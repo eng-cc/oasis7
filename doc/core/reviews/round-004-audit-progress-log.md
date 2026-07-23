@@ -83,10 +83,10 @@
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-production-hardening-phase1.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
@@ -108,12 +108,12 @@
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-production-hardening-phase9.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-runtime-path-index.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-runtime-path-index.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-standard-file-io.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distfs/distfs-standard-file-io.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/distributed/distributed-hard-split-phase7.prd.md` | issue_open | I4-001,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 含过程化迁移描述 |

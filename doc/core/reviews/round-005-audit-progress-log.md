@@ -12,16 +12,16 @@
 | 2026-03-06 17:20:24 +0800 | cc | `doc/core/reviews/consistency-review-round-005.md` | pass | A5-001 | ROUND-005 启动台账创建。 |
 | 2026-03-06 17:20:24 +0800 | cc | `doc/core/reviews/round-005-timeliness-index-worklist.md` | pass | A5-001 | ROUND-005 执行清单创建。 |
 | 2026-03-06 17:20:24 +0800 | cc | `doc/core/reviews/round-005-reviewed-files.md` | pass | A5-001 | ROUND-005 审读清单初始化。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | pass | I5-001 | 补齐 `最近更新` 字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/distfs/distfs-distributed-resilience.project.md` | pass | I5-001/I5-002 | 补齐 `完成日期 + 最近更新` 字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:50:46 +0800 | cc | `doc/world-simulator/prd.index.md` | pass | I5-004 | 回写索引覆盖规则统一模板并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:50:46 +0800 | cc | `doc/p2p/prd.index.md` | pass | I5-004 | 回写索引覆盖规则统一模板并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
