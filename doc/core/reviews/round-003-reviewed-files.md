@@ -2,6 +2,8 @@
 
 审计轮次: 4
 
+> 历史身份说明：清单中的 `blockchain-p2pfs-hardening-phase2` 至 `phase8` 路径记录当时实际审读的文件；这些文件现已退役删除，当前专业权威统一为 `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.{prd,design,project}.md`。
+
 - 生成时间: 2026-03-05 23:50:06 CST（本提交）
 - 生成规则: `rg -l "^审计轮次:\s*3$" doc --glob '*.md' | sort`
 - 当前已审读文档数: 773
@@ -78,20 +80,20 @@
 - `doc/headless-runtime/prd.md`
 - `doc/headless-runtime/project.md`
 - `doc/p2p/README.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase2.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase2.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase3.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase3.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase4.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase4.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase5.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase5.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase6.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase6.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase7.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase7.project.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase8.prd.md</code>
+- <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase8.project.md</code>
 - `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.prd.md`
 - `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.project.md`
 - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.prd.md`
