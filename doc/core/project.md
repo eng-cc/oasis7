@@ -243,9 +243,9 @@
     - `doc/core/project.md`
     - `testing-manual.md`
     - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
+    - `doc/world-simulator/llm/provider-agent-dual-mode.{prd,project}.md`
+    - `doc/world-simulator/llm/provider-loopback-http-contract.{prd,project}.md`
+    - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
     - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
     - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
     - `crates/oasis7_client_launcher/src/{launcher_core.rs,main.rs,main_tests.rs}`
@@ -274,8 +274,8 @@
     - player access mode dated companion set (retired/deleted; historical task evidence)
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
-    - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md`
+    - `doc/world-simulator/llm/provider-loopback-http-contract.{prd,project}.md`
+    - `doc/world-simulator/llm/provider-agent-dual-mode.{prd,project}.md`
     - `testing-manual.md`
     - `crates/oasis7_client_launcher/src/{main.rs,launcher_core.rs,config_ui.rs,feedback_window.rs,main_tests.rs}`
     - `crates/oasis7_launcher_ui/src/lib.rs`

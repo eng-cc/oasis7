@@ -5,7 +5,7 @@
 ## 当前执行窗口
 - 当前状态: active
 - 当前权威入口: `doc/testing/prd.md`、`testing-manual.md`、`doc/testing/prd.index.md`
-- 当前阻断摘要: `test-coverage-gate-fill` 仍是当前 active 覆盖缺口；provider dual-mode T4 旧 blocker 已收敛到 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 与复签 evidence，不再作为 testing 当前阻断入口。
+- 当前阻断摘要: `test-coverage-gate-fill` 仍是当前 active 覆盖缺口；provider dual-mode T4 旧 blocker 已收敛到 `doc/world-simulator/llm/provider-agent-dual-mode.project.md` 与复签 evidence，不再作为 testing 当前阻断入口。
 - 活跃任务:
   - [ ] `test-coverage-gate-fill` (PRD-TESTING-002/003) [test_tier_required] + [test_tier_full]: 补齐 Rust CI 测试覆盖缺口，让 `full-support` 直接触达 workspace support crates，并为 `required-gate` changed-path planner 增加 regression，防止未分类代码路径绕过 full fallback。Trace: `.pm/tasks/task_ce44b8a269824fbcb718febd2140c425.yaml`
   - [ ] `qa-test-governance-simplify` (PRD-TESTING-001/002/003) [governance]: 按“影响面覆盖 + 最小充分测试”收紧测试选择树、skip reason 与 claim boundary；不关闭 `test-coverage-gate-fill` 覆盖缺口。Trace: .pm/tasks/task_1ed6ad641a634905a3e7bc6423d61504.yaml

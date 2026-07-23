@@ -6,7 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md)
+- 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
 
 本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
@@ -15,6 +15,8 @@
 当玩家在专业域已明确场景范围的 provider 组合间切换时，切换不能带来无法解释的、实质性的体验退化。连续性以玩家可感知的目标结果、等待体验、多轮记忆与意图延续、问题可诊断性及恢复路径为准，而不要求内部实现相同。
 
 体验连续性不改变世界规则或执行权威。provider 只影响 Agent 如何形成意图；世界结果仍须经过同一权威裁决，不能因切换而把未发生、未接受或被拒绝的结果呈现为成功。
+
+`player_parity` 与 `headless_agent` 是 Agent 的执行 lane，不是新的玩家访问模式。无论 Agent 经由哪一 lane 提出意图，玩家所理解、纠正或继续行动的只能是同一条权威世界结果链；lane 差异不得制造另一份世界事实、绕开裁决，或把 Agent 执行能力误述为玩家获得新的进入权限。两条 lane 的具体合同、适用范围与 `experimental` / 非默认边界由[专业域 parity 权威](../../world-simulator/llm/provider-agent-experience-parity.prd.md)维护，产品层不将其提升为当前支持、默认或发布就绪结论。
 
 ## 2. 玩家边界
 
@@ -32,7 +34,7 @@
 
 | 产品承诺 | 专业 owner | 专业域权威 | 证据边界 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| 场景内的体验连续性 | agent_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md` | 专业域维护适用场景、评估方法与具体结论；产品层只消费其可追溯结论 | test_tier_required |
+| 场景内的体验连续性 | agent_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` | 专业域维护适用场景、评估方法与具体结论；产品层只消费其可追溯结论 | test_tier_required |
 | 受限或退化时的真实表达与下一步 | agent_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 以权威世界真相、诊断和恢复证据验证；不以技术连通或截图代签 | test_tier_required |
 
 ## 4. 非目标与权威边界

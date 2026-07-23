@@ -34,7 +34,7 @@
 - `doc/world-simulator/scenario/README.md`：`scenario/` 子域 landing page，适合先按场景文件、world initialization、seed/location、资源生成或 asteroid-fragment 问题分流，再进入精确专题。
 - launcher transfer 当前入口：`doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md` 与 `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md` 承接早期 `PRD-WORLD_SIMULATOR-004/005` 的链上转账基础条款；旧 `world-simulator` launcher blockchain-transfer singleton 分册已退役删除，不再作为 active supporting doc。
 - `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
-- `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
+- `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
 
 ## 覆盖规则（ROUND-005 统一）
@@ -108,11 +108,11 @@
 | `doc/world-simulator/llm/llm-agent-behavior.prd.md` | `doc/world-simulator/llm/llm-agent-behavior.design.md` | `doc/world-simulator/llm/llm-agent-behavior.project.md` |
 | `doc/world-simulator/llm/llm-async-openai-responses.prd.md` | `doc/world-simulator/llm/llm-async-openai-responses.design.md` | `doc/world-simulator/llm/llm-async-openai-responses.project.md` |
 | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.design.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md` |
-| `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.design.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.project.md` |
+| `doc/world-simulator/llm/decision-provider-contract.prd.md` | `doc/world-simulator/llm/decision-provider-contract.design.md` | `doc/world-simulator/llm/decision-provider-contract.project.md` |
 | `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.design.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md` |
-| `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.design.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md` |
-| `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.design.md` | `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md` |
-| `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md` | `—` | `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` |
+| `doc/world-simulator/llm/provider-loopback-http-contract.prd.md` | `doc/world-simulator/llm/provider-loopback-http-contract.design.md` | `doc/world-simulator/llm/provider-loopback-http-contract.project.md` |
+| `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` | `doc/world-simulator/llm/provider-agent-experience-parity.design.md` | `doc/world-simulator/llm/provider-agent-experience-parity.project.md` |
+| `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` | `—` | `doc/world-simulator/llm/provider-agent-dual-mode.project.md` |
 | `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.project.md` |
 | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.prd.md` | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.design.md` | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.project.md` |
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | `doc/world-simulator/llm/llm-lmso29-stability.project.md` |

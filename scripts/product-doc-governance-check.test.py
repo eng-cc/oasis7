@@ -22,6 +22,7 @@ COPY_PATHS = (
     "doc/p2p/prd.md",
     "doc/testing/prd.md",
     "doc/world-simulator/prd.md",
+    "doc/world-simulator/llm/provider-agent-experience-parity.prd.md",
     "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
 )
 
@@ -197,6 +198,19 @@ def main() -> None:
             "# Agent/provider 体验连续性",
             "# Agent/provider 体验连续性\n\n- Product PRD-ID：`PRD-PRODUCT-003`",
         ),
+    )
+    scenario(
+        "topic-professional-authority",
+        lambda root: [
+            replace(
+                root / "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
+                "../../world-simulator/llm/provider-agent-experience-parity.prd.md",
+                "../../world-simulator/llm/"
+                + "llm-provider-agent-experience-parity"
+                + "-2026-03-12.prd.md",
+            )
+            for _ in range(2)
+        ],
     )
     scenario(
         None,

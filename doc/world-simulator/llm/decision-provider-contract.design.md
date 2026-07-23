@@ -1,7 +1,7 @@
 # LLM Agent Decision Provider 标准层 + Local Provider 外部适配可行性（2026-03-12）设计
 
-- 对应需求文档: `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.project.md`
+- 对应需求文档: `doc/world-simulator/llm/decision-provider-contract.prd.md`
+- 对应项目管理文档: `doc/world-simulator/llm/decision-provider-contract.project.md`
 
 ## 1. 设计定位
 定义 world-simulator 中“世界内 Agent 契约”与“具体外部 agent provider”之间的标准层，使 `Local Provider` 之类的外部框架可通过 adapter 参与模拟，但不侵入 runtime 权威、规则执行与回放边界。

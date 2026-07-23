@@ -1,7 +1,7 @@
 # Local Provider 与内置 Agent 体验等价（parity）验收方案（2026-03-12）
 
-- 对应设计文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md`
+- 对应设计文档: `doc/world-simulator/llm/provider-agent-experience-parity.design.md`
+- 对应项目管理文档: `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
 
 审计轮次: 2
 
@@ -73,8 +73,8 @@
   - parity 评估层建立在 `Decision Provider` 与 `Local Provider(Local HTTP)` 方案之上，不新增新的 provider 传输层。
   - 使用统一 `scenario fixture + observation log + trace collector + score aggregator` 对 builtin 和 Local Provider 两条链路做对照。
 - Integration Points:
-  - `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`
-  - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
+  - `doc/world-simulator/llm/decision-provider-contract.prd.md`
+  - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
   - `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
   - `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
   - `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`
