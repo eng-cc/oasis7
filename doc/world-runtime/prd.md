@@ -203,7 +203,7 @@
   - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
   - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
   - `doc/world-runtime/governance/governance-events.md`
-  - `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
+  - `doc/world-runtime/module/player-published-entities.prd.md`
   - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
   - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
   - `doc/world-runtime/testing/testing.md`

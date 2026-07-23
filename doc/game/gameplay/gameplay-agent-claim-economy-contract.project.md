@@ -1,7 +1,7 @@
-# Gameplay Agent 认领代币成本与维护机制（项目管理文档）
+# Gameplay Agent 认领经济合同（项目管理文档）
 
-- 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
-- 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+- 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md`
+- 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
 
 审计轮次: 16
 
@@ -45,7 +45,7 @@
 - 当前 owner: `producer_system_designer`
 - 下一任务: `无（当前专题已闭环；后续仅在真实 claim 分布、liveops、QA 或 admin registry 信号异常时再重开）`
 - 已完成补充:
-  - `TASK-GAMEPLAY-AGC-001` 已新增 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.{prd,design,project}.md`，并将 `PRD-GAME-011` 挂入 game 根 PRD / project / 索引 / README。
+  - `TASK-GAMEPLAY-AGC-001` 已新增 agent claim 专题三件套（现迁移为 `gameplay-agent-claim-economy-contract.{prd,design,project}.md`），并将 `PRD-GAME-011` 挂入 game 根 PRD / project / 索引 / README。
   - `TASK-GAMEPLAY-AGC-002` 已在 `crates/oasis7/src/runtime/` 落地 `ClaimAgent / ReleaseAgentClaim` 动作、claim 状态持久化、自动 upkeep/grace/idle reclaim processor 与 main token 账本联动。
   - `TASK-GAMEPLAY-AGC-003` 已在 `crates/oasis7/src/viewer/runtime_live/` 为 `player_gameplay` 增加 canonical `agent_claim` 快照，并在 `crates/oasis7_viewer/src/ui_text_claims.rs` / agent 详情文案中补齐 claim owner、状态、bond/upkeep、release/grace/forced reclaim 倒计时与未认领报价 blocker。
   - `TASK-GAMEPLAY-AGC-004` 已在 `crates/oasis7/src/runtime/tests/agent_claims.rs` 补齐并发单 owner 原子性、tier cap / slot 成本、grace 内恢复、release refund、欠费/闲置 reclaim slash-refund 对账断言，并把结果沉淀到 `doc/testing/evidence/game-agent-claim-abuse-matrix-2026-03-27.md`。

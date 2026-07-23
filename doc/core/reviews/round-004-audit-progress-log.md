@@ -387,8 +387,8 @@
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-storage.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-subscription-filters.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-subscription-filters.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md` | issue_open | I4-017 | Validation 区仅描述性验证方法，缺可执行命令/证据路径。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/player-published-entities-2026-03-05.project.md` | issue_open | I4-018 | Project 任务缺可执行验收命令与证据链接。 |
+| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/player-published-entities.prd.md` | issue_open | I4-017 | Validation 区仅描述性验证方法，缺可执行命令/证据路径。 |
+| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/player-published-entities.project.md` | issue_open | I4-018 | Project 任务缺可执行验收命令与证据链接。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/runtime/bootstrap-power-modules.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/runtime/bootstrap-power-modules.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |

@@ -9,7 +9,7 @@
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `../../product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的玩法合同
 - 想确认访问模式、limited preview 或 release readiness：先读 `../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前 preview 执行状态看 `../project.md` 与对应 round execution record
-- 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
+- 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-economy-contract.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
 - 想精确找某份 gameplay 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -47,7 +47,7 @@
   - `gameplay-indirect-control-agency-contract.prd.md`
   - `../../product/world-rules-core-gameplay/prd.md`（产品承诺）与 `gameplay-top-level-design.prd.md`（玩法合同）
   - `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`
-  - `gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
+  - `gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感
   - 1cm 物理世界和表现层夸张的边界是什么
@@ -66,7 +66,7 @@
 
 ### 5. Economy、claim 与运营规则
 - 首读入口:
-  - `gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+  - `gameplay-agent-claim-economy-contract.prd.md`
   - `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
   - `../../product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
 - 适合问题:

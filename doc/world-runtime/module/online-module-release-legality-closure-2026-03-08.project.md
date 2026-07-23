@@ -24,7 +24,7 @@
 
 ## 依赖
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
-- `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
+- `doc/world-runtime/module/player-published-entities.prd.md`
 - `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md`
 - `doc/p2p/distributed/distributed-pos-consensus.prd.md`
 - `testing-manual.md`

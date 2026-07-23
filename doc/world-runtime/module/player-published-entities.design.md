@@ -1,7 +1,7 @@
-# oasis7 Runtime：玩家发布制成品的 WASM 模块与 Profile 治理闭环（2026-03-05）设计
+# oasis7 Runtime：玩家发布制成品的 WASM 模块与 Profile 治理闭环设计
 
-- 对应需求文档: `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
-- 对应项目管理文档: `doc/world-runtime/module/player-published-entities-2026-03-05.project.md`
+- 对应需求文档: `doc/world-runtime/module/player-published-entities.prd.md`
+- 对应项目管理文档: `doc/world-runtime/module/player-published-entities.project.md`
 
 ## 1. 设计定位
 定义玩家发布制成品的 WASM 模块与 Profile 治理闭环，统一玩家产物发布、模块约束与身份治理。

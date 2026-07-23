@@ -21,7 +21,7 @@
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 gameplay 顶层合同
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
-- 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
+- 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态看 `doc/game/project.md` 与对应 round execution record
 - 想继续按文件名、专题或补充材料下钻：使用下方热点子域导航与补充入口；当前文件库存统一以 `./scripts/doc-inventory-report.sh` 为准，本页不维护容易漂移的数量快照
 
@@ -40,8 +40,8 @@
 - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力的产品主入口。
 - `doc/product/world-rules-core-gameplay/prd.md` 与 `doc/game/gameplay/gameplay-top-level-design.prd.md`：分别承载物理尺度/间接控制的产品承诺，以及玩法侧动作粒度与表现层夸张边界。
 - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`：访问模式、统一候选门禁与公开 claim 升阶入口。
-- `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`：近期高频经济规则与 token 成本边界主入口。
-- `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`：WASM-backed 可编程区域设施、micro_depot quote/receipt、upkeep 与区域专业化边界主入口。
+- `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`：近期高频经济规则与 token 成本边界主入口。
+- `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`：WASM-backed 可编程区域设施、micro_depot quote/receipt、upkeep 与区域专业化边界主入口。
 - `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`：restricted grant 发放、撤销、过期与 incident 处理 runbook。
 
 ## 默认阅读面边界
@@ -58,11 +58,11 @@
 ## 完整活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md` |
+| `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md` |
 | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.design.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` |
 | `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
-| `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md` |
+| `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md` |
 
 ## 历史 closure / provenance 入口
 | 历史 closure 专题 | 当前追溯入口 |

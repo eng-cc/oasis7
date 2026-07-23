@@ -1,7 +1,7 @@
 # oasis7 Runtime：玩家发布制成品的 WASM 模块与 Profile 治理闭环（项目管理文档）
 
-- 对应设计文档: `doc/world-runtime/module/player-published-entities-2026-03-05.design.md`
-- 对应需求文档: `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
+- 对应设计文档: `doc/world-runtime/module/player-published-entities.design.md`
+- 对应需求文档: `doc/world-runtime/module/player-published-entities.prd.md`
 
 审计轮次: 4
 
@@ -14,7 +14,7 @@
 - [x] TASK-WORLD_RUNTIME-015 (PRD-WORLD_RUNTIME-012) [test_tier_required]: 实现 profile 覆盖拒绝（包括 payload 与现状完全一致的场景）并补齐 release shadow/apply 冲突拒绝回归测试。
 
 ## 依赖
-- doc/world-runtime/module/player-published-entities-2026-03-05.prd.md
+- doc/world-runtime/module/player-published-entities.prd.md
 - doc/world-runtime/wasm/wasm-interface.md
 - doc/world-runtime/module/module-lifecycle.md
 - doc/world-runtime/module/module-storage.prd.md
@@ -22,6 +22,6 @@
 - testing-manual.md
 
 ## 状态
-- 更新日期: 2026-03-06
-- 当前状态: active
-- 下一任务: none
+- 记录日期: 2026-03-06
+- 历史结论: TASK-WORLD_RUNTIME-010 至 TASK-WORLD_RUNTIME-015 已完成；本文件保留当时的实现拆解与 PRD-ID 对应关系。
+- 当前任务真值: 后续任务、状态与证据以 GitHub task issue evidence comments 为准；本历史记录不声明当前 active 状态或下一任务。

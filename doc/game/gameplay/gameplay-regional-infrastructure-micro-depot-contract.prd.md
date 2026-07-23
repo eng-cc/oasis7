@@ -1,7 +1,7 @@
-# Gameplay WASM-backed Regional Infrastructure: micro_depot PRD
+# Gameplay 区域基础设施 micro_depot 合同 PRD
 
-- 对应设计文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md`
+- 对应设计文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
+- 对应项目管理文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md`
 
 审计轮次: 1
 
@@ -19,9 +19,9 @@
 
 ## 接口 / 数据
 
-- PRD 主入口: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
-- 设计细节: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
-- 项目执行: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md`
+- PRD 主入口: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
+- 设计细节: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
+- 项目执行: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md`
 - 根 baseline: `doc/game/prd.md` / `PRD-GAME-016`
 - 关键 runtime 数据: `RegionalInfrastructure`, `MicroDepotEvalInput`, `MicroDepotProposal`, `MicroDepotServiceApplied`
 - 关键 player-facing 数据: install quote, upkeep state, service radius, before/after preview, blocker, receipt, module evidence
@@ -124,11 +124,11 @@
   - `micro_depot` is a WASM-backed regional facility. WASM evaluates a proposal against a runtime-provided input snapshot; runtime validates, caps, applies, signs and emits receipt.
   - Viewer and pure API render canonical DTOs only; they do not inspect WASM or infer benefit from events.
 - Integration Points:
-  - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
+  - `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
   - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
-  - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+  - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - Edge Cases & Error Handling:
   - Missing `regional_blocker_receipt_id`: install is refused; player receives blocker explaining required prior repair/logistics receipt.

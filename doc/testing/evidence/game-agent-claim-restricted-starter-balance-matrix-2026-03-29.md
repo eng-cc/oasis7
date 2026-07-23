@@ -6,7 +6,7 @@
 - Owner Role: `qa_engineer`
 - Review Role: `producer_system_designer`
 - Scope: `TASK-GAME-047` / `TASK-GAMEPLAY-AGC-009` for `PRD-GAME-011`
-- Topic: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
+- Topic: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
 
 ## 目标
 - 把 `restricted starter claim balance` 的 QA 守门面收敛成一份可复跑矩阵。

@@ -7,8 +7,8 @@
 - Review Role: `producer_system_designer`
 - Document Type: `How-to / Runbook`
 - Scope: `TASK-GAME-050` / `TASK-GAMEPLAY-AGC-012`
-- Related PRD: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
-- Related Project: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
+- Related PRD: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
+- Related Project: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
 - Runtime Dependencies:
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_policy_contract.rs`
