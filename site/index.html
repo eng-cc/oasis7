@@ -32,8 +32,8 @@
     <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/en/" />
     <link rel="alternate" hreflang="x-default" href="https://eng-cc.github.io/oasis7/" />
     <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
-    <link rel="stylesheet" href="assets/styles.css" />
-    <script defer src="assets/app.js"></script>
+    <link rel="stylesheet" href="assets/styles.css?v=20260722-visual-convergence" />
+    <script defer src="assets/app.js?v=20260722-visual-convergence"></script>
   </head>
   <body>
     <a class="skip-link" href="#top">跳到正文</a>
@@ -43,8 +43,8 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#what">怎么玩</a>
         <a href="#proof">一局后果</a>
+        <a href="#world">观察世界</a>
         <a href="#download">获取预览</a>
         <a href="#contribute">了解更多</a>
       </nav>
@@ -71,7 +71,7 @@
     </header>
 
     <main id="top" tabindex="-1">
-      <section class="hero section section-hero" id="hero" data-reveal>
+      <section class="hero section section-hero landing-chapter landing-hero" id="hero" data-reveal>
         <canvas class="hero-canvas" data-hero-canvas aria-hidden="true"></canvas>
         <div class="hero-grid">
           <div>
@@ -80,7 +80,7 @@
             <p class="subtitle">你定方向，Agent 作选择，世界记住后果。</p>
             <div class="cta-row">
               <a class="button primary" href="#proof">看一局事件链</a>
-              <a class="hero-overview-link" href="#what">怎么玩</a>
+              <a class="hero-overview-link" href="#world">观察这个世界</a>
             </div>
             <div class="hero-facts hero-status" aria-label="当前预览状态">
               <span class="preview-badge" data-homepage-claim="preview-status">状态：limited playable technical preview</span>
@@ -95,8 +95,8 @@
         </div>
       </section>
 
-      <section id="what" class="section" data-reveal>
-        <p class="eyebrow">一局后果</p>
+      <section id="what" class="section landing-chapter landing-consequence" data-reveal>
+        <p class="eyebrow">后果如何发生</p>
         <h2>压力出现，Agent 回应，世界留下后果。</h2>
         <div class="consequence-rail" aria-label="oasis7 核心玩法循环">
           <article class="consequence-beat">
@@ -218,7 +218,7 @@
         </details>
       </section>
 
-      <section id="proof" class="section" data-reveal>
+      <section id="proof" class="section landing-chapter landing-proof" data-reveal>
         <p class="eyebrow">受控场景证据</p>
         <h2>不是一串日志，而是一条能回看的后果链。</h2>
         <p class="section-intro">这里展示的是当前 Viewer 的受控验证场景截图：先出现压力，再由 Agent 作出选择，最后把变化留在可追看的世界记录里。当前是 limited playable technical preview，不等同 closed beta、公开发售、赛季或公开网页加入。</p>
@@ -246,12 +246,13 @@
             <img src="assets/images/screenshots/triad_region_bootstrap.webp" alt="受控的三方治理场景 Viewer 截图，显示多方区域的世界状态" width="2400" height="1600" />
             <figcaption>三方治理：当前 Viewer 受控场景截图，不是概念图或公开玩法模式。</figcaption>
           </figure>
-          <article class="proof-card proof-card-key">
-            <h3>这张图背后的三步</h3>
+          <article class="proof-card proof-card-key" data-proof-causal aria-live="polite">
+            <p class="proof-causal-kicker" data-proof-causal-kicker>单点波动 · 因果轨迹</p>
+            <h3 data-proof-causal-title>这张图背后的三步</h3>
             <ol class="proof-list proof-causal-list">
-              <li><span>01</span><div><strong>压力出现</strong><p>资源、目标或既有规则先收紧可选空间。</p></div></li>
-              <li><span>02</span><div><strong>Agent 回应</strong><p>它们在当下约束内决定生产、交易或协作。</p></div></li>
-              <li><span>03</span><div><strong>后果留下</strong><p>世界变化进入事件、回放与审计可读的轨迹。</p></div></li>
+              <li><span>01</span><div><strong data-proof-causal-step="0-title">压力出现</strong><p data-proof-causal-step="0-copy">资源、目标或既有规则先收紧可选空间。</p></div></li>
+              <li><span>02</span><div><strong data-proof-causal-step="1-title">Agent 回应</strong><p data-proof-causal-step="1-copy">它们在当下约束内决定生产、交易或协作。</p></div></li>
+              <li><span>03</span><div><strong data-proof-causal-step="2-title">后果留下</strong><p data-proof-causal-step="2-copy">世界变化进入事件、回放与审计可读的轨迹。</p></div></li>
             </ol>
             <a class="button secondary" href="#download">获取开发预览</a>
           </article>
@@ -309,17 +310,34 @@
         </div>
       </section>
 
-      <section id="download" class="section" data-reveal>
+      <section id="world" class="section landing-chapter landing-world" data-reveal>
+        <div class="world-copy">
+          <p class="eyebrow">观察与操作</p>
+          <h2>不是替每个 Agent 下命令，而是读懂一个正在变化的世界。</h2>
+          <p class="section-intro">当前 Viewer 展示受控场景里的区域、事件和状态变化。你先看到压力如何穿过世界，再回看 Agent 如何在约束内协作、交易或调整。</p>
+        </div>
+        <div class="world-layout">
+          <figure class="world-figure">
+            <img src="assets/images/screenshots/triad_region_bootstrap.webp" alt="当前 Viewer 的受控三方治理场景截图，显示多方区域与可观测世界状态" width="2400" height="1600" loading="lazy" />
+            <figcaption>当前受控场景 Viewer 截图：它用于观察和验证，不代表公开网页加入或已开放玩法模式。</figcaption>
+          </figure>
+          <div class="world-capabilities" aria-label="当前 Viewer 可观察的内容">
+            <article>
+              <span>01</span><h3>观察</h3><p>查看当前世界状态与区域间的变化。</p>
+            </article>
+            <article>
+              <span>02</span><h3>影响</h3><p>从文明外部设定方向与约束，不接管每一步动作。</p>
+            </article>
+            <article>
+              <span>03</span><h3>回看</h3><p>把留下的事件与后果放回可检查的轨迹里。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" class="section landing-chapter landing-download" data-reveal>
         <h2>想亲手试试？现在能下载的是开发预览构建</h2>
         <p class="section-intro">现在公开下载的还是开发预览构建，不是普通玩家直接开玩的版本。页面尽量每个平台只给一个主包，省得你先在安装包之间做判断。</p>
-        <div class="boundary-banner" data-homepage-claim="download-boundary">
-          <p class="boundary-title">先确认这条路适不适合你</p>
-          <ul class="boundary-list">
-            <li><strong>适合：</strong>愿意验证技术预览、反馈 blocker 和安装摩擦的 builder。</li>
-            <li><strong>不适合：</strong>期待直接通过网页加入，或寻找面向普通玩家的正式发售体验。</li>
-            <li><strong>当前边界：</strong>这不是公开网页玩家入口，也不是正式玩家发布；正式公告仍在准备中。</li>
-          </ul>
-        </div>
         <p class="release-meta">
           当前版本：<strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="发布时间">发布时间待同步</span>
@@ -374,8 +392,8 @@
             </div>
             <p class="download-primary-footnote" data-download-primary-footnote>如果你要给另一台机器下载，可切换上方平台按钮；默认面不会再把多个技术形态并列给普通用户判断。</p>
           </div>
-          <aside class="download-support-card">
-            <h3>下载前先确认</h3>
+          <details class="download-support-card">
+            <summary>安装前的兼容性与信任边界</summary>
             <dl class="download-support-list">
               <div>
                 <dt>系统/架构</dt>
@@ -394,7 +412,7 @@
                 <dd data-download-primary-support>当前页面面向技术预览验证，不等同玩家正式发布；若公司设备策略阻止未知发行者安装，请先查看发布说明中的构建与支持边界。</dd>
               </div>
             </dl>
-          </aside>
+          </details>
           <div class="download-platform-sources" hidden>
             <article
               data-download-platform-source="windows"
@@ -440,8 +458,16 @@
             </article>
           </div>
         </div>
-        <div class="download-advanced">
-          <p class="download-advanced-title">补充信息</p>
+        <div class="boundary-banner" data-homepage-claim="download-boundary">
+          <p class="boundary-title">先确认这条路适不适合你</p>
+          <ul class="boundary-list">
+            <li><strong>适合：</strong>愿意验证技术预览、反馈 blocker 和安装摩擦的 builder。</li>
+            <li><strong>不适合：</strong>期待直接通过网页加入，或寻找面向普通玩家的正式发售体验。</li>
+            <li><strong>当前边界：</strong>这不是公开网页玩家入口，也不是正式玩家发布；正式公告仍在准备中。</li>
+          </ul>
+        </div>
+        <details class="download-advanced">
+          <summary class="download-advanced-title">更多校验与升级信息</summary>
           <ul class="download-advanced-list">
             <li>
               完整校验文件：
@@ -454,7 +480,7 @@
             <li>升级前先备份当前启动目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 和 `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/`；这些状态现在还是跟着实际启动目录走。</li>
             <li>Windows 尤其别把“先卸载再重装”当成等价升级路径。当前卸载器会把安装目录一起删掉。</li>
           </ul>
-        </div>
+        </details>
       </section>
 
       <section id="roadmap" class="section" data-reveal hidden>
