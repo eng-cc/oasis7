@@ -10,7 +10,7 @@
 - `doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
 - `doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 - `doc/testing/templates/network-tier-public-testnet.example.json`
 
 ## QA verdict

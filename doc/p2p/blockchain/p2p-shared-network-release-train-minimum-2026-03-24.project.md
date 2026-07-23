@@ -8,7 +8,7 @@
 
 > Current canonical source: this project file tracks historical shared-network /
 > release-train work. Current network-tier truth lives in
-> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
 > `shared_devnet` pass is legacy/rehearsal evidence only, not public testnet or
 > public large-world readiness.
 
@@ -66,8 +66,8 @@
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
-- `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
-- `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
+- `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md`
+- `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
 - `doc/p2p/project.md`
 - `testing-manual.md`
 - `doc/devlog/README.md`
@@ -120,7 +120,7 @@
 
 ## 依赖
 - `testing-manual.md`
-- `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+- `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - `README.md`
 - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`（legacy rehearsal 不构成当前公开状态）
@@ -129,7 +129,7 @@
 ## 验收命令（RTMIN-4）
 - `./scripts/release-gate.sh --dry-run --candidate-bundle output/release-candidates/shared-devnet-dry-run-20260324-01.json --out-dir output/shared-network/shared-devnet-dry-run-20260324-01/release-gate`
 - `./scripts/shared-network-track-gate.sh --track shared_devnet --candidate-bundle output/release-candidates/shared-devnet-dry-run-20260324-01.json --lanes-tsv output/shared-network/shared-devnet-dry-run-20260324-01/lanes.shared_devnet.tsv --out-dir output/shared-network/shared-devnet-dry-run-20260324-01/gate`
-- `rg -n "partial|hold_promotion|shared-devnet-dry-run-20260324-01|local-only" doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md testing-manual.md`
+- `rg -n "partial|hold_promotion|shared-devnet-dry-run-20260324-01|local-only" doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md testing-manual.md`
 - `./scripts/shared-devnet-rehearsal-smoke.sh`
 - `./scripts/shared-devnet-blocker-packet-smoke.sh`
 - `./scripts/shared-network-track-gate-smoke.sh`

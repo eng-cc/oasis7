@@ -2,23 +2,23 @@
 
 ## 从这里开始
 
-- 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`；执行时再进入同名 runbook 和 `p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
+- 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `formal-network-tiers-testnet-mechanism.prd.md`；执行时再进入同名 runbook 和 `p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
 - 想确认主链安全基线、剩余 mainnet-grade blocker、signer custody 或 genesis ceremony：先读 `p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`，再按具体 gate 进入 crypto baseline、production custody、governance signer 与 genesis freeze 专题。
-- 想确认普通玩家的 `hosted_public_join`、邮箱登录、托管 player signer 和后续自托管升级：先读 `p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`。它不覆盖 node、validator 或 governance signer custody。
+- 想确认普通玩家的 `hosted_public_join`、邮箱登录、托管 player signer 和后续自托管升级：先读 `hosted-public-join-managed-identity-custody.prd.md`。它不覆盖 node、validator 或 governance signer custody。
 - 想做精确文件检索、查看 P2PFS hardening phase 或历史三件套：回到 `../prd.index.md`；本页不复制其完整文件表。
 
 ## 首读主题簇
 
 | 主题簇 | 默认入口 | 入口边界 |
 | --- | --- | --- |
-| Formal network tiers | `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` | `local_devnet -> public_testnet -> mainnet` 的现行语义、promotion gate 与公开口径；operator 步骤见 companion runbook。 |
+| Formal network tiers | `formal-network-tiers-testnet-mechanism.prd.md` | `local_devnet -> public_testnet -> mainnet` 的现行语义、promotion gate 与公开口径；operator 步骤见 companion runbook。 |
 | Mainnet-grade security | `p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md` | 当前仍是 `not_mainnet_grade` 的剩余 gate；crypto baseline 解释基线，keystore / governance / genesis 专题承载各 gate。 |
-| Hosted player identity | `p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md` | `hosted_public_join` 的玩家身份、邮箱登录与 managed player signer；不替代协议级 signer custody。 |
+| Hosted player identity | `hosted-public-join-managed-identity-custody.prd.md` | `hosted_public_join` 的玩家身份、邮箱登录与 managed player signer；不替代协议级 signer custody。 |
 | P2PFS / blockchain hardening history | `../prd.index.md` | `blockchain-p2pfs-hardening-phase*` 与 production-grade phase 文档是可检索的阶段追溯，不作为默认首读路径。 |
 
 ## 现行与历史边界
 
-- `p2p-shared-network-release-train-minimum-2026-03-24.*` 是旧 `shared_devnet -> staging -> canary` rehearsal 的背景与证据链；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值以 `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.*` 为准。
+- `p2p-shared-network-release-train-minimum-2026-03-24.*` 是旧 `shared_devnet -> staging -> canary` rehearsal 的背景与证据链；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值以 `formal-network-tiers-testnet-mechanism.*` 为准。
 - 历史 rehearsal、P2PFS phase 和已完成安全专题仍保留为审计/追溯材料。本轮未发现同时具备明确 successor 与零活跃调用的可删除文件。
 - 根 [`README.md`](../../../README.md) 是当前公开状态权威，[产品层公开口径分册](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md) 定义长期沟通生命周期；network-tier PRD 与 runbook 只提供专业边界和证据，不单独升级公开状态。
 

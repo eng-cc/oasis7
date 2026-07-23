@@ -7,6 +7,7 @@
   - `PRD-P2P-RTMIN-002`
   - `PRD-P2P-RTMIN-003`
   - `PRD-P2P-BENCH-003`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - 关联任务:
   - `RTMIN-4`
 - 责任角色:

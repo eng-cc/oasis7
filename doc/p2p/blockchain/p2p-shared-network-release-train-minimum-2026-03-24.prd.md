@@ -7,7 +7,7 @@
 
 > Current canonical source: this document is legacy/rehearsal background for the old
 > `shared_devnet -> staging -> canary` release-train model. Current network-tier
-> truth lives in `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> truth lives in `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
 > `shared_devnet` pass evidence must not be used as `public_testnet`, `mainnet`,
 > public launch, or public large-world readiness.
 
@@ -75,8 +75,8 @@
 - Architecture Overview: legacy network rehearsal / release train minimum 是一条位于本地验证之后、公开口径之前的历史执行轨道。输入是已通过 `required/full`、S6、S9/S10、governance drill 基线的 `release_candidate_bundle`；中间经过 `shared_devnet -> staging -> canary` 逐级 promotion；输出是 `pass/block/rollback` 证据与 claims decision。它不新增共识协议，而是把版本固定、world 真值、治理 manifest、证据留档和升级窗口管理纳入统一流程。
 - Integration Points:
   - `testing-manual.md`
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md`
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`（仅定义长期公开口径；本专题仍是 legacy rehearsal evidence）

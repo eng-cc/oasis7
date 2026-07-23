@@ -193,19 +193,19 @@
   - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
   - AC-25: `p2p-genesis-freeze-ceremony-qa-gate-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
   - AC-26: `TASK-P2P-038` 是 2026-03-23 的历史公开口径审查，记录当时 `MAINNET-1~3` 仅完成 spec gate、整体 verdict 为 `not_mainnet_grade`；它不再充当当前公开状态权威。当前状态以根 `README.md` 为准，长期公开口径规则由 `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md` 承接，网络与测试文档提供专业证据。
-  - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `network rehearsal/release train` 缺口，以及真实 governance drill 证据的当前优先级。
+  - AC-27: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` 保留 2026-03-24 专题历史并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、单实现栈等价要求、历史 gap matrix、`fuzz/property` 与 `network rehearsal/release train` 缺口及 claims denylist；当前网络状态与成熟度不由该 benchmark 维护。
   - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` legacy 专题文档落盘并映射历史任务链 `TASK-P2P-040`，明确 rehearsal `public_testnet_rehearsal/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 legacy evidence 边界；当前不作为目标环境或玩家世界模型。
   - AC-29: hosted player access 的长期合同由本 PRD 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md` 承接，明确 `public player plane / private control plane / identity plane / custody or signer plane`、`guest/player/strong-auth` 会话梯度、player-safe / operator-only action split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界；历史 `TASK-P2P-041` 从模块 project、GitHub task evidence 与 Git history 追溯。
-  - AC-30: `p2p-mainnet-private-reachability-architecture-2026-04-01` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
-  - AC-30A: `p2p-mainnet-private-reachability-architecture-2026-04-01` 必须补齐 iroh-inspired follow-up 的 truth chain：`PeerReachabilityContract` 负责 runtime reachability 归一化，path behavior matrix 只负责 evidence/claim taxonomy，triad/status observability 只消费 bounded status projection。
+  - AC-30: `mainnet-private-reachability-architecture` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
+  - AC-30A: `mainnet-private-reachability-architecture` 必须补齐 iroh-inspired follow-up 的 truth chain：`PeerReachabilityContract` 负责 runtime reachability 归一化，path behavior matrix 只负责 evidence/claim taxonomy，triad/status observability 只消费 bounded status projection。
   - AC-31: `TASK-P2P-045` 必须把当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，作为后续 runtime 符号与账户派生迁移的前置口径。
   - AC-32: `TASK-P2P-046` 必须把当前链上代币的 runtime `main_token.symbol`、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 当作现行真值。
   - AC-33: `TASK-P2P-047` 必须把当前链上代币的创世 `initial_supply` 冻结为 `10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 同步回写到 token 专题与模块执行台账。
   - AC-34: `triad-observability-stack` 必须把 real-env triad 的 host/process、chain status、traffic window、wasm window 收敛到统一 repo-owned 监控入口，并在 `testing-manual.md` 冻结 canonical 命令与产物路径。
   - AC-35: `triad-three-equal-validator-topology` 必须把当前 real-env triad 从“本机 observer + 两台云端 validator”提升为“三节点等权 validator”可审计基线，至少覆盖：`3` 个 validator 的 stake/signer binding、local 节点不再以 observer-only 角色运行、repo-owned snapshot/manual 不再把 `partial_with_observer_blocker` 当成唯一有效 claim、same-window evidence 对 legacy service label 与真实 runtime role 的区分，以及 `oasis7_chain_runtime` 在 execution world 已落盘 `governance_finality_signer_registry` 时会优先用该 world-state registry 恢复 validator membership / signer binding；`--node-validator*` 只保留为 bootstrap 或显式运维覆盖。
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
-  - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层 operator/runtime network-tier 模型、`public_testnet_rehearsal` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate；这些 tier 不作为玩家世界模型。
-  - AC-38: `p2p-hosted-public-join-managed-identity-custody-2026-05-18` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
+  - AC-37: `formal-network-tiers-testnet-mechanism` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层 operator/runtime network-tier 模型、`public_testnet_rehearsal` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate；这些 tier 不作为玩家世界模型。
+  - AC-38: `hosted-public-join-managed-identity-custody` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-38A: `mainchain-token-ideal-transaction-upgrade-2026-06-08` 专题文档必须落盘并映射任务链 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)`，明确理想交易对象字段分组、完整 JSON 草案、理想签名域、理想回执与最小理想升级集，并显式声明其为 ideal target 而非当前实现真值。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`；这些是判定枚举，placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 必须保持阻断。
   - AC-40: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以 runbook/project 当前 verdict 约束 public claims。
@@ -237,14 +237,14 @@
   - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
-  - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
-  - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+  - `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
+  - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
   - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`
-  - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+  - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/product/world-rules-core-gameplay/prd.md`
   - `doc/world-simulator/viewer/viewer-manual.manual.md`

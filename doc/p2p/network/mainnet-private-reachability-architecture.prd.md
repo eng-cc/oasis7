@@ -1,9 +1,11 @@
-# oasis7 主链级非全公网 P2P 覆盖网络架构（2026-04-01）
+# oasis7 主链级非全公网 P2P 覆盖网络架构
 
-- 对应设计文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
-- 对应项目管理文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+- 对应设计文档: `doc/p2p/network/mainnet-private-reachability-architecture.design.md`
+- 对应项目管理文档: `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
 
 审计轮次: 2
+建档日期: 2026-04-01
+
 ## 1. Executive Summary
 - Problem Statement: 当前 triad 实测已经证明，家宽 / NAT / CGNAT / 企业内网节点无法稳定接收入站 UDP 时，现有“节点最好有公网地址”假设会直接把本机、边缘机房和大量运营环境排除在主路径之外。若继续把公网可达当成默认前提，oasis7 很难对标公共主链常见的 mixed-topology 现实。
 - Proposed Solution: 冻结一套 public-chain-grade 的 P2P 目标态，把 `identity`、`addressability`、`transport`、`discovery`、`relay/overlay` 与 `consensus/data plane` 解耦，使 validator / full / storage / observer 节点在 `public / hybrid / private / relay_only / validator_hidden` 多种部署模式下都能成为一等公民。
@@ -92,7 +94,7 @@
 - Integration Points:
   - `doc/p2p/prd.md`
   - `doc/p2p/project.md`
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`

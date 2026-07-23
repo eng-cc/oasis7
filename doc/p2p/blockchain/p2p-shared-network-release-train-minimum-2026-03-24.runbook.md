@@ -8,7 +8,7 @@
 
 > Current canonical source: use this runbook only for legacy shared-network /
 > release-train operations. Current network-tier truth lives in
-> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
 
 ## Meta
 - Owner Role: `liveops_community`

@@ -60,7 +60,7 @@
      - 候选必须附 `evidence` 与 `suggested_optimizations`，避免只给口头判断。
 
 ## Reachability Path Summary Extension
-本扩展对齐 `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md` 的 `PeerReachabilityContract`。triad observability 只消费 status projection，不拥有 reachability contract。
+本扩展对齐 `doc/p2p/network/mainnet-private-reachability-architecture.design.md` 的 `PeerReachabilityContract`。triad observability 只消费 status projection，不拥有 reachability contract。
 
 建议 summary shape：
 

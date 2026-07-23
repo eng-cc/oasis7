@@ -1,7 +1,7 @@
 # oasis7 主链级非全公网 P2P 覆盖网络架构（项目管理文档）
 
-- 对应设计文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
-- 对应需求文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+- 对应设计文档: `doc/p2p/network/mainnet-private-reachability-architecture.design.md`
+- 对应需求文档: `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
 
 审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
@@ -82,7 +82,7 @@
 ## 角色拆解
 ### P2PARCH-1 / runtime_engineer
 - 输入:
-  - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+  - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `doc/p2p/node/node-net-stack-unification-readme.prd.md`
   - `doc/p2p/node/node-replication-libp2p-migration.prd.md`
 - 输出:
@@ -201,7 +201,7 @@
 
 ### P2PARCH-7 / producer_system_designer + liveops_community + qa_engineer
 - 输入:
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - P2PARCH-6 mixed-topology evidence
 - 输出:
@@ -254,7 +254,7 @@
 ## 依赖
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
-- `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+- `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
 - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
 - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
@@ -262,7 +262,7 @@
 - `testing-manual.md`
 
 ## 验收命令（本轮）
-- `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct|自动加入|私有安全|公网入口|deployment_mode|node_role|显式确认" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md testing-manual.md`
+- `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct|自动加入|私有安全|公网入口|deployment_mode|node_role|显式确认" doc/p2p/network/mainnet-private-reachability-architecture.prd.md doc/p2p/network/mainnet-private-reachability-architecture.design.md doc/p2p/network/mainnet-private-reachability-architecture.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md testing-manual.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unknown-unknown`

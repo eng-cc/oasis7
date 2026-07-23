@@ -32,7 +32,7 @@
 
 ## 5. 专题导航
 - 基础链路进入 `network/`、`consensus/`
-- mixed-topology / 非全公网主链级覆盖网络进入 `network/p2p-mainnet-private-reachability-architecture-2026-04-01.*`
+- mixed-topology / 非全公网主链级覆盖网络进入 `network/mainnet-private-reachability-architecture.*`
 - 数据与复制进入 `distfs/`
 - 节点执行与奖励进入 `node/`
 - 区块链和生产化扩展进入 `blockchain/`、`distributed/`
