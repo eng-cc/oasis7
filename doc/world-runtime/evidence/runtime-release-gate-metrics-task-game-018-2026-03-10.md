@@ -33,4 +33,4 @@
 - 通过项：回放恢复、snapshot retention、storage footprint baseline、WASM/hash/registry、治理阻断路径均有本轮或可追溯证据。
 - 阻断项：无 task 级 P0 阻断。
 - 条件放行项：更大范围 footprint/GC/soak 联合验证仍在 `TASK-WORLD_RUNTIME-033` 后续切片中推进。
-- 建议升级动作：将本记录回填到 Git history，把 runtime P0 从 `blocked` 更新为 `ready`。
+- 历史处置：本记录曾作为 runtime P0 从 `blocked` 转为 `ready` 的依据；Git history 只保留当时裁决，不接受状态回写，当前状态以 GitHub task issue evidence 和现行 runtime project 为准。
