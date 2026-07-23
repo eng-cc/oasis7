@@ -1,7 +1,7 @@
 # Agent 直连接入的 Local Provider 本地 HTTP Provider 首期方案（2026-03-12）
 
-- 对应设计文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
+- 对应设计文档: `doc/world-simulator/llm/provider-loopback-http-contract.design.md`
+- 对应项目管理文档: `doc/world-simulator/llm/provider-loopback-http-contract.project.md`
 
 审计轮次: 1
 

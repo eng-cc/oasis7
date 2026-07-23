@@ -67,13 +67,13 @@
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.{prd,project}.md`
-- `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`
-- `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.project.md`
-- `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
-- `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
-- `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
-- `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md`
-- `doc/world-simulator/llm/{llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md,provider-agent-dual-mode-contract-2026-03-16.md}`
+- `doc/world-simulator/llm/decision-provider-contract.prd.md`
+- `doc/world-simulator/llm/decision-provider-contract.project.md`
+- `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
+- `doc/world-simulator/llm/provider-loopback-http-contract.project.md`
+- `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
+- `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
+- `doc/world-simulator/llm/{provider-agent-dual-mode.{prd,project}.md,provider-agent-dual-mode-contract.md}`
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
 - Runtime live migration phase1/2/3 旧三件套已退役删除；当前追溯入口收敛到 `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md`、`doc/world-simulator/viewer/viewer-manual.manual.md`、GitHub task issue evidence comments 与 git history。
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.{prd,design,project}.md`

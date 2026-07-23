@@ -3,8 +3,8 @@
 - owner: `producer_system_designer`
 - 协作角色: `agent_engineer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 关联 PRD:
-  - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
-  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
+  - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
+  - `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`
   - `doc/product/player-entry-distribution/prd.md`
 - 关联任务:
   - `TASK-WORLD_SIMULATOR-119/120/121/124/125/126/128/160/283`
@@ -35,7 +35,7 @@
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7_client_launcher/src/launcher_core.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
+  - `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
 - 设计目标:
   - `player_parity` lane 已贯通 runtime live / `oasis7_game_launcher` / `oasis7` / launcher 主链路。
 - 当前实现:
@@ -54,7 +54,7 @@
   - `crates/oasis7/src/simulator/decision_provider.rs`
   - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
   - `crates/oasis7/src/viewer/runtime_live/mapping.rs`
-  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
+  - `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
 - 设计目标:
   - 双轨模式共享动作 contract，但观测表达必须分层；`player_parity` 只能拿玩家可感知压缩视图，`headless_agent` 可拿结构化局部拓扑与提示信息。
 - 当前实现:
@@ -178,7 +178,7 @@
   - QA / producer 能重新签署“本专题已按目标态落地”。
 
 ## 7. 文档口径更新要求
-- `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 不应继续保持“completed / none”而不提 remediation。
+- `doc/world-simulator/llm/provider-agent-dual-mode.project.md` 不应继续保持“completed / none”而不提 remediation。
 - `doc/world-simulator/project.md` 需要新增 follow-up task，避免本轮结论只停留在 review 文本。
 - 若后续修正改变了 `PRD-WORLD_SIMULATOR-037/040` 的边界或 acceptance，必须先回写对应 PRD，再推进实现。
 

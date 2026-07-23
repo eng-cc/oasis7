@@ -1,8 +1,8 @@
 # Agent 直连执行 Lane（provider: player_parity / headless_agent）（2026-03-16）
 
-- 对应项目管理文档: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
+- 对应项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
 - 关联专题:
-  - `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
+  - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
   - `doc/product/player-entry-distribution/prd.md`
 
@@ -21,11 +21,11 @@
 - 不覆盖本轮具体 runtime/adapter/viewer 实现细节与逐行代码方案。
 
 ## 接口 / 数据
-- PRD 主文档: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
-- 项目管理文档: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
-- 关联 parity 专题: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
+- PRD 主文档: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`
+- 项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
+- 关联 parity 专题: `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
 - 关联 software-safe 专题: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- supporting contract: `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`
+- supporting contract: `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`
 - product taxonomy: `doc/product/player-entry-distribution/prd.md`
 - 追踪主键: `PRD-WORLD_SIMULATOR-040`
 - 执行追踪: `TASK-WORLD_SIMULATOR-148/149/150/151/152/153`

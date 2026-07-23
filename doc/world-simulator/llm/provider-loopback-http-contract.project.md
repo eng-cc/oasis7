@@ -1,7 +1,7 @@
 # Agent 直连接入的 Local Provider 本地 HTTP Provider 首期方案（2026-03-12）项目管理文档
 
-- 对应设计文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.design.md`
-- 对应需求文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
+- 对应设计文档: `doc/world-simulator/llm/provider-loopback-http-contract.design.md`
+- 对应需求文档: `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
 
 审计轮次: 1
 
@@ -14,7 +14,7 @@
 - [ ] T5 (PRD-WORLD_SIMULATOR-037) [test_tier_full]: 以真实本机 `Local Provider` 完成单一低频 NPC 闭环试点，验证“安装 -> 发现 -> 绑定 -> 决策 -> 恢复”用户路径；未通过 parity 前仅允许 `experimental`。
 
 ## 依赖
-- `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`
+- `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/prd.md`
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/prd.index.md`

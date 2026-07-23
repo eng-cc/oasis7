@@ -4,7 +4,7 @@
 - 联审: `producer_system_designer`
 - 关联 PRD: `PRD-WORLD_SIMULATOR-040`、`PRD-WORLD_SIMULATOR-038`
 - 关联任务:
-  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` T4.5
+  - `doc/world-simulator/llm/provider-agent-dual-mode.project.md` T4.5
   - `TASK-WORLD_SIMULATOR-298`
 - 结论状态:
   - `PRD-WORLD_SIMULATOR-040`: `pass / restore completed`

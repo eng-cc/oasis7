@@ -3,7 +3,7 @@
 - owner: `qa_engineer`
 - 联审: `producer_system_designer`、`runtime_engineer`、`viewer_engineer`
 - 关联 PRD: `PRD-WORLD_SIMULATOR-038`
-- 关联任务: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md` T4
+- 关联任务: `doc/world-simulator/llm/provider-agent-experience-parity.project.md` T4
 - 结论状态: `failed`
 
 ## 1. 批次信息

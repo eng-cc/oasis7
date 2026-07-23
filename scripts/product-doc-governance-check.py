@@ -45,6 +45,11 @@ PRODUCT_IDENTITY_EXAMPLE_PATHS = frozenset(
     {"doc/engineering/doc-governance/doc-structure-standard.design.md"}
 )
 CANONICAL_MODULE_ROOT_PATHS = frozenset(module.path for module in MODULES)
+TOPIC_PROFESSIONAL_AUTHORITIES = {
+    "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md": (
+        "doc/world-simulator/llm/provider-agent-experience-parity.prd.md",
+    ),
+}
 REQUIRED_HEADINGS = (
     "## 文档身份",
     "## 1. 产品承诺",
@@ -265,6 +270,11 @@ def check(root: Path) -> list[str]:
                 fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must reference {topic}")
         if metadata(topic_text, "产品层唯一 PRD") not in {None, module_root}:
             fail(errors, "topic-module-authority", f"{topic}: 产品层唯一 PRD must name its module root")
+        for authority in TOPIC_PROFESSIONAL_AUTHORITIES.get(topic, ()):
+            if authority not in markdown_targets(root, topic_path, topic_text):
+                fail(errors, "topic-professional-authority", f"{topic}: missing link to {authority}")
+            elif not (root / authority).is_file():
+                fail(errors, "topic-professional-authority", f"{topic}: missing authority {authority}")
 
     paired_files = [
         path

@@ -45,7 +45,7 @@
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。
 - `doc/testing/manual/README.md`：`manual/` 子树 landing page，按 Web UI 页面闭环、真实 Playwright 流程、formal public-testnet attach 与模型视觉评审分流；具体 manual 保留 operator 真值，不并入下方模块 PRD 三件套长表。
 - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`：按 surface 汇总现有性能覆盖、当前缺口、建议补测和建议 tier 的速查表。
-- Provider dual-mode 历史 blocker 已收敛到 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 与复签 evidence；当前 testing 阻断只从 `doc/testing/project.md` 进入。
+- Provider dual-mode 历史 blocker 已收敛到 `doc/world-simulator/llm/provider-agent-dual-mode.project.md` 与复签 evidence；当前 testing 阻断只从 `doc/testing/project.md` 进入。
 
 Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流，不再作为单一 PRD/design/project 三件套维护。`web-ui-agent-browser-closure-manual.*` 保留 Viewer 页面通用闭环的 PRD / project / manual 真值；`web-ui-playwright-closure-manual.manual.md` 保留真实本地栈 + 玩家 UI 操作流程的 `PWT-###` 系列入口；`web-ui-playwright-closure-manual.design.md` 仅作为历史/共享设计 companion 追溯，不再把两条 manual surface 合并成一个 normal triplet。
 

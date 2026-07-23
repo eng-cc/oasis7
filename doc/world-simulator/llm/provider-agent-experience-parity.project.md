@@ -1,7 +1,7 @@
 # Local Provider 与内置 Agent 体验等价（parity）验收方案（2026-03-12）项目管理文档
 
-- 对应设计文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.design.md`
-- 对应需求文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
+- 对应设计文档: `doc/world-simulator/llm/provider-agent-experience-parity.design.md`
+- 对应需求文档: `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
 
 审计轮次: 2
 
@@ -15,8 +15,8 @@
 - [ ] T5 (PRD-WORLD_SIMULATOR-038) [test_tier_full]: 在保持 `experimental` 的前提下推进 `P1`/`P2` 行为等价扩面；只有当 Local Provider 达到 `latency_class A` 时，才允许作为默认体验或扩大覆盖范围。
 
 ## 依赖
-- `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`
-- `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
+- `doc/world-simulator/llm/decision-provider-contract.prd.md`
+- `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
 - `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
 - `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
 - `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`

@@ -1,7 +1,7 @@
 # Local Provider 本地 HTTP Provider 接入 world-simulator 首期方案（2026-03-12）设计
 
-- 对应需求文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
+- 对应需求文档: `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
+- 对应项目管理文档: `doc/world-simulator/llm/provider-loopback-http-contract.project.md`
 
 ## 1. 设计定位
 定义“安装在用户机器上的 `Local Provider` 如何通过本地 HTTP 参与 world-simulator 的 agent 决策”的首期工程方案，覆盖本地发现、握手、配置、决策请求、反馈回写、状态可观测与失败回退。
