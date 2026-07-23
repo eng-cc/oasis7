@@ -79,7 +79,7 @@
 - Gameplay routing: `doc/game/gameplay/README.md`, `doc/game/prd.index.md`
 - Related topics:
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
-  - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
+  - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
   - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
