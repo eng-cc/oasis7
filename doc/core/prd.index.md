@@ -26,7 +26,6 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `reviews/` | 46 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；先由 `reviews/README.md` 分流，默认按需进入 |
 | core 根入口 | 动态 | 项目级总览、设计、执行台账与索引；产品契约从 `doc/product/` 对应模块文档树进入 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
@@ -38,7 +37,7 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部活跃专题和 review 文件。
-- `reviews/`、模板与 checklist 继续保留可检索性；历史一次性 handoff 文档已退役删除，不再作为默认阅读面或证据 sink。
+- 模板与 checklist 继续保留可检索性；历史 review 与一次性 handoff 文档已退役删除，从 Git history 和 GitHub task issue evidence comments 追溯。
 - 完整专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
