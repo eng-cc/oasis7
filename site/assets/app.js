@@ -627,6 +627,37 @@
     const buttons = Array.from(controls.querySelectorAll("[data-proof-tab]"));
     const panels = Array.from(document.querySelectorAll("[data-proof-panel]"));
     const events = Array.from(document.querySelectorAll("[data-proof-event]"));
+    const causal = document.querySelector("[data-proof-causal]");
+
+    const causalCopy = {
+      minimal: {
+        kicker: "单点波动 · 因果轨迹",
+        title: "一条收紧条件如何留下痕迹",
+        steps: [
+          ["压力出现", "资源、目标或既有规则先收紧可选空间。"],
+          ["Agent 回应", "它们在当下约束内决定生产、交易或协作。"],
+          ["后果留下", "世界变化进入事件、回放与审计可读的轨迹。"],
+        ],
+      },
+      twin: {
+        kicker: "双区协作 · 因果轨迹",
+        title: "一笔协作如何穿过两个区域",
+        steps: [
+          ["供给收紧", "两个区域先面对需要重新分配的资源与维护压力。"],
+          ["Agent 协作", "Agent 在当下条件里协商交易与共同生产。"],
+          ["结构改变", "供给协议和生产结果成为随后可以回看的世界状态。"],
+        ],
+      },
+      triad: {
+        kicker: "三方治理 · 因果轨迹",
+        title: "一项协定如何成为可观察的制度后果",
+        steps: [
+          ["多方压力", "区域间的物流与优先级冲突，让协作需要新的边界。"],
+          ["Agent 协商", "多方在既有约束内调整路径、协定与治理选择。"],
+          ["治理留档", "投票和协定进入可审计轨迹，供后续观察与回看。"],
+        ],
+      },
+    };
 
     if (!buttons.length || !panels.length || !events.length) {
       return;
@@ -647,6 +678,29 @@
       events.forEach((item) => {
         const visible = item.getAttribute("data-proof-event") === tab;
         item.setAttribute("data-proof-visible", visible ? "true" : "false");
+      });
+
+      const nextCausal = causalCopy[tab];
+      if (!causal || !nextCausal) {
+        return;
+      }
+      const kicker = causal.querySelector("[data-proof-causal-kicker]");
+      const title = causal.querySelector("[data-proof-causal-title]");
+      if (kicker) {
+        kicker.textContent = nextCausal.kicker;
+      }
+      if (title) {
+        title.textContent = nextCausal.title;
+      }
+      nextCausal.steps.forEach(([stepTitle, stepCopy], index) => {
+        const titleNode = causal.querySelector(`[data-proof-causal-step="${index}-title"]`);
+        const copyNode = causal.querySelector(`[data-proof-causal-step="${index}-copy"]`);
+        if (titleNode) {
+          titleNode.textContent = stepTitle;
+        }
+        if (copyNode) {
+          copyNode.textContent = stepCopy;
+        }
       });
     };
 
