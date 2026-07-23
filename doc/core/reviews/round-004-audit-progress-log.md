@@ -21,9 +21,9 @@
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/project.md` | issue_open | I4-011 | 模块级 project 缺 PRD-ID->TASK->验收命令->证据矩阵。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/prd.index.md` | issue_open | I4-010 | 索引未覆盖 README.md，可达性规则未显式声明。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/README.md` | issue_open | I4-007 | README 与 prd.index.md 同时承担入口角色，权威入口边界不清。 |
-| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯表 T0~Tn 占位且缺命令证据，且混入迁移过程描述。 |
-| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.project.md` | issue_open | I4-002,I4-013 | PRD-ID 粒度与 PRD 不一致，且无独立验收命令段。 |
-| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.prd.md` | issue_open | I4-005 | phase 系列缺主从权威声明，存在双源漂移风险。 |
+| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯表 T0~Tn 占位且缺命令证据，且混入迁移过程描述。 |
+| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-002,I4-013 | PRD-ID 粒度与 PRD 不一致，且无独立验收命令段。 |
+| 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-005 | phase 系列缺主从权威声明，存在双源漂移风险。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/distfs/distfs-production-hardening-phase1.project.md` | issue_open | I4-003 | 任务含回归描述但未落地为可执行验收命令清单。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.project.md` | issue_open | I4-008 | 已完成状态缺最近更新日期字段，时效性不可审计。 |
 | 2026-03-06 11:42:26 +0800 | Codex-G4-001 | `doc/core/prd.md` | pass | - | 入口层级与术语口径清晰，未发现 D4 高中风险。 |
@@ -50,17 +50,17 @@
 | 2026-03-06 11:57:17 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”仅迁移任务带 PRD-ID，T0~T3 未显式映射需求与验收命令。 |
 | 2026-03-06 11:48:11 +0800 | codex | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md` | issue_open | I4-003,I4-006 | 同文并存 `审计轮次: 4` 与 `- 审计轮次: 2`；状态仍写“进行中/等待回归”且最近更新停在 2026-03-01，时效状态失真。 |
 | 2026-03-06 11:48:17 +0800 | codex | `doc/scripts/precommit/pre-commit.prd.md` | issue_open | I4-004 | 接口示例含占位命令 `rustfmt --edition 2021 <staged .rs files>`，不属于可直接执行验收命令。 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | issue_open | I4-001,I4-004,I4-006,I4-005 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述；phase 系列缺主从口径声明 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
