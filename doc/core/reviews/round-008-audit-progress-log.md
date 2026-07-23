@@ -2,6 +2,8 @@
 
 审计轮次: 8
 
+> 历史身份说明：日志中的 `blockchain-p2pfs-hardening-phase2` 至 `phase8` basename 记录当时实际补齐的专题；这些文件现已退役删除，当前专业权威统一为 `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.{prd,design,project}.md`。
+
 - 当前状态: `in_progress`
 - 说明: ROUND-008 已启动，已完成缺失 `Design` 专题的全量扫描，共 `365` 个缺口。
 - 记录规则: 每次完成分级、补齐或延期登记后即时回写。
@@ -233,16 +235,16 @@
 | 2026-03-10 10:20:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 144 个专题、剩余 221 个缺口 |
 
 
-| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase2.design.md</code> 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase3.design.md</code> 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase4.design.md</code> 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase5.design.md</code> 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 10:35:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 148 个专题、剩余 217 个缺口 |
 
 
-| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase6.design.md</code> 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase7.design.md</code> 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8` | `backfill` | pass | I8-001/I8-002 | 已补齐 <code>doc&#47;p2p&#47;blockchain&#47;blockchain-p2pfs-hardening-phase8.design.md</code> 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 10:50:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 152 个专题、剩余 213 个缺口 |
 

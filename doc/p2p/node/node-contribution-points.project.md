@@ -19,7 +19,7 @@
 - `crates/oasis7/src/runtime/mod.rs`
 - `crates/oasis7/src/runtime`（新增节点积分模块）
 - `doc/p2p/distributed/distributed-runtime.prd.md`
-- `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md`
+- `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
 
 ## 状态
 - 当前阶段：节点贡献积分激励阶段完成（NCP-1~NCP-4 全部完成）。

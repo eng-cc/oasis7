@@ -75,13 +75,7 @@
 ## 完整专题检索清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.project.md` |
-| `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.project.md` |
+| `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` |
 | `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md` | `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.design.md` | `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.project.md` |
 | `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md` | `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.design.md` | `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.project.md` |
 | `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md` | `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.design.md` | `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.project.md` |
