@@ -113,7 +113,7 @@
 ## 新增已补齐（2026-03-10 / world-runtime + world-simulator 收口）
 - `doc/world-runtime/module/module-subscription-filters`
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08`
-- `doc/world-runtime/module/player-published-entities-2026-03-05`
+- `doc/world-runtime/module/player-published-entities`
 - `doc/world-runtime/runtime/runtime-infinite-sequence-rollover`
 - `doc/world-runtime/runtime/runtime-numeric-correctness-phase1` ~ `phase15`
 - `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening`

@@ -36,7 +36,7 @@
 - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`：module-local observe spec、共享 runner、wrapper script 与模板化接入主入口。
 - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
-- `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`：玩家发布实体与模块发布链路衔接入口。
+- `doc/world-runtime/module/player-published-entities.prd.md`：玩家发布实体与模块发布链路衔接入口。
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md`：治理收据安全 hardening 主入口。
 
 ## governance 子域阅读边界
@@ -67,7 +67,7 @@
 | --- | --- | --- |
 | `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md` | `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md` | `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md` |
 | `doc/world-runtime/module/agent-default-modules.prd.md` | `doc/world-runtime/module/agent-default-modules.design.md` | `doc/world-runtime/module/agent-default-modules.project.md` |
-| `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md` | `doc/world-runtime/module/player-published-entities-2026-03-05.design.md` | `doc/world-runtime/module/player-published-entities-2026-03-05.project.md` |
+| `doc/world-runtime/module/player-published-entities.prd.md` | `doc/world-runtime/module/player-published-entities.design.md` | `doc/world-runtime/module/player-published-entities.project.md` |
 | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md` |
 | `doc/world-runtime/module/module-storage.prd.md` | `doc/world-runtime/module/module-storage.design.md` | `doc/world-runtime/module/module-storage.project.md` |
 | `doc/world-runtime/module/module-subscription-filters.prd.md` | `doc/world-runtime/module/module-subscription-filters.design.md` | `doc/world-runtime/module/module-subscription-filters.project.md` |

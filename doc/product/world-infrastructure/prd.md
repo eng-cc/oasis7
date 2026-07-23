@@ -18,6 +18,7 @@
 ### 活跃产品专题
 
 - [`世界连续性、治理与恢复`](world-continuity-governance-and-recovery.prd.md)：权威世界不分叉、恢复后玩家结果连续、治理不可旁路、紧急处置可申诉与长期世界放行。
+- [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md)：有限区域设施如何解决可读压力，以及经治理的新工业能力如何安全进入同一持久世界。
 
 ## 1. 产品承诺
 
@@ -41,7 +42,7 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 
 `发现 -> 报价 -> 建设/commission -> 运营/提供服务 -> 维护 -> 升级/迁移 -> 回收/退役`
 
-每一步都必须具备明确前置条件、资源变化、权限边界、结构化失败和可追溯 receipt。当前首个正式冻结的设施专题 PRD 基线是 [`micro_depot`](../../game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md)；它验证区域专业化，不代表自由建造、任意 WASM 上传或全局治理授权。
+每一步都必须具备明确前置条件、资源变化、权限边界、结构化失败和可追溯 receipt。当前首个正式冻结的设施专题 PRD 基线是 [`micro_depot`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)；它验证区域专业化，不代表自由建造、任意 WASM 上传或全局治理授权。
 
 ### 2.3 产品原则
 

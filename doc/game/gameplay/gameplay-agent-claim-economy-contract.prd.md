@@ -1,7 +1,7 @@
-# Gameplay Agent 认领代币成本与维护机制（2026-03-27）
+# Gameplay Agent 认领经济合同
 
-- 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
+- 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md`
+- 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
 
 审计轮次: 8
 

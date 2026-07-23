@@ -398,8 +398,8 @@
 - `doc/world-runtime/module/module-storage.project.md`
 - `doc/world-runtime/module/module-subscription-filters.prd.md`
 - `doc/world-runtime/module/module-subscription-filters.project.md`
-- `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
-- `doc/world-runtime/module/player-published-entities-2026-03-05.project.md`
+- `doc/world-runtime/module/player-published-entities.prd.md`
+- `doc/world-runtime/module/player-published-entities.project.md`
 - `doc/world-runtime/prd.index.md`
 - `doc/world-runtime/prd.md`
 - `doc/world-runtime/project.md`

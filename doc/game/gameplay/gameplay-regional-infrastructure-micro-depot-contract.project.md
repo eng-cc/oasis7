@@ -1,11 +1,11 @@
-# Gameplay WASM-backed Regional Infrastructure: micro_depot Project
+# Gameplay 区域基础设施 micro_depot 合同（项目管理文档）
 
 审计轮次: 2
 
 ## 入口定位
 
-- PRD: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
-- Design: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
+- PRD: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
+- Design: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
 - Root baseline: `doc/game/prd.md` / `PRD-GAME-016`
 - Current task truth: GitHub issue `eng-cc/oasis7#2279`, `task_511d22454fee4f62b893df3462242cc5`
 - Current draft PR: GitHub pull request `eng-cc/oasis7#2289`
@@ -60,7 +60,7 @@
   - `git diff --check`
   - `for f in doc/game/gameplay/*.prd.md; do base=${f%.prd.md}; [ -f "$base.design.md" ] || echo "missing design for $f"; [ -f "$base.project.md" ] || echo "missing project for $f"; done`
 - Route checks:
-  - `rg -n "PRD-GAME-016|micro_depot|gameplay-wasm-backed-regional-infrastructure-micro-depot" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/README.md doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.*.md`
+  - `rg -n "PRD-GAME-016|micro_depot|gameplay-regional-infrastructure-micro-depot-contract" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/README.md doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.*.md`
 
 ## Blockers / Guardrails
 
@@ -81,7 +81,7 @@
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
   - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
-  - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+  - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
 
 ## 状态
 
