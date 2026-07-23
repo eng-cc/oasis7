@@ -1,7 +1,8 @@
-# Gameplay 间接控制 control-feeling 合同（2026-05-14） PRD v0.1
+# Gameplay 间接控制 agency 合同 PRD
 
-- 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`
+- 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md`
+- 对应项目管理文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md`
+- 产品层长期承诺: [`doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md)；本文继续拥有保证项字段、状态与失败签名，以及 gameplay、runtime、Viewer/API、Agent 和 QA 的专业合同与任务证据。
 
 审计轮次: 1
 

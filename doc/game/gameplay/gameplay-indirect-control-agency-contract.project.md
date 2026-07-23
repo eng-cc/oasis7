@@ -1,7 +1,7 @@
-# Gameplay 间接控制 control-feeling 合同（项目管理文档）
+# Gameplay 间接控制 agency 合同（项目管理文档）
 
-- 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md`
-- 对应需求文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
+- 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md`
+- 对应需求文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
 
 审计轮次: 1
 
@@ -44,7 +44,7 @@
 ## 验收命令（草案）
 
 - `indirect-control-feeling-contract-freeze` / 文档冻结与挂载
-  - `rg -n "PRD-GAME-014|TASK-GAME-071|TASK-GAME-072|TASK-GAME-073|TASK-GAME-074|TASK-GAME-075|control-feeling|accepted intent|间接控制因果与下一步" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/gameplay-top-level-design.prd.md doc/game/gameplay/gameplay-top-level-design.project.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`
+  - `rg -n "PRD-GAME-014|TASK-GAME-071|TASK-GAME-072|TASK-GAME-073|TASK-GAME-074|TASK-GAME-075|control-feeling|accepted intent|间接控制因果与下一步" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/gameplay-top-level-design.prd.md doc/game/gameplay/gameplay-top-level-design.project.md doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md`
   - `./scripts/doc-governance-check.sh`
   - `git diff --check`
 - `runtime-control-feeling-canonical-contract` / canonical contract 对齐

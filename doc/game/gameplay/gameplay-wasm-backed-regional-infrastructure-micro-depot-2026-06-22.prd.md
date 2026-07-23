@@ -126,7 +126,7 @@
 - Integration Points:
   - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
-  - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
+  - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
   - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`

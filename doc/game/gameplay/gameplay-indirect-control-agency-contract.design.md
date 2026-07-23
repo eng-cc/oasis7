@@ -1,7 +1,7 @@
-# Gameplay 间接控制 control-feeling 合同（2026-05-14）设计文档
+# Gameplay 间接控制 agency 合同设计文档
 
-- 对应需求文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`
+- 对应需求文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
+- 对应项目管理文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md`
 
 审计轮次: 1
 

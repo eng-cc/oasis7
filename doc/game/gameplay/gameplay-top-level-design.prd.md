@@ -413,7 +413,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 4. `bounded consequence readability`
    - 玩家必须看懂当前代价、世界变化、主阻塞与最短下一步。
 
-这 4 条 guarantees 的专题合同见 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
+这 4 条 guarantees 的专题合同见 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`。
 
 当前 defer 范围：
 - 暂不继续扩大高风险对抗/治理/元进度在首局中的曝光。
