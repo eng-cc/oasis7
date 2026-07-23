@@ -23,7 +23,7 @@
 - 模块设计总览：`doc/core/design.md`
   - 历史产物：已从活跃文档树退役，可由 Git history 按原路径追溯。
   - 验收命令 (`test_tier_required`):
-    - `git log --oneline -- 'doc/core/$(printf reviews)/consistency-review-round-*.md'`
+    - `test -n "$(git log --format=%H -- doc/core/$(printf reviews)/consistency-review-round-\*.md)"`
     - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-008.md | rg -n "轮次编号|轮次状态|审计轮次|缺省=0|抽样范围|一致性问题|整改项|责任人|截止时间|复审结果"`
     - `./scripts/doc-governance-check.sh`
   - ROUND-002 启动产物（2026-03-05）:
