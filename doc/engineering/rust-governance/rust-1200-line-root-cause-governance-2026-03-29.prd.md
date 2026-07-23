@@ -4,7 +4,7 @@
 
 本文定义长期规则与完成态；`scripts/check-rust-file-size.sh` 是当前扫描结果
 的单一运行时真值。历史峰值、迁移批次、逐文件行数和一次性验证记录不属于
-当前规则，改从 GitHub task、`doc/core/reviews/round-*` 或 git history 追溯。
+当前规则，改从 GitHub task、Git history 或 git history 追溯。
 
 ## 当前契约
 

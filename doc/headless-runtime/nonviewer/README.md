@@ -14,4 +14,4 @@
 ## 维护边界
 
 - 本页只负责活跃专题的首次分流，不重述技术规格、任务状态或历史审计结论。
-- 新增或退役本目录中的当前专题时，同一改动需更新本页和 `doc/headless-runtime/prd.index.md`；历史证据继续按父目录 README 所述保留在 `doc/core/reviews/` 与 GitHub task evidence 中。
+- 新增或退役本目录中的当前专题时，同一改动需更新本页和 `doc/headless-runtime/prd.index.md`；历史证据继续按父目录 README 所述保留在 Git history 与 GitHub task evidence 中。

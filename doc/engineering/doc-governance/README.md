@@ -25,4 +25,4 @@
 - 就文档树共享治理规则而言，上游 `doc/README.md` 与 `doc/engineering/README.md` 只链接本页；其他模块或专题导航按各自职责保留。具体规则、专题正文与执行状态必须从本页继续下钻，避免上游入口各自固定某个专题文件。
 - 新增 doc-governance 专题时，同批更新 `doc/engineering/prd.index.md`，并在本页补一行“按治理问题分流”。
 - 一次性路径治理完成且目标 landing page 已承接首读分流与维护触发器后，退役该专题三件套，并在 `doc/engineering/prd.index.md` 的历史审计留痕记录替代入口；不要保留已经过期的缺口描述或 follow-up 排期。
-- 历史证据、旧审读轮次和任务过程仍保留在 GitHub task issue evidence comments、`doc/core/reviews/round-*` 与 git history；不要为减重而批量改写历史文件。
+- 历史证据、旧审读轮次和任务过程仍保留在 GitHub task issue evidence comments、Git history 与 git history；不要为减重而批量改写历史文件。

@@ -11,7 +11,7 @@
 - 想确认跨模块优先级规则：读 `doc/core/prd.md`；想确认当前执行任务与下一步：读 `doc/core/project.md`
 - 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/prd.md`
 - 想先看“统一持久大世界”默认产品模型与术语契约：`doc/product/world-infrastructure/prd.md`
-- 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 `doc/core/reviews/README.md`
+- 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 Git history
 
 ## 入口
 - PRD: `doc/core/prd.md`

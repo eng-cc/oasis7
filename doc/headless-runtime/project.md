@@ -45,7 +45,7 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-NONVIEWER-009 (PRD-NONVIEWER-001) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口治理，为模块 README 增加命名迁移后的轻量阅读顺序，并明确 README 与 `nonviewer/`、`checklists/`、`templates/`、`prd.index.md` 的边界。
-- [x] headless-runtime-nonviewer-design-alignment-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且继续暴露旧 `nonviewer` 设计审查语义的 `nonviewer-design-alignment-closure/review` 两组三件套，将追溯入口收敛到 `doc/core/reviews/`、`doc/headless-runtime/README.md`、`doc/headless-runtime/prd.index.md` 与 GitHub task issue evidence comments。 Trace: #1790 (task_747c60075cb6474fbb16d7b276eb86e4)
+- [x] headless-runtime-nonviewer-design-alignment-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且继续暴露旧 `nonviewer` 设计审查语义的 `nonviewer-design-alignment-closure/review` 两组三件套，将追溯入口收敛到 Git history、`doc/headless-runtime/README.md`、`doc/headless-runtime/prd.index.md` 与 GitHub task issue evidence comments。 Trace: #1790 (task_747c60075cb6474fbb16d7b276eb86e4)
 
 ## 依赖
 - 模块设计总览：`doc/headless-runtime/design.md`
@@ -71,5 +71,5 @@
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已补齐命名迁移后的轻量入口，当前模块无需再拆更重的 README 层级。
 - 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。
-- 当前追溯入口：`TASK-NONVIEWER-001~009`、`doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`、`doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md`、`doc/headless-runtime/templates/longrun-archive-incident-template.md`、`doc/core/reviews/` 中的 round review 记录与 GitHub task issue evidence comments / role review evidence；旧 2026-03-11 root 状态 closure / handoff 文档与 `nonviewer-design-alignment-*` 一次性审查三件套已退役删除。
+- 当前追溯入口：`TASK-NONVIEWER-001~009`、`doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`、`doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md`、`doc/headless-runtime/templates/longrun-archive-incident-template.md`、Git history 中的 round review 记录与 GitHub task issue evidence comments / role review evidence；旧 2026-03-11 root 状态 closure / handoff 文档与 `nonviewer-design-alignment-*` 一次性审查三件套已退役删除。
 - 旧 `HO-CORE-20260310-HR-001` 阶段收口角色交接块已并入上方 `TASK-NONVIEWER-002/003/004` 完成记录与当前追溯入口；不再保留过期待办状态语义。

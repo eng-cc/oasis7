@@ -30,5 +30,5 @@
 - game 视觉证据：`doc/game/gameplay/gameplay-micro-loop-visual-closure-evidence-2026-03-10-round009.md`
 - playability 证据包：`doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md`
 - testing 证据包：`doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
-- core go/no-go 记录：`doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
+- core go/no-go 记录：Git history
 - 当前链路状态：`TASK-GAME-018` 已完成任务关闭，但候选级总评仍取决于其它 `P0` 证据是否齐备。

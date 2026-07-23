@@ -8,7 +8,7 @@
 - 日期: `2026-03-10`
 - 汇总人: `qa_engineer`
 - 总结论: `pass`
-- 关联 go/no-go 记录: `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
+- 关联 go/no-go 记录: Git history
 
 ## 覆盖范围
 | 模块 | PRD-ID | 任务ID | 测试层级 | 负责人 |

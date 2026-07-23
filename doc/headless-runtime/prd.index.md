@@ -18,4 +18,4 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - 活跃 `nonviewer/` 专题的首次问题分流由 `doc/headless-runtime/nonviewer/README.md` 负责；本页保持精确 triplet 查找，不重复专题说明。
-- 已退役的 `nonviewer-design-alignment-*` 一次性设计对齐审查三件套不再占据活跃索引；历史证据从 `doc/core/reviews/consistency-review-round-001.md`、`doc/core/reviews/round-003-reviewed-files.md`、`doc/core/reviews/round-004-reviewed-files.md` 与 `doc/core/reviews/round-008-reviewed-files.md` 追溯。
+- 已退役的 `nonviewer-design-alignment-*` 一次性设计对齐审查三件套不再占据活跃索引；历史证据从 Git history、Git history、Git history 与 Git history 追溯。
