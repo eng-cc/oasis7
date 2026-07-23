@@ -1,18 +1,20 @@
-# oasis7 主流公链测试体系对标与缺口矩阵（2026-03-24）
+# oasis7 主流公链测试体系对标与缺口矩阵
 
-- 对应设计文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
+- 对应设计文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md`
+- 对应项目管理文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
+- 原始基准日期: `2026-03-24`
 
 审计轮次: 1
 
-> Current canonical source: this benchmark document explains testing-maturity
-> background only. It must not maintain current `shared_devnet` or
-> `public_testnet` status. Current network-tier truth lives in
-> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> Authority boundary: this benchmark document explains testing-maturity
+> background and preserves the original 2026-03-24 benchmark history only. It
+> must not maintain current `shared_devnet`, `public_testnet`, `mainnet`, or
+> release status. Current network-tier truth lives in
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
 
 ## 1. Executive Summary
 - Problem Statement: oasis7 近几轮已经补齐签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已经开始做真实 governance registry import/audit/runbook，但团队仍缺一份“主流公链到底怎样分层测试、oasis7 当前已经覆盖到哪一层、还缺什么才能把 preview 做成更像主流链的工程体系”的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
-- Proposed Solution: 新建 producer-owned 的测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> network rehearsal / release-train readiness` 六层，再把 oasis7 当前命令、证据与缺口映射进去，形成后续 `MAINNET-1~3` execution workstreams 的测试优先级。
+- Proposed Solution: 由 testing 专业域维护测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> network rehearsal / release-train readiness` 六层，再把 oasis7 可追溯的命令、证据与缺口映射进去；producer 只据此决定后续 execution workstreams 的优先级，不由本 benchmark 维护当前网络状态或成熟度。
 - Success Criteria:
   - SC-1: 明确给出不少于 6 层的“主流公链测试体系”分层模型，并区分“单客户端项目的等价替代要求”与“多客户端公链的原生做法”。
   - SC-2: 明确给出 oasis7 当前 `已有 / 部分具备 / 缺失` 的测试矩阵，而不是只给抽象建议。

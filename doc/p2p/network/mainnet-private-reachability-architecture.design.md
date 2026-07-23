@@ -1,7 +1,7 @@
 # oasis7 主链级非全公网 P2P 覆盖网络架构（设计文档）
 
-- 对应需求文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
-- 对应项目管理文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+- 对应需求文档: `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
+- 对应项目管理文档: `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
 
 审计轮次: 1
 ## 设计目标

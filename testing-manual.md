@@ -875,8 +875,8 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
 - required 验证（本轮 docs-only baseline）：
 ```bash
 rg -n "自动加入|私有安全|公网入口|deployment_mode|node_role|AutoNAT|高风险职责|显式确认" \
-  doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md \
-  doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md \
+  doc/p2p/network/mainnet-private-reachability-architecture.prd.md \
+  doc/p2p/network/mainnet-private-reachability-architecture.project.md \
   testing-manual.md
 ./scripts/doc-governance-check.sh
 git diff --check
@@ -972,14 +972,14 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
 
 ### Network Tiers / Shared-Network Evidence
-- 当前网络层真值统一以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 与对应 project/runbook 为准：
+- 当前网络层真值统一以 `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` 与对应 project/runbook 为准：
   - operator/runtime network-tier 是 `local_devnet -> public_testnet -> mainnet`，不作为玩家世界模型。
   - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 six-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
 - Canonical docs:
-  - Current network-tier source of truth: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+  - Current network-tier source of truth: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
   - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
   - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.project.md`
-  - Benchmark background: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
+  - Benchmark background: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
 - Canonical commands:
 ```bash
 ./scripts/network-tier-manifest.sh validate \

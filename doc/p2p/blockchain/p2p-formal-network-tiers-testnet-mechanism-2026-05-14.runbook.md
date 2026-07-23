@@ -1,8 +1,8 @@
 # oasis7 正式网络分层与 `public_testnet` live-candidate checklist（Companion Runbook）
 
-- 对应需求文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
-- 对应设计文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+- 对应需求文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
+- 对应设计文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
+- 对应项目管理文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
 
 审计轮次: 1
 
@@ -242,7 +242,7 @@
 ## 9. 回写要求
 每次正式推进 live candidate checklist，至少回写：
 - GitHub task issue evidence comments
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
 - `testing-manual.md`（若 canonical 命令或 claim boundary 变化）
 - lane evidence 文档与 TSV
 

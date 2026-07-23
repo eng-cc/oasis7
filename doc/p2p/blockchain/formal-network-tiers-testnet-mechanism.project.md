@@ -1,7 +1,7 @@
 # oasis7 正式网络分层与 testnet 机制（项目管理文档）
 
-- 对应设计文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
-- 对应需求文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+- 对应设计文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
+- 对应需求文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 
 审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
@@ -66,9 +66,9 @@
 - `testing-manual.md`
 
 ## 本轮产物
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
 - `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`
 - `crates/oasis7/src/network_tier_manifest.rs`
@@ -154,13 +154,13 @@
 - `./scripts/p2p-public-testnet-local-observer-sync.sh render --local-env .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json`
 - `tmpdir="$(mktemp -d)" && mkdir -p "$tmpdir/app/config" "$tmpdir/app/bin" && cp .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env "$tmpdir/app/config/node.env" && ./scripts/p2p-public-testnet-local-observer-sync.sh apply --local-env "$tmpdir/app/config/node.env" --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json --manifest-source doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --manifest-dest "$tmpdir/app/config/network-tier-public-testnet-live-candidate.json" --start-script-dest "$tmpdir/app/bin/start-node.sh" --backup-dir "$tmpdir/backups"`
 - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 2 --interval-secs 3 --out-dir .tmp/p2p_testnet_reality --world-id oasis7-public-testnet-parallel-20260518 --local-service oasis7-testnet-observer.service --local-status-url http://127.0.0.1:6633/v1/chain/status --local-health-url http://127.0.0.1:6633/healthz --local-env-file /opt/oasis7/p2p-testnet-local/config/node.env --sequencer-target root@39.104.204.172 --sequencer-service oasis7-testnet-sequencer.service --sequencer-status-url http://127.0.0.1:6631/v1/chain/status --sequencer-health-url http://127.0.0.1:6631/healthz --sequencer-env-file /opt/oasis7/p2p-testnet/config/node.env --storage-target root@39.104.205.67 --storage-service oasis7-testnet-storage.service --storage-status-url http://127.0.0.1:6632/v1/chain/status --storage-health-url http://127.0.0.1:6632/healthz --storage-env-file /opt/oasis7/p2p-testnet/config/node.env`
-- `rg -n "ready_for_live_candidate|specified_skeleton_only|required-lane|same_world_hosted_entry_ready|claim boundary" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
-- `rg -n "claims_boundary_review|allowed_claims|denied_claims|ready_for_live_candidate" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+- `rg -n "ready_for_live_candidate|specified_skeleton_only|required-lane|same_world_hosted_entry_ready|claim boundary" doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
+- `rg -n "claims_boundary_review|allowed_claims|denied_claims|ready_for_live_candidate" doc/testing/evidence/public-testnet-claims-boundary-review-2026-05-21.md doc/testing/evidence/public-testnet-live-candidate-endpoint-deploy-2026-05-19.md doc/testing/evidence/p2p-public-testnet-faucet-service-2026-05-19.md doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-21.tsv doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 - `env -u RUSTC_WRAPPER cargo check -p oasis7`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_oasis7_chain_runtime_args_prefers_network_tier_manifest_when_present`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 build_chain_runtime_args_uses_network_tier_manifest_when_present`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 status_payload_exposes_loaded_network_tier_manifest`
-- `rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md testing-manual.md scripts/network-tier-manifest.sh`
+- `rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest" doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md testing-manual.md scripts/network-tier-manifest.sh`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 

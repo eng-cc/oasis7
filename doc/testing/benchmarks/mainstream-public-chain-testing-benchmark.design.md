@@ -1,24 +1,20 @@
 # oasis7 主流公链测试体系对标与缺口矩阵（设计文档）
 
-- 对应需求文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md`
+- 对应需求文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
+- 对应项目管理文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
+- 原始基准日期: `2026-03-24`
 
 审计轮次: 2
 
-> Current canonical source: this design is benchmark background only. Current
-> network-tier status and next blockers live in
-> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
-> 2026-07-03 update: the external verifier / light-client-lite operator path is
-> now represented by `oasis7_world_head_proof_verify` plus the optional
-> `external_verifier_light_client_lite_ready` lane. This closes the bounded
-> verifier audit path only; it does not claim full light-client security or
-> multi-client consensus equivalence.
-> 2026-07-03 current-state refresh: see
+> Authority boundary: this design preserves benchmark background and historical
+> observations only. Current network-tier status and blockers live in
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
+> Historical update (2026-07-03): the external verifier /
+> light-client-lite operator path gained bounded sampled world-head verification.
+> That historical closure did not establish full light-client security,
+> multi-client consensus equivalence, current network readiness, or release
+> maturity. The dated gap snapshot remains at
 > `doc/p2p/blockchain/p2p-current-mainstream-public-chain-gap-benchmark-2026-07-03.md`.
-> The integrated role conclusion is that Oasis7 is now an auditability-enhanced
-> crypto preview with external sampled world-head verification, while formal
-> `public_testnet` remains blocked until the current 11 required lanes are
-> represented by a non-template all-pass readiness packet.
 
 ## 设计目标
 - 把“主流公链怎么测”从泛泛经验，收成 oasis7 可执行的对标矩阵。
@@ -32,9 +28,9 @@
 | `L2 distributed system` | 多节点/网络/复制/升级兼容 | `S4` + `S9/S10` + world/consensus/distfs 多节点一致性 |
 | `L3 user-facing closure` | 钱包/浏览器/节点运维路径真实可用 | `S6` Web-first UI 闭环、producer playtest、viewer auth 路径 |
 | `L4 longrun/chaos/drill` | 长跑、故障注入、事故演练、key rotation/validator failover | `S9/S10` 长跑 + governance rotation/revocation/failover 实际 drill |
-| `L5 network/release train` | devnet/testnet/canary、共享环境升级演练、发布列车 | 当前以 formal `public_testnet` readiness、mainnet gates 和 legacy `shared_devnet` rehearsal evidence 对齐 |
+| `L5 network/release train` | devnet/testnet/canary、共享环境升级演练、发布列车 | 等价映射包括 formal `public_testnet` readiness、mainnet gates 和 legacy `shared_devnet` rehearsal evidence；具体当前状态回到各自专业权威 |
 
-## oasis7 当前映射
+## oasis7 历史映射快照
 | Layer | 当前状态 | 当前证据 | 结论 |
 | --- | --- | --- | --- |
 | `L0 spec/reference` | 已具备 | `./scripts/doc-governance-check.sh`、专题 PRD/project/design、registry import/audit 工具 | `present` |
@@ -42,7 +38,7 @@
 | `L2 distributed system` | 已具备基础，但以库测和长跑为主 | `S4`、`S9`、`S10`、node/net/consensus/distfs tests | `present_with_gap` |
 | `L3 user-facing closure` | 已具备 | `S6` Web-first UI 闭环、producer playtest 手册 | `present` |
 | `L4 longrun/chaos/drill` | 长跑具备，治理真实 drill 证据缺失 | `S9/S10` 已有；governance import/audit/runbook 已有；真实 pass/block 证据未回写 | `partial` |
-| `L5 network/release train` | legacy `shared_devnet` rehearsal 已有 pass 追溯结论；当前状态不在本 benchmark 维护，转由 formal network-tier project 维护 | `see_formal_network_tier` |
+| `L5 network/release train` | legacy `shared_devnet` rehearsal 留有历史追溯；任何当前状态均不在本 benchmark 维护，转由 formal network-tier project 维护 | `historical_evidence_only` |
 
 ## 当前高优先级缺口
 | Gap ID | 缺口 | 严重度 | owner | 下一步 |

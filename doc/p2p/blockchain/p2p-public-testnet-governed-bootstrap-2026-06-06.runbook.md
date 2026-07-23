@@ -1,7 +1,7 @@
 # Public Testnet Governed Bootstrap Runbook (2026-06-06)
 
 - 对应项目文档:
-  - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+  - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
 - 关联证据:
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`

@@ -1,9 +1,11 @@
-# oasis7 正式网络分层与 testnet 机制（2026-05-14）
+# oasis7 正式网络分层与 testnet 机制
 
-- 对应设计文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+- 对应设计文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
+- 对应项目管理文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
 
 审计轮次: 2
+建档日期: 2026-05-14
+
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在需要把“本地 / test / 正式”三套环境讲清楚；历史 `shared_devnet/staging/canary` 容易被误读成目标 test 环境，而 `mainnet` 又容易被误读成“等 mainnet gates 文档齐了就能直接上线”。
 - Proposed Solution: 冻结一份 producer-owned 的正式网络分层 PRD，明确 `local_devnet -> public_testnet -> mainnet` 的 operator/runtime tier、各层 network manifest 真值、faucet/reset/validator/claims policy 边界，以及 repo-owned script/config skeleton；`shared_devnet` 只作为 legacy/rehearsal evidence 追溯，不再作为目标环境入口。Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
@@ -66,12 +68,12 @@
 ## 4. Technical Specifications
 - Architecture Overview: 正式网络分层收束为 operator/runtime 目标三层：本地 `local_devnet`、测试 `public_testnet`、正式 `mainnet`。这些 tier 是统一持久大世界的运行/验证载体，不是多个玩家世界。历史 `shared_devnet/staging/canary` 继续可作为内部 legacy/rehearsal evidence 追溯，但不再作为目标 test 环境；`public_testnet` 是可公开访问、可 reset、带 faucet 的 rehearsal 网络；`mainnet` 是 frozen genesis、no-reset、no-faucet、受治理准入约束的正式价值网络。各层通过同一 `network_tier_manifest` schema 固定 tier 语义。
 - Integration Points:
-  - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
-  - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+  - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
   - `testing-manual.md`
   - `scripts/release-candidate-bundle.sh`

@@ -8,7 +8,7 @@
 
 > Current canonical source: this design is legacy/rehearsal background for the old
 > shared release-train model. Current network-tier truth lives in
-> `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
 > Do not read `shared_devnet` pass as `public_testnet`, `mainnet`, public launch,
 > or public large-world readiness.
 

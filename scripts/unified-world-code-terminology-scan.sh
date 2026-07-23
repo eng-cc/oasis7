@@ -20,9 +20,9 @@ scan_paths = [
     "doc/p2p/prd.md",
     "doc/p2p/project.md",
     "doc/p2p/prd.index.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md",
     "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
     "testing-manual.md",
 ]
@@ -32,9 +32,9 @@ boundary_files = {
     "doc/p2p/prd.md",
     "doc/p2p/project.md",
     "doc/p2p/prd.index.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md",
     "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
 }
 boundary_markers = (
@@ -92,11 +92,11 @@ allowed_snippets = {
     "scripts/shared-network-track-gate-smoke.sh": (
         'shared_network_track_gate_smoke',
     ),
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md": (
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md": (
         "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
         "scripts/shared-network-track-gate.sh",
     ),
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md": (
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md": (
         "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
         'rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest"',
     ),

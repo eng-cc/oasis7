@@ -7,7 +7,7 @@
 - 适用范围：`hosted_public_join` 的玩家入口分享、访问面隔离、session 处置、事故收口与 claim freeze
 - 产品边界：[`doc/product/player-entry-distribution/prd.md`](../../product/player-entry-distribution/prd.md)
 - 专业合同：[`doc/p2p/prd.md`](../prd.md)
-- 身份与托管后继专题：[`p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`](p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md)
+- 身份与托管后继专题：[`hosted-public-join-managed-identity-custody.prd.md`](hosted-public-join-managed-identity-custody.prd.md)
 - 环境边界：[`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`](../../engineering/governance/environment-lanes-and-inventory-2026-05-29.md)
 
 本文是长期稳定的 operator procedure。它不定义协议、实现、custody 方案、发布状态或公开 claim；当前公开状态始终以根 [`README.md`](../../../README.md) 为准。

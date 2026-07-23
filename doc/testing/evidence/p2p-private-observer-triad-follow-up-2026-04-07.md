@@ -1,6 +1,6 @@
 # P2P 私有 observer triad follow-up 验证（2026-04-07）
 
-- 对应专题: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+- 对应专题: `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
 - 对应任务: `P2PARCH-6`
 - PM task: `task_c0fa78756f6e4105abdd0d7f5f96de2d`
 - owner_role: `runtime_engineer`

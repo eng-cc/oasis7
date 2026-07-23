@@ -1,9 +1,10 @@
-# oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录（2026-05-18）
+# oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录
 
-- 对应设计文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+- 对应设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
+- 对应项目管理文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md`
 
 审计轮次: 1
+建档日期: 2026-05-18
 
 ## 目标
 - 为 `hosted_public_join` 建立一套正式的托管身份 / 托管密钥产品规格，解决“普通玩家如何登录并长期使用”而不是继续停留在 preview 会话与浏览器本地私钥。
@@ -14,9 +15,9 @@
 - 不覆盖 node / validator / governance signer 的生产托管；这些继续由既有 custody / governance 专题负责。
 
 ## 接口 / 数据
-- 主文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
-- 设计文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
-- 项目管理文档: `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
+- 主文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
+- 设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
+- 项目管理文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md`
 - 关键主键: `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref`
 
 ## 里程碑

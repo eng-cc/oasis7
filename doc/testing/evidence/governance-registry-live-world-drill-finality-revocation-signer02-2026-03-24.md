@@ -6,6 +6,7 @@
 - 关联专题:
   - `PRD-P2P-GOVSIGN-003`
   - `PRD-P2P-BENCH-002/003`
+  - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - 关联任务:
   - `GOVSIGN execution workstream`
   - `BENCH-G1`

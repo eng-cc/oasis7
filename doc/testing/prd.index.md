@@ -29,6 +29,7 @@
 ## 热点子域导航
 | 子域 | 适合回答的问题 |
 | --- | --- |
+| `benchmarks/` | 测试成熟度对标、单实现栈等价要求、历史缺口矩阵与 claims denylist；不维护当前网络状态 |
 | `evidence/` | 发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口 |
 | `ci/` | CI、wasm determinism、tiering、required check 保护 |
 | `longrun/` | 长稳、chaos、soak、world state sync / commit closure 与在线稳定性 |
@@ -74,6 +75,7 @@ Wasm build determinism guard historical/provenance note: `doc/testing/governance
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
+| `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md` |
 | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.project.md` |
 | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.project.md` |
 | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.prd.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.design.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.project.md` |
