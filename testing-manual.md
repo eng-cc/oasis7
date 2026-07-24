@@ -180,6 +180,12 @@
 - 结论边界：只有到这一层，才能正式回答“真实人类/真实环境里是否仍想继续玩”；内部真人 spot-check 仍只算 `L4B` 的可选校准，不单列新层。
 - 说明：长稳、压力和 soak 仍属于测试套件层（如 S8/S10），不是这里的 playability `L5`。
 
+### Playability review、persona 与 claim 收口
+- L4A packet 记录 change scope、target claim、formal surfaces、evidence、blockers、roles、personas、questions 与 target lane；card 必须区分直接证据、推断、未证明项和 follow-up。输入不足写 `insufficient_input`，只转述他人结论写 `secondary_review_only`。
+- 默认先由 `producer_system_designer` 与 `qa_engineer` 审核，按 surface 追加 viewer/agent/runtime/WASM 角色；涉及 limited-preview 或外部 claim 时追加 `liveops_community`。角色 review 完整只构成 L4A。
+- persona 仅按主观风险选择 `new_player_confused`、`impatient_action_player`、`systems_optimizer`、`narrative_curiosity_player`、`chaos_tester`，并回流标准角色。多 persona 同节点负面或发现 exploit/dominant strategy/softlock 时升级工程角色与 L4B；persona 不是正式角色，不能单独给 L4B、L5 或 stage verdict。
+- `block`: formal surface 不稳定或没有稳定玩家杠杆；`hold`: L4A 未支持 continue 或 L4B 有高价值反证；`watch`: L4B 缺失/样本薄/与校准冲突；`go`: 仅当目标 claim envelope 内 L1-L3、需要的 L4A/L4B 无高价值反证且 L5 无新反证。producer 定义 claim envelope，QA 守证据边界。
+
 ## 测试套件目录（S0~S10）
 
 ### S0：基础门禁套件（L0）
