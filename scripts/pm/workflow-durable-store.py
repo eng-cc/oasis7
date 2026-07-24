@@ -9,6 +9,7 @@ import os
 import pathlib
 import copy
 import tempfile
+import time
 from typing import Any, Callable, Iterator
 
 try:
@@ -144,6 +145,20 @@ def _fsync_dir(path: pathlib.Path) -> None:
         os.close(fd)
 
 
+def _atomic_replace(source: str | os.PathLike[str], destination: pathlib.Path) -> None:
+    """Retry transient Windows sharing violations around atomic replacement."""
+    deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as exc:
+            if (os.name != "nt" or time.monotonic() >= deadline
+                    or getattr(exc, "winerror", None) not in (5, 32)):
+                raise
+            time.sleep(0.01)
+
+
 def atomic_replace_json(path: pathlib.Path, value: Any) -> None:
     path = pathlib.Path(path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -154,7 +169,7 @@ def atomic_replace_json(path: pathlib.Path, value: Any) -> None:
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
-        os.replace(temporary, path)
+        _atomic_replace(temporary, path)
         _fsync_dir(path.parent)
     finally:
         pathlib.Path(temporary).unlink(missing_ok=True)
