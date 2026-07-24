@@ -13,7 +13,7 @@
 - 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
 - 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
-- 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
+- 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`；回放/live profile 与 live 无 seek 边界读 `viewer-control-plane-split-live-playback.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -71,12 +71,13 @@
 - 首读入口:
   - `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
   - `viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
+  - `viewer-control-plane-split-live-playback.prd.md`
   - `viewer-manual.manual.md`
 - 适合问题:
   - runtime live 现在哪些能力已经接管
   - event-driven 阶段的主文档是哪份
   - step/control/live playback 的现行边界是什么
-- 说明: `phase8/9` 已物理合并到主文档；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
+- 说明: `phase8/9` 已物理合并到主文档；control-profile 与 live 无 seek 的两组 2026-02 源三件套已回填至 stable authority，当前 batch 暂留等待删除切片；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
 
 ### 5. chat / prompt / right panel
 - 首读入口:
