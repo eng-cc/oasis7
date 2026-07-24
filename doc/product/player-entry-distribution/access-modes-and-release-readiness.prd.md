@@ -24,9 +24,9 @@
 
 ### 2.1 Launcher 交付表面边界
 
-Native 或 Web Launcher 是已声明 `viewer` / `pure_api` 路径的交付、控制与过渡表面，不是第三种玩家模式、发行等级或独立可玩性证明。当前 Launcher 的首次引导、配置修复、反馈入口与持续运行体验，应统一服务于对应 primary mode；具体 UI、控制面、请求状态、持久化、运行时恢复与验证契约继续由 [`doc/world-simulator/launcher/README.md`](../../world-simulator/launcher/README.md) 及其专业域文档维护。
+Native 或 Web Launcher 是已声明 `viewer` / `pure_api` 路径的交付、控制与过渡表面，不是第三种玩家模式、发行等级或独立可玩性证明。首次使用时，玩家的窄承诺是：能够理解当前入口所服务的 primary mode、看到真实的 `blocked` / `observer` 状态，并获得不伪装为成功的可恢复下一步。稳定的首次引导与配置修复产品要求由 [Launcher 引导配置与可用性 PRD](../../world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.prd.md) 承接；具体 UI、控制面、请求状态、持久化、运行时恢复与验证契约继续由 [`doc/world-simulator/launcher/README.md`](../../world-simulator/launcher/README.md) 及其专业域文档维护。
 
-当 Launcher 的前置条件、配置、会话或后端不可用时，产品口径必须呈现真实的 `blocked` / `observer` 状态和可执行的恢复下一步。成功打开 Launcher、完成本地 fallback、探针/console 可用或单次启动成功，都不能反向证明声明的 primary mode 已经可玩，也不能扩大公开发行 claim。
+该承诺不声称当前已实现某个引导步骤、自动修复、fallback、配置保存或持续运行结果。成功打开 Launcher、完成本地 fallback、探针/console 可用或单次启动成功，都不能反向证明声明的 primary mode 已经可玩，也不能扩大公开发行 claim。
 
 ## 3. 入口能力等价
 
