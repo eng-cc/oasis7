@@ -1,6 +1,6 @@
 # 客户端启动器区块链浏览器（当前 authority）
 
-> 本文是启动器区块链浏览器的当前需求 authority。它收敛五组 2026-03/04 专题中已经实现或记录的只读查询、七个业务视图与状态呈现合同；源三件套在本轮保留，作为后续 migration-governance 删除切片的可审计来源。
+> 本文是启动器区块链浏览器的当前需求 authority。它收敛五组 2026-03/04 专题中已经实现或记录的只读查询、七个业务视图与状态呈现合同；本轮已完成语义回填和活跃引用修复，日期化源三件套随之退役删除，追溯使用 Git 与 GitHub task issue evidence。
 
 - 对应设计: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.design.md`
 - 对应项目: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.project.md`
@@ -42,17 +42,17 @@ native 与 Web 复用同一 launcher UI 与控制面语义；Web 经既有 `/api
 ## 里程碑
 
 - 已完成：早期 panel、P0、P1、UX 与信息架构专题分别记录了既有只读查询、七视图与状态呈现。
-- 本轮：将已记录的共同合同收敛为 stable authority，修复默认入口；五组源三件套保留。
+- 本轮：将已记录的共同合同收敛为 stable authority，修复默认入口，并删除五组已吸收的源三件套。
 - 后续：任何 API、数据保留、可用性、公开发布或玩家控制面变化，均须在独立任务中重新定界并取证。
 
 ## 风险
 
 - 数据不可用、链未就绪、查询失败或最近窗口不足时，explorer 的结果可能为空或失败；界面必须忠实呈现状态，不能把空白或历史缓存表示为成功。
 - 同一只读 UI 不能证明 runtime、共识、结算或网络性质；若文档未跟随实现更新，容易再次产生 authority 漂移。
-- 历史专题保留期间，读者可能误把 “public chain” / “mainnet-grade” 当作当前承诺；默认入口和本节的非承诺边界优先。
+- 历史命名只能通过 Git 与 GitHub task evidence 追溯；任何将 “public chain” / “mainnet-grade” 外推为当前承诺的解释都无效。
 
 ## 验收与追溯
 
 - 文档迁移验收：`./scripts/doc-governance-check.sh`、`./scripts/readme-link-check.sh`、`git diff --check`。
 - 行为或可见界面变更必须重新按 `testing-manual.md` 的命中测试层执行；触达可见表面时由 game_visual_interaction_designer 给出验收，并按 S6 获取 desktop/mobile 浏览器证据。
-- 五组源三件套本轮保留。后续仅在稳定三件套的语义回填、活跃引用修复和 focused evidence 均完成后，才能按迁移治理流程删除；删除后的追溯使用 Git 与 GitHub task issue evidence。
+- 五组已吸收的源三件套已删除；删除后的追溯使用 Git 与 GitHub task issue evidence。

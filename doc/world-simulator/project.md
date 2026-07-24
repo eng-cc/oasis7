@@ -60,7 +60,6 @@
 - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`

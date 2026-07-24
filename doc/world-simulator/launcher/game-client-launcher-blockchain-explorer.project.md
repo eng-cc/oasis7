@@ -6,14 +6,14 @@
 ## 状态
 
 - 状态：`documented_current_authority`。
-- 本轮完成：建立 stable explorer PRD/design/project 三件套，并把 launcher landing、world-simulator 索引和模块项目入口改指向它。
-- 本轮未做：不修改 `oasis7_client_launcher`、`oasis7_web_launcher`、runtime、DOM、UI、测试或五组源三件套；更不把文档迁移写成 mainnet/readiness/public/settlement/validator/no-reset/full-archive 承诺。
+- 本轮完成：建立 stable explorer PRD/design/project 三件套，把 launcher landing、world-simulator 索引和模块项目入口改指向它，并删除五组已吸收的日期化源三件套。
+- 本轮未做：不修改 `oasis7_client_launcher`、`oasis7_web_launcher`、runtime、DOM、UI 或测试；更不把文档迁移写成 mainnet/readiness/public/settlement/validator/no-reset/full-archive 承诺。
 
 ## 任务拆解
 
 - [x] launcher-blockchain-explorer-stable-authority (PRD-WORLD_SIMULATOR-024) [test_tier_required]: 收敛 explorer 概览、七视图、只读控制面与状态呈现的当前 authority。 Trace: https://github.com/eng-cc/oasis7/issues/2580 (task_50841597d34a4d51a5511303d5b44a60)
 - [x] launcher-blockchain-explorer-routing-cutover (PRD-WORLD_SIMULATOR-024) [test_tier_required]: 将 Launcher landing、world-simulator PRD index/project 默认路由指向 stable authority。 Trace: https://github.com/eng-cc/oasis7/issues/2580 (task_50841597d34a4d51a5511303d5b44a60)
-- [ ] launcher-blockchain-explorer-source-retirement (PRD-WORLD_SIMULATOR-024) [test_tier_required]: 在独立 migration-governance slice 完成语义回填、活跃引用修复与 focused evidence 后，再决定是否删除五组历史源三件套。 Trace: https://github.com/eng-cc/oasis7/issues/2580 (task_50841597d34a4d51a5511303d5b44a60)
+- [x] launcher-blockchain-explorer-source-retirement (PRD-WORLD_SIMULATOR-024) [test_tier_required]: 已完成语义回填、活跃引用修复与 focused evidence，删除五组已吸收的历史源三件套；追溯使用 Git 与 GitHub task issue evidence。 Trace: https://github.com/eng-cc/oasis7/issues/2580 (task_50841597d34a4d51a5511303d5b44a60)
 
 ## 依赖
 
@@ -31,4 +31,4 @@
 
 - 若要新增 API、长期 archive、保留/重置语义、网络 readiness、validator、结算或公开服务结论，必须由对应 runtime/blockchain-ops/LiveOps 专题与当前任务证据授权，不能从本文推断。
 - 若要改变信息层级、窄屏行为、CTA 或状态恢复提示，先由 game_visual_interaction_designer 给出屏幕验收，再经 TPM 协调 Viewer 控制边界。
-- 五组 source triplet 在当前仓库仍可精确检索；删除决策与 provenance 以后续独立治理切片为准。
+- 五组 source triplet 已退役删除；其历史需求、设计和任务状态只通过 Git 与 GitHub task issue evidence 追溯。

@@ -1,6 +1,6 @@
 # `world-simulator/launcher` 热点子域入口
 
-更新时间: 2026-07-05
+更新时间: 2026-07-24
 
 ## 从这里开始
 - 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/project.md` 确认 Pages、Release 资产、专业实现和 blocker
@@ -20,9 +20,9 @@
 - 本页只维护簇级入口；当某个专题退化为历史执行证据时，继续让它通过 `../prd.index.md` 可检索，而不是回到默认首读路径。
 
 ## 密度快照
-- 当前 inventory 快照（`./scripts/doc-inventory-report.sh`，2026-07-05，本次删除完成后）:
-  - `doc/world-simulator/launcher/`: 84 份 Markdown
-  - `doc/world-simulator/`: 454 份 Markdown
+- 当前 inventory 快照（2026-07-24，本次删除完成后）:
+  - `doc/world-simulator/launcher/`: 64 份 Markdown
+  - `doc/world-simulator/`: 365 份 Markdown
 - 该子域仍超过热点阈值；本页目标是降低首读扫描成本，并持续退役不再承担当前入口职责的历史专题。
 
 ## 首读主题簇
