@@ -58,11 +58,8 @@
 - `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-panel-2026-03-07.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p0-2026-03-07.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p1-address-contract-assets-mempool-2026-03-08.prd.md`
+- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
@@ -76,7 +73,6 @@
 - `doc/world-simulator/llm/{provider-agent-dual-mode.{prd,project}.md,provider-agent-dual-mode-contract.md}`
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
 - Runtime live migration phase1/2/3 旧三件套已退役删除；当前追溯入口收敛到 `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md`、`doc/world-simulator/viewer/viewer-manual.manual.md`、GitHub task issue evidence comments 与 git history。
-- `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.{prd,design,project}.md`
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`
@@ -89,7 +85,7 @@
 - 当前状态: active
 - 下一任务: 待下一个模块任务明确。
 - 当前优先任务: 回到模块后续排队项；当前无新 blocker。
-- 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 主链级重构、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口，详情回看对应 task trace。
+- 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 当前 authority、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口；explorer 只记录既有只读查询与七视图，不能外推为 mainnet/readiness/public/settlement/validator/no-reset/full-archive 结论，详情回看对应 task trace。
 - 当前 launcher feedback authority: `doc/world-simulator/launcher/game-client-launcher-feedback.{prd,design,project}.md` 收敛当前 native Ready 后远端提交失败时的本地回落与 Web 控制面代理边界；三个 2026-03 源三件套已删除，追溯仅使用 Git 与 `.pm` task evidence。
 - 边界说明: 已知环境限制仍是 source stack formal 启动前需要 `OASIS7_LLM_MODEL` 或等价配置；旧第二 Viewer 入口相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
 - 历史追溯: 最近完成项不再压缩在标题行中维护；需要追 launcher / viewer / provider-backed NPC / release distribution 历史时，先从上方任务项、topic project、`doc/world-simulator/prd.index.md` 与 GitHub task issue evidence comments 进入。

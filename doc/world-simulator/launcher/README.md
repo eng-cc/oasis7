@@ -1,6 +1,6 @@
 # `world-simulator/launcher` 热点子域入口
 
-更新时间: 2026-07-05
+更新时间: 2026-07-24
 
 ## 从这里开始
 - 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/project.md` 确认 Pages、Release 资产、专业实现和 blocker
@@ -8,7 +8,7 @@
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
 - 想确认其余 Web / native control plane、console、settings、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
-- 想确认 blockchain explorer、public chain、address / contract / assets / mempool 或 mainnet-grade rebuild：先读 `game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`
+- 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -20,9 +20,9 @@
 - 本页只维护簇级入口；当某个专题退化为历史执行证据时，继续让它通过 `../prd.index.md` 可检索，而不是回到默认首读路径。
 
 ## 密度快照
-- 当前 inventory 快照（`./scripts/doc-inventory-report.sh`，2026-07-05，本次删除完成后）:
-  - `doc/world-simulator/launcher/`: 84 份 Markdown
-  - `doc/world-simulator/`: 454 份 Markdown
+- 当前 inventory 快照（2026-07-24，本次删除完成后）:
+  - `doc/world-simulator/launcher/`: 64 份 Markdown
+  - `doc/world-simulator/`: 365 份 Markdown
 - 该子域仍超过热点阈值；本页目标是降低首读扫描成本，并持续退役不再承担当前入口职责的历史专题。
 
 ## 首读主题簇
@@ -46,13 +46,11 @@
 
 ### 3. Blockchain explorer 与链上可见性
 - 首读入口:
-  - `game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`
-  - `game-client-launcher-blockchain-explorer-public-chain-p0-2026-03-07.prd.md`
-  - `game-client-launcher-blockchain-explorer-public-chain-p1-address-contract-assets-mempool-2026-03-08.prd.md`
+  - `game-client-launcher-blockchain-explorer.prd.md`
 - 适合问题:
-  - explorer 当前是否按 mainnet-grade 口径组织
-  - public chain、address、contract、assets、mempool 的入口在哪里
-  - explorer UI / UX 优化和 panel 设计从哪里追溯
+  - explorer 当前的概览、Blocks/Txs/Search/Address/Contracts/Assets/Mempool 入口和状态语义
+  - native/Web 只读控制面、错误态或数据保留边界在哪里
+  - 历史 public-chain / mainnet-grade 命名如何追溯，而不外推成发布或网络结论
 
 ### 4. Runtime / execution world 边界
 - 首读入口:
