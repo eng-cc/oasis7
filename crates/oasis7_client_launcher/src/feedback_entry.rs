@@ -114,8 +114,14 @@ pub(crate) fn validate_feedback_draft(draft: &FeedbackDraft) -> Vec<FeedbackDraf
 }
 
 pub(crate) fn collect_recent_logs(logs: &VecDeque<String>) -> Vec<String> {
-    let keep = logs.len().saturating_sub(FEEDBACK_LOG_SNAPSHOT_LIMIT);
-    logs.iter().skip(keep).cloned().collect()
+    let mut recent = logs
+        .iter()
+        .rev()
+        .take(FEEDBACK_LOG_SNAPSHOT_LIMIT)
+        .cloned()
+        .collect::<Vec<_>>();
+    recent.reverse();
+    recent
 }
 
 pub(crate) fn submit_feedback_report(

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Derive the task-bound durable receipt directory from Git common-dir."""
 from __future__ import annotations
-import argparse, fcntl, json, os, pathlib, re, subprocess, sys, tempfile
+import argparse, json, os, pathlib, re, subprocess, sys, tempfile
+from portable_file_lock import ensure_lock_byte, fcntl
 
 UID = re.compile(r"^task_[0-9a-f]{32}$")
 ALLOWED={"merge-receipt.json","main-sync-receipt.json","terminal-cleanup-receipt.json","finalizer-ledger.json","cleanup-intent.json","patch-equivalence-receipt.json"}
@@ -25,6 +26,7 @@ def main() -> int:
         root.mkdir(parents=True,exist_ok=True)
         lock_path=root/"identity.json.lock"
         with lock_path.open("a+b") as lock:
+            ensure_lock_byte(lock)
             fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
             if metadata.exists() and json.loads(metadata.read_text())!=expected:
                 fail("receipt root identity mismatch; repository moves require trusted mapping rotation/rebind")
@@ -35,9 +37,10 @@ def main() -> int:
                         json.dump(expected,out,indent=2,sort_keys=True); out.write("\n")
                         out.flush(); os.fsync(out.fileno())
                     os.replace(tmp_name,metadata)
-                    dir_fd=os.open(root,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
-                    try: os.fsync(dir_fd)
-                    finally: os.close(dir_fd)
+                    if os.name != "nt":
+                        dir_fd=os.open(root,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+                        try: os.fsync(dir_fd)
+                        finally: os.close(dir_fd)
                 finally: pathlib.Path(tmp_name).unlink(missing_ok=True)
     elif root.exists() and metadata.exists() and json.loads(metadata.read_text())!=expected:
         fail("receipt root identity mismatch; repository moves require trusted mapping rotation/rebind")

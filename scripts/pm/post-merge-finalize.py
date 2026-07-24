@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Finalize one receipt-proven terminal workflow transition idempotently."""
 from __future__ import annotations
-import argparse, fcntl, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
+import argparse, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
+from portable_file_lock import ensure_lock_byte, fcntl
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 CANONICAL_ROOT_HELPER = SCRIPT_DIR/"canonical-receipt-root.py"
