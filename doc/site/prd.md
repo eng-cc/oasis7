@@ -132,6 +132,12 @@
   - `doc/site/manual/`
   - `doc/readme/prd.md`
   - `site/skills/oasis7.md`
+### 当前 Pages、下载与镜像合同
+- `site/index.html` 与 `site/en/index.html` 是公开 CN/EN 首页；`site/assets/app.js` 和 `site/assets/styles.css` 是其静态交互与无脚本降级的实现面。它们必须继续把 `viewer` 表达为默认 Web 验证入口、把 `software_safe` 限定为兼容 alias，并保持 `limited playable technical preview` 的公开边界。
+- Pages 发布在 `.github/workflows/pages.yml` 中先执行四个当前门禁：`scripts/site-link-check.sh`、`scripts/site-homepage-claim-check.sh`、`scripts/site-manual-sync-check.sh` 与 `scripts/site-download-check.sh`；任一失败都不应部署静态站点。前两个分别守本地资源可达性与 CN/EN claim/no-JS 导航，后两个分别守 Viewer 手册镜像和下载面。
+- 下载面只分发 `eng-cc/oasis7` GitHub Releases 的 Windows `.exe`、macOS `.dmg`、Linux `.AppImage` 与 checksum；首页可按平台选择主 CTA，但必须在下载前保留版本、安装、信任与支持边界。资产存在或检查通过不构成普通用户广泛发行、Windows codesigning 或 macOS notarization 已就绪的声明。
+- 升级仅支持重新下载最新主包并手动覆盖/替换。`config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` 是需要用户先备份的相对路径状态；不得把该说明升级为应用内更新、自动迁移或跨目录状态保留承诺。
+- `site/doc/{cn,en}/viewer-manual.html` 是静态发布镜像，不是 Viewer 手册真值；其 canonical source 是 `doc/world-simulator/viewer/viewer-manual.manual.md`，并由同步门禁约束当前 agent-browser 命令基线。
 - Edge Cases & Error Handling:
   - 断链：发现下载或文档断链时阻断发布并进入修复流程。
   - 空页面：关键页面内容缺失时展示维护提示并记录异常。
@@ -153,6 +159,7 @@
   - NFR-SITE-7: 首页 claim/parity gate 必须覆盖 CN/EN 双首页，并在 Pages workflow 中执行，避免关键对外承诺静默漂移。
   - NFR-SITE-8: 首页主要导航在移动端不依赖脚本才能可达；键盘访问路径需具备可见 skip link。
   - NFR-SITE-9: 公开 skill Markdown URL 必须稳定、可直接访问，且其内容在同一次发布中与当前 repo-native Local Provider 工作流保持语义一致。
+  - NFR-SITE-10: Pages workflow 的四项站点门禁与公开下载资产名必须和当前静态首页同步；门禁成功只证明该静态合同，不替代 release gate、安装器验收或玩家可玩性结论。
 - Security & Privacy: 站点不得暴露内部凭据与敏感配置；下载链路需具备来源可验证性。
 
 ## 5. Risks & Roadmap
@@ -198,3 +205,4 @@
 | DEC-SITE-011 | 对外 `oasis7` skill 只保留站内 raw Markdown 直链，并在 docs hub 暴露入口 | 新增独立 HTML 说明页或只暴露 GitHub blob 路径 | 用户目标是直接获取 skill 内容；单一 raw 入口更短、更稳定，也减少公开镜像维护面。 |
 | DEC-SITE-012 | 路演材料以站内 HTML deck 形式挂在 `site/` 下，并复用静态 Pages 链路 | 继续只靠首页/长文档承担路演，或为 deck 单独引入 SPA 构建工程 | deck 需要的是顺序化讲述，不是新的前端系统；保持静态站发布可减少维护面并保留直接访问能力。 |
 | DEC-SITE-013 | 首页采用游戏优先的叙事压缩，保留现有视觉语言、claim gate 与静态发布基础 | 只做表面样式微调，或改造成重动效沉浸式展示 | 当前主要问题是重复内容与同质卡片削弱层级；压缩信息架构能改善首访理解，同时避免概念图和新交互扩大承诺与回归风险。 |
+| DEC-SITE-014 | 将当前 Pages、下载、镜像、信任与手动升级合同收敛到 site root PRD/project，并把 dated 专题降为历史证据 | 继续让 dated release-pipeline 专题承担当前首读真值 | 可执行脚本、workflow 与 root authority 已是当前合同；保留旧专题为默认入口会把历史 CI/就绪记录误读为当前发布承诺。 |

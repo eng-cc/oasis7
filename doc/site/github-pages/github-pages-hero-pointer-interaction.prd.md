@@ -7,7 +7,7 @@
 - 对应标准执行入口: `doc/site/github-pages/github-pages-hero-pointer-interaction.project.md`
 
 ## ROUND-002 主从口径
-- 主入口：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
+- 主入口：`doc/site/prd.md`
 - 本文仅维护增量。
 
 ## 目标

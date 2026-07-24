@@ -6,7 +6,7 @@
 审计轮次: 5
 
 ## ROUND-002 主从口径
-- 主入口文档：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`。
+- 主入口文档：`doc/site/prd.md`。
 - 本文件仅维护架构图 SVG 精修增量内容。
 
 - 对应标准执行入口: `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md`

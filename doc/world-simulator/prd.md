@@ -37,7 +37,7 @@
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
 - 跨模块模式 taxonomy: `doc/product/player-entry-distribution/prd.md`
-- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；专业发行流水线: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
+- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；Pages、Release 资产、静态镜像与下载门禁的专业合同: `doc/site/prd.md` 与 `doc/site/project.md`
 - UI 视觉短期样本池: `doc/ui_review_result/README.md`
 - 常用 active supporting docs:
   - `doc/world-simulator/viewer/README.md`

@@ -6,7 +6,7 @@
 审计轮次: 5
 
 ## ROUND-002 主从口径
-- 主入口统一指向 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`，本文仅维护增量。
+- 主入口统一指向 `doc/site/prd.md`，本文仅维护增量。
 
 - 对应标准执行入口: `doc/site/github-pages/github-pages-hero-motion-layer.project.md`
 

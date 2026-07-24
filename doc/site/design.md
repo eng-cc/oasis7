@@ -30,6 +30,22 @@
 - 页面与体验优化进入 `github-pages/`
 - 静态文档与手册迁移进入 `manual/`
 
+### GitHub Pages 当前视觉与交互权威
+
+首页以陌生访客为第一阅读对象：首屏先说明游戏、玩家位置与当前可做
+事项，再渐进披露证据、下载、文档与技术细节。中英文路由须保持同一信息
+顺序与预览边界；`limited playable technical preview` 必须可见，且不得被视觉
+素材、截图或 CTA 表达成正式发布或公开网页可玩承诺。
+
+响应式与可访问性要求包括：窄屏无横向溢出、可达的导航与触控操作、键盘
+焦点和 skip navigation、无 JS 导航以及 reduced-motion 行为。生成式世界图仅
+承担氛围与层级，不能替代真实 Viewer 截图、状态证据或 HTML 中的有效文案。
+
+- 需求与公开边界：`doc/site/prd.md`
+- 首页页面级层级基线：`doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`
+- 当前首屏内容与响应式验收：`doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`
+- 当前后果链节奏与渐进披露：`doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`
+
 ## 设计目标
 - 提供 `site` 模块的总体设计入口。
 

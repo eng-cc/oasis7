@@ -101,7 +101,7 @@
   - `doc/engineering/README.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/project.md`
-  - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
+  - `doc/site/prd.md`
 - Edge Cases & Error Handling:
   - 若 skill 已被删，但角色卡仍引用：视为未完成。
   - 若活跃文档仍把被退役 skill 当正式方法入口：视为未完成。
