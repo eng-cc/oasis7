@@ -6,7 +6,8 @@
 - 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/project.md` 确认 Pages、Release 资产、专业实现和 blocker
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
-- 想确认 Web / native control plane、console、settings、feedback、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
+- 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
+- 想确认其余 Web / native control plane、console、settings、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
 - 想确认 blockchain explorer、public chain、address / contract / assets / mempool 或 mainnet-grade rebuild：先读 `game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -65,7 +66,7 @@
 
 ### 5. Feedback、transfer 与自引导体验
 - 首读入口:
-  - `game-client-launcher-feedback-entry-2026-03-02.prd.md`
+  - `game-client-launcher-feedback.prd.md`
   - `game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
   - `game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
   - `game-client-launcher-self-guided-experience-2026-03-08.prd.md`
@@ -78,7 +79,7 @@
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
 - 如果问题涉及当前本地 launcher/playtest 操作口径，优先看 `../project.md` 当前状态和 GitHub task issue evidence comments，再决定是否进入某个历史专题。
 - 如果问题需要判断 runtime 正确性、hosted auth、chain behavior 或 release readiness，本页只提供文档入口，结论必须回到对应专业角色和当前任务证据。
-- 历史完成的 launcher 专题继续保留可检索性；除非它仍是当前 operator 入口，不再提升为默认首读路径。
+- feedback 的三个 2026-03 源三件套已由 `game-client-launcher-feedback.prd.md` 收敛并删除；追溯仅使用 Git 与 `.pm` task evidence。其余历史完成专题除非仍是当前 operator 入口，不再提升为默认首读路径。
 
 ## 维护约定
 - 新增 launcher 专题后，若改变默认首读路径，应同步更新本页。

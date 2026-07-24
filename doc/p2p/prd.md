@@ -20,6 +20,11 @@
 - 追踪主键: `PRD-P2P-xxx`
 - 测试与发布参考: `testing-manual.md`
 
+## 当前专题路由
+
+- DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
+- 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
+
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
 - M2: 补齐模块设计验收清单与关键指标。

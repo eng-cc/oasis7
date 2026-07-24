@@ -79,7 +79,7 @@
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.{prd,design,project}.md`
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02.prd.md`、`skills/prd/check.md`
+- `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`
 - `crates/oasis7_launcher_ui/src/lib.rs`
 - `crates/oasis7_client_launcher/src/{main.rs,main_app_shell.rs,app_process.rs,app_process_web.rs,explorer_window.rs,explorer_window_view.rs}`
@@ -90,6 +90,7 @@
 - 下一任务: 待下一个模块任务明确。
 - 当前优先任务: 回到模块后续排队项；当前无新 blocker。
 - 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 主链级重构、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口，详情回看对应 task trace。
+- 当前 launcher feedback authority: `doc/world-simulator/launcher/game-client-launcher-feedback.{prd,design,project}.md` 收敛当前 native Ready 后远端提交失败时的本地回落与 Web 控制面代理边界；三个 2026-03 源三件套已删除，追溯仅使用 Git 与 `.pm` task evidence。
 - 边界说明: 已知环境限制仍是 source stack formal 启动前需要 `OASIS7_LLM_MODEL` 或等价配置；旧第二 Viewer 入口相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
 - 历史追溯: 最近完成项不再压缩在标题行中维护；需要追 launcher / viewer / provider-backed NPC / release distribution 历史时，先从上方任务项、topic project、`doc/world-simulator/prd.index.md` 与 GitHub task issue evidence comments 进入。
 - 当前追溯入口: 活跃任务、最近完成项、topic project、`doc/world-simulator/prd.index.md` 与 GitHub task issue evidence comments；旧 2026-03-11 viewer 状态 closure / viewer-to-producer handoff 文档已退役删除，当前状态、活跃任务与下一步以本文档为准。
