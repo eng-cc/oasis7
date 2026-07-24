@@ -1,6 +1,8 @@
 """Small cross-platform advisory file-lock compatibility layer."""
 from __future__ import annotations
 
+import time
+
 try:
     import fcntl as fcntl
 except ImportError:  # pragma: no cover - exercised on Windows
@@ -18,7 +20,18 @@ except ImportError:  # pragma: no cover - exercised on Windows
             if operation == _WindowsFcntl.LOCK_UN:
                 msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
             else:
-                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                # LK_LOCK can report ERROR_POSSIBLE_DEADLOCK when another
+                # Python process owns the byte. Poll the non-blocking form so
+                # contention behaves like POSIX flock instead of failing.
+                while True:
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError as exc:
+                        if (getattr(exc, "winerror", None) not in (33, 36, 158)
+                                and getattr(exc, "errno", None) not in (13, 36)):
+                            raise
+                        time.sleep(0.01)
 
     fcntl = _WindowsFcntl()
 

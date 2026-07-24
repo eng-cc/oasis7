@@ -79,8 +79,11 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
         "--task-uid",task_uid,"--create","--path",str(terminal_receipt_path),"--name","terminal-cleanup-receipt.json"],text=True,capture_output=True)
     if canonical.returncode: fail(canonical.stderr.strip() or "noncanonical terminal receipt")
     terminal_receipt_path=pathlib.Path(canonical.stdout.strip())
-    lock=durable_store.mapping_lock_path(path); lock_fd=os.open(lock,os.O_CREAT|os.O_RDWR,0o600)
-    fcntl.flock(lock_fd,fcntl.LOCK_EX)
+    lock=durable_store.mapping_lock_path(path)
+    lock_handle=lock.open("a+b")
+    ensure_lock_byte(lock_handle)
+    fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
+    lock_fd=lock_handle.fileno()
     mapping=json.loads(path.read_text(encoding="utf-8")); record=(mapping.get("tasks") or {}).get(task_uid) or {}
     terminal_path=pathlib.Path(terminal_receipt_path)
     if not terminal_path.is_absolute(): fail("terminal cleanup receipt path must be absolute")
@@ -114,7 +117,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
         (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
     # The lock protects the validation snapshot only. Remote effects use the
     # durable ledger and never hold the mapping lock across a network call.
-    os.close(lock_fd); lock_fd=-1
+    lock_handle.close(); lock_fd=-1
     if already_finalized:
         _ledger_transition(ledger_path,task_uid,"issue_close","intent")
         issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
@@ -218,12 +221,14 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
     # CAS transition, terminal mapping commit, and issue-close readback.
     finalizer_lock=path.with_name(f"{path.name}.{task_uid}.finalizer-lock")
     finalizer_lock.parent.mkdir(parents=True,exist_ok=True)
-    finalizer_lock_fd=os.open(finalizer_lock,os.O_CREAT|os.O_RDWR,0o600)
+    finalizer_lock_handle=finalizer_lock.open("a+b")
+    ensure_lock_byte(finalizer_lock_handle)
+    finalizer_lock_fd=finalizer_lock_handle.fileno()
     try:
         fcntl.flock(finalizer_lock_fd,fcntl.LOCK_EX)
         return _write_terminal_locked(root,task_uid,terminal_receipt_path)
     finally:
-        os.close(finalizer_lock_fd)
+        finalizer_lock_handle.close()
 
 def main() -> int:
     p=argparse.ArgumentParser()

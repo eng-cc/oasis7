@@ -29,9 +29,21 @@ except ModuleNotFoundError:  # Support isolated fixture copies of this module.
             @staticmethod
             def flock(fd: int, operation: int) -> None:
                 import os
+                import time
 
                 os.lseek(fd, 0, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_UNLCK if operation == _WindowsFcntl.LOCK_UN else msvcrt.LK_LOCK, 1)
+                if operation == _WindowsFcntl.LOCK_UN:
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    return
+                while True:
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        return
+                    except OSError as exc:
+                        if (getattr(exc, "winerror", None) not in (33, 36, 158)
+                                and getattr(exc, "errno", None) not in (13, 36)):
+                            raise
+                        time.sleep(0.01)
 
         fcntl = _WindowsFcntl()
 
