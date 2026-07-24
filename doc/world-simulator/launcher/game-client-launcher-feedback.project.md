@@ -11,9 +11,9 @@
 
 ## 任务拆解
 
-- [x] 建立 feedback stable PRD/design/project 三件套。
-- [x] 将 Launcher landing、world-simulator PRD/index/project 默认路由指向 stable authority。
-- [x] 修复活跃路由与精确索引后删除三个 2026-03 feedback 源三件套；Git 与 `.pm` task evidence 保留迁移 provenance。
+- [x] launcher-feedback-stable-authority (PRD-WORLD_SIMULATOR-002) [test_tier_required]: 建立 feedback stable PRD/design/project 三件套。 Trace: https://github.com/eng-cc/oasis7/issues/2565 (task_720517b6203b456cb2179a6c01c700ea)
+- [x] launcher-feedback-routing-cutover (PRD-WORLD_SIMULATOR-002) [test_tier_required]: 将 Launcher landing、world-simulator PRD/index/project 默认路由指向 stable authority。 Trace: https://github.com/eng-cc/oasis7/issues/2565 (task_720517b6203b456cb2179a6c01c700ea)
+- [x] launcher-feedback-source-retirement (PRD-WORLD_SIMULATOR-002) [test_tier_required]: 修复活跃路由与精确索引后删除三个 2026-03 feedback 源三件套；Git 与 `.pm` task evidence 保留迁移 provenance。 Trace: https://github.com/eng-cc/oasis7/issues/2565 (task_720517b6203b456cb2179a6c01c700ea)
 
 ## 依赖
 
