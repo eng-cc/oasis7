@@ -26,8 +26,9 @@
 ## 依赖
 
 - `crates/oasis7_proto/src/viewer.rs`
-- `crates/oasis7/src/viewer/`
-- `crates/oasis7_viewer/src/`
+- `crates/oasis7/src/viewer/{protocol.rs,server.rs,live_controls.rs,runtime_live.rs}`
+- `crates/oasis7_viewer/software_safe_src/{legacy_core.js,legacy_core_control_gate.test.js}`
+- `crates/oasis7_viewer/viewer.js`（生成入口）
 - `doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 当前验证责任

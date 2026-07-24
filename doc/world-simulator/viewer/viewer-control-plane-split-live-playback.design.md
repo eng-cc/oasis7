@@ -18,6 +18,6 @@
 
 ## 代码与验证接点
 
-- 协议/服务：`crates/oasis7_proto/src/viewer.rs`、`crates/oasis7/src/viewer/{protocol.rs,server.rs,live_split_part2.rs,mod.rs}`。
-- 表现/自动化：`crates/oasis7_viewer/src/{timeline_controls.rs,viewer_automation.rs,web_test_api.rs,headless.rs}` 及相关面板模块。
+- 协议/服务：`crates/oasis7_proto/src/viewer.rs`、`crates/oasis7/src/viewer/{protocol.rs,server.rs,live_controls.rs,runtime_live.rs}`。
+- 表现/自动化：`crates/oasis7_viewer/software_safe_src/{legacy_core.js,legacy_core_control_gate.test.js}`；生成浏览器入口为 `crates/oasis7_viewer/viewer.js`。
 - 本设计不改变世界规则、P2P/共识回退策略、视觉方向或测试发布判断。
