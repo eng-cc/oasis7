@@ -7,7 +7,7 @@
 - 想确认 LLM 默认、`--no-llm` 的 observer/debug 边界及 launcher 不可回退语义：先读 [`oasis7-viewer-live-decision-mode.prd.md`](oasis7-viewer-live-decision-mode.prd.md)。
 - 想确认当前 `oasis7_viewer_live` 的职责、允许参数与 legacy 参数拒绝语义：再读 [`doc/p2p/prd.md`](../prd.md) 的 Viewer 控制面边界。
 - 想运行 Viewer、做 Web 回归或区分 formal gameplay 与 observer/debug：先读 [`doc/world-simulator/viewer/viewer-manual.manual.md`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`testing-manual.md`](../../../testing-manual.md)。
-- 想按历史文件名追溯：两组 2026-02 源三件套保留至本批删除切片完成；当前语义以 stable authority 为准。
+- 想按历史变更追溯：查阅 Git 与 GitHub task evidence；当前语义以 stable authority 为准。
 
 ## 阅读边界
 

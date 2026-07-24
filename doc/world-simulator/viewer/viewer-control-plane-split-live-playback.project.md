@@ -7,20 +7,20 @@
 
 - 状态：`documented_current_authority`。
 - 本轮完成：将 control profile 拆分和 live 禁用 seek 收敛到稳定三件套，并修复 Viewer landing/index 默认路由。
-- 本轮未做：不修改协议、server、Viewer UI、automation、DOM 或测试；两个 2026-02 源三件套仍保留，等待迁移治理删除切片。
+- 本轮未做：不修改协议、server、Viewer UI、automation、DOM 或测试。
 
 ## 历史范围与当前归属
 
 | 历史专题 | 已完成范围 | 当前归属 |
 | --- | --- | --- |
 | `viewer-control-plane-split-live-playback-2026-02-27` | profile、握手、server 路由、legacy bridge 与结构化 dispatch | 控制 profile 合同与兼容边界。 |
-| `viewer-live-disable-seek-p2p-2026-02-27` | live `seek` 禁用、入口与 test API 收敛 | live 单调推进与无 seek 表现边界。 |
+| 2026-02 live 无 seek 历史专题 | live `seek` 禁用、入口与 test API 收敛 | live 单调推进与无 seek 表现边界。 |
 
 ## 任务拆解
 
 - [x] viewer-control-profile-stable-authority (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 建立 current PRD/design/project，回填 profile、dispatch 与 live 无 seek 语义。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 - [x] viewer-control-profile-routing (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 修复 Viewer landing 与 world-simulator 文件索引的默认路由。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
-- [ ] viewer-control-profile-source-retirement (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 在后续删除切片完成活跃引用审计后删除两组 2026-02 源三件套；本轮不删除。
+- [x] viewer-control-profile-source-retirement (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 完成活跃引用审计，删除已吸收的 2026-02 live 无 seek 源三件套。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 
 ## 依赖
 

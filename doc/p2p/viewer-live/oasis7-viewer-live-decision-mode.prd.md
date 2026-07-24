@@ -1,6 +1,6 @@
 # `oasis7_viewer_live` 决策模式
 
-> 本文是 `oasis7_viewer_live` LLM 默认值与 `--no-llm` observer/debug 边界的当前专业 authority。它收敛两组 2026-02 源三件套；源文件仍暂留，待本批迁移完成引用审计和删除切片后移除。
+> 本文是 `oasis7_viewer_live` LLM 默认值与 `--no-llm` observer/debug 边界的当前专业 authority。它收敛两组 2026-02 源三件套；历史变更仅从 Git 与 GitHub task evidence 追溯。
 
 - 对应设计: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md`
 - 对应项目: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md`
@@ -40,7 +40,7 @@
 
 - M1（已完成）：默认 LLM、显式 `--no-llm` 与参数解析测试落地。
 - M2（本轮）：将当前语义收敛至稳定 authority 并修复入口路由。
-- M3（后续）：完成引用审计后由迁移治理删除已吸收的 2026-02 源三件套。
+- M3（已完成）：已完成引用审计并退役已吸收的 2026-02 源三件套。
 
 ## 追溯
 

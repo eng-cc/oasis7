@@ -1,6 +1,6 @@
 # Viewer 控制面：回放与 Live 分离
 
-> 本文是回放/Live 控制 profile 与 live 无 seek 语义的当前专业 authority。它收敛两个 2026-02 源三件套；源文件仍暂留，待本批迁移完成引用审计和删除切片后移除。
+> 本文是回放/Live 控制 profile 与 live 无 seek 语义的当前专业 authority。它收敛两个 2026-02 源三件套；历史变更仅从 Git 与 GitHub task evidence 追溯。
 
 - 对应设计: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md`
 - 对应项目: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md`
@@ -42,7 +42,7 @@
 
 - M1（已完成）：协议、握手与 server/live handler 按 profile 拆分。
 - M2（已完成）：Viewer 路由、Web test API、automation 与 timeline 对齐 live 无 seek。
-- M3（本轮）：建立稳定 authority 并切换入口；后续删除切片移除已吸收源三件套。
+- M3（已完成）：已建立稳定 authority、切换入口并退役已吸收源三件套。
 
 ## 风险
 

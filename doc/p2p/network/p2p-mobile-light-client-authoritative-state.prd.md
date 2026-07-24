@@ -7,7 +7,7 @@
 
 本三件套是移动轻客户端的当前专业 authority：客户端仅提交签名 intent 并消费权威 delta；权威执行批次以 `state_root`/`data_root` 承诺，并以 challenge、reorg recovery 与 session-key 生命周期约束可见状态。
 
-它收敛 2026-03-06 日期型三件套的稳定语义。旧文件在本迁移批次中保留，供后续 deletion-readiness、Git 与 task evidence 追溯；它们不再是 P2P 根入口的当前 authority，也不得以其中的完成叙述推导当前部署、QA 放行、公开可用性、finality 或 release 结论。
+它收敛 2026-03-06 日期型三件套的稳定语义。旧文件已退役；完成记录从 Git 与 GitHub task evidence 追溯，且不得以历史完成叙述推导当前部署、QA 放行、公开可用性、finality 或 release 结论。
 
 ## 专业合同
 
@@ -26,7 +26,7 @@
 
 - M1：将日期型专题的稳定协议、状态和恢复语义收敛为本三件套的当前入口。
 - M2：后续变更持续以本合同核对 intent、根绑定、challenge、恢复与会话权限边界，并取得相应实现证据。
-- M3：源文件删除仅在引用审计与 deletion-readiness 完成后进行，不以本次文档迁移替代该门槛。
+- M3（已完成）：引用审计与 deletion-readiness 已完成，日期型源三件套已退役；本稳定 authority 不以历史迁移替代任何实现或发布门槛。
 
 ## 风险
 

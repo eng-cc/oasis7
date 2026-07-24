@@ -7,20 +7,20 @@
 
 - 状态：`documented_current_authority`。
 - 本轮完成：将 LLM 默认与 `--no-llm` 语义收敛到稳定三件套，并把子域入口和 P2P 文件索引指向该 authority。
-- 本轮未做：不修改 CLI、launcher、runtime、Web UI、DOM、测试或 release 配置；两组 2026-02 源三件套仍保留，等待迁移治理的删除切片。
+- 本轮未做：不修改 CLI、launcher、runtime、Web UI、DOM、测试或 release 配置。
 
 ## 历史范围与当前归属
 
 | 历史专题 | 已完成范围 | 当前归属 |
 | --- | --- | --- |
-| `oasis7-viewer-live-llm-default-on-2026-02-23` | 默认 `llm_mode=true`、帮助文案与参数解析回归 | 默认 LLM 合同。 |
-| `oasis7-viewer-live-no-llm-flag-2026-02-23` | 显式 `--no-llm` 解析与诊断路径 | observer/debug-only Script 合同。 |
+| 2026-02 默认 LLM 历史专题 | 默认 `llm_mode=true`、帮助文案与参数解析回归 | 默认 LLM 合同。 |
+| 2026-02 `--no-llm` 历史专题 | 显式 `--no-llm` 解析与诊断路径 | observer/debug-only Script 合同。 |
 
 ## 任务拆解
 
 - [x] viewer-live-decision-mode-stable-authority (PRD-P2P-010) [test_tier_required]: 建立当前 PRD/design/project，并回填默认 LLM 与 observer/debug-only `--no-llm` 语义。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 - [x] viewer-live-decision-mode-routing (PRD-P2P-010) [test_tier_required]: 修复 Viewer-live README 与 P2P 文件索引的默认路由。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
-- [ ] viewer-live-decision-mode-source-retirement (PRD-P2P-010) [test_tier_required]: 在后续删除切片完成活跃引用审计后删除两组 2026-02 源三件套；本轮不删除。
+- [x] viewer-live-decision-mode-source-retirement (PRD-P2P-010) [test_tier_required]: 完成活跃引用审计，删除两组已吸收的 2026-02 源三件套。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 
 ## 依赖
 

@@ -77,7 +77,7 @@
   - runtime live 现在哪些能力已经接管
   - event-driven 阶段的主文档是哪份
   - step/control/live playback 的现行边界是什么
-- 说明: `phase8/9` 已物理合并到主文档；control-profile 与 live 无 seek 的两组 2026-02 源三件套已回填至 stable authority，当前 batch 暂留等待删除切片；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
+- 说明: `phase8/9` 已物理合并到主文档；control-profile 与 live 无 seek 的两组 2026-02 源三件套已回填至 stable authority 并退役；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
 
 ### 5. chat / prompt / right panel
 - 首读入口:

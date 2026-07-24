@@ -7,9 +7,9 @@
 
 | 历史专题 | 回填的稳定合同 | 当前证据责任 |
 | --- | --- | --- |
-| `p2p-mobile-light-client-authoritative-state-2026-03-06.*` | intent 签名/去重、权威批次根、三段状态、challenge/resolve、reorg recovery、snapshot/cursor 与 session-key 吊销换钥 | 当前改动由 runtime、viewer、ops 与 QA 按受影响路径验证；日期型源在本批次尚未删除，仅作追溯。 |
+| 2026-03-06 历史源三件套 | intent 签名/去重、权威批次根、三段状态、challenge/resolve、reorg recovery、snapshot/cursor 与 session-key 吊销换钥 | 当前改动由 runtime、viewer、ops 与 QA 按受影响路径验证；日期型源已退役，历史从 Git 与 GitHub task evidence 追溯。 |
 
-源文件中的历史任务与完成记录不是现时 release、public availability、network finality 或 QA 放行证据。删除源文件前，必须完成活跃引用审计和 deletion-readiness slice。
+源文件中的历史任务与完成记录不是现时 release、public availability、network finality 或 QA 放行证据。活跃引用审计和 deletion-readiness 已完成；源文件已退役，历史从 Git 与 GitHub task evidence 追溯。
 
 ## 任务拆解
 
@@ -28,6 +28,6 @@
 
 ## 状态
 
-稳定专业 authority 已建立；日期型源三件套仍待后续 deletion-readiness 处理。当前状态只表示文档治理迁移完成，不表示代码、运行环境、发布或 QA 放行完成。
+稳定专业 authority 已建立；日期型源三件套已退役。当前状态只表示文档治理迁移完成，不表示代码、运行环境、发布或 QA 放行完成。
 
 本 project 记录合同归属与维护责任，不新增完成态或发布承诺。
