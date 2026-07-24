@@ -20,12 +20,16 @@
 - 分层层：`test_tier_required` / `test_tier_full` 的职责分工。
 - 证据层：测试结果、失败签名、门禁与复审记录。
 - 发布层：go/no-go、回归范围与阻断结论。
+- 好玩性证据层：`L1` automation、`L2` probe、`L3` telemetry/experiment、`L4A` synthetic review、`L4B` embodied-agent playtest 与 `L5` external signals 按证明强度递进；低层不替代高层，世界活动不等于玩家杠杆。
+- 内部评审层：standard-role packet/card 收口，persona panel 只提供结构化假设并回流角色结论，不新增正式 `player` 角色或外部验证结论。
 
 ## 4. 集成点
 - `testing-manual.md`
 - `doc/playability_test_result/prd.md`
 - `doc/core/prd.md`
 - `doc/scripts/prd.md`
+- `scripts/prepare-playability-l4-review.sh`：在一个 worktree 固定 L4 packet、role/persona cards、L4B card、可选校准 notes、summary 与命令。
+- `scripts/run-playability-l4b-agent.sh`：执行真实 agent 操作并写入 L4B state/screenshot/summary/card evidence。
 
 ## 5. 专题导航
 - CI 与覆盖进入 `ci/`
@@ -51,3 +55,4 @@
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
+- 若自动化、synthetic、agent 实操和真实人类信号混写，stage/release claim 会越过证据边界；QA 以 `world_activity_only`、L4B session evidence 与 L5 缺失状态阻断升级。

@@ -40,10 +40,10 @@
   - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.project.md` 命名。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
   - SC-7: 主链 Token 创世前具备一份 QA 审计清单，覆盖分配比例、custody/treasury 语义、个人上限、创世流通与首年释放上限，避免带着错误经济配置进入执行。
-  - SC-8: testing 模块具备一份正式的 `playability evidence stack` 专题，明确自动化、agent probe、遥测/实验、`L4A synthetic`、`L4B embodied-agent` 与 `L5` 真实人类 / 受控外部信号的分层证明边界，禁止把“自动化已通过”误写为“游戏已被证明好玩”。
-  - SC-9: testing 模块具备一份正式的 `playability subagent review system` 专题，明确标准角色 subagent 清单、输入输出 contract、触发矩阵和升级边界，让内部多角色评审可重复执行。
-  - SC-10: testing 模块具备一份正式的 `simulated player persona panel` 专题，明确多个风格化玩家视角如何作为内部假设层接入标准角色 review，同时不新增正式 `player` 角色。
-  - SC-11: testing 模块明确把 `L4` 正式收口为 `L4A synthetic internal playability review` 与 `L4B embodied agent playtest`，并把内部真人试玩降为 `L4B` 的可选校准证据，避免把 agent 角色扮演、agent 实操试玩和真实人类 / 外部继续游玩意愿混写成同一层结论。
+  - SC-8: testing root authorities define the `L1/L2/L3/L4A/L4B/L5` evidence boundaries and forbid writing an automation pass as proof that the game is fun.
+  - SC-9: the durable authority defines standard-role review inputs, outputs, trigger matrix and escalation boundary for repeatable internal review.
+  - SC-10: the durable authority defines a simulated-player persona panel as an internal hypothesis input to standard-role review, not a formal `player` role.
+  - SC-11: the durable authority separates `L4A synthetic internal playability review` from `L4B embodied agent playtest`; internal human play is only optional L4B calibration and never L5.
   - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
   - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，能够实际启动 producer playtest、执行最小真实操作链路、并把状态快照/截图/日志路径/summary 回填到同一 artifact 目录，而不是只留下手工提示。
   - SC-14: testing 模块具备一份 canonical 模型视觉评审 SOP，使截图/布局/遮挡/层级/可读性等常规视觉 review 默认由模型完成，并明确何时必须升级人工 owner。
@@ -93,6 +93,11 @@
   11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
   12. Flow-TST-012: `若先做高强度内部模拟 -> 形成 L4A；若需要 agent 实际进游戏操作且尽量逼近真人评审效果的结论 -> 升级到 L4B；若仍需真实人类 / 真实环境结论 -> 再升级到 L5；内部真人试玩只作为 L4B 可选校准`
   13. Flow-TST-013: `识别可视化相关改动 -> 采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> verdict=pass 且 confidence=high 替代 routine 人工视觉 review，verdict=watch/block/human_escalation 或 confidence=low 升级人工`
+- Durable Playability Evidence Governance:
+  - `L1` automation proves reproducibility and regressions; `L2` controlled probe proves reachability, pacing or response; `L3` telemetry/experiment compares variants or exit points. None proves fun alone. `L4A` is standard-role/persona/surface-based synthetic review, `L4B` requires an agent to execute a real minimum play loop with session evidence, and `L5` is real-player or controlled external evidence. `L4A != L4B != L5`.
+  - Every playability packet records formal surface, `player_action`, `world_change_due_to_player`, `player_leverage_score` and `world_activity_only`. A world-moving sample with no player-caused change is `world_activity_only=yes` and cannot support meaningful participation or a continue claim.
+  - `producer_system_designer` and `qa_engineer` review every packet first; surface-specific roles follow. Each card distinguishes direct evidence, inference, what it does not prove, and follow-ups; use `insufficient_input` or `secondary_review_only` when applicable. Personas (`new_player_confused`, `impatient_action_player`, `systems_optimizer`, `narrative_curiosity_player`, `chaos_tester`) are L4A inputs only and must hand off to a standard role.
+  - `block` applies to unstable formal surfaces or absent player leverage; `hold` to failed synthetic continuation or high-value L4B contrary evidence; `watch` to missing/thin/conflicting L4B; `go` only within a producer-defined claim envelope when required L1-L4B evidence has no high-value contrary evidence and L5 has no new contrary evidence. QA guards the evidence boundary.
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -135,10 +140,10 @@
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
   - AC-14B: 仓库必须维护 Playwright 实跑测试系列入口，记录 `PWT-###` 用例矩阵、真实本地栈/真实 provider/真实 UI 输入的覆盖边界、mock 禁用规则、证据产物要求和新增用例规则；首个用例为 `PWT-001 Real Agent Chat`，后续玩家操作流程必须从该入口扩展。
   - AC-15: 正式 gameplay/trust evidence 至少要有 1 条代表性样本明确记录 `player_action`、`world_change_due_to_player`、`player_leverage_score` 与 `world_activity_only`，否则不得宣称“玩家已有 meaningful participation”。
-  - AC-16: `playability-evidence-stack-2026-05-06` 专题文档必须明确 `L1/L2/L3/L4A/L4B/L5` 证据边界、组合规则、现有 oasis7 锚点映射，以及“自动化不能单独保证好玩”的正式结论。
-  - AC-17: `playability-subagent-review-system-2026-05-06` 专题文档必须明确标准角色 subagent 清单、review packet / output card、trigger matrix、sequencing rules 和 stop conditions。
-  - AC-18: `playability-simulated-player-persona-panel-2026-05-06` 专题文档必须明确固定 persona 清单、persona packet / card、与标准角色 review 的回流方式，以及“不是正式角色、不能替代真人验证”的边界。
-  - AC-19: `playability-l4-synthetic-human-split-2026-05-06` 专题文档必须明确 `L4A/L4B/L5` 的定义、operator 入口、claim 边界与当前非替代承诺。
+  - AC-16: durable root authority defines `L1/L2/L3/L4A/L4B/L5`, combination rules, current anchors, and that automation cannot prove fun alone.
+  - AC-17: durable root authority defines standard roles, review packet/card contract, triggers, sequencing and stop conditions.
+  - AC-18: durable root authority defines the fixed persona catalog, packet/card, role handoff, and non-role/non-human-validation boundary.
+  - AC-19: durable root authority defines L4A/L4B/L5, operator entrypoints, claim boundary and non-substitution commitment.
   - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成一套完整 `L4` scaffold，至少包含 review packet、role review cards、persona cards、summary、`L4B` agent 卡副本、可选内部真人佐证 notes 和推荐命令文件。
   - AC-21: `scripts/run-playability-l4b-agent.sh` 必须能消费上述 `manifest.json` 或 artifact 目录，实际完成一次 `L4B` embodied-agent run，并落盘 `L4B` summary、关键 state snapshots、截图、启动日志路径以及对 copied `l4b-agent-playtest-card.md` / `l4-summary.md` 的自动预填。
   - AC-22: `model-visual-review-sop-2026-05-29.manual.md` 与 `model-visual-review-card-template.md` 必须定义截图输入、rubric、verdict、confidence、人类升级条件与正式 sink，使模型视觉评审能替代 routine 人工视觉 review。
@@ -158,10 +163,6 @@
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
-  - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
-  - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
-  - `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
-  - `doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
   - `doc/testing/templates/playability-l4-review-packet-template.md`
   - `doc/testing/templates/playability-l4-role-review-card-template.md`
   - `doc/testing/templates/playability-l4-persona-card-template.md`
@@ -241,10 +242,10 @@
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
-| PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | `L1/L2/L3/L4A/L4B/L5` 证据边界、现有锚点映射、模块入口互链、repo-local `L4` scaffold 入口与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
-| PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、scaffold 入口、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
-| PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、persona scaffold、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
-| PRD-TESTING-010 | playability-l4-synthetic-human-split-2026-05-06 | `test_tier_required` | `L4A/L4B/L5` 边界、manual 入口、repo-local scaffold、`L4B` runner、claim 边界与根入口互链抽样检查 | synthetic/agent/real-human 玩法证据治理 |
+| PRD-TESTING-007 | durable playability evidence governance | `test_tier_required` | L1-L5 boundary, current anchors, L4 scaffold and combination-rule sampling | 玩法质量 claim 与放行边界 |
+| PRD-TESTING-008 | durable role-based playability review | `test_tier_required` | role/card contract, scaffold, triggers and stop-condition sampling | 多角色内部评审系统设计 |
+| PRD-TESTING-009 | durable simulated-player persona panel | `test_tier_required` | catalog, card schema, handoff and L4/L5-boundary sampling | 多风格内部玩家视角治理 |
+| PRD-TESTING-010 | durable L4 synthetic/agent split | `test_tier_required` | L4A/L4B/L5 boundary, manual entry and L4B runner sampling | synthetic/agent/real-human 玩法证据治理 |
 | PRD-TESTING-011 | model-visual-review-sop | `test_tier_required` | 模型视觉评审 SOP、输出模板、testing 根入口和 S6 手册互链、doc governance 检查 | routine 人工视觉 review 替代路径 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

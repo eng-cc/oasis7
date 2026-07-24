@@ -14,7 +14,7 @@
   - `required-gate-ondemand-launcher-web-build`、`rust-required-gate-ondemand-scope` 与 `wasm-determinism-gate-ondemand-scope` 已把 GitHub required gate 收口为 stable context + changed-path on-demand 执行；launcher/shared runtime 命中时会额外补跑 launcher Web `trunk build`。
   - `engineering-code-quality-performance-baselines` 已为 `required-gate` 增补 Viewer changed-path perf smoke scope；`viewer-performance-probe.sh --profile smoke` 当前是 report-only scoped gate，不作为 blocking failure。
   - `qa-test-governance-simplify` 正在把测试执行入口收口为“影响面 -> 最小测试集 -> 证据 -> 残余风险”，并要求 release skip 与 required-gate skip 输出 claim boundary，避免把未执行项误读成覆盖完成。
-  - `playability-governance-stack-2026-05-06` 已把好玩性证据栈、标准角色 subagent 评审系统、模拟玩家 persona panel，以及 `L4A synthetic` / `L4B embodied-agent` / `L5` 真实人类与线上验证边界收口为单个 bundle 视图。
+  - durable playability evidence governance 已把好玩性证据栈、标准角色评审、persona panel 与 L4A/L4B/L5 边界收口在 testing root authorities；操作从 `testing-manual.md` 的 L4A/L4B/L5 分层进入。
   - `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
   - `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 live contract 证据。
 
@@ -27,7 +27,7 @@
 | Archive / CI / wasm determinism / required-gate 保护批次 (`TASK-TESTING-035` 至 `TASK-TESTING-040`) | `doc/testing/ci/*.project.md`、`doc/testing/governance/*.project.md` |
 | Launcher / Web UI / release gate hardening 批次 (`TASK-TESTING-041` 至 `TASK-TESTING-065`) | 当前入口为 `testing-manual.md`、`doc/testing/launcher/README.md` 与 `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`；launcher 现行 PRD 由目录入口按“验什么 / 从哪里进入”分流，已完成的 design/project 拆解及更早专题追溯见 GitHub task issue evidence comments 与 Git 历史 |
 | 2026-03-02 / 2026-03-03 / 2026-03-06 专题任务映射 | `doc/testing/prd.index.md` 按文件名检索对应 `*.project.md`；旧 `SUBTASK-TESTING-*` 映射保留在专题 project 文档与 task evidence 中 |
-| Playability evidence stack / L4A-L4B / model visual review | `doc/testing/governance/playability-*.project.md`、`doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`、`doc/testing/templates/model-visual-review-card-template.md` |
+| Playability evidence governance / L4A-L4B / model visual review | `doc/testing/prd.md` durable governance、`testing-manual.md` L4A/L4B/L5 steps、`doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`、`doc/testing/templates/model-visual-review-card-template.md` |
 | Legacy shared-network rehearsal / hosted access / release evidence | `doc/testing/evidence/README.md` 先分流，再进入具体 evidence 文件 |
 | Performance coverage and baselines | `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`testing-manual.md` 的 required-gate / Viewer performance probe 段落 |
 
