@@ -59,9 +59,8 @@
 - `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
+- `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
+- `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
@@ -74,7 +73,6 @@
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
 - Runtime live migration phase1/2/3 旧三件套已退役删除；当前追溯入口收敛到 `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md`、`doc/world-simulator/viewer/viewer-manual.manual.md`、GitHub task issue evidence comments 与 git history。
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`
 - `crates/oasis7_launcher_ui/src/lib.rs`
