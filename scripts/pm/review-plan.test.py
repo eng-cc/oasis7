@@ -61,6 +61,23 @@ class ReviewPlanTests(unittest.TestCase):
             self.assertRegex(item["slice_id"],
                              r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
+    def test_unchanged_identity_reuses_batch_with_a_different_explicit_plan_path(self) -> None:
+        first = self.plan()
+        alternate_out = self.root / "alternate-plan.json"
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", HEAD, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--out", str(alternate_out)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        retry = json.loads(result.stdout)
+        self.assertTrue(retry["reused"])
+        self.assertEqual(first["epoch"], retry["epoch"])
+        self.assertEqual(first["expected_slices"], retry["expected_slices"])
+        self.assertEqual(first["batch_path"], retry["batch_path"])
+
     def test_preflight_only_materializes_incomplete_artifacts_without_collection(self) -> None:
         artifacts = self.root / "preflight"
         plan = self.plan("--preflight-dir", str(artifacts))

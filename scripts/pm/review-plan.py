@@ -103,7 +103,7 @@ def ensure_batch(root: Path, task_uid: str, head: str, evidence_digest: str,
         if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("epoch") != epoch
                 or {key: batch.get(key) for key in identity} != identity):
             raise ContractError(f"existing review batch does not match immutable plan: {path}")
-        return batch, True
+        return {**batch, "batch_path": str(path)}, True
     helper = Path(__file__).with_name("review-batch-epoch.py")
     command = [sys.executable, str(helper), "--root", str(root), "create", "--task-uid", task_uid,
                "--head", head, "--evidence-digest", evidence_digest]
