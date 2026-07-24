@@ -45,7 +45,7 @@
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
 - `doc/world-simulator/scenario/scenario-files.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.prd.md`
+- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
 - `doc/world-simulator/prd/acceptance/unified-checklist.md`
 - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
@@ -59,9 +59,10 @@
 - `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
+- `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
+- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/llm/decision-provider-contract.project.md`

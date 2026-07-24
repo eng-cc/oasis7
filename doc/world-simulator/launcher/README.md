@@ -9,7 +9,7 @@
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
 - 想确认其余 Web / native control plane、console、settings、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
 - 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
-- 想确认 launcher 的引导配置、可诊断状态，以及 chain runtime / execution world / stale-world 恢复边界：先读 `game-client-launcher-guided-configuration-and-usability.prd.md`；当前实现事实仍须按当期代码与任务证据核验
+- 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -21,8 +21,8 @@
 
 ## 密度快照
 - 当前 inventory 快照（2026-07-24，本次删除完成后）:
-  - `doc/world-simulator/launcher/`: 55 份 Markdown
-  - `doc/world-simulator/`: 356 份 Markdown
+  - `doc/world-simulator/launcher/`: 64 份 Markdown
+  - `doc/world-simulator/`: 365 份 Markdown
 - 该子域仍超过热点阈值；本页目标是降低首读扫描成本，并持续退役不再承担当前入口职责的历史专题。
 
 ## 首读主题簇
@@ -54,7 +54,9 @@
 
 ### 4. Runtime / execution world 边界
 - 首读入口:
-  - `game-client-launcher-guided-configuration-and-usability.prd.md`
+  - `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
+  - `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
+  - `game-client-launcher-chain-runtime-stale-execution-world-recovery-2026-03-12.prd.md`
 - 适合问题:
   - launcher 与 chain runtime 的职责边界在哪里
   - execution world dir 输出、恢复与 stale world 处理如何收口
