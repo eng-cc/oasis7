@@ -9,7 +9,7 @@
 - 想先看当前站点任务、同步状态与最近完成项：`doc/site/project.md`
 - 想直接按文件名定位某个 github-pages / manual 专题：`doc/site/prd.index.md`
 - 想先确认静态手册镜像如何挂到仓库权威文档：`doc/site/manual/README.md`
-- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、`doc/site/prd.md` 与 `doc/site/project.md`
+- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/prd.md` 与 `doc/site/project.md`
 
 ## 入口
 - PRD: `doc/site/prd.md`

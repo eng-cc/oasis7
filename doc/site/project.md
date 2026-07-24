@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] site-pages-release-contract-consolidation (PRD-SITE-002/PRD-SITE-003/PRD-SITE-008) [test_tier_required]: 将当前 Pages 静态入口、四项质量门禁、Release 平台资产、信任/安装器 blocker、Viewer 手册镜像与手动升级边界收敛到 site root authority；dated GitHub Pages 专题只保留历史追溯，不再承担当前发布就绪结论。验证：`./scripts/site-link-check.sh && ./scripts/site-homepage-claim-check.sh && ./scripts/site-manual-sync-check.sh && ./scripts/site-download-check.sh`，以及 `git diff --check`。 Trace: #2563 (task_57970b526b30498b862ae51c66c619ca)
 - [x] github-pages-visual-content-refresh-20260718 (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略、模拟与生存游戏官网，把中英首页首屏从多层解释面板收敛为“压力抉择 + 玩家角色 + 持续后果 + 双 CTA + 精确预览状态”；使用明确标注为概念图而非 gameplay capture 的 Image2 小行星文明主视觉，并将真实 Viewer 证据继续保留在证据链语境。 Trace: #2438 (task_adfbfbfea1e64f4eb8904b9779b4c2bb)
   - 产物文件:
     - `site/index.html`
@@ -28,7 +29,7 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
     - 浏览器核对 `1440x900`、`390x844`、`360x800` 的首屏层级、导航/CTA、横向溢出与关键交互
-- [x] site-github-pages-cta-microtopic-deletion (PRD-SITE-003/PRD-ENGINEERING-025) [test_tier_required]: 删除已降格为历史压缩且由当前首页叙事、下载链路与 project 台账承接的 `github-pages-hero-cta-simplify-2026-02-26` 一次性 CTA 三件套；当前追溯收敛到 `doc/site/project.md`、`doc/site/prd.index.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、站点文件、GitHub task issue evidence comments 与 git history。 Trace: #2174 (task_5a8f6c879c1347b98e9cc2764ea372b0)
+- [x] site-github-pages-cta-microtopic-deletion (PRD-SITE-003/PRD-ENGINEERING-025) [test_tier_required]: 删除已降格为历史压缩且由当前首页叙事、下载链路与 project 台账承接的 `github-pages-hero-cta-simplify-2026-02-26` 一次性 CTA 三件套；当前追溯收敛到 `doc/site/project.md`、`doc/site/prd.index.md`、`doc/site/prd.md`、站点文件、GitHub task issue evidence comments 与 git history。 Trace: #2174 (task_5a8f6c879c1347b98e9cc2764ea372b0)
 - [x] historical-doc-governance-slimdown-round (PRD-SITE-003) [test_tier_required]: 对 `doc/site` 与 `doc/readme` 中已完成且只承担历史证据职责的专题三件套做索引曝光瘦身，保留原路径、互链和治理状态块，同时把当前读者路由回 active site/readme/gap/public-status 入口。 Trace: .pm/tasks/task_fc499abed90742caa7c1a66166f7d926.yaml
   - 产物文件:
     - `doc/site/README.md`
@@ -141,7 +142,7 @@
     - `git diff --check`
 - [x] TASK-SITE-018 (PRD-SITE-008) [test_tier_required]: 收口 `doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径，统一使用 `oasis7_viewer` / `crates/oasis7*` 口径。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
+    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/prd.md doc/site/project.md doc/site/github-pages --glob '*.md'`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SITE-019 (PRD-SITE-002/003) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，明确 `doc/site/README.md`、公开 docs hub、手册镜像策略与仓库权威手册的职责边界。
@@ -164,8 +165,6 @@
     - `site/en/index.html`
     - `doc/site/prd.md`
     - `doc/site/project.md`
-    - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
-    - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
   - 验收命令 (`test_tier_required`):
     - `./scripts/site-download-check.sh`
     - `bash -n scripts/package-native-installer.sh`
@@ -205,7 +204,7 @@
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点公开叙事 / 对外材料收口）`
 - 当前窗口摘要: 已完成游戏优先的中英首页叙事压缩、五入口导航、受控 Viewer 截图证据与桌面/移动端视觉收口；公开下载、viewer manual mirror、homepage claim/parity gate 等既有边界保持不变。
-- 历史追溯: 更早 `TASK-SITE-*` 与 homepage copy iteration 不再在状态区逐条追加；需要追 Pages/manual/release/download/homepage 历史时，先从 `doc/site/prd.index.md`、`doc/site/github-pages/` topic project、站点文件 diff 与 `.pm/tasks/*.execution.md` 进入。
+- 历史追溯: 更早 `TASK-SITE-*` 与 homepage copy iteration 不再在状态区逐条追加；需要追 Pages/manual/release/download/homepage 历史时，先从 `doc/site/prd.index.md`、仍活跃的 `doc/site/github-pages/` topic project、站点文件 diff、GitHub task issue evidence comments 与 git history 进入。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND 状态: manual 子簇、github-pages 子簇、技术预览口径、下载 CTA 与 release notes 边界均已完成历史收口；后续只在对应 topic project 中增量维护。
 - 说明: 本文档仅维护 site 模块设计执行状态；历史过程摘要见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。

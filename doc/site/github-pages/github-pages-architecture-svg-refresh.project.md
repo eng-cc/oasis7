@@ -6,7 +6,7 @@
 审计轮次: 5
 
 ## 审计备注
-- 项目主入口：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`。
+- 项目主入口：`doc/site/project.md`。
 - 本文件仅维护架构图 SVG 精修的增量任务。
 
 ## 任务拆解
