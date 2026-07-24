@@ -62,9 +62,10 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 - Limited preview 是面向候选版本的受控、可纠偏、可撤回体验，不等于 public launch、广泛可用或阶段自动升级。
 - 每轮 preview 必须绑定同一候选版本、primary mode、受支持入口、claim envelope 与正式反馈入口；入口不可达或被迫 fallback 时必须如实标记 blocked，不能改写为成功。
 - 反馈按 `Blocking / Opportunity / Idea` 分类，并记录 owner、处置结论与下一步。可复现的 blocking 信号必须让同一候选重新进入受影响专业域与 QA gate，旧 gate pass 不能代签。
+- 正式反馈入口必须如实呈现当前可用性；可提交时，玩家能够确认提交结果；入口不可用或提交未完成时，玩家能够获得恢复下一步。该承诺不包含公开反馈账本、必达交付、保存期限、审核或调解、人工支持或逐条答复。
 - claim drift 必须在同轮纠正并留下记录；单次 callout、互动数量或无阻塞反馈都不能单独证明发行就绪。
 - QA 可以建议 pause、conditional 或 downgrade；producer 基于反馈与 QA 结论决定 continue / hold / reassess。渠道切换不改变阶段，公开状态仍只由根 `README.md` 拥有。
-- 收集反馈时只索取复现和分流所需的最小信息；不得把账号、私密渠道内容或其他不必要的个人信息写入公开证据。
+- 收集反馈时只索取复现和分流所需的最小信息；不得把账号、私密渠道内容、敏感配置/凭据或其他不必要的个人信息写入公开证据。
 
 - AR-1：所有入口和证据都能归一到 `viewer` 或 `pure_api`，不存在由 alias、provider、deployment 或 session context 派生的第三种模式。
 - AR-2：同一候选版本分别证明 `viewer` 与 `pure_api` 的阶段、目标、阻塞、下一步、核心动作、主要因果与重连恢复；两种模式证据不互相代签。
