@@ -61,7 +61,7 @@
 - doc/p2p/prd.index.md
 - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
-- `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.prd.md`
+- `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
 - `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.prd.md`
 - `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
 - `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`

@@ -29,7 +29,7 @@
 | `token/` | 创世分配、签名授权、治理分发与流通边界；默认先读 `doc/p2p/token/README.md` |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
 | `distributed/` | 分布式 runtime / consensus / hard split 路线；首读 `doc/p2p/distributed/README.md` |
-| `viewer-live/` | 已完成的 Viewer LLM 默认值与 observer/debug 回退变更；默认先读 `doc/p2p/viewer-live/README.md`，再按文件名追溯 |
+| `viewer-live/` | Viewer LLM 默认与 observer/debug-only `--no-llm` 边界；默认先读 `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` |
 | `consensus/` | 共识实现与内建 wasm 身份口径；默认先读 `doc/p2p/consensus/README.md` |
 
 ## 当前补充阅读面
@@ -70,7 +70,7 @@
 | `distfs/` distributed resilience | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | 异构 provider 选择、无单机完整依赖、自愈控制/轮询与受限 NodeRuntime 接线统一收敛；NodeRuntime 仍仅是依赖齐备时运行、失败不阻断 tick 的增量边界 |
 | `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | `observer-sync-source-dht-mode` 仅作为 DHT 组合链路 delta |
 | `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 仅作为增量入口 |
-| `viewer-live/` CLI defaults | `doc/p2p/viewer-live/README.md` -> `doc/p2p/prd.md` | `oasis7-viewer-live-llm-default-on-2026-02-23` 与 `oasis7-viewer-live-no-llm-flag-2026-02-23` 均已完成，仅作为历史变更与审计追溯入口 |
+| `viewer-live/` decision mode | `doc/p2p/viewer-live/README.md` -> `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | 两组 2026-02 源三件套已语义回填并退役；历史变更从 Git 与 GitHub task evidence 追溯 |
 
 ## 完整专题检索清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
@@ -104,7 +104,7 @@
 | `doc/p2p/distributed/distributed-runtime.prd.md` | `doc/p2p/distributed/distributed-runtime.design.md` | `doc/p2p/distributed/distributed-runtime.project.md` |
 | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.prd.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.design.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.project.md` |
 | `doc/p2p/network/net-runtime-bridge-closure.prd.md` | `doc/p2p/network/net-runtime-bridge-closure.design.md` | `doc/p2p/network/net-runtime-bridge-closure.project.md` |
-| `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.project.md` |
+| `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md` |
 | `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
 | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
@@ -139,8 +139,7 @@
 | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md` | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md` | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md` |
 | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md` |
 | `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md` | `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.design.md` | `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.project.md` |
-| `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.design.md` | `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.project.md` |
-| `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.design.md` | `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.project.md` |
+| `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md` |
 
 ## 发布说明文档（release，补充材料）
 | 发布说明 | 对应专题 |
