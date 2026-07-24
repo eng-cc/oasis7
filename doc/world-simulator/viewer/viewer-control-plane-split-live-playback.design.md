@@ -6,15 +6,15 @@
 ## 结构
 
 1. **协议与握手层**：`ViewerControlProfile`、`PlaybackControl`、`LiveControl` 与 `HelloAck.control_profile` 让客户端知道服务端的动作集合。
-2. **服务端与路由层**：playback 和 live 各执行所属控制；legacy `Control` 只桥接兼容请求。发送前按 profile 校验，并返回 `Sent`、`UnsupportedForProfile` 或 `ClientChannelSendFailed` 等可诊断结果。
-3. **表现层**：timeline、egui、Web test API 与 automation 共用 profile 判定；live 不显示可提交 seek，不能以“重连后再试”掩盖语义不支持。
-4. **兼容层**：profile 未知时可临时显示 legacy 动作集合，但实际发送仍二次校验，避免竞态导致 live seek。
+2. **服务端与路由层**：playback 和 live 各执行所属控制；legacy `Control` 只桥接兼容请求。现有 legacy live handler 收到 seek 时记录并忽略，保持世界不回退；这不是 profile-specific 结构化响应。
+3. **表现层**：timeline、egui、Web test API 与 automation 不把 live seek 暴露为可提交动作；当前 Web 控制入口对 seek 在发送前给出通用 unsupported-action 反馈，不能以“重连后再试”掩盖语义不支持。
+4. **兼容层**：profile 未知时可临时显示 legacy 动作集合；若旧调用方仍发送 seek，live handler 的 log-and-ignore 行为必须被视为兼容性边界，而不是成功、断链或回退。
 
 ## 不变量
 
 - live 的世界推进单调，不提供回退或跳时控制。
 - `seek` 枚举可以为非 live 兼容保留，但不得泄漏为 live 玩家或自动化动作。
-- UI/API 的结构化状态与真实 dispatch 必须一致；不可用不等于 channel failure。
+- Web 发送前拒绝与 legacy handler 的记录并忽略必须如实区分；两者都不等于 channel failure、发送成功或世界回退。
 
 ## 代码与验证接点
 

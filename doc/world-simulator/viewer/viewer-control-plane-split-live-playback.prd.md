@@ -18,23 +18,23 @@
 
 - `ViewerControlProfile::{playback, live}`、`PlaybackControl`、`LiveControl`。
 - `ViewerRequest::{PlaybackControl, LiveControl}` 与 `HelloAck.control_profile`。
-- `ViewerControlDispatchResult` 和 `window.__AW_TEST__` 的 `controlProfile`、动作描述/发送接口。
+- `window.__AW_TEST__` 的 `controlProfile`、动作描述/发送接口，以及 legacy live handler 的无回退行为。
 
 ## 当前合同
 
 | profile | 支持控制 | 不支持控制 | 表现要求 |
 | --- | --- | --- | --- |
 | `playback` | `play`、`pause`、`step`、`seek` | — | timeline 与 automation 可按 playback 暴露 seek |
-| `live` | `play`、`pause`、`step` | `seek` / `seek_event` | 不渲染或不标记 seek 为可用；请求必须返回结构化“不支持当前 profile”，提示使用 `play/pause/step` |
+| `live` | `play`、`pause`、`step` | `seek` / `seek_event` | 当前 Web 控制入口在发送前以通用 unsupported-action 反馈拒绝 seek；legacy live request 收到 seek 时记录并忽略，不回退世界，也不把它报告为连接失败 |
 
 - `HelloAck.control_profile` 是握手后的控制面真值；`ViewerRequest` 分别使用 `PlaybackControl` 与 `LiveControl`。
-- 握手前可暂按 legacy 能力展示，但发送前必须二次校验 profile；不得向已知 live profile 发 seek。
-- legacy `Control` 仅是兼容桥接，不能成为新调用方绕过 profile 的路径。
+- 握手前可暂按 legacy 能力展示；当前 Web 入口不提供 seek 提交，未知或 live profile 的 seek 以发送前通用 unsupported-action 反馈拒绝。
+- legacy `Control` 仅是兼容桥接；若旧调用方仍向 live handler 发送 seek，handler 只记录并忽略该请求，世界保持单调前进。
 - live 禁止 seek 只适用于 live 服务，不改变非 live 的历史浏览/回放语义。
 
 ## 验证与边界
 
-- dispatch 结果至少区分已发送、当前 profile 不支持和 client channel 发送失败，不能把 live seek 误报为断链。
+- 不得把 live seek 的发送前拒绝或 legacy handler 的记录并忽略误报为断链、发送成功或世界回退；若未来引入 profile-specific dispatch 结果，必须同时实现并测试所有保留的 live 请求路径。
 - Viewer UI、timeline、automation 与 `window.__AW_TEST__` 的 `getState`、`describeControls`、`fillControlExample`、`sendControl` 必须对齐 `controlProfile` 与支持集合。
 - 受影响实现改动应覆盖协议 round-trip、live/playback handler、发送路由和 Web test API；可见 UI 改动按 `testing-manual.md` S6 提供 browser/console/语义证据。本轮仅迁移文档，不产生 browser 证据。
 
@@ -46,7 +46,7 @@
 
 ## 风险
 
-- 若客户端忽略 profile，可能把不支持的 seek 误报为断链或发送成功；必须用结构化 dispatch 结果区分。
+- 若客户端忽略 profile，可能把不支持的 seek 误报为断链或发送成功；当前文档必须保留 Web 发送前拒绝与 legacy handler 忽略的区别。
 - `seek` 保留为非 live 兼容枚举，不能被误解为 live 能力。
 - 文档迁移不验证 UI 行为；未来任何可见控制面改动仍需单独 S6 取证。
 
