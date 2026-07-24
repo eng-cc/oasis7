@@ -24,6 +24,7 @@
 
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
+- 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套在本迁移批次保留作追溯，后续删除须经 deletion-readiness。
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
@@ -176,7 +177,7 @@
   - AC-2: p2p project 文档任务项明确映射 PRD-P2P-ID。
   - AC-3: 与 `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md` 等设计文档口径一致。
   - AC-4: S9/S10 相关测试套件在 testing 手册中有对应条目。
-  - AC-5: 轻客户端专题需求落盘并映射到独立任务链（`TASK-P2P-MLC-*`）。
+  - AC-5: 轻客户端专题以稳定三件套 `p2p-mobile-light-client-authoritative-state.*` 维护，并映射到独立维护责任；历史 `TASK-P2P-MLC-*` 只作追溯，不单独构成现时完成或发布结论。
   - AC-6: `node-pos-slot-clock-real-time-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-008`。
   - AC-7: `node-pos-subslot-tick-pacing-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-009`。
   - AC-8: 三线联合验收清单明确给出“基线命令 + 发布门禁阈值 + 阻断条件 + 证据产物”，可直接用于发行前检查。
@@ -230,7 +231,7 @@
 - Integration Points:
   - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
   - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
-  - `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.prd.md`
+  - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
   - `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.prd.md`
   - `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
   - `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`

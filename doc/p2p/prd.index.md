@@ -104,7 +104,7 @@
 | `doc/p2p/distributed/distributed-runtime.prd.md` | `doc/p2p/distributed/distributed-runtime.design.md` | `doc/p2p/distributed/distributed-runtime.project.md` |
 | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.prd.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.design.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.project.md` |
 | `doc/p2p/network/net-runtime-bridge-closure.prd.md` | `doc/p2p/network/net-runtime-bridge-closure.design.md` | `doc/p2p/network/net-runtime-bridge-closure.project.md` |
-| `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.project.md` |
+| `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md` |
 | `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
 | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
