@@ -11,19 +11,44 @@
         "Rust optimization and portability patch are verified"
       ],
       "canonical_worktree": "C:\\Users\\Administrator\\Desktop\\worktrees\\oasis7-engineering-rust-quality-optimization",
+      "claim_verifications": [
+        {
+          "allowed_to_claim": true,
+          "blocked_phrase": "Do not claim the branch is ready for PR.",
+          "claim_message": "Fresh verification passed; the branch can now be claimed ready for PR.",
+          "claim_type": "ready_for_pr",
+          "comparison_ref": "refs/remotes/origin/main",
+          "frozen_source_head": "8e1ca0976909be68e03640e26f31fdf7a5ddadb0",
+          "frozen_source_tree": "eed1ef726e8ca75963628bb04ba48b6bea2a8264",
+          "repository_fingerprint_after": "adb2cbb3a666165aef438b17904fafb096459a2df205f69a0f1ed03c406ea279",
+          "repository_fingerprint_before": "adb2cbb3a666165aef438b17904fafb096459a2df205f69a0f1ed03c406ea279",
+          "status": "verified",
+          "success_phrase": "Fresh verification passed; the branch can now be claimed ready for PR.",
+          "task_uid": "task_0ffee6b8b991432fa70ac0f52412efdd",
+          "verification_epoch_stable": true,
+          "verification_exit_code": 0,
+          "verification_mode": "detached_frozen_tree",
+          "verification_profile": "repository_required",
+          "verified_at": "2026-07-25T09:14:28+08:00",
+          "verify_command": "true"
+        }
+      ],
       "created_at": "2026-07-24T21:56:48+08:00",
       "default_branch": "main",
       "doc_refs": [],
       "evidence_comments": [
         "https://github.com/eng-cc/oasis7/issues/2578#issuecomment-5070644101",
         "https://github.com/eng-cc/oasis7/issues/2578#issuecomment-5070676401",
-        "https://github.com/eng-cc/oasis7/issues/2578#issuecomment-5070759631"
+        "https://github.com/eng-cc/oasis7/issues/2578#issuecomment-5070759631",
+        "https://github.com/eng-cc/oasis7/issues/2578#issuecomment-5076022922"
       ],
       "evidence_sink": "https://github.com/eng-cc/oasis7/issues/2578",
       "handoff_to": [],
       "issue_number": 2578,
       "issue_url": "https://github.com/eng-cc/oasis7/issues/2578",
-      "last_evidence_at": "2026-07-24T22:00:28+08:00",
+      "last_claim_verification_at": "2026-07-25T09:14:28+08:00",
+      "last_closed_at": "2026-07-25T09:14:34+08:00",
+      "last_evidence_at": "2026-07-25T09:14:34+08:00",
       "last_started_at": "2026-07-24T21:57:03+08:00",
       "merge_hold": {
         "active": false,
@@ -47,12 +72,12 @@
       ],
       "source_signal": "",
       "source_type": "reflection",
-      "status": "committed",
+      "status": "ready",
       "task_branch": "task/engineering-rust-quality-optimization",
       "task_uid": "task_0ffee6b8b991432fa70ac0f52412efdd",
       "title": "Rust PM Python portability v2",
       "updated_at": "2026-07-24T22:09:23+08:00",
-      "workflow_phase": "verification",
+      "workflow_phase": "pre_pr_ready",
       "worktree_hint": "C:\\Users\\Administrator\\Desktop\\worktrees\\oasis7-engineering-rust-quality-optimization"
     }
   },
