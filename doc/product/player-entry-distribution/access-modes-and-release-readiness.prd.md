@@ -28,6 +28,10 @@ Native 或 Web Launcher 是已声明 `viewer` / `pure_api` 路径的交付、控
 
 该承诺不声称当前已实现某个引导步骤、自动修复、fallback、配置保存或持续运行结果。成功打开 Launcher、完成本地 fallback、探针/console 可用或单次启动成功，都不能反向证明声明的 primary mode 已经可玩，也不能扩大公开发行 claim。
 
+### 2.2 受控 Launcher 动作
+
+当当前专业 authority 支持时，Launcher 可让玩家对配置、设置、反馈或转账等受控动作看到真实的 `executable`、`blocked`、`result` 与恢复下一步；不同平台可以使用不同输入字段、存储或控制面适配。该产品边界要求语义真实而非界面同一：不得把浏览器存储或控制面可达解释为 WASM authority、授权、安全持久化或运行时成功；也不得把 runtime 的 submit acceptance/action ID 解释为 settlement、最终确认、完整持久历史、100% parity、primary-mode playability 或发行就绪。当前专业实现边界见 [跨表面受控动作契约](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md)。
+
 ## 3. 入口能力等价
 
 `viewer` 与 `pure_api` 可以采用不同表现方式，但必须消费同一权威世界事实和玩家语义。决定持续游玩的能力不能因入口不同而丢失：
@@ -72,6 +76,7 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 - AR-3：blocked/observer 样例能说明真实原因和恢复路径，且不会继续保留错误的 playable/parity 结论。
 - AR-4：统一候选门禁把入口、权威运行与恢复、发行资产、QA 和公开 claim 绑定到同一版本；局部或历史 green 无法代签。
 - AR-5：公开口径变更可追踪到产品决策、专业验证、QA 结论、LiveOps 同步和根 README；gate pass 不自动等于阶段升级。
+- AR-6：适用的 Launcher 受控动作如实区分可执行、阻断与结果，并给出对应恢复下一步；平台字段或适配差异、submit acceptance、近期历史与控制面可达均不被外推为跨端完全一致、结算、持久性、可玩性或发行结论。
 - LP-1：每轮 preview 都能追踪同一候选、primary mode、受支持入口、claim envelope 与反馈入口，且不会被表述为公开发布或自动升阶。
 - LP-2：声明入口能进入对应 primary mode；blocked、observer 或 fallback 不会被计作成功，并由 Viewer S6 及适用的 S9/S10、发行资产证据验证。
 - LP-3：每条有效信号都有分类、owner、复现或处置结论和下一步；自动化 green 不能替代真实反馈 trace。

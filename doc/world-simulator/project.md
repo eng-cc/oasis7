@@ -32,7 +32,7 @@
 
 ### 历史压缩索引
 - 初始 world-simulator PRD/schema/acceptance、launcher 转账、Web 控制台、shared UI schema、Web wasm 与 native/web control plane 历史：回看 `doc/world-simulator/prd.index.md`、相关 topic project 与 GitHub task issue evidence comments。
-- 早期 launcher 链上转账基础条款 `PRD-WORLD_SIMULATOR-004/005` 已从旧 singleton 分册退役，当前追溯通过 `doc/world-simulator/prd.index.md`、`doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md` 与 `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md` 进入。
+- 早期 launcher 链上转账基础条款 `PRD-WORLD_SIMULATOR-004/005` 已从旧 singleton 分册退役；当前专业边界通过 `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` 进入，逐任务证据通过 Git history 与 GitHub task issue evidence comments 追溯。
 - Viewer live/runtime-world、LLM/provider、software_safe、pixel-world 与 visual cleanup 历史：回看 `doc/world-simulator/viewer/`、`doc/world-simulator/llm/`、`doc/testing/evidence/` 与对应 task trace。
 - Release distribution、platform native entrypoints、Windows installer、Linux AppImage 与 upgrade policy 历史：回看 `doc/world-simulator/launcher/`、`doc/site/github-pages/` 与对应 task trace。
 - 本主项目页只维护当前/最近任务索引；完整执行证据以 topic project、testing evidence 与 GitHub task issue evidence comments 为准。
@@ -47,10 +47,7 @@
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
 - `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-web-wasm-time-compat-2026-03-04.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-required-config-gating-2026-03-04.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
+- `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
@@ -76,7 +73,7 @@
 - 下一任务: 待下一个模块任务明确。
 - 当前优先任务: 回到模块后续排队项；当前无新 blocker。
 - 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 当前 authority、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口；explorer 只记录既有只读查询与七视图，不能外推为 mainnet/readiness/public/settlement/validator/no-reset/full-archive 结论，详情回看对应 task trace。
-- 当前 launcher feedback authority: `doc/world-simulator/launcher/game-client-launcher-feedback.{prd,design,project}.md` 收敛当前 native Ready 后远端提交失败时的本地回落与 Web 控制面代理边界；三个 2026-03 源三件套已删除，追溯仅使用 Git 与 `.pm` task evidence。
+- 当前跨表面 Launcher 动作 authority: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.{prd,design,project}.md` 收敛配置、设置、反馈与转账的真实结果/恢复语义和平台差异；四组 2026-03 源三件套已删除，追溯仅使用 Git history 与 GitHub task issue evidence comments。
 - 边界说明: 已知环境限制仍是 source stack formal 启动前需要 `OASIS7_LLM_MODEL` 或等价配置；旧第二 Viewer 入口相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
 - 历史追溯: 最近完成项不再压缩在标题行中维护；需要追 launcher / viewer / provider-backed NPC / release distribution 历史时，先从上方任务项、topic project、`doc/world-simulator/prd.index.md` 与 GitHub task issue evidence comments 进入。
 - 当前追溯入口: 活跃任务、最近完成项、topic project、`doc/world-simulator/prd.index.md` 与 GitHub task issue evidence comments；旧 2026-03-11 viewer 状态 closure / viewer-to-producer handoff 文档已退役删除，当前状态、活跃任务与下一步以本文档为准。
