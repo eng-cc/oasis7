@@ -7,7 +7,7 @@
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
-- 想确认其余 Web / native control plane、console、settings、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
+- 想确认 native/Web control plane、共享 UI schema、console 与 GUI-agent 机器接口的兼容边界：先读 `game-client-launcher-control-plane-and-machine-interface.prd.md`；settings、transfer 仍进入各自专题
 - 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
 - 想确认 launcher 的语言/配置清晰度、blocked/observer 状态与响应式自引导边界：先读 `game-client-launcher-guided-configuration-and-usability.prd.md`；它不构成玩家入口、network readiness 或发布承诺
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
@@ -37,8 +37,7 @@
 
 ### 2. Web / native 控制面与设置
 - 首读入口:
-  - `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
-  - `game-client-launcher-web-console-2026-03-04.prd.md`
+  - `game-client-launcher-control-plane-and-machine-interface.prd.md`
   - `game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
 - 适合问题:
   - native 与 Web control plane 哪些能力要保持一致

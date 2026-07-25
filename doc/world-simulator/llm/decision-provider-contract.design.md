@@ -20,7 +20,7 @@
 - `AgentMemory`：`crates/oasis7/src/simulator/memory.rs`
 - viewer 诊断协议：`crates/oasis7_proto/src/viewer.rs`
 - runtime live 真 LLM 接管专题：`doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
-- launcher GUI Agent 统一机器接口专题：`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.prd.md`
+- launcher operator HTTP-JSON 机器接口专题：`doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`；该接口不等同于 `DecisionProvider` 或世界内 autonomous Agent。
 
 ## 4. 约束与边界
 - 外部 provider 只提供决策建议，不得直接改 world state、存储或 runtime 内核。
