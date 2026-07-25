@@ -7,7 +7,7 @@
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
-- 想确认 native/Web control plane、共享 UI schema、console 与 GUI-agent 机器接口的兼容边界：先读 `game-client-launcher-control-plane-and-machine-interface.prd.md`；settings、transfer 仍进入各自专题
+- 想确认 native/Web 配置、设置、反馈与转账的共享语义、平台差异、结果和恢复边界：先读 `game-client-launcher-cross-surface-action-parity.prd.md`；control plane、GUI-agent 机器接口仍读 `game-client-launcher-control-plane-and-machine-interface.prd.md`
 - 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
 - 想确认 launcher 的语言/配置清晰度、blocked/observer 状态与响应式自引导边界：先读 `game-client-launcher-guided-configuration-and-usability.prd.md`；它不构成玩家入口、network readiness 或发布承诺
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
@@ -38,7 +38,7 @@
 ### 2. Web / native 控制面与设置
 - 首读入口:
   - `game-client-launcher-control-plane-and-machine-interface.prd.md`
-  - `game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md`
+  - `game-client-launcher-cross-surface-action-parity.prd.md`
 - 适合问题:
   - native 与 Web control plane 哪些能力要保持一致
   - Web console / settings / feedback 的当前 canonical 口径是什么
@@ -66,8 +66,7 @@
 - 首读入口:
   - `game-client-launcher-guided-configuration-and-usability.prd.md`
   - `game-client-launcher-feedback.prd.md`
-  - `game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
-  - `game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
+  - `game-client-launcher-cross-surface-action-parity.prd.md`
 - 适合问题:
   - feedback entry/window/distributed submit 的职责怎么分
   - transfer 产品级 parity 的当前约束是什么
@@ -77,7 +76,7 @@
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
 - 如果问题涉及当前本地 launcher/playtest 操作口径，优先看 `../project.md` 当前状态和 GitHub task issue evidence comments，再决定是否进入某个历史专题。
 - 如果问题需要判断 runtime 正确性、hosted auth、chain behavior 或 release readiness，本页只提供文档入口，结论必须回到对应专业角色和当前任务证据。
-- feedback 的三个 2026-03 源三件套已由 `game-client-launcher-feedback.prd.md` 收敛并删除；追溯仅使用 Git 与 `.pm` task evidence。其余历史完成专题除非仍是当前 operator 入口，不再提升为默认首读路径。
+- 四组 2026-03 跨表面动作源三件套已由 `game-client-launcher-cross-surface-action-parity.prd.md` 收敛并删除；追溯仅使用 Git 与 GitHub task issue evidence。其余历史完成专题除非仍是当前 operator 入口，不再提升为默认首读路径。
 
 ## 维护约定
 - 新增 launcher 专题后，若改变默认首读路径，应同步更新本页。
