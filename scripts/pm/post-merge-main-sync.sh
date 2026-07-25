@@ -35,7 +35,6 @@ if [[ -n "$PATCH_RECEIPT" ]]; then
 fi
 ACTUAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || die "repo root must be on a named branch"
 [[ "$ACTUAL_BRANCH" == "$MAIN_REF" ]] || die "repo root is not checked out on the requested default branch"
-[[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "default-branch worktree is dirty"
 MAPPING="$REPO_ROOT/.pm/github-project-sync/tasks.json"
 [[ -f "$MAPPING" ]] || die "task mapping is unavailable"
 # RECEIPT_OUTPUT is accepted only after Path.is_absolute and resolved
@@ -66,8 +65,12 @@ PY
 git -C "$REPO_ROOT" remote get-url origin >/dev/null 2>&1 || die "origin remote is required"
 git -C "$REPO_ROOT" fetch --quiet origin "refs/heads/$MAIN_REF:refs/remotes/origin/$MAIN_REF" || die "failed to fetch origin default branch"
 REMOTE_MAIN="$(git -C "$REPO_ROOT" rev-parse "refs/remotes/origin/$MAIN_REF")"
-git -C "$REPO_ROOT" merge --ff-only "$REMOTE_MAIN" >/dev/null || die "default branch cannot fast-forward to origin"
 LOCAL_MAIN="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$MAIN_REF")"
+if [[ "$LOCAL_MAIN" != "$REMOTE_MAIN" ]]; then
+  [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "default-branch worktree is dirty; refusing branch update"
+  git -C "$REPO_ROOT" merge --ff-only "$REMOTE_MAIN" >/dev/null || die "default branch cannot fast-forward to origin"
+  LOCAL_MAIN="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$MAIN_REF")"
+fi
 [[ "$LOCAL_MAIN" == "$REMOTE_MAIN" ]] || die "default branch did not synchronize exactly"
 MERGED_HEAD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("head_oid") or "")' "$PR_RECEIPT")"
 INTEGRATION_MODE="ancestry"

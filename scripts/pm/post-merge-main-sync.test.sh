@@ -217,11 +217,24 @@ fi
 grep -Eqi 'merge receipt is unavailable|noncanonical' "$TMPDIR/missing.err"
 
 printf 'dirty\n' >"$REPO/untracked"
+"$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+  --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null
+[[ "$(git -C "$REPO" rev-parse main)" == "$MERGED_HEAD" ]]
+
+ADVANCE="$TMPDIR/advance-main"
+git clone -q "$REMOTE" "$ADVANCE"
+git -C "$ADVANCE" config user.email test@example.invalid
+git -C "$ADVANCE" config user.name Test
+printf 'remote advance\n' >>"$ADVANCE/file"
+git -C "$ADVANCE" commit -qam remote-advance
+git -C "$ADVANCE" push -q origin main
 if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
-  --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/dirty.err"; then
-  echo "expected dirty main worktree to fail" >&2; exit 1
+  --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/dirty-update.err"; then
+  echo "expected dirty main worktree requiring an update to fail" >&2; exit 1
 fi
-grep -Fqi 'dirty' "$TMPDIR/dirty.err"
+grep -Fqi 'dirty; refusing branch update' "$TMPDIR/dirty-update.err"
+[[ "$(git -C "$REPO" rev-parse main)" == "$MERGED_HEAD" ]]
 
 echo "post-merge-main-sync.test: OK"

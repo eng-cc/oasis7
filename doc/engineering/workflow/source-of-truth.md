@@ -267,8 +267,10 @@ per-PR truth artifact.
   Project item IDs are external object handles, not replacements for `task_uid`.
 - `.pm/github-project-sync/tasks.json`, when generated locally, is a
   deterministic mapping cache from `task_uid` to issue/project item handles. It
-  is not required to be committed in ordinary task PRs; scripts must tolerate it
-  being absent or refresh it from GitHub/task issue evidence.
+  is ignored local runtime state, never a frozen implementation-head artifact.
+  Scripts must tolerate it being absent or refresh it from GitHub/task issue
+  evidence; ordinary lifecycle mutations must not require a task PR evidence
+  commit or invalidate same-head CI/review.
 - `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local
   archive for historical task metadata and evidence records. It is an audit
   bridge, not a planning queue.
@@ -633,6 +635,10 @@ cd <canonical-default-worktree>
 ```
 
 4. Main sync — require receipt readback; retry with the same bound inputs.
+   The helper fetches first. It permits a dirty default worktree only when its
+   checked-out default-branch HEAD already equals the freshly fetched
+   `origin/<default-branch>`, so no branch update is attempted; a clean
+   worktree remains mandatory before any fast-forward.
 ```bash
 ./scripts/pm/post-merge-main-sync.sh --repo-root <canonical-default-worktree> \
   --main-ref <default-branch> --task-uid <TASK-UID> \

@@ -144,5 +144,15 @@ class AuthoritativeMappingContract(unittest.TestCase):
         self.assertEqual(original, MODULE.load_mapping(mapping_path))
 
 
+class WindowsSubprocessEncodingContract(unittest.TestCase):
+    def test_run_text_uses_utf8_for_windows_subprocess_output(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["gh", "issue", "view"], 0, stdout="\u4efb\u52a1\u8bc1\u636e\n", stderr=""
+        )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            self.assertEqual("\u4efb\u52a1\u8bc1\u636e", MODULE.run_text(["gh", "issue", "view"]))
+        self.assertEqual("utf-8", run.call_args.kwargs["encoding"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

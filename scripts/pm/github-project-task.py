@@ -105,7 +105,15 @@ def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
 
 
 def run_text(cmd: list[str]) -> str:
-    result = subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
+    result = subprocess.run(
+        cmd,
+        check=True,
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=180,
+    )
     return result.stdout.strip()
 
 
