@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import importlib.util
 import json
@@ -174,6 +173,7 @@ def pr_number_from_url(pr_url: str) -> int | None:
 
 
 def issue_task_fields(body: str) -> dict[str, Any]:
+    body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
     for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
@@ -233,7 +233,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
         return None
     issue_payload = run_text(["gh", "issue", "view", str(issue_number), "-R", repo, "--json", "body,number,title,url"])
     issue = json.loads(issue_payload)
-    body = str(issue.get("body") or "")
+    body = str(issue.get("body") or "").replace("\r\n", "\n")
     if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
         return None
     record = issue_task_fields(body)
@@ -323,7 +323,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
 
 
 def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
         handle.write(issue_body(task))
         body_path = handle.name
     try:
@@ -333,7 +333,7 @@ def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
 
 
 def update_issue_body(repo: str, issue_number: int, task: OrderedDict[str, Any]) -> None:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
         handle.write(issue_body(task))
         body_path = handle.name
     try:
@@ -343,7 +343,7 @@ def update_issue_body(repo: str, issue_number: int, task: OrderedDict[str, Any])
 
 
 def issue_comment(repo: str, issue_number: int, body: str) -> str:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
         handle.write(body)
         body_path = handle.name
     try:

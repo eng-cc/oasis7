@@ -4,13 +4,54 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
 import json
 import os
 import pathlib
 import copy
 import tempfile
+import time
 from typing import Any, Callable, Iterator
+
+try:
+    from portable_file_lock import ensure_lock_byte, fcntl
+except ModuleNotFoundError:  # Support isolated fixture copies of this module.
+    try:
+        import fcntl
+
+        def ensure_lock_byte(handle) -> None:
+            return None
+    except ImportError:  # pragma: no cover - exercised on Windows fixtures
+        import msvcrt
+
+        class _WindowsFcntl:
+            LOCK_EX = 0
+            LOCK_UN = 1
+
+            @staticmethod
+            def flock(fd: int, operation: int) -> None:
+                import os
+                import time
+
+                os.lseek(fd, 0, os.SEEK_SET)
+                if operation == _WindowsFcntl.LOCK_UN:
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    return
+                while True:
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        return
+                    except OSError as exc:
+                        if (getattr(exc, "winerror", None) not in (33, 36, 158)
+                                and getattr(exc, "errno", None) not in (13, 36)):
+                            raise
+                        time.sleep(0.01)
+
+        fcntl = _WindowsFcntl()
+
+        def ensure_lock_byte(handle) -> None:
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
 
 PHASE_ORDER = {
     "": 0, "blocked": 0, "intake": 1, "bootstrap": 2, "route": 3,
@@ -95,11 +136,27 @@ def mapping_lock_path(path: pathlib.Path) -> pathlib.Path:
 
 
 def _fsync_dir(path: pathlib.Path) -> None:
+    if os.name == "nt":
+        return
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def _atomic_replace(source: str | os.PathLike[str], destination: pathlib.Path) -> None:
+    """Retry transient Windows sharing violations around atomic replacement."""
+    deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as exc:
+            if (os.name != "nt" or time.monotonic() >= deadline
+                    or getattr(exc, "winerror", None) not in (5, 32)):
+                raise
+            time.sleep(0.01)
 
 
 def atomic_replace_json(path: pathlib.Path, value: Any) -> None:
@@ -112,7 +169,7 @@ def atomic_replace_json(path: pathlib.Path, value: Any) -> None:
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
-        os.replace(temporary, path)
+        _atomic_replace(temporary, path)
         _fsync_dir(path.parent)
     finally:
         pathlib.Path(temporary).unlink(missing_ok=True)
@@ -124,6 +181,7 @@ def locked_json(path: pathlib.Path, default: Any | None = None) -> Iterator[Any]
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = mapping_lock_path(path)
     with lock.open("a+b") as handle:
+        ensure_lock_byte(handle)
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         value = json.loads(path.read_text(encoding="utf-8")) if path.exists() else (default if default is not None else {})
         yield value
