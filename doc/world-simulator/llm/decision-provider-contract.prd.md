@@ -83,7 +83,7 @@
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`
   - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
-  - `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.prd.md`
+  - `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`（operator HTTP-JSON interface；不是 `DecisionProvider` 或世界内 autonomous Agent）
 - Standard Contracts:
   - `ObservationEnvelope`: `agent_id`、`world_time`、局部可见世界状态、近期事件摘要、记忆摘要、预算与动作白名单。
   - `DecisionRequest`: `observation + action_catalog + provider_config_ref + timeout_budget`。

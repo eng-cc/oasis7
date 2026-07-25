@@ -21,7 +21,7 @@
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`
 - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.prd.md`
+- `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`（仅 operator HTTP-JSON interface，不提供 `DecisionProvider` 语义）
 
 ## 状态
 - 最近更新：2026-03-12
