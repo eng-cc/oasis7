@@ -95,6 +95,10 @@ assert module.normalized_acceptance("task_uid: task_x\n") == []
 assert module.normalized_acceptance("Acceptance:\n\nNext:\n") == []
 assert module.normalized_acceptance("Acceptance:\n- [ ] first\n- [x] second\n") == ["first", "second"]
 assert module.normalized_acceptance("Acceptance:\n- first\n- second\n") == ["first", "second"]
+draft = {"status": "committed", "workflow_phase": "verification"}
+assert module.expected_project_values(draft)["Workflow Phase"] == "verification"
+ordinary = {"status": "committed", "workflow_phase": "execution"}
+assert module.expected_project_values(ordinary)["Workflow Phase"] == "execution"
 PY
 
 AUDIT_JSON="$TMPDIR/audit.json"

@@ -90,6 +90,10 @@ never satisfy a live task.
 
 A draft candidate opens after freeze for exact-head CI. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and time.
 Any head change invalidates CI evidence and review; promotion requires same-head readiness.
+The draft candidate remains PM status `committed` while its workflow phase is
+`verification`; selected-task audit projects that explicit pair as Project
+workflow phase `verification`. Other `committed` task states project as
+`execution`.
 
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
