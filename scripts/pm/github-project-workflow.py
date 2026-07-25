@@ -418,6 +418,8 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "done": "done",
         "deferred": "blocked",
     }.get(status, "execution")
+    if status == "committed" and internal_phase == "verification":
+        workflow_phase = "verification"
     project_status = {
         "candidate": "Todo",
         "committed": "In Progress",
