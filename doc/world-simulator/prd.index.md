@@ -74,7 +74,6 @@
 | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.project.md` |
 | `doc/world-simulator/kernel/kernel-rule-wasm-readiness.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-readiness.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-readiness.project.md` |
 | `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.project.md` |
-| `doc/world-simulator/kernel/location-electricity-pool-removal-and-radiation-plant.prd.md` | `doc/world-simulator/kernel/location-electricity-pool-removal-and-radiation-plant.design.md` | `doc/world-simulator/kernel/location-electricity-pool-removal-and-radiation-plant.project.md` |
 | `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md` | `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.design.md` | `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.project.md` |
 | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.prd.md` | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.design.md` | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.project.md` |
 | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.prd.md` | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.design.md` | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.project.md` |
@@ -110,9 +109,7 @@
 | `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.design.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.project.md` |
 | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.prd.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.design.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md` |
 | `doc/world-simulator/llm/llm-prompt-system.prd.md` | `doc/world-simulator/llm/llm-prompt-system.design.md` | `doc/world-simulator/llm/llm-prompt-system.project.md` |
-| `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.design.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` |
-| `doc/world-simulator/m4/m4-power-system.prd.md` | `doc/world-simulator/m4/m4-power-system.design.md` | `doc/world-simulator/m4/m4-power-system.project.md` |
-| `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.design.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.project.md` |
+| `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.project.md` |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md` |
 | `doc/world-simulator/scenario/asteroid-fragment-renaming.prd.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.design.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` |
 | `doc/world-simulator/scenario/chunked-fragment-generation.prd.md` | `doc/world-simulator/scenario/chunked-fragment-generation.design.md` | `doc/world-simulator/scenario/chunked-fragment-generation.project.md` |
