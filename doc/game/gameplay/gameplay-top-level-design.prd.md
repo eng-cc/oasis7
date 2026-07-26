@@ -436,6 +436,14 @@ early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-ses
 
 产品模式、证据隔离与发行组合验收见 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；本节继续拥有 pure API 持续玩法等价的专业规则。
 
+## 2.12 Future：玩法 mode 的参与与准入可读性（未实现）
+
+这是后续目标，不改变当前 `GameplayModeReadiness`、runtime 或 UI 行为，也不承诺匹配、排队、邀请或自动补人。未来若某个 surface 暴露 mode 进入，必须把**当前参与状态**与**这次准入**分开：对同一 mode 的所有 active gameplay module，`(min_players, max_players)` 必须完全相同（`min_players == max_players` 是合法固定人数 mode）；任一边界不一致即 fail closed，不做 min/max、交集或其他聚合。
+
+- 当前参与状态只说明已有玩家：`current_players < min_players` 为 `waiting_for_players`，否则最低人数已满足；有限上限且 `current_players >= max_players` 时同时为 `full`。它不决定最后一个空位能否被准入。
+- 准入是 prospective：模块 ready 且有限上限满足 `current_players < max_players` 时可准入，故即使当前仍 `waiting_for_players`，最后一个空位也可被加入；无上限时只要模块 ready 即可准入。`current_players >= max_players` 必须拒绝为 `full`。
+- `enterable` 只能由“模块 ready + prospective 可准入”得出。模块未 ready 时必须明确模块/缺失原因，不得伪报为等待或满员；等待时必须说明仍缺人数但不虚构 ETA；满员时必须说明容量原因并给出返回其他当前可进入 mode 的恢复路径。人数重判不得隐式替玩家加入或退出。
+
 ---
 
 # 第三部分：爽点曲线模型
