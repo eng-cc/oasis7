@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: keep temporary paths readable by Git Bash and native Windows Python.
 set -euo pipefail
+
+case "$(uname -s)" in
+  MSYS*|MINGW*|CYGWIN*)
+    if [[ -z "${TMPDIR:-}" || "$TMPDIR" == "/tmp" || "$TMPDIR" == "/tmp/" ]]; then
+      TMPDIR="$(cygpath -m "${TEMP:-${TMP:-/tmp}}")"
+    elif [[ "$TMPDIR" == /* ]]; then
+      TMPDIR="$(cygpath -m "$TMPDIR")"
+    fi
+    export TMPDIR
+    ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
