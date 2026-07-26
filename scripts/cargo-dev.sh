@@ -79,6 +79,29 @@ if ! RUSTC_BIN="$(resolve_rustc)"; then
   echo "error: rustc not found on PATH or in the Windows Rustup toolchain directory" >&2
   exit 1
 fi
+
+resolve_cargo() {
+  local candidate
+  if candidate="$(command -v cargo 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  case "${OSTYPE:-}" in
+    msys*|cygwin*)
+      candidate="$(dirname "$RUSTC_BIN")/cargo.exe"
+      if [[ -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+      ;;
+  esac
+  return 1
+}
+
+if ! CARGO_BIN="$(resolve_cargo)"; then
+  echo "error: cargo not found on PATH or alongside the Windows Rustup toolchain rustc" >&2
+  exit 1
+fi
 HOST_TRIPLE="$("$RUSTC_BIN" -vV | sed -n 's/^host: //p')"
 RUSTC_RELEASE="$("$RUSTC_BIN" -vV | sed -n 's/^release: //p')"
 
@@ -116,4 +139,4 @@ case "${1:-}" in
 esac
 
 mkdir -p "$TARGET_DIR"
-exec env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$TARGET_DIR" cargo "$@"
+exec env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$TARGET_DIR" "$CARGO_BIN" "$@"

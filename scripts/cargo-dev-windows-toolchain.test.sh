@@ -23,4 +23,13 @@ fi
   exit 1
 }
 
+if ! cargo_version="$(PATH="$clean_path" "$ROOT_DIR/scripts/cargo-dev.sh" --version)"; then
+  echo "cargo-dev-windows-toolchain.test: cargo execution failed without login-profile Rust PATH" >&2
+  exit 1
+fi
+[[ "$cargo_version" == cargo\ * ]] || {
+  echo "cargo-dev-windows-toolchain.test: unexpected cargo version output: $cargo_version" >&2
+  exit 1
+}
+
 echo "cargo-dev-windows-toolchain.test: OK"
