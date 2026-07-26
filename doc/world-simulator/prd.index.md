@@ -121,13 +121,9 @@
 | `doc/world-simulator/scenario/world-initialization.prd.md` | `doc/world-simulator/scenario/world-initialization.design.md` | `doc/world-simulator/scenario/world-initialization.project.md` |
 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | `doc/world-simulator/viewer/viewer-minimal-system.design.md` | `doc/world-simulator/viewer/viewer-minimal-system.project.md` |
 | `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md` | `doc/world-simulator/viewer/viewer-module-visual-entities.design.md` | `doc/world-simulator/viewer/viewer-module-visual-entities.project.md` |
-| `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.design.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` |
-| `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.design.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` |
-| `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.design.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md` |
-| `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.design.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` |
 | `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md` | `doc/world-simulator/viewer/viewer-frag-default-rendering.design.md` | `doc/world-simulator/viewer/viewer-frag-default-rendering.project.md` |
 | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.prd.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.design.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.project.md` |

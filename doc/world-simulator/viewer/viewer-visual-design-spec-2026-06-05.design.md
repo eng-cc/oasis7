@@ -62,8 +62,9 @@ This specification consolidates and does not replace:
   readability.
 - `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`:
   commercial HUD, player leverage, route readability, and diagnostics collapse.
-- `viewer-2d-visual-polish.design.md`: 2D symbol layer, label LOD, and flow
-  overlay readability.
+- `doc/product/agents-world-simulation/player-readable-world-stage.design.md`:
+  durable object, relationship, scale-honesty, and diagnostic-demotion product
+  semantics distilled from the retired 2D/EGUI readability topics.
 - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`:
   screenshot-based visual review gate, model review rubric, and escalation
   boundaries.
