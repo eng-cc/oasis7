@@ -10,7 +10,7 @@ UID="task_12345678901234567890123456789012"
 
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
 def plan():
-  p={"scope":"targeted","reason_summary":"fixture","changed_path_count":"1"}; p.update({k:"false" for k in M.RUN_FIELDS}); return p
+  p={"scope":"targeted","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; return p
 def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
 def null_summary_run(run_id=12345):
   r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
@@ -29,6 +29,18 @@ class ReceiptTest(unittest.TestCase):
     return patch.object(M,"gh",side_effect=[r or pr(),{"check_runs":runs if runs is not None else [run()]}])
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
+  def test_planner_config_digest_is_bound_into_the_issued_receipt(self):
+    receipt=self.invoke_verify()
+    self.assertIn("planner_config_sha256",receipt["planner"],
+                  "canonical receipt planner omits the planner configuration digest")
+    self.assertIn("planner_config_sha256",receipt,
+                  "issued receipt omits the planner configuration digest")
+    self.assertEqual(plan()["planner_config_sha256"],receipt["planner"]["planner_config_sha256"])
+    self.assertEqual(plan()["planner_config_sha256"],receipt["planner_config_sha256"])
+    self.assertIs(receipt["planner"]["run_rust_baseline"],True)
+    self.assertIn("run_rust_baseline",receipt,
+                  "issued receipt omits the run_rust_baseline boolean")
+    self.assertIs(receipt["run_rust_baseline"],True)
   def test_ready_pr_requires_explicit_recovery_mode(self):
     ready=pr(); ready["draft"]=False
     with self.api(r=ready):
@@ -51,7 +63,7 @@ class ReceiptTest(unittest.TestCase):
       with self.assertRaisesRegex(SystemExit,"uncertain"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
   def invoke_verify(self, mutate=None, refresh=False, live_run=None):
     planner=M.planner_from_run(run()); digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
-    receipt={"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"eng-cc/oasis7","task_uid":UID,"task_issue_number":1,"pr_number":7,"base_oid":"b"*40,"head_oid":"a"*40,"check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":digest,"planner":planner,"conclusion":"success","observed_at":M.now()}
+    receipt={"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"eng-cc/oasis7","task_uid":UID,"task_issue_number":1,"pr_number":7,"base_oid":"b"*40,"head_oid":"a"*40,"check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":M.now()}
     if mutate: mutate(receipt)
     with tempfile.NamedTemporaryFile("w",delete=False) as f: json.dump(receipt,f); name=f.name
     argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-name","required-gate","--check-app-id","42","--planner-digest",digest,"--receipt",name]
@@ -61,6 +73,12 @@ class ReceiptTest(unittest.TestCase):
     return json.loads(output.getvalue())
   def test_wrong_head(self):
     with self.assertRaisesRegex(SystemExit,"wrong_head"): self.invoke_verify(lambda r:r.update(head_oid="c"*40))
+  def test_legacy_receipt_without_planner_config_digest_is_rejected(self):
+    with self.assertRaisesRegex(SystemExit,"planner_config_sha256|mismatch"):
+      self.invoke_verify(lambda r:r.pop("planner_config_sha256"))
+  def test_legacy_receipt_without_run_rust_baseline_is_rejected(self):
+    with self.assertRaisesRegex(SystemExit,"run_rust_baseline|mismatch"):
+      self.invoke_verify(lambda r:r.pop("run_rust_baseline"))
   def test_stale(self):
     with self.assertRaisesRegex(SystemExit,"stale"): self.invoke_verify(lambda r:r.update(observed_at="2000-01-01T00:00:00+00:00"))
   def test_explicit_same_identity_refresh_changes_only_observed_at(self):

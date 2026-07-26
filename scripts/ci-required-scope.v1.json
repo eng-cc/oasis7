@@ -1,0 +1,21 @@
+{
+  "schema": "oasis7-ci-required-scope/v1",
+  "gates": ["oasis7_required", "consensus", "distfs", "node", "net", "viewer", "launcher_web", "workspace_support"],
+  "rules": [
+    {"match": ["doc/**", ".agents/**", ".pm/**", "AGENTS.md", "*.md"], "minimal": true, "reason": "governance_doc"},
+    {"match": ["crates/oasis7/**"], "gates": ["oasis7_required", "launcher_web"], "reason": "runtime"},
+    {"match": ["crates/oasis7_consensus/**"], "gates": ["consensus"], "reason": "consensus"},
+    {"match": ["crates/oasis7_distfs/**"], "gates": ["distfs"], "reason": "distfs"},
+    {"match": ["crates/oasis7_node/**"], "gates": ["node"], "reason": "node"},
+    {"match": ["crates/oasis7_net/**"], "gates": ["net"], "reason": "net"},
+    {"match": ["crates/oasis7_viewer/**"], "gates": ["viewer"], "reason": "viewer"},
+    {"match": ["crates/oasis7_client_launcher/**", "crates/oasis7_launcher_ui/**", "crates/oasis7_proto/**"], "gates": ["launcher_web"], "reason": "launcher"},
+    {"match": ["crates/oasis7_proto/**"], "gates": ["launcher_web"], "reason": "launcher_proto"},
+    {"match": ["crates/oasis7_wasm_abi/**"], "gates": ["workspace_support", "launcher_web"], "reason": "wasm_abi_support"},
+    {"match": ["crates/oasis7_wasm_abi/**"], "gates": ["launcher_web"], "reason": "launcher_wasm_abi"},
+    {"match": ["crates/oasis7_wasm_build/**", "crates/oasis7_builtin_wasm_modules/**", "crates/oasis7_wasm_sdk/**", "crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "gates": ["workspace_support"], "reason": "wasm_support"},
+    {"match": ["crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "gates": ["workspace_support", "oasis7_required"], "reason": "runtime_wasm_support"},
+    {"match": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".github/workflows/rust.yml", "scripts/ci-tests.sh", "scripts/plan-rust-required-scope.sh", "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v1.json"], "full": true, "reason": "shared_required_gate"}
+  ],
+  "unmatched": "full"
+}

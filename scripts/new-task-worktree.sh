@@ -531,10 +531,9 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
     cd "$TARGET_PATH" &&
     ./scripts/pm/move-task.sh --task-uid "$PM_TASK_UID" --to-status committed >/dev/null &&
     ./scripts/pm/workflow-report.sh --phase start --role "$PM_OWNER_ROLE" --task-uid "$PM_TASK_UID" >/dev/null &&
-    ./scripts/pm/bootstrap-task-snapshot.py create \
+    ./scripts/pm/bootstrap-task-snapshot.py validate-or-create \
       --repo-root "$TARGET_PATH" \
       --task-uid "$PM_TASK_UID" \
-      --request-identity "$PM_TITLE" \
       --producer scripts/new-task-worktree.sh >/dev/null
   )
   BOOTSTRAP_STATUS=$?

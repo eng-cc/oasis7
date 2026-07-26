@@ -86,6 +86,9 @@ jobs:
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
+          echo "run_rust_baseline=${{ steps.scope.outputs.run_rust_baseline }}"
+          echo "needs_rust_toolchain=${{ steps.scope.outputs.needs_rust_toolchain }}"
+          echo "planner_config_sha256=${{ steps.scope.outputs.planner_config_sha256 }}"
       - name: Write required planner artifact
         env:
           PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
@@ -102,6 +105,7 @@ jobs:
               "run_oasis7_node_tests", "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests",
               "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
               "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
+              "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
           )
           missing=[field for field in fields if field not in source]
           if missing:
@@ -129,6 +133,7 @@ jobs:
           retention-days: 7
           overwrite: true
       - name: Install pinned Rust toolchains
+        if: ${{ steps.scope.outputs.needs_rust_toolchain == 'true' }}
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
@@ -136,6 +141,7 @@ jobs:
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           fi
       - name: Install cargo-deny
+        if: ${{ steps.scope.outputs.needs_rust_toolchain == 'true' }}
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny@0.19.9
@@ -182,6 +188,7 @@ jobs:
           OASIS7_CI_RUN_VIEWER_PERF_SMOKE: ${{ steps.scope.outputs.run_viewer_perf_smoke }}
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
+          OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
       - name: Run execution bridge binary unit suite
         if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}

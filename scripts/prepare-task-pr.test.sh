@@ -17,6 +17,7 @@ mkdir -p "$FIXTURE_ROOT"
 "$REAL_GIT" -C "$FIXTURE_ROOT" add .
 "$REAL_GIT" -C "$FIXTURE_ROOT" commit -qm "fixture snapshot"
 "$REAL_GIT" -C "$FIXTURE_ROOT" update-ref refs/remotes/origin/main HEAD
+COMPARISON_OID="$("$REAL_GIT" -C "$FIXTURE_ROOT" rev-parse refs/remotes/origin/main)"
 ROOT_DIR="$FIXTURE_ROOT"
 cleanup() {
   "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "${SMOKE_WORKTREE:-$TMPDIR/smoke-worktree}" >/dev/null 2>&1 || true
@@ -256,6 +257,7 @@ write_role_review_packet() {
 - Source Branch: $SMOKE_BRANCH
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main
+- Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
@@ -314,6 +316,7 @@ write_shadowed_role_review_packet() {
 - Source Branch: $SMOKE_BRANCH
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main
+- Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
@@ -359,6 +362,7 @@ write_prefix_mismatch_role_review_packet() {
 - Source Branch: $SMOKE_BRANCH-old
 - Source Head: $source_head
 - Comparison Ref: refs/remotes/origin/main-old
+- Comparison OID: 0000000000000000000000000000000000000000
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
 - Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
@@ -757,6 +761,13 @@ cat > "$GITHUB_FALLBACK_ROOT/.pm/github-project-sync/tasks.json" <<EOF
   "version": 1
 }
 EOF
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" init -q -b main
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" config user.email test@example.com
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" config user.name Test
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" add .
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" commit -qm "fallback fixture"
+"$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" update-ref refs/remotes/origin/main HEAD
+GITHUB_FALLBACK_COMPARISON_OID="$("$REAL_GIT" -C "$GITHUB_FALLBACK_ROOT" rev-parse refs/remotes/origin/main)"
 GITHUB_ISSUE_VIEW_JSON="$TMPDIR/github-issue-view.json"
 cat > "$GITHUB_ISSUE_VIEW_JSON" <<EOF
 {
@@ -767,11 +778,22 @@ cat > "$GITHUB_ISSUE_VIEW_JSON" <<EOF
   ]
 }
 EOF
+python3 - "$GITHUB_ISSUE_VIEW_JSON" "$GITHUB_FALLBACK_COMPARISON_OID" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+body = path.read_text(encoding="utf-8")
+path.write_text(body.replace(
+    "Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths:",
+    f"Comparison Ref: refs/remotes/origin/main\\n- Comparison OID: {sys.argv[2]}\\n- Reviewed Changed Paths:",
+), encoding="utf-8")
+PY
 local_role_review_function="$(sed -n '/^local_role_review_status()/,/^ensure_branch_exists /p' "$ROOT_DIR/scripts/prepare-task-pr.sh" | sed '$d')"
 eval "$local_role_review_function"
 github_mapping_review="$TMPDIR/github-mapping-review.env"
 : > "$TMPDIR/gh-github-mapping.log"
-PATH="$TMPDIR/bin:$PATH" TEST_GH_LOG="$TMPDIR/gh-github-mapping.log" TEST_GH_ISSUE_VIEW_JSON="$GITHUB_ISSUE_VIEW_JSON" \
+PATH="$TMPDIR/bin:$PATH" TEST_GH_LOG="$TMPDIR/gh-github-mapping.log" TEST_GIT_LOG="$TMPDIR/git-github-mapping.log" TEST_GH_ISSUE_VIEW_JSON="$GITHUB_ISSUE_VIEW_JSON" \
   local_role_review_status "$GITHUB_FALLBACK_WORKTREE" "$SMOKE_BRANCH" "$GITHUB_FALLBACK_HEAD" refs/remotes/origin/main > "$github_mapping_review"
 
 python3 - "$github_mapping_review" "$TMPDIR/gh-github-mapping.log" <<'PY'
@@ -860,7 +882,7 @@ commit_fixture_evidence
 prefix_mismatch_json="$TMPDIR/prefix-mismatch.json"
 run_prepare "$TMPDIR/gh-prefix-mismatch.log" "$TMPDIR/git-prefix-mismatch.log" --json >"$prefix_mismatch_json"
 
-python3 - "$prefix_mismatch_json" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" <<'PY'
+python3 - "$prefix_mismatch_json" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" "$COMPARISON_OID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -870,12 +892,14 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 expected_worktree = sys.argv[2]
 expected_branch = sys.argv[3]
+expected_comparison_oid = sys.argv[4]
 review = payload["pre_pr_local_role_review"]
 missing = set(review["missing_markers"])
 expected = {
     "Source Worktree: " + Path(expected_worktree).name + " or repo-relative worktree hint",
     f"Source Branch: {expected_branch}",
     "Comparison Ref: refs/remotes/origin/main",
+    f"Comparison OID: {expected_comparison_oid}",
 }
 if review["status"] != "missing":
     raise SystemExit(f"expected missing review status for prefix-mismatched fields, got: {review}")
@@ -927,6 +951,21 @@ cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
   ]
 }
 EOF
+python3 - "$NO_CACHE_ISSUE_COMMENTS" "$COMPARISON_OID" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+for comment in payload["comments"]:
+    body = comment.get("body", "")
+    comment["body"] = body.replace(
+        "Comparison Ref: refs/remotes/origin/main\n- Reviewed Changed Paths:",
+        f"Comparison Ref: refs/remotes/origin/main\n- Comparison OID: {sys.argv[2]}\n- Reviewed Changed Paths:",
+    )
+path.write_text(json.dumps(payload), encoding="utf-8")
+PY
 cat > "$NO_CACHE_ISSUE_FULL" <<EOF
 {
   "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`smoke-worktree\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
@@ -1465,6 +1504,7 @@ expected_present = [
     "OASIS7_CI_RUN_OASIS7_NODE_TESTS=true",
     "OASIS7_CI_RUN_OASIS7_NET_TESTS=false",
     "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS=false",
+    "OASIS7_CI_RUN_RUST_BASELINE=true",
 ]
 missing = [item for item in expected_present if item not in command]
 if missing:
@@ -1533,6 +1573,27 @@ if required["scope"] != "targeted":
     raise SystemExit(f"expected targeted viewer scope, got: {required}")
 if "viewer:crates/oasis7_viewer/src/lib.rs" not in reason:
     raise SystemExit(f"expected viewer reason, got: {reason}")
+PY
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "README.md"
+docs_required_json="$TMPDIR/docs-required.json"
+run_prepare "$TMPDIR/gh-docs-required.log" "$TMPDIR/git-docs-required.log" --json >"$docs_required_json"
+
+python3 - "$docs_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+command = required["recommended_required_command"] or ""
+if required["scope"] != "minimal":
+    raise SystemExit(f"expected minimal docs-only scope, got: {required}")
+if "OASIS7_CI_RUN_RUST_BASELINE" in command:
+    raise SystemExit(f"docs-only command must not recommend Rust baseline: {command}")
 PY
 
 echo "prepare-task-pr.test: OK"

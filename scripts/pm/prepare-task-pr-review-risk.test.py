@@ -35,6 +35,13 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertIn('--changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS"', source)
         self.assertIn('REQUIRED_REVIEW_ROLES="$(python3 -c', source)
 
+    def test_prepare_task_pr_requires_review_packet_comparison_oid(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        self.assertTrue('"Comparison OID": comparison_oid' in source,
+                        "prepare helper does not bind packet comparison OID")
+        self.assertTrue('"Comparison OID",' in source,
+                        "prepare helper does not validate packet comparison OID")
+
 
 if __name__ == "__main__":
     unittest.main()

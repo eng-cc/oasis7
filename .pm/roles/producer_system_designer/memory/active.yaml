@@ -7,7 +7,8 @@ records:
     topic: player_access.formal_gameplay_requires_llm
     summary: "formal gameplay controls require active LLM access; no-LLM remains observer/debug only, and step/play must surface blocked ack semantics to clients"
     source_refs:
-      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md
+      - doc/game/prd.md
       - testing-manual.md
       - .pm/tasks/task_63a90a761d435a1e8723c8af73bac3f4.execution.md
     tags:
@@ -25,7 +26,7 @@ records:
     topic: governance.p2p_user_modes
     summary: "P2P player-facing deployment UX should collapse to 2-3 auto-selected user modes while preserving internal deployment_mode and node_role semantics for implementation and operations."
     source_refs:
-      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/network/mainnet-private-reachability-architecture.prd.md
       - .pm/tasks/task_7ebfc181e1a04649b1ffcf5671955660.execution.md
       - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
     tags:

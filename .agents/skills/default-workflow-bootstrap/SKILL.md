@@ -30,7 +30,7 @@ reuse an existing owner only when task truth still validates it. Create a
 dedicated worktree unless the user explicitly authorized reuse. Professional
 work still requires matching bounded subagent slices.
 3. Confirm task UID, issue/Project binding, owner, repository, branch, worktree, request identity, and acceptance target using `./scripts/pm/workflow-report.sh --phase start --role tpm`.
-4. Create one immutable bootstrap snapshot with `./scripts/pm/bootstrap-task-snapshot.py create`, record its path/digest, and use `validate` before downstream dispatch. Do not replay the full bootstrap report while the snapshot remains valid.
+4. Create or reuse one immutable bootstrap snapshot with `./scripts/pm/bootstrap-task-snapshot.py validate-or-create --task-uid <task_uid> --producer tpm`; record its path/digest and validate its result before downstream dispatch. The helper derives a new request identity only from bound task truth, reuses an existing immutable snapshot byte-for-byte, and fails closed on drift. Keep `create` / `validate` only for explicit compatibility or diagnosis; do not replay the full bootstrap report while the snapshot remains valid.
 5. Record the bootstrap result in a GitHub issue evidence comment (mandatory). Fallback evidence cannot replace the GitHub-backed task evidence sink for task truth.
 6. Once task truth exists, hand off to `repo-owned-workflow-router` via `./.agents/skills/repo-owned-workflow-router/SKILL.md`.
 

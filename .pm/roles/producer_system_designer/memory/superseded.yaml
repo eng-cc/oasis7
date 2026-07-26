@@ -7,7 +7,8 @@ records:
     topic: player_access.pure_api_requires_llm
     summary: "formal pure_api gameplay requires active LLM access; no-LLM is observer/debug only"
     source_refs:
-      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md
+      - doc/game/prd.md
       - .pm/tasks/task_63a90a761d435a1e8723c8af73bac3f4.execution.md
     tags:
       - player_access
