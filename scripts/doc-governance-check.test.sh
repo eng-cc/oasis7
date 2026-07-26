@@ -4,9 +4,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REAL_RG="$(command -v rg)"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
+
+if REAL_RG="$(command -v rg 2>/dev/null)"; then
+  :
+else
+  REAL_RG="$TMPDIR/rg-grep-backend"
+  cat >"$REAL_RG" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+for argument in "$@"; do
+  if [[ "$argument" == *F* ]]; then
+    exec grep "$@"
+  fi
+done
+exec grep -E "$@"
+SH
+  chmod +x "$REAL_RG"
+fi
 
 if [[ -n "${OASIS7_TEST_PYTHON:-}" ]]; then
   REAL_PYTHON="$OASIS7_TEST_PYTHON"
@@ -107,6 +123,11 @@ if [[ "$(wc -l < "$TMPDIR/rg.log")" -lt 2 ]]; then
   echo "doc-governance-check.test: document scan did not split its rg invocation into bounded batches" >&2
   exit 1
 fi
-grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"
+if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
+  echo "doc-governance-check.test: fixture output missing successful governance verdict" >&2
+  cat "$TMPDIR/check.out" >&2
+  cat "$TMPDIR/check.err" >&2
+  exit 1
+fi
 
 echo "doc-governance-check.test: OK"
