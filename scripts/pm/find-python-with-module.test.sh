@@ -4,12 +4,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-REAL_PYTHON="${OASIS7_TEST_PYTHON:-/c/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
+if [[ -n "${OASIS7_TEST_PYTHON:-}" ]]; then
+  REAL_PYTHON="$OASIS7_TEST_PYTHON"
+else
+  REAL_PYTHON="$("$ROOT_DIR/scripts/pm/find-python-with-module.sh" ast)"
+fi
+
 if [[ ! -x "$REAL_PYTHON" ]] || ! "$REAL_PYTHON" -c 'import ast; print("ready")' | grep -Fxq ready; then
-  echo "find-python-with-module.test: a functional OASIS7_TEST_PYTHON is required" >&2
+  echo "find-python-with-module.test: OASIS7_TEST_PYTHON or PATH discovery must provide a functional Python interpreter" >&2
   exit 1
 fi
 

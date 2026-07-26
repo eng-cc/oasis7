@@ -212,6 +212,9 @@ run_required_gate_checks() {
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
+  run bash ./scripts/cargo-dev-windows-toolchain.test.sh
+  run bash ./scripts/doc-governance-check.test.sh
+  run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
