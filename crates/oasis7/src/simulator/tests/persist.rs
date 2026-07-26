@@ -507,6 +507,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         escalation_hint: Some("repair the line, then advance again".to_string()),
         fallback_action_id: None,
         fallback_action_label: None,
+        fallback_tradeoff_preview: None,
         resume_next_step: Some("Replenish upstream materials and advance again.".to_string()),
         available_actions: Vec::new(),
         recent_feedback: Some(PlayerGameplayRecentFeedback {
@@ -565,6 +566,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         .expect("player gameplay object");
     gameplay_object.remove("execution_state");
     gameplay_object.remove("branch_recommendations");
+    gameplay_object.remove("fallback_tradeoff_preview");
     gameplay_object.remove("recovery_options");
 
     let migrated = WorldSnapshot::from_json(
@@ -598,6 +600,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         Some("unverified")
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
+    assert!(gameplay.fallback_tradeoff_preview.is_none());
     assert!(gameplay.recovery_options.is_empty());
     let facility = gameplay
         .micro_depot_facilities

@@ -63,6 +63,34 @@ describe("viewer feedback module", () => {
     );
   });
 
+  it("retains every published fallback tradeoff instead of collapsing the summary to one CTA", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          stage_status: "blocked",
+          fallback_tradeoff_preview: [
+            { value_class: "safe_wait", available: true, cost: "one bounded recheck", progress_kept: "keeps the current line", opportunity_cost: "delays alternate output", reason: "a confirmed event can clear the blocker", recommended: true },
+            { value_class: "repair_now", available: true, cost: "spend repair materials", progress_kept: "keeps the current capability", opportunity_cost: "uses the repair reserve", reason: "the local blocker is repairable", recommended: false },
+            { value_class: "reroute_now", available: false, cost: "move to an alternate route", progress_kept: "keeps the goal but changes the route", opportunity_cost: "abandons the current route's near-term output", reason: "no alternate route is currently available", recommended: false },
+          ],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().fallbackTradeoffPreview).toEqual([
+      { valueClass: "safe_wait", available: true, cost: "one bounded recheck", progressKept: "keeps the current line", opportunityCost: "delays alternate output", reason: "a confirmed event can clear the blocker", recommended: true },
+      { valueClass: "repair_now", available: true, cost: "spend repair materials", progressKept: "keeps the current capability", opportunityCost: "uses the repair reserve", reason: "the local blocker is repairable", recommended: false },
+      { valueClass: "reroute_now", available: false, cost: "move to an alternate route", progressKept: "keeps the goal but changes the route", opportunityCost: "abandons the current route's near-term output", reason: "no alternate route is currently available", recommended: false },
+    ]);
+    expect(
+      createFeedbackModule(state).buildGameplaySummary().fallbackTradeoffPreview
+        .filter((option) => option.recommended),
+    ).toHaveLength(1);
+  });
+
   it("preserves English product-validation preview values and labels", () => {
     const state = {
       lastGameplayActionFeedback: null,

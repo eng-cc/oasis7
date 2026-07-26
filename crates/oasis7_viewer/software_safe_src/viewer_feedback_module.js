@@ -882,6 +882,23 @@ export function createViewerFeedbackModule({
       ),
     };
     const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
+    const fallbackTradeoffPreview = (
+      Array.isArray(gameplay.fallback_tradeoff_preview)
+        ? gameplay.fallback_tradeoff_preview
+        : Array.isArray(gameplay.fallbackTradeoffPreview)
+          ? gameplay.fallbackTradeoffPreview
+          : []
+    )
+      .filter(isRecord)
+      .map((option) => ({
+        valueClass: option.value_class || option.valueClass || null,
+        available: option.available === true,
+        cost: displayableString(option.cost) || null,
+        progressKept: displayableString(option.progress_kept ?? option.progressKept) || null,
+        opportunityCost: displayableString(option.opportunity_cost ?? option.opportunityCost) || null,
+        reason: displayableString(option.reason) || null,
+        recommended: option.recommended === true,
+      }));
     const recoveryOptionComparisons = (
       Array.isArray(gameplay.recovery_options)
         ? gameplay.recovery_options
@@ -1133,6 +1150,7 @@ export function createViewerFeedbackModule({
       attractionProof,
       agencyMoves,
       progressionProof,
+      fallbackTradeoffPreview,
       matureWorldContinuation,
       shareReplay,
       entityCounts: {

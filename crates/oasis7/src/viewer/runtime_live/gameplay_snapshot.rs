@@ -10,6 +10,9 @@ use crate::simulator::persist::{
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
+#[path = "gameplay_snapshot_fallback.rs"]
+mod fallback;
+
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
 pub(super) use super::gameplay_snapshot_helpers::apply_runtime_snapshot_empty_entities_blocker;
@@ -19,6 +22,7 @@ use super::gameplay_snapshot_helpers::{
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::gameplay_validation_preview::product_validation_unlock_preview;
 use super::player_gameplay::extend_available_actions;
+use fallback::player_gameplay_fallback_tradeoff_preview;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -410,6 +414,10 @@ fn finalize_player_gameplay_snapshot(
         player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
     gameplay.fallback_action_label = fallback_action.map(|(_, label)| label);
+    gameplay.fallback_tradeoff_preview = player_gameplay_fallback_tradeoff_preview(
+        &gameplay,
+        gameplay.response_window_class.as_deref(),
+    );
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     apply_small_player_lane_truth(&mut gameplay);
     gameplay
@@ -491,6 +499,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -603,6 +612,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 escalation_hint: None,
                 fallback_action_id: None,
                 fallback_action_label: None,
+                fallback_tradeoff_preview: None,
                 resume_next_step: None,
                 branch_recommendations: Vec::new(),
                 available_actions,
@@ -669,6 +679,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -746,6 +757,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -826,6 +838,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -881,6 +894,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -936,6 +950,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -991,6 +1006,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1044,6 +1060,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1097,6 +1114,7 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1149,6 +1167,7 @@ pub(super) fn build_player_gameplay_snapshot(
         escalation_hint: None,
         fallback_action_id: None,
         fallback_action_label: None,
+        fallback_tradeoff_preview: None,
         resume_next_step: None,
         branch_recommendations: Vec::new(),
         available_actions,
