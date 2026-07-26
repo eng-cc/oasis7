@@ -30,6 +30,8 @@ pub use persistence::{
     CommittedAuthoritativeRecoveryGeneration,
 };
 mod policy;
+mod product_validation_quote;
+pub use product_validation_quote::ProductValidationQuote;
 mod release_manifest;
 mod resources;
 mod restricted_claim_grants;

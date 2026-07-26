@@ -413,6 +413,49 @@ fn validate_product_with_module_rejects_when_module_denies() {
 }
 
 #[test]
+fn product_validation_quote_previews_eligible_product_without_mutating_world() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    let journal_len_before_quote = world.journal().events.len();
+    let stage_before_quote = world.state().industry_progress.stage;
+    let quote = world
+        .product_validation_quote(
+            "builder-a",
+            "m4.product.logistics_drone",
+            &MaterialStack::new("logistics_drone", 1),
+            20260214,
+        )
+        .expect("eligible product has a deterministic pre-submit quote");
+
+    assert_eq!(world.journal().events.len(), journal_len_before_quote);
+    assert_eq!(world.state().industry_progress.stage, stage_before_quote);
+    assert_eq!(quote.product_id, "logistics_drone");
+    assert_eq!(quote.product_role, "explore");
+    assert!(quote.tradable);
+    assert_eq!(quote.stage_before, "bootstrap");
+    assert_eq!(quote.stage_after, "bootstrap");
+    assert!(!quote.unlock_or_value_class.is_empty());
+    assert!(!quote.recommended_action.is_empty());
+    assert!(quote.submission_allowed);
+    assert_eq!(
+        quote,
+        world
+            .product_validation_quote(
+                "builder-a",
+                "m4.product.logistics_drone",
+                &MaterialStack::new("logistics_drone", 1),
+                20260214,
+            )
+            .expect("same input has the same quote"),
+    );
+}
+
+#[test]
 fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {

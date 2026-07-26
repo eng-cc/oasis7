@@ -420,7 +420,7 @@ fn material_profile(
     }
 }
 
-fn m4_default_product_profiles() -> Vec<ProductProfileV1> {
+pub(super) fn m4_default_product_profiles() -> Vec<ProductProfileV1> {
     vec![
         product_profile("iron_ingot", "scale", true, "bootstrap"),
         product_profile_with_sink(

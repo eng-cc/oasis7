@@ -264,8 +264,8 @@ pub use world::{
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState,
     CommittedAuthoritativeRecoveryGeneration, M1ScenarioBootstrapConfig,
     ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
-    ModuleTickRoutingMetricsSnapshot, ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats,
-    WorldRuntimeMemoryLimits,
+    ModuleTickRoutingMetricsSnapshot, ProductValidationQuote, ReleaseSecurityPolicy, World,
+    WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
 };
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 

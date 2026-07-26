@@ -7,6 +7,7 @@ import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
+import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
 import {
   buildViewerEntityLists,
   renderViewerEntityList,
@@ -44,9 +45,7 @@ import {
   generateEphemeralEd25519Keypair,
   signAuthPayload,
 } from "./viewer_auth_crypto.js";
-
 export const state = createSoftwareSafeState();
-
 let socket = null;
 let reconnectTimer = null;
 let helloAckTimer = null;
@@ -68,7 +67,6 @@ let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
-
 const elements = {};
 let renderHook = () => {};
 let bootstrapped = false;
@@ -90,7 +88,6 @@ const CHAT_HISTORY_LIMIT = 40;
 const STARTER_AGENT_ID = "starter-agent-0";
 const LOCAL_TEST_PLAYER_ID_PREFIX = "local-test-player-";
 let localTestStarterRebindAttemptKey = null;
-
 function normalizeUiLocale(raw) {
   const value = String(raw || "").trim().toLowerCase();
   if (["zh", "zh-cn", "zh_cn", "cn", "chinese"].includes(value)) {
@@ -101,15 +98,12 @@ function normalizeUiLocale(raw) {
   }
   return null;
 }
-
 export function isLocaleZh(locale = state.uiLocale) {
   return normalizeUiLocale(locale) === "zh";
 }
-
 function localeText(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
-
 const {
   applyUiLocaleToDocument,
   resolveInitialUiLocale,
@@ -128,24 +122,19 @@ const {
   uiLocaleStoragePrefix: UI_LOCALE_STORAGE_PREFIX,
   windowRef: window,
 });
-
 export { setViewerLocale, toggleViewerLocale, setPromptOverridesVisible, togglePromptOverridesVisible };
 export const setSoftwareSafeLocale = setViewerLocale;
 export const toggleSoftwareSafeLocale = toggleViewerLocale;
-
 export function getSelectedSearch() {
   return state.selectedSearch;
 }
-
 export function setSelectedSearch(value) {
   state.selectedSearch = String(value || "");
   render();
 }
-
 export function setRenderHook(nextHook) {
   renderHook = typeof nextHook === "function" ? nextHook : () => {};
 }
-
 function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
@@ -154,7 +143,6 @@ function isTestApiEnabled() {
   const value = String(getSearchParams().get("test_api") || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes" || value === "on";
 }
-
 function resolveAgentChatOverallTimeoutMs() {
   if (!isTestApiEnabled()) {
     return 45000;
@@ -191,6 +179,9 @@ const {
   render,
   state,
 });
+
+const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
+const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 
 function normalizeU64Display(value) {
   if (value == null) {
@@ -1808,6 +1799,7 @@ async function requestRefineQuote(compoundMassG) {
   }
 }
 
+
 function canAutoIssueHostedPlayerSession() {
   return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
     && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
@@ -3097,7 +3089,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error)) {
+  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3515,6 +3507,9 @@ function handleViewerMessage(message) {
       break;
     case "refine_quote_preflight":
       handleRefineQuotePreflight(message.quote);
+      break;
+    case "product_validation_quote_preflight":
+      productValidationQuote.handleProductValidationQuote(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -4261,6 +4256,7 @@ function installTestApi() {
     sendControl,
     sendGameplayAction,
     requestRefineQuote,
+    requestProductValidationQuote,
     runSteps,
     setMode,
     focus,
@@ -4272,6 +4268,7 @@ function installTestApi() {
     setStrongAuthApprovalCode,
     injectSnapshot,
     injectRefineQuotePreflightForTest,
+    injectProductValidationQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4294,6 +4291,7 @@ function bootstrap() {
   state.auth = resolveViewerAuthState();
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture();
+  productValidationQuote.installProductValidationQuoteVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -4384,6 +4382,7 @@ export {
   hostedActionPolicy,
   injectSnapshot,
   injectRefineQuotePreflightForTest,
+  injectProductValidationQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4411,6 +4410,7 @@ export {
   sendControl,
   sendGameplayAction,
   requestRefineQuote,
+  requestProductValidationQuote,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,
