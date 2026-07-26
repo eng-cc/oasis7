@@ -7,15 +7,16 @@ FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "u
 PLAN_MARKER="oasis7-required-plan-v1"
 PLAN_ARTIFACT=PLAN_MARKER
 PLAN_MEMBER=f"{PLAN_MARKER}.json"
-RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_launcher_web_build","run_oasis7_workspace_support_crate_tests")
+RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_launcher_web_build","run_oasis7_workspace_support_crate_tests","run_rust_baseline")
 
 def canonical_planner(raw):
-    required=("scope","reason_summary","changed_path_count",*RUN_FIELDS)
+    required=("scope","reason_summary","changed_path_count","planner_config_sha256",*RUN_FIELDS)
     if any(k not in raw for k in required): raise SystemExit("ci-ready-receipt: uncertain incomplete planner metadata")
     if any(str(raw[k]).lower() not in ("true","false") for k in RUN_FIELDS): raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata")
     try: changed=int(raw["changed_path_count"])
     except Exception: raise SystemExit("ci-ready-receipt: uncertain invalid changed_path_count")
-    plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed}
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}",str(raw["planner_config_sha256"])): raise SystemExit("ci-ready-receipt: uncertain invalid planner config digest")
+    plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed,"planner_config_sha256":str(raw["planner_config_sha256"])}
     plan.update({k:str(raw[k]).lower()=="true" for k in RUN_FIELDS})
     return plan
 
@@ -143,7 +144,7 @@ def main():
     payload={"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":a.repository,
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
-      "planner_digest":trusted_planner_digest,"planner":planner,"conclusion":"success","observed_at":now()}
+      "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
     if old is not None:
         for key,val in payload.items():
             if key=="observed_at": continue

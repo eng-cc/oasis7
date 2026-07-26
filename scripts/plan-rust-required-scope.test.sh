@@ -9,6 +9,15 @@ plan_for_path() {
     --changed-path "$1"
 }
 
+plan_for_paths() {
+  local args=(--event-name pull_request)
+  local path
+  for path in "$@"; do
+    args+=(--changed-path "$path")
+  done
+  "$ROOT_DIR/scripts/plan-rust-required-scope.sh" "${args[@]}"
+}
+
 value_for_key() {
   local output="$1"
   local key="$2"
@@ -39,6 +48,66 @@ assert_reason_contains() {
     exit 1
   fi
 }
+
+assert_key_matches() {
+  local output="$1"
+  local key="$2"
+  local pattern="$3"
+  local actual
+  actual="$(value_for_key "$output" "$key")"
+  if [[ ! "$actual" =~ $pattern ]]; then
+    echo "expected $key to match $pattern, got $actual" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+}
+
+product_doc_output="$(plan_for_path doc/product/world-rules-core-gameplay.prd.md)"
+assert_key_equals "$product_doc_output" scope minimal
+assert_key_equals "$product_doc_output" run_rust_baseline false
+assert_key_equals "$product_doc_output" needs_rust_toolchain false
+assert_key_equals "$product_doc_output" needs_node false
+assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
+assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
+
+launcher_output="$(plan_for_path crates/oasis7_client_launcher/src/lib.rs)"
+assert_key_equals "$launcher_output" needs_node true
+assert_key_equals "$launcher_output" needs_trunk true
+assert_key_equals "$launcher_output" needs_rust_toolchain true
+
+overlap_output="$(plan_for_paths crates/oasis7_node/src/network_bridge.rs crates/oasis7_net/src/lib.rs)"
+assert_key_equals "$overlap_output" scope targeted
+assert_key_equals "$overlap_output" run_oasis7_node_tests true
+assert_key_equals "$overlap_output" run_oasis7_net_tests true
+assert_key_equals "$overlap_output" run_oasis7_net_libp2p_tests true
+
+rename_delete_output="$(plan_for_paths crates/oasis7_node/src/old_bridge.rs crates/oasis7_net/src/new_bridge.rs)"
+assert_key_equals "$rename_delete_output" scope targeted
+assert_key_equals "$rename_delete_output" run_oasis7_node_tests true
+assert_key_equals "$rename_delete_output" run_oasis7_net_tests true
+
+config_output="$(plan_for_path scripts/ci-required-scope.v1.json)"
+assert_key_equals "$config_output" scope full
+assert_key_equals "$config_output" run_rust_baseline true
+assert_key_equals "$config_output" needs_rust_toolchain true
+assert_key_equals "$config_output" needs_node true
+
+unknown_output="$(plan_for_path unknown-unclassified-input.txt)"
+assert_key_equals "$unknown_output" scope full
+assert_reason_contains "$unknown_output" "unclassified_or_unresolvable:unknown-unclassified-input.txt"
+
+invalid_config="$(mktemp)"
+trap 'rm -f "$invalid_config"' EXIT
+printf '{not json}\n' >"$invalid_config"
+if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" --event-name pull_request --config "$invalid_config" --changed-path README.md >"$invalid_config.out" 2>"$invalid_config.err"; then
+  echo "expected invalid planner configuration to fail closed" >&2
+  exit 1
+fi
+if ! grep -qi "config" "$invalid_config.err"; then
+  echo "expected config validation failure, got:" >&2
+  cat "$invalid_config.err" >&2
+  exit 1
+fi
 
 wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
 assert_key_equals "$wasm_build_output" scope targeted

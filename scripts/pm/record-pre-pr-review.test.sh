@@ -129,6 +129,27 @@ if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --finding-disposition-evidence "smoke evidence" \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
+  --comparison-ref refs/heads/base \
+  --review-plan "$TMPDIR/missing-review-plan.json" \
+  --print-only >"$TMPDIR/missing-plan.out" 2>"$TMPDIR/missing-plan.err"; then
+  echo "expected missing review plan preflight to fail" >&2
+  exit 1
+fi
+if ! grep -qi "review plan" "$TMPDIR/missing-plan.err"; then
+  echo "record helper did not reject the missing review-plan preflight" >&2
+  cat "$TMPDIR/missing-plan.err" >&2
+  exit 1
+fi
+
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; smoke" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "smoke evidence" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "fixture risk" \
   --review-package "/tmp/non-repo-review-package.diff" \
   --slice-ledger "$LEDGER_REL" \
   --comparison-ref refs/heads/base \

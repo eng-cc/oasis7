@@ -612,6 +612,7 @@ def emit(
     ops_evidence: str = "",
     liveops_evidence: str = "",
     reviewed_source_head: str = "",
+    comparison_oid: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -631,6 +632,7 @@ def emit(
     print(f"ops_evidence={ops_evidence}")
     print(f"liveops_evidence={liveops_evidence}")
     print(f"reviewed_source_head={reviewed_source_head}")
+    print(f"comparison_oid={comparison_oid}")
     raise SystemExit(0)
 
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
@@ -880,15 +882,17 @@ if not blocks:
         missing_markers=["Pre-PR Local Role Review: passed"],
     )
 
+selected_block = blocks[-1]
+comparison_oid = parse_field(selected_block, "Comparison OID")
 required = {
     "Pre-PR Local Role Review": "passed",
     "Task UID": task_uid,
     "Source Branch": source_branch,
     "Comparison Ref": comparison_ref,
+    "Comparison OID": comparison_oid,
 }
 
 missing: list[str] = []
-selected_block = blocks[-1]
 
 for key, expected in required.items():
     if parse_field(selected_block, key) != expected:
@@ -931,7 +935,23 @@ elif reviewed_source_head != source_head:
         if disallowed:
             missing.append("Source Head has post-review non-evidence changes: " + ",".join(disallowed))
 
+if not comparison_oid:
+    missing.append("Comparison OID")
+else:
+    try:
+        current_comparison_oid = subprocess.check_output(
+            ["git", "-C", str(source_worktree), "rev-parse", "--verify", f"{comparison_ref}^{{commit}}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        missing.append(f"Comparison Ref resolvable: {comparison_ref}")
+    else:
+        if comparison_oid != current_comparison_oid:
+            missing.append(f"Comparison OID: {current_comparison_oid}")
+
 for key in (
+    "Comparison OID",
     "Reviewed Changed Paths",
     "Review Package",
     "Role Selection Basis",
@@ -984,6 +1004,7 @@ if missing:
         ops_evidence=ops_evidence,
         liveops_evidence=liveops_evidence,
         reviewed_source_head=reviewed_source_head,
+        comparison_oid=comparison_oid,
     )
 
 emit(
@@ -1003,6 +1024,7 @@ emit(
     ops_evidence=ops_evidence,
     liveops_evidence=liveops_evidence,
     reviewed_source_head=reviewed_source_head,
+    comparison_oid=comparison_oid,
 )
 PY
 }
@@ -1081,6 +1103,7 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
       RUN_VIEWER_PERF_SMOKE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_viewer_perf_smoke" "false")"
       RUN_LAUNCHER_WEB_BUILD="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_launcher_web_build" "false")"
       RUN_WORKSPACE_SUPPORT_CRATE_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_workspace_support_crate_tests" "false")"
+      RUN_RUST_BASELINE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_rust_baseline" "false")"
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
 OASIS7_CI_RUN_CONSENSUS_TESTS=$RUN_CONSENSUS_TESTS \
 OASIS7_CI_RUN_DISTFS_TESTS=$RUN_DISTFS_TESTS \
@@ -1092,6 +1115,7 @@ OASIS7_CI_RUN_VIEWER_WASM_CHECK=$RUN_VIEWER_WASM_CHECK \
 OASIS7_CI_RUN_VIEWER_PERF_SMOKE=$RUN_VIEWER_PERF_SMOKE \
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=$RUN_LAUNCHER_WEB_BUILD \
 OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=$RUN_WORKSPACE_SUPPORT_CRATE_TESTS \
+OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
 ./scripts/ci-tests.sh required"
     fi
     if [[ -z "$LOCAL_REQUIRED_COMMAND" ]]; then

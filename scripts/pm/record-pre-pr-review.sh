@@ -32,6 +32,8 @@ Options:
   --ops-evidence <text>        Ops Evidence value.
   --liveops-evidence <text>    LiveOps Evidence value.
   --comparison-ref <ref>       Comparison Ref value (default: refs/remotes/origin/main).
+  --comparison-oid <oid>       Optional assertion for the resolved comparison ref OID.
+  --review-plan <path>         Immutable review plan; validates task/head/ref/OID/roles.
   --source-head <sha>          Source Head value (default: HEAD).
   --source-branch <branch>     Source Branch value (default: current branch).
   --allow-dirty                Allow dirty working tree only when --reviewed-paths
@@ -84,10 +86,13 @@ WASM_EVIDENCE="n/a; no WASM surface"
 OPS_EVIDENCE="n/a; no deployment/operator ops surface"
 LIVEOPS_EVIDENCE="n/a; no external/player/community messaging surface"
 COMPARISON_REF="refs/remotes/origin/main"
+COMPARISON_OID=""
+REVIEW_PLAN=""
 SOURCE_HEAD=""
 SOURCE_BRANCH=""
 PRINT_ONLY="0"
 ALLOW_DIRTY="0"
+COMPARISON_REF_EXPLICIT="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -109,7 +114,9 @@ while [[ $# -gt 0 ]]; do
     --wasm-evidence) WASM_EVIDENCE="${2:-}"; shift 2 ;;
     --ops-evidence) OPS_EVIDENCE="${2:-}"; shift 2 ;;
     --liveops-evidence) LIVEOPS_EVIDENCE="${2:-}"; shift 2 ;;
-    --comparison-ref) COMPARISON_REF="${2:-}"; shift 2 ;;
+    --comparison-ref) COMPARISON_REF="${2:-}"; COMPARISON_REF_EXPLICIT="1"; shift 2 ;;
+    --comparison-oid) COMPARISON_OID="${2:-}"; shift 2 ;;
+    --review-plan) REVIEW_PLAN="${2:-}"; shift 2 ;;
     --source-head) SOURCE_HEAD="${2:-}"; shift 2 ;;
     --source-branch) SOURCE_BRANCH="${2:-}"; shift 2 ;;
     --allow-dirty) ALLOW_DIRTY="1"; shift ;;
@@ -120,7 +127,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
-[[ -n "$ROLES" ]] || die "--roles is required"
+[[ -n "$ROLES" || -n "$REVIEW_PLAN" ]] || die "--roles is required unless --review-plan is supplied"
 [[ -n "$REVIEW_EVIDENCE" ]] || die "--review-evidence is required"
 [[ -n "$REVIEW_VERDICTS" ]] || die "--review-verdicts is required"
 [[ -n "$FINDING_DISPOSITION_EVIDENCE" ]] || die "--finding-disposition-evidence is required"
@@ -140,6 +147,67 @@ fi
 if [[ -z "$SOURCE_BRANCH" ]]; then
   SOURCE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 fi
+if [[ -n "$REVIEW_PLAN" ]]; then
+  PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" "$ROLES" "$SOURCE_HEAD" "$COMPARISON_REF" "$COMPARISON_REF_EXPLICIT" "$COMPARISON_OID" <<'PY'
+from __future__ import annotations
+import json, subprocess, sys
+from pathlib import Path
+
+root, plan_path, task_uid, supplied_roles, supplied_head, supplied_ref, ref_explicit, supplied_oid = sys.argv[1:]
+try:
+    plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"error: cannot read review plan {plan_path}: {exc}")
+required = ("task_uid", "frozen_head", "comparison_ref", "comparison_oid", "roles", "expected_slices", "epoch", "batch_path")
+missing = [key for key in required if not plan.get(key)]
+if plan.get("schema") != "oasis7-review-plan/v1" or missing:
+    raise SystemExit("error: --review-plan is not a complete oasis7-review-plan/v1: " + ",".join(missing))
+if plan["task_uid"] != task_uid:
+    raise SystemExit(f"error: --review-plan task UID mismatch: expected {task_uid}, actual {plan['task_uid']}")
+roles = plan["roles"]
+if not isinstance(roles, list) or not roles or any(not isinstance(role, str) or not role for role in roles):
+    raise SystemExit("error: --review-plan roles are invalid")
+expected_slices = plan["expected_slices"]
+if (not isinstance(expected_slices, list) or len(expected_slices) != len(roles)
+        or [item.get("role") if isinstance(item, dict) else None for item in expected_slices] != roles
+        or any(not isinstance(item, dict) or not isinstance(item.get("slice_id"), str) or not item["slice_id"] for item in expected_slices)):
+    raise SystemExit("error: --review-plan expected slices are invalid")
+canonical_roles = ",".join(roles)
+if supplied_roles and supplied_roles != canonical_roles:
+    raise SystemExit(f"error: --review-plan roles mismatch: expected {canonical_roles}, actual {supplied_roles}")
+if supplied_head and supplied_head != plan["frozen_head"]:
+    raise SystemExit(f"error: --review-plan source head mismatch: expected {plan['frozen_head']}, actual {supplied_head}")
+if ref_explicit == "1" and supplied_ref != plan["comparison_ref"]:
+    raise SystemExit(f"error: --review-plan comparison ref mismatch: expected {plan['comparison_ref']}, actual {supplied_ref}")
+if supplied_oid and supplied_oid != plan["comparison_oid"]:
+    raise SystemExit(f"error: --review-plan comparison OID mismatch: expected {plan['comparison_oid']}, actual {supplied_oid}")
+resolved = subprocess.run(["git", "-C", root, "rev-parse", "--verify", f"{plan['comparison_ref']}^{{commit}}"], text=True, capture_output=True)
+if resolved.returncode:
+    raise SystemExit(f"error: cannot resolve review-plan comparison ref {plan['comparison_ref']}: {resolved.stderr.strip()}")
+actual_oid = resolved.stdout.strip()
+if actual_oid != plan["comparison_oid"]:
+    raise SystemExit(f"error: review-plan comparison ref drift: expected {plan['comparison_oid']}, actual {actual_oid}")
+print(canonical_roles)
+print(plan["frozen_head"])
+print(plan["comparison_ref"])
+print(plan["comparison_oid"])
+print(plan["epoch"])
+PY
+)" || exit 1
+  ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
+  SOURCE_HEAD="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
+  COMPARISON_REF="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '3p')"
+  COMPARISON_OID="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '4p')"
+  REVIEW_PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+fi
+CURRENT_HEAD="$(git rev-parse HEAD)"
+[[ "$SOURCE_HEAD" == "$CURRENT_HEAD" ]] || die "source head must be the current frozen HEAD: expected $CURRENT_HEAD, actual $SOURCE_HEAD"
+RESOLVED_COMPARISON_OID="$(git rev-parse --verify "${COMPARISON_REF}^{commit}")" \
+  || die "cannot resolve comparison ref: $COMPARISON_REF"
+if [[ -n "$COMPARISON_OID" && "$COMPARISON_OID" != "$RESOLVED_COMPARISON_OID" ]]; then
+  die "comparison OID mismatch: expected $RESOLVED_COMPARISON_OID, actual $COMPARISON_OID"
+fi
+COMPARISON_OID="$RESOLVED_COMPARISON_OID"
 if [[ -z "$REVIEWED_PATHS" ]]; then
   REVIEWED_PATHS="$(git diff --name-only "$COMPARISON_REF"...HEAD | paste -sd ';' -)"
   REVIEWED_PATHS="${REVIEWED_PATHS:-n/a; no changed paths}"
@@ -149,16 +217,27 @@ if [[ -z "$ROLE_BASIS" ]]; then
 fi
 REVIEW_PACKAGE="$(sanitize_evidence_path_field "Review Package" "$REVIEW_PACKAGE")"
 SLICE_LEDGER="$(sanitize_evidence_path_field "Slice Ledger" "$SLICE_LEDGER")"
-python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" <<'PY'
+python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" "$REVIEW_PLAN" <<'PY'
 from __future__ import annotations
 import hashlib, json, re, sys
 from pathlib import Path
 
-root, relative, roles_csv, source_head = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+root, relative, roles_csv, source_head, review_plan = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 path = root / relative
 if not path.is_file():
     raise SystemExit(f"error: Slice Ledger does not exist: {relative}")
 required = {item.strip() for item in roles_csv.split(",") if item.strip()}
+expected_slices = {}
+plan_epoch = ""
+if review_plan:
+    try:
+        plan = json.loads(Path(review_plan).read_text(encoding="utf-8"))
+        expected_slices = {str(item["role"]): str(item["slice_id"]) for item in plan["expected_slices"]}
+        plan_epoch = str(plan["epoch"])
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"error: cannot validate Slice Ledger against review plan: {exc}")
+    if set(expected_slices) != required:
+        raise SystemExit("error: review-plan expected slices do not match required roles")
 seen = {}
 for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
     if not raw.strip():
@@ -181,6 +260,9 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
         raise SystemExit(f"error: self-authored Slice Ledger identity is forbidden for {role}")
     if str(item.get("head") or "") != source_head:
         raise SystemExit(f"error: Slice Ledger source head mismatch for {role}")
+    if review_plan and (str(item.get("slice_id") or "") != expected_slices[role]
+                        or str(item.get("epoch") or item.get("review_epoch") or "") != plan_epoch):
+        raise SystemExit(f"error: Slice Ledger review-plan identity mismatch for {role}")
     digest = str(item["artifact_digest"])
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise SystemExit(f"error: invalid artifact SHA-256 for {role}")
@@ -261,6 +343,7 @@ PACKET="$(cat <<EOF
 - Source Branch: $SOURCE_BRANCH
 - Source Head: $SOURCE_HEAD
 - Comparison Ref: $COMPARISON_REF
+- Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: $REVIEWED_PATHS
 - Review Package: $REVIEW_PACKAGE
 - Role Selection Basis: $ROLE_BASIS

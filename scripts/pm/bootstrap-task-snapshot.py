@@ -127,6 +127,36 @@ def default_path(repo_root: pathlib.Path, task_uid: str) -> pathlib.Path:
     return repo_root / ".pm" / "scratch" / task_uid / "bootstrap-task-snapshot.json"
 
 
+def derived_request_identity(repo_root: pathlib.Path, tasks_json: pathlib.Path, task_uid: str) -> str:
+    """Return the deterministic request identity for a newly bound task."""
+    _, task = load_task(tasks_json, task_uid)
+    title = task.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise SnapshotError("tasks mapping is missing required bootstrap request identity: title")
+    return title.strip()
+
+
+def request_identity_for_validate_or_create(
+    snapshot_path: pathlib.Path,
+    repo_root: pathlib.Path,
+    tasks_json: pathlib.Path,
+    task_uid: str,
+    supplied: str | None,
+) -> str:
+    if supplied:
+        return supplied
+    if snapshot_path.exists():
+        try:
+            saved = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SnapshotError(f"cannot read snapshot {snapshot_path}: {exc}") from exc
+        identity = saved.get("request", {}).get("identity") if isinstance(saved, dict) else None
+        if not isinstance(identity, str) or not identity:
+            raise SnapshotError("existing snapshot request identity is missing; pass --request-identity only after repairing task truth")
+        return identity
+    return derived_request_identity(repo_root, tasks_json, task_uid)
+
+
 def create(args: argparse.Namespace) -> pathlib.Path:
     root = pathlib.Path(args.repo_root).resolve()
     tasks_json = pathlib.Path(args.tasks_json).resolve() if args.tasks_json else root / ".pm/github-project-sync/tasks.json"
@@ -160,7 +190,10 @@ def validate(args: argparse.Namespace) -> pathlib.Path:
     expected = live_payload(root, tasks_json, args.task_uid, args.request_identity)
     for field in ("schema", "task", "repository", "git", "request"):
         if saved.get(field) != expected[field]:
-            raise SnapshotError(f"snapshot {field} drift")
+            raise SnapshotError(
+                f"snapshot {field} drift: expected={expected[field]!r} actual={saved.get(field)!r}; "
+                "remediation: refresh bound task truth or create a new task bootstrap epoch"
+            )
     if not isinstance(saved.get("producer"), str) or not saved["producer"]:
         raise SnapshotError("snapshot producer is missing")
     if not isinstance(saved.get("created_at"), str) or not saved["created_at"]:
@@ -168,17 +201,37 @@ def validate(args: argparse.Namespace) -> pathlib.Path:
     return snapshot_path
 
 
+def validate_or_create(args: argparse.Namespace) -> tuple[pathlib.Path, str]:
+    root = pathlib.Path(args.repo_root).resolve()
+    tasks_json = pathlib.Path(args.tasks_json).resolve() if args.tasks_json else root / ".pm/github-project-sync/tasks.json"
+    snapshot_path = pathlib.Path(args.snapshot).resolve() if args.snapshot else default_path(root, args.task_uid)
+    request_identity = request_identity_for_validate_or_create(
+        snapshot_path, root, tasks_json, args.task_uid, args.request_identity,
+    )
+    args.request_identity = request_identity
+    if snapshot_path.exists():
+        return validate(args), "reused"
+    try:
+        return create(args), "created"
+    except SnapshotError as exc:
+        # A concurrent bootstrap may have created the same immutable snapshot.
+        # Validate that exact winner; never overwrite it.
+        if "snapshot already exists; refusing overwrite" not in str(exc):
+            raise
+        return validate(args), "reused"
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     subparsers = result.add_subparsers(dest="command", required=True)
-    for command in ("create", "validate"):
+    for command in ("create", "validate", "validate-or-create"):
         sub = subparsers.add_parser(command)
         sub.add_argument("--repo-root", required=True)
         sub.add_argument("--task-uid", required=True)
-        sub.add_argument("--request-identity", required=True)
+        sub.add_argument("--request-identity", required=command != "validate-or-create")
         sub.add_argument("--tasks-json")
         sub.add_argument("--snapshot", help="snapshot path; defaults under .pm/scratch/<task-uid>")
-        if command == "create":
+        if command in {"create", "validate-or-create"}:
             sub.add_argument("--producer", required=True)
     return result
 
@@ -186,11 +239,16 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     try:
-        path = create(args) if args.command == "create" else validate(args)
+        if args.command == "create":
+            path, status = create(args), "created"
+        elif args.command == "validate":
+            path, status = validate(args), "valid"
+        else:
+            path, status = validate_or_create(args)
     except SnapshotError as exc:
         print(f"bootstrap-task-snapshot: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps({"status": "created" if args.command == "create" else "valid", "snapshot": str(path)}))
+    print(json.dumps({"status": status, "snapshot": str(path)}))
     return 0
 
 

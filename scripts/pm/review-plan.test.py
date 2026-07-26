@@ -13,22 +13,39 @@ SCRIPT = Path(__file__).with_name("review-plan.py")
 TASK = "task_" + "1" * 32
 HEAD = "a" * 40
 EVIDENCE = "b" * 64
+COMPARISON_REF = "refs/remotes/origin/main"
 
 
 class ReviewPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.git("init", "-b", "main")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.name", "Test")
+        (self.root / "README").write_text("fixture\n", encoding="utf-8")
+        self.git("add", "README")
+        self.git("commit", "-m", "base")
+        self.comparison_ref = COMPARISON_REF
+        self.git("update-ref", self.comparison_ref, "HEAD")
+        self.comparison_oid = self.git("rev-parse", self.comparison_ref)
         self.out = self.root / "plan.json"
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def git(self, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(self.root), *args], check=True, text=True,
+            stdout=subprocess.PIPE,
+        ).stdout.strip()
+
     def run_plan(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
-            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
-             "--head", HEAD, "--evidence-digest", EVIDENCE,
-             "--change-class", "workflow-doc", "--out", str(self.out), *extra],
+             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+              "--head", HEAD, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+             "--comparison-oid", self.comparison_oid, "--out", str(self.out), *extra],
             text=True,
             capture_output=True,
         )
@@ -65,9 +82,10 @@ class ReviewPlanTests(unittest.TestCase):
         first = self.plan()
         alternate_out = self.root / "alternate-plan.json"
         result = subprocess.run(
-            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
-             "--head", HEAD, "--evidence-digest", EVIDENCE,
-             "--change-class", "workflow-doc", "--out", str(alternate_out)],
+             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+              "--head", HEAD, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+             "--comparison-oid", self.comparison_oid, "--out", str(alternate_out)],
             text=True,
             capture_output=True,
         )
@@ -115,7 +133,8 @@ class ReviewPlanTests(unittest.TestCase):
                 result = subprocess.run(
                     [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
                      "--head", HEAD, "--evidence-digest", EVIDENCE,
-                     "--change-class", "workflow-doc", *args],
+                     "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+                     "--comparison-oid", self.comparison_oid, *args],
                     text=True,
                     capture_output=True,
                 )
@@ -123,6 +142,24 @@ class ReviewPlanTests(unittest.TestCase):
                 drifted = json.loads(result.stdout)
                 self.assertFalse(drifted["reused"])
                 self.assertNotEqual(first["epoch"], drifted["epoch"])
+
+    def test_comparison_ref_and_resolved_oid_are_immutable_plan_identity(self) -> None:
+        first = self.plan()
+        self.assertEqual(self.comparison_ref, first["comparison_ref"])
+        self.assertEqual(self.comparison_oid, first["comparison_oid"])
+
+        (self.root / "comparison-drift").write_text("drift\n", encoding="utf-8")
+        self.git("add", "comparison-drift")
+        self.git("commit", "-m", "comparison drift")
+        self.comparison_oid = self.git("rev-parse", "HEAD")
+        self.git("update-ref", self.comparison_ref, self.comparison_oid)
+        drifted = self.plan("--out", str(self.root / "comparison-oid-drift.json"))
+        self.assertFalse(drifted["reused"])
+        self.assertNotEqual(first["epoch"], drifted["epoch"])
+
+    def test_rejects_a_caller_supplied_oid_that_does_not_match_the_real_ref(self) -> None:
+        result = self.run_plan("--comparison-oid", "c" * 40, ok=False)
+        self.assertIn("--comparison-oid mismatch", result.stderr)
 
 
 if __name__ == "__main__":

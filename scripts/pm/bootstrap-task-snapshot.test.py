@@ -57,7 +57,7 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
             "--task-uid", UID, "--request-identity", request,
             "--tasks-json", str(self.mapping), "--snapshot", str(self.snapshot),
         ]
-        if command == "create":
+        if command in {"create", "validate-or-create"}:
             args.extend(("--producer", "tpm"))
         return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -78,6 +78,28 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         overwrite = self.run_helper("create")
         self.assertNotEqual(overwrite.returncode, 0)
         self.assertIn("refusing overwrite", overwrite.stderr)
+
+    def test_validate_or_create_creates_then_reuses_the_immutable_snapshot(self) -> None:
+        created = self.run_helper("validate-or-create")
+        self.assertEqual(created.returncode, 0, created.stderr)
+        self.assertEqual("created", json.loads(created.stdout)["status"])
+        original = self.snapshot.read_bytes()
+
+        reused = self.run_helper("validate-or-create")
+        self.assertEqual(reused.returncode, 0, reused.stderr)
+        self.assertEqual("reused", json.loads(reused.stdout)["status"])
+        self.assertEqual(original, self.snapshot.read_bytes())
+
+    def test_validate_or_create_rejects_drift_while_legacy_create_remains_strict(self) -> None:
+        created = self.run_helper("validate-or-create")
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        drifted = self.run_helper("validate-or-create", request="request-2")
+        self.assertNotEqual(drifted.returncode, 0, drifted.stdout)
+        self.assertIn("snapshot request drift", drifted.stderr)
+        legacy_create = self.run_helper("create")
+        self.assertNotEqual(legacy_create.returncode, 0)
+        self.assertIn("refusing overwrite", legacy_create.stderr)
 
     def test_missing_required_truth_rejected(self) -> None:
         self.write_mapping(issue_url="")

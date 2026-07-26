@@ -60,6 +60,25 @@ def run_json(command: list[str]) -> dict[str, Any]:
     return value
 
 
+def resolve_comparison_ref(root: Path, comparison_ref: str, supplied_oid: str | None) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", f"{comparison_ref}^{{commit}}"],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or "unknown revision"
+        raise ContractError(f"cannot resolve --comparison-ref {comparison_ref!r}: {detail}")
+    resolved = result.stdout.strip()
+    if not HEAD_RE.fullmatch(resolved):
+        raise ContractError("resolved comparison ref is not a commit object id")
+    if supplied_oid is not None and supplied_oid != resolved:
+        raise ContractError(
+            f"--comparison-oid mismatch: expected resolved {resolved}, actual {supplied_oid}; remove it or pass the resolved OID"
+        )
+    return resolved
+
+
 def selector_roles(args: argparse.Namespace) -> list[str]:
     selector = Path(__file__).with_name("review-role-selector.py")
     command = [sys.executable, str(selector), "--change-class", args.change_class, "--json"]
@@ -78,9 +97,11 @@ def selector_roles(args: argparse.Namespace) -> list[str]:
     return roles
 
 
-def expected_slices(task_uid: str, head: str, evidence_digest: str, roles: list[str]) -> list[dict[str, str]]:
+def expected_slices(task_uid: str, head: str, evidence_digest: str, comparison_ref: str,
+                    comparison_oid: str, roles: list[str]) -> list[dict[str, str]]:
     identity = {"task_uid": task_uid, "frozen_head": head,
-                "relevant_evidence_digest": evidence_digest, "roles": roles}
+                "relevant_evidence_digest": evidence_digest,
+                "comparison_ref": comparison_ref, "comparison_oid": comparison_oid, "roles": roles}
     seed = digest(identity)
     return [{"role": role, "slice_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"oasis7-review/{seed}/{role}"))}
             for role in roles]
@@ -193,10 +214,11 @@ def preflight(root: Path, batch_path: Path, out_dir: Path, epoch: str,
     return {**returned, "reused": False}
 
 
-def plan_identity(task_uid: str, head: str, evidence_digest: str,
+def plan_identity(task_uid: str, head: str, evidence_digest: str, comparison_ref: str, comparison_oid: str,
                   roles: list[str], slices: list[dict[str, str]]) -> dict[str, object]:
     return {"task_uid": task_uid, "frozen_head": head,
-            "relevant_evidence_digest": evidence_digest, "roles": roles,
+            "relevant_evidence_digest": evidence_digest,
+            "comparison_ref": comparison_ref, "comparison_oid": comparison_oid, "roles": roles,
             "expected_slices": slices}
 
 
@@ -216,6 +238,8 @@ def main() -> int:
     parser.add_argument("--task-uid", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--evidence-digest", required=True)
+    parser.add_argument("--comparison-ref", required=True)
+    parser.add_argument("--comparison-oid", help="optional assertion; must equal the resolved comparison ref OID")
     parser.add_argument("--change-class", required=True,
                         choices=("mechanical-doc", "workflow-doc", "domain-semantic-doc",
                                  "external-messaging", "unknown", "mixed"))
@@ -232,12 +256,16 @@ def main() -> int:
             raise ContractError("--head must be a 40-64 character lowercase hex object id")
         if not SHA_RE.fullmatch(args.evidence_digest):
             raise ContractError("--evidence-digest must be a lowercase SHA-256")
+        if args.comparison_oid is not None and not HEAD_RE.fullmatch(args.comparison_oid):
+            raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
         root = Path(args.root).resolve()
+        comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
         roles = selector_roles(args)
-        slices = expected_slices(args.task_uid, args.head, args.evidence_digest, roles)
+        slices = expected_slices(args.task_uid, args.head, args.evidence_digest, args.comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, args.evidence_digest, slices)
         epoch = str(batch["epoch"])
-        identity = plan_identity(args.task_uid, args.head, args.evidence_digest, roles, slices)
+        identity = plan_identity(args.task_uid, args.head, args.evidence_digest,
+                                 args.comparison_ref, comparison_oid, roles, slices)
         plan_path = (Path(args.out).resolve() if args.out else
                      root / ".pm" / "scratch" / args.task_uid / "review-plans" / f"{epoch}.json")
         if plan_path.exists():

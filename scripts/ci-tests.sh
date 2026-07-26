@@ -212,7 +212,6 @@ run_required_gate_checks() {
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
-  run ./scripts/cargo-dev-lib.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
@@ -223,11 +222,12 @@ run_required_gate_checks() {
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
   run_provider_remote_https_smoke
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
-  run_newapi_bridge_service_accounting_tests
+  run_required_component "cargo-dev library contract" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run ./scripts/cargo-dev-lib.test.sh
+  run_required_component "newapi bridge Rust baseline" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_newapi_bridge_service_accounting_tests
   run ./scripts/check-rust-file-size.test.sh
   run ./scripts/check-rust-file-size.sh
-  run env -u RUSTC_WRAPPER cargo fmt --all -- --check
-  run_rustsec_advisory_check
+  run_required_component "cargo fmt" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run env -u RUSTC_WRAPPER cargo fmt --all -- --check
+  run_required_component "RustSec advisory check" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_rustsec_advisory_check
 }
 
 run_commit_gate_checks() {
