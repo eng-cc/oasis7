@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# This fixture must remain compatible with POSIX and Git Bash with native Windows Python.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TMPDIR="$(mktemp -d)"
+FIXTURE_PYTHON3_BIN="$(command -v python3)"
+export FIXTURE_PYTHON3_BIN
+FIXTURE_TMPDIR="$(mktemp -d)"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) TMPDIR="$(cygpath -am "$FIXTURE_TMPDIR")" ;;
+  *) TMPDIR="$FIXTURE_TMPDIR" ;;
+esac
+export TMPDIR
 trap 'rm -rf "$TMPDIR"' EXIT
 
 REMOTE="$TMPDIR/origin.git"
@@ -49,7 +57,11 @@ assert r['task_uid']==sys.argv[3] and r['main_commit']==sys.argv[4],r
 assert r['main_commit']==r['remote_main_commit'],r
 assert r['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
-INITIAL_MERGE_RECEIPT_SHA256="$(shasum -a 256 "$MERGE_RECEIPT" | awk '{print $1}')"
+INITIAL_MERGE_RECEIPT_SHA256="$(python3 - "$MERGE_RECEIPT" <<'PY'
+import hashlib,pathlib,sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
 
 # A later live observation of this exact merge must refresh durable authority.
 # Sleep rather than inventing a timestamp so the replacement receipt has a new
@@ -216,8 +228,24 @@ case "$*" in
 esac
 EOF
 chmod +x "$TMPDIR/squash-bin/gh"
+SQUASH_BIN_PATH="$TMPDIR/squash-bin"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    SQUASH_BIN_PATH="$(cygpath -u "$SQUASH_BIN_PATH")"
+    cat >"$TMPDIR/squash-bin/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == */pr-merge-receipt.py ]]; then
+  printf '{"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"fixture/repo","default_branch":"main","pr_number":8,"pr_url":"https://example.invalid/pull/8","state":"MERGED","merged_at":"%s","head_oid":"%s","base_ref":"main","observed_at":"%s"}\n' \
+    "${TEST_MERGED_AT:?}" "${TEST_HEAD_OID:?}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  exit 0
+fi
+exec "${FIXTURE_PYTHON3_BIN:?}" "$@"
+EOF
+    chmod +x "$TMPDIR/squash-bin/python3"
+    ;;
+esac
 
-if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -227,7 +255,7 @@ if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDI
 fi
 grep -Fqi 'no patch-equivalence receipt' "$TMPDIR/squash-missing-patch.err"
 
-TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -242,7 +270,7 @@ import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8')); p['patch_id']='0'*40
 open(sys.argv[1], 'w', encoding='utf-8').write(json.dumps(p)+'\n')
 PY
-if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -278,7 +306,7 @@ printf 'dirty\n' >"$REPO/untracked"
 [[ "$(git -C "$REPO" rev-parse main)" == "$MERGED_HEAD" ]]
 
 ADVANCE="$TMPDIR/advance-main"
-git clone -q "$REMOTE" "$ADVANCE"
+git clone -q --branch main "$REMOTE" "$ADVANCE"
 git -C "$ADVANCE" config user.email test@example.invalid
 git -C "$ADVANCE" config user.name Test
 printf 'remote advance\n' >>"$ADVANCE/file"

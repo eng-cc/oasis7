@@ -115,7 +115,11 @@ PY
   RECOMPUTED_MAIN_TREE="$(git -C "$REPO_ROOT" rev-parse "$PATCH_MAIN_COMMIT^{tree}")"
   [[ "$RECOMPUTED_PROJECTED_TREE" == "$RECOMPUTED_MAIN_TREE" && "$RECOMPUTED_PROJECTED_TREE" == "$PROJECTED_TREE_OID" && "$RECOMPUTED_MAIN_TREE" == "$MAIN_TREE_OID" ]] \
     || die "patch-equivalence projected tree failed recomputation"
-  PATCH_RECEIPT_SHA="$(shasum -a 256 "$PATCH_RECEIPT" | awk '{print $1}')"
+  PATCH_RECEIPT_SHA="$(python3 - "$PATCH_RECEIPT" <<'PY'
+import hashlib,pathlib,sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
   INTEGRATION_MODE="patch_equivalence"
 fi
 
