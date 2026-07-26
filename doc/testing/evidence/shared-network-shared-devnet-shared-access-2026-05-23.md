@@ -54,7 +54,7 @@
 - `candidate_bundle_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json`
 - `candidate_gate_summary_ref`:
-  - `doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-214249/summary.md`
+  - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`
 - `evidence_ref`:
   - `.tmp/shared-devnet-live-reset-20260523-01/shared-access-proof/cloud-shared-access-20260523.png`
   - `.tmp/shared-devnet-live-reset-20260523-01/shared-access-proof/cloud-shared-access-state-20260523.json`

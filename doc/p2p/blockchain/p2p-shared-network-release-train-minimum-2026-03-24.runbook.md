@@ -184,7 +184,7 @@
   - first `shared_devnet` dry-run candidate / gate / promotion / incident 产物
   - 2026-05-24 legacy `shared_devnet` pass / eligible-for-promotion 追溯结论
 - 当前 `mixed_topology_baseline` 已有正式 pass evidence：
-  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
+  - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`（保留的 lane-specific record 索引见该 authority）
 - legacy network-rehearsal `shared_devnet` verdict 当前是 `pass / eligible_for_promotion`；但该 pass 不升级 public claims，也不等于 `public_testnet` 或正式在线大世界。
 - 当前 release-train 剩余边界:
   - `staging/canary` 仍需要按本 runbook 另行开窗验证

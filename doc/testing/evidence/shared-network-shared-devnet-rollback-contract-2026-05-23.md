@@ -20,7 +20,7 @@
 - `fallback_candidate_bundle_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json`
 - `fallback_gate_ref`:
-  - `doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260523-191122/summary.md`
+  - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`
 - `fallback_owner_ref`:
   - `.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md`
 
