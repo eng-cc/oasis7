@@ -84,6 +84,9 @@
 - [x] small-player-progression-contract-freeze (PRD-GAME-015) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-015` 专题 PRD / design / project，并完成根入口、`gameplay` 主文档、索引与 execution log 挂载；正式冻结 mature-world 小玩家默认主线 `local operator -> regional specialist -> limited-scope regional influence`，明确 `protected first industrial win` 指低爆炸半径、可恢复和 leverage 可见，而不是新手无敌豁免。 Trace: .pm/tasks/task_d97dfa29208444a9b6a652f2a12fb65d.yaml
 - 产品承诺已收敛到 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，专业玩法合同保留在 `gameplay-top-level-design.prd.md`。runtime truth、viewer surface 与 Agent 文档合同已有历史任务证据；当前剩余验证是 `qa-mature-world-small-player-fresh-sample`，只有 fresh sample 能把 `grind_only` / `forced_major_power_dependency` 从 watch 升级为当前 verdict。
 
+### T12 Future：玩法 mode 的参与与准入可读性（未实现）
+- [ ] mode-participation-admission-contract (PRD-GAME-001) [test_tier_required]: 在独立 runtime / viewer 任务中实现顶层 PRD 的 mode participation / prospective admission 合同；当前无 `GameplayModeReadiness`、runtime 或 UI 实现，且不包含匹配、排队、邀请或自动补人。当前 GitHub #2609 / 此 Task UID 仅记录已完成的设计目标文档决策，不是实现真值；尚无实现 task UID。仅当获准的 runtime / viewer scope 明确新增 mode-entry surface 时，才创建该独立实现任务。 Trace: https://github.com/eng-cc/oasis7/issues/2609 (task_ed7d98168cba42a187015bc53cb7afe7)
+
 ## 依赖
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
@@ -105,7 +108,7 @@
 
 - 当前状态：`进行中`
 - 已完成：文档归位、命名语义化、必备字段补齐、工程分册格式修复、Gameplay Runtime/模块化/协议扩展任务拆解与落地、Gameplay 模块测试矩阵引用固化、设计评审准备与战争/政治数值基线补齐、前期工业引导闭环文档冻结（首个制成品/工厂主链）、T4 的 runtime 工业状态/事件与 viewer 主反馈闭环、T5 的 `PostOnboarding` 阶段目标链闭环、T6 的纯 API 客户端等价闭环、T7 的封闭 Beta 准入专题冻结与根入口挂载、T11 的 mature-world 小玩家成长线合同冻结。
-- 未完成：当前无 `T7` 技术阻塞；后续仅保留统一 gate、trend baseline 与 liveops 节奏的持续监控。
+- 未完成：当前无 `T7` 技术阻塞；后续保留统一 gate、trend baseline 与 liveops 节奏的持续监控，以及 T12 mode participation / prospective admission 的独立实现任务。
 - 阻塞项：无统一 gate 技术阻塞；当前继续保持 `internal_playable_alpha_late` 属于 producer claim 决策，不得据此宣称 `closed beta approved`。
 
 ## 迁移记录（2026-03-03）
