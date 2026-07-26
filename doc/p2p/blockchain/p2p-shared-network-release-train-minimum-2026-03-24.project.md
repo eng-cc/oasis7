@@ -80,15 +80,11 @@
 - `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
 - `doc/testing/templates/shared-network-shared-access-check-template.md`
 - `doc/testing/templates/shared-network-rollback-target-template.md`
-- `doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md`
-- `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md`
-- `doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md`
+- `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`（shared-access、mixed-topology 与 rollback 的 retained record 索引）
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md`
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md`
 - `doc/testing/evidence/shared-network-shared-devnet-follow-up-incident-2026-03-24.md`
-- `doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md`
-- `doc/testing/evidence/shared-network-shared-devnet-short-window-promotion-record-2026-03-24.md`
-- `doc/testing/evidence/shared-network-shared-devnet-short-window-incident-2026-03-24.md`
+- `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`（short-window pass、promotion 与 incident retained record 索引）
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
@@ -103,15 +99,15 @@
   - legacy network-rehearsal verdict: `pass`
 - 当前缺口:
   - `shared_devnet` 已到 `pass`
-  - 当前 formal gate 已更新到 `candidate_id=shared-devnet-live-reset-20260523-01`，见 `doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260524-101652/summary.md`；aggregate 结论为 `pass / eligible_for_promotion`
+  - 当前 formal gate 已更新到 `candidate_id=shared-devnet-live-reset-20260523-01`，见 `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`；aggregate 结论为 `pass / eligible_for_promotion`
   - `shared_access` 已基于同窗云上 shared endpoint + 独立 workstation/browser 证据 + cloud storage host 访问证据升到 `pass`
   - `multi_entry_closure` 已基于同窗 `headed web + no-ui + pure_api` 证据升到 `pass`
   - `governance_live_drill` 已基于同窗 post-reset finality drill 升到 `pass`
   - 2026-05-23 的 live triad 卡死事件已通过 `doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md` 收口：旧链历史被放弃，三节点已在 fresh shared-devnet chain 上恢复推进；因此当前 `shared_devnet` 不再被“observer retention window / sequencer predecessor-gap”这组运行时故障阻断
-  - `rollback_target_ready` 已通过 `doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md` 升到 first-pass 允许的 `bootstrap_restore_ready` `pass`：当前 live-reset candidate 的 fallback bundle/gate、owner、restore steps 与 restoration scope 都已固定
+  - `rollback_target_ready` 已通过 compact provenance authority 中保留的 rollback contract 升到 first-pass 允许的 `bootstrap_restore_ready` `pass`：当前 live-reset candidate 的 fallback bundle/gate、owner、restore steps 与 restoration scope 都已固定
   - `P2PARCH-6` matrix baseline 已成为 legacy network-rehearsal required lane，但它当前只足以阻止 claims 越界，不等价于 same-window `pass`
   - `shared_access / rollback_target_ready / short_window_longrun` 已全部在当前 candidate 窗口内转为 `pass`
-  - `mixed_topology_baseline` 现已通过 `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md` 升到 `pass`：同窗 live repair 后，本地 workstation validator 与两台 ECS validator 已在 `2026-05-24 10:13:55 CST` 收敛到 `committed_height=1280 / network_committed_height=1280 / last_execution_height=1280`，并已补齐 producer/QA `pass_uplift_decision_ref`
+  - `mixed_topology_baseline` 现已通过 compact provenance authority 中保留的 mixed-topology record 升到 `pass`：同窗 live repair 后，本地 workstation validator 与两台 ECS validator 已在 `2026-05-24 10:13:55 CST` 收敛到 `committed_height=1280 / network_committed_height=1280 / last_execution_height=1280`，并已补齐 producer/QA `pass_uplift_decision_ref`
   - `shared_access` 的 endpoint / operator handoff / access evidence 现在已在同窗 candidate 上闭环；后续不再需要围绕 shared access 本身补结构
   - mixed-topology 的 `pass_uplift_decision_ref` 已被落实到本轮 execution log，并已进入正式 lane / gate 真值
   - `rollback_target_ready` 的 first-pass 语义已收口为：`staging/canary` 仍要求最近一次 formal `pass` candidate，但首条 `shared_devnet pass` 可接受受审计 `bootstrap_restore_ready` fallback；若 `restore_steps_ref/fallback_owner_ref/restoration_scope` 不完整，仍只能记 `partial`

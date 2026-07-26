@@ -65,7 +65,7 @@
 - 归档边界:
   - `public-testnet-claims-boundary-review-2026-05-21.md` 是旧 live-candidate packet 的 historical claims-boundary evidence；当前 claims boundary 以 `public-testnet-claims-boundary-review-2026-07-06.md` 为首读入口。
   - `public-testnet-live-candidate-lanes-2026-05-21.tsv` 与 2026-05-22 live-candidate bundle / manifest / bootstrap-peers / lanes 文件保留为 public-testnet 演进链证据；当前 readiness 结论仍以 formal `public_testnet` runbook、正式 lanes TSV 与 `network-tier-public-testnet-readiness.sh` 汇总为准。
-  - shared-network / shared-devnet 文件只作为 legacy rehearsal provenance，不作为当前 test 环境、formal `public_testnet` readiness、`mainnet` readiness 或公开统一大世界上线证据。
+  - shared-network / shared-devnet 文件只作为 legacy rehearsal provenance，不作为当前 test 环境、formal `public_testnet` readiness、`mainnet` readiness 或公开统一大世界上线证据。先读 `legacy-shared-devnet-provenance-2026-07-26.md`；它保留 replay identity、最终 lane disposition 和底层记录索引。
   - `archive/visual-cleanup-2026-06-14/manifest.md` 记录从 active evidence path 移出的历史 visual evidence；这些文件只作为追溯归档，不作为当前 release / viewer / gameplay 首读证据。
 
 ### 4. Governance drill 与 live world finality

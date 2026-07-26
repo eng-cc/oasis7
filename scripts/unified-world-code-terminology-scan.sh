@@ -86,6 +86,15 @@ allowed_snippets = {
     "scripts/shared-devnet-rehearsal.sh": (
         "shared-devnet-rehearsal.sh is a legacy compatibility wrapper",
     ),
+    "scripts/legacy-shared-devnet-provenance-smoke.sh": (
+        "authority=doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md",
+        '"shared_devnet"',
+        '"shared-devnet-live-reset-20260523-01"',
+        'shared_devnet-',
+        'shared-network-shared-devnet-',
+        'active generated shared_devnet capture reference remains',
+        'legacy-shared-devnet-provenance-smoke',
+    ),
     "scripts/shared-network-track-gate.sh": (
         "shared-network-track-gate.sh is a legacy compatibility wrapper",
     ),
@@ -127,6 +136,7 @@ allowed_path_names = {
     "scripts/shared-devnet-blocker-packet.sh",
     "scripts/shared-devnet-rehearsal-smoke.sh",
     "scripts/shared-devnet-rehearsal.sh",
+    "scripts/legacy-shared-devnet-provenance-smoke.sh",
     "scripts/shared-network-track-gate-smoke.sh",
     "scripts/shared-network-track-gate.sh",
 }

@@ -78,7 +78,7 @@
 
 遗留清理项：
 1. `scripts/network-tier-public-testnet-readiness.sh` 和 public-testnet lanes template 已从新目标中移除 `shared_devnet_pass`；若旧证据或历史 runbook 继续引用 `shared_devnet`，只作为 legacy evidence 处理。
-2. shared-network / shared-devnet 历史专题仍作为 provenance 保留；当前入口文档可删减重复旧口径，但 evidence-only 路径删除前必须单独评估仍被测试、证据、PRD 或脚本引用的路径。
+2. shared-network / shared-devnet 历史专题仍作为 provenance 保留；当前入口统一为 `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`。evidence-only 路径删除前必须单独评估仍被测试、证据、PRD 或脚本引用的路径。
 
 ## 6. 命名原则
 项目默认采用三层表达，但所有对外或可变更流程至少必须具备 test/prod 两套：

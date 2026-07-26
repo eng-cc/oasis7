@@ -16,7 +16,7 @@
 - `candidate_bundle_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-live-reset-candidate-2026-05-23.json`
 - `candidate_gate_summary_ref`:
-  - `doc/testing/evidence/generated-shared-network-gates/shared_devnet-20260524-101652/summary.md`
+  - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`
 
 ## Mixed-Topology Inputs
 - `baseline_evidence_ref`:
