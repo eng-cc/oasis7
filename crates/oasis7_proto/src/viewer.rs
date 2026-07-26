@@ -93,7 +93,6 @@ pub enum ViewerRequest {
     QuoteRefineCompound {
         request: RefineQuoteRequest,
     },
-    /// Requests authoritative validation facts without submitting validation.
     QuoteProductValidation {
         request: ProductValidationQuoteRequest,
     },
@@ -631,7 +630,6 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     RefineQuotePreflight {
         quote: RefineQuotePreflight,
     },
-    /// Returns the read-only facts needed to decide whether to validate.
     ProductValidationQuotePreflight {
         quote: ProductValidationQuotePreflight,
     },
