@@ -83,10 +83,12 @@ run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/
 "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/fallback-evidence.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-transition.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-profile.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/closeout-tmpdir-portability.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-lifecycle-trust.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-workflow-driver.test.py" >/dev/null
@@ -1073,10 +1075,21 @@ segments = [
     },
     {
         "id": "completion_claim_gate",
-        "command": "./scripts/pm/claim-ready.test.sh",
+        "command": "./scripts/pm/claim-ready.test.sh && ./scripts/pm/claim-ready-ready-pr.test.sh",
         "status": "passed",
         "evidence": {
             "helper": "claim-ready",
+            "ready_pr_revalidation": "passed",
+        },
+    },
+    {
+        "id": "closeout_tmpdir_portability",
+        "command": "./scripts/pm/closeout-tmpdir-portability.test.sh",
+        "status": "passed",
+        "evidence": {
+            "helpers": ["claim-ready", "task-closeout"],
+            "windows_native_tmpdir": "passed",
+            "posix_tmpdir_preserved": "passed",
         },
     },
     {
