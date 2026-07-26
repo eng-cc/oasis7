@@ -32,9 +32,17 @@
 - legacy `Control` 仅是兼容桥接；若旧调用方仍向 live handler 发送 seek，handler 只记录并忽略该请求，世界保持单调前进。
 - live 禁止 seek 只适用于 live 服务，不改变非 live 的历史浏览/回放语义。
 
+### 观测字段与控制完成边界
+
+- `getState().logicalTime` 是当前 Web surface 的逻辑时间观测值；`eventSeq` 是独立的事件顺序观测值。两者都只能由收到的 runtime 消息推进，不能由客户端控制请求、空 mailbox 或重连计时器自行递增。
+- `tick` 只作为 `logicalTime` 的兼容 alias 保留；它不是 browser polling、mailbox drive 或“每个 step 必有进展”的承诺。新自动化优先读取 `logicalTime` 与 `eventSeq`。
+- `sendControl` 的 accepted/queued 只表示客户端已通过本地校验并已尝试发送。只有后续的 runtime snapshot/event 或 completion feedback 才能标记观察到的增量；无增量不得伪造 event。
+- `seek_event` 与 `seek` 一样不是 live 控制动作。playback 可按 profile 暴露 seek；live 必须在发送前返回 unsupported-action，而非以断链、重连或成功替代该结果。
+
 ## 验证与边界
 
 - 不得把 live seek 的发送前拒绝或 legacy handler 的记录并忽略误报为断链、发送成功或世界回退；若未来引入 profile-specific dispatch 结果，必须同时实现并测试所有保留的 live 请求路径。
+- 断链、被 gameplay gate 阻断、无可观察进展和不支持的 profile action 是不同状态；实现与 automation 不得将其中任一状态折叠为 fabricated event 或连接成功。
 - Viewer UI、timeline、automation 与 `window.__AW_TEST__` 的 `getState`、`describeControls`、`fillControlExample`、`sendControl` 必须对齐 `controlProfile` 与支持集合。
 - 受影响实现改动应覆盖协议 round-trip、live/playback handler、发送路由和 Web test API；可见 UI 改动按 `testing-manual.md` S6 提供 browser/console/语义证据。本轮仅迁移文档，不产生 browser 证据。
 

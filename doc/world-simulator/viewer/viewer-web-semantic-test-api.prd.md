@@ -6,6 +6,8 @@
 审计轮次: 5
 
 ## 1. Executive Summary
+- 当前 canonical 实现位于 `crates/oasis7_viewer/software_safe_src/legacy_core.js`；本文件保留测试专用 API 合同，不把历史 Bevy/EGUI automation 实现当作当前 source truth。
+- 本节其余 round-1 至 round-4 叙述保留为历史迁移记录；当前 API 的可调用控制和状态字段以“当前实现合同”为准。
 - 为 Web 端 `oasis7_viewer` 注入一套稳定的语义化测试 API，降低 agent-browser 对像素坐标点击的依赖。
 - 复用现有 `viewer_automation` 步骤执行器，统一测试动作语义（`mode/focus/select/zoom/orbit/wait`）。
 - 在不暴露生产攻击面的前提下，提供测试模式专用入口：`window.__AW_TEST__`。
@@ -16,7 +18,19 @@
 
 ## 2. User Experience & Functionality
 
-### In Scope
+### 当前实现合同（Batch 22 回填）
+
+- `window.__AW_TEST__` 仅在测试模式启用。当前 control-action surface 是 `sendControl("play"|"pause"|"step", payload?)`、`runSteps(payload?)` 与 `getState()`；其他测试 helper 不扩大 live 控制集合，`seek`/`seek_event` 不得在 live profile 作为可提交动作出现。
+- `sendControl("step", payload?)` 的 count grammar 为：缺省/`null` 为 1；有限 number `>= 1` 取 `Math.floor`；string 为空、`step`、有限数字或 `step:<n>`/`step=<n>`；object 读取有限 `count >= 1` 并取整。其余 payload 返回 rejected feedback，不抛出浏览器异常，也不发送控制请求。
+- `runSteps(payload?)` 使用同一 count grammar 并委派为一次 step；它不再是历史 panel/layout/timeline DSL 的通用执行器。历史 DSL、Bevy command queue、2D/3D camera automation 和 EGUI module actions 已退役，不得据此编写当前 Web 回归。
+- `getState()` 至少用于读取 `connectionStatus`、`logicalTime`、`eventSeq`、兼容 `tick`、`controlProfile`、`lastError` 和 `lastControlFeedback`。`tick === logicalTime` 是兼容 alias；时间和事件序号仅来自 runtime 消息，空结果不得被客户端合成为进展。
+- control feedback 必须区分 rejected、blocked、queued、发送失败以及后续观察到的 completed/no-progress；queued 不是 completion。live seek 的 unsupported-action、WebSocket 断链和 runtime 无增量均必须保留为不同可诊断状态。
+
+### Historical Bevy API record (retired; not current contract)
+
+The following scope, command queue, state snapshot, roadmap, and decision-log records preserve the completed Bevy/EGUI implementation history. They do not override the current implementation contract above.
+
+#### In Scope
 - 新增 `window.__AW_TEST__` 最小 API：
   - `runSteps(steps: string)`
   - `setMode(mode: "2d" | "3d")`
@@ -52,24 +66,30 @@
   - 事件/trace 计数
 - 接入 `app_bootstrap` 生命周期（startup 注册、update 消费与状态发布）。
 
-### Out of Scope
+#### Out of Scope
 - 不改 Viewer 协议（`ViewerRequest/ViewerResponse` 语义不变）。
 - 不扩展到通用远程控制协议（仅用于 Web UI 测试辅助）。
 - 不在本阶段引入完整 agent-browser E2E 套件重写（先提供 API 与最小回归）。
 - 不在本轮覆盖文本输入、鼠标拖拽轨迹细节、IME 组合输入等低层“逐事件复刻”能力。
+- 不把 `--auto-play`、WebSocket readiness probe 或 reconnect timer 变成 API 成功判据；它们是 launcher/manual 的操作合同，不能伪造连接或世界事件。
 
 ## 3. AI System Requirements (If Applicable)
 - N/A: 本专题不新增 AI 专属要求。
 
 ## 4. Technical Specifications
 
-### 测试入口
+#### 测试入口
 - JS 全局对象：`window.__AW_TEST__`（仅测试模式启用）。
 - 运行时开关：
   - `cfg(debug_assertions)` 下默认启用；
   - 或 URL query 包含 `?test_api=1`（release 场景）。
 
-### 命令队列
+### Current connection and no-throw boundary
+
+- socket `error` 必须留下 `viewer.ws` 诊断，socket `close` 进入 `connecting` 并安排重连；这些状态不等于已连接、已排队或已推进。
+- 历史“非法 payload 只 warning、不 panic”的目标由当前 rejected-feedback/no-throw 合同继承。自动化应断言返回值、`lastError` 和 state，而不是依赖 console 文案或伪造 time/event 增量。
+
+#### 命令队列
 - JS -> queue -> Bevy Update 消费：
   - `RunSteps(String)`
   - `SetMode(ViewerCameraMode)`
@@ -93,7 +113,7 @@
   - `TimelineMarkFilter`
   - `TimelineMarkJump`
 
-### 状态快照
+#### 状态快照
 - Bevy 每帧发布到可读快照：
   - `connection_status`
   - `tick`
@@ -102,7 +122,11 @@
   - `error_count` / `last_error`
   - `event_count` / `trace_count`
 
-## 5. Risks & Roadmap
+### 历史实现处置
+
+- 下列段落记录已完成的 Bevy/EGUI round-1 至 round-4 迁移，仅作历史追溯；其中的 `viewer_automation`、命令队列、camera、panel/module、timeline DSL 和 `sendControl.seek` 不定义当前 SolidJS API。
+
+#### Risks & Roadmap
 - WTA-0：设计/项目管理文档建档。
 - WTA-1：`viewer_automation` 支持运行时步骤入队。
 - WTA-2：`web_test_api`（wasm）桥接层实现与 `window.__AW_TEST__` 注入。
@@ -132,7 +156,7 @@
 - 语义命令解析失败导致测试不稳定：
   - 缓解：复用已有 `viewer_automation` 解析规则，并对非法输入忽略/记录。
 
-## 6. Validation & Decision Record
+#### Validation & Decision Record
 - Test Plan & Traceability:
   - PRD-WTA-R1-001 -> WTA-8 -> `test_tier_required`（文档存在性与条目一致性检查）
   - PRD-WTA-R1-002 -> WTA-9 -> `test_tier_required`（`oasis7_viewer` 定向单测）

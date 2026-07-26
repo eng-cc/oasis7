@@ -15,6 +15,7 @@
 | --- | --- | --- |
 | `viewer-control-plane-split-live-playback-2026-02-27` | profile、握手、server 路由与 legacy bridge | 控制 profile 合同与兼容边界；当前 legacy live seek 为记录并忽略，不回退世界。 |
 | 2026-02 live 无 seek 历史专题 | live `seek` 禁用、入口与 test API 收敛 | live 单调推进与无 seek 表现边界。 |
+| Batch 22 Web/live-control transition cohort | historical logical-time/step/Web-entry documents | current `logicalTime`/`eventSeq` observation, `tick` alias, profile-gated seek, and no-fabricated-event boundaries are retained by this stable authority and the semantic test API; protocol/runtime specifics remain professional. |
 
 ## 任务拆解
 
@@ -22,6 +23,7 @@
 - [x] viewer-control-profile-routing (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 修复 Viewer landing 与 world-simulator 文件索引的默认路由。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 - [x] viewer-control-profile-source-retirement (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 完成活跃引用审计，删除已吸收的 2026-02 live 无 seek 源三件套。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
 - [x] viewer-control-profile-viewer-1-disposition (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 收正 stable authority：Web seek 是发送前通用 unsupported-action 拒绝，legacy live request 是记录并忽略且不回退；不承诺普适 profile-specific structured response。 Trace: https://github.com/eng-cc/oasis7/issues/2569 (task_478961979bbf43fe81997816547f8258)
+- [x] viewer-control-profile-batch22-professional-backfill (PRD-WORLD_SIMULATOR-001) [test_tier_required]: document current Web observation aliases, mailbox empty-result boundary, and profile-gated control semantics before historical-source retirement. Trace: https://github.com/eng-cc/oasis7/issues/2628 (task_972f19ca22244723a9305ca494b52a1f)
 
 ## 依赖
 
