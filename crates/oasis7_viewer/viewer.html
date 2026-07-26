@@ -2392,7 +2392,7 @@
         min-height: 260px;
       }
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-      .micro-depot-facilities__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+      .micro-depot-facilities__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .micro-depot-facilities__metric--primary { border-color: rgba(141, 199, 170, 0.3); background: linear-gradient(180deg, rgba(141, 199, 170, 0.08), transparent 68%); } .micro-depot-facilities__state-cue { margin-top: 8px; padding-left: 8px; border-left: 2px solid currentColor; } .micro-depot-facilities__state-cue--empty { color: #e5b96f; } .micro-depot-facilities__state-cue--unpaid { color: #efad91; } .micro-depot-facilities__availability-badge::before { content: "published · "; } .micro-depot-facilities__technical-evidence { margin-top: 12px; border: 1px solid rgba(152, 177, 150, 0.22); border-radius: 9px; background: rgba(255, 255, 255, 0.018); } .micro-depot-facilities__technical-evidence > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; color: var(--muted); font-size: 12px; } .micro-depot-facilities__technical-evidence > summary::-webkit-details-marker { display: none; } .micro-depot-facilities__technical-evidence > summary::before { content: "›"; font-size: 18px; line-height: 1; } .micro-depot-facilities__technical-evidence[open] > summary::before { transform: rotate(90deg); } .micro-depot-facilities__technical-evidence > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 8px; } .micro-depot-facilities__technical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 12px 12px; }
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .event-card,
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .metric-card {
         border-color: rgba(152, 177, 150, 0.2);
@@ -2478,7 +2478,7 @@
         .list, .event-list { max-height: none; }
         .action-grid { grid-template-columns: 1fr; }
         .summary-grid { grid-template-columns: 1fr; }
-        .micro-depot-facilities__metrics { grid-template-columns: 1fr !important; }
+        .micro-depot-facilities__metrics { grid-template-columns: 1fr !important; } .micro-depot-facilities__technical-grid { grid-template-columns: 1fr; }
         .metric--claim-total { grid-column: auto; }
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }

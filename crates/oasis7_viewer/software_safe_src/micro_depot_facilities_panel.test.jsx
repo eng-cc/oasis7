@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
@@ -6,7 +6,7 @@ import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 const tr = (_locale, zh, en) => en;
 
 describe("MicroDepotFacilitiesPanel", () => {
-  it("shows canonical state, module, receipt, proposal, and runtime-published actions", () => {
+  it("keeps status, inventory, and throughput primary while disclosing technical evidence on demand", () => {
     render(() => (
       <MicroDepotFacilitiesPanel
         locale={() => "en"}
@@ -24,11 +24,47 @@ describe("MicroDepotFacilitiesPanel", () => {
     ));
 
     const depotPanel = screen.getByTestId("micro-depot-facilities-panel");
-    expect(within(depotPanel).getByTestId("micro-depot-facility-depot-1")).toHaveTextContent("data=6");
-    expect(within(depotPanel).getByText("micro_depot.eval.v2")).toBeInTheDocument();
-    expect(within(depotPanel).getByText("receipt-1")).toBeInTheDocument();
-    expect(within(depotPanel).getByText("proposal=proposal-1")).toBeInTheDocument();
-    expect(within(depotPanel).getByText("service_micro_depot_repair")).toBeInTheDocument();
+    const facility = within(depotPanel).getByTestId("micro-depot-facility-depot-1");
+    expect(facility).toHaveTextContent("active");
+    expect(facility).toHaveTextContent("data=6");
+    expect(facility).toHaveTextContent("12/16");
+
+    const technicalEvidence = within(facility).getByTestId("micro-depot-technical-evidence");
+    expect(technicalEvidence.tagName).toBe("DETAILS");
+    expect(technicalEvidence).not.toHaveAttribute("open");
+    const technicalSummary = within(technicalEvidence).getByText("Technical evidence").closest("summary");
+    expect(technicalSummary).toBeTruthy();
+
+    fireEvent.click(technicalSummary);
+    expect(technicalEvidence).toHaveAttribute("open");
+    expect(within(technicalEvidence).getByText("micro_depot.eval.v2")).toBeInTheDocument();
+    expect(within(technicalEvidence).getByText("receipt-1")).toBeInTheDocument();
+    expect(within(technicalEvidence).getByText("proposal=proposal-1")).toBeInTheDocument();
+
+    const availability = within(facility).getByLabelText("Available depot actions");
+    const actionBadge = within(availability).getByText("service_micro_depot_repair");
+    expect(actionBadge).toHaveAttribute("data-action-availability", "published");
+    expect(actionBadge.closest("button, a, input, select, textarea")).toBeNull();
+  });
+
+  it("explains unpaid upkeep and an empty inventory without presenting an action control", () => {
+    render(() => (
+      <MicroDepotFacilitiesPanel
+        locale={() => "en"}
+        tr={tr}
+        facilities={[{
+          facilityId: "depot-constrained", status: "degraded", availableUnitsByKind: {},
+          throughputRemainingUnits: 0, throughputLimitUnitsPerEpoch: 16, upkeepPaid: false,
+          availableActions: [],
+        }]}
+      />
+    ));
+
+    const facility = screen.getByTestId("micro-depot-facility-depot-constrained");
+    expect(within(facility).getByText("Inventory is empty.")).toBeInTheDocument();
+    expect(within(facility).getByText("Upkeep is unpaid; service availability may be constrained.")).toBeInTheDocument();
+    expect(within(facility).getByText("The current snapshot publishes no available depot actions.")).toBeInTheDocument();
+    expect(within(facility).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("hides absent or empty facility lists", () => {
