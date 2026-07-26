@@ -29,18 +29,30 @@ describe("ProductValidationQuoteCard", () => {
     expect(within(card).getByText(/Explore/)).toBeInTheDocument();
     expect(within(card).getByText(/Bootstrap → Bootstrap/)).toBeInTheDocument();
     expect(within(card).getByText("Scale out")).toBeInTheDocument();
-    expect(within(card).getByText(/Allowed by runtime/)).toBeInTheDocument();
-    expect(within(card).getByTestId("product-validation-quote-advisory")).toHaveTextContent(/advisory/i);
+    expect(within(card).getByText(/Known preflight \/ No known blocker/)).toBeInTheDocument();
+    expect(within(card).getByText(/does not evaluate or predict an arbitrary module outcome/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/Allowed by runtime|Blocked by runtime/i)).not.toBeInTheDocument();
+    expect(within(card).getByTestId("product-validation-quote-advisory")).toHaveTextContent(/advisory and the preflight found no known blocker/i);
     expect(within(card).getByTestId("product-validation-quote-recommended-action")).toHaveTextContent(/Advance industry stage/);
     expect(within(card).getByText(/Missing prerequisite/)).toHaveAttribute("data-raw-missing-prerequisite", "industry_stage=scale_out");
     expect(within(card).queryByRole("button", { name: /submit|validate|confirm/i })).not.toBeInTheDocument();
   });
 
-  it("does not disable a runtime-allowed submission merely because its prerequisite is advisory", () => {
+  it("keeps the compatibility field while presenting a known preflight state", () => {
     render(() => <ProductValidationQuoteCard quote={quote} locale="zh" tr={tr} />);
     const card = screen.getByTestId("product-validation-quote");
-    expect(within(card).getByText("运行时允许")).toBeInTheDocument();
-    expect(within(card).getByTestId("product-validation-quote-advisory")).toHaveTextContent(/不会自行禁用运行时允许的提交/);
+    expect(card).toHaveAttribute("data-submission-allowed", "true");
+    expect(within(card).getByText("已知预估 / 未发现阻塞")).toBeInTheDocument();
+    expect(within(card).getByTestId("product-validation-quote-advisory")).toHaveTextContent(/这是建议，预估未发现阻塞/);
+  });
+
+  it("labels a false compatibility field as a known preflight blocker, not module prediction", () => {
+    render(() => <ProductValidationQuoteCard quote={{ ...quote, submission_allowed: false }} locale="en" tr={tr} />);
+    const card = screen.getByTestId("product-validation-quote");
+    expect(card).toHaveAttribute("data-submission-allowed", "false");
+    expect(within(card).getByText("Known preflight / Known blocker")).toBeInTheDocument();
+    expect(within(card).getByTestId("product-validation-quote-advisory")).toHaveTextContent(/preflight found a known blocker/i);
+    expect(within(card).queryByText(/module outcome/i)).toHaveTextContent(/does not evaluate or predict/i);
   });
 
   it("requests a signed read-only quote before confirmation and exposes receive state", async () => {

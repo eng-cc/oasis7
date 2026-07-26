@@ -34,7 +34,7 @@ export function ProductValidationQuoteCard(props) {
   const quote = () => props.quote || {};
   const locale = () => props.locale;
   const tr = props.tr;
-  const isAllowed = () => quote().submission_allowed === true;
+  const hasNoKnownBlocker = () => quote().submission_allowed === true;
   const hasPrerequisite = () => Boolean(String(quote().missing_prerequisite || "").trim());
   return (
     <section
@@ -45,12 +45,12 @@ export function ProductValidationQuoteCard(props) {
       data-product-role={raw(quote().product_role)}
       data-stage-before={raw(quote().stage_before)}
       data-stage-after={raw(quote().stage_after)}
-      data-submission-allowed={String(isAllowed())}
+      data-submission-allowed={String(hasNoKnownBlocker())}
     >
       <div class="panel__header"><div class="stack stack--compact">
         <div class="panel__eyebrow">{tr(locale(), "提交前估价", "Before You Commit")}</div>
         <div class="panel__title">{tr(locale(), "产品验证预估", "Product Validation Quote")}</div>
-        <div class="panel__meta-copy">{tr(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt.")}</div>
+        <div class="panel__meta-copy">{tr(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。由于不会执行模块，它不会评估或预测任意模块结果。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt. Because it does not execute the module, it does not evaluate or predict an arbitrary module outcome.")}</div>
       </div></div>
       <div class="panel__body stack">
         <div class="badge-row">
@@ -62,12 +62,12 @@ export function ProductValidationQuoteCard(props) {
         <div class="summary-grid">
           <QuoteMetric label={tr(locale(), "阶段", "Stage")} value={`${stageLabel(quote().stage_before, locale(), tr)} → ${stageLabel(quote().stage_after, locale(), tr)}`} />
           <QuoteMetric label={tr(locale(), "解锁 / 价值等级", "Unlock / value class")} value={stageLabel(quote().unlock_or_value_class, locale(), tr)} />
-          <QuoteMetric label={tr(locale(), "提交状态", "Submission status")} value={isAllowed() ? tr(locale(), "运行时允许", "Allowed by runtime") : tr(locale(), "运行时阻止", "Blocked by runtime")} />
+          <QuoteMetric label={tr(locale(), "预估状态", "Preflight status")} value={hasNoKnownBlocker() ? tr(locale(), "已知预估 / 未发现阻塞", "Known preflight / No known blocker") : tr(locale(), "已知预估 / 发现阻塞", "Known preflight / Known blocker")} />
         </div>
         <div class="feedback-summary" data-testid="product-validation-quote-recommended-action">{`${tr(locale(), "建议", "Recommended")}: ${actionLabel(quote().recommended_action, locale(), tr)}`}</div>
-        {hasPrerequisite() ? <div class="feedback-summary feedback-summary--warn" data-testid="product-validation-quote-advisory">{isAllowed()
-          ? tr(locale(), "阶段前提尚未满足；这是建议，不会自行禁用运行时允许的提交。", "The stage prerequisite is not met; this is advisory and does not disable a runtime-allowed submission.")
-          : tr(locale(), "运行时已阻止提交；请先完成所列前提。", "Runtime has blocked submission; complete the listed prerequisite first.")}</div> : null}
+        {hasPrerequisite() ? <div class="feedback-summary feedback-summary--warn" data-testid="product-validation-quote-advisory">{hasNoKnownBlocker()
+          ? tr(locale(), "阶段前提尚未满足；这是建议，预估未发现阻塞。", "The stage prerequisite is not met; this is advisory and the preflight found no known blocker.")
+          : tr(locale(), "预估发现阻塞；请先完成所列前提。", "The preflight found a known blocker; complete the listed prerequisite first.")}</div> : null}
         {hasPrerequisite() ? <div class="feedback-detail" data-raw-missing-prerequisite={raw(quote().missing_prerequisite)}>{`${tr(locale(), "缺少前提", "Missing prerequisite")}: ${raw(quote().missing_prerequisite)}`}</div> : null}
         {quote().reachable_advance_or_recovery ? <div class="feedback-detail" data-raw-recovery={raw(quote().reachable_advance_or_recovery)}>{`${tr(locale(), "可达路径", "Reachable path")}: ${raw(quote().reachable_advance_or_recovery)}`}</div> : null}
       </div>

@@ -10219,13 +10219,13 @@ function ProductValidationQuoteCard(props) {
   const quote = () => props.quote || {};
   const locale = () => props.locale;
   const tr2 = props.tr;
-  const isAllowed = () => quote().submission_allowed === true;
+  const hasNoKnownBlocker = () => quote().submission_allowed === true;
   const hasPrerequisite = () => Boolean(String(quote().missing_prerequisite || "").trim());
   return (() => {
     var _el$4 = _tmpl$2$3(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling;
     insert(_el$7, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$8, () => tr2(locale(), "产品验证预估", "Product Validation Quote"));
-    insert(_el$9, () => tr2(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt."));
+    insert(_el$9, () => tr2(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。由于不会执行模块，它不会评估或预测任意模块结果。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt. Because it does not execute the module, it does not evaluate or predict an arbitrary module outcome."));
     insert(_el$10, () => tr2(locale(), "预估", "quote"));
     insert(_el$11, () => `${tr2(locale(), "产品", "Product")}: ${raw(quote().product_id)}`);
     insert(_el$12, () => `${tr2(locale(), "角色", "Role")}: ${roleLabel(quote().product_role, locale(), tr2)}`);
@@ -10251,10 +10251,10 @@ function ProductValidationQuoteCard(props) {
     }), null);
     insert(_el$14, createComponent(QuoteMetric$1, {
       get label() {
-        return tr2(locale(), "提交状态", "Submission status");
+        return tr2(locale(), "预估状态", "Preflight status");
       },
       get value() {
-        return memo(() => !!isAllowed())() ? tr2(locale(), "运行时允许", "Allowed by runtime") : tr2(locale(), "运行时阻止", "Blocked by runtime");
+        return memo(() => !!hasNoKnownBlocker())() ? tr2(locale(), "已知预估 / 未发现阻塞", "Known preflight / No known blocker") : tr2(locale(), "已知预估 / 发现阻塞", "Known preflight / Known blocker");
       }
     }), null);
     insert(_el$15, () => `${tr2(locale(), "建议", "Recommended")}: ${actionLabel(quote().recommended_action, locale(), tr2)}`);
@@ -10263,8 +10263,8 @@ function ProductValidationQuoteCard(props) {
       return () => _c$2() ? (() => {
         var _el$16 = _tmpl$3$3();
         insert(_el$16, (() => {
-          var _c$5 = memo(() => !!isAllowed());
-          return () => _c$5() ? tr2(locale(), "阶段前提尚未满足；这是建议，不会自行禁用运行时允许的提交。", "The stage prerequisite is not met; this is advisory and does not disable a runtime-allowed submission.") : tr2(locale(), "运行时已阻止提交；请先完成所列前提。", "Runtime has blocked submission; complete the listed prerequisite first.");
+          var _c$5 = memo(() => !!hasNoKnownBlocker());
+          return () => _c$5() ? tr2(locale(), "阶段前提尚未满足；这是建议，预估未发现阻塞。", "The stage prerequisite is not met; this is advisory and the preflight found no known blocker.") : tr2(locale(), "预估发现阻塞；请先完成所列前提。", "The preflight found a known blocker; complete the listed prerequisite first.");
         })());
         return _el$16;
       })() : null;
@@ -10288,7 +10288,7 @@ function ProductValidationQuoteCard(props) {
       })() : null;
     })(), null);
     createRenderEffect((_p$) => {
-      var _v$ = raw(quote().product_id), _v$2 = raw(quote().product_role), _v$3 = raw(quote().stage_before), _v$4 = raw(quote().stage_after), _v$5 = String(isAllowed()), _v$6 = quote().tradable ? "badge badge--good" : "badge";
+      var _v$ = raw(quote().product_id), _v$2 = raw(quote().product_role), _v$3 = raw(quote().stage_before), _v$4 = raw(quote().stage_after), _v$5 = String(hasNoKnownBlocker()), _v$6 = quote().tradable ? "badge badge--good" : "badge";
       _v$ !== _p$.e && setAttribute(_el$4, "data-product-id", _p$.e = _v$);
       _v$2 !== _p$.t && setAttribute(_el$4, "data-product-role", _p$.t = _v$2);
       _v$3 !== _p$.a && setAttribute(_el$4, "data-stage-before", _p$.a = _v$3);
