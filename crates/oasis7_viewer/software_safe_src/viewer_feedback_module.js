@@ -899,6 +899,24 @@ export function createViewerFeedbackModule({
         reason: displayableString(option.reason) || null,
         recommended: option.recommended === true,
       }));
+    const noSafeFallbackReason = displayableString(
+      gameplay.no_safe_fallback_reason ?? gameplay.noSafeFallbackReason,
+    );
+    const requiredNextDecisionActionId = displayableString(
+      gameplay.required_next_decision_action_id ?? gameplay.requiredNextDecisionActionId,
+    );
+    const requiredNextDecisionClass = displayableString(
+      gameplay.required_next_decision_class ?? gameplay.requiredNextDecisionClass,
+    );
+    const noSafeFallbackHandoff = noSafeFallbackReason
+      || requiredNextDecisionActionId
+      || requiredNextDecisionClass
+      ? {
+        reason: noSafeFallbackReason,
+        requiredNextDecisionActionId,
+        requiredNextDecisionClass,
+      }
+      : null;
     const recoveryOptionComparisons = (
       Array.isArray(gameplay.recovery_options)
         ? gameplay.recovery_options
@@ -1151,6 +1169,7 @@ export function createViewerFeedbackModule({
       agencyMoves,
       progressionProof,
       fallbackTradeoffPreview,
+      noSafeFallbackHandoff,
       matureWorldContinuation,
       shareReplay,
       entityCounts: {

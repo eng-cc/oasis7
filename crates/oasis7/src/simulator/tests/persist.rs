@@ -508,6 +508,9 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         fallback_action_id: None,
         fallback_action_label: None,
         fallback_tradeoff_preview: None,
+        no_safe_fallback_reason: None,
+        required_next_decision_action_id: None,
+        required_next_decision_class: None,
         resume_next_step: Some("Replenish upstream materials and advance again.".to_string()),
         available_actions: Vec::new(),
         recent_feedback: Some(PlayerGameplayRecentFeedback {
@@ -567,6 +570,9 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     gameplay_object.remove("execution_state");
     gameplay_object.remove("branch_recommendations");
     gameplay_object.remove("fallback_tradeoff_preview");
+    gameplay_object.remove("no_safe_fallback_reason");
+    gameplay_object.remove("required_next_decision_action_id");
+    gameplay_object.remove("required_next_decision_class");
     gameplay_object.remove("recovery_options");
 
     let migrated = WorldSnapshot::from_json(
@@ -601,6 +607,9 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
     assert!(gameplay.fallback_tradeoff_preview.is_none());
+    assert!(gameplay.no_safe_fallback_reason.is_none());
+    assert!(gameplay.required_next_decision_action_id.is_none());
+    assert!(gameplay.required_next_decision_class.is_none());
     assert!(gameplay.recovery_options.is_empty());
     let facility = gameplay
         .micro_depot_facilities

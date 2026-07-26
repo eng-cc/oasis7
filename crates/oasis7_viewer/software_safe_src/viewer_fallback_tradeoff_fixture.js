@@ -11,12 +11,12 @@ export function fallbackTradeoffVisualFixture() {
     },
     {
       value_class: "repair_now",
-      available: true,
+      available: false,
       cost: "Refresh the gameplay snapshot and inspect the current blocker.",
       progress_kept: "Keeps the current intent while checking recovery state.",
       opportunity_cost: "Uses the next decision on diagnosis instead of a new goal.",
-      reason: "A snapshot refresh is available to verify or repair the published blocker.",
-      recommended: true,
+      reason: "No repair action is currently available for the published blocker.",
+      recommended: false,
     },
     {
       value_class: "reroute_now",

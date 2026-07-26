@@ -1,4 +1,90 @@
-use crate::simulator::persist::{PlayerGameplayFallbackTradeoffOption, PlayerGameplaySnapshot};
+use crate::simulator::persist::{
+    PlayerGameplayAction, PlayerGameplayFallbackTradeoffOption, PlayerGameplaySnapshot,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct FallbackTradeoffDecision {
+    pub recommended_value_class: Option<&'static str>,
+    pub no_safe_fallback_reason: Option<&'static str>,
+    pub required_next_decision_action_id: Option<&'static str>,
+    pub required_next_decision_class: Option<&'static str>,
+}
+
+pub(super) fn fallback_tradeoff_decision(
+    repair_available: bool,
+    reroute_available: bool,
+) -> FallbackTradeoffDecision {
+    let recommended_value_class = if repair_available {
+        Some("repair_now")
+    } else if reroute_available {
+        Some("reroute_now")
+    } else {
+        None
+    };
+    let no_safe_fallback = recommended_value_class.is_none();
+    FallbackTradeoffDecision {
+        recommended_value_class,
+        no_safe_fallback_reason: no_safe_fallback.then_some(
+            "Neither snapshot repair nor goal reroute is currently available; return to goal selection to choose a new actionable intent.",
+        ),
+        required_next_decision_action_id: no_safe_fallback.then_some("return_to_goal_selection"),
+        required_next_decision_class: no_safe_fallback.then_some("return_to_goal_selection"),
+    }
+}
+
+pub(super) fn fallback_tradeoff_decision_for_gameplay(
+    gameplay: &PlayerGameplaySnapshot,
+) -> FallbackTradeoffDecision {
+    let action_available = |action_id: &str| {
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == action_id && action.disabled_reason.is_none())
+    };
+    fallback_tradeoff_decision(
+        action_available("request_snapshot"),
+        action_available("reprioritize"),
+    )
+}
+
+pub(super) fn player_gameplay_fallback_action(
+    gameplay: &PlayerGameplaySnapshot,
+    response_window_class: Option<&str>,
+) -> Option<(String, String)> {
+    let enabled_actions: Vec<&PlayerGameplayAction> = gameplay
+        .available_actions
+        .iter()
+        .filter(|action| action.disabled_reason.is_none())
+        .collect();
+    if enabled_actions.is_empty() {
+        return None;
+    }
+
+    let request_snapshot = enabled_actions
+        .iter()
+        .find(|action| action.protocol_action == "request_snapshot")
+        .copied();
+    let advance_step = enabled_actions
+        .iter()
+        .find(|action| action.action_id == "advance_step")
+        .copied();
+    let resume_play = enabled_actions
+        .iter()
+        .find(|action| action.action_id == "resume_play")
+        .copied();
+
+    let preferred = match response_window_class {
+        Some("waiting_for_committed_progress") => advance_step.or(resume_play).or(request_snapshot),
+        Some("stalled_needs_escalation") | Some("blocked_needs_repair") => {
+            request_snapshot.or(advance_step).or(resume_play)
+        }
+        Some("request_rejected") => request_snapshot.or(advance_step).or(resume_play),
+        _ => None,
+    }
+    .or_else(|| enabled_actions.first().copied())?;
+
+    Some((preferred.action_id.clone(), preferred.label.clone()))
+}
 
 pub(super) fn player_gameplay_fallback_tradeoff_preview(
     gameplay: &PlayerGameplaySnapshot,
@@ -19,13 +105,7 @@ pub(super) fn player_gameplay_fallback_tradeoff_preview(
     };
     let repair_available = action_available("request_snapshot");
     let reroute_available = action_available("reprioritize");
-    let recommended_value_class = if repair_available {
-        "repair_now"
-    } else if reroute_available {
-        "reroute_now"
-    } else {
-        "safe_wait"
-    };
+    let decision = fallback_tradeoff_decision_for_gameplay(gameplay);
 
     Some(vec![
         PlayerGameplayFallbackTradeoffOption {
@@ -36,7 +116,7 @@ pub(super) fn player_gameplay_fallback_tradeoff_preview(
             opportunity_cost: "Waiting cannot verify or repair the blocker.".to_string(),
             reason: "The runtime has no canonical tick or event trigger that bounds a safe wait."
                 .to_string(),
-            recommended: recommended_value_class == "safe_wait",
+            recommended: decision.recommended_value_class == Some("safe_wait"),
         },
         PlayerGameplayFallbackTradeoffOption {
             value_class: "repair_now".to_string(),
@@ -51,7 +131,7 @@ pub(super) fn player_gameplay_fallback_tradeoff_preview(
                 "No enabled repair-oriented snapshot action is currently available."
             }
             .to_string(),
-            recommended: recommended_value_class == "repair_now",
+            recommended: decision.recommended_value_class == Some("repair_now"),
         },
         PlayerGameplayFallbackTradeoffOption {
             value_class: "reroute_now".to_string(),
@@ -67,7 +147,49 @@ pub(super) fn player_gameplay_fallback_tradeoff_preview(
                 "No enabled reprioritize action is currently available."
             }
             .to_string(),
-            recommended: recommended_value_class == "reroute_now",
+            recommended: decision.recommended_value_class == Some("reroute_now"),
         },
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_decision_requires_goal_selection_without_repair_or_reroute() {
+        let decision = fallback_tradeoff_decision(false, false);
+
+        assert_eq!(decision.recommended_value_class, None);
+        assert_eq!(
+            decision.no_safe_fallback_reason,
+            Some(
+                "Neither snapshot repair nor goal reroute is currently available; return to goal selection to choose a new actionable intent."
+            )
+        );
+        assert_eq!(
+            decision.required_next_decision_action_id,
+            Some("return_to_goal_selection")
+        );
+        assert_eq!(
+            decision.required_next_decision_class,
+            Some("return_to_goal_selection")
+        );
+    }
+
+    #[test]
+    fn fallback_decision_recommends_exactly_one_available_action() {
+        for (repair_available, reroute_available, expected) in [
+            (true, false, "repair_now"),
+            (false, true, "reroute_now"),
+            (true, true, "repair_now"),
+        ] {
+            let decision = fallback_tradeoff_decision(repair_available, reroute_available);
+
+            assert_eq!(decision.recommended_value_class, Some(expected));
+            assert_eq!(decision.no_safe_fallback_reason, None);
+            assert_eq!(decision.required_next_decision_action_id, None);
+            assert_eq!(decision.required_next_decision_class, None);
+        }
+    }
 }

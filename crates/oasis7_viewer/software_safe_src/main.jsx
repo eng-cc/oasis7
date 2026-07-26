@@ -2728,7 +2728,7 @@ function WorldSummaryPanel() {
                   </div>
                 </Show>
               </EventCard>
-              <FallbackTradeoffPanel options={gameplay().fallbackTradeoffPreview} locale={locale()} tr={tr} />
+              <FallbackTradeoffPanel options={gameplay().fallbackTradeoffPreview} noSafeFallbackHandoff={gameplay().noSafeFallbackHandoff} locale={locale()} tr={tr} />
               <Show when={gameplay().validationUnlockPreview}>
                 {(preview) => (
                   <EventCard
@@ -4052,8 +4052,8 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
       repair_available: true,
       rebuild_available: true,
       pivot_available: true,
-      recovery_options: recoveryOptionVisualFixture(),
-      fallback_tradeoff_preview: fallbackTradeoffVisualFixture(),
+      recovery_options: recoveryOptionVisualFixture(), fallback_tradeoff_preview: fallbackTradeoffVisualFixture(),
+      no_safe_fallback_reason: "No repair or reroute action is currently available for this blocked intent.", required_next_decision_action_id: "return_to_goal_selection", required_next_decision_class: "return_to_goal_selection",
       available_actions: [
         {
           action_id: "build_factory_smelter_mk1",

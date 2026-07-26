@@ -24,4 +24,27 @@ describe("fallback tradeoff panel", () => {
     expect(panel).not.toHaveTextContent(/safe_wait|repair_now|reroute_now/);
     expect(panel.querySelectorAll("button")).toHaveLength(0);
   });
+
+  it("renders a display-only handoff when runtime publishes no safe fallback", () => {
+    const { getByTestId } = render(() => (
+      <FallbackTradeoffPanel
+        options={[]}
+        noSafeFallbackHandoff={{
+          reason: "Repair and reroute are unavailable.",
+          requiredNextDecisionActionId: "select_new_goal",
+          requiredNextDecisionClass: "goal_selection",
+        }}
+        locale="en"
+        tr={tr}
+      />
+    ));
+    const handoff = getByTestId("viewer-no-safe-fallback-handoff");
+
+    expect(handoff).toHaveTextContent("No safe fallback");
+    expect(handoff).toHaveTextContent("Repair and reroute are unavailable.");
+    expect(handoff).toHaveTextContent("Required next decision");
+    expect(handoff).toHaveTextContent("Select New Goal");
+    expect(handoff).not.toHaveTextContent(/select_new_goal|goal_selection/);
+    expect(handoff.querySelectorAll("button")).toHaveLength(0);
+  });
 });

@@ -29,10 +29,15 @@ function Detail(props) {
 
 export function FallbackTradeoffPanel(props) {
   const options = () => props.options || [];
+  const handoff = () => props.noSafeFallbackHandoff || null;
   const text = (zh, en) => props.tr(props.locale, zh, en);
+  const requiredNextDecision = () => {
+    const value = handoff()?.requiredNextDecisionActionId || handoff()?.requiredNextDecisionClass;
+    return value ? humanize(value) : null;
+  };
 
   return (
-    <Show when={options().length > 0}>
+    <Show when={options().length > 0 || handoff()}>
       <section class="fallback-tradeoff" aria-labelledby="fallback-tradeoff-heading" data-testid="viewer-fallback-tradeoff">
         <div class="fallback-tradeoff__heading">
           <h3 id="fallback-tradeoff-heading">{text("恢复选项", "Recovery choices")}</h3>
@@ -68,6 +73,20 @@ export function FallbackTradeoffPanel(props) {
             )}
           </For>
         </div>
+        <Show when={handoff()}>
+          <aside class="event-card fallback-tradeoff__handoff" data-testid="viewer-no-safe-fallback-handoff">
+            <div class="event-card__title">
+              <h4>{text("没有安全恢复选项", "No safe fallback")}</h4>
+              <span class="badge badge--warn">{text("需要新的决定", "New decision required")}</span>
+            </div>
+            <dl class="fallback-tradeoff__details">
+              <Detail label={text("原因", "Reason")} value={handoff().reason} />
+              <Show when={requiredNextDecision()}>
+                <Detail label={text("所需下一决定", "Required next decision")} value={requiredNextDecision()} />
+              </Show>
+            </dl>
+          </aside>
+        </Show>
       </section>
     </Show>
   );

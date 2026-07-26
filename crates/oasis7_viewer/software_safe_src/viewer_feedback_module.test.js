@@ -91,6 +91,27 @@ describe("viewer feedback module", () => {
     ).toHaveLength(1);
   });
 
+  it("maps the no-safe-fallback handoff without inventing an executable action", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          no_safe_fallback_reason: "Repair and reroute are unavailable.",
+          required_next_decision_action_id: "select_new_goal",
+          required_next_decision_class: "goal_selection",
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().noSafeFallbackHandoff).toEqual({
+      reason: "Repair and reroute are unavailable.",
+      requiredNextDecisionActionId: "select_new_goal",
+      requiredNextDecisionClass: "goal_selection",
+    });
+  });
+
   it("preserves English product-validation preview values and labels", () => {
     const state = {
       lastGameplayActionFeedback: null,

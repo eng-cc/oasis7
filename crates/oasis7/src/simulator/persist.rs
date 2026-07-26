@@ -283,6 +283,12 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_tradeoff_preview: Option<Vec<PlayerGameplayFallbackTradeoffOption>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub no_safe_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_next_decision_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_next_decision_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_next_step: Option<String>,
     #[serde(default)]
     pub available_actions: Vec<PlayerGameplayAction>,
@@ -400,6 +406,12 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fallback_tradeoff_preview: Option<Vec<PlayerGameplayFallbackTradeoffOption>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    no_safe_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_next_decision_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_next_decision_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     resume_next_step: Option<String>,
     #[serde(default)]
     available_actions: Vec<PlayerGameplayAction>,
@@ -501,6 +513,9 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             fallback_action_id: legacy.fallback_action_id,
             fallback_action_label: legacy.fallback_action_label,
             fallback_tradeoff_preview: legacy.fallback_tradeoff_preview,
+            no_safe_fallback_reason: legacy.no_safe_fallback_reason,
+            required_next_decision_action_id: legacy.required_next_decision_action_id,
+            required_next_decision_class: legacy.required_next_decision_class,
             resume_next_step: legacy.resume_next_step,
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
