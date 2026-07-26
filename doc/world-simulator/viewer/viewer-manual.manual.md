@@ -71,6 +71,15 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供第二 Viewer 跳转，也不再承担退役视觉专项工具职责。
 
+### 当前 Agent Chat 与高级 Prompt 设置
+
+- Chat 和 Prompt 控制只对当前账号已绑定/权威认领且当前可控制的 Agent 开放；选中共享世界中的其他 Agent 不会授予控制权。无可控制 Agent 时，页面保持 blocked，并引导先认领 Agent 或等待 binding sync。
+- `Agent Chat` 是面向当前 Agent 的消息入口。发送成功只表示对应请求结果，不会绕过 runtime 权威裁决，也不证明产生了世界效果。
+- `Advanced Prompt Settings` 属于 operator-level 控制，默认收起，不与玩家主路径竞争。显式展开后，当前页面提供 system/short-term/long-term override、preview、apply、rollback 与最近 Prompt feedback。
+- preview 不等于 apply；apply acceptance 不等于 runtime 已应用。以页面返回的实际 feedback 为准，失败或未授权必须保持 blocker/error，不能显示假成功。
+- `hosted_public_join` 下的 Prompt apply 需要有效 `player_session` 与后端重新授权；当前入口使用 `Backend Approval Code` 满足 preview-grade `strong_auth`。缺失、过期或拒绝时应重新注册/认证或按页面提示恢复。
+- 产品层的对话、草稿、默认/override 与反馈承诺见 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md)；自动化 grammar 与状态字段见 [`viewer-web-semantic-test-api.prd.md`](viewer-web-semantic-test-api.prd.md)。
+
 ### 已退役的 legacy 操作
 
 历史 Standard-3D / egui 表面曾提供 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板；该表面及这些操作均已退役，不能作为当前 canonical `viewer` Web 页面的使用说明或能力声明。当前支持边界仍以实时观察、当前选中对象、prompt/chat、`window.__AW_TEST__` 以及本手册列出的三条回归脚本为准。

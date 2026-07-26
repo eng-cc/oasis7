@@ -14,7 +14,7 @@
 - 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`；回放/live profile 与 live 无 seek 边界读 `viewer-control-plane-split-live-playback.prd.md`
-- 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
+- 想先理解 Agent 对话、预设/草稿、Prompt/目标调整与反馈恢复的产品语义：读 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 及其配对产品设计；当前 surface、协议、输入桥接与操作边界继续读 `viewer-manual.manual.md`、`viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -81,12 +81,17 @@
 
 ### 5. chat / prompt / right panel
 - 首读入口:
+  - `../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`
+  - `../../product/agents-world-simulation/agent-conversation-and-prompt-control.design.md`
+  - `viewer-manual.manual.md`
+  - `viewer-web-semantic-test-api.prd.md`
   - `viewer-chat-right-panel-polish.prd.md`
   - `viewer-egui-right-panel.prd.md`
-  - `viewer-chat-prompt-presets-profile-editing.prd.md`
 - 适合问题:
-  - 聊天入口、右侧面板、Prompt profile 现在怎样组织
+  - Agent 对话、预设草稿和 Prompt/目标调整在产品层如何区分
+  - 当前聊天入口、右侧面板、Prompt profile 与协议怎样组织
   - 输入法、回车发送、预设编辑这些问题该去哪里看
+- 说明: 产品层先读新产品专题；当前 SolidJS surface、权限、preview/apply/rollback 和自动化合同以手册与 semantic test API 为准。`viewer-chat-right-panel-polish` / `viewer-egui-right-panel` 只用于旧 EGUI 专业追溯，不得声明为当前布局。四组历史 Chat Panel prompt-presets 三件套已迁入产品 PRD/design/project 并物理删除。
 
 ### 6. release / 体验收口
 - 首读入口:

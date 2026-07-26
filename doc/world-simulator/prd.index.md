@@ -58,6 +58,7 @@
 - Git history
 - Git history
 - Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈的产品结果读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，Viewer/API 合同读 `doc/world-simulator/prd.md`，间接控制玩法规则读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`；原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
+- Viewer Chat prompt-presets、profile editing、scroll 与 Agent Prompt default-value prefill 四组三件套已迁入 `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.{prd,design,project}.md` 并物理删除；当前 surface、AgentChat、PromptControl、profile/override、鉴权与验证仍以 `doc/world-simulator/prd.md`、Viewer 手册和专业实现证据为准，历史 EGUI 布局不得外推为当前能力。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 Git history 与 Git history 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
 - 已删除的 intent/distributed/runtime closure 与 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯；当前阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与长期 world-simulator、P2P、runtime、gameplay 权威。
@@ -123,14 +124,10 @@
 | `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.design.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.design.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.design.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md` | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.design.md` | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.design.md` | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-enter-send.prd.md` | `doc/world-simulator/viewer/viewer-chat-enter-send.design.md` | `doc/world-simulator/viewer/viewer-chat-enter-send.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-ime-cn-input.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-cn-input.design.md` | `doc/world-simulator/viewer/viewer-chat-ime-cn-input.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-prompt-presets-profile-editing.prd.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets-profile-editing.design.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets-profile-editing.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-prompt-presets-scroll.prd.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets-scroll.design.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets-scroll.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-prompt-presets.prd.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets.design.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.prd.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.design.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md` |
