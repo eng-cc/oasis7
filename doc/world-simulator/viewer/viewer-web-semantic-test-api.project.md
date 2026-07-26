@@ -25,6 +25,7 @@
 - [x] WTA-17 (PRD-WTA-R4-001) [test_tier_required]：round-4 补齐文档建模（`timeline_seek/filter/jump` 语义步骤设计 + 任务拆解）
 - [x] WTA-18 (PRD-WTA-R4-002) [test_tier_required]：扩展 `viewer_automation + web_test_api` round-4 语义步骤（timeline + `sendControl.seek`）并补齐定向测试
 - [x] WTA-19 (PRD-WTA-R4-003) [test_tier_required]：执行 round-4 定向回归、更新手册示例与文档状态收口
+- [x] viewer-semantic-test-api-batch22-professional-backfill (PRD-WORLD_SIMULATOR-001) [test_tier_required]: current SolidJS `legacy_core.js` backfills the `step` payload grammar, observation aliases, live no-seek, no-throw/no-fabricated-event, and WebSocket diagnostic boundary; historical Bevy/EGUI rounds remain trace-only. Trace: https://github.com/eng-cc/oasis7/issues/2628 (task_972f19ca22244723a9305ca494b52a1f)
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-semantic-test-api.design.md`
@@ -39,8 +40,9 @@
 - `crates/oasis7_viewer/src/web_test_api.rs`
 - `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `testing-manual.md`
+- `crates/oasis7_viewer/software_safe_src/{legacy_core.js,legacy_core_control_gate.test.js}`
 
 ## 状态
 - 当前阶段：WTA 全部完成
-- 下一步：可选继续 round-5（timeline 调整按钮与恢复动作语义补齐）
-- 最近更新：2026-03-08（WTA-19 完成，round-4 回归与手册收口完成）
+- 下一步：当前 Web API 的行为改动必须先更新 current-contract sections，并以 `legacy_core.js` 与 focused tests 为准；不得从 retired Bevy/EGUI round 反推功能。
+- 最近更新：2026-07-26（WTA-20 current-contract backfill）

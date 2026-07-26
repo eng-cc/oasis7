@@ -33,8 +33,14 @@
 - 恢复入口与当前决策上下文相邻；重连成功只证明连接恢复，不证明请求、动作或世界进展成功。
 - 当前 surface authority 未支持的 retry、fullscreen、panel 或 locale 动作不得展示成可用能力。
 
-## 5. 非承诺
+## 5. 当前模式与行动反馈
+
+- 在主动作附近表达当前可用行动；不支持、连接中断、规则/权限阻塞和已接受请求必须保持不同含义，不能共用为“失败”或“请重连”。
+- 不支持的行动提供当前模式适用的替代、等待或安全返回入口；能力边界不因布局、自动开始、重载或背景推进而消失。
+- 界面时间、事件计数和动画只帮助阅读；只有权威反馈能够确认行动产生世界后果。没有可见进展时，继续呈现当前可信状态和下一决策，而不是用自动刷新制造成功印象。
+
+## 6. 非承诺
 
 - 不承诺旧 EGUI 右栏、模块可见性缓存、专用 fullscreen toggle、固定断点或历史 Web 布局。
-- 不定义字体、翻译键、localStorage/JSON 路径、WebSocket callback/backoff、viewport hit test 或 Test API。
+- 不定义 control profile、动作枚举、seek/step、逻辑时间/事件游标、ack 字段、字体、翻译键、localStorage/JSON 路径、WebSocket callback/backoff、viewport hit test 或 Test API。
 - 不以历史截图、旧测试、mock、software-safe 或局部 DOM 存在代签当前产品能力。

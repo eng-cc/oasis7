@@ -33,6 +33,11 @@
 - `ViewerServer` 回放控制：`Play` 改为事件触发推进（一次请求驱动连续事件发出），不再依赖定时 tick。
 - `ViewerWebBridgeConfig`：移除 `poll_interval` 字段及 `with_poll_interval`，清理轮询 sleep。
 
+### 当前 mailbox 驱动合同（Batch 22 回填）
+- viewer 的 event-drive 是 mailbox/事件触发的调度合同，不是以 `tick` 为时钟的替代轮询。可处理的 mailbox 触发才会请求一次 runtime drive；空 mailbox 或空结果必须安静返回。
+- 一次 drive 没有 action、event 或可观察状态增量时，Viewer 不得为“看起来在推进”而合成 event、logical time 或 completion；后续推进必须等待新的有效触发。
+- 这项合同保留空转降载和可诊断性，不定义玩家承诺、世界规则或数值。玩家侧的接受/完成表达由产品 authority 管理；本文件只约束 runtime/bridge 不伪造状态。
+
 ## 5. Risks & Roadmap
 1. M0：建档（设计文档+项目管理文档）。
 2. M1：offline server 去 tick 化并通过 required 测试。
@@ -42,6 +47,7 @@
 ### Technical Risks
 - 离线 `Play` 从“定速推送”变为“事件驱动批量推送”后，前端若依赖慢速动画可能表现变化。
 - web bridge 去轮询后需确保断连退出、上游重连行为不退化。
+- 若 mailbox 空结果被错误地转译为 synthetic event 或时间增量，自动化会把空转误判为世界进展；回归必须同时断言“无 fabricated event”和“新触发后可继续 drive”。
 - 若误触 node/runtime 基础 tick 机制，可能引入共识回归，需要严格边界控制。
 
 ## Phase 10 完成态（T4）

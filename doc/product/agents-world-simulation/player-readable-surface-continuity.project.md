@@ -20,6 +20,12 @@
 | `viewer-i18n` 三件套 | 支持语言具有明确选择、fallback 与关键文本覆盖 | locale 自动选择、字体资产、翻译键、缓存和同步 |
 | `viewer-web-usability-hardening-2026-02-22` 三件套 | 连接状态真实可读且存在恢复路径 | websocket、callback、backoff、toast 与实现命令 |
 | `viewer-step-completion-ack-2026-02-28` 三件套 | 产品语义归入 gameplay 分册：接受与观察到的完成分离，无进展保留下一决策 | request_id、ack enum/字段、delta、时序、兼容与测试 API |
+| `viewer-control-plane-split-live-playback-2026-02-27` 三件套 | 当前模式只暴露真实可用行动；不支持行动、断连与已接受请求可区分，并有替代或安全返回 | control profile、seek/live 规则、协议、legacy bridge、UI/automation 与测试 API |
+| `viewer-live-llm-event-driven-trigger-2026-02-26` 三件套 | 被接受的控制只取得一次真实处理机会；空结果或等待不冒充玩家进展 | LLM trigger、pending 状态、调度、共识唤醒、配置与测试 |
+| `viewer-live-logical-time-interface-phase11-2026-02-27` 三件套 | 进展以权威结果而非界面计数或时间标签判断 | logical time、event cursor、兼容别名、seek mapping 与测试接口 |
+| `viewer-live-step-control-progress-stability-2026-02-28` 三件套 | 接受、观察到进展和完成窗口内无进展分别可读；后两者不由重试或计数伪造 | step handler、consensus 消费、重试窗口、指标、A/B 与协议增强 |
+| `viewer-web-test-api-step-control-2026-02-24` 三件套 | Web 自动化入口不形成新的玩家控制或完成事实 | Test API action/payload 解析、浏览器闭环与测试命令 |
+| `viewer-web-playability-unblock-2026-02-26` 三件套 | 连接、自动开始或后台推进不代签玩家意图已经完成或世界已经推进 | wasm auto-play、runSteps/sendControl、探针、脚本和历史 verdict |
 
 ## 删除收据
 
@@ -27,10 +33,11 @@
 - surface 连续性由本专题 PRD/design 承载；step acknowledgement 的玩家承诺由 `indirect-control-agency-and-continuation.prd.md` 和 `first-session-and-continuation.prd.md` 承载。
 - 当前 Viewer 手册、Web 专业合同、proto/runtime 代码与测试继续拥有实现、协议、兼容和验证真值。
 - `viewer-egui-right-panel` 明确保留为 legacy EGUI 专业追溯，不属于本批。
+- 本表新增的六组控制迁移只归位产品语义；删除仍以 current Viewer/runtime authority 回填、活跃索引修复和专业 slice 结论为条件。
 
 ## 完成条件
 
-仅在六组三件套全部删除、活跃索引和 incoming references 修复、负向历史引用 guard 保留、产品文档未承诺旧控件或协议字段时，本迁移收据有效。Git history 与 GitHub task evidence 保留历史任务追溯。
+仅在上述十二组三件套全部删除、活跃索引和 incoming references 修复、负向历史引用 guard 保留、每组已有 current professional successor，且产品文档未承诺旧控件或协议字段时，本迁移收据有效。Git history 与 GitHub task evidence 保留历史任务追溯。
 
 ## 任务拆解
 
