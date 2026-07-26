@@ -40,6 +40,8 @@ export function createSoftwareSafeState() {
     lastGameplayActionFeedback: null,
     refineQuotePreflight: null,
     refineQuoteRequest: { status: "idle", error: null },
+    productValidationQuote: null,
+    productValidationQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {
       actionKey: null,
       label: null,

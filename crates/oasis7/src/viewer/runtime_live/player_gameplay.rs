@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::auth::{
     VerifiedPlayerAuth, verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
-    verify_refine_quote_auth_proof,
+    verify_product_validation_quote_auth_proof, verify_refine_quote_auth_proof,
 };
 use super::super::gameplay_actions::{
     ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_CLAIM_FIRST_AGENT,
@@ -17,7 +17,8 @@ use super::super::gameplay_actions::{
 };
 use super::super::protocol::{
     CollectDataCommand, CollectDataPreflight, GameplayActionAck, GameplayActionError,
-    GameplayActionRequest, RefineQuotePreflight, RefineQuoteRequest,
+    GameplayActionRequest, ProductValidationQuotePreflight, ProductValidationQuoteRequest,
+    RefineQuotePreflight, RefineQuoteRequest,
 };
 use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
@@ -27,6 +28,7 @@ use crate::runtime::{Action as RuntimeAction, IndustryStage, MaterialLedgerId, W
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
 };
+use oasis7_wasm_abi::MaterialStack;
 use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
@@ -278,6 +280,84 @@ pub(super) fn extend_available_actions(
 }
 
 impl ViewerRuntimeLiveServer {
+    /// Computes a signed, read-only product-validation preflight from the authoritative world.
+    /// The quote does not execute a module, mutate a nonce, or submit a validation action.
+    pub(super) fn handle_product_validation_quote(
+        &mut self,
+        request: ProductValidationQuoteRequest,
+    ) -> Result<ProductValidationQuotePreflight, GameplayActionError> {
+        let verified = self.verify_product_validation_quote_auth(&request)?;
+        self.session_policy
+            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
+            .map_err(|message| GameplayActionError {
+                code: map_session_policy_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some("quote_validate_product".to_string()),
+                target_agent_id: None,
+            })?;
+        let agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "player_agent_binding_required".to_string(),
+                message: "quote_validate_product requires a bound player Agent session".to_string(),
+                action_id: Some("quote_validate_product".to_string()),
+                target_agent_id: None,
+            })?;
+        let public_key = normalize_optional_public_key(request.public_key.as_deref());
+        ensure_agent_player_access_runtime(
+            &self.world,
+            &self.llm_sidecar,
+            agent_id,
+            verified.player_id.as_str(),
+            public_key.as_deref(),
+        )
+        .map_err(|err| GameplayActionError {
+            code: err.code,
+            message: err.message,
+            action_id: Some("quote_validate_product".to_string()),
+            target_agent_id: err.agent_id,
+        })?;
+
+        let product_id = request.product_id.trim();
+        if product_id.is_empty() || request.amount <= 0 {
+            return Err(GameplayActionError {
+                code: "product_validation_quote_rejected".to_string(),
+                message: "product validation quote requires a product id and positive amount"
+                    .to_string(),
+                action_id: Some("quote_validate_product".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            });
+        }
+        let module_id = format!("m4.product.{product_id}");
+        let quote = self
+            .world
+            .product_validation_quote(
+                agent_id,
+                module_id.as_str(),
+                &MaterialStack::new(product_id, request.amount),
+                0,
+            )
+            .map_err(|reason| GameplayActionError {
+                code: "product_validation_quote_rejected".to_string(),
+                message: format!("product validation quote rejected: {reason}"),
+                action_id: Some("quote_validate_product".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })?;
+        Ok(ProductValidationQuotePreflight {
+            product_id: quote.product_id,
+            product_role: quote.product_role,
+            tradable: quote.tradable,
+            stage_before: quote.stage_before,
+            stage_after: quote.stage_after,
+            unlock_or_value_class: quote.unlock_or_value_class,
+            recommended_action: quote.recommended_action,
+            submission_allowed: quote.submission_allowed,
+            missing_prerequisite: quote.missing_prerequisite,
+            reachable_advance_or_recovery: quote.reachable_advance_or_recovery,
+        })
+    }
+
     /// Computes the simulator-kernel quote from a fresh, read-only projection of runtime state.
     /// No runtime action, event, auth nonce, or player binding is mutated by this path.
     pub(super) fn handle_refine_quote(
@@ -368,6 +448,26 @@ impl ViewerRuntimeLiveServer {
             message,
             action_id: Some("quote_refine_compound".to_string()),
             target_agent_id: None,
+        })
+    }
+
+    fn verify_product_validation_quote_auth(
+        &self,
+        request: &ProductValidationQuoteRequest,
+    ) -> Result<VerifiedPlayerAuth, GameplayActionError> {
+        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
+            code: "auth_proof_required".to_string(),
+            message: "quote_validate_product requires auth proof".to_string(),
+            action_id: Some("quote_validate_product".to_string()),
+            target_agent_id: None,
+        })?;
+        verify_product_validation_quote_auth_proof(request, auth).map_err(|message| {
+            GameplayActionError {
+                code: map_auth_verify_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some("quote_validate_product".to_string()),
+                target_agent_id: None,
+            }
         })
     }
 

@@ -7,22 +7,21 @@ mod collect_data;
 pub use collect_data::*;
 mod refine_quote;
 pub use refine_quote::*;
+mod product_validation_quote;
+pub use product_validation_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NegotiatedViewerProtocol {
     pub version: u32,
     #[serde(default)]
     pub capabilities: Vec<String>,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerAuthScheme {
     #[default]
     Ed25519,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
     #[serde(default)]
@@ -32,7 +31,6 @@ pub struct PlayerAuthProof {
     pub nonce: u64,
     pub signature: String,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostedStrongAuthGrant {
     pub version: u8,
@@ -45,7 +43,6 @@ pub struct HostedStrongAuthGrant {
     pub signer_public_key: String,
     pub signature: String,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewerRequest {
@@ -96,6 +93,10 @@ pub enum ViewerRequest {
     QuoteRefineCompound {
         request: RefineQuoteRequest,
     },
+    /// Requests authoritative validation facts without submitting validation.
+    QuoteProductValidation {
+        request: ProductValidationQuoteRequest,
+    },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
     },
@@ -103,7 +104,6 @@ pub enum ViewerRequest {
         command: AuthoritativeRecoveryCommand,
     },
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum PromptControlCommand {
@@ -176,7 +176,6 @@ pub struct PromptControlRollbackRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentChatRequest {
     pub agent_id: String,
@@ -192,7 +191,6 @@ pub struct AgentChatRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent_seq: Option<u64>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameplayActionRequest {
     pub action_id: String,
@@ -632,6 +630,10 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     RefineQuotePreflight {
         quote: RefineQuotePreflight,
+    },
+    /// Returns the read-only facts needed to decide whether to validate.
+    ProductValidationQuotePreflight {
+        quote: ProductValidationQuotePreflight,
     },
     Error {
         message: String,

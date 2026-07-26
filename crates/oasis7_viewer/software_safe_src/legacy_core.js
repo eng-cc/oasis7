@@ -7,6 +7,7 @@ import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
+import { createProductValidationQuoteStateModule } from "./product_validation_quote_state.js";
 import {
   buildViewerEntityLists,
   renderViewerEntityList,
@@ -185,6 +186,19 @@ const {
   injectRefineQuotePreflightForTest,
   installRefineQuotePreflightVisualFixture,
 } = createRefineQuotePreflightStateModule({
+  clone,
+  getSearchParams,
+  isTestApiEnabled,
+  render,
+  state,
+});
+
+const {
+  handleProductValidationQuote,
+  handleProductValidationQuoteError,
+  injectProductValidationQuoteForTest,
+  installProductValidationQuoteVisualFixture,
+} = createProductValidationQuoteStateModule({
   clone,
   getSearchParams,
   isTestApiEnabled,
@@ -1808,6 +1822,69 @@ async function requestRefineQuote(compoundMassG) {
   }
 }
 
+async function buildProductValidationQuoteAuthProof(request, auth) {
+  const nonce = nextAuthNonce();
+  const signingPayload = buildAuthEnvelope({
+    operation: "gameplay_action",
+    action_id: "quote_validate_product",
+    target_agent_id: `product_id:${request.product_id}|amount:${request.amount}`,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+  });
+  return {
+    scheme: "ed25519",
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+    signature: await signAuthPayload(signingPayload, auth),
+  };
+}
+
+async function requestProductValidationQuote(productId, amount) {
+  const normalizedProductId = String(productId || "").trim();
+  const amountNumber = Number(amount);
+  if (!normalizedProductId || !Number.isSafeInteger(amountNumber) || amountNumber <= 0) {
+    const reason = "product validation quote requires a product id and positive whole-number amount";
+    state.productValidationQuoteRequest = { status: "error", error: reason };
+    return { ok: false, reason };
+  }
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    const reason = "product validation quote requires a connected viewer websocket";
+    state.productValidationQuoteRequest = { status: "error", error: reason };
+    return { ok: false, reason };
+  }
+  try {
+    await ensureHostedPlayerAuthAvailable();
+    if (!state.auth.available) {
+      const reason = state.auth.error || "product validation quote requires an active player session";
+      state.productValidationQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    const boundAgentId = String(state.auth.boundAgentId || "").trim();
+    if (!boundAgentId) {
+      const reason = "product validation quote requires a bound player Agent";
+      state.productValidationQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    await ensureRegisteredPlayerSession(boundAgentId);
+    const request = {
+      product_id: normalizedProductId,
+      amount: amountNumber,
+      player_id: state.auth.playerId,
+      public_key: state.auth.publicKey,
+    };
+    request.auth = await buildProductValidationQuoteAuthProof(request, state.auth);
+    state.productValidationQuoteRequest = { status: "pending", error: null };
+    sendJson({ type: "quote_product_validation", request });
+    return { ok: true, request: clone(request) };
+  } catch (error) {
+    const reason = `product validation quote request failed: ${String(error)}`;
+    state.productValidationQuoteRequest = { status: "error", error: reason };
+    return { ok: false, reason };
+  }
+}
+
 function canAutoIssueHostedPlayerSession() {
   return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
     && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
@@ -3097,7 +3174,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error)) {
+  if (handleRefineQuoteError(error) || handleProductValidationQuoteError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3515,6 +3592,9 @@ function handleViewerMessage(message) {
       break;
     case "refine_quote_preflight":
       handleRefineQuotePreflight(message.quote);
+      break;
+    case "product_validation_quote_preflight":
+      handleProductValidationQuote(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -4261,6 +4341,7 @@ function installTestApi() {
     sendControl,
     sendGameplayAction,
     requestRefineQuote,
+    requestProductValidationQuote,
     runSteps,
     setMode,
     focus,
@@ -4272,6 +4353,7 @@ function installTestApi() {
     setStrongAuthApprovalCode,
     injectSnapshot,
     injectRefineQuotePreflightForTest,
+    injectProductValidationQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4294,6 +4376,7 @@ function bootstrap() {
   state.auth = resolveViewerAuthState();
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture();
+  installProductValidationQuoteVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -4384,6 +4467,7 @@ export {
   hostedActionPolicy,
   injectSnapshot,
   injectRefineQuotePreflightForTest,
+  injectProductValidationQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4411,6 +4495,7 @@ export {
   sendControl,
   sendGameplayAction,
   requestRefineQuote,
+  requestProductValidationQuote,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,

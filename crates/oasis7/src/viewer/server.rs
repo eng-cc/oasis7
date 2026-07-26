@@ -310,6 +310,21 @@ impl<'a> ViewerSession<'a> {
                     },
                 )?;
             }
+            ViewerRequest::QuoteProductValidation { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_offline_server".to_string(),
+                            message:
+                                "quote_validate_product is only available in runtime live mode"
+                                    .to_string(),
+                            action_id: Some("quote_validate_product".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::AuthoritativeChallenge { command: _ } => {
                 send_response(
                     writer,

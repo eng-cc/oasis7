@@ -52,6 +52,136 @@ fn signed_refine_quote_request(
     request
 }
 
+fn signed_product_validation_quote_request(
+    product_id: &str,
+    amount: i64,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::ProductValidationQuoteRequest {
+    let mut request = crate::viewer::ProductValidationQuoteRequest {
+        product_id: product_id.to_string(),
+        amount,
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_product_validation_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign product validation quote auth"),
+    );
+    request
+}
+
+#[test]
+fn runtime_product_validation_quote_is_signed_read_only_and_advisory_before_submission() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(251);
+    register_runtime_session(
+        &mut server,
+        "player-product-quote",
+        Some(agent_id.as_str()),
+        251,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let quote = server
+        .handle_product_validation_quote(signed_product_validation_quote_request(
+            "logistics_drone",
+            1,
+            "player-product-quote",
+            252,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("signed product validation quote");
+
+    assert_eq!(quote.product_id, "logistics_drone");
+    assert_eq!(quote.product_role, "explore");
+    assert_eq!(quote.stage_before, "bootstrap");
+    assert_eq!(quote.stage_after, "bootstrap");
+    assert_eq!(quote.unlock_or_value_class, "scale_out");
+    assert!(
+        quote.submission_allowed,
+        "stage guidance must remain advisory"
+    );
+    assert_eq!(quote.missing_prerequisite, "industry_stage=scale_out");
+    assert_eq!(
+        quote.reachable_advance_or_recovery,
+        "complete_reachable_industry_progress"
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_product_validation_quote_requires_auth_proof() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let err = server
+        .handle_product_validation_quote(crate::viewer::ProductValidationQuoteRequest {
+            product_id: "logistics_drone".to_string(),
+            amount: 1,
+            player_id: "player-product-quote".to_string(),
+            public_key: None,
+            auth: None,
+        })
+        .expect_err("unsigned product validation quote must fail");
+
+    assert_eq!(err.code, "auth_proof_required");
+    assert_eq!(err.action_id.as_deref(), Some("quote_validate_product"));
+}
+
+#[test]
+fn runtime_product_validation_quote_rejects_tampered_auth_proof() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let (public_key, private_key) = test_signer(253);
+    let mut request = signed_product_validation_quote_request(
+        "logistics_drone",
+        1,
+        "player-product-quote",
+        254,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    request.auth.as_mut().expect("signed auth").signature = "00".repeat(64);
+
+    let err = server
+        .handle_product_validation_quote(request)
+        .expect_err("tampered product validation quote auth must fail");
+
+    assert_eq!(err.code, "auth_signature_invalid");
+    assert_eq!(err.action_id.as_deref(), Some("quote_validate_product"));
+}
+
 #[test]
 fn runtime_refine_quote_is_signed_deterministic_and_non_mutating() {
     let _guard = lock_test_llm_env();

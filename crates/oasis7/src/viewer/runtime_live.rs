@@ -1,11 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread;
-use std::time::{Duration, Instant};
-
 use super::auth::verify_session_register_auth_proof_for_recovery;
 use super::live::ViewerLiveDecisionMode;
 use super::protocol::{
@@ -34,6 +26,13 @@ use crate::simulator::{
     RunnerMetrics, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldInitConfig, WorldModel,
     WorldScenario, WorldSnapshot, build_world_model,
 };
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
+use std::time::{Duration, Instant};
 use tracing::Level;
 mod authoritative;
 mod branch_commitment;
@@ -76,6 +75,7 @@ use authoritative::{
 };
 use claim_snapshot::build_player_agent_claim_snapshot;
 pub use config::{ChainLinkPolicy, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError};
+pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
 use control_plane::{RuntimeLlmSidecar, RuntimePlayerBindingPlan};
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
@@ -89,16 +89,14 @@ use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
     map_session_policy_error_code, normalize_optional_string, session_revoke_metadata_key,
 };
+pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
+pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 use support::{
     FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
     bootstrap_formal_release_runtime_world, bootstrap_generated_sidecar_runtime_world,
     bootstrap_runtime_world, is_expected_disconnect_error, is_timeout_error,
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
-
-pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
-pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
-pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 
@@ -813,16 +811,20 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::CollectData { command } => {
                 self.handle_collect_data_protocol_request(command, session, writer)?;
             }
-            ViewerRequest::QuoteRefineCompound { request } => {
-                match self.handle_refine_quote(request) {
-                    Ok(quote) => {
-                        send_response(writer, &ViewerResponse::RefineQuotePreflight { quote })?
-                    }
-                    Err(error) => {
-                        send_response(writer, &ViewerResponse::GameplayActionError { error })?
-                    }
-                }
-            }
+            ViewerRequest::QuoteRefineCompound { request } => send_response(
+                writer,
+                &self
+                    .handle_refine_quote(request)
+                    .map(|quote| ViewerResponse::RefineQuotePreflight { quote })
+                    .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
+            )?,
+            ViewerRequest::QuoteProductValidation { request } => send_response(
+                writer,
+                &self
+                    .handle_product_validation_quote(request)
+                    .map(|quote| ViewerResponse::ProductValidationQuotePreflight { quote })
+                    .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
+            )?,
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {

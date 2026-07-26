@@ -6,7 +6,9 @@ import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
 import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
+import { ProductValidationQuotePanel } from "./product_validation_quote_card.jsx";
 import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
+import { installProductValidationQuoteVisualFixture } from "./product_validation_quote_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
@@ -2837,6 +2839,13 @@ function WorldSummaryPanel() {
                   />
                 )}
               </Show>
+              <ProductValidationQuotePanel
+                quote={core.state.productValidationQuote}
+                requestState={core.state.productValidationQuoteRequest}
+                requestProductValidationQuote={core.requestProductValidationQuote}
+                locale={locale()}
+                tr={tr}
+              />
               <Show when={gameplay().recommendedAction}>
                 {(action) => (
                   <CalloutCard
@@ -4329,6 +4338,7 @@ function installViewerVisualFixture() {
     },
   };
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();
