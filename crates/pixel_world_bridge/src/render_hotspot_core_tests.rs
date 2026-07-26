@@ -1,18 +1,29 @@
 use super::*;
 use crate::render::hotspot_core::{
     HOTSPOT_CORE_COLOR, HOTSPOT_CORE_LAYER_Z_OFFSET, HOTSPOT_CORE_MAX_SIZE_PX,
-    HOTSPOT_CORE_MIN_SIZE_PX, HOTSPOT_CORE_SIZE_SCALE,
+    HOTSPOT_CORE_MIN_SIZE_PX, HOTSPOT_CORE_SIZE_SCALE, PixelWorldHotspotCoreHighlightVisual,
+    PixelWorldHotspotCoreShadowVisual,
 };
+use std::time::Duration;
+
+const HOTSPOT_CORE_HIGHLIGHT_COLOR: Color = Color::srgba_u8(248, 250, 252, 230);
+const HOTSPOT_CORE_SHADOW_COLOR: Color = Color::srgba_u8(148, 163, 184, 230);
 
 #[test]
 fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
     let first = visual_probe_summary(&mut app);
+    let first_highlight_entities =
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(&mut app);
+    let first_shadow_entities =
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app);
 
     assert_eq!(first.hotspots.len(), 2);
     assert_eq!(first.hotspot_cores.len(), 2);
     assert_eq!(first.hotspot_entity_cache_size, 2);
     assert_eq!(first.hotspot_core_entity_count, 2);
+    assert_eq!(first_highlight_entities.len(), 2);
+    assert_eq!(first_shadow_entities.len(), 2);
     assert_eq!(
         first.hit_regions, 2,
         "hotspot cores must not add hit regions"
@@ -47,6 +58,46 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         2,
         "a consecutive visible reconcile must reuse each hotspot core"
     );
+    assert_eq!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(&mut app),
+        first_highlight_entities,
+        "a consecutive visible reconcile must reuse each hotspot core highlight"
+    );
+    assert_eq!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app),
+        first_shadow_entities,
+        "a consecutive visible reconcile must reuse each hotspot core shadow"
+    );
+    let initial_blocker_core_size = first
+        .hotspot_cores
+        .iter()
+        .find(|core| core.id == "hotspot-blocker")
+        .expect("blocker hotspot core")
+        .size_px;
+    app.world_mut()
+        .resource_mut::<Time>()
+        .advance_by(Duration::from_millis(70));
+    app.update();
+    let pulsed_blocker_core_size = visual_probe_summary(&mut app)
+        .hotspot_cores
+        .iter()
+        .find(|core| core.id == "hotspot-blocker")
+        .expect("pulsed blocker hotspot core")
+        .size_px;
+    assert_ne!(
+        pulsed_blocker_core_size, initial_blocker_core_size,
+        "the existing hotspot core pulse remains intact"
+    );
+    assert_eq!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(&mut app),
+        first_highlight_entities,
+        "pulse updates must reuse each hotspot core highlight"
+    );
+    assert_eq!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app),
+        first_shadow_entities,
+        "pulse updates must reuse each hotspot core shadow"
+    );
 
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
@@ -59,10 +110,40 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     let removed = visual_probe_summary(&mut app);
     assert!(removed.hotspot_cores.is_empty());
     assert_eq!(removed.hotspot_core_entity_count, 0);
+    assert!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(&mut app)
+            .is_empty()
+    );
+    assert!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app).is_empty()
+    );
     assert_eq!(removed.hotspot_entity_cache_size, 0);
     assert_eq!(
         removed.hit_regions, 2,
         "hotspot removal must not alter hit regions"
+    );
+
+    let mut no_render_state_app = render_test_app(sample_render_state_with_hotspot_candidates());
+    no_render_state_app
+        .world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .render_state = None;
+    no_render_state_app.update();
+    assert_eq!(
+        visual_probe_summary(&mut no_render_state_app).hotspot_core_entity_count,
+        0
+    );
+    assert!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(
+            &mut no_render_state_app
+        )
+        .is_empty()
+    );
+    assert!(
+        hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(
+            &mut no_render_state_app
+        )
+        .is_empty()
     );
 }
 
@@ -82,4 +163,75 @@ fn bevy_pixel_regression_exports_visible_neutral_hotspot_cores() {
     );
 
     write_pixel_probe_if_requested(&image, &summary);
+}
+
+#[test]
+fn bevy_ecs_layers_static_asymmetric_one_pixel_hotspot_core_treatment_inside_base_footprint() {
+    let mut render_state = sample_render_state_with_hotspot_candidates();
+    render_state.visual_hotspots[0].size_hint_px = Some(1.0);
+    let mut app = render_test_app(render_state);
+    let world = app.world_mut();
+    let mut sprite_query = world.query::<(&Sprite, &Transform)>();
+    let sprites = sprite_query.iter(world).collect::<Vec<_>>();
+    let core_transforms = sprites
+        .iter()
+        .filter(|(sprite, _)| sprite.color == HOTSPOT_CORE_COLOR)
+        .map(|(sprite, transform)| {
+            (
+                sprite.custom_size.expect("hotspot core size").x,
+                transform.translation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        core_transforms
+            .iter()
+            .any(|(size, _)| *size == HOTSPOT_CORE_MIN_SIZE_PX as f32),
+        "the 1px treatment must remain inside the clamped 2px core"
+    );
+    assert!(
+        core_transforms
+            .iter()
+            .any(|(size, _)| *size == HOTSPOT_CORE_MAX_SIZE_PX as f32),
+        "the 1px treatment must remain inside the clamped 5px core"
+    );
+    let highlights = sprites
+        .iter()
+        .filter(|(sprite, _)| sprite.color == HOTSPOT_CORE_HIGHLIGHT_COLOR)
+        .map(|(sprite, transform)| (sprite, transform.translation))
+        .collect::<Vec<_>>();
+    let shadows = sprites
+        .iter()
+        .filter(|(sprite, _)| sprite.color == HOTSPOT_CORE_SHADOW_COLOR)
+        .map(|(sprite, transform)| (sprite, transform.translation))
+        .collect::<Vec<_>>();
+
+    assert_eq!(highlights.len(), core_transforms.len());
+    assert_eq!(shadows.len(), core_transforms.len());
+    for (core_size, core_translation) in core_transforms {
+        let footprint_half_extent = (core_size - 1.0) / 2.0;
+        assert!(highlights.iter().any(|(sprite, translation)| {
+            sprite.custom_size == Some(Vec2::ONE)
+                && translation.x < core_translation.x
+                && translation.y > core_translation.y
+                && (translation.x - core_translation.x).abs() <= footprint_half_extent
+                && (translation.y - core_translation.y).abs() <= footprint_half_extent
+        }));
+        assert!(shadows.iter().any(|(sprite, translation)| {
+            sprite.custom_size == Some(Vec2::ONE)
+                && translation.x > core_translation.x
+                && translation.y < core_translation.y
+                && (translation.x - core_translation.x).abs() <= footprint_half_extent
+                && (translation.y - core_translation.y).abs() <= footprint_half_extent
+        }));
+    }
+}
+
+fn hotspot_core_decoration_entities<T: Component>(app: &mut App) -> Vec<Entity> {
+    let world = app.world_mut();
+    let mut query = world.query_filtered::<Entity, With<T>>();
+    let mut entities = query.iter(world).collect::<Vec<_>>();
+    entities.sort_by_key(|entity| entity.to_bits());
+    entities
 }

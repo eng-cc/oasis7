@@ -13,7 +13,9 @@ use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouet
 
 #[path = "render_hotspot_core.rs"]
 mod hotspot_core;
-use hotspot_core::{PixelWorldHotspotCoreVisual, reconcile_hotspot_cores};
+#[cfg(test)]
+use hotspot_core::PixelWorldHotspotCoreVisual;
+use hotspot_core::{HotspotCoreQueries, despawn_hotspot_core_treatments, reconcile_hotspot_cores};
 
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
@@ -1009,7 +1011,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
-    hotspot_cores: Query<'w, 's, (Entity, &'static PixelWorldHotspotCoreVisual)>,
+    hotspot_cores: HotspotCoreQueries<'w, 's>,
 }
 
 pub(crate) fn render_scene(
@@ -1035,9 +1037,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
-        for (entity, _) in queries.hotspot_cores.iter() {
-            commands.entity(entity).despawn();
-        }
+        despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
@@ -1098,9 +1098,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
-        for (entity, _) in queries.hotspot_cores.iter() {
-            commands.entity(entity).despawn();
-        }
+        despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
