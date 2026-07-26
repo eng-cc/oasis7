@@ -15,13 +15,17 @@
 | 已吸收源专题 | 归位语义 | 后续权威 |
 | --- | --- | --- |
 | `viewer-chat-prompt-presets` 三件套 | 单一交互路径、预设编辑与填充、草稿不等于发送/持久化 | 产品 PRD/design；当前 surface 与 AgentChat 合同留在 `world-simulator` |
-| `viewer-chat-prompt-presets-profile-editing` 三件套 | 目标 Agent、当前值加载、Prompt/目标编辑、apply 与缺失 rollback 边界 | 产品 PRD/design；PromptControl、鉴权和应用结果留在 `world-simulator` |
+| `viewer-chat-prompt-presets-profile-editing` 三件套 | 目标 Agent、当前值加载、Prompt/目标编辑、apply，以及历史 source 当时未承诺 rollback 的边界 | 产品 PRD/design；PromptControl、鉴权和应用结果留在 `world-simulator` |
 | `viewer-chat-prompt-presets-scroll` 三件套 | 窄屏和低高度下的可达性、滚动与焦点边界 | 产品 design；布局实现与验证留在 Viewer 专业权威 |
 | `viewer-chat-agent-prompt-default-values-prefill` 三件套 | 默认值、当前生效值、草稿与 override 的玩家语义 | 产品 PRD/design；字段和 patch 算法留在 `world-simulator` |
+| `viewer-chat-dedicated-right-panel` 三件套 | 单一可辨识的 Chat 路径、响应式可达性；不保留最右侧或双面板布局 | 产品 PRD/design；当前 surface、布局和命中边界留在 Viewer 专业权威 |
+| `viewer-chat-enter-send` 三件套 | 草稿编辑、换行/快捷键/发送不得互相误触；不承诺历史 Enter 发送 | 产品 PRD/design；当前快捷键和发送入口留在 Viewer 手册与实现 |
+| `viewer-chat-ime-cn-input` 三件套 | 输入法与发送动作不冲突的产品要求；不外推历史 EGUI Web 修复为当前已验证能力 | 产品 PRD/design；IME 实现与浏览器证据留在 Viewer 专业权威 |
+| `viewer-chat-right-panel-polish` 三件套 | 目标 Agent、草稿、主动作和结果的稳定顺序与窄屏可达性；不保留右栏结构 | 产品 PRD/design；当前 SolidJS 结构和自动化合同留在 Viewer 专业权威 |
 
 ## 删除收据
 
-- 源文件数量：12。
+- 累计源文件数量：24（两个各 12 文件的迁移批次）。
 - 迁移结果：产品承诺进入同名 PRD，产品交互设计进入同名 design，迁移映射进入本 project。
 - 专业语义保留：当前 surface 由 Viewer 手册描述；AgentChat、PromptControl、鉴权、profile、patch、runtime 应用与验证仍归 `doc/world-simulator` 及对应代码/测试 authority。
 - 历史追溯：源三件套删除后只通过 Git history 与 GitHub task issue evidence 进入，不再保留日期化或实现表面绑定的重复入口。
@@ -43,5 +47,5 @@
 ## 状态
 
 - 文档生命周期：`active`。
-- 迁移收据：`finalized`，表示上方 12 个源文件的产品语义和专业边界已归位；不表示 PR、review、CI、发布或任务完成。
+- 迁移收据：`finalized`，表示上方两个各 12 文件批次的产品语义和专业边界已归位；不表示 PR、review、CI、发布或任务完成。
 - 历史追溯：旧实现任务与测试证据只从 Git history / GitHub task issue evidence 进入。

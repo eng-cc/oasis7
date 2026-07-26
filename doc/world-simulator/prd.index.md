@@ -124,11 +124,7 @@
 | `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.design.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.design.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.design.md` | `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.design.md` | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-enter-send.prd.md` | `doc/world-simulator/viewer/viewer-chat-enter-send.design.md` | `doc/world-simulator/viewer/viewer-chat-enter-send.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-ime-cn-input.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-cn-input.design.md` | `doc/world-simulator/viewer/viewer-chat-ime-cn-input.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.project.md` |
-| `doc/world-simulator/viewer/viewer-chat-right-panel-polish.prd.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.design.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md` |
 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.design.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` |
