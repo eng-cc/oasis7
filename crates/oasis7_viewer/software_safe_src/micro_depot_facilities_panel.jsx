@@ -20,6 +20,10 @@ function resourceSummary(resources) {
     : "-";
 }
 
+function hasInventory(resources) {
+  return isRecord(resources) && Object.keys(resources).length > 0;
+}
+
 function shortHash(value) {
   const normalized = String(value || "").trim();
   if (normalized.length <= 18) return normalized || "-";
@@ -59,25 +63,25 @@ export function MicroDepotFacilitiesPanel(props) {
                   {`claim=${facility.ownerClaimId || "-"} · location=${facility.locationId || "-"} · ${tr(locale(), "半径", "radius")}=${facility.serviceRadiusCm ?? "-"}cm`}
                 </div>
                 <div class="summary-grid micro-depot-facilities__metrics">
-                  <div class="metric">
+                  <div class="metric micro-depot-facilities__metric--primary">
                     <div class="metric__label">{tr(locale(), "库存", "Inventory")}</div>
                     <div class="metric__value">{resourceSummary(facility.availableUnitsByKind)}</div>
                     <div class="feedback-detail">{`${tr(locale(), "修订", "revision")}=${facility.inventoryRevision ?? "-"}`}</div>
+                    <Show when={!hasInventory(facility.availableUnitsByKind)}>
+                      <div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--empty">
+                        {tr(locale(), "库存为空。", "Inventory is empty.")}
+                      </div>
+                    </Show>
                   </div>
-                  <div class="metric">
+                  <div class="metric micro-depot-facilities__metric--primary">
                     <div class="metric__label">{tr(locale(), "吞吐", "Throughput")}</div>
                     <div class="metric__value">{`${facility.throughputRemainingUnits ?? "-"}/${facility.throughputLimitUnitsPerEpoch ?? "-"}`}</div>
                     <div class="feedback-detail">{`${tr(locale(), "epoch", "epoch")}=${facility.throughputEpoch ?? "-"} · ${tr(locale(), "upkeep", "upkeep")}=${facility.upkeepPaid == null ? "-" : facility.upkeepPaid ? tr(locale(), "已付", "paid") : tr(locale(), "未付", "unpaid")}`}</div>
-                  </div>
-                  <div class="metric">
-                    <div class="metric__label">{tr(locale(), "模块证据", "Module Evidence")}</div>
-                    <div class="metric__value">{facility.moduleId || "-"}</div>
-                    <div class="feedback-detail">{`${facility.moduleVersion || "-"} · wasm=${shortHash(facility.wasmHash)}`}</div>
-                  </div>
-                  <div class="metric">
-                    <div class="metric__label">{tr(locale(), "回执 / 提案", "Receipt / Proposal")}</div>
-                    <div class="metric__value">{shortHash(facility.lastReceiptId)}</div>
-                    <div class="feedback-detail">{`proposal=${shortHash(facility.lastProposalHash)}`}</div>
+                    <Show when={facility.upkeepPaid === false}>
+                      <div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--unpaid">
+                        {tr(locale(), "维护费未付；服务可用性可能受限。", "Upkeep is unpaid; service availability may be constrained.")}
+                      </div>
+                    </Show>
                   </div>
                 </div>
                 <Show when={displayableStrings(facility.supportedResourceKinds).length > 0}>
@@ -85,9 +89,24 @@ export function MicroDepotFacilitiesPanel(props) {
                 </Show>
                 <Show when={displayableStrings(facility.availableActions).length > 0} fallback={<div class="feedback-detail">{tr(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions.")}</div>}>
                   <div class="badge-row badge-row--spaced" aria-label={tr(locale(), "可用 depot 动作", "Available depot actions")}>
-                    <For each={displayableStrings(facility.availableActions)}>{(action) => <span class="badge">{action}</span>}</For>
+                    <For each={displayableStrings(facility.availableActions)}>{(action) => <span class="badge micro-depot-facilities__availability-badge" data-action-availability="published">{action}</span>}</For>
                   </div>
                 </Show>
+                <details class="micro-depot-facilities__technical-evidence" data-testid="micro-depot-technical-evidence">
+                  <summary>{tr(locale(), "技术证据", "Technical evidence")}</summary>
+                  <div class="summary-grid micro-depot-facilities__technical-grid">
+                    <div class="metric">
+                      <div class="metric__label">{tr(locale(), "模块证据", "Module Evidence")}</div>
+                      <div class="metric__value">{facility.moduleId || "-"}</div>
+                      <div class="feedback-detail">{`${facility.moduleVersion || "-"} · wasm=${shortHash(facility.wasmHash)}`}</div>
+                    </div>
+                    <div class="metric">
+                      <div class="metric__label">{tr(locale(), "回执 / 提案", "Receipt / Proposal")}</div>
+                      <div class="metric__value">{shortHash(facility.lastReceiptId)}</div>
+                      <div class="feedback-detail">{`proposal=${shortHash(facility.lastProposalHash)}`}</div>
+                    </div>
+                  </div>
+                </details>
               </div>
             )}
           </For>
