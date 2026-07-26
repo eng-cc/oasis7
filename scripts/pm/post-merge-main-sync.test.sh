@@ -49,6 +49,61 @@ assert r['task_uid']==sys.argv[3] and r['main_commit']==sys.argv[4],r
 assert r['main_commit']==r['remote_main_commit'],r
 assert r['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
+INITIAL_MERGE_RECEIPT_SHA256="$(shasum -a 256 "$MERGE_RECEIPT" | awk '{print $1}')"
+
+# A later live observation of this exact merge must refresh durable authority.
+# Sleep rather than inventing a timestamp so the replacement receipt has a new
+# observation time and byte digest while preserving its immutable merge identity.
+sleep 1
+REFRESHED_OBSERVED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+python3 - "$MERGE_RECEIPT" "$REFRESHED_OBSERVED_AT" <<'PY'
+import json,sys
+path=sys.argv[1]
+receipt=json.load(open(path,encoding='utf-8'))
+receipt['observed_at']=sys.argv[2]
+open(path,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True)+'\n')
+PY
+"$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+  --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null
+python3 - "$REPO/.pm/github-project-sync/tasks.json" "$TASK_UID" "$MERGE_RECEIPT" "$REFRESHED_OBSERVED_AT" "$INITIAL_MERGE_RECEIPT_SHA256" <<'PY'
+import hashlib,json,pathlib,sys
+record=json.load(open(sys.argv[1],encoding='utf-8'))['tasks'][sys.argv[2]]
+receipt=json.load(open(sys.argv[3],encoding='utf-8'))
+digest=hashlib.sha256(pathlib.Path(sys.argv[3]).read_bytes()).hexdigest()
+assert receipt['observed_at']==sys.argv[4],receipt
+assert digest!=sys.argv[5],(digest,sys.argv[5])
+assert record['merge_receipt']==receipt,record
+assert record['merge_receipt_sha256']==digest,record
+PY
+
+assert_immutable_identity_drift_rejected() {
+  local field="$1" value="$2"
+  cp "$MERGE_RECEIPT" "$TMPDIR/merge-receipt-before-identity-drift.json"
+  python3 - "$MERGE_RECEIPT" "$field" "$value" <<'PY'
+import json,sys
+path=sys.argv[1]
+receipt=json.load(open(path,encoding='utf-8'))
+receipt[sys.argv[2]]=sys.argv[3]
+open(path,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True)+'\n')
+PY
+  if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
+    --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+    --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/immutable-identity-drift.err"; then
+    echo "expected refreshed merge receipt immutable identity drift to fail" >&2; exit 1
+  fi
+  grep -Fqi 'stored merge receipt conflicts with validated receipt' "$TMPDIR/immutable-identity-drift.err"
+  cp "$TMPDIR/merge-receipt-before-identity-drift.json" "$MERGE_RECEIPT"
+  python3 - "$REPO/.pm/github-project-sync/tasks.json" "$TASK_UID" "$MERGE_RECEIPT" <<'PY'
+import hashlib,json,pathlib,sys
+record=json.load(open(sys.argv[1],encoding='utf-8'))['tasks'][sys.argv[2]]
+receipt=json.load(open(sys.argv[3],encoding='utf-8'))
+assert record['merge_receipt']==receipt,record
+assert record['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[3]).read_bytes()).hexdigest(),record
+PY
+}
+
+assert_immutable_identity_drift_rejected head_oid "$(git -C "$REPO" rev-parse "$MERGED_HEAD^")"
 
 SQUASH_REMOTE="$TMPDIR/squash-origin.git"
 SQUASH_REPO="$TMPDIR/squash-repo"
