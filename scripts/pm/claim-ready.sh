@@ -130,7 +130,7 @@ PY
   [[ -z "$TASK_UID" || "$TASK_UID" == "$RECEIPT_TASK_UID" ]] || die "ci_ready_receipt task_uid mismatch"
   python3 "$SCRIPT_DIR/ci-ready-receipt.py" --repository "$RECEIPT_REPOSITORY" \
     --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
-    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" >/dev/null \
+    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr >/dev/null \
     || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
 fi
 
