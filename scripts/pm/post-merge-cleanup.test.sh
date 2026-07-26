@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# This cleanup regression must remain cross-platform on Windows, Linux, and macOS.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,6 +67,12 @@ case "$*" in
 esac
 EOF
 chmod +x "$TMPDIR/bin/gh"
+# Native Python on Windows resolves gh.exe instead of the extensionless Bash
+# fixture. TEST_NATIVE_GH_SHIM optionally supplies that equivalent executable.
+if [[ -n "${TEST_NATIVE_GH_SHIM:-}" ]]; then
+  [[ -x "$TEST_NATIVE_GH_SHIM" ]] || { echo "TEST_NATIVE_GH_SHIM must name an executable" >&2; exit 1; }
+  cp "$TEST_NATIVE_GH_SHIM" "$TMPDIR/bin/gh.exe"
+fi
 
 # Main-sync authority is mandatory and cryptographically bound to this merge receipt.
 if TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
@@ -124,6 +131,29 @@ done
 cat >"$MAPPING" <<EOF
 {"version":1,"tasks":{"$TASK_UID":{"task_uid":"$TASK_UID","status":"done","pr_number":1,"pr_url":"https://example.invalid/pull/1","repository":"eng-cc/oasis7","canonical_worktree":"$WORKTREE","task_branch":"$BRANCH","default_branch":"main"}}}
 EOF
+
+# Git for Windows emits C:/... worktree porcelain while Python path resolution
+# preserves a caller/task-truth C:\\... spelling. Both spellings identify the
+# same worktree and must be accepted before terminal cleanup proceeds.
+WINDOWS_WORKTREE="$(cygpath -w "$WORKTREE")"
+python3 - "$MAPPING" "$TASK_UID" "$WINDOWS_WORKTREE" "$BRANCH" <<'PY'
+import json,sys
+path, uid, worktree, branch = sys.argv[1:]
+json.dump({"version": 1, "tasks": {uid: {
+    "task_uid": uid, "status": "done", "pr_number": 1,
+    "pr_url": "https://example.invalid/pull/1", "repository": "eng-cc/oasis7",
+    "canonical_worktree": worktree, "task_branch": branch, "default_branch": "main",
+}}}, open(path, "w", encoding="utf-8"))
+PY
+if ! TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
+  --repo-root "$REPO" --worktree "$WINDOWS_WORKTREE" --branch "$BRANCH" \
+  --main-ref main --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+  --main-sync-receipt "$MAIN_SYNC_RECEIPT" \
+  --dry-run >"$TMPDIR/windows-path.out" 2>"$TMPDIR/windows-path.err"; then
+  cat "$TMPDIR/windows-path.err" >&2
+  exit 1
+fi
+grep -F "worktree remove" "$TMPDIR/windows-path.out" >/dev/null
 
 printf 'dirty\n' >"$WORKTREE/untracked.txt"
 if TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
