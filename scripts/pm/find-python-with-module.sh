@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: preserve Windows Git Bash/PowerShell and Linux/macOS Python discovery behavior.
 set -euo pipefail
 
 if [[ $# -ne 1 ]] || [[ ! "$1" =~ ^[A-Za-z_][A-Za-z0-9_.]*$ ]]; then
@@ -10,13 +11,18 @@ MODULE="$1"
 
 supports_module() {
   local candidate="$1"
+  local output
   [[ -x "$candidate" ]] || return 1
-  "$candidate" - "$MODULE" >/dev/null 2>&1 <<'PY'
+  output="$("$candidate" - "$MODULE" 2>/dev/null <<'PY'
 import importlib
 import sys
 
 importlib.import_module(sys.argv[1])
+print("oasis7-python-module-ok")
 PY
+)" || return 1
+  output="${output%$'\r'}"
+  [[ "$output" == "oasis7-python-module-ok" ]]
 }
 
 emit_if_supported() {
@@ -32,6 +38,11 @@ for generic_name in python python3; do
     emit_if_supported "$candidate"
   fi
 done
+
+codex_runtime_python="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe"
+if [[ -x "$codex_runtime_python" ]]; then
+  emit_if_supported "$codex_runtime_python"
+fi
 
 while IFS= read -r path_dir; do
   [[ -n "$path_dir" ]] || path_dir="."

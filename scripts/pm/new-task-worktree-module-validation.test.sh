@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Cross-platform test contract: fixture bootstrap remains valid on Windows Git Bash and Linux/macOS shells.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,6 +13,7 @@ PM_BOOTSTRAP_MARKER="$TMPDIR/pm-bootstrap-invoked"
 mkdir -p "$REPO/scripts/pm"
 cp "$ROOT_DIR/scripts/new-task-worktree.sh" "$REPO/scripts/new-task-worktree.sh"
 cp "$ROOT_DIR/scripts/worktree-harness-lib.sh" "$REPO/scripts/worktree-harness-lib.sh"
+cp "$ROOT_DIR/scripts/pm/find-python-with-module.sh" "$REPO/scripts/pm/find-python-with-module.sh"
 cp "$ROOT_DIR/scripts/pm/pm_store.py" "$REPO/scripts/pm/pm_store.py"
 chmod +x "$REPO/scripts/new-task-worktree.sh"
 
