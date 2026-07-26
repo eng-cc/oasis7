@@ -28,6 +28,12 @@ native 与 Web 客户端消费同一份状态和动作合同。Web 入口可托�
 - launcher 静态资源和 API 可并存；静态目录缺失或资源不可用不得改变既有 API 路由语义。
 - 共享 UI schema 负责字段分组、文案和可见性的一致映射。它是表现层合同，不是 runtime 配置或世界规则的第二真源。
 
+### 受控停止与 Web 诊断
+
+- `POST /api/stop` 的 launcher 表现必须将用户请求、当前结果和随后状态快照如实呈现；它不是对 chain、所有子进程或 runtime 最终清理完成的承诺。native launcher 对其直接管理的子进程先请求优雅停止，在有界等待后才使用终止回退；用户选择停止和关闭窗口走同一停止生命周期，失败必须保留可诊断结果。
+- Web 表面不得因初始化、浏览器环境、状态读取或控制面请求失败而把 launcher 显示为 ready。它应保留可见的 blocked/error 诊断及可恢复下一步，并继续以服务端状态快照为准；这条表现边界不声明浏览器 clock、轮询、WASM lifecycle 或 runtime session 的具体实现。
+- chain runtime、execution-world 输出、stale-session/recovery，以及浏览器/WASM 的运行时兼容细节，统一转至 `game-client-launcher-runtime-session-continuity.prd.md` 的 runtime 专业 authority；本控制面只保留请求、结果和状态的呈现合同。
+
 ### 机器接口
 
 - `GET /api/gui-agent/capabilities` 是机器客户端的 capability discovery 入口；响应中的版本、`actions[]` 与 `query_targets` 是当前动作清单和查询目标的真值，文档不维护永久且穷尽的动作清单。payload 约束不由该响应发现，而是在提交 action 时按当前实现校验。
@@ -51,9 +57,11 @@ native 与 Web 客户端消费同一份状态和动作合同。Web 入口可托�
 
 - 动作清单、查询目标和 action payload 约束可能随实现演进；调用方必须发现当前能力并处理执行期校验结果，不得把本文档当成永久 action catalog 或 payload schema。
 - operator-plane 路由边界不能替代 runtime 权威、安全部署或公开 readiness 的专业结论。
+- 停止请求被接受、Web 未崩溃或诊断可见，都不等于 runtime 已收敛、所有进程已退出，或浏览器/WASM 环境已经具备通用兼容性。
 
 ## 验收与追溯
 
 - 文档入口与链接：`./scripts/doc-governance-check.sh`、`./scripts/readme-link-check.sh`。
 - 机器接口合同：`oasis7_web_launcher` 的定向测试覆盖 capabilities、状态别名、严格 JSON/action 解析、统一响应以及 hosted operator-path gate。
+- 停止与诊断表现：实现变更时验证有界停止/失败回退、停止与窗口关闭的一致入口，以及 Web 对不可用状态的非崩溃诊断呈现；runtime/session/WASM 正确性由其 successor authority 复核。
 - 本稳定专题吸收的历史完成证据保留在 Git history 和 GitHub task issue evidence comments；不再把已删除的日期化专题作为当前入口。

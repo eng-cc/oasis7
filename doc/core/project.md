@@ -105,7 +105,7 @@
 - [x] TASK-CORE-008 (PRD-CORE-003) [test_tier_required]: 统一回写脱离正式台账的高位 `审计轮次` 到 ROUND-005 基线，恢复字段与审计台账的一致语义。
   - 验收命令 (`test_tier_required`):
     - `test "$(rg -l "^审计轮次:\s*6$" doc --glob "*.md" -g "!doc/devlog/**" | wc -l)" -eq 0`
-    - `test "$(rg -l "^审计轮次:\s*5$" doc/p2p/prd.md doc/p2p/prd.index.md doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.project.md | wc -l)" -eq 3`
+    - `test "$(rg -l "^审计轮次:\s*5$" doc/p2p/prd.md doc/p2p/prd.index.md doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.project.md | wc -l)" -eq 3`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-009 (PRD-CORE-003) [test_tier_required]: 统一清理剩余 `审计轮次 > 5` 与缺失 `审计轮次` 的文档，确保全仓文档审计标记不高于 ROUND-005 基线。
   - 验收命令 (`test_tier_required`):

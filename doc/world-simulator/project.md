@@ -41,16 +41,14 @@
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
 - `doc/world-simulator/scenario/scenario-files.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
+- `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
 - `doc/world-simulator/prd/acceptance/unified-checklist.md`
 - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
 - `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-wasm-time-compat-2026-03-04.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/llm/decision-provider-contract.project.md`
