@@ -23,6 +23,7 @@ mod claim_runway;
 mod industrial_progression;
 mod prompt_control;
 mod provider_settings;
+mod snapshot_fallback;
 mod snapshot_generated_world;
 mod snapshot_micro_depot;
 mod snapshot_progress;

@@ -882,6 +882,41 @@ export function createViewerFeedbackModule({
       ),
     };
     const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
+    const fallbackTradeoffPreview = (
+      Array.isArray(gameplay.fallback_tradeoff_preview)
+        ? gameplay.fallback_tradeoff_preview
+        : Array.isArray(gameplay.fallbackTradeoffPreview)
+          ? gameplay.fallbackTradeoffPreview
+          : []
+    )
+      .filter(isRecord)
+      .map((option) => ({
+        valueClass: option.value_class || option.valueClass || null,
+        available: option.available === true,
+        cost: displayableString(option.cost) || null,
+        progressKept: displayableString(option.progress_kept ?? option.progressKept) || null,
+        opportunityCost: displayableString(option.opportunity_cost ?? option.opportunityCost) || null,
+        reason: displayableString(option.reason) || null,
+        recommended: option.recommended === true,
+      }));
+    const noSafeFallbackReason = displayableString(
+      gameplay.no_safe_fallback_reason ?? gameplay.noSafeFallbackReason,
+    );
+    const requiredNextDecisionActionId = displayableString(
+      gameplay.required_next_decision_action_id ?? gameplay.requiredNextDecisionActionId,
+    );
+    const requiredNextDecisionClass = displayableString(
+      gameplay.required_next_decision_class ?? gameplay.requiredNextDecisionClass,
+    );
+    const noSafeFallbackHandoff = noSafeFallbackReason
+      || requiredNextDecisionActionId
+      || requiredNextDecisionClass
+      ? {
+        reason: noSafeFallbackReason,
+        requiredNextDecisionActionId,
+        requiredNextDecisionClass,
+      }
+      : null;
     const recoveryOptionComparisons = (
       Array.isArray(gameplay.recovery_options)
         ? gameplay.recovery_options
@@ -1133,6 +1168,8 @@ export function createViewerFeedbackModule({
       attractionProof,
       agencyMoves,
       progressionProof,
+      fallbackTradeoffPreview,
+      noSafeFallbackHandoff,
       matureWorldContinuation,
       shareReplay,
       entityCounts: {

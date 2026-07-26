@@ -4,19 +4,19 @@ import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
-import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
+import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx";
 import { ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
 import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { installProductValidationQuoteVisualFixture } from "./product_validation_quote_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
+import { fallbackTradeoffVisualFixture } from "./viewer_fallback_tradeoff_fixture.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
   LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
-
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 
@@ -2728,6 +2728,7 @@ function WorldSummaryPanel() {
                   </div>
                 </Show>
               </EventCard>
+              <FallbackTradeoffPanel options={gameplay().fallbackTradeoffPreview} noSafeFallbackHandoff={gameplay().noSafeFallbackHandoff} locale={locale()} tr={tr} />
               <Show when={gameplay().validationUnlockPreview}>
                 {(preview) => (
                   <EventCard
@@ -4051,7 +4052,8 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
       repair_available: true,
       rebuild_available: true,
       pivot_available: true,
-      recovery_options: recoveryOptionVisualFixture(),
+      recovery_options: recoveryOptionVisualFixture(), fallback_tradeoff_preview: fallbackTradeoffVisualFixture(),
+      no_safe_fallback_reason: "No repair or reroute action is currently available for this blocked intent.", required_next_decision_action_id: "return_to_goal_selection", required_next_decision_class: "return_to_goal_selection",
       available_actions: [
         {
           action_id: "build_factory_smelter_mk1",

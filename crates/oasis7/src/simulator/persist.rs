@@ -281,6 +281,14 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_action_label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_tradeoff_preview: Option<Vec<PlayerGameplayFallbackTradeoffOption>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub no_safe_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_next_decision_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_next_decision_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_next_step: Option<String>,
     #[serde(default)]
     pub available_actions: Vec<PlayerGameplayAction>,
@@ -328,6 +336,17 @@ pub struct ProductValidationUnlockPreview {
     pub stage_status: String,
     pub value_summary: String,
     pub next_step_hint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayFallbackTradeoffOption {
+    pub value_class: String,
+    pub available: bool,
+    pub cost: String,
+    pub progress_kept: String,
+    pub opportunity_cost: String,
+    pub reason: String,
+    pub recommended: bool,
 }
 
 #[derive(Deserialize)]
@@ -384,6 +403,14 @@ struct PlayerGameplaySnapshotSerde {
     fallback_action_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fallback_action_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fallback_tradeoff_preview: Option<Vec<PlayerGameplayFallbackTradeoffOption>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    no_safe_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_next_decision_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_next_decision_class: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resume_next_step: Option<String>,
     #[serde(default)]
@@ -485,6 +512,10 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             escalation_hint: legacy.escalation_hint,
             fallback_action_id: legacy.fallback_action_id,
             fallback_action_label: legacy.fallback_action_label,
+            fallback_tradeoff_preview: legacy.fallback_tradeoff_preview,
+            no_safe_fallback_reason: legacy.no_safe_fallback_reason,
+            required_next_decision_action_id: legacy.required_next_decision_action_id,
+            required_next_decision_class: legacy.required_next_decision_class,
             resume_next_step: legacy.resume_next_step,
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,

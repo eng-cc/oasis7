@@ -3,12 +3,14 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
-    PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayCausalityKind,
-    PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
-    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
-    ProductValidationUnlockPreview,
+    PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
+    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
+    PlayerGameplayStageId, PlayerGameplayStageStatus, ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
+
+#[path = "gameplay_snapshot_fallback.rs"]
+mod fallback;
 
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
@@ -19,6 +21,10 @@ use super::gameplay_snapshot_helpers::{
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::gameplay_validation_preview::product_validation_unlock_preview;
 use super::player_gameplay::extend_available_actions;
+use fallback::{
+    fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
+    player_gameplay_fallback_tradeoff_preview,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -230,45 +236,6 @@ fn player_gameplay_escalation_hint(
         })
 }
 
-fn player_gameplay_fallback_action(
-    gameplay: &PlayerGameplaySnapshot,
-    response_window_class: Option<&str>,
-) -> Option<(String, String)> {
-    let enabled_actions: Vec<&PlayerGameplayAction> = gameplay
-        .available_actions
-        .iter()
-        .filter(|action| action.disabled_reason.is_none())
-        .collect();
-    if enabled_actions.is_empty() {
-        return None;
-    }
-
-    let request_snapshot = enabled_actions
-        .iter()
-        .find(|action| action.protocol_action == "request_snapshot")
-        .copied();
-    let advance_step = enabled_actions
-        .iter()
-        .find(|action| action.action_id == "advance_step")
-        .copied();
-    let resume_play = enabled_actions
-        .iter()
-        .find(|action| action.action_id == "resume_play")
-        .copied();
-
-    let preferred = match response_window_class {
-        Some("waiting_for_committed_progress") => advance_step.or(resume_play).or(request_snapshot),
-        Some("stalled_needs_escalation") | Some("blocked_needs_repair") => {
-            request_snapshot.or(advance_step).or(resume_play)
-        }
-        Some("request_rejected") => request_snapshot.or(advance_step).or(resume_play),
-        _ => None,
-    }
-    .or_else(|| enabled_actions.first().copied())?;
-
-    Some((preferred.action_id.clone(), preferred.label.clone()))
-}
-
 fn derive_player_gameplay_execution_state(
     stage_status: PlayerGameplayStageStatus,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -410,6 +377,23 @@ fn finalize_player_gameplay_snapshot(
         player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
     gameplay.fallback_action_label = fallback_action.map(|(_, label)| label);
+    gameplay.fallback_tradeoff_preview = player_gameplay_fallback_tradeoff_preview(
+        &gameplay,
+        gameplay.response_window_class.as_deref(),
+    );
+    let fallback_decision = gameplay
+        .fallback_tradeoff_preview
+        .as_ref()
+        .map(|_| fallback_tradeoff_decision_for_gameplay(&gameplay));
+    gameplay.no_safe_fallback_reason = fallback_decision
+        .and_then(|decision| decision.no_safe_fallback_reason)
+        .map(str::to_string);
+    gameplay.required_next_decision_action_id = fallback_decision
+        .and_then(|decision| decision.required_next_decision_action_id)
+        .map(str::to_string);
+    gameplay.required_next_decision_class = fallback_decision
+        .and_then(|decision| decision.required_next_decision_class)
+        .map(str::to_string);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     apply_small_player_lane_truth(&mut gameplay);
     gameplay
@@ -491,6 +475,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -603,6 +591,10 @@ pub(super) fn build_player_gameplay_snapshot(
                 escalation_hint: None,
                 fallback_action_id: None,
                 fallback_action_label: None,
+                fallback_tradeoff_preview: None,
+                no_safe_fallback_reason: None,
+                required_next_decision_action_id: None,
+                required_next_decision_class: None,
                 resume_next_step: None,
                 branch_recommendations: Vec::new(),
                 available_actions,
@@ -669,6 +661,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -746,6 +742,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -826,6 +826,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
+                    no_safe_fallback_reason: None,
+                    required_next_decision_action_id: None,
+                    required_next_decision_class: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -881,6 +885,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
+                    no_safe_fallback_reason: None,
+                    required_next_decision_action_id: None,
+                    required_next_decision_class: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -936,6 +944,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     escalation_hint: None,
                     fallback_action_id: None,
                     fallback_action_label: None,
+                    fallback_tradeoff_preview: None,
+                    no_safe_fallback_reason: None,
+                    required_next_decision_action_id: None,
+                    required_next_decision_class: None,
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
@@ -991,6 +1003,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1044,6 +1060,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1097,6 +1117,10 @@ pub(super) fn build_player_gameplay_snapshot(
             escalation_hint: None,
             fallback_action_id: None,
             fallback_action_label: None,
+            fallback_tradeoff_preview: None,
+            no_safe_fallback_reason: None,
+            required_next_decision_action_id: None,
+            required_next_decision_class: None,
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
@@ -1149,6 +1173,10 @@ pub(super) fn build_player_gameplay_snapshot(
         escalation_hint: None,
         fallback_action_id: None,
         fallback_action_label: None,
+        fallback_tradeoff_preview: None,
+        no_safe_fallback_reason: None,
+        required_next_decision_action_id: None,
+        required_next_decision_class: None,
         resume_next_step: None,
         branch_recommendations: Vec::new(),
         available_actions,
