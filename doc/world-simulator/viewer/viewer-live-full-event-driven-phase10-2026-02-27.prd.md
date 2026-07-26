@@ -57,7 +57,7 @@
 - 活跃入口与文档已清理旧 `--tick-ms` 示例：
   - `site/index.html`、`site/en/index.html`
   - 历史 visualization 专题已删除，当前 Web 入口以 `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md` 为准
-  - `doc/world-simulator/viewer/viewer-i18n.prd.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - 历史 open-world readiness 专题与 stress report 模板已删除；当前 operator 回归统一收口到 repo-owned Web regression 与 evidence 文档
   - `doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`
 - 删除 legacy `--tick-ms` 拒绝断言测试，避免保留旧参数语义噪音：
