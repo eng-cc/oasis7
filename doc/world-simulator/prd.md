@@ -44,6 +44,7 @@
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`
   - `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
+  - `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`
   - `doc/world-simulator/prd/acceptance/unified-checklist.md`
   - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
   - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
@@ -59,7 +60,7 @@
 | 领域 | Active PRD-ID / 专题 | 当前模块级要求 |
 | --- | --- | --- |
 | 场景与世界契约 | `PRD-WORLD_SIMULATOR-001/002/003` | 场景初始化、资源变化、关键交互和发布证据必须可复现，并通过统一验收清单映射到测试证据。 |
-| runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative；LLM 失败按硬失败或显式阻断处理，不回退启发式。 |
+| runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative；LLM 失败按硬失败或显式阻断处理，不回退启发式。AgentChat、PromptControl、profile/override、鉴权与实际应用结果属于本专业域；产品层只组合对话、草稿、持续调整与反馈恢复的玩家语义。 |
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
 | first-session goal and control feedback | `PRD-WORLD_SIMULATOR-001/039/041/046` | Viewer 首局面向玩家呈现一个主目标及可收起、可找回且不冲突的次目标；主目标消费权威进度并展示动作、完成条件、阶段预期、剩余条件、blocker 与玩家可选择的恢复动作。首个推荐需解释价值、可达性与首次持续能力关联；完成后交接到可达的后引导目标。Web Test API 以 `describeControls()` / `fillControlExample(action)` 暴露支持动作、payload schema 与示例，`sendControl(action, payload)` 稳定返回 accepted、action、parsedControl、reason、hint，`getState().lastControlFeedback` 保留最近反馈供人工与脚本复核；新增字段不得静默破坏自动化兼容。正式玩家摘要只从 canonical `player_gameplay` / feedback 派生 Player Intent、World Consequence、Recovery Move、Next Move 等解释面，不新增 runtime truth。具体阈值、布局与测试锚点由当前 Viewer 实现和验证证据维护，不进入产品层。 |
 | launcher feedback / transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/Web Launcher 的受控动作共享真实的 executable/blocked/result/recovery 语义，但保留平台字段与适配差异；稳定入口为 `launcher/game-client-launcher-cross-surface-action-parity.prd.md`。submit acceptance 不等于 settlement，近期历史不等于持久账本；反馈、explorer、链状态、GUI Agent 和 stale execution-world 恢复仍由各自专业 authority 维护。 |
