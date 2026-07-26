@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
+# This script must remain cross-platform across Windows and Linux/macOS.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DURABLE_STORE="$SCRIPT_DIR/workflow-durable-store.py"
 journal_write() { python3 "$DURABLE_STORE" write-journal --path "$1" --json "$2"; }
+
+# Git for Windows porcelain uses forward slashes while native Python resolves
+# Windows paths with backslashes. Normalize before comparing worktree identity.
+normalize_path_identity() {
+  python3 -c 'import os,sys; path=os.path.normcase(os.path.realpath(sys.argv[1])); print(path.replace("\\", "/") if os.name == "nt" else path)' "$1"
+}
+
+worktree_is_registered() {
+  local repo_root="$1" worktree="$2" entry
+  while IFS= read -r entry; do
+    [[ "$entry" == "worktree "* ]] || continue
+    [[ "$(normalize_path_identity "${entry#worktree }")" == "$worktree" ]] && return 0
+  done < <(git -C "$repo_root" worktree list --porcelain)
+  return 1
+}
 
 die() { echo "post-merge-cleanup: $*" >&2; exit 1; }
 usage() {
@@ -81,8 +97,8 @@ if [[ "$DRY_RUN" == "0" ]]; then
     --mapping "$MAPPING" --task-uid "$TASK_UID" --path "$TERMINAL_RECEIPT_OUTPUT" \
     --label "terminal cleanup receipt output")" || die "invalid durable terminal receipt path"
 fi
-RECORDED_WORKTREE="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$RECORDED_WORKTREE")"
-WORKTREE="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$WORKTREE")"
+RECORDED_WORKTREE="$(normalize_path_identity "$RECORDED_WORKTREE")"
+WORKTREE="$(normalize_path_identity "$WORKTREE")"
 [[ "$WORKTREE" == "$RECORDED_WORKTREE" ]] || die "caller worktree disagrees with canonical task truth"
 [[ "$MAIN_REF" == "$RECORDED_DEFAULT_BRANCH" ]] || die "caller main ref disagrees with canonical task truth"
 git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null || die "invalid repo root"
@@ -106,14 +122,14 @@ BRANCH_DELETED="$(printf '%s' "$INTENT_STATE" | awk '{print $2}')"
 TERMINAL_COMMITTED="$(printf '%s' "$INTENT_STATE" | awk '{print $3}')"
 if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   [[ ! -e "$WORKTREE" ]] || die "cleanup journal says worktree_removed but path still exists"
-  ! git -C "$REPO_ROOT" worktree list --porcelain | grep -Fx "worktree $WORKTREE" >/dev/null \
+  ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
     || die "cleanup journal says worktree_removed but git still registers it"
   ACTUAL_BRANCH="$RECORDED_BRANCH"
   BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
 else
   [[ -e "$WORKTREE" ]] || die "worktree path is absent and no matching cleanup intent proves removal"
   git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "worktree path is not a git worktree"
-  git -C "$REPO_ROOT" worktree list --porcelain | grep -Fx "worktree $WORKTREE" >/dev/null || die "task worktree is not registered under repo root"
+  worktree_is_registered "$REPO_ROOT" "$WORKTREE" || die "task worktree is not registered under repo root"
   WORKTREE_COMMON_DIR="$(cd "$WORKTREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
     || die "task worktree common-dir cannot be resolved"
   REPO_COMMON_DIR="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
