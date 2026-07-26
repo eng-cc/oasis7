@@ -5,8 +5,7 @@ import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
-import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
-import { ProductValidationQuotePanel } from "./product_validation_quote_card.jsx";
+import { ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
 import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { installProductValidationQuoteVisualFixture } from "./product_validation_quote_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
@@ -2785,12 +2784,7 @@ function WorldSummaryPanel() {
                 locale={locale}
                 tr={tr}
               />
-              <RefineQuotePreflightPanel
-                quote={core.state.refineQuotePreflight} requestState={core.state.refineQuoteRequest}
-                requestRefineQuote={core.requestRefineQuote}
-                locale={locale()}
-                tr={tr}
-              />
+              <RefineQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
                   locale={locale()}
@@ -2839,13 +2833,7 @@ function WorldSummaryPanel() {
                   />
                 )}
               </Show>
-              <ProductValidationQuotePanel
-                quote={core.state.productValidationQuote}
-                requestState={core.state.productValidationQuoteRequest}
-                requestProductValidationQuote={core.requestProductValidationQuote}
-                locale={locale()}
-                tr={tr}
-              />
+              <ProductValidationQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <Show when={gameplay().recommendedAction}>
                 {(action) => (
                   <CalloutCard

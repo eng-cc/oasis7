@@ -3233,6 +3233,81 @@ function createRefineQuotePreflightStateModule({ clone: clone2, getSearchParams:
     installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture2
   };
 }
+function createProductValidationQuoteRequestModule({
+  buildAuthEnvelope: buildAuthEnvelope2,
+  clone: clone2,
+  ensureHostedPlayerAuthAvailable: ensureHostedPlayerAuthAvailable2,
+  ensureRegisteredPlayerSession: ensureRegisteredPlayerSession2,
+  getSocket,
+  nextAuthNonce: nextAuthNonce2,
+  sendJson: sendJson2,
+  signAuthPayload: signAuthPayload2,
+  state: state2
+}) {
+  async function buildAuthProof(request, auth) {
+    const nonce = nextAuthNonce2();
+    const signingPayload = buildAuthEnvelope2({
+      operation: "gameplay_action",
+      action_id: "quote_validate_product",
+      target_agent_id: `product_id:${request.product_id}|amount:${request.amount}`,
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce
+    });
+    return {
+      scheme: "ed25519",
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce,
+      signature: await signAuthPayload2(signingPayload, auth)
+    };
+  }
+  async function requestProductValidationQuote2(productId, amount) {
+    const normalizedProductId = String(productId || "").trim();
+    const amountNumber = Number(amount);
+    if (!normalizedProductId || !Number.isSafeInteger(amountNumber) || amountNumber <= 0) {
+      const reason = "product validation quote requires a product id and positive whole-number amount";
+      state2.productValidationQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    const socket2 = getSocket();
+    if (!socket2 || socket2.readyState !== WebSocket.OPEN) {
+      const reason = "product validation quote requires a connected viewer websocket";
+      state2.productValidationQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    try {
+      await ensureHostedPlayerAuthAvailable2();
+      if (!state2.auth.available) {
+        const reason = state2.auth.error || "product validation quote requires an active player session";
+        state2.productValidationQuoteRequest = { status: "error", error: reason };
+        return { ok: false, reason };
+      }
+      const boundAgentId = String(state2.auth.boundAgentId || "").trim();
+      if (!boundAgentId) {
+        const reason = "product validation quote requires a bound player Agent";
+        state2.productValidationQuoteRequest = { status: "error", error: reason };
+        return { ok: false, reason };
+      }
+      await ensureRegisteredPlayerSession2(boundAgentId);
+      const request = {
+        product_id: normalizedProductId,
+        amount: amountNumber,
+        player_id: state2.auth.playerId,
+        public_key: state2.auth.publicKey
+      };
+      request.auth = await buildAuthProof(request, state2.auth);
+      state2.productValidationQuoteRequest = { status: "pending", error: null };
+      sendJson2({ type: "quote_product_validation", request });
+      return { ok: true, request: clone2(request) };
+    } catch (error) {
+      const reason = `product validation quote request failed: ${String(error)}`;
+      state2.productValidationQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+  }
+  return { requestProductValidationQuote: requestProductValidationQuote2 };
+}
 const VISUAL_FIXTURE_NAME = "product_validation_quote";
 const visualFixtureQuote = Object.freeze({
   product_id: "logistics_drone",
@@ -3247,12 +3322,12 @@ const visualFixtureQuote = Object.freeze({
   reachable_advance_or_recovery: "complete_reachable_industry_progress"
 });
 function createProductValidationQuoteStateModule({ clone: clone2, getSearchParams: getSearchParams2, isTestApiEnabled: isTestApiEnabled2, render: render2, state: state2 }) {
-  function handleProductValidationQuote2(quote) {
+  function handleProductValidationQuote(quote) {
     if (!quote || typeof quote !== "object") return;
     state2.productValidationQuote = clone2(quote);
     state2.productValidationQuoteRequest = { status: "received", error: null };
   }
-  function handleProductValidationQuoteError2(error) {
+  function handleProductValidationQuoteError(error) {
     if (String(error?.action_id || "").trim() !== "quote_validate_product") return false;
     state2.productValidationQuoteRequest = {
       status: "error",
@@ -3264,20 +3339,26 @@ function createProductValidationQuoteStateModule({ clone: clone2, getSearchParam
     if (!isTestApiEnabled2()) {
       throw new Error("injectProductValidationQuoteForTest requires test_api=1");
     }
-    handleProductValidationQuote2(quote);
+    handleProductValidationQuote(quote);
     render2();
     return clone2(state2.productValidationQuote);
   }
   function installProductValidationQuoteVisualFixture2() {
     if (!isTestApiEnabled2() || getSearchParams2().get("fixture") !== VISUAL_FIXTURE_NAME) return;
-    handleProductValidationQuote2(visualFixtureQuote);
+    handleProductValidationQuote(visualFixtureQuote);
   }
   return {
-    handleProductValidationQuote: handleProductValidationQuote2,
-    handleProductValidationQuoteError: handleProductValidationQuoteError2,
+    handleProductValidationQuote,
+    handleProductValidationQuoteError,
     injectProductValidationQuoteForTest: injectProductValidationQuoteForTest2,
     installProductValidationQuoteVisualFixture: installProductValidationQuoteVisualFixture2
   };
+}
+function createProductValidationQuoteIntegration(getDependencies) {
+  const dependencies = getDependencies();
+  const stateModule = createProductValidationQuoteStateModule(dependencies);
+  const requestModule = createProductValidationQuoteRequestModule(dependencies);
+  return { ...stateModule, ...requestModule };
 }
 function resourceSummary$1(resources) {
   if (!resources || typeof resources !== "object") {
@@ -3916,18 +3997,8 @@ const {
   render,
   state
 });
-const {
-  handleProductValidationQuote,
-  handleProductValidationQuoteError,
-  injectProductValidationQuoteForTest,
-  installProductValidationQuoteVisualFixture: installProductValidationQuoteVisualFixture$1
-} = createProductValidationQuoteStateModule({
-  clone,
-  getSearchParams,
-  isTestApiEnabled,
-  render,
-  state
-});
+const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
+const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 function normalizeFiniteNumber(value) {
   if (value == null) {
     return null;
@@ -5372,67 +5443,6 @@ async function requestRefineQuote(compoundMassG) {
     return { ok: false, reason };
   }
 }
-async function buildProductValidationQuoteAuthProof(request, auth) {
-  const nonce = nextAuthNonce();
-  const signingPayload = buildAuthEnvelope({
-    operation: "gameplay_action",
-    action_id: "quote_validate_product",
-    target_agent_id: `product_id:${request.product_id}|amount:${request.amount}`,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce
-  });
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth)
-  };
-}
-async function requestProductValidationQuote(productId, amount) {
-  const normalizedProductId = String(productId || "").trim();
-  const amountNumber = Number(amount);
-  if (!normalizedProductId || !Number.isSafeInteger(amountNumber) || amountNumber <= 0) {
-    const reason = "product validation quote requires a product id and positive whole-number amount";
-    state.productValidationQuoteRequest = { status: "error", error: reason };
-    return { ok: false, reason };
-  }
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    const reason = "product validation quote requires a connected viewer websocket";
-    state.productValidationQuoteRequest = { status: "error", error: reason };
-    return { ok: false, reason };
-  }
-  try {
-    await ensureHostedPlayerAuthAvailable();
-    if (!state.auth.available) {
-      const reason = state.auth.error || "product validation quote requires an active player session";
-      state.productValidationQuoteRequest = { status: "error", error: reason };
-      return { ok: false, reason };
-    }
-    const boundAgentId = String(state.auth.boundAgentId || "").trim();
-    if (!boundAgentId) {
-      const reason = "product validation quote requires a bound player Agent";
-      state.productValidationQuoteRequest = { status: "error", error: reason };
-      return { ok: false, reason };
-    }
-    await ensureRegisteredPlayerSession(boundAgentId);
-    const request = {
-      product_id: normalizedProductId,
-      amount: amountNumber,
-      player_id: state.auth.playerId,
-      public_key: state.auth.publicKey
-    };
-    request.auth = await buildProductValidationQuoteAuthProof(request, state.auth);
-    state.productValidationQuoteRequest = { status: "pending", error: null };
-    sendJson({ type: "quote_product_validation", request });
-    return { ok: true, request: clone(request) };
-  } catch (error) {
-    const reason = `product validation quote request failed: ${String(error)}`;
-    state.productValidationQuoteRequest = { status: "error", error: reason };
-    return { ok: false, reason };
-  }
-}
 function canAutoIssueHostedPlayerSession() {
   return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
 }
@@ -6623,7 +6633,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 }
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error) || handleProductValidationQuoteError(error)) {
+  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -7007,7 +7017,7 @@ function handleViewerMessage(message) {
       handleRefineQuotePreflight(message.quote);
       break;
     case "product_validation_quote_preflight":
-      handleProductValidationQuote(message.quote);
+      productValidationQuote.handleProductValidationQuote(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -7676,7 +7686,7 @@ function bootstrap() {
   state.auth = resolveViewerAuthState();
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture$1();
-  installProductValidationQuoteVisualFixture$1();
+  productValidationQuote.installProductValidationQuoteVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -10169,219 +10179,7 @@ function RecoveryOptionComparisonPanel(props) {
     }
   });
 }
-var _tmpl$$3 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class=metric__detail>`), _tmpl$3$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=refine-quote-preflight data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary></div><div class=feedback-summary data-testid=refine-quote-next-decision>`), _tmpl$4$3 = /* @__PURE__ */ template(`<section id=viewer-refine-quote-panel class="panel panel--nested"data-testid=refine-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=refine-quote-request-form><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$5$3 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$6$2 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
-function displayValue(value) {
-  if (value === null || value === void 0 || value === "") return "-";
-  return String(value);
-}
-function classificationCopy(value, locale, tr2) {
-  switch (String(value || "")) {
-    case "enough_to_advance":
-      return tr2(locale, "足以推进下一步", "Enough to advance");
-    case "partial_progress":
-      return tr2(locale, "可获得部分进展", "Partial progress");
-    default:
-      return tr2(locale, "电力投入不划算", "Poor power tradeoff");
-  }
-}
-function targetCopy(value, locale, tr2) {
-  switch (String(value || "")) {
-    case "factory_build_hardware":
-      return tr2(locale, "工厂硬件建造", "Factory hardware build");
-    default:
-      return tr2(locale, "当前工业目标", "Current industrial target");
-  }
-}
-function nextDecisionGuidance(value, locale, tr2) {
-  switch (String(value || "")) {
-    case "enough_to_advance":
-      return tr2(locale, "这笔预估足以推进目标：把推荐量作为计划参考，再从支持的玩法动作继续；当前面板不会替你提交精炼。", "This quote can advance the target: keep the recommended amount as a planning reference, then continue through a supported gameplay action. This panel will not submit refining for you.");
-    case "partial_progress":
-      return tr2(locale, "这次只能缩小缺口：先比较补电、采矿或等待，再选择支持的玩法动作；当前面板只提供预估。", "This only reduces the gap: compare recharging, mining, or waiting before choosing a supported gameplay action. This panel only provides the estimate.");
-    default:
-      return tr2(locale, "这笔电力投入不划算：先补电、采矿或等待，调整计划后再请求一份新预估。", "This power tradeoff is poor: recharge, mine, or wait, then adjust the plan and request a new estimate.");
-  }
-}
-function quoteRequestErrorCopy(error, locale, tr2) {
-  if (!error) return "";
-  return tr2(locale, "无法获取精炼预估。请检查连接、玩家会话和输入量后重试。", "Could not get the refining quote. Check the connection, player session, and amount, then retry.");
-}
-function linkageCopy(value, locale, tr2) {
-  switch (String(value || "")) {
-    case "enables_factory_build_hardware_goal":
-      return tr2(locale, "本次产出可满足工厂硬件目标", "This output satisfies the factory hardware target");
-    case "reduces_factory_build_hardware_shortfall":
-      return tr2(locale, "本次产出会缩小工厂硬件缺口", "This output reduces the factory hardware gap");
-    default:
-      return tr2(locale, "本次产出不会缩小当前工厂硬件缺口", "This output does not reduce the current factory hardware gap");
-  }
-}
-function QuoteMetric$1(props) {
-  return (() => {
-    var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
-    insert(_el$2, () => props.label);
-    insert(_el$3, () => displayValue(props.value));
-    insert(_el$, (() => {
-      var _c$ = memo(() => !!props.detail);
-      return () => _c$() ? (() => {
-        var _el$4 = _tmpl$2$3();
-        insert(_el$4, () => props.detail);
-        return _el$4;
-      })() : null;
-    })(), null);
-    return _el$;
-  })();
-}
-function RefineQuotePreflightCard(props) {
-  const quote = () => props.quote || {};
-  const locale = () => props.locale;
-  const tr2 = props.tr;
-  return (() => {
-    var _el$5 = _tmpl$3$3(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$8.nextSibling, _el$0 = _el$9.nextSibling, _el$1 = _el$6.nextSibling, _el$10 = _el$1.firstChild, _el$11 = _el$10.firstChild, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$10.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling, _el$17 = _el$16.nextSibling;
-    insert(_el$8, () => tr2(locale(), "提交前估价", "Before You Commit"));
-    insert(_el$9, () => tr2(locale(), "化合物精炼预估", "Compound Refining Quote"));
-    insert(_el$0, () => tr2(locale(), "这是只读预估，不会提交精炼、扣除电力或生成回执。", "This is a read-only quote. It does not submit refining, spend electricity, or create a receipt."));
-    insert(_el$11, () => tr2(locale(), "预估", "quote"));
-    insert(_el$12, () => `${tr2(locale(), "目标", "target")}: ${targetCopy(quote().target_id, locale(), tr2)}`);
-    insert(_el$13, () => `${tr2(locale(), "Agent", "Agent")}: ${displayValue(quote().owner_agent_id)}`);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "精炼量", "Refine amount");
-      },
-      get value() {
-        return `${displayValue(quote().compound_mass_g)} g`;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "电力成本", "Electricity cost");
-      },
-      get value() {
-        return quote().electricity_cost;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "剩余电力", "Electricity remaining");
-      },
-      get value() {
-        return quote().electricity_after;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "硬件产出", "Hardware output");
-      },
-      get value() {
-        return quote().hardware_output;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "目标缺口", "Target gap");
-      },
-      get value() {
-        return `${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric$1, {
-      get label() {
-        return tr2(locale(), "建议精炼量", "Recommended amount");
-      },
-      get value() {
-        return `${displayValue(quote().recommended_refine_amount)} g`;
-      }
-    }), null);
-    insert(_el$15, () => `${tr2(locale(), "目标关联", "Target linkage")}: ${linkageCopy(quote().target_linkage, locale(), tr2)}`);
-    insert(_el$16, () => `${tr2(locale(), "价值判断", "Value assessment")}: ${classificationCopy(quote().value_classification, locale(), tr2)}`);
-    insert(_el$17, () => `${tr2(locale(), "下一步建议", "Next decision")}: ${nextDecisionGuidance(quote().value_classification, locale(), tr2)}`);
-    createRenderEffect(() => setAttribute(_el$12, "data-target-id", displayValue(quote().target_id)));
-    return _el$5;
-  })();
-}
-function RefineQuotePreflightPanel(props) {
-  const [compoundMassG, setCompoundMassG] = createSignal("40");
-  const [requesting, setRequesting] = createSignal(false);
-  const [requestError, setRequestError] = createSignal("");
-  const [requestStatus, setRequestStatus] = createSignal("");
-  const locale = () => props.locale;
-  const tr2 = props.tr;
-  const remoteRequestState = () => props.requestState || {};
-  const visibleError = () => quoteRequestErrorCopy(remoteRequestState().status === "error" ? remoteRequestState().error : requestError(), locale(), tr2);
-  const visibleStatus = () => remoteRequestState().status === "received" ? tr2(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.") : requestStatus();
-  async function requestQuote(event) {
-    event.preventDefault();
-    setRequestError("");
-    setRequestStatus("");
-    setRequesting(true);
-    try {
-      const result = await props.requestRefineQuote(compoundMassG());
-      if (!result?.ok) {
-        setRequestError(result?.reason || tr2(locale(), "无法请求预估，请稍后重试。", "Could not request a quote. Please try again."));
-        return;
-      }
-      setRequestStatus(tr2(locale(), "已请求只读预估，正在等待报价结果。", "Read-only quote requested; waiting for the quote result."));
-    } catch (error) {
-      setRequestError(`${tr2(locale(), "请求预估失败", "Quote request failed")}: ${String(error)}`);
-    } finally {
-      setRequesting(false);
-    }
-  }
-  return (() => {
-    var _el$18 = _tmpl$4$3(), _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$19.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling;
-    insert(_el$21, () => tr2(locale(), "提交前估价", "Before You Commit"));
-    insert(_el$22, () => tr2(locale(), "化合物精炼预估", "Compound Refining Quote"));
-    insert(_el$23, () => tr2(locale(), "请求预估不会提交精炼、扣除电力或生成回执。", "Requesting a quote does not submit refining, spend electricity, or create a receipt."));
-    _el$25.addEventListener("submit", requestQuote);
-    insert(_el$27, () => tr2(locale(), "精炼量（克）", "Refine amount (g)"));
-    _el$28.$$input = (event) => setCompoundMassG(event.currentTarget.value);
-    insert(_el$29, (() => {
-      var _c$2 = memo(() => !!requesting());
-      return () => _c$2() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求预估", "Request quote");
-    })());
-    insert(_el$24, (() => {
-      var _c$3 = memo(() => !!visibleError());
-      return () => _c$3() ? (() => {
-        var _el$30 = _tmpl$5$3();
-        insert(_el$30, visibleError);
-        return _el$30;
-      })() : null;
-    })(), null);
-    insert(_el$24, (() => {
-      var _c$4 = memo(() => !!visibleStatus());
-      return () => _c$4() ? (() => {
-        var _el$31 = _tmpl$6$2();
-        insert(_el$31, visibleStatus);
-        return _el$31;
-      })() : null;
-    })(), null);
-    insert(_el$24, (() => {
-      var _c$5 = memo(() => !!props.quote);
-      return () => _c$5() ? createComponent(RefineQuotePreflightCard, {
-        get quote() {
-          return props.quote;
-        },
-        get locale() {
-          return locale();
-        },
-        tr: tr2
-      }) : null;
-    })(), null);
-    createRenderEffect((_p$) => {
-      var _v$ = tr2(locale(), "精炼量（克）", "Refine amount (g)"), _v$2 = requesting();
-      _v$ !== _p$.e && setAttribute(_el$28, "aria-label", _p$.e = _v$);
-      _v$2 !== _p$.t && (_el$29.disabled = _p$.t = _v$2);
-      return _p$;
-    }, {
-      e: void 0,
-      t: void 0
-    });
-    createRenderEffect(() => _el$28.value = compoundMassG());
-    return _el$18;
-  })();
-}
-delegateEvents(["input"]);
-var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=product-validation-quote-recommended-action>`), _tmpl$3$2 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"data-testid=product-validation-quote-advisory>`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=product-validation-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
+var _tmpl$$3 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=product-validation-quote-recommended-action>`), _tmpl$3$3 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"data-testid=product-validation-quote-advisory>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=product-validation-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$6$2 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
 function raw(value) {
   return value == null || value === "" ? "-" : String(value);
 }
@@ -10409,9 +10207,9 @@ function actionLabel(value, locale, tr2) {
   if (value === "validate_product_with_module") return tr2(locale, "验证产品", "Validate product");
   return raw(value);
 }
-function QuoteMetric(props) {
+function QuoteMetric$1(props) {
   return (() => {
-    var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -10424,7 +10222,7 @@ function ProductValidationQuoteCard(props) {
   const isAllowed = () => quote().submission_allowed === true;
   const hasPrerequisite = () => Boolean(String(quote().missing_prerequisite || "").trim());
   return (() => {
-    var _el$4 = _tmpl$2$2(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling;
+    var _el$4 = _tmpl$2$3(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling;
     insert(_el$7, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$8, () => tr2(locale(), "产品验证预估", "Product Validation Quote"));
     insert(_el$9, () => tr2(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt."));
@@ -10435,7 +10233,7 @@ function ProductValidationQuoteCard(props) {
       var _c$ = memo(() => !!quote().tradable);
       return () => _c$() ? tr2(locale(), "可交易", "Tradable") : tr2(locale(), "不可交易", "Not tradable");
     })());
-    insert(_el$14, createComponent(QuoteMetric, {
+    insert(_el$14, createComponent(QuoteMetric$1, {
       get label() {
         return tr2(locale(), "阶段", "Stage");
       },
@@ -10443,7 +10241,7 @@ function ProductValidationQuoteCard(props) {
         return `${stageLabel(quote().stage_before, locale(), tr2)} → ${stageLabel(quote().stage_after, locale(), tr2)}`;
       }
     }), null);
-    insert(_el$14, createComponent(QuoteMetric, {
+    insert(_el$14, createComponent(QuoteMetric$1, {
       get label() {
         return tr2(locale(), "解锁 / 价值等级", "Unlock / value class");
       },
@@ -10451,7 +10249,7 @@ function ProductValidationQuoteCard(props) {
         return stageLabel(quote().unlock_or_value_class, locale(), tr2);
       }
     }), null);
-    insert(_el$14, createComponent(QuoteMetric, {
+    insert(_el$14, createComponent(QuoteMetric$1, {
       get label() {
         return tr2(locale(), "提交状态", "Submission status");
       },
@@ -10463,7 +10261,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$2 = memo(() => !!hasPrerequisite());
       return () => _c$2() ? (() => {
-        var _el$16 = _tmpl$3$2();
+        var _el$16 = _tmpl$3$3();
         insert(_el$16, (() => {
           var _c$5 = memo(() => !!isAllowed());
           return () => _c$5() ? tr2(locale(), "阶段前提尚未满足；这是建议，不会自行禁用运行时允许的提交。", "The stage prerequisite is not met; this is advisory and does not disable a runtime-allowed submission.") : tr2(locale(), "运行时已阻止提交；请先完成所列前提。", "Runtime has blocked submission; complete the listed prerequisite first.");
@@ -10474,7 +10272,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$3 = memo(() => !!hasPrerequisite());
       return () => _c$3() ? (() => {
-        var _el$17 = _tmpl$4$2();
+        var _el$17 = _tmpl$4$3();
         insert(_el$17, () => `${tr2(locale(), "缺少前提", "Missing prerequisite")}: ${raw(quote().missing_prerequisite)}`);
         createRenderEffect(() => setAttribute(_el$17, "data-raw-missing-prerequisite", raw(quote().missing_prerequisite)));
         return _el$17;
@@ -10483,7 +10281,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$4 = memo(() => !!quote().reachable_advance_or_recovery);
       return () => _c$4() ? (() => {
-        var _el$18 = _tmpl$4$2();
+        var _el$18 = _tmpl$4$3();
         insert(_el$18, () => `${tr2(locale(), "可达路径", "Reachable path")}: ${raw(quote().reachable_advance_or_recovery)}`);
         createRenderEffect(() => setAttribute(_el$18, "data-raw-recovery", raw(quote().reachable_advance_or_recovery)));
         return _el$18;
@@ -10532,7 +10330,7 @@ function ProductValidationQuotePanel(props) {
     }
   }
   return (() => {
-    var _el$19 = _tmpl$5$2(), _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.firstChild, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$30.nextSibling, _el$32 = _el$29.nextSibling;
+    var _el$19 = _tmpl$5$3(), _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.firstChild, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$30.nextSibling, _el$32 = _el$29.nextSibling;
     insert(_el$22, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$23, () => tr2(locale(), "产品验证预估", "Product Validation Quote"));
     _el$25.addEventListener("submit", requestQuote);
@@ -10547,7 +10345,7 @@ function ProductValidationQuotePanel(props) {
     insert(_el$24, (() => {
       var _c$7 = memo(() => !!error());
       return () => _c$7() ? (() => {
-        var _el$33 = _tmpl$6$1();
+        var _el$33 = _tmpl$6$2();
         insert(_el$33, error);
         return _el$33;
       })() : null;
@@ -10589,6 +10387,256 @@ function ProductValidationQuotePanel(props) {
   })();
 }
 delegateEvents(["input"]);
+var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=metric__detail>`), _tmpl$3$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=refine-quote-preflight data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary></div><div class=feedback-summary data-testid=refine-quote-next-decision>`), _tmpl$4$2 = /* @__PURE__ */ template(`<section id=viewer-refine-quote-panel class="panel panel--nested"data-testid=refine-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=refine-quote-request-form><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$5$2 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
+function displayValue(value) {
+  if (value === null || value === void 0 || value === "") return "-";
+  return String(value);
+}
+function classificationCopy(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "enough_to_advance":
+      return tr2(locale, "足以推进下一步", "Enough to advance");
+    case "partial_progress":
+      return tr2(locale, "可获得部分进展", "Partial progress");
+    default:
+      return tr2(locale, "电力投入不划算", "Poor power tradeoff");
+  }
+}
+function targetCopy(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "factory_build_hardware":
+      return tr2(locale, "工厂硬件建造", "Factory hardware build");
+    default:
+      return tr2(locale, "当前工业目标", "Current industrial target");
+  }
+}
+function nextDecisionGuidance(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "enough_to_advance":
+      return tr2(locale, "这笔预估足以推进目标：把推荐量作为计划参考，再从支持的玩法动作继续；当前面板不会替你提交精炼。", "This quote can advance the target: keep the recommended amount as a planning reference, then continue through a supported gameplay action. This panel will not submit refining for you.");
+    case "partial_progress":
+      return tr2(locale, "这次只能缩小缺口：先比较补电、采矿或等待，再选择支持的玩法动作；当前面板只提供预估。", "This only reduces the gap: compare recharging, mining, or waiting before choosing a supported gameplay action. This panel only provides the estimate.");
+    default:
+      return tr2(locale, "这笔电力投入不划算：先补电、采矿或等待，调整计划后再请求一份新预估。", "This power tradeoff is poor: recharge, mine, or wait, then adjust the plan and request a new estimate.");
+  }
+}
+function quoteRequestErrorCopy(error, locale, tr2) {
+  if (!error) return "";
+  return tr2(locale, "无法获取精炼预估。请检查连接、玩家会话和输入量后重试。", "Could not get the refining quote. Check the connection, player session, and amount, then retry.");
+}
+function linkageCopy(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "enables_factory_build_hardware_goal":
+      return tr2(locale, "本次产出可满足工厂硬件目标", "This output satisfies the factory hardware target");
+    case "reduces_factory_build_hardware_shortfall":
+      return tr2(locale, "本次产出会缩小工厂硬件缺口", "This output reduces the factory hardware gap");
+    default:
+      return tr2(locale, "本次产出不会缩小当前工厂硬件缺口", "This output does not reduce the current factory hardware gap");
+  }
+}
+function QuoteMetric(props) {
+  return (() => {
+    var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    insert(_el$2, () => props.label);
+    insert(_el$3, () => displayValue(props.value));
+    insert(_el$, (() => {
+      var _c$ = memo(() => !!props.detail);
+      return () => _c$() ? (() => {
+        var _el$4 = _tmpl$2$2();
+        insert(_el$4, () => props.detail);
+        return _el$4;
+      })() : null;
+    })(), null);
+    return _el$;
+  })();
+}
+function RefineQuotePreflightCard(props) {
+  const quote = () => props.quote || {};
+  const locale = () => props.locale;
+  const tr2 = props.tr;
+  return (() => {
+    var _el$5 = _tmpl$3$2(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$8.nextSibling, _el$0 = _el$9.nextSibling, _el$1 = _el$6.nextSibling, _el$10 = _el$1.firstChild, _el$11 = _el$10.firstChild, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$10.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling, _el$17 = _el$16.nextSibling;
+    insert(_el$8, () => tr2(locale(), "提交前估价", "Before You Commit"));
+    insert(_el$9, () => tr2(locale(), "化合物精炼预估", "Compound Refining Quote"));
+    insert(_el$0, () => tr2(locale(), "这是只读预估，不会提交精炼、扣除电力或生成回执。", "This is a read-only quote. It does not submit refining, spend electricity, or create a receipt."));
+    insert(_el$11, () => tr2(locale(), "预估", "quote"));
+    insert(_el$12, () => `${tr2(locale(), "目标", "target")}: ${targetCopy(quote().target_id, locale(), tr2)}`);
+    insert(_el$13, () => `${tr2(locale(), "Agent", "Agent")}: ${displayValue(quote().owner_agent_id)}`);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "精炼量", "Refine amount");
+      },
+      get value() {
+        return `${displayValue(quote().compound_mass_g)} g`;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "电力成本", "Electricity cost");
+      },
+      get value() {
+        return quote().electricity_cost;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "剩余电力", "Electricity remaining");
+      },
+      get value() {
+        return quote().electricity_after;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "硬件产出", "Hardware output");
+      },
+      get value() {
+        return quote().hardware_output;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "目标缺口", "Target gap");
+      },
+      get value() {
+        return `${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "建议精炼量", "Recommended amount");
+      },
+      get value() {
+        return `${displayValue(quote().recommended_refine_amount)} g`;
+      }
+    }), null);
+    insert(_el$15, () => `${tr2(locale(), "目标关联", "Target linkage")}: ${linkageCopy(quote().target_linkage, locale(), tr2)}`);
+    insert(_el$16, () => `${tr2(locale(), "价值判断", "Value assessment")}: ${classificationCopy(quote().value_classification, locale(), tr2)}`);
+    insert(_el$17, () => `${tr2(locale(), "下一步建议", "Next decision")}: ${nextDecisionGuidance(quote().value_classification, locale(), tr2)}`);
+    createRenderEffect(() => setAttribute(_el$12, "data-target-id", displayValue(quote().target_id)));
+    return _el$5;
+  })();
+}
+function RefineQuotePreflightPanel(props) {
+  const [compoundMassG, setCompoundMassG] = createSignal("40");
+  const [requesting, setRequesting] = createSignal(false);
+  const [requestError, setRequestError] = createSignal("");
+  const [requestStatus, setRequestStatus] = createSignal("");
+  const locale = () => props.locale;
+  const tr2 = props.tr;
+  const remoteRequestState = () => props.requestState || {};
+  const visibleError = () => quoteRequestErrorCopy(remoteRequestState().status === "error" ? remoteRequestState().error : requestError(), locale(), tr2);
+  const visibleStatus = () => remoteRequestState().status === "received" ? tr2(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.") : requestStatus();
+  async function requestQuote(event) {
+    event.preventDefault();
+    setRequestError("");
+    setRequestStatus("");
+    setRequesting(true);
+    try {
+      const result = await props.requestRefineQuote(compoundMassG());
+      if (!result?.ok) {
+        setRequestError(result?.reason || tr2(locale(), "无法请求预估，请稍后重试。", "Could not request a quote. Please try again."));
+        return;
+      }
+      setRequestStatus(tr2(locale(), "已请求只读预估，正在等待报价结果。", "Read-only quote requested; waiting for the quote result."));
+    } catch (error) {
+      setRequestError(`${tr2(locale(), "请求预估失败", "Quote request failed")}: ${String(error)}`);
+    } finally {
+      setRequesting(false);
+    }
+  }
+  return (() => {
+    var _el$18 = _tmpl$4$2(), _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$19.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling;
+    insert(_el$21, () => tr2(locale(), "提交前估价", "Before You Commit"));
+    insert(_el$22, () => tr2(locale(), "化合物精炼预估", "Compound Refining Quote"));
+    insert(_el$23, () => tr2(locale(), "请求预估不会提交精炼、扣除电力或生成回执。", "Requesting a quote does not submit refining, spend electricity, or create a receipt."));
+    _el$25.addEventListener("submit", requestQuote);
+    insert(_el$27, () => tr2(locale(), "精炼量（克）", "Refine amount (g)"));
+    _el$28.$$input = (event) => setCompoundMassG(event.currentTarget.value);
+    insert(_el$29, (() => {
+      var _c$2 = memo(() => !!requesting());
+      return () => _c$2() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求预估", "Request quote");
+    })());
+    insert(_el$24, (() => {
+      var _c$3 = memo(() => !!visibleError());
+      return () => _c$3() ? (() => {
+        var _el$30 = _tmpl$5$2();
+        insert(_el$30, visibleError);
+        return _el$30;
+      })() : null;
+    })(), null);
+    insert(_el$24, (() => {
+      var _c$4 = memo(() => !!visibleStatus());
+      return () => _c$4() ? (() => {
+        var _el$31 = _tmpl$6$1();
+        insert(_el$31, visibleStatus);
+        return _el$31;
+      })() : null;
+    })(), null);
+    insert(_el$24, (() => {
+      var _c$5 = memo(() => !!props.quote);
+      return () => _c$5() ? createComponent(RefineQuotePreflightCard, {
+        get quote() {
+          return props.quote;
+        },
+        get locale() {
+          return locale();
+        },
+        tr: tr2
+      }) : null;
+    })(), null);
+    createRenderEffect((_p$) => {
+      var _v$ = tr2(locale(), "精炼量（克）", "Refine amount (g)"), _v$2 = requesting();
+      _v$ !== _p$.e && setAttribute(_el$28, "aria-label", _p$.e = _v$);
+      _v$2 !== _p$.t && (_el$29.disabled = _p$.t = _v$2);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0
+    });
+    createRenderEffect(() => _el$28.value = compoundMassG());
+    return _el$18;
+  })();
+}
+delegateEvents(["input"]);
+function RefineQuoteGameplayPanel(props) {
+  return createComponent(RefineQuotePreflightPanel, {
+    get quote() {
+      return props.core.state.refineQuotePreflight;
+    },
+    get requestState() {
+      return props.core.state.refineQuoteRequest;
+    },
+    get requestRefineQuote() {
+      return props.core.requestRefineQuote;
+    },
+    get locale() {
+      return props.locale;
+    },
+    get tr() {
+      return props.tr;
+    }
+  });
+}
+function ProductValidationQuoteGameplayPanel(props) {
+  return createComponent(ProductValidationQuotePanel, {
+    get quote() {
+      return props.core.state.productValidationQuote;
+    },
+    get requestState() {
+      return props.core.state.productValidationQuoteRequest;
+    },
+    get requestProductValidationQuote() {
+      return props.core.requestProductValidationQuote;
+    },
+    get locale() {
+      return props.locale;
+    },
+    get tr() {
+      return props.tr;
+    }
+  });
+}
 const refineQuotePreflightFixture = Object.freeze({
   owner_agent_id: "agent-0",
   compound_mass_g: 40,
@@ -13995,14 +14043,8 @@ function WorldSummaryPanel() {
             },
             locale,
             tr
-          }), createComponent(RefineQuotePreflightPanel, {
-            get quote() {
-              return state.refineQuotePreflight;
-            },
-            get requestState() {
-              return state.refineQuoteRequest;
-            },
-            requestRefineQuote,
+          }), createComponent(RefineQuoteGameplayPanel, {
+            core,
             get locale() {
               return locale();
             },
@@ -14097,14 +14139,8 @@ function WorldSummaryPanel() {
               },
               liveRegion: true
             })
-          }), createComponent(ProductValidationQuotePanel, {
-            get quote() {
-              return state.productValidationQuote;
-            },
-            get requestState() {
-              return state.productValidationQuoteRequest;
-            },
-            requestProductValidationQuote,
+          }), createComponent(ProductValidationQuoteGameplayPanel, {
+            core,
             get locale() {
               return locale();
             },
