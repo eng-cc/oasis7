@@ -10,7 +10,7 @@
 - 想确认 native/Web 配置、设置、反馈与转账的共享语义、平台差异、结果和恢复边界：先读 `game-client-launcher-cross-surface-action-parity.prd.md`；control plane、GUI-agent 机器接口仍读 `game-client-launcher-control-plane-and-machine-interface.prd.md`
 - 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
 - 想确认 launcher 的语言/配置清晰度、blocked/observer 状态与响应式自引导边界：先读 `game-client-launcher-guided-configuration-and-usability.prd.md`；它不构成玩家入口、network readiness 或发布承诺
-- 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
+- 想确认 launcher 与 chain runtime、execution world、stale session/recovery 或 browser/WASM runtime compatibility 的边界：先读 `game-client-launcher-runtime-session-continuity.prd.md`；native/Web 控制请求、结果和诊断表现再读 control-plane authority
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -42,7 +42,7 @@
 - 适合问题:
   - native 与 Web control plane 哪些能力要保持一致
   - Web console / settings / feedback 的当前 canonical 口径是什么
-  - UI schema、required config 与 wasm time compat 相关问题从哪里下钻
+  - UI schema、required config 与 wasm time compat 相关问题从哪里下钻：控制表现读本簇两份 stable authority；runtime/session/WASM mechanics 转至下一簇的 successor
 
 ### 3. Blockchain explorer 与链上可见性
 - 首读入口:
@@ -54,12 +54,11 @@
 
 ### 4. Runtime / execution world 边界
 - 首读入口:
-  - `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
-  - `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
-  - `game-client-launcher-chain-runtime-stale-execution-world-recovery-2026-03-12.prd.md`
+  - `game-client-launcher-runtime-session-continuity.prd.md`
 - 适合问题:
   - launcher 与 chain runtime 的职责边界在哪里
-  - execution world dir 输出、恢复与 stale world 处理如何收口
+  - execution world 输出、session continuity、恢复与 stale world 处理如何收口
+  - browser/WASM runtime compatibility、轮询或 lifecycle 细节应由哪个专业 authority 复核
   - 这类问题何时需要转给 runtime / QA 角色复核
 
 ### 5. 引导配置、feedback、transfer 与自引导体验
