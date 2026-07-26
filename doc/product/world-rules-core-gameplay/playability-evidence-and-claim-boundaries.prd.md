@@ -54,6 +54,14 @@ oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性�
 
 每个结论必须绑定其 formal 玩家入口和当前证据窗口。`viewer` 与 `pure_api` 的证据不能互相代签；当前公开状态与对外 claim envelope 仍由根 `README.md` 和玩家入口与发行模块拥有。
 
+### 4.1 结论比较单位
+
+产品建议只能比较同一结论比较单位内的证据：`体验目标 + formal 玩家入口 + 候选版本或明确变更范围 + 证据窗口`。其中任一项不同，信号都只能作为相邻观察，不能与当前单位合并后升级结论。
+
+- 同一入口上的不同候选版本，或同一候选版本上的不同体验目标，必须分别说明其已证明与未证明范围；不得以一个单位的正向信号抵消另一个单位的断点。
+- 当变更范围无法辨识，或证据无法回链到一个结论比较单位时，该信号只能支持 `watch`，不能支持 `go`；若它正被用于支撑既有较强 claim，则该 claim 应降为 `hold`，直至范围重新可比。
+- 本规则定义产品结论的比较语义，不新增测试字段、产物 schema、版本标识格式或当前 release verdict；这些仍由相应专业域维护。
+
 ## 5. 与相邻产品专题的边界
 
 - [`首局与持续游玩`](first-session-and-continuation.prd.md)定义首局信任、后引导和首次持续能力的具体产品结果；本文定义这些结果可被作出何种可玩性结论。
@@ -65,7 +73,7 @@ oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性�
 
 - PE-1：代表性样例能够用同一条因果链说明玩家行动、可归因世界变化、新选择或价值，以及下一决策或回访理由。
 - PE-2：任何仅证明自动化通过、世界活跃或内部模拟正面的样例，均不会被表述为已证明真实玩家愿意继续。
-- PE-3：产品结论明确标明其支持的层级、formal 玩家入口、证据窗口和未证明部分；低层证据不越级代签 `L4A`、`L4B` 或 `L5`。
+- PE-3：产品结论明确标明其支持的层级、体验目标、formal 玩家入口、候选版本或明确变更范围、证据窗口和未证明部分；只有同一结论比较单位内的证据可以合并，低层证据不越级代签 `L4A`、`L4B` 或 `L5`。
 - PE-4：`go/watch/hold/block` 建议不会扩大公开状态、发行就绪或长期留存承诺，并在证据冲突或玩家杠杆缺失时保持 `hold` 或 `block`。
 
 ### 6.1 验收追踪
@@ -73,7 +81,7 @@ oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性�
 | 成功标准 | 专业 owner | 专业域权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | PE-1 | producer_system_designer / gameplay_designer / qa_engineer | `doc/game/prd.md`; `doc/testing/prd.md` | player leverage 与 world-activity 区分的代表性样例 | test_tier_full |
-| PE-2 / PE-3 | producer_system_designer / qa_engineer | `doc/testing/prd.md`; `testing-manual.md` | 分层证据、non-substitution 与 formal-surface 组合审计 | test_tier_required |
+| PE-2 / PE-3 | producer_system_designer / qa_engineer | `doc/testing/prd.md`; `testing-manual.md` | 分层证据、non-substitution、结论比较单位与 formal-surface 组合审计 | test_tier_required |
 | PE-4 | producer_system_designer / qa_engineer / liveops_community | 根 `README.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/prd.md` | 当前证据窗口、产品建议与公开 claim 边界对账 | test_tier_full |
 
 具体测试命令、卡片字段、角色触发矩阵、执行记录和当前 verdict 均由专业域与 GitHub task issue evidence 维护。

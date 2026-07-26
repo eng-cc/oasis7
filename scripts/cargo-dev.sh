@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: preserve Windows Git Bash/PowerShell and Linux/macOS toolchain discovery.
 set -euo pipefail
 
 usage() {
@@ -50,11 +51,39 @@ esac
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CANONICAL_REPO_ROOT="$(cd "$COMMON_GIT_DIR/.." && pwd -P)"
-HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
-RUSTC_RELEASE="$(rustc -vV | sed -n 's/^release: //p')"
+if ! PYTHON_BIN="$("$REPO_ROOT/scripts/pm/find-python-with-module.sh" ast)"; then
+  echo "error: cannot find a functional Python interpreter for cargo target discovery" >&2
+  exit 1
+fi
+
+resolve_rustc() {
+  local candidate
+  if candidate="$(command -v rustc 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  case "${OSTYPE:-}" in
+    msys*|cygwin*)
+      for candidate in "${RUSTUP_HOME:-$HOME/.rustup}"/toolchains/*/bin/rustc.exe; do
+        [[ -x "$candidate" ]] || continue
+        "$candidate" -vV >/dev/null 2>&1 || continue
+        printf '%s\n' "$candidate"
+        return 0
+      done
+      ;;
+  esac
+  return 1
+}
+
+if ! RUSTC_BIN="$(resolve_rustc)"; then
+  echo "error: rustc not found on PATH or in the Windows Rustup toolchain directory" >&2
+  exit 1
+fi
+HOST_TRIPLE="$("$RUSTC_BIN" -vV | sed -n 's/^host: //p')"
+RUSTC_RELEASE="$("$RUSTC_BIN" -vV | sed -n 's/^release: //p')"
 
 cache_namespace() {
-  python3 - "$COMMON_GIT_DIR" <<'PY'
+  "$PYTHON_BIN" - "$COMMON_GIT_DIR" <<'PY'
 from __future__ import annotations
 
 import hashlib

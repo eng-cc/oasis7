@@ -1,7 +1,8 @@
-#!/usr/bin/env python3
+# Cross-platform test contract: setup must run on Windows PowerShell and Linux/macOS without weakening Git fallback coverage.
 
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,17 @@ import unittest
 
 SCRIPT = pathlib.Path(__file__).with_name("bootstrap-task-snapshot.py")
 UID = "task_test"
+
+
+def git_executable() -> str:
+    executable = shutil.which("git")
+    if executable is None and sys.platform == "win32":
+        candidate = pathlib.Path("C:/Program Files/Git/cmd/git.exe")
+        if candidate.is_file():
+            executable = str(candidate)
+    if executable is None:
+        raise RuntimeError("bootstrap-task-snapshot test setup cannot find git")
+    return executable
 
 
 class BootstrapTaskSnapshotTests(unittest.TestCase):
@@ -32,7 +44,12 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         self.temp.cleanup()
 
     def git(self, *args: str) -> str:
-        return subprocess.run(["git", "-C", str(self.root), *args], check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+        return subprocess.run(
+            [git_executable(), "-C", str(self.root), *args],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout.strip()
 
     def write_mapping(self, **changes: object) -> None:
         task = {
@@ -51,7 +68,9 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         task.update(changes)
         self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "eng-cc", "number": 1}, "tasks": {UID: task}}), encoding="utf-8")
 
-    def run_helper(self, command: str, request: str = "request-1") -> subprocess.CompletedProcess[str]:
+    def run_helper(
+        self, command: str, request: str = "request-1", env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         args = [
             sys.executable, str(SCRIPT), command, "--repo-root", str(self.root),
             "--task-uid", UID, "--request-identity", request,
@@ -59,7 +78,7 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         ]
         if command in {"create", "validate-or-create"}:
             args.extend(("--producer", "tpm"))
-        return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
 
     def create(self) -> None:
         result = self.run_helper("create")
@@ -135,6 +154,14 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         payload["producer"] = "tampered"
         self.snapshot.write_text(json.dumps(payload), encoding="utf-8")
         self.assert_invalid("snapshot digest mismatch")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows Git fallback contract")
+    def test_validate_finds_windows_git_when_path_omits_git(self) -> None:
+        self.create()
+        environment = dict(__import__("os").environ)
+        environment["PATH"] = str(self.root / "no-git-path")
+        result = self.run_helper("validate", env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

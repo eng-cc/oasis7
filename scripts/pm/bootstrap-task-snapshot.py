@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Cross-platform maintenance: preserve Windows Git Bash/PowerShell and Linux/macOS Git discovery behavior.
 """Create and validate an immutable bootstrap task snapshot."""
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -18,6 +20,17 @@ SCHEMA = "oasis7.bootstrap-task-snapshot/v1"
 
 class SnapshotError(Exception):
     pass
+
+
+def git_executable() -> str:
+    executable = shutil.which("git")
+    if executable is None and sys.platform == "win32":
+        candidate = pathlib.Path("C:/Program Files/Git/cmd/git.exe")
+        if candidate.is_file():
+            executable = str(candidate)
+    if executable is None:
+        raise SnapshotError("git executable not found on PATH or in the standard Windows Git installation")
+    return executable
 
 
 def canonical_bytes(value: dict[str, Any]) -> bytes:
@@ -31,8 +44,9 @@ def digest(value: dict[str, Any]) -> str:
 
 
 def git(repo_root: pathlib.Path, *args: str) -> str:
+    executable = git_executable()
     result = subprocess.run(
-        ["git", "-C", str(repo_root), *args],
+        [executable, "-C", str(repo_root), *args],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -56,9 +70,10 @@ def load_task(tasks_json: pathlib.Path, task_uid: str) -> tuple[dict[str, Any], 
 
 def resolve_base(repo_root: pathlib.Path, default_branch: str) -> tuple[str, str]:
     candidates = (f"refs/remotes/origin/{default_branch}", f"refs/heads/{default_branch}")
+    executable = git_executable()
     for ref in candidates:
         result = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            [executable, "-C", str(repo_root), "rev-parse", "--verify", f"{ref}^{{commit}}"],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,

@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: preserve Windows Git Bash/PowerShell and Linux/macOS bootstrap behavior.
 set -euo pipefail
 
 CALLER_DIR="$(pwd -P)"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
+
+if ! PYTHON_BIN="$("$ROOT_DIR/scripts/pm/find-python-with-module.sh" ast)"; then
+  echo "error: cannot find a functional Python interpreter required for task worktree bootstrap" >&2
+  exit 1
+fi
 
 usage() {
   cat <<'USAGE'
@@ -176,7 +182,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
 fi
 
 slugify() {
-  python3 - "$1" <<'PY'
+  "$PYTHON_BIN" - "$1" <<'PY'
 from __future__ import annotations
 
 import re
@@ -190,7 +196,7 @@ PY
 }
 
 resolve_abs_path() {
-  python3 - "$CALLER_DIR" "$1" <<'PY'
+  "$PYTHON_BIN" - "$CALLER_DIR" "$1" <<'PY'
 from __future__ import annotations
 
 from pathlib import Path
@@ -206,7 +212,7 @@ PY
 }
 
 worktree_id_for_path() {
-  python3 - "$1" <<'PY'
+  "$PYTHON_BIN" - "$1" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -220,7 +226,7 @@ PY
 }
 
 branch_checkout_path() {
-  python3 - "$COMMON_GIT_DIR" "$1" <<'PY'
+  "$PYTHON_BIN" - "$COMMON_GIT_DIR" "$1" <<'PY'
 from __future__ import annotations
 
 import subprocess
@@ -258,7 +264,7 @@ PY
 extract_json_field() {
   local key="$1"
   local payload="$2"
-  JSON_PAYLOAD="$payload" python3 - "$key" <<'PY'
+  JSON_PAYLOAD="$payload" "$PYTHON_BIN" - "$key" <<'PY'
 from __future__ import annotations
 
 import json
@@ -288,7 +294,7 @@ fi
 [[ -n "$TASK_SLUG" ]] || { echo "error: <task> becomes empty after slug normalization" >&2; exit 2; }
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   PM_STORE_PATH="$ROOT_DIR/scripts/pm/pm_store.py"
-  if ! CANONICAL_MODULES="$(python3 - "$PM_STORE_PATH" <<'PY'
+  if ! CANONICAL_MODULES="$("$PYTHON_BIN" - "$PM_STORE_PATH" <<'PY'
 import ast
 import pathlib
 import sys
@@ -312,6 +318,7 @@ PY
   fi
   MODULE_SUPPORTED=0
   while IFS= read -r supported_module; do
+    supported_module="${supported_module%$'\r'}"
     if [[ "$MODULE_SLUG" == "$supported_module" ]]; then
       MODULE_SUPPORTED=1
       break
@@ -544,7 +551,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
     exit "$BOOTSTRAP_STATUS"
   fi
   PM_BOOTSTRAP_SNAPSHOT_PATH="$TARGET_PATH/.pm/scratch/$PM_TASK_UID/bootstrap-task-snapshot.json"
-  PM_BOOTSTRAP_SNAPSHOT_DIGEST="$(python3 - "$PM_BOOTSTRAP_SNAPSHOT_PATH" <<'PY'
+  PM_BOOTSTRAP_SNAPSHOT_DIGEST="$("$PYTHON_BIN" - "$PM_BOOTSTRAP_SNAPSHOT_PATH" <<'PY'
 import json
 import sys
 
@@ -553,7 +560,7 @@ PY
 )"
 fi
 
-SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" "$PM_BOOTSTRAP_SNAPSHOT_PATH" "$PM_BOOTSTRAP_SNAPSHOT_DIGEST" <<'PY'
+SUMMARY_JSON="$("$PYTHON_BIN" - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" "$PM_BOOTSTRAP_SNAPSHOT_PATH" "$PM_BOOTSTRAP_SNAPSHOT_DIGEST" <<'PY'
 from __future__ import annotations
 
 import json

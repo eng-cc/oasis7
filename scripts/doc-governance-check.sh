@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: preserve Windows Git Bash/PowerShell and Linux/macOS governance-check behavior.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+
+if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" ast)"; then
+  echo "doc-governance-check: cannot find a functional Python interpreter" >&2
+  exit 1
+fi
 
 usage() {
   cat <<'USAGE'
@@ -88,11 +94,45 @@ regex_match_file() {
 regex_match_with_line_numbers() {
   local regex="$1"
   shift
+  local status=1 matched=0 file
+  local -a batch=()
   if command -v rg >/dev/null 2>&1; then
-    rg -n -e "$regex" "$@"
-    return $?
+    if [[ "$#" -eq 0 ]]; then
+      rg -n -e "$regex"
+      return $?
+    fi
+    for file in "$@"; do
+      batch+=("$file")
+      if [[ "${#batch[@]}" -lt 64 ]]; then
+        continue
+      fi
+      if rg -n -e "$regex" "${batch[@]}"; then
+        matched=1
+      else
+        status=$?
+        [[ "$status" -eq 1 ]] || return "$status"
+      fi
+      batch=()
+    done
+    if [[ "${#batch[@]}" -gt 0 ]]; then
+      if rg -n -e "$regex" "${batch[@]}"; then
+        matched=1
+      else
+        status=$?
+        [[ "$status" -eq 1 ]] || return "$status"
+      fi
+    fi
+    [[ "$matched" -eq 1 ]]
+    return
   fi
-  grep -nE -- "$regex" "$@"
+  for file in "$@"; do
+    if grep -nE -- "$regex" "$file"; then
+      status=0
+    elif [[ "$?" -gt 1 ]]; then
+      status=2
+    fi
+  done
+  return "$status"
 }
 
 contains_literal() {
@@ -245,12 +285,14 @@ is_topic_project_doc() {
 }
 
 check_doc_path_references_batch() {
-  local exempt_tmp
+  local exempt_tmp doc_list_tmp
   local status=0
   exempt_tmp=$(mktemp)
+  doc_list_tmp=$(mktemp)
   printf '%s\n' "${REFERENCE_EXISTENCE_EXEMPT_DOCS[@]}" > "$exempt_tmp"
+  printf '%s\0' "${all_doc_files[@]}" > "$doc_list_tmp"
 
-  python3 - "$exempt_tmp" "${all_doc_files[@]}" <<'PY' || status=$?
+  "$PYTHON_BIN" - "$exempt_tmp" "$doc_list_tmp" <<'PY' || status=$?
 from __future__ import annotations
 
 from pathlib import Path
@@ -259,7 +301,12 @@ import sys
 
 
 exempt_path = Path(sys.argv[1])
-doc_files = sys.argv[2:]
+doc_list_path = Path(sys.argv[2])
+doc_files = [
+    entry.decode("utf-8")
+    for entry in doc_list_path.read_bytes().split(b"\0")
+    if entry
+]
 exempt_docs = {
     line.strip()
     for line in exempt_path.read_text(encoding="utf-8").splitlines()
@@ -281,6 +328,7 @@ for file in doc_files:
 PY
 
   rm -f "$exempt_tmp"
+  rm -f "$doc_list_tmp"
   return "$status"
 }
 
@@ -551,7 +599,7 @@ project_task_policy_diff+=$'\n'
 project_task_policy_diff+=$(git diff --unified=0 --no-color -- 'doc/**/*.project.md' 'doc/*/project.md' 'doc/*.project.md' || true)
 check_added_project_task_row_policy "$project_task_policy_diff"
 
-if ! python3 scripts/product-doc-governance-check.py; then
+if ! "$PYTHON_BIN" scripts/product-doc-governance-check.py; then
   fail "product documentation overlay contract failed"
 fi
 
