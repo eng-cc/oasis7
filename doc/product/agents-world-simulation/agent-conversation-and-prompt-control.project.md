@@ -28,25 +28,20 @@
 
 ## 完成条件
 
-已完成：产品模块主 PRD 可达本专题且专题回链主 PRD；产品承诺、产品设计与专业实现边界已分离；已退役 EGUI 布局未被提升为当前产品能力；活跃索引和 Viewer landing 已改指当前权威；12 个源文件已整组删除。
-
-待完成：合并前治理检查、精确旧路径断言与 involved-role review。
+本迁移收据只在以下产品文档事实同时成立时有效：产品模块主 PRD 可达本专题且专题回链主 PRD；产品承诺、产品设计与专业实现边界已分离；已退役 EGUI 布局未被提升为当前产品能力；活跃索引和 Viewer landing 已改指当前权威；12 个源文件已整组删除。合并、review 和任务完成事实不由本文件证明。
 
 ## 任务拆解
 
-1. 盘点 12 个源文件的产品、设计、专业实现与历史状态语义。
-2. 建立长期产品 PRD/design/project，并补强当前 Viewer 专业入口。
-3. 修复活跃索引和 landing 引用，删除全部已吸收源文件。
-4. 完成治理验证、专业 review 与合并收口。
+不适用。本文件不维护执行计划、checkbox、owner 队列或当前任务进度；相关真值只进入 GitHub task issue evidence。
 
 ## 依赖
 
 - [`doc/product/README.md`](../README.md) 的迁移治理与产品/专业边界。
 - [`doc/world-simulator/prd.md`](../../world-simulator/prd.md) 的 AgentChat、PromptControl 与 runtime authority。
 - [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 的当前 surface、权限与操作合同。
-- GitHub issue #2597 的任务、review 与合并证据。
 
 ## 状态
 
-- 当前阶段：语义迁移和源文件删除已完成，等待治理验证与 involved-role review。
-- 残余迁移债务：无；旧实现任务与测试证据只从 Git history / GitHub task issue evidence 追溯。
+- 文档生命周期：`active`。
+- 迁移收据：`finalized`，表示上方 12 个源文件的产品语义和专业边界已归位；不表示 PR、review、CI、发布或任务完成。
+- 历史追溯：旧实现任务与测试证据只从 Git history / GitHub task issue evidence 进入。
