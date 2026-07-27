@@ -67,7 +67,7 @@ Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流�
 
 2026-07-15 governance note: 早期 launcher 专题三件套与已完成的 design/project 拆解已退役删除；当前 launcher / playtest / Web UI 闭环入口收敛到 `testing-manual.md`、`doc/testing/launcher/README.md`、两份 launcher 现行 PRD、Web UI manual、GitHub task issue evidence comments 与 Git 历史。
 
-Viewer performance historical/provenance note: `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.*` 是已完成的 legacy methodology closure，依赖已移除的 `viewer-owr4-stress` / old `perf_probe` 路径；当前 Viewer performance 入口为 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md` 与 `testing-manual.md` 的 Viewer performance probe 指引。Delete-candidate boundary: focused `rg` 确认只剩 self/provenance 引用前，保留该 legacy triplet 作为历史证据；不得把它作为当前 operator guidance。
+Performance observability historical/provenance note: 2026-02-25 的 runtime foundation、LLM/API decoupling、Viewer native bottleneck 与 Viewer methodology 四组三件套已完成专业权威合并并物理删除；当前 authority 为 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md` 与 `testing-manual.md`。旧 Viewer native `RenderPerfSummary` / `PerfHotspot` / runtime-stage / CSV contract 随 old `perf_probe` / `viewer-owr4-stress` 退役；当前浏览器 probe 不承诺 hotspot 分类或 runtime-stage diagnosis。历史里程碑、阈值来源与完成证据仅从 Git/GitHub task evidence 追溯。
 
 Builtin wasm m1 determinism historical/provenance note: `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.*` 是已完成的 historical triplet，旧 independent multi-runner / host-native 对账口径已并入当前 Docker canonical `wasm-determinism-gate`。当前 builtin wasm 独立 gate 入口为 `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` 与 `.github/workflows/wasm-determinism-gate.yml`；删除该 legacy triplet 前，需 focused `rg` 确认只剩 self/provenance 引用。
 
@@ -100,9 +100,6 @@ Wasm build determinism guard historical/provenance note: `doc/testing/governance
 | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.prd.md` | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.design.md` | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.project.md` |
 | `doc/testing/longrun/s10-five-node-real-game-soak.prd.md` | `doc/testing/longrun/s10-five-node-real-game-soak.design.md` | `doc/testing/longrun/s10-five-node-real-game-soak.project.md` |
 | `doc/testing/manual/systematic-application-testing-manual.prd.md` | `doc/testing/manual/systematic-application-testing-manual.design.md` | `doc/testing/manual/systematic-application-testing-manual.project.md` |
-| `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.prd.md` | `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.design.md` | `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.project.md` |
-| `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.prd.md` | `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.design.md` | `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.project.md` |
-| `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.prd.md` | `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.design.md` | `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.project.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

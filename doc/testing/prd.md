@@ -167,6 +167,7 @@
   - `doc/testing/templates/playability-l4-role-review-card-template.md`
   - `doc/testing/templates/playability-l4-persona-card-template.md`
   - `doc/testing/templates/playability-l4-summary-template.md`
+  - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`（当前跨 surface 性能覆盖、runtime/LLM observability 与 Viewer Web gate authority）
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`

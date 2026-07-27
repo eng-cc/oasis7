@@ -20,11 +20,13 @@
 - 分层层：`test_tier_required` / `test_tier_full` 的职责分工。
 - 证据层：测试结果、失败签名、门禁与复审记录。
 - 发布层：go/no-go、回归范围与阻断结论。
+- 性能证据层：`performance-coverage-gap-matrix-2026-06-09.md` 统一当前 runtime/LLM observability、Viewer Web browser metrics、tier 与 report-only/blocking 边界；历史 native probe schema 不反向定义当前 Web harness。
 - 好玩性证据层：`L1` automation、`L2` probe、`L3` telemetry/experiment、`L4A` synthetic review、`L4B` embodied-agent playtest 与 `L5` external signals 按证明强度递进；低层不替代高层，世界活动不等于玩家杠杆。
 - 内部评审层：standard-role packet/card 收口，persona panel 只提供结构化假设并回流角色结论，不新增正式 `player` 角色或外部验证结论。
 
 ## 4. 集成点
 - `testing-manual.md`
+- `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`
 - `doc/playability_test_result/prd.md`
 - `doc/core/prd.md`
 - `doc/scripts/prd.md`
