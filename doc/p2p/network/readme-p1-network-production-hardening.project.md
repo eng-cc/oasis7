@@ -9,8 +9,8 @@
 - [x] T1 (PRD-P2P-MIG-086)：实现 libp2p request 多 peer 轮换重试 + 无 peer 可控回退策略，并补测试。
 - [x] T2 (PRD-P2P-MIG-086)：实现 node 共识消息 libp2p pubsub 主路径（ingest/broadcast）并补测试。
 - [x] T3 (PRD-P2P-MIG-086)：执行 `env -u RUSTC_WRAPPER cargo test -p oasis7_node` + `env -u RUSTC_WRAPPER cargo check`，回写文档/devlog 收口。
-- [x] node-network-authority-consolidation (PRD-P2P-MIG-086) [test_tier_required]: 合并 net stack unification 与 wasm32/libp2p compile guard 的现行专业语义，冻结 native `oasis7_net` 单向依赖、公开 API、peer 轮换/失败分类、默认无 peer 错误、显式本地 fallback 及 wasm unavailable stub 边界。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
-- [ ] node-wasm-libp2p-compile-guard (PRD-P2P-MIG-086) [test_tier_required]: 以 `env -u RUSTC_WRAPPER cargo check -p oasis7_node --target wasm32-unknown-unknown --features libp2p` 作为 wasm32 API/target cfg 编译护栏，并消除当前 `getrandom 0.2` 缺少 `js` feature 的依赖闭包阻断。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
+- [x] node-network-authority-consolidation (PRD-P2P-MIG-105-001) [test_tier_required]: 承接原 net-stack-unification-readme 专题 ID，冻结 native `oasis7_net` 单向依赖、公开 API、peer 轮换/失败分类、默认无 peer 错误及显式本地 fallback。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
+- [ ] node-wasm-libp2p-compile-guard (PRD-P2P-MIG-104-001) [test_tier_required]: 承接原 wasm32-libp2p-compile-guard 专题 ID，以 `env -u RUSTC_WRAPPER cargo check -p oasis7_node --target wasm32-unknown-unknown --features libp2p` 作为 wasm32 API/target cfg 编译护栏，并消除当前 `getrandom 0.2` 缺少 `js` feature 的依赖闭包阻断。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
 
 ## 依赖
 - T2 依赖 T1（先稳定网络请求层，再接共识主循环）。

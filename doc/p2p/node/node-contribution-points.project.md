@@ -13,8 +13,8 @@
 - [x] NCP-2 (PRD-P2P-MIG-091)：实现节点积分结算引擎（额外计算/存储/在线/惩罚 + 积分台账）。
 - [x] NCP-3 (PRD-P2P-MIG-091)：补齐单元测试并在 runtime 模块导出接口，执行 test_tier_required 回归。
 - [x] NCP-4 (PRD-P2P-MIG-091)：回写项目状态与 devlog，完成收口。
-- [x] node-points-runtime-closure (PRD-P2P-MIG-091) [test_tier_required]: 完成 epoch 幂等结算与恢复/重放闭环，保证快照更新不静默改写奖励台账。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
-- [x] node-points-multi-node-closure (PRD-P2P-MIG-091) [test_tier_required]: 完成至少 3 节点、连续 2 epoch 的闭环验证，覆盖积分池守恒、贡献排序、惩罚效果与累计积分单调性。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
+- [x] node-points-runtime-closure (PRD-P2P-MIG-090-001) [test_tier_required]: 承接原 runtime-closure 专题 ID，完成 epoch 幂等结算与恢复/重放闭环，保证快照更新不静默改写奖励台账。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
+- [x] node-points-multi-node-closure (PRD-P2P-MIG-089-001) [test_tier_required]: 承接原 multi-node-closure-test 专题 ID，完成至少 3 节点、连续 2 epoch 的闭环验证，覆盖积分池守恒、贡献排序、惩罚效果与累计积分单调性。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
 
 ## 依赖
 - doc/p2p/node/node-contribution-points.prd.md
