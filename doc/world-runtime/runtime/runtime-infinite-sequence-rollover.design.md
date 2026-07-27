@@ -22,6 +22,7 @@
 - 序列语义必须保持单调和可验证。
 - 滚动不得破坏重放或同步兼容性。
 - 不在本专题扩展新的全局 ID 体系。
+- 本专题仅拥有已持久化 era 的 rollover 语义；余额、票权、高度、slot、lease 与 membership 时间计算遵循 `runtime-numeric-safety` 的受检失败或显式 clamp 契约。
 
 ## 5. 设计演进计划
 - 先明确边界与滚动规则。
