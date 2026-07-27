@@ -4,9 +4,9 @@
 - 对应项目管理文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md`
 
 审计轮次: 5
-## ROUND-002 主从口径
-- 主入口：`doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md`。
-- `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 作为增量子文档维护，跨专题统一口径以本主文档为准。
+## 专业权威口径
+- 本文件是 Observer 模式报告、自动记录桥接与运行态计数的当前专业权威。
+- 原统计桥接 `PRD-P2P-MIG-106-001` 与策略可观测性 `PRD-P2P-MIG-107-001` 的有效语义与任务追踪已合并到本三件套；源文件删除后只从 Git history 与 GitHub task evidence 追溯。
 
 ## 1. Executive Summary
 - Problem Statement: 将 `ObserverClient` 已有的模式化可观测报告接入运行态统计，形成“持续监控”基础闭环。
@@ -28,6 +28,8 @@
   - AC-2: 提供针对 `HeadSyncModeReport` 与 `HeadSyncModeWithDhtReport` 的记录接口。
   - AC-3: 提供快照读取接口，便于上层 runtime/面板周期拉取并展示。
   - AC-4: 补充单元测试，覆盖各模式计数正确性与回退计数。
+  - AC-5: 非 DHT 与 DHT 模式都必须提供包含 `mode`、原同步报告和 `fallback_used` 的 observed report，且不破坏既有 `HeadSyncReport`。
+  - AC-6: 提供单轮与 follow 自动记录桥接；每个成功产生的 observed report 记录一次，follow 保持原 `max_rounds` 与 `HeadFollowReport` 聚合语义。
 - Non-Goals:
   - Prometheus/OpenTelemetry exporter。
   - 跨进程或落盘持久化统计。
@@ -76,6 +78,17 @@
 - `ObserverRuntimeMetrics::record_mode_with_dht_report(&HeadSyncModeWithDhtReport)`
 - `ObserverRuntimeMetrics::snapshot() -> ObserverRuntimeMetricsSnapshot`
 
+### 模式可观测报告
+- `HeadSyncModeReport` 与 `HeadSyncModeWithDhtReport` 均包含 `mode`、既有 `HeadSyncReport` 和 `fallback_used`。
+- `sync_heads_with_mode_observed_report` 与 `sync_heads_with_dht_mode_observed_report` 分别覆盖非 DHT/DHT 路径。
+- `fallback_used` 必须在模式分发层按真实执行路径计算；不得修改既有 `HeadSyncReport` 字段来制造兼容性破坏。
+
+### 自动记录桥接
+- 单轮桥接：`sync_heads_with_mode_observed_report_and_record`、`sync_heads_with_dht_mode_observed_report_and_record`。
+- follow 桥接：`follow_heads_with_mode_and_metrics`、`follow_heads_with_dht_mode_and_metrics`。
+- 每次成功产出 observed report 后调用对应 `record_*`；follow 按轮记录，但最终 `HeadFollowReport` 聚合与 `max_rounds` 终止规则保持不变。
+- metrics 由调用方以 `&mut ObserverRuntimeMetrics` 持有，不引入隐式全局状态。
+
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - OSRM-1：设计文档与项目管理文档落地。
@@ -91,6 +104,8 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-P2P-MIG-108-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| PRD-P2P-MIG-106-001 | observer-metrics-bridge-authority | `test_tier_required` | 单轮/follow 自动记录与计数回归 | Observer metrics bridge |
+| PRD-P2P-MIG-107-001 | observer-mode-observability-authority | `test_tier_required` | 非 DHT/DHT observed report 与 fallback 回归 | Observer mode observability |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

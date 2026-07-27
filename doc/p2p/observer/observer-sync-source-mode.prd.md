@@ -5,11 +5,9 @@
 
 审计轮次: 5
 
-## ROUND-002 主从口径（2026-03-05）
-- 本文档为 Observer 同步源策略化的基线主文档（非 DHT 链路）。
-- DHT 组合同步源专题降级为增量子文档，保留差异项与实现追溯：
-  - `doc/p2p/observer/observer-sync-source-dht-mode.prd.md`
-  - `doc/p2p/observer/observer-sync-source-dht-mode.project.md`
+## 专业权威口径
+- 本文件是 Observer 非 DHT 与 DHT 组合同步源策略的当前专业权威。
+- 原 DHT 增量专题 `PRD-P2P-MIG-109-001` 的有效语义与任务追踪已合并到本三件套；源文件删除后只从 Git history 与 GitHub task evidence 追溯。
 
 ## 1. Executive Summary
 - Problem Statement: 为 `ObserverClient` 增加可配置的 head 同步源策略，显式控制“网络路径”与“路径索引路径”的使用方式。
@@ -33,8 +31,9 @@
   - AC-4: `NetworkOnly`
   - AC-5: `PathIndexOnly`
   - AC-6: `NetworkThenPathIndex`
+  - AC-7: DHT 组合模式提供 `NetworkWithDhtOnly`、`PathIndexOnly` 与 `NetworkWithDhtThenPathIndex`。
+  - AC-8: 只有网络+DHT 链路报错时才允许回退路径索引；若回退也失败，必须保留两个错误的可诊断上下文。
 - Non-Goals:
-  - DHT 链路下的策略组合（如 `NetworkWithDhtThenPathIndex`）。
   - 全局配置中心或动态热更新配置。
   - 指标埋点/告警联动。
 
@@ -64,6 +63,12 @@
 - `PathIndexOnly`：仅走路径索引恢复链路。
 - `NetworkThenPathIndex`：先走网络；仅在网络恢复报错时回退路径索引。
 
+### DHT 组合策略
+- `HeadSyncSourceModeWithDht::NetworkWithDhtOnly`：仅调用 `sync_from_heads_with_dht`，失败直接返回。
+- `HeadSyncSourceModeWithDht::PathIndexOnly`：仅走路径索引恢复。
+- `HeadSyncSourceModeWithDht::NetworkWithDhtThenPathIndex`：先走网络+DHT；只有该链路报错才回退路径索引。
+- DHT 是同步源组合能力增强，不改变 Observer 主同步与一致性语义。两段链路都失败时不得用最终错误覆盖首段网络/DHT 失败原因。
+
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - OSSM-1：设计文档与项目管理文档落地。
@@ -79,6 +84,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-P2P-MIG-110-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| PRD-P2P-MIG-109-001 | observer-sync-dht-authority | `test_tier_required` | DHT 组合模式与回退错误上下文回归 | Observer DHT 同步源 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

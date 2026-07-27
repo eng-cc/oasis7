@@ -33,7 +33,7 @@
   - 节点奖励怎么计、贡献分如何结算
   - 可赎回 power asset 与治理签名阶段如何拆分
   - 奖励、执行验证与原生交易结算的关系是什么
-- 说明: contribution points 的 `runtime-closure` 与 `multi-node-closure-test` 语义已合并进主三件套并删除源文件；`audit-hardening`、`signature-governance-phase3` 等仍存增量子文档不应代替主文档成为默认首读入口。
+- 说明: contribution points 的 `runtime-closure` / `multi-node-closure-test` 与 redeemable power asset 的 `audit-hardening` / `signature-governance-phase3` 语义均已合并进各自主三件套并删除源文件；历史过程由 Git 与 GitHub task evidence 追溯。
 
 ### 2. 复制、网络与 signer binding
 - 首读入口:

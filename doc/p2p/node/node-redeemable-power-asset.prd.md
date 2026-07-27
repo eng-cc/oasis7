@@ -4,10 +4,9 @@
 - 对应项目管理文档: `doc/p2p/node/node-redeemable-power-asset.project.md`
 
 审计轮次: 5
-## ROUND-002 主从口径
-- 主入口文档：`doc/p2p/node/node-redeemable-power-asset.prd.md`。
-- 从文档：`doc/p2p/node/node-redeemable-power-asset-audit-hardening.prd.md`、`doc/p2p/node/node-redeemable-power-asset-signature-governance-phase3.prd.md`。
-- 从文档仅维护增量约束，通用规格以主文档为准。
+## 专业权威口径
+- 本文件是可兑现节点资产、审计和签名治理的当前专业权威。
+- 原审计加固 `PRD-P2P-MIG-096-001` 与签名治理 `PRD-P2P-MIG-097-001` 的有效语义与任务追踪已合并到本三件套；源文件删除后只从 Git history 与 GitHub task evidence 追溯。
 
 ## 1. Executive Summary
 - Problem Statement: 将现有 Node Points 从“统计积分”升级为“可兑现协议资产”，使算力/存储节点可将收益兑换为 Agent 电力。
@@ -137,6 +136,14 @@ DomainEvent::PowerRedeemRejected {
 - 将 `NodeAssetBalance`、`ProtocolPowerReserve`、`NodeRewardMintRecord` 纳入快照。
 - 事件重放必须重建相同余额与储备结果；不一致视为状态错误。
 
+### 6) 审计与签名治理演进
+- `mintsig:v1:<sha256_hex>` 是覆盖 epoch、node、积分、铸造量、settlement hash 与 signer 绑定字段的可重算历史摘要，不等同真实私钥签名。
+- `mintsig:v2:<signature_hex>` 使用 Ed25519 对版本化结算载荷签名；`redeemsig:v1:<signature_hex>` 对 node、目标 Agent、credits、nonce 与 signer 绑定字段签名。
+- `verify_reward_mint_record_signature` 在兼容期支持 v1/v2；当前 chain-runtime reward worker 的安全默认要求 v2、禁用 v1 fallback、要求兑换签名，并要求 `signer_node_id == node_id`。
+- `RewardSignatureGovernancePolicy` 显式控制 `require_mintsig_v2`、`allow_mintsig_v1_fallback` 与 `require_redeem_signature`；策略要求无法满足时必须 fail closed。
+- `RewardAssetInvariantReport` 汇总 mint/burn/balance/record 并列出异常；它用于检测和审计，不自动修复或对账。旧快照即使可通过 serde 默认值反序列化，恢复/同步验收仍必须复核签名策略与 invariant report。
+- 当前 operator 证据入口是 chain-runtime CLI、runtime root 与 report artifacts；历史 `oasis7_viewer_live` 参数只作为发布 provenance，不是现行 runbook。
+
 #### 测试策略
 - `test_tier_required`：
   - 资产铸造守恒（points -> credits）；
@@ -171,6 +178,8 @@ DomainEvent::PowerRedeemRejected {
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-P2P-MIG-098-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| PRD-P2P-MIG-096-001 | redeemable-asset-audit-authority | `test_tier_required` + `test_tier_full` | v1 摘要、签名校验、invariant report 与恢复一致性 | Reward asset audit |
+| PRD-P2P-MIG-097-001 | redeemable-asset-signature-authority | `test_tier_required` + `test_tier_full` | v2/redeem 签名、治理拒绝路径与快照策略回归 | Reward signature governance |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
