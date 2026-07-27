@@ -59,7 +59,6 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md` |
-| `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.design.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` |
 | `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
 | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md` |
@@ -69,7 +68,7 @@
 | --- | --- |
 | lifecycle rules、war/governance/crisis/meta、module-driven production 历史 closure（正文已退役） | 玩家合同与生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包`、`doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`、战争/政治数值基线及 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`；历史审读见 Git history 与 Git history。 |
 | `gameplay-release-gap-closure-2026-02-21` | 正文已退役；历史内容从 Git history、core review logs 与 GitHub task issue evidence comments 追溯。 |
-| `gameplay-release-production-closure`、`gameplay-runtime-governance-closure` | 当前仍作为非首读 provenance 保留；当前判断不得以这两份旧 closure 替代 gameplay 主入口、现行专业域验证或 GitHub task evidence。 |
+| gameplay release-production、runtime-governance 与 base-runtime/WASM split closure | 正文已吸收到 gameplay top-level、world-runtime/WASM 专业权威；历史过程从 Git history 与 GitHub task evidence 追溯。 |
 
 上述 closure 均不作为 active gameplay truth；已完成语义收敛的正文直接退役，不保留 redirect 或占位文件，尚未完成逐文件迁移审计的旧 closure 仅保留为非首读 provenance。
 
@@ -77,10 +76,7 @@
 | 文档路径 | 类型 | 用途 |
 | --- | --- | --- |
 | `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md` | `runbook` | restricted grant 发放、撤销、过期与 incident runbook |
-| `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-release-gate-2026-03-06.md` | `evidence` | distributed consensus longrun release gate 采证 |
 | `doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md` | `runbook` | longrun P0 replay rollback 处理 runbook |
-| `doc/game/gameplay/gameplay-micro-loop-readable-world-checklist-2026-03-10.md` | `checklist` | micro-loop readable world 验收清单 |
-| `doc/game/gameplay/gameplay-micro-loop-visual-closure-evidence-2026-03-10-round009.md` | `evidence` | micro-loop visual closure 采证 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

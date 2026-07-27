@@ -12,7 +12,7 @@
 
 ### T0 文档与结构对齐
 - [x] 将顶层设计文档迁移到 `doc/game/`：`doc/game/gameplay/gameplay-top-level-design.prd.md`
-- [x] 将工程设计分册迁移并重命名为语义化文件：`doc/game/gameplay/gameplay-engineering-architecture.md`
+- 历史完成记录：gameplay 工程架构语义已吸收到 gameplay top-level 与 world-runtime/WASM 专业权威，过程从 Git history 追溯。
 - [x] 修复工程设计分册 Markdown 围栏问题，确保文档可正常渲染
 
 ### T1 顶层设计字段补齐
@@ -25,7 +25,7 @@
 - [x] 对战争与政治机制补充最小可行数值基线（成本/收益/冷却约束）
 
 ### T3 工程落地拆解（下阶段）
-- [x] 落地 Gameplay Runtime 治理闭环首个生产切片（`doc/game/gameplay/gameplay-runtime-governance-closure.prd.md`）：ABI gameplay 元数据、Runtime 校验、mode+kind 槽位冲突检测、就绪度报告与测试
+- 历史完成记录：Gameplay Runtime 治理闭环首个生产切片已落地；当前 ABI、manifest、slot conflict 与 readiness 边界见 `doc/world-runtime/prd.md#gameplay-生命周期协议边界` 和 `doc/world-runtime/wasm/wasm-interface.md`，历史 closure 从 Git history 追溯。
 - 历史完成：WASM Gameplay Kernel API 与生命周期规则切片（读取、提案、事件总线和 tick 推进）已落地；当前 runtime 协议边界见 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`，实现过程从 Git history 与 GitHub task evidence 追溯。
 - 历史完成：War/Governance/Crisis/Economic/Meta 模块 MVP 已完成协议与模块生产实现；玩家侧长期合同由 gameplay 顶层设计与战争/政治数值基线承接，已退役的 layer/module closure 增量专题从 Git history 与 GitHub task evidence 追溯。
 - [x] 为每个模块定义 `test_tier_required` 与 `test_tier_full` 测试矩阵（见下文“Gameplay 模块测试矩阵引用”）
@@ -93,7 +93,7 @@
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
 - 测试流程与分层矩阵：`testing-manual.md`
 - 世界规则与边界约束：`doc/product/world-rules-core-gameplay/prd.md`
-- 战争与政治数值基线：`doc/game/gameplay/gameplay-war-politics-mvp-baseline.md`
+- 战争与政治数值基线：`doc/product/world-rules-core-gameplay/war-politics-baseline.prd.md`
 
 ## Gameplay 模块测试矩阵引用
 

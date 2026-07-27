@@ -201,4 +201,4 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 - Viewer / Web / 运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - 闭环测试与套件矩阵：[`testing-manual.md`](./testing-manual.md)
 - 游戏玩法顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
-- 游戏玩法工程架构：[`doc/game/gameplay/gameplay-engineering-architecture.md`](./doc/game/gameplay/gameplay-engineering-architecture.md)
+- 游戏玩法顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)

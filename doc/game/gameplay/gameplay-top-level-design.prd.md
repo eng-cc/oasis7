@@ -69,6 +69,14 @@
 
 ---
 
+## 0.6 历史 closure 归并后的稳定边界
+
+- 玩家动作必须经过 canonical authority、资源、时间和权限约束；规则可通过受限模块扩展，但不能借扩展绕过这些边界，也不由历史 architecture/closure 文档推导任意 community mode 承诺。
+- Micro-loop 的稳定可读性链是：`supported action -> accepted/rejected -> progress/blocker -> readable consequence -> next/recovery`。视觉证据必须来自真实 player surface，包含 action-to-visible-state、console-clean interaction、截图和专业 visual review；一次性 checklist、template、handoff 或 round evidence 只保留在 Git history / GitHub task evidence，不能晋升为 release/QA pass。
+- Runtime/WASM refactor 不扩张玩家能力承诺。Gameplay module 的 manifest、ABI、权限、计量、identity、install/upgrade/disable、执行失败与 replay 由 world-runtime/WASM 专业权威定义；runtime readiness 不是玩法可玩性或后果可读性验收。
+- 发布或恢复期间，受影响玩家动作必须得到可见处置：保留、replay，或带恢复路径的拒绝，禁止静默丢失。当前发布、长稳、rollback 和 incident 规则只能引用 testing/runtime/P2P/ops 的现行权威，不复用历史 `pass` / `Go` 结论。
+- 战争与政治的数值、评分、成本、冷却和反支配风险已迁入 `doc/product/world-rules-core-gameplay/war-politics-baseline.prd.md`；战争仍不是当前 player-facing 主线，任何重启都需要独立平衡与玩家证据。
+
 # 第一部分：可玩性方法论
 
 ## 1.1 可玩性的底层公式
@@ -731,9 +739,9 @@ early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-ses
 
 ## 8.2 评审输入包
 
-- 玩法与目标基线：`doc/game/gameplay/gameplay-top-level-design.prd.md`、`doc/game/gameplay/gameplay-engineering-architecture.md`。
+- 玩法与目标基线：`doc/game/gameplay/gameplay-top-level-design.prd.md`；工程实现边界见 `doc/world-runtime/prd.md`。
 - Gameplay 生产落地证据：
-  - 玩家侧治理、战争、危机与元进度合同由本文对应章节、`doc/game/gameplay/gameplay-war-politics-mvp-baseline.md` 和当前测试矩阵承接；战争仍不是当前玩家-facing 主线。
+  - 玩家侧治理、战争、危机与元进度合同由本文对应章节、`doc/product/world-rules-core-gameplay/war-politics-baseline.prd.md` 和当前测试矩阵承接；战争仍不是当前玩家-facing 主线。
   - 生命周期协议、tick 推进、模块 bootstrap/readiness 与 replay/恢复边界由 `doc/world-runtime/prd.md#gameplay-生命周期协议边界` 承接；历史 layer closure 实现过程从 Git history 与 GitHub task evidence 追溯。
   - 模块驱动生产切片的完成状态由本专题 T3、下方测试矩阵、当前代码与回归测试共同承接；原增量 closure 三件套已退役，历史实现过程从 Git history 与 GitHub task evidence 追溯。
 - 测试入口与执行规范：`testing-manual.md`（S1/S2/S3/S6/S7）。
@@ -813,7 +821,7 @@ early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-ses
 
 ## 9.4 历史战争/政治数值基线边界
 
-- 历史战争/政治最小可行数值基线仍保留在 `doc/game/gameplay/gameplay-war-politics-mvp-baseline.md`，用于 runtime 兼容、历史证据和未来受控重启参考。
+- 战争/政治数值基线已迁入 `doc/product/world-rules-core-gameplay/war-politics-baseline.prd.md`，用于 runtime 兼容、专业验证和未来受控重启参考。
 - 当前玩家-facing 总纲不再把战争作为主玩法承诺；当前主线优先工业、经济、协作、治理与危机恢复。
 
 ---

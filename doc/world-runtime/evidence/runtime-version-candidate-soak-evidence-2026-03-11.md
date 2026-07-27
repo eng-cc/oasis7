@@ -16,7 +16,7 @@
 | 实际 run 目录 | `.tmp/release_gate_p2p_dcg010/20260306-180215/` | `present` | 对应真实 `dry_run=false` 发布门禁长跑样本。 |
 | 摘要文档 | `.tmp/release_gate_p2p_dcg010/20260306-180215/summary.md` | `pass` | `triad_distributed` 拓扑、`soak_release` profile、300s 长跑。 |
 | 结构化指标 | `.tmp/release_gate_p2p_dcg010/20260306-180215/summary.json` | `pass` | `overall_status=ok`、`metric_gate.status=pass`。 |
-| 上游专题结论 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-release-gate-2026-03-06.md` | `pass` | 已将该 run 作为 `E5` 正式记录入发布门禁专题。 |
+| 历史 provenance | Git history / GitHub task evidence | `historical_only` | 该 run 曾以 `E5` 登记；历史 `pass` / `Go` 不构成当前 release authority。 |
 
 ## Key Runtime Signals
 - `summary.json.dry_run = false`，说明该样本不是命令渲染或演练输出。
@@ -30,7 +30,7 @@
 - `totals.report_samples_total = 213`，证明该样本有持续运行期采样，而非空跑。
 
 ## Interpretation
-- 该样本来自 `soak_release` 发布门禁链路，且上游专题已将其定义为真实可审计发布门禁证据，因此可被版本级 readiness board 复用为 `runtime_soak` 槽位输入。
+- 该样本来自当时的 `soak_release` 链路，可作为版本级历史 runtime soak provenance；当前 release 判断仍须服从 testing manual、现行 longrun claim tiers、正式 public-testnet readiness 与 fresh artifact。
 - 当前版本级候选对 `runtime_soak` 的要求是“存在真实版本级 soak summary / metrics 绑定”，并未强制要求必须先获得新的 S10 五节点实跑结果。
 - 因此，`doc/testing/longrun/s10-five-node-real-game-soak.prd.md` 继续保留为后续增强与扩大覆盖范围的专题目标，但不再构成本候选的唯一阻断。
 
@@ -41,4 +41,4 @@
 
 ## Validation
 - `rg -n 'dry_run|overall_status|metric_gate|consensus_hash_consistent|consensus_hash_mismatch_count|report_samples_total' .tmp/release_gate_p2p_dcg010/20260306-180215/summary.json`
-- `rg -n 'E5|release_gate_p2p_dcg010|Gate Result: `pass`|放行建议: `Go`' doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-release-gate-2026-03-06.md`
+- `rg -n 'release_gate_p2p_dcg010|dry_run|overall_status|metric_gate' doc/world-runtime/evidence/runtime-version-candidate-{evidence,soak-evidence}-2026-03-11.md`
