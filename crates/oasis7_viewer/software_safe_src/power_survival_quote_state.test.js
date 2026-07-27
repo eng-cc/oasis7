@@ -32,7 +32,7 @@ describe("power survival quote response freshness", () => {
     expect(state.powerSurvivalQuote).toBeNull();
     expect(state.powerSurvivalQuoteRequest.status).toBe("idle");
     expect(module.handlePowerSurvivalQuote({ seller_agent_id: "agent-late" })).toBe(false);
-    expect(module.handlePowerSurvivalQuoteError({ action_id: "quote_power_survival", message: "late rejection" })).toBe(false);
+    expect(module.handlePowerSurvivalQuoteError({ action_id: "quote_power_survival", message: "late rejection" })).toBe(true);
     expect(state.powerSurvivalQuote).toBeNull();
     expect(state.powerSurvivalQuoteRequest.status).toBe("idle");
   });

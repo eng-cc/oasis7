@@ -3480,8 +3480,10 @@ function createPowerSurvivalQuoteStateModule({ clone: clone2, getSearchParams: g
     return true;
   }
   function handlePowerSurvivalQuoteError(error) {
-    if (String(error?.action_id || "").trim() !== "quote_power_survival" || state2.powerSurvivalQuoteRequest?.status !== "pending") return false;
-    state2.powerSurvivalQuoteRequest = { status: "error", error: String(error?.message || error?.code || "power survival quote request failed") };
+    if (String(error?.action_id || "").trim() !== "quote_power_survival") return false;
+    if (state2.powerSurvivalQuoteRequest?.status === "pending") {
+      state2.powerSurvivalQuoteRequest = { status: "error", error: String(error?.message || error?.code || "power survival quote request failed") };
+    }
     return true;
   }
   function injectPowerSurvivalQuoteForTest2(quote) {
