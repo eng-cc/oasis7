@@ -115,7 +115,7 @@
   - `crates/oasis7_viewer/software_safe.js`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
-  - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+  - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
   - `testing-manual.md`
 - Environment Tiering Contract:

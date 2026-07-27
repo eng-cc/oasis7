@@ -6,10 +6,10 @@
 - 想确认 P2P/DistFS/consensus/execution/observer 的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 node 子域入口。
 - 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md` 或 `node-reward-settlement-native-transaction.prd.md`
 - 想确认复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-replication-libp2p-migration.prd.md`、`node-distfs-replication-network-closure.prd.md` 或 `node-consensus-signer-binding-replication-hardening.prd.md`
-- 想确认 PoS 时间、slot clock 与控制面对齐：先读 `node-pos-slot-clock-real-time-2026-03-07.prd.md`、`node-pos-subslot-tick-pacing-2026-03-07.prd.md` 或 `node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
+- 想确认 PoS 时间、slot clock 与控制面对齐：先读 `../../world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想确认节点身份引导、keypair bootstrap 与初始化入口：先读 `node-keypair-config-bootstrap.prd.md`
 - 想确认 `wasm32/libp2p` 编译约束：先读 `../network/readme-p1-network-production-hardening.prd.md`；想确认 builtin wasm fallback：先读 `node-builtin-wasm-fetch-fallback-compile.prd.md`
-- 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据，以及模块级优化点：先读 `node-triad-observability-stack-2026-04-23.prd.md`
+- 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据，以及模块级优化点：先读 `node-triad-operations-observability.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -47,9 +47,7 @@
 
 ### 3. PoS 时间与控制面对齐
 - 首读入口:
-  - `node-pos-slot-clock-real-time-2026-03-07.prd.md`
-  - `node-pos-subslot-tick-pacing-2026-03-07.prd.md`
-  - `node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
+  - `../../world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 适合问题:
   - slot/epoch 真实时钟驱动的现行口径是什么
   - 槽内 tick phase 和 proposal pacing 怎么理解
@@ -72,7 +70,7 @@
 
 ### 6. 三节点监控与运行证据
 - 首读入口:
-  - `node-triad-observability-stack-2026-04-23.prd.md`
+  - `node-triad-operations-observability.prd.md`
 - 适合问题:
   - 现在三节点哪个 CPU 高、内存紧不紧、磁盘吃了多少
   - chain status、traffic、wasm 和宿主机资源怎样统一采样

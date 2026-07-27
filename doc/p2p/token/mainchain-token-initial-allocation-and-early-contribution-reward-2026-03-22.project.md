@@ -109,7 +109,7 @@
 
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-- `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
+- `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
 - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
 - `doc/testing/evidence/token-genesis-allocation-audit-template-2026-03-22.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`

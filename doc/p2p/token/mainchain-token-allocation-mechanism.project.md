@@ -14,6 +14,7 @@
 - [x] TAM-6 (PRD-P2P-MIG-112)：实现 NodePoints -> 主链 Token 桥接占位接口并接入结算路径。
 - [x] TAM-7 (PRD-P2P-MIG-112)：补齐 `test_tier_required` / `test_tier_full` 测试矩阵与回归脚本。
 - [x] TAM-8 (PRD-P2P-MIG-112)：文档回写、发布说明与运行手册补充。
+- [x] mainchain-token-allocation-phase2-governance-bridge-consolidation (PRD-P2P-MIG-112) [test_tier_required]: 吸收节点主链账户绑定、Approved/Applied proposal gate、受治理 treasury 分发和幂等审计；实现过程由 Git history 与 GitHub task evidence 追溯。 Trace: #2682 (task_172abebb99354d4fad395aa05a581193)
 
 ## 依赖
 - doc/p2p/token/mainchain-token-allocation-mechanism.prd.md
@@ -23,9 +24,10 @@
 - `crates/oasis7/src/runtime/reward_asset.rs`
 - `crates/oasis7/src/runtime/state.rs`
 - `crates/oasis7/src/runtime/world/resources.rs`
+- `crates/oasis7/src/runtime/state/apply_domain_event_main_token.rs`
 - `testing-manual.md`
 
 ## 状态
 - 当前阶段：TAM-0 ~ TAM-8 全部完成。
-- 下一步：等待验收与后续迭代需求。
+- 下一步：后续经济、custody、mint、release 或外部钱包需求必须另立专业 authority；本专题不授予这些结论。
 - 最近更新：2026-02-26。

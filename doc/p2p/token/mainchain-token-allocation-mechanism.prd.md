@@ -128,12 +128,15 @@ DomainEvent::NodePointsSettlementApplied {
   - `UpdateMainTokenPolicy` 走参数边界校验；
   - 固定延迟 `2` 个 epoch 生效（`MAIN_TOKEN_POLICY_UPDATE_DELAY_EPOCHS = 2`）；
   - 增发与费用结算均按“目标 epoch 的有效配置”计算。
-- NodePoints 桥接占位：
+- NodePoints 桥接与二期治理分发：
   - 预算来源：同 epoch `MainTokenEpochIssuanceRecord.node_service_reward_amount`；
   - 分配：按 `awarded_points` 比例做确定性分配，余数按排序回填；
   - 执行：扣减 `node_service_reward_pool`，增加节点主链 Token `liquid_balance` 与 `circulating_supply`；
   - 审计：写入 `main_token_node_points_bridge_records[epoch]`；
-  - 当前账户映射占位策略：`account_id = node_id`。
+  - 节点主链账户以 `WorldState.node_main_token_account_bindings: BTreeMap<String, String>` 维护；`World::bind_node_main_token_account(node_id, account_id)` 写入并由 `World::node_main_token_account(node_id)` 查询。NodePoints 桥接优先使用该绑定，而不是把 `node_id` 当作账户。
+  - `UpdateMainTokenPolicy { proposal_id, next }` 除原有参数边界和两 epoch 延迟外，要求 proposal 存在且状态为 `Approved` 或 `Applied`。
+  - `DistributeMainTokenTreasury { proposal_id, distribution_id, bucket_id, distributions }` 仅可分发 `staking_reward_pool`、`ecosystem_pool`、`security_reserve`。它扣减 treasury bucket、增加接收方 `liquid_balance` 与 `circulating_supply`（不改变 `total_supply`），并写入 `main_token_treasury_distribution_records[distribution_id]` 与 `MainTokenTreasuryDistributed` 审计事件；`distribution_id` 必须幂等。
+  - 旧快照缺少二期字段时以 `serde(default)` 保持兼容。
 
 ### 5) 运行手册补充
 - 主链 Token / NodePoints 桥接定向回归：
@@ -161,7 +164,8 @@ DomainEvent::NodePointsSettlementApplied {
 - Technical Risks:
   - 参数风险：通胀/分配配置不当可能导致激励不足或稀释过快。
   - 治理风险：提案频繁变更会增加运行理解成本，需保持提案审计与发布节奏。
-  - 桥接风险：当前 `node_id -> account_id` 为占位映射，后续身份体系升级时需平滑迁移。
+- 桥接风险：当前 `node_id -> account_id` 为占位映射，后续身份体系升级时需平滑迁移。
+- 二期地址绑定仅为 runtime 内部字符串映射，不是外部钱包、跨链地址、custody 或公开领取协议；二期不改变通胀公式或 split 比例。
   - 并行经济体风险：`NodePoints/PowerCredit` 与主链 Token 并行阶段仍需持续防重复激励。
 
 ## 6. Validation & Decision Record

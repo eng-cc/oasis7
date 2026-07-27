@@ -178,12 +178,12 @@
   - AC-3: 与 `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md` 等设计文档口径一致。
   - AC-4: S9/S10 相关测试套件在 testing 手册中有对应条目。
   - AC-5: 轻客户端专题以稳定三件套 `p2p-mobile-light-client-authoritative-state.*` 维护，并映射到独立维护责任；历史 `TASK-P2P-MLC-*` 只作追溯，不单独构成现时完成或发布结论。
-  - AC-6: `node-pos-slot-clock-real-time-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-008`。
-  - AC-7: `node-pos-subslot-tick-pacing-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-009`。
+  - AC-6: PoS fixed slot/epoch wall-clock、漏槽与时间窗口合同已由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 承载；历史任务链 `TASK-P2P-008` 只作追溯。
+  - AC-7: PoS subslot tick phase、adaptive pacing 与 strict-lag recovery contract 已由同一 runtime authority 承载；历史任务链 `TASK-P2P-009` 只作追溯。
   - AC-8: 三线联合验收清单明确给出“基线命令 + 发布门禁阈值 + 阻断条件 + 证据产物”，可直接用于发行前检查。
   - AC-9: S9/S10 长跑结果模板与缺陷闭环模板完成定义，失败运行必须能映射到 `incident_id -> 修复任务 -> 回归证据`。
   - AC-10: 发行门禁分布式质量指标（S9/S10）具备“阈值 + 数据源 + 阻断策略 + 责任归属”映射，并与 `release-gate` 脚本参数一致。
-  - AC-11: `node-pos-time-anchor-control-plane-alignment-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-010`，覆盖 runtime/game/web/client launcher/scripts 与状态接口口径对齐。
+  - AC-11: runtime/game/web/client launcher/scripts 的 PoS control-plane 参数与 status 接口口径由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 承载；历史任务链 `TASK-P2P-010` 只作追溯。
   - AC-12: 残留语义项完成收敛：`world-rule` 时间模型、launcher `chain_node_tick_ms` 校验文案、`/v1/chain/status` 轮询字段命名、viewer/manual/site 与 `oasis7_viewer_live` 实际 CLI 能力保持一致。
   - AC-13: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher` 默认 `slot_duration_ms` 与文档基线一致；`oasis7_web_launcher` 校验文案明确 `chain_node_tick_ms` 为 poll interval 语义。
   - AC-14: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher/oasis7_viewer_live/p2p-longrun/s10` 默认 `slot_duration_ms/ticks_per_slot/proposal_tick_phase` 与 `config/chain-pos-defaults.env` 基线一致，相关默认值断言与手册同步更新。
@@ -193,7 +193,7 @@
   - AC-18: `doc/p2p/**` 仍可读历史专题的首行标题必须统一使用 `oasis7 Runtime` 或 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文、证据原文与兼容说明中。
   - AC-19: `mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22` 专题文档落盘并映射任务链 `TASK-P2P-031`，明确 `10000 bps` 创世分配表、项目战略控制 `5000 bps`、协议奖励池 `3500 bps`、单人直持目标/上限、低流通边界与“贡献制奖励而非 P2E”口径。
   - AC-20: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-032` 的密码学基线，保持整体 verdict 为 `not_mainnet_grade`，固定交易授权、custody、治理 signer 与创世控制 blocker。
-  - AC-21: `mainchain-token-signed-transaction-authorization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-033`；`POST /v1/chain/transfer/submit` 必须新增 `public_key/signature` 鉴权、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归。
+  - AC-21: `p2p-mainnet-security-governance-readiness` 承载当前 signed transfer contract：`POST /v1/chain/transfer/submit` 必须校验 `public_key/signature`、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归；历史任务链 `TASK-P2P-033` 只作追溯。
   - AC-22: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
   - AC-23: 同一稳定权威吸收 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
   - AC-24: 同一稳定权威吸收 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
@@ -232,9 +232,7 @@
   - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
   - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
   - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
-  - `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.prd.md`
-  - `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
-  - `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
+  - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
@@ -253,7 +251,7 @@
   - `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
   - `oasis7_viewer_live.release.example.toml`
   - `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`
-  - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
+  - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 节点掉线：共识链路需在节点恢复后自动重同步并验证状态。

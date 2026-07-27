@@ -15,6 +15,7 @@
 - 想直接进入 WASM 全局 timing/status/window 或单模块 contract/perf 观测：先读 `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
 - 想直接进入 SDK no_std、共享 wire 与 codec 兼容契约：先读 `doc/world-runtime/wasm/wasm-sdk.prd.md`
 - 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- 想直接进入链 PoS 时间锚、slot/tick 相位、控制面参数与 restart/replay 边界：先读 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -35,6 +36,7 @@
 - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`：build/executor/router timing、`/v1/chain/status.wasm`、窗口汇总与 module-local observe spec/runner/template 主入口。
 - `doc/world-runtime/wasm/wasm-sdk.prd.md`：默认 no_std、共享 Canonical-CBOR wire、codec 错误与 builtin 兼容主入口。
 - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
+- `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`：链 PoS 时间、tick 相位、控制面 status 与恢复合同主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities.prd.md`：玩家发布实体与模块发布链路衔接入口。
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md`：治理收据安全 hardening 主入口。
@@ -75,6 +77,7 @@
 | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.prd.md` | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.design.md` | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-safety.prd.md` | `doc/world-runtime/runtime/runtime-numeric-safety.design.md` | `doc/world-runtime/runtime/runtime-numeric-safety.project.md` |
 | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md` |
+| `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.project.md` |

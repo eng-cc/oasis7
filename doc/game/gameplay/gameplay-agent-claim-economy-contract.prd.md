@@ -151,7 +151,7 @@
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-  - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+  - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 余额不足：报价可见，但确认认领必须拒绝，并明确缺少的是 `activation fee`、`bond`、`upkeep` 还是 `eligible_claim_balance` 总额不足。

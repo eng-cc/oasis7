@@ -62,11 +62,9 @@
 - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
 - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
-- `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.prd.md`
-- `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
-- `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
+- `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-- `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+- `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `README.md`
 - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
