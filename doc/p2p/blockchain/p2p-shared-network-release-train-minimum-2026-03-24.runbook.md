@@ -1,8 +1,7 @@
 # oasis7 legacy shared-network rehearsal / release-train background（LiveOps Runbook）
 
-- 对应需求文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
-- 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
+- Retained legacy provenance. Current network-tier authority: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`.
+- Current system-level security gate authority: `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`.
 
 审计轮次: 5
 
@@ -14,9 +13,8 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Scope: `shared_devnet/staging/canary promotion + freeze + rollback + run window + public claims gate`
-- Source Docs:
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
+- Source boundary:
+- This retained runbook is historical `shared_devnet/staging/canary` rehearsal/rollback provenance, not an active release or public-testnet authority.
   - `testing-manual.md`
 
 ## 1. 适用范围

@@ -67,13 +67,11 @@
 - `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
 - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
+- `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `README.md`
 - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
 - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy rehearsal provenance only）
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`（legacy rehearsal provenance only）
 - `TASK-P2P-041` hosted player access/session auth 已完成并收敛：长期专业合同见 `doc/p2p/prd.md`，operator procedure 见 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`，玩家承诺见 `doc/product/player-entry-distribution/prd.md`；原日期型专题从 GitHub task evidence 与 Git history 追溯。
 
 ## 状态

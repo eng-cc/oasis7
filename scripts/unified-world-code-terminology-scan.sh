@@ -102,19 +102,22 @@ allowed_snippets = {
         'shared_network_track_gate_smoke',
     ),
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md": (
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
         "scripts/shared-network-track-gate.sh",
     ),
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md": (
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
         'rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest"',
     ),
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md": (
+        "p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
+    ),
     "doc/p2p/prd.md": (
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
         "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
     ),
     "doc/p2p/project.md": (
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md",
+        "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
     ),
     "doc/p2p/prd.index.md": (
         "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24",

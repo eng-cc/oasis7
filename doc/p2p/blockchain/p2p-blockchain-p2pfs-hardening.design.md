@@ -7,12 +7,16 @@
 
 本设计把 Phase 2–8 的分阶段 hardening 收为三个运行面：Node PoS state recovery、Action/Head signer policy、membership signer/keyring/recovery policy。当前代码与测试是行为真值；历史阶段文字只保留 provenance，不可覆盖当前 fail-closed 恢复合同。
 
+2026-02-23 的 generic replication security hardening 同样已吸收：guard 在验证和写盘成功前不提交；writer/fetch 鉴权、bounded subscription 与签名优先 membership restore 遵循 PRD 的当前合同。该吸收不将这些局部防护提升为 production custody 或 mainnet readiness。
+
 ## 结构与边界
 
 - 恢复层：仅缺失状态可默认初始化；有效陈旧同 world 状态可由 execution latest 前推；损坏、不可读或不可解析状态必须停止并暴露错误。
 - Action/Head 层：HMAC 与 ed25519 可双栈存在；ed25519 使用 canonical 格式和 payload；强制动作签名需要 HMAC 或 allowlist 支撑。
 - Membership 层：keyring 处理 active/multi-key、key-ID 和 revoked key；allowlist 仅在非空时强制 ed25519 signer 匹配，且不绕过 keyring、key-ID、revocation 或 requester policy。
 - 公钥策略层：共享 32-byte hex 规范化、小写比较、重复拒绝和字段级错误，以避免 membership 与 sequencer 漂移。
+- Replication guard 层：拒绝空 world/writer 和零 epoch/sequence；同 writer/epoch 的 sequence 严格递增，epoch 或 writer 切换从 sequence 1 开始且不允许 epoch 回退。
+- Replay 层：逐条调用与在线路径相同的 `apply_replication_record`；只有 hash 校验和 store 写入成功后才提交 guard，首个失败立即终止并保留失败前的确定状态。
 
 ## 约束
 
@@ -27,6 +31,7 @@
 - `crates/oasis7_consensus/src/ed25519_signer_policy.rs`
 - `crates/oasis7_consensus/src/membership_logic.rs`
 - `crates/oasis7_consensus/src/sequencer_mainloop.rs`
+- `crates/oasis7_distfs/src/replication.rs`
 
 ## 历史演进
 

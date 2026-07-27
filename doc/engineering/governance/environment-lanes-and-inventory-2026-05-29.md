@@ -175,7 +175,7 @@ Hosted-login 形态接入 testnet 大世界的追加验证：
 | `local_dev` | 本地或单机开发验证 | 可用于开发反馈，不可对外声明 | `testing-manual.md` |
 | `shared_devnet` | legacy 共享开发网络 / release train 前置环境 | 不再作为目标环境；历史证据只可作为 legacy rehearsal evidence | `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md` |
 | `public_testnet` | 面向外部测试者、可重置、有 faucet guard 的测试网络 | 当前 11 条 formal required lanes 全 pass，可声明 controlled / resettable / non-mainnet `ready_for_live_candidate`；不得扩写为 public launch、mainnet、production OC settlement、public validator admission 或 no-reset release | `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` |
-| `mainnet` | 正式网络，非可随意重置的生产语义 | 未有 mainnet gate 前不得声明 | `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md` |
+| `mainnet` | 正式网络，非可随意重置的生产语义 | 未有 mainnet gate 前不得声明 | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md` |
 
 `testnet -> mainnet` promotion 必须至少证明：
 1. 候选版本、genesis、bootstrap peers 与 manifest 都不是 placeholder。

@@ -7,7 +7,7 @@
 - 本文保留为 2026-03-23 `STRAUTH` 实现切片的历史项目证据；不得因两个月以上未改动而删除或移出索引。
 - 本切片已完成 signed transfer、shared payload auth envelope、controller slot binding、本地 signer allowlist / threshold enforcement，以及 Web/native signed submit 证据闭环。
 - 本文不再作为 ceremony、external signer、HSM/KMS、production keystore / custody、signer rotation 或长期 world-state / governance source of truth 的当前 owner；这些安全 / 运维生命周期事项由后续 P2P governance / custody / ceremony 专题承接。
-- 相关后续入口：`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`、`doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.project.md`、`doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.project.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md`。
+- 相关后续入口：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.project.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md`。
 
 审计轮次: 3
 ## 任务拆解（含 PRD-ID 映射）
@@ -43,7 +43,7 @@
   - 生产级 keystore / signer rotation / external signer 专题。
 
 ## 依赖
-- `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
+- `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs`

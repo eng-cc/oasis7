@@ -30,9 +30,7 @@
 
 ## 依赖
 - `testing-manual.md`
-- `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
+- `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `README.md`
 - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
 

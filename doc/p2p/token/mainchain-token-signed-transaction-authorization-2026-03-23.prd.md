@@ -95,7 +95,7 @@
   - `crates/oasis7/src/runtime/main_token.rs`
   - `crates/oasis7_node/src/node_runtime_core.rs`
   - `crates/oasis7_node/src/tests_action_payload.rs`
-  - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
+  - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 若 `public_key` 不是 32-byte hex，直接按 `invalid_request` 拒绝。
