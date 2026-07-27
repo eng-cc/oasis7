@@ -11,7 +11,6 @@
 - [x] RQ-3 (PRD-README-CYCLE-001/003) [test_tier_required]: 完成 `producer_system_designer -> qa_engineer` handoff，并回写 readme 模块主项目为 completed。
 
 ## 依赖
-- `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.md`
 - `scripts/readme-link-check.sh`
 - `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md`
 - `doc/readme/governance/readme-remediation-log-template-2026-03-11.md`

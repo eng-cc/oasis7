@@ -6,8 +6,8 @@
 审计轮次: 4
 
 ## 1. Executive Summary
-- Problem Statement: `TASK-README-002/003` 已经补齐人工巡检清单和最小自动检查脚本，但 readme 模块仍缺“多久复查一次、谁触发、发现问题怎么回收”的固定节奏。没有节奏，就会再次回到“只有出问题才修”的被动模式。
-- Proposed Solution: 建立 README 季度口径审查与修复节奏，定义季度巡检触发、角色分工、固定输入输出、阻断条件与最小记录模板。
+- Problem Statement: README 口径治理需要同时具备可复用的人工判断项、最小自动检查，以及“多久复查一次、谁触发、发现问题怎么回收”的固定节奏。
+- Proposed Solution: 以季度审查模板承接人工巡检项，以 `scripts/readme-link-check.sh` 承接自动链接检查，并在本专题定义季度触发、角色分工、固定输入输出与修复闭环。
 - Success Criteria:
   - SC-1: 季度审查节奏明确 `谁/何时/检查什么/如何回写`。
   - SC-2: 至少包含季度审查模板与修复记录模板。
@@ -40,7 +40,7 @@
 - Acceptance Criteria:
   - AC-1: 新专题明确季度节奏、触发条件与角色分工。
   - AC-2: 至少产出一份季度审查模板与一份修复记录模板。
-  - AC-3: 模板引用 `TASK-README-002/003` 已有清单与脚本。
+  - AC-3: 模板内置人工巡检项并引用 `scripts/readme-link-check.sh`。
   - AC-4: `doc/readme/project.md` 回写完成态与下一任务状态。
 - Non-Goals:
   - 不在本轮执行真实季度审查。
@@ -54,7 +54,6 @@
 ## 4. Technical Specifications
 - Architecture Overview: 本专题把 readme 治理从“单次任务”提升为“周期性审查流程”，复用现有人工清单与自动脚本作为执行输入。
 - Integration Points:
-  - `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.md`
   - `scripts/readme-link-check.sh`
   - `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md`
   - `doc/readme/governance/readme-remediation-log-template-2026-03-11.md`
