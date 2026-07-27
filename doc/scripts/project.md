@@ -6,21 +6,15 @@
 - [x] TASK-SCRIPTS-001 (PRD-SCRIPTS-001) [test_tier_required]: 完成 scripts PRD 改写，建立脚本治理主入口。
 - [x] TASK-SCRIPTS-002 (PRD-SCRIPTS-001/002) [test_tier_required]: 梳理脚本分层并标注主入口与 fallback 入口。
   - 产物文件:
-    - `doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`
-    - `doc/scripts/governance/script-entry-layering-2026-03-11.design.md`
-    - `doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
-    - 已删除：一次性 runtime→QA handoff brief；持续规则收敛到上述三件套，路由见 `doc/scripts/governance/README.md`。
+    - 历史专题与一次性 handoff 已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.prd.md doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
+    - 历史验收检查过当时的主入口与 fallback 映射；当前入口以 `doc/scripts/{prd,design}.md`、脚本 `--help` 和测试为准。
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SCRIPTS-003 (PRD-SCRIPTS-002/003) [test_tier_required]: 补齐高频脚本参数契约与失败语义说明。
   - 产物文件:
-    - `doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`
-    - `doc/scripts/governance/script-parameter-contracts-2026-03-11.design.md`
-    - `doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
-    - 已删除：一次性 runtime→QA handoff brief；持续规则收敛到上述三件套，路由见 `doc/scripts/governance/README.md`。
+    - 历史专题与一次性 handoff 已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "ci-tests.sh|release-gate.sh|build-game-launcher-bundle.sh|run-viewer-web.sh|site-link-check.sh|skip-|dry-run" doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
+    - 历史验收检查过当时的最小参数和失败语义；当前 CLI 细节以脚本 `--help` 和测试为准。
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SCRIPTS-004 (PRD-SCRIPTS-003) [test_tier_required]: 建立脚本稳定性趋势跟踪指标。
   - 当前语义收敛: 后续治理已退役一次性趋势专题三件套和 runtime->QA brief，当前历史基线只保留 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`。
@@ -69,9 +63,7 @@
     - `scripts/worktree-harness-lib.sh`
     - `scripts/run-launcher-stack.sh`
     - `scripts/run-producer-playtest.sh`
-    - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
-    - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.design.md`
-    - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.project.md`
+    - 历史 harness 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/prd.index.md`
@@ -91,9 +83,7 @@
 - [x] TASK-SCRIPTS-015 (PRD-SCRIPTS-005) [test_tier_required]: 新增标准化 task worktree bootstrap 入口，统一新需求的 branch/path 命名、脏源 worktree 围栏与机器可读摘要输出，并同步 scripts 治理文档。
   - 产物文件:
     - `scripts/new-task-worktree.sh`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.project.md`
+    - 历史 bootstrap 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/prd.index.md`
@@ -111,9 +101,7 @@
 - [x] TASK-SCRIPTS-016 (PRD-SCRIPTS-006) [test_tier_required]: 为标准化 task worktree bootstrap 入口补齐 `--init-docs` 与 `--with-harness`，让新需求可在创建 worktree 后直接检查模块文档并可选预热隔离 harness。
   - 产物文件:
     - `scripts/new-task-worktree.sh`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.project.md`
+    - 历史 bootstrap 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
@@ -132,9 +120,7 @@
 - [x] TASK-SCRIPTS-017 (PRD-SCRIPTS-007) [test_tier_required]: 为 task worktree 闭环补齐标准化 landing 入口，统一“任务分支 rebase 到本地 `main` 并 fast-forward 合入本地 `main`”的脚本、文档与失败语义。
   - 产物文件:
     - `scripts/land-task-worktree.sh`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.project.md`
+    - 历史 local landing 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/prd.index.md`
@@ -155,9 +141,7 @@
 - [x] TASK-SCRIPTS-018 (PRD-SCRIPTS-008) [test_tier_required]: 收紧 task worktree 生命周期口径，明确每个已完成 task `worktree` 在 landing 成功后必须删除，并同步 landing 脚本/文档输出。
   - 产物文件:
     - `scripts/land-task-worktree.sh`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.project.md`
+    - 历史 local landing 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
@@ -174,12 +158,10 @@
     - `AGENTS.md`
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.project.md`
+    - 历史 bootstrap 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录。
     - `doc/devlog/README.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n '先写一版|先不要提交|顺手改一下|复用当前 `worktree`|切错 worktree' AGENTS.md doc/scripts/prd.md doc/scripts/project.md doc/scripts/governance/task-worktree-bootstrap-2026-03-27.*`
+    - `rg -n '先写一版|先不要提交|顺手改一下|复用当前 `worktree`|切错 worktree' AGENTS.md doc/scripts/prd.md doc/scripts/project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-021 (PRD-SCRIPTS-009) [test_tier_required]: 新增 repo-family 共享 cargo 开发缓存入口，允许多个 worktree 复用 Rust 开发态构建缓存，同时保持 deterministic wasm / release 链路继续走未设置 `CARGO_TARGET_DIR` 的原始入口。
@@ -242,12 +224,7 @@
   - 产物文件:
     - `scripts/prepare-task-pr.sh`
     - `scripts/land-task-worktree.sh`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.design.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.design.md`
-    - `doc/scripts/governance/task-worktree-landing-2026-03-27.project.md`
+    - 历史 PR closure 与 local landing 专题已吸收到 `doc/scripts/prd.md`、`doc/scripts/design.md` 和本任务记录；生命周期门禁只引用工程 workflow 真值。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/prd.index.md`
@@ -313,8 +290,7 @@
 - [x] prepare-task-pr-local-required-recommendation (PRD-SCRIPTS-007) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path 本地 required 验证推荐摘要，在 PR preflight 时直接输出建议的 `./scripts/ci-tests.sh required` 命令与必要的额外命令，但不自动执行。 Trace: .pm/tasks/task_f86d4971140d463193d336907f94a00c.yaml
   - 产物文件:
     - `scripts/prepare-task-pr.sh`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - 历史 PR closure 专题已吸收到稳定模块权威与本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
@@ -331,8 +307,7 @@
 - [x] prepare-task-pr-planner-reason-summary (PRD-SCRIPTS-007) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path planner `reason_summary` 与 `reason_items[]` 输出，让 owner 在 PR preflight 阶段直接看到当前 scope 的命中原因，但不扩到 wasm 解释层或自动执行。 Trace: .pm/tasks/task_db7d4beaf8354e1eb7f50afd0ee0a8d6.yaml
   - 产物文件:
     - `scripts/prepare-task-pr.sh`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - 历史 PR closure 专题已吸收到稳定模块权威与本任务记录。
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
@@ -382,8 +357,7 @@
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
-    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - 历史 PR closure 专题已吸收到稳定模块权威与本任务记录。
     - `doc/engineering/prd.md`
     - `doc/engineering/project.md`
     - `.pm/README.md`

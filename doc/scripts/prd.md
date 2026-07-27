@@ -52,6 +52,15 @@
   - SC-13A: 仓库必须提供只读 worktree 生命周期盘点入口，能够统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，避免回收状态只能靠人工 `git worktree list` + `git status` 拼接判断。
   - SC-14: worktree 治理口径必须明确“文档改动、脚本改动、测试改动、仅改话术”都算新需求；只有用户显式授权复用当前 worktree 时才允许例外，且发现切错 worktree 后必须立即切走。
 
+### 稳定治理承诺
+
+- 每个常见脚本意图只有一个推荐稳定入口；辅助与 fallback 路径必须声明触发条件，且永远不能替代 canonical 路径。
+- 对外发布的脚本契约必须说明最小调用、改变验证范围的选项和失败类别；可变参数、默认值与机器可读字段以当前脚本行为、`--help` 和测试为实现权威。`dry-run`、`skip-*`、语法或 help 成功不能被解释为完整门禁通过。
+- Worktree harness 的产品承诺是 machine-readable、worktree-scoped 的启动与证据隔离；teardown 终止运行栈并保留证据。其 `ready` / `smoke` 只证明本地 launcher/Viewer reachability 边界，不证明 headed S6、玩法、持久化、replay/recovery、共识或发布就绪。
+- 每个请求从绑定单一 task truth 的独立 task worktree 开始；复用必须有用户明确授权。Bootstrap 部分失败时必须保留已创建的 branch/worktree，并返回可执行的 refresh/retry 恢复指令。
+- 已完成工作默认通过 repository GitHub PR lifecycle 进入受保护 `main`，并使用 source-bound review evidence 与 canonical post-merge cleanup；具体状态、门禁和 receipt 规则只由 `doc/engineering/workflow/source-of-truth.md` 定义。
+- `land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不是默认最终集成路径，也不能绕过 canonical cleanup。
+
 ## 2. User Experience & Functionality
 - User Personas:
   - 开发者：需要可预期的脚本入口与错误提示。

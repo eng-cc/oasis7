@@ -16,7 +16,7 @@
 | architecture | `doc/scripts/design.md` | 解释模块结构与文档分层 |
 | execution record | `doc/scripts/project.md` | 记录 PRD-ID、任务和验证证据映射 |
 | inventory | `doc/scripts/prd.index.md` | 提供专题三件套的精确文件索引 |
-| topic truth | `governance/`、`precommit/`、`wasm/` | 承载各主题的当前规范、设计和完成记录 |
+| topic truth | `precommit/`、`wasm/` | 仅在需要独立专业权威时承载当前规范；通用治理语义归入模块稳定文档 |
 
 工程任务生命周期不属于 scripts 模块的第二套设计层；它统一引用
 `doc/engineering/workflow/source-of-truth.md`。
@@ -25,15 +25,25 @@
 
 - 开发与验证入口：为本地开发、检查和测试提供稳定 wrapper，并把正式验收边界交给测试规范。
 - 任务与仓库治理 helper：实现 workflow 规范定义的机械操作，但不自行定义生命周期状态或门禁。
-- 运行支撑入口：组合 launcher、runtime、provider 与 WASM 工具；具体参数和兼容边界由对应专题或脚本 `--help` 持有。
+- 运行支撑入口：组合 launcher、runtime、provider 与 WASM 工具；稳定边界由模块 PRD/design 持有，具体参数由脚本 `--help` 和测试持有。
 - 文档治理入口：通过模块索引和治理检查保持脚本、规范与验证证据可追溯。
 
 ## 阅读顺序
 
 1. 从 `doc/scripts/README.md` 按目标选择入口。
 2. 需要模块契约时读 `doc/scripts/prd.md`；需要当前任务证据时读 `doc/scripts/project.md`。
-3. 需要某个治理问题时先进入对应专题 README，再读该专题的 PRD/design/project。
-4. 已知文件名时使用 `doc/scripts/prd.index.md` 精确定位。
+3. 需要通用治理规则时读模块 PRD/design；只有 pre-commit、WASM 等仍独立维护的专业专题才进入专题文档。
+4. 已知独立专题文件名时使用 `doc/scripts/prd.index.md` 精确定位。
+
+## 稳定脚本契约
+
+- 每个常见意图只有一个推荐稳定入口；辅助或 fallback 路径必须有明确触发条件，且不能替代 canonical 路径。
+- 已发布脚本契约说明最小调用、改变验证范围的选项和失败类别；脚本行为、`--help` 与测试是可变 CLI 细节的实现权威。`dry-run`、`skip-*`、语法或 help 成功都不能证明完整门禁通过。
+- `worktree-harness.sh` 从解析后的当前 worktree 路径派生稳定身份，并把 runtime、artifact、browser、bundle、metadata、日志和 browser session 资源隔离到 `output/harness/<worktree_id>/`。它以 loopback endpoint 启动 lower-level launcher，并把 worktree-specific run ID、输出目录、metadata 文件和 chain node ID 传给 `run-launcher-stack.sh`。
+- Harness 的 `ready` 仅表示 launcher 已发布 `STACK_READY=1` 且 Viewer HTTP/Web bridge probe 成功；`smoke` 仅证明 Viewer 可达并能采集非空 `__AW_TEST__` 状态。二者都不证明 headed S6、玩法可用、持久化、replay/recovery、共识或发布就绪。
+- Harness `state.json` 持有 `worktree_id`、`viewer_url`、PID、runtime/artifact/bundle/browser 路径、`meta_file` 与 `boot_mode` 等机器可读状态；`launch_mode` 属于 launcher `session.meta` / `--json-ready`。`browser_dir` 是 harness 分配路径，当前浏览器隔离权威仅是 worktree-derived `agent-browser` session namespace，不承诺独立 browser profile/cache。
+- `up` 先写 `booting`，收到 metadata ready signal 后才写 `ready`；`status`、`url`、`logs`、`smoke` 读取该状态；`down` 终止记录的 harness/launcher 进程和浏览器 session，但保留 runtime 与 evidence artifacts。端口是 bind 前 probe，不是持续 reservation，仍存在 probe-to-bind race。
+- Chain-enabled 是 launcher 默认模式，并要求执行世界持久化就绪；`--chain-disable` 只是 Viewer/page-play mitigation，不能作为 chain-enabled standalone-world 证据。`trusted_local_only` 是显式本地 playtest 模式，不是 hosted-public 默认值。
 
 ## 集成边界
 

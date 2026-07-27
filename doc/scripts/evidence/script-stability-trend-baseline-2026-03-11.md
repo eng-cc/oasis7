@@ -27,8 +27,8 @@
 | Sample ID | 来源 | 主入口覆盖 | 参数契约覆盖 | fallback 围栏 | 发现日期 | 关闭日期 | 修复时长 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TASK-SCRIPTS-001` | `doc/scripts/project.md` | `0 / 5` | `0 / 5` | `0 / 1` | `2026-03-03` | `2026-03-03` | `0d` | 模块主入口建档完成，但尚未开始分层与契约治理。 |
-| `TASK-SCRIPTS-002` | `doc/scripts/governance/script-entry-layering-2026-03-11.project.md` | `5 / 5` | `0 / 5` | `1 / 1` | `2026-03-11` | `2026-03-11` | `0d` | 完成主入口与 fallback 围栏治理。 |
-| `TASK-SCRIPTS-003` | `doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md` | `5 / 5` | `5 / 5` | `1 / 1` | `2026-03-11` | `2026-03-11` | `0d` | 完成高频主入口脚本最小参数契约与失败语义。 |
+| `TASK-SCRIPTS-002` | `doc/scripts/project.md` | `5 / 5` | `0 / 5` | `1 / 1` | `2026-03-11` | `2026-03-11` | `0d` | 完成主入口与 fallback 围栏治理；历史专题已吸收到稳定模块权威。 |
+| `TASK-SCRIPTS-003` | `doc/scripts/project.md` | `5 / 5` | `5 / 5` | `1 / 1` | `2026-03-11` | `2026-03-11` | `0d` | 完成高频主入口最小契约与失败语义；历史专题已吸收到稳定模块权威。 |
 
 ## 当前基线结果
 - 主入口覆盖率：`5 / 5 = 100%` → `green`
