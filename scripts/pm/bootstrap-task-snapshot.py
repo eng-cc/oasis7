@@ -102,6 +102,9 @@ def live_payload(
         raise SnapshotError(f"tasks mapping is missing required bootstrap truth: {details}")
     if not isinstance(task["acceptance"], list) or not task["acceptance"]:
         raise SnapshotError("tasks mapping acceptance must be a non-empty list")
+    bootstrap_epoch = task.get("bootstrap_epoch", 1)
+    if type(bootstrap_epoch) is not int or bootstrap_epoch < 1:
+        raise SnapshotError("tasks mapping bootstrap_epoch must be a positive integer")
 
     root = pathlib.Path(git(repo_root, "rev-parse", "--show-toplevel")).resolve()
     canonical_worktree = pathlib.Path(task["canonical_worktree"]).resolve()
@@ -126,6 +129,7 @@ def live_payload(
             },
             "owner_role": task["owner_role"],
             "acceptance": task["acceptance"],
+            "bootstrap_epoch": bootstrap_epoch,
         },
         "repository": task["repository"],
         "git": {
