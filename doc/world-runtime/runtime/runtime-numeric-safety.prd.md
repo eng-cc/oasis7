@@ -3,7 +3,7 @@
 - 对应设计文档：`doc/world-runtime/runtime/runtime-numeric-safety.design.md`
 - 对应项目文档：`doc/world-runtime/runtime/runtime-numeric-safety.project.md`
 - 专业权威：`runtime_engineer`
-- 吸收范围：已完成的 numeric-correctness phase 1–6；phase 7–15 仍由各自专题承载。
+- 吸收范围：已完成的 numeric-correctness phase 1–12；phase 13–15 仍由各自专题承载。
 
 ## 1. 目标
 
@@ -35,6 +35,9 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | Replication writer | 本地 writer 的 epoch/sequence 位置计算可失败，local commit 构造必须透传错误；同 writer、writer 切换和无 guard 三种边界均须覆盖。 |
 | Sequencer 与 lease | proposal slot/height、lease term/expiry 的推进使用受检语义；失败保留原 proposal/head/lease。 |
 | Membership 与时钟转换 | in-memory 与 store-backed coordinator 在插入或持久化前计算 expiry；可失败接口使用受检转换，明确采用 clamp 的辅助函数必须稳定返回边界值并有测试。 |
+| PoS 比率与 required stake | 超多数配置使用无乘法溢出的 `> 1/2` 判定，并在 proto、consensus、node 三层保持一致；required-stake 使用加宽计算和可失败窄化，无法表示时拒绝。 |
+| Membership recovery/replay | retry attempt、backoff timestamp、调度间隔、policy/rollback cooldown 与计数/容量聚合采用受检算术；阈值和比率比较不得以饱和乘法改变数学判断，失败不更新 replay、pending、dead-letter 或 policy 状态。 |
+| Governance archive/audit | recovery drill、audit retention、tiered offload、rollback streak 与 alert window 的时间和计数运算采用受检语义；时间回拨或边界异常在 archive、governance、alert 状态写入前失败。 |
 
 ## 4. 验收
 
@@ -45,15 +48,15 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 
 ## 5. 里程碑
 
-- M1：phase 1–6 的永久语义与当前代码/测试 evidence 完成核对。
+- M1：phase 1–12 的永久语义与当前代码/测试 evidence 完成核对。
 - M2：稳定 PRD/design/project 三件套建立并接管专业权威。
-- M3：18 个阶段源文件、活动索引和历史入口完成原子迁移。
+- M3：phase 1–12 的 36 个阶段源文件、活动索引和历史入口分两批完成原子迁移。
 - M4：文档治理、陈旧引用、定向测试和 frozen-head review 通过。
 
 ## 6. 风险与边界
 
 - 本文不要求全仓库立即采用 BigInt 或统一 newtype。
-- 本文不替代 phase 7–15 尚未吸收的 membership/recovery/mempool 专题语义。
+- 本文不替代 phase 13–15 尚未吸收的 membership/mempool 专题语义。
 - 本文不把实现路径、测试任务状态或运维阈值迁入产品 PRD。
 - 本文不宣称模块、集成、长稳或发布就绪；发布证据仍由对应测试与任务 evidence 承载。
 
@@ -67,3 +70,4 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | --- | --- | --- | --- |
 | DEC-WR-NUMERIC-001 | 以稳定专业契约吸收已完成的 phase 1–6 | 长期保留六组三件套作为并列权威 | 阶段文档重复、设计模板化且项目状态已完成；稳定契约更利于防漂移。 |
 | DEC-WR-NUMERIC-002 | 明确区分 checked failure、rollover 与 observable clamp | 统一写成“全部越界都失败” | 当前接口签名与兼容要求不同，clamp/rollover 是受约束的显式策略。 |
+| DEC-WR-NUMERIC-003 | 以同一稳定专业契约吸收已完成的 phase 7–12 | 继续保留六组三件套与稳定契约并列 | phase 7–12 均是同一 numeric-safety 专业链中的完成记录；合并后仍以模块和边界测试保留精确证据。 |
