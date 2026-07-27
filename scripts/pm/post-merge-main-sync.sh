@@ -39,6 +39,13 @@ ACTUAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || die 
 [[ "$ACTUAL_BRANCH" == "$MAIN_REF" ]] || die "repo root is not checked out on the requested default branch"
 MAPPING="$REPO_ROOT/.pm/github-project-sync/tasks.json"
 [[ -f "$MAPPING" ]] || die "task mapping is unavailable"
+# A terminal Project item may be absent from a freshly generated default cache.
+# Recover only from the record retained by its registered canonical worktree;
+# the helper validates complete task/receipt identity before atomic import.
+python3 "$SCRIPT_DIR/recover-terminal-task-mapping.py" \
+  --repo-root "$REPO_ROOT" --mapping "$MAPPING" --task-uid "$TASK_UID" \
+  --main-ref "$MAIN_REF" --pr-receipt "$PR_RECEIPT" >/dev/null \
+  || die "default task mapping recovery failed"
 # RECEIPT_OUTPUT is accepted only after Path.is_absolute and resolved
 # relative_to(canonical_worktree) rejection in the shared validator; the
 # canonical task worktree is never a durable receipt sink.
