@@ -34,7 +34,7 @@
 - 证据入口：`doc/world-runtime/evidence/runtime-version-candidate-soak-evidence-2026-03-11.md`
 - 可采信结论：
   - 已绑定 `.tmp/release_gate_p2p_dcg010/20260306-180215/summary.json` 的真实 `dry_run=false` 样本。
-  - 上游专题 `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-release-gate-2026-03-06.md` 已将同一 run 作为 `E5` 正式登记。
+  - 历史 gameplay release-gate 曾把同一 run 登记为 `E5`；该专题已退役，当前只把 run ID 与原始 summary/metrics 作为历史 provenance，不作为现行放行结论。
   - 该证据足以把版本级 `runtime_soak` 从 `blocked` 提升到 `ready`。
 
 ## Overall Interpretation

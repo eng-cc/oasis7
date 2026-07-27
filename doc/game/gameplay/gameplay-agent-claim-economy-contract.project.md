@@ -32,7 +32,7 @@
 
 ## 依赖
 
-- `doc/game/gameplay/gameplay-engineering-architecture.md`
+- `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
 - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`

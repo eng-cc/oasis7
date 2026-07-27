@@ -26,6 +26,10 @@
 - Gameplay 生命周期沿用 `validated Action -> DomainEvent -> WorldState` 的 runtime 权威链；动作校验与路由以 `crates/oasis7/src/runtime/world/event_processing.rs` 为准，事件与持久状态以 `crates/oasis7/src/runtime/events.rs` 及 state apply 路径为准。
 - 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；存在激活的 Gameplay tick module 时先校验并应用其 directive，只有没有激活 Gameplay tick module 时才整体使用 native fallback，激活模块后不会因某类 directive 缺失而逐项回退。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。
 - 内建 Gameplay 模块的注册、`ModuleRole::Gameplay` 绑定与 readiness 由 `crates/oasis7/src/runtime/world/bootstrap_gameplay.rs` 和当前回归测试承接。模块存在或 readiness 通过不替代 gameplay 专业域的可玩性与后果可读性验收。
+- Gameplay manifest 必须使用 `ModuleRole::Gameplay` 并携带合法 contract：mode 非空、去空白后唯一，`min_players >= 1`，设置 `max_players` 时必须满足 `max_players >= min_players`；非 Gameplay manifest 不得携带该 contract。register、activate、deactivate、upgrade 都必须对变更后的 active set 预检，同一 `(mode, GameplayModuleKind)` 最多只能有一个 active module。
+- `gameplay_modules()` 与 `gameplay_mode_readiness(mode)` 返回确定排序的 active-set / coverage snapshot；readiness 只表示 runtime operational coverage，不是玩家体验、视觉或发布验收。
+- Base module governance 负责通用 identity、version、artifact、interface/export、subscription、capability 与 limit 校验，只把 Gameplay contract 和变更后 active-set slot 冲突交给 gameplay layer。这是内部实现职责拆分，不创建新的 ABI 或规则语义边界；公开协议仍以本页和 `doc/world-runtime/wasm/wasm-interface.md` 为准。
+- 发生 tick-consensus drift 时，runtime 恢复必须让受影响 action 得到显式处置（保留、replay，或带恢复路径的拒绝），不得静默丢失。可执行 governed rollback v2 的 custody、C/T reconciliation、nonce、journal/root 校验与 all-clear 流程仍由现行 rollback runbook 承载；历史 release `Go`、RTO/RPO 或一次性 soak 结果不得充当当前 release authority。
 - 生命周期事件与状态仍受本 PRD 的确定性、receipt、replay、恢复与 ABI 兼容合同约束；持久化保留和恢复细则见 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`。历史 closure 的实现过程从 Git history 与 GitHub task evidence 追溯，不再作为长期 runtime 权威入口。
 
 ## 接口 / 数据

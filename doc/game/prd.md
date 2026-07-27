@@ -48,7 +48,7 @@
 | PRD-ID | 当前玩家侧真值 | 权威专题 / 入口 | 当前状态与验证口径 |
 | --- | --- | --- | --- |
 | PRD-GAME-001 | game 模块以玩法循环和玩家体验为主轴组织需求，不以功能清单平铺。 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | 活跃基线；新增 gameplay 专题需回挂 `doc/game/prd.index.md` 与相关 topic project。 |
-| PRD-GAME-002 | 规则层边界必须能映射到 runtime / agent / viewer 可验证语义，不能只停留在概念。 | `doc/game/gameplay/gameplay-engineering-architecture.md` | 作为实现边界参考；具体行为仍由专题与任务 trace 验证。 |
+| PRD-GAME-002 | 规则层边界必须能映射到 runtime / agent / viewer 可验证语义，不能只停留在概念。 | `doc/game/gameplay/gameplay-top-level-design.prd.md`、`doc/world-runtime/prd.md` | gameplay 拥有玩家规则，runtime 拥有实现边界；具体行为仍由专业任务证据验证。 |
 | PRD-GAME-003 | 发布前可玩性结论必须绑定证据、风险等级和 go/no-go 口径。 | `testing-manual.md`, `doc/playability_test_result/prd.md` | release / preview 相关结论必须回到 QA evidence。 |
 | PRD-GAME-004 | micro-loop 要让玩家看见动作接受、推进、阻塞、反馈和下一步；Viewer 与 pure API 必须从同一权威状态给出状态感知的“现在做什么”：有效动作，以及合理但暂不可用动作的原因和解锁/恢复路径。cold start、进行中、重连和空/阻塞快照都必须保留有效决策，不能只停留在内部 snapshot 字段、空列表或协议猜测。 | `doc/game/gameplay/gameplay-top-level-design.prd.md`；`doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` | 本行拥有 gameplay 验收语义；产品承诺与组合验收见首局专题。后续 runtime/viewer 必须以真实动作能力验证 parity，不得借此新增 snapshot 字段、UI 布局或改变动作可用性。 |
 | PRD-GAME-005 | 分布式执行 / 治理能力是长期在线支撑，不是当前首局玩家主循环扩张许可。 | `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`；`doc/world-runtime/prd.md`；`doc/p2p/prd.md` | game 只保留玩家治理体验与早期曝光边界；长期执行、共识和恢复由专业域拥有。 |

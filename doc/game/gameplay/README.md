@@ -63,7 +63,7 @@
   - closed beta candidate gate 如何判断
   - 当前 release gate 与候选级放行边界在哪里
 - 历史 closure / production provenance:
-  - release gap、production closure 与 runtime governance closure 旧专题只作为历史证据入口保留；当前首读先走 `gameplay-top-level-design.prd.md`、`gameplay-top-level-design.project.md`、`doc/game/prd.index.md#历史-closure--provenance-入口` 与 GitHub task issue evidence comments。
+  - release gap、production closure、runtime governance 与 base-runtime/WASM split 旧专题正文已退役；当前首读走 `gameplay-top-level-design.prd.md`、`gameplay-top-level-design.project.md`、world-runtime/WASM 专业权威与 GitHub task issue evidence comments。
 
 ### 5. Economy、claim 与运营规则
 - 首读入口:
