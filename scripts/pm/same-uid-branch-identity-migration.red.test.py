@@ -119,6 +119,11 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         mapping["tasks"][UID] = record
         self.mapping.write_text(json.dumps(mapping), encoding="utf-8")
 
+    def remove_bootstrap_epoch(self) -> None:
+        record = self.mapping_record()
+        record.pop("bootstrap_epoch")
+        self.replace_mapping_record(record)
+
     def run_helper(
         self,
         *,
@@ -220,6 +225,29 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(receipt["invalidated_authority"]["fields"], invalidated["fields"])
         self.assertIn("phase_receipts", invalidated["fields"])
         self.assertIn("bootstrap_snapshot", invalidated["fields"])
+
+    def test_legacy_record_without_bootstrap_epoch_migrates_as_epoch_one(self) -> None:
+        self.remove_bootstrap_epoch()
+
+        receipt = self.assert_migrated(self.run_helper())
+
+        history = self.mapping_record()["historical_epochs"]["1"]
+        self.assertEqual(history["task_record"]["bootstrap_epoch"], 1)
+        self.assertEqual(receipt["old_epoch"], 1)
+        self.assertEqual(receipt["new_epoch"], 2)
+
+    def test_legacy_record_without_bootstrap_epoch_recovers_after_mapping_commit(self) -> None:
+        self.remove_bootstrap_epoch()
+
+        interrupted = self.run_helper(crash_after="mapping_committed")
+
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+        self.assertIn("injected crash after mapping committed", interrupted.stderr)
+        receipt = self.assert_migrated(self.run_helper())
+        history = self.mapping_record()["historical_epochs"]["1"]
+        self.assertEqual(history["task_record"]["bootstrap_epoch"], 1)
+        self.assertEqual(receipt["old_epoch"], 1)
+        self.assertEqual(receipt["new_epoch"], 2)
 
     def test_existing_conflicting_branch_fails_before_commit_and_keeps_old_epoch_active(self) -> None:
         self.git("branch", self.replacement_branch, "main")

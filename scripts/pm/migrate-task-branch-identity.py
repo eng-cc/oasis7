@@ -484,7 +484,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise MigrationError("comparison ref OID changed after replacement branch creation")
 
         archive = root / ".pm" / "scratch" / args.task_uid / "historical-epochs" / str(old_epoch) / "bootstrap-task-snapshot.json"
-        historical = {"task_record": json.loads(json.dumps(record)), **archive_snapshot(snapshot, archive)}
+        historical_record = json.loads(json.dumps(record))
+        historical_record.setdefault("bootstrap_epoch", old_epoch)
+        historical = {"task_record": historical_record, **archive_snapshot(snapshot, archive)}
         update_journal(journal_file, {"task_uid": args.task_uid,
                                       "historical_snapshot_path": historical.get("snapshot_path", "")})
         if os.environ.get("OASIS7_PM_TEST_MIGRATION_CRASH_AFTER") == "historical_snapshot_archived":
