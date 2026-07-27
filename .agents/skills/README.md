@@ -43,6 +43,10 @@ surface.
 - When moving a default skill into the library, update this README,
   `doc/engineering/workflow/source-of-truth.md`, role cards, and any scripts
   that referenced the old `.agents/skills` path.
+- External workflow or skill ideas are historical decision inputs only: adopt
+  them solely through a new repo-owned task and source-of-truth-first change.
+  They cannot create a default phase, replace the canonical task/worktree/PR
+  chain, or reactivate a retired generic mirror without that promotion.
 
 ## Authoring Entry Points
 

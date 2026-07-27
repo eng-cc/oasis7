@@ -264,6 +264,18 @@
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
 - [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前快照式 `codex exec review --uncommitted` 规则与 smoke。
 - [x] TASK-ENGINEERING-086 (PRD-ENGINEERING-022) [test_tier_required]: 建立“记忆启发式自我进化补强”专题 `prd/design/project`，冻结 `memoryOSS` / 《Hindsight》 的 adopted/rejected/deferred 边界，并同步回写 engineering 根入口、主项目、索引与 task execution log 规则。
+
+### Retained Pending Self-Evolution Follow-ups
+
+- Historical pending scope `TASK-ENGINEERING-087` (PRD-ENGINEERING-MIR-001/002/005): 扩展 role/shared memory schema，增加 `memory_kind`、`review_due_at`、`recall_priority` 与兼容 lint/report。
+- Historical pending scope `TASK-ENGINEERING-088` (PRD-ENGINEERING-MIR-002/005): 建立 recall profile registry，并让 `workflow-report` / `memory-report` 支持 budgeted recall 视图与截断说明。
+- Historical pending scope `TASK-ENGINEERING-089` (PRD-ENGINEERING-MIR-002/003/004/006): 建立 `.codex` raw evidence / GitHub task issue evidence comments / explicit evidence -> `working_memory` -> GitHub-backed reflection intake 的 canonical 契约、去重规则、`source_ref` 规范化与 owner review 入口。
+- Historical pending scope `TASK-ENGINEERING-090` (PRD-ENGINEERING-MIR-003/004/005/006): 建立 recall/working_memory/reflection 质量评估与回归 smoke，覆盖 `.codex` 抽取、stale belief、working_memory close-phase 清理、重复 reflection 与新角色扩容场景。
+
+These retained historical identifiers describe pending implementation scope only;
+a new GitHub-backed task must be created before execution, and its issue/Project
+record is authoritative.
+
 - [x] TASK-ENGINEERING-091 (PRD-ENGINEERING-022) [test_tier_required]: 补充“会话记录分析 -> task-scoped working_memory”专题口径，冻结 Codex/engineering task 的 phase 1 来源为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时为当前 live session 抽取补齐 `last_extracted_ts/captured_until_ts` 水位与默认增量抽取口径，并回写记忆启发式补强专题、engineering 主项目与 task execution log。
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-021) [test_tier_required]: 起草 7 个标准角色 `topic` allowlist、扩展 `promotion_reason` 白名单与 close-phase 记忆抽取 checklist，并同步接入长期 memory 专题、角色职责卡、`workflow-report` 与 `.pm/templates/role-memory-policy.yaml` 草案。
 - [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 补齐 commit 前 review 流程的正式追踪入口，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 task execution log，确保默认流程互链完整。
@@ -523,12 +535,8 @@
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/doc-governance/doc-structure-standard.project.md`
-- `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
-- `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
-- `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
-- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
-- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
-- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
+- `doc/engineering/doc-governance/README.md`（当前文档组织、阅读面与路径分流入口）
+- `doc/engineering/governance/README.md`（当前 inventory、维护成本与季度复核入口）
 - historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
 - historical `world-simulator-viewer-path-governance` triplet（后续已删除；当前 `world-simulator/viewer` 首读分流与维护边界由 `doc/world-simulator/viewer/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
 - historical `p2p-node-path-governance` triplet（后续已删除；当前 `p2p/node` 首读分流、主题簇与维护边界由 `doc/p2p/node/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
@@ -537,12 +545,8 @@
 - `doc/devlog/README.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
-- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
-- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
-- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
-- `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
-- `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
-- `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
+- `.agents/skills/README.md`（当前 default-vs-library skill reachability）
+- `doc/engineering/project.md#retained-pending-self-evolution-follow-ups`（当前 memory / reflection 待办范围）
 - historical PRD review checklist snapshots（后续已删除；当前审读追溯见 core review round logs，当前模块 truth 见各模块 `README.md` / `prd.index.md` / `project.md` / `prd.md`）
 - `scripts/doc-governance-check.sh`
 - `scripts/doc-inventory-report.sh`

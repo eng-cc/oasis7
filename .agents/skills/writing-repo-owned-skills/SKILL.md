@@ -78,8 +78,8 @@ Do not directly borrow:
 - default-loadable skill surface: `.agents/skills/*/SKILL.md`
 - non-default specialist library surface: `skills/*/SKILL.md`
 - governance topics:
-  - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
+  - `doc/engineering/workflow/source-of-truth.md`
+  - `.agents/skills/README.md`
 
 ## Verification
 
