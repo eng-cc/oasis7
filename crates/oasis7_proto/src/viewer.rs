@@ -9,19 +9,9 @@ mod refine_quote;
 pub use refine_quote::*;
 mod product_validation_quote;
 pub use product_validation_quote::*;
+mod power_survival_quote;
+pub use power_survival_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NegotiatedViewerProtocol {
-    pub version: u32,
-    #[serde(default)]
-    pub capabilities: Vec<String>,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayerAuthScheme {
-    #[default]
-    Ed25519,
-}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
     #[serde(default)]
@@ -95,6 +85,9 @@ pub enum ViewerRequest {
     },
     QuoteProductValidation {
         request: ProductValidationQuoteRequest,
+    },
+    QuotePowerSurvival {
+        request: PowerSurvivalQuoteRequest,
     },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
@@ -632,6 +625,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     ProductValidationQuotePreflight {
         quote: ProductValidationQuotePreflight,
+    },
+    PowerSurvivalQuotePreflight {
+        quote: PowerSurvivalQuotePreflight,
     },
     Error {
         message: String,

@@ -825,6 +825,7 @@ impl ViewerRuntimeLiveServer {
                     .map(|quote| ViewerResponse::ProductValidationQuotePreflight { quote })
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
+            ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {

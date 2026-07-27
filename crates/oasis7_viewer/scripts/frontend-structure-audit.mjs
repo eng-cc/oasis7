@@ -25,16 +25,16 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "the next Viewer inline-style or document-shell behavior change must extract a coherent style/token boundary or record a narrower owner-tagged exemption",
   },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
-    maxLines: 4424,
+    maxLines: 4435,
     owner: "viewer_engineer",
-    reason: "legacy facade burndown is already tracked as viewer-legacy-core-facade-burndown-next-slice",
-    nextTrigger: "next legacy_core behavior change must extract one coherent boundary or record a narrower exemption",
+    reason: "task_36a85651cfec4ce2b35a20545990c69d adds a bounded power-survival quote facade while quote state, request signing, rendering, and fixtures stay outside legacy_core",
+    nextTrigger: "next legacy_core behavior change must extract the remaining quote protocol dispatch/test-api facade",
   },
   "crates/oasis7_viewer/software_safe_src/main.jsx": {
-    maxLines: 4376,
+    maxLines: 4379,
     owner: "viewer_engineer",
-    reason: "main Viewer composition surface is already tracked as viewer-main-jsx-component-boundary-next-slice",
-    nextTrigger: "next main.jsx UI behavior change must extract a named widget/feature component or display-model helper",
+    reason: "task_36a85651cfec4ce2b35a20545990c69d composes the extracted bounded PowerSurvivalQuoteGameplayPanel without expanding its rendering logic into main.jsx",
+    nextTrigger: "next main.jsx UI behavior change must extract another named composition boundary or display-model helper",
   },
   "crates/oasis7_viewer/software_safe_src/main.test.jsx": {
     maxLines: 3363,

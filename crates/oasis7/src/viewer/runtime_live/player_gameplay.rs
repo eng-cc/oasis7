@@ -31,6 +31,9 @@ use crate::simulator::{
 use oasis7_wasm_abi::MaterialStack;
 use std::collections::BTreeMap;
 
+#[path = "power_survival_quote.rs"]
+mod power_survival_quote;
+
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
 
 pub(super) enum CollectDataResult {
