@@ -1253,7 +1253,7 @@ export function PixelWorldHost(props) {
 
   function enterFocusMode() {
     setPersistentFocusMode(true);
-    setPersistentCommandDrawerOpen(true);
+    setPersistentCommandDrawerOpen(false);
     setPersistentDiagnosticsDrawerOpen(false);
     setPersistentMaximized(false);
   }
