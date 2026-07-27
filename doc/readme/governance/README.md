@@ -4,7 +4,7 @@
 
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
-- 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
+- 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`../../../scripts/readme-link-check.sh` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
 - 想确认 release communication 的产品边界：先读 `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`；执行时使用 `readme-release-communication-template.md` 或 `readme-release-announcement-template.md`
 - 想确认 Moltbook 渠道边界与公开 claim：先读发行沟通产品分册；持续运营使用 `readme-moltbook-liveops-runbook.md`，帖文与回复素材使用 `readme-moltbook-post-pack.md`
 - 想确认 limited playable technical preview 中“参与或贡献不自动形成权益”的产品边界：先读 [`参与和认可边界`](../../product/player-entry-distribution/participation-and-recognition-boundaries.prd.md)；如需贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan，再读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
@@ -36,7 +36,7 @@
 - 首读入口:
   - `../../../README.md`
   - `readme-project-overview-whitepaper-2026-04-25.md`
-  - `readme-consistency-audit-checklist-2026-03-11.prd.md`
+  - `../../../scripts/readme-link-check.sh`
   - `readme-quarterly-review-cycle-2026-03-11.prd.md`
 - 适合问题:
   - README 对外口径一致性和链接检查该看哪里
@@ -45,11 +45,13 @@
 
 ### 已删除治理专题
 - 已删除:
+  - `readme-consistency-audit-checklist-2026-03-11.md`
+  - `readme-consistency-audit-checklist-2026-03-11.{prd,design,project}.md`
   - `readme-link-check-automation-2026-03-11.{prd,design,project}.md`
   - `readme-root-status-alignment-2026-03-11.{prd,design,project}.md`
 - 当前承接:
-  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-consistency-audit-checklist-2026-03-11.prd.md`、`readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `../project.md` 承接。
-  - 根 README 公开状态真值是根 `../../../README.md`；公开状态复核从白皮书总览、一致性 checklist、季度复核与 release communication surfaces 进入。
+  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `../project.md` 承接。
+  - 根 README 公开状态真值是根 `../../../README.md`；公开状态复核从白皮书总览、季度复核与 release communication surfaces 进入。
 - 追溯边界:
   - 如需查看 2026-03-11 一次性专题原文，使用 git history 与 GitHub task issue evidence comments；不要在当前入口中恢复这些旧专题作为活跃文档。
 

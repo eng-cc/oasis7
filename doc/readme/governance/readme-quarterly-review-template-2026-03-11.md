@@ -13,15 +13,17 @@
 ## Inputs
 - `README.md`
 - `doc/README.md`
-- `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.md`
 - `scripts/readme-link-check.sh`
 - 相关模块主 PRD / site / core 文档
 
 ## Review Checklist
-- [ ] 执行人工巡检清单
 - [ ] 执行 `./scripts/readme-link-check.sh`
-- [ ] 复核产品状态口径是否与 site / core 一致
-- [ ] 复核 README 权威源链接是否仍正确
+- [ ] README 顶层叙事不与 `doc/product/` 产品真值及对应专业模块 PRD 冲突；冲突时先裁定权威源，再回写 README
+- [ ] README 与 site 不出现超出当前 evidence 的“已上线 / public launch”等状态宣称；变化时同步复核中英文入口
+- [ ] 世界规则、玩家权能、WASM、runtime 与 viewer 只保留导航级摘要，具体规则链接到产品或专业权威
+- [ ] README / `doc/README.md` 指向产品树、`testing-manual.md` 和专业主 PRD 的链接可用
+- [ ] site、产品 PRD、专业主 PRD或公开状态文案变化时，触发本模板并在对应 project / GitHub task evidence 回写
+- [ ] README 不重复定义详细行为或实现；发现重复时迁移语义、修复引用并删除被完整吸收的源内容
 - [ ] 将问题写入修复记录模板
 
 ## Findings
