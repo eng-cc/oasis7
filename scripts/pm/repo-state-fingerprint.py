@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Cross-platform maintenance: support POSIX Python and native Windows Python under Git Bash.
 """Fingerprint one Git verification epoch without mutating repository state."""
 
 from __future__ import annotations
@@ -13,8 +14,13 @@ from pathlib import Path
 
 
 def git(root: Path, *args: str) -> bytes:
+    bash_executable = os.environ.get("OASIS7_GIT_BASH_EXECUTABLE")
+    git_command = os.environ.get("OASIS7_GIT_COMMAND")
+    command = ["git", "-C", str(root), *args]
+    if bash_executable and git_command:
+        command = [bash_executable, git_command, "-C", str(root), *args]
     return subprocess.check_output(
-        ["git", "-C", str(root), *args], stderr=subprocess.DEVNULL
+        command, stderr=subprocess.DEVNULL
     )
 
 

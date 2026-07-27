@@ -10,6 +10,11 @@ case "$(uname -s)" in
       TMPDIR="$(cygpath -m "$TMPDIR")"
     fi
     export TMPDIR
+    # Native Windows Python cannot resolve POSIX PATH entries. Route its Git
+    # subprocesses through this exact Git Bash and Bash-resolved Git command.
+    OASIS7_GIT_BASH_EXECUTABLE="$(cygpath -w "$(command -v bash)")"
+    OASIS7_GIT_COMMAND="$(command -v git)"
+    export OASIS7_GIT_BASH_EXECUTABLE OASIS7_GIT_COMMAND
     ;;
 esac
 
