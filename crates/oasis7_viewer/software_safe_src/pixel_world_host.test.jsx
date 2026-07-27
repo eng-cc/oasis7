@@ -836,7 +836,13 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveClass("pixel-world-focus-minimap");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
-    expect(commandDrawer.open).toBe(true);
+    const focusDiagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
+    expect(commandDrawer).toHaveProperty("open", false);
+    expect(focusDiagnosticsDrawer).toHaveProperty("open", false);
+
+    screen.getByRole("button", { name: "Command & Target" }).click();
+    expect(commandDrawer).toHaveProperty("open", true);
+    expect(focusDiagnosticsDrawer).toHaveProperty("open", false);
     expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "true");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("agent=agent-0");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--blocker")).toHaveAttribute("data-blocker-present", "true");
@@ -857,8 +863,6 @@ describe("pixel world host", () => {
     expect(screen.getByRole("button", { name: "Maximize" })).toHaveClass("pixel-world-focus-control--secondary");
     expect(screen.getByRole("button", { name: "Leave Focus · Esc" })).toHaveClass("pixel-world-focus-control--quiet");
 
-    screen.getByRole("button", { name: "Command & Target" }).click();
-    expect(commandDrawer.open).toBe(true);
     expect(commandDrawer).toHaveTextContent("Agent Chat");
 
     screen.getByRole("button", { name: "Maximize" }).click();
