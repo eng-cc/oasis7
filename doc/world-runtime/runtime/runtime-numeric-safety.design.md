@@ -21,6 +21,9 @@
 | Replication | `crates/oasis7_node/src/replication.rs` | writer position 返回 `Result`；local commit 构造透传错误。 |
 | Sequencer/lease | `crates/oasis7_consensus/src/sequencer_mainloop.rs`、`lease.rs` | slot/height/term/expiry 先计算，成功后才更新权威状态。 |
 | Membership/clock | `membership_reconciliation.rs`、`membership_recovery/stores.rs`、`dht.rs`、`crates/oasis7_node/src/runtime_util.rs` | schedule expiry 在写前受检；Duration 窄化按接口选择失败或显式 clamp。 |
+| PoS ratio/required stake | `crates/oasis7_proto/src/distributed_pos.rs`、`crates/oasis7_consensus/src/pos.rs`、`crates/oasis7_node/src/pos_validation.rs` | `> 1/2` 判定不通过可能溢出的乘法实现；required stake 以加宽计算和可失败窄化保持三层一致。 |
+| Membership retry/replay | `crates/oasis7_consensus/src/membership_recovery/types.rs`、`mod.rs`、`replay.rs` | retry/backoff、调度/cooldown 与计数/容量后继值先受检；阈值/比率比较保持数学语义；失败不部分持久化。 |
+| Governance archive/audit | `membership_recovery/replay_archive.rs`、`replay_archive_tiered.rs`、`replay_audit.rs` | drill、retention、offload、rollback 与 alert window 的时间/计数异常在状态更新前显式失败。 |
 
 ## 3. 状态转移模式
 
@@ -49,4 +52,4 @@ read current state
 
 ## 6. 演进边界
 
-phase 7–15 仍是独立专题。后续吸收时应追加子系统权威图和 evidence ledger，而不是把未复核内容预先归入本文。
+phase 13–15 仍是独立专题。后续吸收时应追加子系统权威图和 evidence ledger，而不是把未复核内容预先归入本文。

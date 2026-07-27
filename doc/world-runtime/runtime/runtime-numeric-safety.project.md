@@ -2,7 +2,7 @@
 
 - 对应需求文档：`doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
 - 对应设计文档：`doc/world-runtime/runtime/runtime-numeric-safety.design.md`
-- 当前状态：phase 1–6 已完成并归档到稳定权威；phase 7–15 未纳入本次吸收。
+- 当前状态：phase 1–12 已完成并归档到稳定权威；phase 13–15 尚未吸收。
 
 ## 任务拆解
 
@@ -10,6 +10,8 @@
 - [x] numeric-safety-authority-absorption (PRD-WORLD_RUNTIME-041) [test_tier_required]: 建立稳定 PRD/design/project 并吸收仍有效语义。 Trace: #2658 (task_530f70d6f4f547c4a6b64aa1da37a4a2)
 - [x] numeric-safety-source-retirement (PRD-WORLD_RUNTIME-041) [test_tier_required]: 删除 18 个阶段源文件并修复活动入口。 Trace: #2658 (task_530f70d6f4f547c4a6b64aa1da37a4a2)
 - [x] numeric-safety-local-verification (PRD-WORLD_RUNTIME-041) [test_tier_required]: 完成本地治理与定向边界测试，并把 frozen-head review、CI 与合入收尾移交 GitHub task evidence。 Trace: #2658 (task_530f70d6f4f547c4a6b64aa1da37a4a2)
+- [x] numeric-safety-phase7-12-authority-audit (PRD-WORLD_RUNTIME-041) [test_tier_required]: 核对 phase 7–12 的永久语义、产品边界、当前实现与边界测试。 Trace: #2665 (task_99bbcd36b8ed43b4a39e86aa2e2d4478)
+- [x] numeric-safety-phase7-12-absorption (PRD-WORLD_RUNTIME-041) [test_tier_required]: 将 phase 7–12 吸收到稳定 PRD/design/project，删除 18 个阶段源并修复活动入口。 Trace: #2665 (task_99bbcd36b8ed43b4a39e86aa2e2d4478)
 
 ## 已完成 evidence ledger
 
@@ -21,13 +23,19 @@
 | phase 4 | Replication writer epoch/sequence 可失败定位 | `crates/oasis7_node/src/replication.rs`；`replication/tests.rs` 中同 writer、writer 切换、无 guard 三类测试 |
 | phase 5 | Sequencer proposal 与 lease term/expiry 原子推进 | `crates/oasis7_consensus/src/sequencer_mainloop.rs`、`lease.rs` 及其 overflow-without-mutation tests |
 | phase 6 | Membership schedule expiry 与 Duration 窄化边界 | `membership_reconciliation.rs`、`membership_recovery/stores.rs`、`membership_reconciliation_tests.rs`、`dht.rs`、`crates/oasis7_node/src/runtime_util.rs` |
+| phase 7 | PoS 超多数比率与 required-stake 的无溢出三层一致语义 | `crates/oasis7_proto/src/distributed_pos.rs`、`crates/oasis7_consensus/src/pos.rs`、`crates/oasis7_node/src/pos_validation.rs`；`required_supermajority_accepts_extreme_ratio_just_above_half` 及对应 consensus/node 边界测试 |
+| phase 8 | Membership retry/backoff 与 adaptive replay 阈值/比率安全 | `membership_recovery/types.rs`、`mod.rs`、`replay.rs`；`with_retry_failure_rejects_attempt_overflow`、`with_retry_failure_rejects_retry_timestamp_overflow` 及 dead-letter replay tests |
+| phase 9 | Governance drill schedule 与 audit retention 时间受检语义 | `membership_recovery/replay_archive.rs`；`governance_recovery_drill_schedule_rejects_next_due_overflow_without_mutation`、`governance_audit_archive_prune_rejects_age_overflow_without_mutation` |
+| phase 10 | Tiered offload、drill alert 与 rollback audit 的时间/计数原子失败 | `membership_recovery/replay_archive_tiered.rs`、`replay_audit.rs`；tiered-offload、alert age 与 rollback-streak overflow-without-mutation tests |
+| phase 11 | Replay interval、policy cooldown 与 rollback cooldown 门控 | `membership_recovery/replay.rs`；`run_replay_schedule_with_state_store_rejects_interval_overflow_without_mutation`、`recommend_guarded_policy_rejects_cooldown_overflow_without_mutation` 及 persisted rollback-cooldown regression |
+| phase 12 | Recovery scheduling、alert/dead-letter 容量与计数聚合 | `membership_recovery/mod.rs`；checked count helpers 与 recovery/dead-letter overflow regressions |
 
 ## 维护任务
 
-- 已完成：将 phase 1–6 的永久契约吸收到稳定 PRD/design。
+- 已完成：将 phase 1–12 的永久契约吸收到稳定 PRD/design。
 - 已完成：将当前实现与测试入口归拢到本 evidence ledger。
-- 已完成：删除已吸收的 18 个阶段源文件并修复活动索引。
-- 已完成：明确 phase 7–15 未被本次合并覆盖。
+- 已完成：分两批删除 phase 1–12 的 36 个阶段源文件并修复活动索引。
+- 已完成：明确 phase 13–15 未被本次合并覆盖。
 - 后续：修改数值策略时，同步更新稳定 authority 与对应边界测试。
 
 ## 依赖
@@ -40,12 +48,12 @@
 
 - `./scripts/doc-governance-check.sh`
 - `./scripts/readme-link-check.sh`
-- 对已删除 phase 1–6 文件名执行精确陈旧引用扫描
+- 对已删除 phase 1–12 文件名执行精确陈旧引用扫描
 - 运行与本次 authority map 对应的定向 runtime/consensus/node 测试
 - `git diff --check`
 
 ## 状态
 
-- 当前状态：phase 1–6 专业权威合并与本地验证完成；frozen-head lifecycle 状态以 GitHub task evidence 为准。
+- 当前状态：phase 1–12 专业权威合并已完成；本地与 frozen-head lifecycle 状态以 GitHub task evidence 为准。
 - 阻塞项：无。
 - 非声明：本状态不等于集成、长稳或发布就绪。

@@ -160,10 +160,6 @@
     - `doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.design.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase7.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase7.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase8.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase8.project.md`
     - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
     - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
     - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md`
@@ -171,7 +167,7 @@
     - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
     - `doc/world-runtime/project.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7(_consensus|_node|_net|_distfs|_proto|_wasm_executor)?|crates/oasis7|crates/oasis7_consensus|crates/oasis7_node|crates/oasis7_net|crates/oasis7_distfs|crates/oasis7_proto|crates/oasis7_wasm_executor" doc/world-runtime/runtime/runtime-infinite-sequence-rollover.project.md doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase7.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase7.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase8.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase8.project.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
+    - `rg -n "oasis7(_consensus|_node|_net|_distfs|_proto|_wasm_executor)?|crates/oasis7|crates/oasis7_consensus|crates/oasis7_node|crates/oasis7_net|crates/oasis7_distfs|crates/oasis7_proto|crates/oasis7_wasm_executor" doc/world-runtime/runtime/runtime-infinite-sequence-rollover.project.md doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-051 (PRD-WORLD_RUNTIME-001/010/011/012) [test_tier_required]: 收口 `world-runtime` 其余活跃 module/testing/governance 与 numeric-correctness 专题中仍把旧 `oasis7*` crate/path/command 写成当前实现载体的口径，统一到 `oasis7*`。
@@ -185,14 +181,6 @@
     - `doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.design.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase9.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase9.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase10.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase10.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase11.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase11.project.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase12.prd.md`
-    - `doc/world-runtime/runtime/runtime-numeric-correctness-phase12.project.md`
     - `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md`
     - `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md`
     - `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md`
@@ -201,7 +189,7 @@
     - `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.project.md`
     - `doc/world-runtime/project.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7(_consensus|_node|_wasm_abi)?|crates/oasis7|crates/oasis7_consensus|crates/oasis7_node|crates/oasis7_wasm_abi|cargo test -p oasis7" doc/world-runtime/module/module-storage.project.md doc/world-runtime/module/player-published-entities.prd.md doc/world-runtime/module/module-subscription-filters.project.md doc/world-runtime/governance/governance-events.md doc/world-runtime/testing/testing.md doc/world-runtime/runtime/bootstrap-power-modules.project.md doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase9.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase9.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase10.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase10.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase11.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase11.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase12.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase12.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase14.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase15.prd.md`
+    - `rg -n "oasis7(_consensus|_node|_wasm_abi)?|crates/oasis7|crates/oasis7_consensus|crates/oasis7_node|crates/oasis7_wasm_abi|cargo test -p oasis7" doc/world-runtime/module/module-storage.project.md doc/world-runtime/module/player-published-entities.prd.md doc/world-runtime/module/module-subscription-filters.project.md doc/world-runtime/governance/governance-events.md doc/world-runtime/testing/testing.md doc/world-runtime/runtime/bootstrap-power-modules.project.md doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md doc/world-runtime/runtime/runtime-numeric-correctness-phase14.project.md doc/world-runtime/runtime/runtime-numeric-correctness-phase15.prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-052 (PRD-WORLD_RUNTIME-001/015/020/021/022) [test_tier_required]: 收口 `world-runtime` 仍活跃专题中把旧 builtin 模块命名、旧品牌 storage profile key 与旧品牌 wasm fallback 写成当前入口的口径，统一到 `oasis7_builtin_wasm`、`OASIS7_CHAIN_STORAGE_PROFILE`、`OASIS7_WASM_*` 与 `OASIS7_BUILTIN_WASM_*` 当前入口。
