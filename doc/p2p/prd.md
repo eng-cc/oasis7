@@ -192,15 +192,15 @@
   - AC-17: 历史文档中 `oasis7_viewer_live` 子目录旧路径完成迁移（对齐 `oasis7_viewer_live.rs` 与 `oasis7_chain_runtime/*` 现行布局），文档门禁通过。
   - AC-18: `doc/p2p/**` 仍可读历史专题的首行标题必须统一使用 `oasis7 Runtime` 或 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文、证据原文与兼容说明中。
   - AC-19: `mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22` 专题文档落盘并映射任务链 `TASK-P2P-031`，明确 `10000 bps` 创世分配表、项目战略控制 `5000 bps`、协议奖励池 `3500 bps`、单人直持目标/上限、低流通边界与“贡献制奖励而非 P2E”口径。
-  - AC-20: `p2p-mainnet-crypto-security-baseline-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-032`，明确当前整体 verdict 为 `not_mainnet_grade`，固定交易授权、keystore、治理 signer 与创世控制 blocker，并给出 mainnet-ready 路线图。
+  - AC-20: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-032` 的密码学基线，保持整体 verdict 为 `not_mainnet_grade`，固定交易授权、custody、治理 signer 与创世控制 blocker。
   - AC-21: `mainchain-token-signed-transaction-authorization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-033`；`POST /v1/chain/transfer/submit` 必须新增 `public_key/signature` 鉴权、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归。
-  - AC-22: `p2p-mainnet-grade-readiness-hardening-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
-  - AC-23: `p2p-production-signer-custody-keystore-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
-  - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
-  - AC-25: `p2p-genesis-freeze-ceremony-qa-gate-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
+  - AC-22: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
+  - AC-23: 同一稳定权威吸收 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
+  - AC-24: 同一稳定权威吸收 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
+  - AC-25: 同一稳定权威吸收 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
   - AC-26: `TASK-P2P-038` 是 2026-03-23 的历史公开口径审查，记录当时 `MAINNET-1~3` 仅完成 spec gate、整体 verdict 为 `not_mainnet_grade`；它不再充当当前公开状态权威。当前状态以根 `README.md` 为准，长期公开口径规则由 `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md` 承接，网络与测试文档提供专业证据。
   - AC-27: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` 保留 2026-03-24 专题历史并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、单实现栈等价要求、历史 gap matrix、`fuzz/property` 与 `network rehearsal/release train` 缺口及 claims denylist；当前网络状态与成熟度不由该 benchmark 维护。
-  - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` legacy 专题文档落盘并映射历史任务链 `TASK-P2P-040`，明确 rehearsal `public_testnet_rehearsal/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 legacy evidence 边界；当前不作为目标环境或玩家世界模型。
+  - AC-28: `formal-network-tiers-testnet-mechanism` 与保留的 legacy release-train runbook 吸收历史任务链 `TASK-P2P-040`，明确旧 rehearsal 轨道、`release_candidate_bundle`、promotion/freeze/rollback 与 provenance 边界；当前不作为目标环境、公开 readiness 或玩家世界模型。
   - AC-29: hosted player access 的长期合同由本 PRD 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md` 承接，明确 `public player plane / private control plane / identity plane / custody or signer plane`、`guest/player/strong-auth` 会话梯度、player-safe / operator-only action split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界；历史 `TASK-P2P-041` 从模块 project、GitHub task evidence 与 Git history 追溯。
   - AC-30: `mainnet-private-reachability-architecture` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
   - AC-30A: `mainnet-private-reachability-architecture` 必须补齐 iroh-inspired follow-up 的 truth chain：`PeerReachabilityContract` 负责 runtime reachability 归一化，path behavior matrix 只负责 evidence/claim taxonomy，triad/status observability 只消费 bounded status projection。
@@ -236,15 +236,11 @@
   - `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
   - `doc/p2p/node/node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
+  - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
+  - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`

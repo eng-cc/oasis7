@@ -69,9 +69,7 @@
 - Architecture Overview: 本专题属于“解释 + 对标 + 执行优先级”文档，不新增协议。它把 `testing-manual.md`、`p2p-mainnet-crypto-security-baseline`、`p2p-mainnet-grade-readiness-hardening`、`p2p-governance-signer-externalization` 当前已存在的测试与门禁，映射到主流公链更完整的测试体系上，判断 oasis7 目前在哪一层做得够、哪一层还没有正式形成 release gate。
 - Integration Points:
   - `testing-manual.md`
-  - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
+  - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/p2p/project.md`

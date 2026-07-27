@@ -67,4 +67,4 @@
 
 ## Notes
 - This evidence upgrades rollback truth from “bootstrap fallback is only a placeholder idea” to “bootstrap fallback has a real, recently exercised recovery contract”.
-- It does not override the formal rule in `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`: first shared-devnet `pass` still needs the fallback bundle/gate/owner/steps/scope set to align with the same candidate/window.
+- It does not override the retained legacy rehearsal rule in `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`: first shared-devnet `pass` still needs the fallback bundle/gate/owner/steps/scope set to align with the same candidate/window.

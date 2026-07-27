@@ -18,7 +18,8 @@
 ## 依赖
 
 - 当前行为锚点：PRD 所列 startup-reconcile、signature、membership、sequencer 源码与单元测试。
-- 系统级安全/readiness 边界：`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`。
+- 系统级安全/readiness 边界：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`。
+- generic replication security authority consolidation 已吸收 2026-02-23 guard 原子性、writer/fetch 鉴权、有界队列与 signed restore 合同；不改变 production custody/mainnet 判定。
 - 节点 inventory、health/readiness、state-sync/restore、upgrade/rollback 的运行面证据：对应 runbook 与 `doc/testing/evidence/`。
 
 ## 状态

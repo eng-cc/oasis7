@@ -202,7 +202,7 @@
 ### P2PARCH-7 / producer_system_designer + liveops_community + qa_engineer
 - 输入:
   - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
+  - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - P2PARCH-6 mixed-topology evidence
 - 输出:
   - shared-network mixed-topology release gate
@@ -255,7 +255,7 @@
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
 - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
 - `testing-manual.md`
