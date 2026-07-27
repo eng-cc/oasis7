@@ -2,6 +2,8 @@
 # This recovery fixture must remain compatible with POSIX and native Windows Python.
 from __future__ import annotations
 
+import datetime as dt
+import importlib.util
 import json
 import pathlib
 import subprocess
@@ -47,7 +49,7 @@ class RecoveryTest(unittest.TestCase):
             "default_branch": "main", "pr_number": 7,
             "pr_url": "https://example.invalid/pull/7", "state": "MERGED",
             "merged_at": "2026-01-01T00:00:00Z", "head_oid": "a" * 40,
-            "base_ref": "main", "observed_at": "2026-01-01T00:00:00Z",
+            "base_ref": "main", "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         }) + "\n", encoding="utf-8")
 
     def tearDown(self) -> None:
@@ -107,6 +109,25 @@ class RecoveryTest(unittest.TestCase):
         self.assertIn("existing", self.invoke().stdout)
         mapping = json.loads(self.mapping.read_text(encoding="utf-8"))
         self.assertIsNone(mapping["tasks"][UID])
+
+    def test_transaction_rejects_present_null_added_after_discovery(self) -> None:
+        spec = importlib.util.spec_from_file_location("recovery_helper", HELPER)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+
+        class RacingStore:
+            @staticmethod
+            def transact_json(path, update, default):
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["tasks"][UID] = None
+                update(data)
+
+        before = self.mapping.read_bytes()
+        with self.assertRaisesRegex(SystemExit, "conflicting task record"):
+            helper.import_recovered(RacingStore, self.mapping, UID, self.record)
+        self.assertEqual(before, self.mapping.read_bytes())
 
 
 if __name__ == "__main__":

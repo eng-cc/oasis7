@@ -134,6 +134,19 @@ def load_store(script_dir: pathlib.Path):
     return module
 
 
+def import_recovered(store: Any, mapping_path: pathlib.Path, task_uid: str,
+                     recovered: dict[str, Any]) -> None:
+    def import_if_absent(mapping: dict[str, Any]) -> None:
+        tasks = mapping.setdefault("tasks", {})
+        if not isinstance(tasks, dict):
+            fail("default task mapping has invalid tasks structure")
+        if task_uid not in tasks:
+            tasks[task_uid] = recovered
+        elif tasks[task_uid] != recovered:
+            fail("default task mapping changed to a conflicting task record during recovery")
+    store.transact_json(mapping_path, import_if_absent, {"version": 1, "tasks": {}})
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
@@ -184,16 +197,7 @@ def main() -> int:
     recovered = copy.deepcopy(authoritative[0])
 
     store = load_store(pathlib.Path(__file__).resolve().parent)
-    def import_if_absent(mapping: dict[str, Any]) -> None:
-        tasks = mapping.setdefault("tasks", {})
-        if not isinstance(tasks, dict):
-            fail("default task mapping has invalid tasks structure")
-        existing = tasks.get(args.task_uid)
-        if existing is None:
-            tasks[args.task_uid] = recovered
-        elif existing != recovered:
-            fail("default task mapping changed to a conflicting task record during recovery")
-    store.transact_json(mapping_path, import_if_absent, {"version": 1, "tasks": {}})
+    import_recovered(store, mapping_path, args.task_uid, recovered)
     print("imported")
     return 0
 

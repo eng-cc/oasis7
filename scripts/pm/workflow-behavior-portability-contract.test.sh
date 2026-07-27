@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+test "$(git -C "$ROOT_DIR" ls-files -s -- scripts/pm/post-merge-main-sync-default-cache-recovery.test.sh | awk '{print $1}')" = "100755"
 python3 - "$SCRIPT_DIR/workflow-behavior-eval.sh" <<'PY'
 import pathlib,sys
 
