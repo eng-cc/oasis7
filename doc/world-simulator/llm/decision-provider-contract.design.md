@@ -19,13 +19,14 @@
 - `AgentDecisionTrace`：`crates/oasis7/src/simulator/agent.rs`
 - `AgentMemory`：`crates/oasis7/src/simulator/memory.rs`
 - viewer 诊断协议：`crates/oasis7_proto/src/viewer.rs`
-- runtime live 真 LLM 接管专题：`doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
+- runtime-live bridge 消费 `AgentDecisionTrace`；本专题拥有 request/response/feedback/trace/memory 语义，Viewer delivery 与 runtime event/snapshot mapping 分别由 `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` 与 `doc/world-simulator/prd.md` 承载。
 - launcher operator HTTP-JSON 机器接口专题：`doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`；该接口不等同于 `DecisionProvider` 或世界内 autonomous Agent。
 
 ## 4. 约束与边界
 - 外部 provider 只提供决策建议，不得直接改 world state、存储或 runtime 内核。
 - 所有 world action 必须先经过本地 action schema 白名单，再进入 runtime 校验。
 - provider trace 需要可脱敏、可裁剪、可映射；不得把外部协议泄露为 viewer 唯一调试口径。
+- trace 必须有界并脱敏，同时保留 provider latency、token/cost、repair diagnostics 与 action/result 关联。
 - memory 的权威副本保留在本地 world-simulator；外部 memory 仅可作为 provider 内部缓存或检索辅助。
 - `Local Provider` PoC 只允许在低频、低破坏性 agent 类型上试点；高频强一致 actor 不在首轮范围。
 - required 测试必须可离线执行，因此标准层必须先支持 `MockProvider`，不能以外部联网能力作为主验证前提。

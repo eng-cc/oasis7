@@ -121,11 +121,6 @@
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` |
 | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md` |
 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md` | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.design.md` | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md` |
-| `doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.project.md` |
-| `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md` | `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.design.md` | `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.project.md` |
-| `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.prd.md` | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.design.md` | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md` |
-| `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.prd.md` | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.design.md` | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md` |
-| `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.prd.md` | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.design.md` | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.project.md` |
 | `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.design.md` | `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.project.md` |
 | `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.design.md` | historical trace: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294 / `.pm/github-project-sync/task-archive.jsonl` |
 | `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.design.md` | historical trace: `task_428db5366f654c5e892ac300807cb9cc` / GitHub issue #986 / `.pm/github-project-sync/task-archive.jsonl` |
@@ -133,7 +128,6 @@
 | `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md` | `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.design.md` | `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.project.md` |
 | `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md` | `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.design.md` | `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.project.md` |
 | `doc/world-simulator/viewer/viewer-web-semantic-test-api.prd.md` | `doc/world-simulator/viewer/viewer-web-semantic-test-api.design.md` | `doc/world-simulator/viewer/viewer-web-semantic-test-api.project.md` |
-| `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md` | `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.design.md` | `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.project.md` |
 | `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md` | `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.design.md` | `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md` |
 | `doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md` | `doc/world-simulator/viewer/viewer-websocket-http-bridge.design.md` | `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md` |
 
@@ -142,7 +136,7 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；若热点子域进入后仍无首读入口，则继续追加路径级治理。当前 `viewer/README.md` 即为 `viewer/` 的首个已执行子域入口。
 - ROUND-002 物理合并（gameplay release）：`viewer-gameplay-release-experience-overhaul` 为主文档，`immersion-phase2~10` 均已收敛到该主文档、审计日志、git history 与 GitHub task issue evidence comments；旧阶段三件套已从仓库移除（不再保留 archive）。
-- ROUND-002 物理合并（live event-driven）：`viewer-live-full-event-driven-phase10-2026-02-27` 为主文档，`phase8/9` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
+- 专业权威合并（runtime-to-Web）：event-driven phase8/9/10、runtime-world LLM bridge、Viewer/node decouple、两轮 build pruning 与 runtime-fatal 的当前语义已分别归入 control-plane、world-simulator、DecisionProvider、Launcher session continuity、single-source build truth、semantic test API 与 Viewer manual；18 个历史源文件已删除，日期化完成态与 byte-size 样本仅从 Git/GitHub task evidence 追溯。
 
 ## 补充验收模板
 - `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`

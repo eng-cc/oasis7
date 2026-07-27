@@ -24,6 +24,7 @@
 
 - 同 tick intents 必须按稳定冲突键和稳定优先序完成确定性裁决，accepted actions 再按确定顺序应用并产出事件；该过程不是具备整体回滚能力的原子事务批次，不得以“统一提交”掩盖顺序应用与局部拒绝语义。
 - `IntentBatchReport` 用于运行期解释和诊断；恢复真值是权威状态、journal 与事件，而不是进程内最后一份 report。
+- runtime-live bridge 的 Viewer snapshot/event 同样只是观测与传输面；重连、replay 与恢复必须回到权威 state + journal/event chain，不能从 Viewer snapshot 或 DecisionTrace 反建世界真值。
 - `intel_ttl_ticks` 等观测配置必须跨 snapshot 保持兼容；observation cache/hook 属于进程内派生状态，恢复时重建或清空，不能作为 Agent 长期记忆或权威世界事实。
 - logistics SLA 与 threat heatmap 是由权威运输、战争和危机状态生成的观测/调度数据；heatmap 当前是 alliance/global 聚合而非空间格网，并可能被治理规则消费，因此不能描述成纯 UI 指标或独立玩法承诺。
 
@@ -60,7 +61,7 @@
 | 领域 | Active PRD-ID / 专题 | 当前模块级要求 |
 | --- | --- | --- |
 | 场景与世界契约 | `PRD-WORLD_SIMULATOR-001/002/003` | 场景初始化、资源变化、关键交互和发布证据必须可复现，并通过统一验收清单映射到测试证据。 |
-| runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative；LLM 失败按硬失败或显式阻断处理，不回退启发式。AgentChat、PromptControl、profile/override、鉴权与实际应用结果属于本专业域；产品层只组合对话、草稿、持续调整与反馈恢复的玩家语义。 |
+| runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative。provider 失败产生结构化 trace/error，并可收敛为不提交动作的 `Wait` 或显式 catalog/runtime rejection；不得回退到状态变更的启发式替代动作。runtime event/snapshot mapping 不得静默丢字段，trace/action/result 保持因果关联。AgentChat、PromptControl、profile/override、鉴权与实际应用结果属于本专业域；产品层只组合对话、草稿、持续调整与反馈恢复的玩家语义。 |
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
 | first-session goal and control feedback | `PRD-WORLD_SIMULATOR-001/039/041/046` | Viewer 首局面向玩家呈现一个主目标及可收起、可找回且不冲突的次目标；主目标消费权威进度并展示动作、完成条件、阶段预期、剩余条件、blocker 与玩家可选择的恢复动作。首个推荐需解释价值、可达性与首次持续能力关联；完成后交接到可达的后引导目标。Web Test API 以 `describeControls()` / `fillControlExample(action)` 暴露支持动作、payload schema 与示例，`sendControl(action, payload)` 稳定返回 accepted、action、parsedControl、reason、hint，`getState().lastControlFeedback` 保留最近反馈供人工与脚本复核；新增字段不得静默破坏自动化兼容。正式玩家摘要只从 canonical `player_gameplay` / feedback 派生 Player Intent、World Consequence、Recovery Move、Next Move 等解释面，不新增 runtime truth。具体阈值、布局与测试锚点由当前 Viewer 实现和验证证据维护，不进入产品层。 |
 | launcher feedback / transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/Web Launcher 的受控动作共享真实的 executable/blocked/result/recovery 语义，但保留平台字段与适配差异；稳定入口为 `launcher/game-client-launcher-cross-surface-action-parity.prd.md`。submit acceptance 不等于 settlement，近期历史不等于持久账本；反馈、explorer、链状态、GUI Agent 和 stale execution-world 恢复仍由各自专业 authority 维护。 |
@@ -78,8 +79,8 @@
 
 ## Critical Flows
 1. Web-first 闭环：选择场景 -> 启动 Viewer Web -> 执行关键交互 -> 采集日志/截图/指标 -> 产出 `test_tier_required` 结论。
-2. LLM / provider loop：触发 prompt/chat/provider 决策 -> runtime 权威校验 -> 执行动作或结构化拒绝 -> 归档 trace 与错误语义。
-3. Runtime-live bridge：runtime step/action/event -> viewer 兼容快照/事件 -> DecisionTrace / error context 可被订阅和复核。
+2. LLM / provider loop：触发 prompt/chat/provider 决策 -> runtime 权威校验 -> 执行动作、traceable Wait 或结构化拒绝 -> 归档 trace 与错误语义；provider failure 不触发启发式替代动作。
+3. Runtime-live bridge：一个可处理 mailbox/event 触发一次 runtime drive -> runtime step/action/event -> viewer 兼容快照/事件 -> DecisionTrace / error context 可被订阅和复核；空 mailbox/零结果不伪造进展，重连/replay 不重复执行已接受动作。
 4. Launcher transfer / explorer：链状态就绪 -> 提交转账或查询 explorer -> 返回 action_id / tx_hash / structured error -> native/web 同层展示。
 5. Slot-1 direct claim：读取 quote -> 显式确认 -> dedicated pool auto-funding 或 insufficient-funds blocker -> `ClaimAgent` result/provenance 可见。
 6. 3D 暂停路由：新的 3D scene/camera/render/material/light/post-process 需求进入 paused pool；非 3D viewer / launcher / runtime interaction 继续走 active delivery。
@@ -97,6 +98,7 @@
 - Web / native / bundle-first 路径必须保持 operator-facing 入口一致，但允许按平台分流 native-only 字段。
 - `viewer` Web 主路径不得依赖高保真 3D 硬件前提；图形环境 blocker 必须与 gameplay/protocol bug 可区分。
 - 历史品牌、旧 alias、兼容 payload 或负向测试输入只允许作为兼容/移除语义存在，不得重新成为当前入口真值。
+- 新增 runtime event/state 必须经过版本化 schema 或 exhaustiveness gate；snapshot/event 保持因果顺序，恢复只认权威 state + journal/event chain。
 
 ## Non-Functional Requirements
 - 启动器链状态探针刷新周期默认 <= 1s，状态可见延迟 <= 2s。

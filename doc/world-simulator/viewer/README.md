@@ -13,7 +13,7 @@
 - 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
 - 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
-- 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`；回放/live profile 与 live 无 seek 边界读 `viewer-control-plane-split-live-playback.prd.md`
+- 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-control-plane-split-live-playback.prd.md`；操作、进程与 runtime-live 观测边界读 `viewer-manual.manual.md`，Agent/provider 语义读 `../llm/decision-provider-contract.prd.md`
 - 想先理解 Agent 对话、预设/草稿、Prompt/目标调整与反馈恢复的产品语义：读 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 及其配对产品设计；当前 surface、协议、操作边界与自动化合同继续读 `viewer-manual.manual.md` 和 `viewer-web-semantic-test-api.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -60,8 +60,8 @@
 ### 3. `viewer` 与正式 Web 主入口
 - 首读入口:
   - `viewer-web-software-safe-mode-2026-03-16.prd.md`
-  - `viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md`
   - `viewer-web-semantic-test-api.prd.md`
+  - `viewer-web-single-source-build-truth-2026-05-19.prd.md`
 - 适合问题:
   - 为什么正式 Web 默认走 `viewer`
   - 弱机 / CI / 无 GPU 环境下的 canonical 路径是什么
@@ -69,15 +69,15 @@
 
 ### 4. runtime live / event-driven / control
 - 首读入口:
-  - `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
-  - `viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
   - `viewer-control-plane-split-live-playback.prd.md`
   - `viewer-manual.manual.md`
+  - `../llm/decision-provider-contract.prd.md`
 - 适合问题:
   - runtime live 现在哪些能力已经接管
   - event-driven 阶段的主文档是哪份
   - step/control/live playback 的现行边界是什么
-- 说明: `phase8/9` 已物理合并到主文档；control-profile 与 live 无 seek 的两组 2026-02 源三件套已回填至 stable authority 并退役；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
+  - Viewer 与 `oasis7_chain_runtime` 的进程、chain-link 与 Launcher 编排边界是什么；跨进程 session/recovery 继续读 `../launcher/game-client-launcher-runtime-session-continuity.prd.md`
+- 说明: 历史 event-driven phase8/9/10、runtime-world LLM bridge、Viewer/node decouple、两轮 Web build pruning 与 runtime-fatal 三件套均已按专业边界回填至当前稳定 authority 并物理删除；当前 `oasis7_viewer_live` 是 Viewer/debug runtime-world surface，不应从旧阶段文件、旧 CLI 或旧 byte-size 样本倒推现行口径。
 
 ### 5. chat / prompt / right panel
 - 首读入口:

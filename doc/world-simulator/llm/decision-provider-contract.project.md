@@ -20,7 +20,8 @@
 - `crates/oasis7/src/simulator/agent.rs`
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
+- `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`
+- `doc/world-simulator/prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`（仅 operator HTTP-JSON interface，不提供 `DecisionProvider` 语义）
 
 ## 状态
@@ -31,3 +32,4 @@
 - 联审: `runtime_engineer`、`viewer_engineer`
 - 发起建模: `producer_system_designer`
 - 备注: `T1/T2` 已完成并形成离线 required 测试基座；后续 `T3/T5` 仍必须同时满足 `PRD-WORLD_SIMULATOR-038` 的 parity 门禁，禁止把 provider 接通视作功能完成。
+- 专业权威合并不改变 `T3/T4/T5` pending；历史 runtime-live bridge 文档退役不代表 adapter parity、trace/error mapping 或成本稳定性已完成。

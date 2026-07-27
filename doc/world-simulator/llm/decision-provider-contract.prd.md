@@ -34,7 +34,7 @@
   2. Flow-DP-002（Local Provider 外部接入 PoC）:
      `ObservationEnvelope + action whitelist -> Local ProviderAdapter -> Local Provider tool/session loop -> structured decision -> Action mapping`。
   3. Flow-DP-003（失败与降级）:
-     `provider timeout / malformed output / unknown tool -> adapter classify -> Wait or ActionRejected -> DecisionTrace.error`。
+     `provider timeout / malformed output / unknown tool -> adapter classify -> traceable Wait or catalog rejection -> DecisionTrace.error`。失败不得偷偷提交启发式替代动作。
   4. Flow-DP-004（回归验证）:
      `golden observation fixtures -> local provider / Local Provider provider -> compare validity, latency, trace completeness`。
 - Functional Specification Matrix:
@@ -46,6 +46,7 @@
 | 可观测性桥接 | `TraceEnvelope -> AgentDecisionTrace` | provider trace 映射到现有 viewer/QA 诊断面 | `trace_pending -> trace_emitted` | trace 与 world time 对齐 | 不得泄露敏感凭据 |
 | 记忆同步策略 | `MemoryContextSnapshot/MemoryWriteIntent` | provider 只读注入上下文；写回需经本地策略裁决 | `memory_read -> decide -> optional_memory_write` | 本地 memory 为权威来源 | 外部 memory 为可选缓存 |
 | Provider 评估 | `valid_action_rate/timeout_rate/p95_latency/trace_completeness` | 使用固定 fixture 对比 provider 表现 | `bench_pending -> bench_done` | 按场景/agent 类型分层统计 | QA 可复核 |
+| runtime-live 决策桥 | `AgentRunner/AgentBehavior/DecisionProvider/AgentDecisionTrace` | provider 只提出候选；runtime 校验并执行 | `observed -> proposed/wait -> validated -> executed/rejected` | trace、action、result 与事件保持因果关联 | provider 失败或未知动作不得触发替代启发式动作 |
 - Acceptance Criteria:
   - AC-1: 建立 `Decision Provider` 标准层专题文档，明确数据契约、边界、风险与验证口径。
   - AC-2: 明确 `Local Provider` 的角色定位为“外部 provider / adapter”，而非 runtime / kernel 替代物。
@@ -82,7 +83,8 @@
 - `crates/oasis7/src/simulator/agent.rs`
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`
-  - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
+  - `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`（Viewer live 观测与无伪进展边界）
+  - `doc/world-simulator/prd.md`（runtime 事件、快照与恢复真值）
   - `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md`（operator HTTP-JSON interface；不是 `DecisionProvider` 或世界内 autonomous Agent）
 - Standard Contracts:
   - `ObservationEnvelope`: `agent_id`、`world_time`、局部可见世界状态、近期事件摘要、记忆摘要、预算与动作白名单。
@@ -97,10 +99,12 @@
   - 首期 PoC 仅允许低频动作集，禁止直接接管高频 tick actor 与强一致经济关键路径。
 - Edge Cases & Error Handling:
   - provider 超时：返回 `Wait`，同时记录 `llm_error=provider_timeout`。
-  - provider 输出未知动作：映射为 `ActionRejected`，写入稳定 `error_code`。
+  - provider 输出未知动作：由 action catalog guard 拒绝或收敛为 `Wait`，写入稳定 `error_code`；两者都不得提交状态变更动作。
   - provider 工具调用次数超限：adapter 终止会话并输出结构化错误。
   - memory 写回冲突：以本地 memory 为准，provider 仅提交 write intent。
   - 网络故障 / API 401 / 插件不可用：按 provider_error 分类，不影响 runtime 主循环稳定性。
+  - runtime 新增的事件/状态不得被 bridge 静默丢弃：协议以版本化 schema 或 exhaustiveness gate 失败；snapshot/event 保持因果顺序，DecisionTrace 可关联到 proposal、runtime result 与反馈。
+  - 重连或 replay 不得重复执行已接受的动作；Viewer snapshot 只是观测/传输面，恢复仍以权威 state + journal/event chain 为准。
 - Non-Functional Requirements:
   - NFR-1: 标准层接口必须支持无网络 mock 执行，确保 required 测试不依赖外部服务。
   - NFR-2: `DecisionResponse` 字段必须稳定可版本化，新增字段只追加，不破坏既有语义。
@@ -132,6 +136,7 @@
 | --- | --- | --- | --- | --- |
 | PRD-WORLD_SIMULATOR-036 | TASK-WORLD_SIMULATOR-112 | `test_tier_required` | `./scripts/doc-governance-check.sh` | 模块文档入口、专题索引、owner/边界定义 |
 | PRD-WORLD_SIMULATOR-036 | T1/T2/T3/T4/T5 | `test_tier_required` / `test_tier_full` | fixture contract test + mock provider + future adapter PoC tests | agent provider abstraction、外部 provider 接入边界、trace 与 memory 桥接 |
+| PRD-WORLD_SIMULATOR-036 | runtime-live bridge baseline | `test_tier_required` | event/snapshot schema exhaustiveness + provider timeout/invalid-output trace + reconnect/replay idempotence + state/journal recovery proof | runtime/Agent/Viewer 桥接；不得以 Viewer snapshot 作为恢复真值 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
