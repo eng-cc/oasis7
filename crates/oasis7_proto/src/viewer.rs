@@ -13,18 +13,6 @@ mod power_survival_quote;
 pub use power_survival_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NegotiatedViewerProtocol {
-    pub version: u32,
-    #[serde(default)]
-    pub capabilities: Vec<String>,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayerAuthScheme {
-    #[default]
-    Ed25519,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
     #[serde(default)]
     pub scheme: PlayerAuthScheme,

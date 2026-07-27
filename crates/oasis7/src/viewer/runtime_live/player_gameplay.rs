@@ -2,8 +2,7 @@ use super::*;
 
 use super::super::auth::{
     VerifiedPlayerAuth, verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
-    verify_power_survival_quote_auth_proof, verify_product_validation_quote_auth_proof,
-    verify_refine_quote_auth_proof,
+    verify_product_validation_quote_auth_proof, verify_refine_quote_auth_proof,
 };
 use super::super::gameplay_actions::{
     ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_CLAIM_FIRST_AGENT,
@@ -18,9 +17,8 @@ use super::super::gameplay_actions::{
 };
 use super::super::protocol::{
     CollectDataCommand, CollectDataPreflight, GameplayActionAck, GameplayActionError,
-    GameplayActionRequest, PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest,
-    ProductValidationQuotePreflight, ProductValidationQuoteRequest, RefineQuotePreflight,
-    RefineQuoteRequest,
+    GameplayActionRequest, ProductValidationQuotePreflight, ProductValidationQuoteRequest,
+    RefineQuotePreflight, RefineQuoteRequest,
 };
 use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
@@ -32,6 +30,9 @@ use crate::simulator::{
 };
 use oasis7_wasm_abi::MaterialStack;
 use std::collections::BTreeMap;
+
+#[path = "power_survival_quote.rs"]
+mod power_survival_quote;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
 
@@ -282,87 +283,6 @@ pub(super) fn extend_available_actions(
 }
 
 impl ViewerRuntimeLiveServer {
-    /// Computes the simulator-kernel `BuyPower` survival quote from a fresh, read-only runtime
-    /// projection. No runtime action, event, auth nonce, or player binding is mutated by this path.
-    pub(super) fn handle_power_survival_quote(
-        &mut self,
-        request: PowerSurvivalQuoteRequest,
-    ) -> Result<PowerSurvivalQuotePreflight, GameplayActionError> {
-        let verified = self.verify_power_survival_quote_auth(&request)?;
-        self.session_policy
-            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
-            .map_err(|message| GameplayActionError {
-                code: map_session_policy_error_code(message.as_str()).to_string(),
-                message,
-                action_id: Some("quote_power_survival".to_string()),
-                target_agent_id: None,
-            })?;
-        let buyer_agent_id = self
-            .llm_sidecar
-            .bound_agent_for_player(verified.player_id.as_str())
-            .ok_or_else(|| GameplayActionError {
-                code: "player_agent_binding_required".to_string(),
-                message: "quote_power_survival requires a bound player Agent session".to_string(),
-                action_id: Some("quote_power_survival".to_string()),
-                target_agent_id: None,
-            })?;
-        let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        ensure_agent_player_access_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            buyer_agent_id,
-            verified.player_id.as_str(),
-            public_key.as_deref(),
-        )
-        .map_err(|err| GameplayActionError {
-            code: err.code,
-            message: err.message,
-            action_id: Some("quote_power_survival".to_string()),
-            target_agent_id: err.agent_id,
-        })?;
-
-        let model = super::mapping::runtime_state_to_simulator_model(
-            self.world.state(),
-            &self.llm_sidecar,
-            self.seed_model.as_ref(),
-        );
-        let quote = WorldKernel::with_model(self.snapshot_config.clone(), model)
-            .quote_power_survival(
-                &ResourceOwner::Agent {
-                    agent_id: buyer_agent_id.to_string(),
-                },
-                &ResourceOwner::Agent {
-                    agent_id: request.seller_agent_id.clone(),
-                },
-                request.amount,
-                request.requested_price_per_pu,
-            )
-            .map_err(|reason| GameplayActionError {
-                code: "power_survival_quote_rejected".to_string(),
-                message: format!("quote_power_survival rejected: {reason:?}"),
-                action_id: Some("quote_power_survival".to_string()),
-                target_agent_id: Some(buyer_agent_id.to_string()),
-            })?;
-        Ok(PowerSurvivalQuotePreflight {
-            buyer_agent_id: quote.agent_id,
-            seller_agent_id: request.seller_agent_id,
-            current_power_level: quote.current_power_level,
-            power_state_before: quote.power_state_before,
-            recovery_action: quote.recovery_action,
-            recovery_amount: quote.recovery_amount,
-            power_gain_estimate: quote.power_gain_estimate,
-            requested_price_per_pu: request.requested_price_per_pu,
-            price_per_pu: quote.price_per_pu,
-            price_or_time_cost: quote.price_or_time_cost,
-            power_state_after_recovery: quote.power_state_after_recovery,
-            survival_runway_ticks: quote.survival_runway_ticks,
-            next_action_affordability_after_recovery: quote
-                .next_action_affordability_after_recovery,
-            shutdown_avoidance_reason: quote.shutdown_avoidance_reason,
-            recommended_power_action: quote.recommended_power_action,
-        })
-    }
-
     /// Computes a signed, read-only product-validation preflight from the authoritative world.
     /// The quote does not execute a module, mutate a nonce, or submit a validation action.
     pub(super) fn handle_product_validation_quote(
@@ -531,26 +451,6 @@ impl ViewerRuntimeLiveServer {
             message,
             action_id: Some("quote_refine_compound".to_string()),
             target_agent_id: None,
-        })
-    }
-
-    fn verify_power_survival_quote_auth(
-        &self,
-        request: &PowerSurvivalQuoteRequest,
-    ) -> Result<VerifiedPlayerAuth, GameplayActionError> {
-        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
-            code: "auth_proof_required".to_string(),
-            message: "quote_power_survival requires auth proof".to_string(),
-            action_id: Some("quote_power_survival".to_string()),
-            target_agent_id: None,
-        })?;
-        verify_power_survival_quote_auth_proof(request, auth).map_err(|message| {
-            GameplayActionError {
-                code: map_auth_verify_error_code(message.as_str()).to_string(),
-                message,
-                action_id: Some("quote_power_survival".to_string()),
-                target_agent_id: None,
-            }
         })
     }
 
