@@ -385,6 +385,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     and record.get("bootstrap_epoch") == receipt.get("new_epoch")
                     and record.get("canonical_worktree") == receipt.get("new_worktree")
                     and record.get("task_branch") == receipt.get("new_branch")):
+                readback_committed_migration(mapping_path, args.task_uid, receipt)
                 finish_active_snapshot_cleanup(prior_journal)
                 return receipt
             raise MigrationError("committed migration journal disagrees with active task mapping")
@@ -394,6 +395,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 and record.get("bootstrap_epoch") == recovered_receipt.get("new_epoch")
                 and record.get("canonical_worktree") == recovered_receipt.get("new_worktree")
                 and record.get("task_branch") == recovered_receipt.get("new_branch")):
+            readback_committed_migration(mapping_path, args.task_uid, recovered_receipt)
             finish_active_snapshot_cleanup(prior_journal)
             update_journal(journal_file, {"task_uid": args.task_uid, "state": "committed",
                                           "receipt": recovered_receipt})

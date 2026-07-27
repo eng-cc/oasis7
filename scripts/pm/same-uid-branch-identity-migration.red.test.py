@@ -114,6 +114,11 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
     def mapping_record(self) -> dict[str, object]:
         return json.loads(self.mapping.read_text(encoding="utf-8"))["tasks"][UID]
 
+    def replace_mapping_record(self, record: dict[str, object]) -> None:
+        mapping = json.loads(self.mapping.read_text(encoding="utf-8"))
+        mapping["tasks"][UID] = record
+        self.mapping.write_text(json.dumps(mapping), encoding="utf-8")
+
     def run_helper(
         self,
         *,
@@ -460,6 +465,42 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         )
         self.assertEqual(journal_after_retry["state"], "committed")
         self.assertEqual(journal_after_retry["receipt"], committed_receipt)
+
+    def test_committed_journal_recovery_rejects_corrupted_common_dir(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+        self.assert_migrated(self.run_helper())
+        committed_record = self.mapping_record()
+        committed_record["branch_identity_migration"]["new_common_dir"] = str(
+            self.root.parent / "foreign-common-dir"
+        )
+        self.replace_mapping_record(committed_record)
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("committed migration record disagrees", retried.stderr)
+        journal = json.loads(
+            (self.root / ".pm" / "scratch" / UID / "branch-identity-migration.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(journal["state"], "committed")
+
+    def test_mapping_commit_recovery_rejects_corrupted_invalidation_set(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+        committed_record = self.mapping_record()
+        committed_record["invalidated_authority"]["fields"] = ["phase_receipts"]
+        self.replace_mapping_record(committed_record)
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("committed invalidated authority disagrees", retried.stderr)
+        self.assertTrue(self.snapshot.exists())
+        journal = json.loads(
+            (self.root / ".pm" / "scratch" / UID / "branch-identity-migration.json").read_text(encoding="utf-8")
+        )
+        self.assertNotEqual(journal["state"], "committed")
 
     def test_retry_after_post_branch_creation_crash_reuses_one_branch_and_one_epoch(self) -> None:
         interrupted = self.run_helper(crash_after="replacement_branch_created")
