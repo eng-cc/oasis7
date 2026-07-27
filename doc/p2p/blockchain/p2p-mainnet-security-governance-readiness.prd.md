@@ -28,7 +28,11 @@
 
 ### 资产与密码学基线
 
-- 资产动作授权、账户绑定与 controller slot 的当前实现合同由 `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.*` 承载。迁移不得恢复其已关闭的历史 blocker，也不得把其完成范围扩展为 custody 或主网结论。
+- `POST /v1/chain/transfer/submit` 要求 normalized ed25519 `public_key` 和 `signature`；`from_account_id` 必须等于 `oc:pk:<normalized_public_key_hex>`。缺失/无效签名或账户不匹配必须在余额、nonce 和 consensus submit 前拒绝。
+- `MainTokenActionAuthProof` 同时进入 `ConsensusActionPayloadEnvelope`，并在 shared `NodeRuntime` submit layer 对受保护 main-token actions 重验。有效请求仍执行 amount、same-account、balance 与 nonce-replay 规则。
+- `oasis7_client_launcher` 的 native 与 wasm 转账入口必须先按同一 canonical `TransferMainToken` payload 与域前缀生成 ed25519 `public_key/signature`，再提交；wasm 通过 `oasis7_web_launcher` 服务 HTML 时注入的 `window.__OASIS7_VIEWER_AUTH_ENV` 读取受信本地 signer bootstrap。
+- bootstrap 缺失或仅有 public/private key 任一侧时，客户端必须在本地明确失败并阻止 transfer POST；不得静默降级为 unsigned submission。该 local env/config/HTML bootstrap 仅是便利路径，不构成钱包托管、生产 keystore 或 custody。
+- 上述完成态不等于 custody 或 mainnet readiness，也不替代系统级多证据判定。
 - Node/replication 的签名与 allowlist 是局部防护信号；系统级评估仍须同时检查 custody、治理、创世和验证证据。
 - 所有系统级 verdict 必须能回溯到当前代码、专业文档或测试证据；不得以历史专题的完成复选框替代当前核验。
 

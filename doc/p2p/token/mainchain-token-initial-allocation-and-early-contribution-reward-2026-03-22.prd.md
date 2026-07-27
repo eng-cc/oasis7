@@ -95,7 +95,7 @@
 - Architecture Overview: 使用现有 `main_token` runtime 的创世分配、锁仓领取、增发与治理绑定 treasury 分发能力承接该口径。创世时先把总量按 bucket 写入 recipient 账户的 `vested_balance`，而不是直接写入 `main_token_treasury_balances`；后续释放严格区分“团队/项目战略控制”“协议奖励池”“外部可流通”三层，不把 custody account 误当作 treasury bucket 或个人库存。
 - Integration Points:
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-  - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
+  - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
   - `doc/game/prd.md`
   - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`

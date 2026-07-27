@@ -19,10 +19,12 @@
 | signer custody | Signer custody 与治理真值 | preview bootstrap 不得成为 production custody。 |
 | governance signer | Signer custody 与治理真值 | registry-first、admission、quorum、rotation/revocation。 |
 | genesis ceremony | 创世、ceremony 与 QA | `not_mint_ready` 直到 binding、ceremony 与 QA pass。 |
+| signed transaction authorization | 资产与密码学基线 | HTTP parsing、canonical auth proof、shared-layer re-verification 与 nonce enforcement，以及 native/wasm 同协议本地产签和缺失/partial bootstrap 的 fail-closed submission 必须同时存在；不等于 custody/mainnet。 |
 
 ## 实现和验证下钻
 
-- 资产授权：`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.*`。
+- 资产授权：本专题“资产与密码学基线”的 signed transaction contract。
+- 客户端签名路径：native 复用本地 signer helper；wasm 使用 `window.__OASIS7_VIEWER_AUTH_ENV` 的受信本地 bootstrap，并以与 native 相同的 canonical payload/域前缀生成签名。缺失或 partial bootstrap 必须在页面侧阻断，不得发出 unsigned transfer POST；这不等同于 production custody。
 - Node/replication 的可恢复签名合同：`doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.*`。
 - formal tier、manifest 和 public-testnet checklist：`doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.*` 及 companion runbook。
 - registry 操作和 evidence：`scripts/governance-registry-drill.sh`、`scripts/governance-registry-live-drill.sh` 与 `doc/testing/evidence/`。

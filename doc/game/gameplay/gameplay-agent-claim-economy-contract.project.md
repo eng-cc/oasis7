@@ -35,7 +35,7 @@
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-- `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+- `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `testing-manual.md`
 
 ## 状态

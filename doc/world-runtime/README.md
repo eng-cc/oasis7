@@ -12,6 +12,7 @@
 - 想看 WASM 全局 timing/status/window，或给单个模块补标准化 contract/perf 观测：`doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
 - 想看模块 SDK 的 no_std、共享 wire 与 codec 兼容契约：`doc/world-runtime/wasm/wasm-sdk.prd.md`
 - 想先看运行态体积、恢复与 retention 治理：`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- 想确认链 PoS 的时间锚、slot/tick 相位、控制面参数、missed accounting 与恢复边界：`doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想先看线上模块发布合法性与 binary-only 边界：`doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想进入治理事件、审计导出或收据安全专题：`doc/world-runtime/governance/README.md`
 
@@ -27,6 +28,7 @@
 - `project.md` 是执行台账，适合确认当前仍在推进的 runtime / wasm 发布 / binary-only / traceability 任务。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名后按文件名直达，不适合作为第一次进入模块时的首读入口。
 - 高频专题文档承担专题真值：`wasm-deterministic-build-pipeline` 负责 Docker canonical build / receipt / release evidence；`wasm-observability-timing-metrics` 同时负责全局 timing/status/window 与 module-local spec/runner/template；`wasm-sdk` 负责 no_std、共享 wire 与 codec 兼容；`runtime-storage-footprint-governance` 负责 retention / GC / replay contract；`online-module-release-legality-closure` 负责线上模块发布合法性与默认安全边界。
+- `chain-pos-control-plane` 是链 PoS 时间与控制面的唯一 runtime 专业 authority：它承接 slot/tick/time-anchor 当前合同，不替代节点运维、经济规则或发布判断。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接平铺 runtime 高频专题长名单。

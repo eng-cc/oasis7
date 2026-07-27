@@ -10,6 +10,7 @@
 ## 任务拆解
 
 - [x] p2p-mainnet-security-governance-authority-consolidation (PRD-P2P-MAINNET-001/002/003/004) [test_tier_required]: 吸收历史 crypto/readiness/custody/governance/genesis 合同并保留负向 gate。 Trace: #2672 (task_b23df712ec4d4bb8b314c84a50278873)
+- [x] p2p-mainnet-signed-transaction-authorization-consolidation (PRD-P2P-MAINNET-005) [test_tier_required]: 吸收 HTTP signature/account binding、canonical proof、shared-layer re-verification、nonce-replay boundary，以及 native/wasm 同协议本地产签、`__OASIS7_VIEWER_AUTH_ENV` bootstrap 注入与缺失/partial bootstrap 的 fail-closed submission；保留 non-custody/not-mainnet-grade 约束。 Trace: #2682 (task_172abebb99354d4fad395aa05a581193)
 
 未关闭的专业条件：
 
@@ -22,6 +23,7 @@
 ## 验证入口
 
 - 文档治理：`./scripts/doc-governance-check.sh`、`./scripts/readme-link-check.sh`。
+- signed transfer client contract：历史 `test_tier_required` 覆盖 request builder/serialization/wasm compile，`test_tier_full` 覆盖 Web-first signed submit 与 bootstrap 缺失的本地阻断；证据见 `doc/testing/evidence/mainchain-token-signed-transfer-web-validation-2026-03-23.md`。
 - registry 合同：`./scripts/governance-registry-drill.sh`（按其安全输入要求执行）。
 - network tier：`./scripts/network-tier-manifest-smoke.sh`。
 
@@ -29,7 +31,7 @@
 
 ## 依赖
 
-- `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+- 本专题“资产与密码学基线”中的 signed transaction contract
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 - `testing-manual.md`
 
