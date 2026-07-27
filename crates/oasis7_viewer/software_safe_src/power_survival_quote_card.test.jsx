@@ -30,6 +30,10 @@ describe("PowerSurvivalQuote", () => {
     expect(within(card).queryByText("low_power")).not.toBeInTheDocument();
     expect(within(card).queryByText("internal-only")).not.toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /buy|submit|commit/i })).not.toBeInTheDocument();
+
+    render(() => <PowerSurvivalQuoteCard quote={quote} locale="zh" tr={tr} />);
+    expect(screen.getAllByText("18 步").at(-1)).toBeInTheDocument();
+    expect(screen.queryByText("18 tick")).not.toBeInTheDocument();
   });
 
   it("requests the signed quote with all three bound inputs and marks an old quote stale", async () => {

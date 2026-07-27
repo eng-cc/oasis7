@@ -10776,7 +10776,7 @@ function PowerSurvivalQuoteCard(props) {
         return tr2(locale(), "可行动时长", "Action runway");
       },
       get value() {
-        return `${display(quote().survival_runway_ticks)} ${tr2(locale(), "tick", "ticks")}`;
+        return `${display(quote().survival_runway_ticks)} ${tr2(locale(), "步", "ticks")}`;
       }
     }), null);
     insert(_el$14, createComponent(Metric, {
