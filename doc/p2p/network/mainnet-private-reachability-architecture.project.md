@@ -83,7 +83,7 @@
 ### P2PARCH-1 / runtime_engineer
 - 输入:
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
-  - `doc/p2p/node/node-net-stack-unification-readme.prd.md`
+  - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
   - `doc/p2p/node/node-replication-libp2p-migration.prd.md`
 - 输出:
   - peer record schema
@@ -258,7 +258,6 @@
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
 - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
 - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
-- `doc/p2p/node/node-net-stack-unification-readme.prd.md`
 - `testing-manual.md`
 
 ## 验收命令（本轮）

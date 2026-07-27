@@ -8,7 +8,7 @@
 - Problem Statement: 收口 P1-1：将 Node 共识消息（proposal/attestation/commit）从“仅 UDP gossip”升级为“libp2p pubsub 主路径”，保留 UDP 兼容兜底。
 - Proposed Solution: 收口 P1-2：将 libp2p request/response 从“单 peer + 无 peer 本地 handler 回退”升级为“多 peer 轮换重试 + 可控本地回退策略”。
 - Success Criteria:
-  - SC-1: 保持现有 `oasis7_viewer_live` 生产默认拓扑（triad/triad_distributed）可用，并保证 required-tier 回归稳定。
+  - SC-1: 保持 node 生产默认拓扑（triad/triad_distributed）可用，并保证 required-tier 回归稳定；viewer 只消费可观测状态，不拥有 node、拓扑或共识 gate。
 
 ## 2. User Experience & Functionality
 - User Personas: 协议维护者、任务执行者、质量复核者。
@@ -50,6 +50,7 @@
   - `allow_local_handler_fallback_when_no_peers: bool`（默认 `false`）。
 - request 语义：
   - 有连接 peer：按轮换顺序选择 peer，失败自动切下一个，直到成功或耗尽。
+  - 远端返回 `ErrorResponse` 时按请求失败分类，继续尝试剩余 peer；全部耗尽后返回结构化 `NetworkRequestFailed`。
   - 无连接 peer：默认返回 `NetworkProtocolUnavailable`；仅在开关开启时允许本地 handler 回退。
 
 ### 2) 共识 topic（libp2p）
@@ -65,6 +66,12 @@
   - 否则走 UDP gossip。
 - 消费优先级：
   - 两路均可 ingest；libp2p 路径用于生产默认主链路，UDP 作为兼容链路。
+
+### 4) `oasis7_net` 与目标平台边界
+- `oasis7_node` 在 native target 依赖 `oasis7_net`，复用其网络实现与公开 API；不得形成反向依赖、依赖环或额外 runtime bridge。
+- `wasm32` 不是完整 node/libp2p 运行目标。target cfg 必须选择 native 实现或 wasm stub，同时保留 `Libp2pReplicationNetwork`、配置结构和 peer identity/key derivation 的 API 形状，避免上层条件编译漂移。
+- wasm stub 的网络操作必须返回结构化 `WorldError::NetworkProtocolUnavailable`，并明确指出 `wasm32` 不支持 node libp2p；不得静默成功或退化为隐式本地网络。
+- 编译护栏命令：`env -u RUSTC_WRAPPER cargo check -p oasis7_node --target wasm32-unknown-unknown --features libp2p`。该命令是目标态验收入口；2026-07-27 新鲜验证仍会先被依赖闭包中的 `getrandom 0.2` 缺少 `js` feature 阻断，因此当前只能证明 target cfg/API 约束已定义，不能声明 package-level wasm32 编译门禁已绿。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:

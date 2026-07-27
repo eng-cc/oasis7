@@ -4,9 +4,9 @@
 - 对应项目管理文档: `doc/p2p/node/node-contribution-points.project.md`
 
 审计轮次: 5
-## ROUND-002 主从口径
-- 主入口文档：`doc/p2p/node/node-contribution-points.prd.md`。
-- 从文档：`node-contribution-points-runtime-closure.prd.md`、`node-contribution-points-multi-node-closure-test.prd.md` 仅维护增量约束与专题闭环，主规格以本文件为准。
+## 专业权威口径
+- 本文件是节点贡献积分产品与专业规则的当前主入口。
+- 既有 runtime closure 与 multi-node closure test 增量文档的有效语义已合并到本三件套；源文件删除后，历史过程由 Git history 与对应 GitHub task evidence 追溯。
 
 ## 1. Executive Summary
 - Problem Statement: 在 oasis7 的区块链 + P2P FS 闭环内，引入可审计的节点积分激励（Node Points）。
@@ -32,10 +32,14 @@
   - AC-4: `world_maintenance_compute_units`（世界维护任务）；
   - AC-5: `effective_storage_bytes`（有效存储）；
   - AC-6: `uptime_seconds`（在线时长）；
+  - AC-7: runtime 必须把贡献快照确定性地结算到对应 epoch，重复执行或恢复重放不得重复入账，普通快照更新不得静默改变奖励台账。
+  - AC-8: 多节点闭环至少覆盖 3 个节点、连续 2 个 epoch，并同时验证计算、存储、在线、可靠性与惩罚输入。
+  - AC-9: 固定 epoch 积分池不得超发；贡献排序、惩罚效果与累计积分单调性必须有可重复断言。
 - Non-Goals:
   - 链上可交易代币、真实经济清算。
   - 完整质押/罚没资产系统（仅保留积分惩罚入口）。
   - 复杂证明协议（PoRep/PoSt/ZK）的真实网络接线。
+  - 用本地多节点夹具冒充真实公网证明、生产 readiness 或经济安全结论。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题不涉及 AI 模型能力改造）。
@@ -123,6 +127,13 @@ EpochSettlementReport {
   - `total < 0` 则按 `0` 处理。
 - 基础义务惩罚：
   - 当 `self_sim_compute_units < min_self_sim_compute_units` 时，额外加罚 `obligation_penalty_points`。
+
+### Runtime 与多节点闭环约束
+- runtime 以 epoch 边界消费节点贡献快照并产出 `EpochSettlementReport`；同一 epoch 的 settlement 必须具备幂等键或等价去重语义。
+- 恢复、重放或重复 tick 只能复现同一结算结果，不得增加 `awarded_points` 或 `cumulative_points`。
+- 快照采集与奖励结算分层：更新 compute/storage/uptime/reliability 样本本身不得提前写入积分台账。
+- 多节点验证最小拓扑为 3 个具有可区分贡献画像的节点，跨越至少 2 个 epoch；验证固定池守恒、贡献更高者排序不反转、显式或义务惩罚会降低得分，以及每个节点累计积分不回退。
+- 该夹具证明确定性业务闭环，不证明采样真实性、复杂证明协议、真实传输或生产网络 readiness。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
