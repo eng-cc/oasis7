@@ -10,6 +10,11 @@ case "$(uname -s)" in
       TMPDIR="$(cygpath -m "$TMPDIR")"
     fi
     export TMPDIR
+    # Native Windows Python cannot resolve POSIX PATH entries. Route its Git
+    # subprocesses through this exact Git Bash and Bash-resolved Git command.
+    OASIS7_GIT_BASH_EXECUTABLE="$(cygpath -w "$(command -v bash)")"
+    OASIS7_GIT_COMMAND="$(command -v git)"
+    export OASIS7_GIT_BASH_EXECUTABLE OASIS7_GIT_COMMAND
     ;;
 esac
 
@@ -363,6 +368,8 @@ set -e
 python3 "$SCRIPT_DIR/repo-state-fingerprint.py" "$VERIFY_ROOT" >"$FINGERPRINT_AFTER"
 FINGERPRINT_BEFORE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$FINGERPRINT_BEFORE")"
 FINGERPRINT_AFTER_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$FINGERPRINT_AFTER")"
+FINGERPRINT_HEAD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["head"])' "$FINGERPRINT_BEFORE")"
+FINGERPRINT_INDEX_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["index_sha256"])' "$FINGERPRINT_BEFORE")"
 EPOCH_STABLE=true
 if [[ "$FINGERPRINT_BEFORE_SHA" != "$FINGERPRINT_AFTER_SHA" ]]; then
   EPOCH_STABLE=false
@@ -383,7 +390,7 @@ if [[ "$VERIFY_EXIT_CODE" != "0" ]]; then
 fi
 
 RESULT_JSON="$(
-python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" "$TASK_UID" "$FINGERPRINT_BEFORE_SHA" "$FINGERPRINT_AFTER_SHA" "$EPOCH_STABLE" "$VERIFICATION_MODE" "$FROZEN_HEAD" "$FROZEN_TREE" "$COMPARISON_REF" "$VERIFICATION_PROFILE" <<'PY'
+python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" "$TASK_UID" "$FINGERPRINT_BEFORE_SHA" "$FINGERPRINT_AFTER_SHA" "$EPOCH_STABLE" "$VERIFICATION_MODE" "$FROZEN_HEAD" "$FROZEN_TREE" "$COMPARISON_REF" "$VERIFICATION_PROFILE" "$FINGERPRINT_HEAD" "$FINGERPRINT_INDEX_SHA" <<'PY'
 from __future__ import annotations
 
 import json
@@ -408,6 +415,8 @@ payload = {
     "frozen_source_tree": sys.argv[16] or None,
     "comparison_ref": sys.argv[17] or None,
     "verification_profile": sys.argv[18] or None,
+    "repository_head": sys.argv[19],
+    "repository_index_sha256": sys.argv[20],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY

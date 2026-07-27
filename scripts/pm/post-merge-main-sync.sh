@@ -39,6 +39,30 @@ ACTUAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || die 
 [[ "$ACTUAL_BRANCH" == "$MAIN_REF" ]] || die "repo root is not checked out on the requested default branch"
 MAPPING="$REPO_ROOT/.pm/github-project-sync/tasks.json"
 [[ -f "$MAPPING" ]] || die "task mapping is unavailable"
+# Validate receipt facts that do not depend on task-cache data before recovery
+# can mutate the default mapping. Full task/receipt binding remains below.
+python3 - "$PR_RECEIPT" "$MAIN_REF" <<'PY'
+import datetime as d,json,sys
+try:
+ receipt=json.load(open(sys.argv[1],encoding='utf-8'))
+ if not isinstance(receipt,dict): raise ValueError('receipt is not an object')
+ if receipt.get('receipt_type')!='oasis7_pr_merge' or receipt.get('issuer')!='github_live_query' or receipt.get('evidence_mode')!='production' or receipt.get('state')!='MERGED': raise ValueError('invalid merge receipt')
+ for key in ('repository','default_branch','pr_number','pr_url','merged_at','head_oid','base_ref','observed_at'):
+  if receipt.get(key) in (None,''): raise ValueError(f'merge receipt is missing {key}')
+ if receipt.get('base_ref')!=sys.argv[2] or receipt.get('default_branch')!=sys.argv[2]: raise ValueError('default branch identity mismatch')
+ seen=d.datetime.fromisoformat(str(receipt['observed_at']).replace('Z','+00:00'))
+ age=(d.datetime.now(d.timezone.utc)-seen).total_seconds()
+ if age < -30 or age > 600: raise ValueError('merge receipt is stale')
+except (OSError,json.JSONDecodeError,TypeError,ValueError) as exc:
+ raise SystemExit(f'post-merge-main-sync: {exc}')
+PY
+# A terminal Project item may be absent from a freshly generated default cache.
+# Recover only from the record retained by its registered canonical worktree;
+# the helper validates complete task/receipt identity before atomic import.
+python3 "$SCRIPT_DIR/recover-terminal-task-mapping.py" \
+  --repo-root "$REPO_ROOT" --mapping "$MAPPING" --task-uid "$TASK_UID" \
+  --main-ref "$MAIN_REF" --pr-receipt "$PR_RECEIPT" >/dev/null \
+  || die "default task mapping recovery failed"
 # RECEIPT_OUTPUT is accepted only after Path.is_absolute and resolved
 # relative_to(canonical_worktree) rejection in the shared validator; the
 # canonical task worktree is never a durable receipt sink.
