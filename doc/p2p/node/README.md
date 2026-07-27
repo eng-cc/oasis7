@@ -8,7 +8,7 @@
 - 想确认复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-replication-libp2p-migration.prd.md`、`node-distfs-replication-network-closure.prd.md` 或 `node-consensus-signer-binding-replication-hardening.prd.md`
 - 想确认 PoS 时间、slot clock 与控制面对齐：先读 `node-pos-slot-clock-real-time-2026-03-07.prd.md`、`node-pos-subslot-tick-pacing-2026-03-07.prd.md` 或 `node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
 - 想确认节点身份引导、keypair bootstrap 与初始化入口：先读 `node-keypair-config-bootstrap.prd.md`
-- 想确认 `wasm32/libp2p` 编译约束或 builtin wasm fallback：先读 `node-wasm32-libp2p-compile-guard.prd.md` 或 `node-builtin-wasm-fetch-fallback-compile.prd.md`
+- 想确认 `wasm32/libp2p` 编译约束：先读 `../network/readme-p1-network-production-hardening.prd.md`；想确认 builtin wasm fallback：先读 `node-builtin-wasm-fetch-fallback-compile.prd.md`
 - 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据，以及模块级优化点：先读 `node-triad-observability-stack-2026-04-23.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -33,7 +33,7 @@
   - 节点奖励怎么计、贡献分如何结算
   - 可赎回 power asset 与治理签名阶段如何拆分
   - 奖励、执行验证与原生交易结算的关系是什么
-- 说明: `runtime-closure`、`multi-node-closure-test`、`audit-hardening`、`signature-governance-phase3` 等文件是增量子文档，不应代替主文档成为默认首读入口。
+- 说明: contribution points 的 `runtime-closure` 与 `multi-node-closure-test` 语义已合并进主三件套并删除源文件；`audit-hardening`、`signature-governance-phase3` 等仍存增量子文档不应代替主文档成为默认首读入口。
 
 ### 2. 复制、网络与 signer binding
 - 首读入口:
@@ -64,7 +64,7 @@
 
 ### 5. WASM 编译与兼容护栏
 - 首读入口:
-  - `node-wasm32-libp2p-compile-guard.prd.md`
+  - `../network/readme-p1-network-production-hardening.prd.md`
   - `node-builtin-wasm-fetch-fallback-compile.prd.md`
 - 适合问题:
   - `wasm32/libp2p` 的编译守卫和限制是什么
