@@ -24,6 +24,17 @@
 - Agent 所有权保持排他、可归因和可审计；玩家不能通过旁路、误认世界实体或静默自动提交获得控制权。
 - 更高的 Agent 容量属于长期成长的受限选择，不是默认囤积权，也不替代区域贡献、专业化或世界治理的其他前置条件。
 
+### 2.1 首个 Agent 认领承诺包
+
+首个 Agent 认领是一次持续的世界参与承诺，而不是只回答“能否支付”的解锁。玩家确认前必须能用一个连贯的承诺包回答：
+
+- 当前候选为何适合或不适合当前目标：其可理解的用途、与其他候选的主要差异，以及这项差异对第一个目标的帮助或风险。
+- 此次确认的非零 upfront 成本，以及确认后能够支撑多久的 upkeep runway；持续义务不得被包装为一次性取得。
+- 哪些可读条件会导致主动结束、进入风险状态或被回收，从而保留什么、失去什么；玩家必须能看见补足、恢复、重新选择或安全结束的下一步。
+- 当前最好的替代决策：比较其他候选、等待一个可理解的条件，或先解决资金/世界 blocker；当没有安全替代时也必须明确说明，不能把立即确认伪装为唯一无代价选择。
+
+受限的首个认领资助只帮助符合条件的玩家承担这次 `slot-1` 的非零 claim/upkeep 承诺，且不能转成自由财富、设施/材料库存、liquid starter OC 或持续补贴。它与完成 Agent 已存在后、为首次对话授予 liquid starter OC 的独立首聊解锁不同：后者不支付或延长 claim/upkeep，也不将认领变成免费或设施补贴。具体 bucket、资格、余额、回收计算和对话 gate 由专业域维护；跨模块来源与 sink 边界见 [大世界基础设施资源 provenance](../world-infrastructure/prd.md#26-跨模块资源-provenance-边界)。
+
 ## 3. 权威边界
 
 | 层级 | 本产品分册拥有 | 下层专业域拥有 |
@@ -42,6 +53,7 @@
 - AS-3：代表性维持、主动结束或失去控制权路径能说明主要原因、保留或失去的结果，以及可用的恢复、重新选择或安全停止路径。
 - AS-4：支持首个控制权的受限帮助不产生可转移财富、无限补贴、所有权旁路或对后续成长边界的豁免。
 - AS-5：产品、game、runtime、Agent/Viewer 与 testing 指向同一候选和权威事实；局部 UI、运营记录或文档迁移不能单独证明产品承诺通过。
+- AS-6：首个认领样例在确认前证明候选用途/差异、upfront 成本、确认后 upkeep runway、回收或失去触发、恢复/重新选择以及等待或替代动作；受限认领资助与 liquid starter OC 首聊解锁在同一因果链中仍可明确区分，且不产生免费认领或持续补贴含义。
 
 ### 4.1 验收追踪
 
@@ -51,6 +63,7 @@
 | AS-2 | agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 当前玩家绑定/所有权与共享世界 Agent 可读边界 | test_tier_required |
 | AS-4 | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 非免费、不可旁路和反滥用的权威与玩家可读证据 | test_tier_required |
 | AS-5 | producer_system_designer / qa_engineer | PRD-GAME-011 / PRD-TESTING-003 | 同候选跨域组合审计 | test_tier_full |
+| AS-6 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 首个认领承诺包、持续成本、失去/恢复、替代决策与两类启动支持边界的组合证据 | test_tier_required |
 
 ## 5. Non-Goals
 

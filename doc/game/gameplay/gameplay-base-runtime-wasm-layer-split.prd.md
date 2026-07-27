@@ -5,9 +5,9 @@
 审计轮次: 4
 
 
-## ROUND-002 主从口径
-- 主入口：`doc/game/gameplay/gameplay-top-level-design.prd.md`
-- 本文仅维护增量。
+## ROUND-002 历史记录与当前范围
+- ROUND-002 曾将 `doc/game/gameplay/gameplay-top-level-design.prd.md` 列为阅读路径；该历史记录不构成当前 authority 或主从关系。
+- 本文在 Base Runtime / WASM Layer Split 的声明范围内维护专题合同；活跃基线与路由回 `doc/game/prd.md`，当前执行状态回相应 project/evidence。
 
 ## 目标
 - 将 `oasis7` runtime 的模块治理与执行架构拆分为两个明确边界：

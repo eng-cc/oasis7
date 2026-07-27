@@ -4,8 +4,9 @@
 - 对应需求文档: `doc/game/gameplay/gameplay-top-level-design.prd.md`
 审计轮次: 9
 
-## ROUND-002 主从口径
-- 本文件为 gameplay 项目主入口，其余 gameplay project 为增量计划。
+## ROUND-002 历史记录与当前范围
+- ROUND-002 曾以本文件集中记录顶层设计计划；该历史记录不构成当前 project 的主从关系。
+- 本文件现仅保存核心玩法骨架与 `PRD-GAME-012` 的 topic project/evidence；模块当前状态回 `doc/game/project.md`，其他 topic project 在各自声明范围内维护计划与证据。
 
 ## 任务拆解
 

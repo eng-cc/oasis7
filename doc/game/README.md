@@ -9,7 +9,7 @@
 - 想看当前正在推进什么、谁在阻断、下一步做什么：先读 `doc/game/project.md`。
 - 想直接按文件名定位某个 gameplay 专题：先读 `doc/game/prd.index.md`。
 - 想先进入 gameplay 热点子域，而不是顺扫近期长名单：先读 `doc/game/gameplay/README.md`。
-- 想快速理解核心玩法骨架：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`。
+- 想快速理解核心玩法骨架：先在 `doc/game/prd.md` 确认活跃基线与路由，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的 bounded 专业合同。
 - 想确认首局、前 10/30 分钟吸引力与持续游玩合同：先读产品承诺 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 与复跑边界看 `doc/game/project.md`。
 - 想确认“间接控制为什么仍然应该感觉像我在控制，而不是旁观 AI”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`。
 - 想确认“成熟世界里小玩家/新玩家靠什么继续有独立价值，而不是只能投靠大组织”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再按需下钻 gameplay 顶层合同。
@@ -24,11 +24,11 @@
 
 ## 入口分工
 - `README.md` 只承担 landing page 职责：帮助读者先决定去模块 PRD、项目台账、文件级索引，还是少量仍承担当前阶段判断的高频专题。
-- `prd.md` 是玩法目标态与阶段口径真值，适合先理解当前 game 模块在管什么、哪些边界已经冻结。
+- `prd.md` 是 game 的活跃玩法基线与路由根入口：它拥有 PRD-ID、专题范围、默认首读路径和当前状态指针；专题详细合同只在各自声明范围内优先。
 - `project.md` 是执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进到哪一步。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
 - `gameplay/README.md` 是 `gameplay/` 热点子域 landing page，负责把玩法骨架、留存、agency、preview/beta gate 与 economy/claim 按问题分流。
-- 高频专题文档继续承担专业域真值：`gameplay-top-level-design` 管核心玩法骨架与稳定 early-retention 合同，`gameplay-indirect-control-agency-contract` 管间接控制下的 agency 合同，`gameplay-agent-claim-economy-contract` 管近期高频经济规则；首局与持续游玩的产品承诺统一由产品分册承载，当前执行由 game project 与对应证据承载。
+- 高频专题文档继续承担声明范围内的专业合同：`gameplay-top-level-design` 管核心玩法骨架与 `PRD-GAME-012` early-retention 合同，`gameplay-indirect-control-agency-contract` 管间接控制下的 agency 合同，`gameplay-agent-claim-economy-contract` 管近期高频经济规则；它们不替代根 PRD 的活跃路由/状态职责。首局与持续游玩的产品承诺统一由产品分册承载，当前执行由 game project 与对应证据承载。
 - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md` 管 mature-world 小玩家的产品承诺；`gameplay-top-level-design.prd.md` 管对应专业玩法合同。
 
 ## 活跃阅读面边界

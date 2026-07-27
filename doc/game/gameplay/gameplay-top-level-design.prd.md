@@ -6,8 +6,11 @@
 审计轮次: 4
 
 
-## ROUND-002 主从口径
-- 本文件为 gameplay 主文档，其余 gameplay 专题为增量子文档。
+## 文档 authority 与适用范围
+- 本文件是核心玩法骨架及 `PRD-GAME-012` early-retention 专业合同的 topic authority：定义跨循环体验脊柱、早期体验判断和本专题的可玩性验收。
+- `doc/game/prd.md` 是 game 模块的活跃基线与路由根入口，拥有 PRD-ID、默认首读路径和当前状态指针；本文件不发布模块级状态，也不取得 gameplay 的模块级 authority。
+- 其他 gameplay 专题在其声明范围内拥有详细合同；本文件只在上述玩法骨架/`PRD-GAME-012` 范围内优先，不能覆盖 agent claim、agency、区域设施等专题，亦不能覆盖 `doc/product/` 四模块的产品承诺。
+- 历史 ROUND-002 的主从表述仅是历史治理记录，不再用于判断现行 authority。
 
 ## —— 让玩家快乐，并愿意长期沉浸的系统设计
 
@@ -238,6 +241,15 @@
 
 产品承诺与组合验收见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；本节继续拥有阶段选择、阻塞分类与玩法承接的专业规则。
 
+### 2.6.1 分支承诺的 gameplay 合同
+
+`branch_ready` 不是路线标签展示，而是在当前世界状态允许时给出 2 至 3 项可比较的分支承诺。规范类别为：扩张（将能力转为更大覆盖/选择）、稳定/恢复（守住能力并移除已知阻塞）与专业化/服务（把能力转成当前本地需求或协作的可交付贡献）。它们不是固定职业、任务树或默认强制站队。
+
+- 每个候选必须表明即时收益，并分别说明选择后的第一个与第二个 beat 如何改变玩家的目标、可用选择、压力或可交付成果；两个候选在这两个 beat 内回到同一循环时，属于 `route_tradeoff_fake_choice`。
+- 候选必须说明主要约束、风险或锁定，以及下次会话恢复的目标和第一动作。专业化/服务路线不得把与 major power 的绑定伪装成默认前置。
+- 可回退候选必须说明回退窗口、主要代价和回退后保留/失去的价值；不可回退或没有安全回退时须明确告知，而非用“可调整”淡化承诺。
+- 本合同只定义玩家决策与验收语义；路线是否可达、行动细节、成本、状态字段与 Viewer 呈现由相应专业域和权威状态决定。
+
 ## 2.7 当前两周收口重点（2026-04-09）
 
 在当前 `internal_playable_alpha_late` 阶段，当前 gameplay scope 必须继续冻结在 early-retention recovery，而不是重新发散到更宽的宏系统曝光。
@@ -297,8 +309,10 @@
 
 #### 选择可读性与 quote/preview 合同
 
-- `branch_offer`：每条推荐路线必须包含 `route_label / immediate_gain / future_beat_changed / risk_or_lockin / next_session_hook`。
-- 路线可回退时必须提供 `rollback_deadline_beat / rollback_cost_summary / rollback_kept_benefit / rollback_lost_benefit`；缺失标记 `route_rollback_quote_missing`。
+- 早期 session 的 quote/preview 必须先服务一个当前主要决策，并突出一个主导 blocker 或成本；可恢复、不会改变当前选择的补充细节可以延后，但必须保留回看条件或时机。该仲裁只重排/解释同一权威事实，不得省略权威成本、改写动作语义或把推荐冒充成结果。
+- 涉及损失、锁定、authority transfer、不可逆行动或恢复可用性变化的任何事实，必须从延后信息升级为当前显式决策信息；不能以“信息过载”掩盖高后果取舍。缺失标记 `early_preview_arbitration_missing`。
+- `branch_offer`：每条推荐路线必须包含 `route_label / immediate_gain / future_beat_changed / risk_or_lockin / next_session_hook`，其中 `future_beat_changed` 必须明确第一个与第二个后续 beat 的实质差异，而不是泛称“会有更多选择”。
+- 路线可回退时必须提供 `rollback_deadline_beat / rollback_cost_summary / rollback_kept_benefit / rollback_lost_benefit`；不可回退或无安全回退时必须同样显式说明。缺失标记 `route_rollback_quote_missing`。
 - `Opportunity Scan` 的未推荐 hook 必须说明 `hook_value_summary / hook_readiness_state / defer_reason / unlock_precondition / revisit_timing_hint / value_vs_immediate_action`；缺失标记 `opportunity_discard_reason_missing`。
 - starter frag 推荐必须说明粗粒度材质预期、可达性与第一工业目标关联，不承诺精确掉落或必然完成能力链。
 - `ScheduleRecipe` 必须在提交前展示基础耗时、本地稀缺延迟和当前电力/battery 风险；仅当 runtime 存在权威维护状态时，才另外展示维护 sink、折旧压力、维护前后 runway、维护停机临界点与维护建议。电力/battery runway、`maintenance_pressure_delta = unchanged` 或执行后 receipt 均不能替代维护 quote。
@@ -329,6 +343,15 @@ oasis7 的世界不是无尺度表格。
 1. `local operator`：先稳住 1 条小规模工业或服务能力，完成 1 次对世界有可见后果的胜利。
 2. `regional specialist`：再把这条能力转成短周期、区域性有用的专业化角色，而不是马上跳到全局治理或大型宏系统。
 3. `limited-scope regional influence`：通过持续贡献获得局部优先级、局部机会或局部可见度，但不直接等价为 global governance 权力。
+
+### 2.9.1 Disruption recovery comparison
+
+当 disruption 阻断 active goal 时，gameplay 必须以同一个目标比较 `repair / rebuild / pivot`，并给出每条路线的时间/阶段成本、资源成本、保留/失去价值、主要风险和推荐理由。推荐应解释它如何最快或最可靠地恢复当前目标的玩家价值，而不是只按最低即时成本排序。
+
+- `repair` 保持现有能力并修补关键缺口；`rebuild` 放弃或暂停旧位置/能力后重建同类能力；`pivot` 将已有投入转换为另一项能服务当前目标的区域用途。三者必须有可感知的恢复节奏或价值保留差异。
+- 每项比较必须说明独立 `small-player lane` 是否仍可行。仅当独立路径当前确实不可行，才可推荐外部赞助或 major-power 依赖，并说明阻断约束、该依赖的用途及下次重评时机。
+- 代表性验收至少覆盖一次局部停机、资源短缺、据点受压或路线失效：玩家能在同一 active goal 下作出有依据的选择，恢复后仍能回到本地立足、区域专业化或有限区域影响，而不是被静默降级为旁观者或强制站队。
+- 本节只定义比较与可玩性验收；不新增 runtime 状态、数值、路径可用性算法或 Viewer 布局。
 
 从 `local operator` 切到 `regional specialist` 之前，系统必须展示 `specialization_entry_quote` / `first_delivery_preview`：玩家要知道候选专业化的第一单交付会满足哪个本地需求、预计产出什么、需要哪些输入、多久形成价值、解锁哪种 `leverage_class`，以及交付后的回访 hook。否则专业化只是抽象标签，不能证明 mature-world 小玩家仍有可判断的经营取舍。
 

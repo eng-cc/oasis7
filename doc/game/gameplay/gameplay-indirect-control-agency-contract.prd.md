@@ -56,6 +56,22 @@
 | 恢复与续玩保证 | `resume_anchor`、`last_accepted_intent`、`primary_blocker`、`resume_next_step` | 玩家重连或回流时，直接恢复当前 agency surface，不要求先读原始事件流 | `fresh_session -> resumed -> replanned` | 优先恢复主目标链最近一次 accepted intent；若旧意图已失效，必须显式写出失效原因 | 已认证玩家可恢复自己的续玩面板/API 字段 |
 | 长期记忆可读与纠正保证 | `memory_summary`、`memory_source_event`、`used_for_current_decision`、`player_correction_hint`、`memory_confidence_or_staleness`、`memory_correction_outcome`、`correction_status`、`affected_memory_or_decision_scope`、`earliest_applied_action`、`correction_scope_confidence`、`stale_or_ignored_reason` | 当 agent 引用长期记忆影响当前行动时，展示脱敏摘要、来源、当前用途和纠正提示；玩家提交纠正后必须回写接受或拒绝、影响的记忆或决策范围，以及最早会应用到的下一决策/行动。接受的纠正必须反映在下一条 memory-driven action summary；若未反映，必须给出明确的 stale/ignored reason | `memory_hidden -> memory_referenced -> correction_submitted -> correction_accepted/rejected -> applied/stale/ignored/reconfirmed` | 当前决策实际引用的记忆优先；过期或低置信记忆必须标记 staleness，不得伪装成确定事实。结果只报告作用范围与置信度，不承诺单条纠正必然决定下一行动 | 玩家只能看见自己可访问 agent / session 的脱敏记忆摘要与纠正结果；不得暴露私有 prompt 全文、内部 trace 或其他玩家记忆 |
 
+### 2.1 Reusable causal-decision receipt
+
+所有会由 Agent 解释、自动推进、改道或可被玩家修正的动作，共用一份语义上的 causal-decision receipt；它适用于记忆驱动、社交、治理与冲突动作，而不是为每类动作另造一条玩家因果链。receipt 必须让玩家读懂：
+
+1. 被接受的玩家意图是什么；
+2. Agent 为什么如此解释或选择推进，及其使用的可读证据或世界约束；
+3. 当前 stakes 与预期世界后果；
+4. 可选择的替代方向；
+5. 可用的打断或纠正动作；
+6. 该打断/纠正最早能影响的后续决策点；以及
+7. 纠正后的实际结果，或尚未生效/被忽略的可读原因。
+
+请求、提案或玩家意图被接受，只表示系统已承认并会在权威边界内处理它；它不等同于规则已应用、投票已结算、社会关系已改变、冲突已开始或任何预期后果已发生。receipt 必须把“已接受”“正在按规则处理”“权威应用或未应用的结果”区分开，并在被阻塞、改道、被替换或纠正后保留同一条因果链。
+
+本 receipt 定义 gameplay 可读性与验收语义，不新增 runtime 字段、状态枚举、治理规则、Agent 推理保证或 Viewer/API 布局。具体事实、可中断性和何时应用仍以对应权威状态与专业合同为准。
+
 - Acceptance Criteria:
   - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
   - AC-2: “间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
@@ -72,6 +88,7 @@
   - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
   - AC-11: 若 agent 当前行动引用长期记忆，headed Web/UI 与 pure API 至少必须能回答 `记住了什么 / 来自哪里 / 影响当前哪一步 / 玩家如何纠正`；若只能看到 agent 自行行动或原始日志，判定为 agency weakened。
   - AC-12: 若玩家已提交长期记忆纠正，headed Web/UI 与 pure API 至少必须能回答 `是否接受 / 影响哪段记忆或哪类决策 / 最早在哪个下一行动应用`；接受结果若未出现在下一条 memory-driven action summary，必须说明 `stale_or_ignored_reason`，否则判定为 `memory_correction_outcome_missing`。
+  - AC-13: 记忆驱动、社交、治理与冲突动作使用同一 causal-decision receipt，且能回答 accepted intent、Agent reason/evidence、stakes/expected consequence、alternative、interrupt/correction、earliest effective point 与 post-correction result；若把请求/提案接受写成权威应用，或纠正后只给状态不说明结果，判定为 `causal_decision_receipt_missing`。
 - Non-Goals:
   - 不把 oasis7 改成第一人称直接操作或逐块建造游戏。
   - 不在本专题中直接修复 active-LLM provider、runtime freeze 或 capability gate 本身；这些仍由对应实现任务负责。

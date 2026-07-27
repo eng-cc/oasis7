@@ -25,6 +25,7 @@
 - 当前路线不可行、被改道或不再值得等待时，玩家保有下一次决策权，能够理解原因并选择等待、修复、改道、重新聚焦，或安全结束当前意图后重新定目标。
 - 玩家可以暂时探索或离开，但能够重新聚焦；重连或回流后能够恢复当前目标、主要阻塞、最近后果与可执行下一步，而不是回到无目标观察。
 - 当 Agent 使用长期记忆影响当前决定时，玩家能够理解相关记忆的来源和作用，并能提交纠正或重排当前意图；纠正是否接受、影响范围及生效结果由 Agent 与 Viewer 专业合同拥有。
+- 对记忆驱动、社交、治理或冲突决策，玩家能够沿同一因果链理解：被接受的意图、Agent 的可读理由/证据、stakes 与预期后果、替代方向、可用的打断或纠正、最早生效点及纠正后的结果。请求或提案被接受只代表进入权威处理，不代表世界规则已经应用、后果已经发生或提案已经结算。
 - Viewer 与 pure API 等正式玩家入口以同一权威世界事实支撑上述体验；入口布局、字段和实现机制可以不同，但不能制造不同的意图、因果或下一步真值。
 
 ## 3. 权威与组合关系
@@ -46,6 +47,7 @@
 - IA-4：离开和返回后，玩家能够从最近有效意图、主要阻塞、最近后果和下一步继续，而不依赖原始日志重建上下文。
 - IA-5：记忆驱动的行动能够说明相关记忆为何影响当前决定，并提供可理解的纠正结果；未使用长期记忆的流程不因此被要求引入记忆系统。
 - IA-6：产品层、game、runtime、Agent/Viewer 与 testing 的证据指向同一候选和权威事实；任一局部 green、文档建档或世界持续 tick 都不能单独证明本产品承诺通过。
+- IA-7：代表性记忆驱动、社交、治理或冲突决策可用同一 receipt 证明意图接受、理由、stakes、替代、纠正、生效点与纠正结果，并明确请求/提案接受与权威应用的边界。
 
 ### 4.1 验收追踪
 
@@ -57,6 +59,7 @@
 | IA-4 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 重连或回流后的意图、阻塞、后果与下一步恢复证据 | test_tier_required |
 | IA-5 | gameplay_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 记忆来源、当前用途、纠正与结果可读性证据 | test_tier_required |
 | IA-6 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同候选跨域组合审计；产品文档、局部测试或世界 tick 不得代签 | test_tier_full |
+| IA-7 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 跨动作 causal-decision receipt、请求/提案接受与权威应用边界、纠正生效与结果的组合证据 | test_tier_required |
 
 ## 5. Non-Goals
 
