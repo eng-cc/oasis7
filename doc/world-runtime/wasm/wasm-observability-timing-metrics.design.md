@@ -224,3 +224,27 @@ oasis7_wasm_router        |
 - build/executor 是最高价值且埋点最明确的两段。
 - status payload 需要先有统一 schema。
 - router 明细容易受 cardinality 影响，放在后半段更稳。
+
+## 9. Module-local observe 层
+
+```text
+module_observe.json
+  -> generic wasm_module_observe runner
+  -> wasm_build_suite
+  -> executor contract cases + metrics delta
+  -> prepared/fallback router probes + metrics delta
+  -> summary.json + summary.md
+```
+
+- spec 路径固定在模块 `observability/` 下，manifest 相对 spec 解析。
+- cases 统一表达 request、expect、repeat 与 failure assertions；router probes 统一表达 prepared/fallback 和 match expectation。
+- runner 只处理 generic JSON -> Canonical CBOR 与共享 ABI 输出，不知道模块私有类型。
+- `repeat` 至少为 1；assertion、path 或 decode 失败返回结构化错误并停止对应运行。
+- summary 同时保留 build timing、case wall-clock、executor/cache delta 与 router delta，但默认不包含 raw payload。
+- 模板与 `m1_rule_move` 样例提供接入真值；扩展更多模块只新增 spec/fixture，不修改 runner 分支。
+
+## 10. 权威边界
+
+- 全局 status/window 适合节点与候选热点归因；module-local observe 适合单模块 contract/perf 验证，两者互补。
+- instrumentation 降级不得阻断模块执行，也不得代签模块功能、产品闭环或 release readiness。
+- 所有 timing 保持本地观测属性和 bounded cardinality。

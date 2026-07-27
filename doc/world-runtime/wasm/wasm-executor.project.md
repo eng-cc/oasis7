@@ -38,11 +38,27 @@
 - [x] E12 `oasis7_wasm_sdk::wire` 改为显式暴露 CBOR 解码失败，builtin 模块调用点改为显式 fallback
 - [x] E12 补充磁盘缓存初始化失败与执行器调用点回归
 - [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将磁盘 compiled cache 从“原始 wasm 字节回盘”修正为“Wasmtime 序列化 compiled artifact 回盘”，并补齐 round-trip / 损坏恢复 / perf probe 测试可编译性。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml
+- [x] wasm-executor-agent-os-alignment (PRD-WORLD_RUNTIME-002) [test_tier_required]: 以可选兼容字段落地 ABI/schema、cap slot、pure policy hook、ModuleContext 与 compiled cache。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
+  - 历史来源：AOSA-1/2/3/5/6。
+- [x] wasm-executor-sandbox-hardening (PRD-WORLD_RUNTIME-002) [test_tier_required]: 落地 fuel fallback、epoch 抢占、memory limiter、工件 hash 校验和结构化失败。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
+  - 历史来源：T1/T2/T3。
+- [x] wasm-executor-authority-consolidation (PRD-WORLD_RUNTIME-002) [test_tier_required]: 吸收两组完成专题并删除六个重复源文件。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
 
 ## 依赖
 - doc/world-runtime/wasm/wasm-executor.prd.md
 - `ModuleSandbox` 接口与模块 ABI 文档（`doc/world-runtime/wasm/wasm-interface.md`）
 - 模块加载缓存与存储实现（`doc/world-runtime/module/module-storage.prd.md`）
 
+## 补充 evidence ledger
+
+| 契约 | 当前实现/验证入口 |
+| --- | --- |
+| ABI/schema 与 capability | `crates/oasis7_wasm_abi/src/lib.rs`、`crates/oasis7/src/runtime/world/module_runtime.rs` 的 optional contract、cap slot/conflict 与 policy-hook tests |
+| ModuleContext | runtime envelope 编码及 manifest/context 默认兼容 tests |
+| Fuel/epoch/memory | `crates/oasis7_wasm_executor/src/lib.rs` 的 zero-gas fallback、interrupt/out-of-fuel 与 memory-growth tests |
+| Artifact integrity | module persistence SHA-256 mismatch rejection tests |
+| Compiled cache | serialized artifact round-trip、wrapper/precompiled marker、engine/OS/arch partition 与 corruption-as-miss tests |
+| Structured failure | executor initialization/cache-dir/codec failure tests；无 panic 宿主退出 |
+
 ## 状态
-- 当前阶段：E13（真实 compiled artifact 磁盘缓存与回归闭环完成）
+- 当前阶段：E14（executor/security/alignment 稳定专业权威合并完成）；该状态不等于集成、长稳或发布就绪。

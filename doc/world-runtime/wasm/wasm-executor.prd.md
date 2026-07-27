@@ -6,7 +6,7 @@
 审计轮次: 4
 
 
-本分册描述将真实 WASM 执行器接入 `ModuleSandbox` 的最小方案。
+本分册描述将真实 WASM 执行器接入 `ModuleSandbox` 的最小方案，并作为已完成 agent-os 对齐增强与 sandbox 安全硬化的稳定专业权威。模块工件持久化生命周期仍由 `doc/world-runtime/module/module-storage.prd.md` 拥有。
 
 ## 1. Executive Summary
 - 在现有 `ModuleSandbox` 抽象之上提供真实 WASM 执行实现（首选 Wasmtime）。
@@ -102,6 +102,23 @@
 - `oasis7_wasm_sdk::wire` 的 CBOR 编解码失败必须向调用者显式暴露，由 builtin 模块明确选择 fallback，而不是由 SDK 静默吞错。
 - Node/runtime 入口在构造执行器失败时需保留可观测错误文本，测试需覆盖磁盘缓存初始化失败路径。
 
+### ABI / capability 对齐契约
+
+- `ModuleManifest.abi_contract` 的版本、输入/输出 schema、`cap_slots` 与 `policy_hooks` 是默认兼容的可选扩展；旧 manifest 缺省这些字段仍可读取。
+- effect 可以携带可选 `cap_slot`；存在 slot 时必须解析到 manifest 中唯一的 `cap_ref`，与显式 `cap_ref` 冲突或未声明时拒绝。
+- pure policy hook 只能作为 effect 提交前的确定性判定器，不得递归产生世界副作用或取得绕过治理的写权限。
+- `ModuleContext` 可携带 stage、manifest hash、journal height、module version/kind/role 等可选元信息；缺省值必须兼容旧模块。
+- 这些扩展不替代 `wasm-1` ABI，不得被描述为新主版本或强制所有历史模块立即实现。
+
+### Sandbox 与工件完整性契约
+
+- 请求 `max_gas = 0` 使用执行器配置的 `max_fuel`，不得形成无上限执行。
+- 每次调用设置 epoch deadline 并由 watchdog 触发抢占；fuel 耗尽与 epoch interruption 映射为结构化 timeout/failure。
+- store memory limiter 约束 `memory.grow`；linker 默认不暴露非 ABI 必需的时间、随机或 I/O capability。
+- 从持久化存储加载工件时必须重算 SHA-256 并与记录的 `wasm_hash` 比对，失败拒绝加载；storage 布局、retention 和 lifecycle 不由本文重定义。
+- 编译缓存只保存带 wrapper/version/checksum 的 serialized compiled artifact；校验失败按 cache miss 安全恢复，并按 engine/OS/arch 兼容域隔离。
+- 引擎初始化、缓存目录和 codec 失败返回结构化错误，不允许以 panic 终止宿主。
+
 ## 5. Risks & Roadmap
 - **E1**：选择 WASM 引擎并完成配置结构体与沙箱实现骨架。
 - **E2**：接入燃料/超时/内存限制，输出校验与错误码映射。
@@ -116,6 +133,7 @@
 - **E11**：升级 Wasmtime 版本（18 -> 41）并完成兼容性回归验证。
 - **E12**：清理执行器初始化 `panic` 与 SDK wire 静默吞错路径，补足失败路径结构化错误回归。
 - **E13**：将磁盘编译缓存从“原始 wasm 回盘”修正为“序列化 compiled artifact 回盘”，补齐 round-trip 与损坏恢复回归。
+- **E14**：将 agent-os 对齐增强与 sandbox 安全硬化的永久契约并入本稳定权威，退役重复专题文档。
 
 ### Technical Risks
 - 引擎版本升级导致行为变化（需锁定版本/回放验证）。
@@ -131,6 +149,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-DOC-MIG-20260303 | 逐篇阅读后人工重写为 `.prd` 命名 | 仅批量重命名 | 保证语义保真与审计可追溯。 |
+| DEC-WR-WASM-EXEC-001 | 将 agent-os 对齐与 sandbox 安全契约吸收到 executor 权威 | 长期保留两个完成专题作为并列权威 | 两者共同约束 executor/ABI 执行边界；集中后更能保持 compatibility、limits、capability 与 cache 语义一致。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标” -> 第 1 章 Executive Summary。

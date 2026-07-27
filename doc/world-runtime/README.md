@@ -9,8 +9,8 @@
 - 想看当前活跃任务、阻断、测试层级与最新完成项：`doc/world-runtime/project.md`
 - 想直接定位某个 runtime / wasm / module / governance 专题文件：`doc/world-runtime/prd.index.md`
 - 想先看当前最关键的发布/构建专题：`doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
-- 想先看 WASM build / executor / router 的观测与耗时指标：`doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
-- 想直接给单个 WASM 模块补标准化功能/性能观测：`doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
+- 想看 WASM 全局 timing/status/window，或给单个模块补标准化 contract/perf 观测：`doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+- 想看模块 SDK 的 no_std、共享 wire 与 codec 兼容契约：`doc/world-runtime/wasm/wasm-sdk.prd.md`
 - 想先看运行态体积、恢复与 retention 治理：`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
 - 想先看线上模块发布合法性与 binary-only 边界：`doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想进入治理事件、审计导出或收据安全专题：`doc/world-runtime/governance/README.md`
@@ -26,7 +26,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解 runtime 的确定性、WASM、治理、存储与发布边界。
 - `project.md` 是执行台账，适合确认当前仍在推进的 runtime / wasm 发布 / binary-only / traceability 任务。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名后按文件名直达，不适合作为第一次进入模块时的首读入口。
-- 高频专题文档承担专题真值：`wasm-deterministic-build-pipeline` 负责 Docker canonical build / receipt / release evidence；`wasm-observability-timing-metrics` 负责 build/executor/router timing 与 `/v1/chain/status.wasm` 观测链路；`wasm-module-observability-standardization` 负责 module-local spec、共享 runner 与模板化接入；`runtime-storage-footprint-governance` 负责 retention / GC / replay contract；`online-module-release-legality-closure` 负责线上模块发布合法性与默认安全边界。
+- 高频专题文档承担专题真值：`wasm-deterministic-build-pipeline` 负责 Docker canonical build / receipt / release evidence；`wasm-observability-timing-metrics` 同时负责全局 timing/status/window 与 module-local spec/runner/template；`wasm-sdk` 负责 no_std、共享 wire 与 codec 兼容；`runtime-storage-footprint-governance` 负责 retention / GC / replay contract；`online-module-release-legality-closure` 负责线上模块发布合法性与默认安全边界。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接平铺 runtime 高频专题长名单。

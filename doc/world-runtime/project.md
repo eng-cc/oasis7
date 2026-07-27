@@ -285,14 +285,26 @@
     - `doc/world-runtime/project.md`
     - `doc/world-runtime/README.md`
     - `doc/world-runtime/prd.index.md`
-    - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
-    - `doc/world-runtime/wasm/wasm-module-observability-standardization.design.md`
-    - `doc/world-runtime/wasm/wasm-module-observability-standardization.project.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`
     - `env -u RUSTC_WRAPPER cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json --out-dir .tmp/wasm_module_observe_m1_check`
     - `bash -n scripts/oasis7-wasm-module-observe.sh`
     - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+- [x] wasm-platform-authority-consolidation-batch-33 (PRD-WORLD_RUNTIME-002/036/037/042) [test_tier_required]: 将 executor/security/alignment、SDK no_std/wire 与 global/module-local observability 的完成专题归入三个稳定专业权威，删除 15 个已吸收源文件并修复入口。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
+  - 稳定权威:
+    - `doc/world-runtime/wasm/wasm-executor.prd.md`
+    - `doc/world-runtime/wasm/wasm-sdk.prd.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_sdk`
+    - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`
+    - `bash -n scripts/oasis7-wasm-module-observe.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `./scripts/readme-link-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-058 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 修复 `oasis7_chain_runtime` 默认 loopback replication network 劫持多机 PoS 共识广播的问题，保留 replication/feedback fallback，但让已配置 UDP gossip 的三节点部署继续通过 gossip 同步 peer heads；显式共享 replication network 的 network-consensus 路径保持不变。
   - 产物文件:

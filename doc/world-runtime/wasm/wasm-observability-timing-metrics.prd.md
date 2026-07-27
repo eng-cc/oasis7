@@ -55,6 +55,17 @@
   - 不把 tracing span、open telemetry exporter 或远端 metrics backend 一并纳入首期范围。
   - 不在首期默认暴露逐 `trace_id` 或逐 payload 的超高基数明细。
 
+### 模块本地 contract / perf 观测
+
+全局 build/executor/router/status 指标与模块本地 contract/perf 观测是同一权威的两层，而不是两套平行体系：
+
+- 每个模块可提供 `<module-dir>/observability/module_observe.json`，声明 build 参数、subscriptions、contract cases、router probes 与 `repeat >= 1` 的采样配置。
+- `tools/wasm_module_observe` 是通用 spec-driven runner；`scripts/oasis7-wasm-module-observe.sh` 提供 `--spec` / `--manifest-path` 入口。
+- runner 构建模块、执行 case、验证 prepared/fallback router probe，并复用现有 build/executor/router metrics delta，输出 machine-readable JSON 与人可读 Markdown。
+- `_templates/module_observe.json` 是复制模板，`m1_rule_move/observability/module_observe.json` 是代表样例；模块差异只能通过 spec/fixture 表达，runner 不得增加 module-specific 分支。
+- assertion failure 必须报告 case、期望和实际差异；repeat=0、无效路径、无法解码的要求字段必须显式失败。
+- summary 默认 bounded，不转储原始 payload 或逐 trace 数据；模块本地 timing 同样不进入 world、consensus 或 replay state。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: `tools/wasm_build_suite`、`oasis7_wasm_executor`、`oasis7_wasm_router`、`oasis7_chain_runtime` status payload、repo-owned summary script。
 - Evaluation Strategy: 以“是否能稳定区分 build/compile/cache/execute/router 热点”与“是否能在 status/summary 中输出 machine-readable 证据”为主，不以一次性 benchmark 截图代替正式验收。
@@ -69,6 +80,10 @@
   - `crates/oasis7/src/bin/oasis7_chain_runtime/storage_metrics.rs`
   - `doc/world-runtime/templates/runtime-release-gate-metrics-template.md`
   - `doc/world-runtime/project.md`
+  - `tools/wasm_module_observe`
+  - `scripts/oasis7-wasm-module-observe.sh`
+  - `crates/oasis7_builtin_wasm_modules/_templates/module_observe.json`
+  - `crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`
 - Edge Cases & Error Handling:
   - metrics lock 中毒：必须返回 `degraded_reason`，但不得阻断正常 module call。
   - 节点重启 / `observed_since_unix_ms` 变化：外部 summary 必须自动缩窗，避免负 delta 或跨重启伪增量。
@@ -102,9 +117,11 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-WORLD_RUNTIME-036 | `wasm-observability-timing-metrics` | `test_tier_required` | 设计文档审查、`doc-governance-check`、状态字段/schema 校验用例、summary 脚本 dry-run | WASM build/executor/router 热点归因、节点 status 可观测性 |
+| PRD-WORLD_RUNTIME-037 | `wasm-module-observability-standardization` | `test_tier_required` | observe runner tests、代表模块 spec、wrapper shell check、JSON/Markdown summary | 模块级 contract/perf 证据与新模块接入 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-WMTM-001 | 复用 storage/traffic 的 cumulative snapshot -> status payload -> external summary 模式 | 直接把 perf probe 日志提升为正式指标来源 | 现有 status/summary 模式已被节点与 triad 流量观测验证，维护成本更低。 |
 | DEC-WMTM-002 | 默认只暴露 bounded totals/buckets，模块级明细采用 top-N / allowlist | 默认输出全量 `module_id -> timing` map | 默认全量明细会造成 status payload 与 cardinality 无界增长。 |
 | DEC-WMTM-003 | timing 指标只留在本地观测面，不进入 world state / replay contract | 把 timing 直接落入事件或状态供全链回放 | wall-clock timing 不具确定性，进入 world state 会破坏 replay contract。 |
+| DEC-WMTM-004 | 在同一权威中组合全局 status 指标与 module-local observe | 长期保留 module observability 独立三件套 | 两层复用相同 build/executor/router metrics，合并可避免 schema 与验收口径分叉。 |

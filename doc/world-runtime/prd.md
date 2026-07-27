@@ -203,9 +203,9 @@
   - `doc/world-runtime/runtime/runtime-integration.md`
   - `doc/world-runtime/wasm/wasm-interface.md`
   - `doc/world-runtime/wasm/wasm-executor.prd.md`
+  - `doc/world-runtime/wasm/wasm-sdk.prd.md`
   - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
   - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
-  - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
   - `doc/world-runtime/governance/governance-events.md`
   - `doc/world-runtime/module/player-published-entities.prd.md`
   - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
