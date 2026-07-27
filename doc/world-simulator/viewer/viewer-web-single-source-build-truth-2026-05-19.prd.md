@@ -67,6 +67,12 @@
 - freshness / bundle manifest / browser rebuild helper 必须把 canonical `viewer.js` 纳入 source-of-truth scope。
 - 若保留 checked-in generated artifact，则必须由单一 finalize 脚本负责写入，避免多个脚本分别“顺手生成”不同变体。
 
+### 4.4 WASM/native build and resource boundary
+
+- native-only runtime、live server、node 与持久化依赖不得重新进入 wasm Viewer dependency graph；Web 不支持的动作必须返回可诊断反馈，不能静默丢弃。
+- 从 bundle 中移出的字体等浏览器资源必须由 canonical finalize/served-asset flow 提供；加载失败必须有可用 fallback 或可见诊断，不能把缺失资源伪装成成功构建。
+- build/finalize 变更至少验证 `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`test:feedback-contract` 与 freshness 证据。历史 byte-size/trunk 对比仅是 Git/task evidence，不是当前性能预算。
+
 ## 接口 / 数据
 - 源码入口：
   - `crates/oasis7_viewer/software_safe_src/main.jsx`
@@ -101,6 +107,7 @@
 - AC-3: `viewer.html` / `software_safe.html`、dist rebuild helper、bundle 打包脚本和 browser regression helper 均按同一 canonical/compat 关系工作，不再依赖 compat 名称作为 canonical 源。
 - AC-4: `dist/pixel-world-bridge/` generated runtime 继续可用，且其来源明确绑定到 finalize flow，而不是被当成手工维护源码；浏览器 served-dist 路径仍保持 `./pixel-world-bridge/`。
 - AC-5: 现有 `npm --prefix crates/oasis7_viewer run test:ui`、`npm --prefix crates/oasis7_viewer run build:software-safe` 与相关 repo-owned Node/browser helper 回归通过。
+- AC-6: wasm graph 不含 native-only runtime/server 依赖；外置资源由 canonical finalize flow 交付，unsupported action 与资源加载失败都留下显式诊断。
 
 ## 7. Validation & Decision Record
 - Test Plan & Traceability:

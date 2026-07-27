@@ -20,6 +20,7 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 ### 托管进程与输出
 
 - Launcher 只构造、启动、停止并观察既有 chain runtime；它不重算世界状态、共识或 execution-world 数据。
+- `oasis7_chain_runtime` 是 node/consensus/execution-world 的进程入口，Launcher 拥有其编排与 session continuity；`oasis7_viewer_live` 是独立的 Viewer live/Web 进程，可通过声明的 chain-status/submit client endpoints 消费 committed chain world 或提交动作，但不得内嵌 node、consensus gate、reward-runtime worker、topology、persistent execution world，也不得把 Viewer event drive 当作 consensus tick。
 - 托管启动必须为 chain runtime 传递显式 `--execution-world-dir`，其 node-scoped 输出规则为 `output/chain-runtime/<node_id>/reward-runtime-execution-world`。直接手工运行 runtime 的 cwd 行为不由 Launcher 保证。
 - chain runtime 的状态、余额、存储指标和执行错误以现有 runtime status 响应为真值；Launcher 只能呈现或转发，不得由空结果推断运行时健康。
 
@@ -38,6 +39,7 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 ## 接口 / 数据
 
 - 托管 runtime 参数：`--execution-world-dir` 与既有 node-scoped 输出路径。
+- 进程边界：正式/本地 chain-enabled gameplay 由 Launcher 编排 `oasis7_chain_runtime`；`oasis7_viewer_live` 不接受旧 node/consensus ownership，但可用 `--chain-status-bind` 观察 committed world，并在同时配置 status bind 时用 `--chain-submit-bind` 作为客户端提交端点。
 - Launcher 状态：既有 chain runtime status、`stale_execution_world` 分类和建议配置；具体 payload 以运行中实现为真值。
 - 运行态存储状态：profile、storage metrics、degraded reason 与 replay summary；字段和恢复规则由运行态存储治理专题定义。
 

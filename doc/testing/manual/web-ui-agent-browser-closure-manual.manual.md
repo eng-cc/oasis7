@@ -101,6 +101,7 @@ OASIS7_RUNTIME_AGENT_CHAT_ECHO=1
 - F2 页面初始化崩溃：立即归档证据并判失败。
 - F3 长时间无推进：优先使用 `viewer-software-safe-step-regression.sh` 判断是正常 blocker 还是异常卡死。
 - F4 URL 被 shell 截断：带 `&` 的 URL 一律加引号。
+- F5 `connecting` 且 `logicalTime=0`：读取 `window.__AW_TEST__.getState().lastError` / `errorCount`，归档 screenshot、console 与 state；WebGL/SwiftShader fatal 按 S6 环境/图形失败分类，已知 fatal 最多允许一次自动 reload，不能当作 gameplay 进展。
 
 ## 发布与延伸入口
 - 系统总手册：`testing-manual.md`

@@ -58,7 +58,7 @@
 - `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
 - `doc/world-simulator/llm/{provider-agent-dual-mode.{prd,project}.md,provider-agent-dual-mode-contract.md}`
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
-- Runtime live migration phase1/2/3 旧三件套已退役删除；当前追溯入口收敛到 `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md`、`doc/world-simulator/viewer/viewer-manual.manual.md`、GitHub task issue evidence comments 与 git history。
+- Runtime live migration 与后续 event-drive/LLM bridge/node split 历史三件套已退役删除；当前 authority 收敛到 `doc/world-simulator/prd.md`、`doc/world-simulator/llm/decision-provider-contract.prd.md`、`doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`、`doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md` 与 `doc/world-simulator/viewer/viewer-manual.manual.md`；历史完成态只从 GitHub task issue evidence comments 与 git history 追溯。
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`

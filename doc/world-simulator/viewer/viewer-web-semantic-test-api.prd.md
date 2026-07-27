@@ -26,6 +26,12 @@
 - `getState()` 至少用于读取 `connectionStatus`、`logicalTime`、`eventSeq`、兼容 `tick`、`controlProfile`、`lastError` 和 `lastControlFeedback`。`tick === logicalTime` 是兼容 alias；时间和事件序号仅来自 runtime 消息，空结果不得被客户端合成为进展。
 - control feedback 必须区分 rejected、blocked、queued、发送失败以及后续观察到的 completed/no-progress；queued 不是 completion。live seek 的 unsupported-action、WebSocket 断链和 runtime 无增量均必须保留为不同可诊断状态。
 
+### Browser runtime-fatal state
+
+- 测试模式发现浏览器 rendering/runtime fatal 时，`getState()` 必须暴露 `connectionStatus=error`、非空 `lastError` 与单调递增的 `errorCount`；fatal 不能继续伪装为 `connecting`、成功连接或世界进展。
+- 已知 graphics fatal 最多自动 reload 一次；再次失败后保持可观测错误，避免无限恢复循环。rejected、blocked、queued、completed/no-progress 与 runtime fatal 必须继续分开。
+- 自动化应归档 state、console 与 screenshot；WebGL/SwiftShader fatal 属于浏览器环境/图形 gate，不是 gameplay 失败或成功证据。
+
 ### Historical Bevy API record (retired; not current contract)
 
 The following scope, command queue, state snapshot, roadmap, and decision-log records preserve the completed Bevy/EGUI implementation history. They do not override the current implementation contract above.
@@ -88,6 +94,7 @@ The following scope, command queue, state snapshot, roadmap, and decision-log re
 
 - socket `error` 必须留下 `viewer.ws` 诊断，socket `close` 进入 `connecting` 并安排重连；这些状态不等于已连接、已排队或已推进。
 - 历史“非法 payload 只 warning、不 panic”的目标由当前 rejected-feedback/no-throw 合同继承。自动化应断言返回值、`lastError` 和 state，而不是依赖 console 文案或伪造 time/event 增量。
+- runtime fatal 优先于普通 reconnect 状态：首次已知 graphics fatal 可触发一次有界 reload；后续 fatal 必须停留在 error 并保留最近错误。
 
 #### 命令队列
 - JS -> queue -> Bevy Update 消费：
