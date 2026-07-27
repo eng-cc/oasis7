@@ -18,10 +18,12 @@
 ## 运维与安全边界
 
 - `feedback_p2p` 是显式配置能力：缺 replication config、network endpoint 或 BlobState lane 权限即拒绝启动。operator 应修正角色/lanes/replication 合同，不以重启替代配置修复。
+- chain-runtime binary 在启动 NodeRuntime 前自动挂载默认 replication network 和 maintenance DHT handle；默认 listen 使用 loopback ephemeral 地址。effective bootstrap peers 优先使用非空的显式 CLI 列表，否则使用已加载的 network-tier manifest 列表；仅当最终 effective 列表为空时，才启用 no-peer 本地 handler fallback。
+- effective peer 列表非空时，transport 必须走真实 peer/admission 路径；没有 connected 或 admissible peer 时返回 `NetworkProtocolUnavailable`。显式 topology 不允许以本地 handler 掩盖连接、角色或 lane 缺陷。
 - 入站和出站都受每 tick 正上限控制；待发队列的容量与出站上限关联。队列饱和、fetch 拒绝、hash 不匹配或签名失败均应作为可诊断失败处理，不能写入未经验证的记录。
 - replication 的 server/request signing、allowlist 和 lane policy 是 fetch 授权边界；本设计只复用，不能以 feedback 的作者签名替代节点间 fetch 授权。
 - audit/IP/public-key 限流仅是基础 anti-abuse，不是内容审核、隐私保护或生产容量保障。
 
 ## 非承诺
 
-该设计不改变 consensus/runtime 状态机，不给反馈事件赋予 finality，不定义 checkpoint/restore，也不产生任何部署、readiness 或 release 结论。跨节点复制的成功只证明受测路径在给定角色、lane 和签名配置下可用。
+该设计不改变 consensus/runtime 状态机，不给反馈事件赋予 finality，不定义 checkpoint/restore，也不产生任何部署、readiness 或 release 结论。默认 no-peer fallback 只是单机 wiring；跨节点复制的成功也只证明受测路径在给定角色、lane、peer 与签名配置下可用。

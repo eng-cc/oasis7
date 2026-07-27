@@ -252,7 +252,7 @@
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
   - `oasis7_viewer_live.release.example.toml`
-  - `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`
+  - `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:

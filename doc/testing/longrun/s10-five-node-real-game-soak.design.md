@@ -11,6 +11,7 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - 五节点编排层：定义 sequencer、storage、observer 节点拓扑、运行时长和脚本入口。
 - 游戏数据流层：覆盖 gameplay 数据、reward/settlement、mint 与资产不变量。
 - 稳定性观测层：采集 committed progress、lag、DistFS、settlement apply 与关键告警。
+- DistFS probe 预热层：reward worker 启动时仅在 blob set 为空时写入幂等、非敏感 seed；失败局部记录而不阻断主循环。
 - 验收归档层：沉淀 `summary.json`、`summary.md`、`timeline.csv`、节点日志、失败签名与门禁结论。
 
 ## 3. 关键接口 / 入口
@@ -23,9 +24,11 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - 长跑场景需可重复执行、可比较。
 - S10 不负责 chaos 注入编排；需要故障恢复覆盖时升级到 S9/GWSC 关联套件。
 - S10 五进程或本地五节点结果不得冒充 real-env/public_testnet readiness。
+- probe seed 只让 `distfs_total_checks` 具备产生样本的前提；它不改变算法阈值，不把 `insufficient_data`、其他门禁失败或缺少同窗口证据升级为 pass。
 - 不在本专题扩展新的线上编排平台。
 
 ## 5. 设计演进计划
 - 固定五节点长跑场景、节点拓扑与探针。
 - 固化 settlement/mint/DistFS/lag 门禁指标。
+- 固化空集 seed 的幂等、非阻断与非证明边界。
 - 与 GWSC 方案对齐 state-sync/commit claim boundary。

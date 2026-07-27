@@ -48,7 +48,7 @@
 
 ## 6. Integration Points
 - `testing-manual.md#s9a链上大世界状态底座自闭环`
-- `doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`
+- `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`
 - `doc/testing/longrun/s10-five-node-real-game-soak.prd.md`
 - `scripts/game-world-state-sync-commit-module-required.sh`
 - `doc/testing/templates/state-sync-closure-evidence-packet-template.md`

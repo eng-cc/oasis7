@@ -16,7 +16,7 @@
 - `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`
 - `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md`
 - `testing-manual.md`
-- `doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`
+- `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`
 - `doc/testing/longrun/s10-five-node-real-game-soak.prd.md`
 - `doc/testing/templates/state-sync-closure-evidence-packet-template.md`
 - `scripts/game-world-state-sync-commit-module-required.sh`
