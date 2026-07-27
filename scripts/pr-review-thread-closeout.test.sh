@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
+# This fixture must remain compatible with POSIX and Git Bash with native Windows Python.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-TMPDIR="$(mktemp -d)"
+mkdir -p "$ROOT_DIR/.pm/scratch"
+TMPDIR="$(mktemp -d "$ROOT_DIR/.pm/scratch/pr-review-thread-closeout-test.XXXXXX")"
 cleanup() {
   rm -rf "$TMPDIR"
 }
@@ -196,7 +198,7 @@ state_path.write_text(json.dumps(payload), encoding="utf-8")
 PY
 
 REPORT_FILE="$TMPDIR/report.json"
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$REPORT_FILE"
+PATH="$TMPDIR/bin:$PATH" env -u TMPDIR "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$REPORT_FILE"
 python3 - "$REPORT_FILE" <<'PY'
 from __future__ import annotations
 
@@ -249,7 +251,7 @@ state_path.write_text(json.dumps(payload), encoding="utf-8")
 PY
 
 PARTIAL_ERR="$TMPDIR/partial.err"
-if PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$TMPDIR/partial.json" 2>"$PARTIAL_ERR"; then
+if PATH="$TMPDIR/bin:$PATH" env -u TMPDIR "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$TMPDIR/partial.json" 2>"$PARTIAL_ERR"; then
   echo "expected partial review-thread scan to fail" >&2
   exit 1
 fi
@@ -258,5 +260,14 @@ if ! grep -q "review thread scan is partial" "$PARTIAL_ERR"; then
   cat "$PARTIAL_ERR" >&2
   exit 1
 fi
+
+python3 - "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" <<'PY'
+import pathlib,re,sys
+source=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+preamble=source.split('ROOT_DIR=',1)[0]
+assert 'MSYS*|MINGW*|CYGWIN*' in preamble,preamble
+assert 'export TMPDIR' in preamble,preamble
+assert not re.search(r'^\s*\*\)',preamble,re.M),preamble
+PY
 
 echo "pr-review-thread-closeout.test: OK"

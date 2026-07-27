@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# This fixture must remain compatible with POSIX and Git Bash with native Windows Python.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TMPDIR="$(mktemp -d)"
+FIXTURE_PYTHON3_BIN="$(command -v python3)"
+export FIXTURE_PYTHON3_BIN
+FIXTURE_TMPDIR="$(mktemp -d)"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) TMPDIR="$(cygpath -am "$FIXTURE_TMPDIR")" ;;
+  *) TMPDIR="$FIXTURE_TMPDIR" ;;
+esac
+export TMPDIR
 trap 'rm -rf "$TMPDIR"' EXIT
 
 REMOTE="$TMPDIR/origin.git"
@@ -49,6 +57,65 @@ assert r['task_uid']==sys.argv[3] and r['main_commit']==sys.argv[4],r
 assert r['main_commit']==r['remote_main_commit'],r
 assert r['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
+INITIAL_MERGE_RECEIPT_SHA256="$(python3 - "$MERGE_RECEIPT" <<'PY'
+import hashlib,pathlib,sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+
+# A later live observation of this exact merge must refresh durable authority.
+# Sleep rather than inventing a timestamp so the replacement receipt has a new
+# observation time and byte digest while preserving its immutable merge identity.
+sleep 1
+REFRESHED_OBSERVED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+python3 - "$MERGE_RECEIPT" "$REFRESHED_OBSERVED_AT" <<'PY'
+import json,sys
+path=sys.argv[1]
+receipt=json.load(open(path,encoding='utf-8'))
+receipt['observed_at']=sys.argv[2]
+open(path,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True)+'\n')
+PY
+"$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+  --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null
+python3 - "$REPO/.pm/github-project-sync/tasks.json" "$TASK_UID" "$MERGE_RECEIPT" "$REFRESHED_OBSERVED_AT" "$INITIAL_MERGE_RECEIPT_SHA256" <<'PY'
+import hashlib,json,pathlib,sys
+record=json.load(open(sys.argv[1],encoding='utf-8'))['tasks'][sys.argv[2]]
+receipt=json.load(open(sys.argv[3],encoding='utf-8'))
+digest=hashlib.sha256(pathlib.Path(sys.argv[3]).read_bytes()).hexdigest()
+assert receipt['observed_at']==sys.argv[4],receipt
+assert digest!=sys.argv[5],(digest,sys.argv[5])
+assert record['merge_receipt']==receipt,record
+assert record['merge_receipt_sha256']==digest,record
+PY
+
+assert_immutable_identity_drift_rejected() {
+  local field="$1" value="$2"
+  cp "$MERGE_RECEIPT" "$TMPDIR/merge-receipt-before-identity-drift.json"
+  python3 - "$MERGE_RECEIPT" "$field" "$value" <<'PY'
+import json,sys
+path=sys.argv[1]
+receipt=json.load(open(path,encoding='utf-8'))
+receipt[sys.argv[2]]=sys.argv[3]
+open(path,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True)+'\n')
+PY
+  if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
+    --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+    --receipt-output "$MAIN_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/immutable-identity-drift.err"; then
+    echo "expected refreshed merge receipt immutable identity drift to fail" >&2; exit 1
+  fi
+  grep -Fqi 'stored merge receipt conflicts with validated receipt' "$TMPDIR/immutable-identity-drift.err"
+  cp "$TMPDIR/merge-receipt-before-identity-drift.json" "$MERGE_RECEIPT"
+  python3 - "$REPO/.pm/github-project-sync/tasks.json" "$TASK_UID" "$MERGE_RECEIPT" <<'PY'
+import hashlib,json,pathlib,sys
+record=json.load(open(sys.argv[1],encoding='utf-8'))['tasks'][sys.argv[2]]
+receipt=json.load(open(sys.argv[3],encoding='utf-8'))
+assert record['merge_receipt']==receipt,record
+assert record['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[3]).read_bytes()).hexdigest(),record
+PY
+}
+
+assert_immutable_identity_drift_rejected head_oid "$(git -C "$REPO" rev-parse "$MERGED_HEAD^")"
 
 SQUASH_REMOTE="$TMPDIR/squash-origin.git"
 SQUASH_REPO="$TMPDIR/squash-repo"
@@ -161,8 +228,24 @@ case "$*" in
 esac
 EOF
 chmod +x "$TMPDIR/squash-bin/gh"
+SQUASH_BIN_PATH="$TMPDIR/squash-bin"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    SQUASH_BIN_PATH="$(cygpath -u "$SQUASH_BIN_PATH")"
+    cat >"$TMPDIR/squash-bin/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == */pr-merge-receipt.py ]]; then
+  printf '{"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"fixture/repo","default_branch":"main","pr_number":8,"pr_url":"https://example.invalid/pull/8","state":"MERGED","merged_at":"%s","head_oid":"%s","base_ref":"main","observed_at":"%s"}\n' \
+    "${TEST_MERGED_AT:?}" "${TEST_HEAD_OID:?}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  exit 0
+fi
+exec "${FIXTURE_PYTHON3_BIN:?}" "$@"
+EOF
+    chmod +x "$TMPDIR/squash-bin/python3"
+    ;;
+esac
 
-if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -172,7 +255,7 @@ if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDI
 fi
 grep -Fqi 'no patch-equivalence receipt' "$TMPDIR/squash-missing-patch.err"
 
-TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -187,7 +270,7 @@ import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8')); p['patch_id']='0'*40
 open(sys.argv[1], 'w', encoding='utf-8').write(json.dumps(p)+'\n')
 PY
-if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$SQUASH_BIN_PATH:$PATH" \
   bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
@@ -223,7 +306,7 @@ printf 'dirty\n' >"$REPO/untracked"
 [[ "$(git -C "$REPO" rev-parse main)" == "$MERGED_HEAD" ]]
 
 ADVANCE="$TMPDIR/advance-main"
-git clone -q "$REMOTE" "$ADVANCE"
+git clone -q --branch main "$REMOTE" "$ADVANCE"
 git -C "$ADVANCE" config user.email test@example.invalid
 git -C "$ADVANCE" config user.name Test
 printf 'remote advance\n' >>"$ADVANCE/file"

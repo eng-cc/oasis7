@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: keep this Bash entrypoint and its Python durable-store
+# transaction compatible with the repository's supported POSIX and Windows shells.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -113,7 +115,11 @@ PY
   RECOMPUTED_MAIN_TREE="$(git -C "$REPO_ROOT" rev-parse "$PATCH_MAIN_COMMIT^{tree}")"
   [[ "$RECOMPUTED_PROJECTED_TREE" == "$RECOMPUTED_MAIN_TREE" && "$RECOMPUTED_PROJECTED_TREE" == "$PROJECTED_TREE_OID" && "$RECOMPUTED_MAIN_TREE" == "$MAIN_TREE_OID" ]] \
     || die "patch-equivalence projected tree failed recomputation"
-  PATCH_RECEIPT_SHA="$(shasum -a 256 "$PATCH_RECEIPT" | awk '{print $1}')"
+  PATCH_RECEIPT_SHA="$(python3 - "$PATCH_RECEIPT" <<'PY'
+import hashlib,pathlib,sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
   INTEGRATION_MODE="patch_equivalence"
 fi
 
@@ -144,10 +150,21 @@ spec=importlib.util.spec_from_file_location('workflow_durable_store',sys.argv[1]
 receipt_path=pathlib.Path(sys.argv[4]); receipt=json.loads(receipt_path.read_text())
 merge_path=pathlib.Path(sys.argv[5]); merge_receipt=json.loads(merge_path.read_text())
 merge_digest=hashlib.sha256(merge_path.read_bytes()).hexdigest()
+IMMUTABLE_MERGE_IDENTITY=(
+ 'receipt_type','issuer','evidence_mode','repository','default_branch','pr_number',
+ 'pr_url','state','merged_at','head_oid','base_ref',
+)
 def update(data):
  record=(data.get('tasks') or {}).get(sys.argv[3]) or {}; record['workflow_phase']='main_sync'
- if record.get('merge_receipt') not in (None,merge_receipt): raise SystemExit('post-merge-main-sync: stored merge receipt conflicts with validated receipt')
- if record.get('merge_receipt_sha256') not in (None,merge_digest): raise SystemExit('post-merge-main-sync: stored merge receipt digest conflicts with validated receipt')
+ stored_receipt=record.get('merge_receipt'); stored_digest=record.get('merge_receipt_sha256')
+ if stored_receipt is None:
+  if stored_digest is not None: raise SystemExit('post-merge-main-sync: stored merge receipt conflicts with validated receipt')
+ elif (not isinstance(stored_receipt,dict) or
+       tuple(stored_receipt.get(key) for key in IMMUTABLE_MERGE_IDENTITY) !=
+       tuple(merge_receipt.get(key) for key in IMMUTABLE_MERGE_IDENTITY)):
+  raise SystemExit('post-merge-main-sync: stored merge receipt conflicts with validated receipt')
+ # A fresh observation of the same immutable merge identity replaces both
+ # receipt and digest within this one durable-store transaction.
  record['merge_receipt']=merge_receipt; record['merge_receipt_sha256']=merge_digest
  record.setdefault('phase_receipts',{})['main_sync']=receipt
  record.setdefault('phase_receipt_sha256',{})['main_sync']=hashlib.sha256(receipt_path.read_bytes()).hexdigest()

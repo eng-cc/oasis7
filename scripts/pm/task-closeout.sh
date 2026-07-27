@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
+# Cross-platform maintenance: keep temporary paths readable by Git Bash and native Windows Python.
 set -euo pipefail
+
+case "$(uname -s)" in
+  MSYS*|MINGW*|CYGWIN*)
+    if [[ -z "${TMPDIR:-}" || "$TMPDIR" == "/tmp" || "$TMPDIR" == "/tmp/" ]]; then
+      TMPDIR="$(cygpath -m "${TEMP:-${TMP:-/tmp}}")"
+    elif [[ "$TMPDIR" == /* ]]; then
+      TMPDIR="$(cygpath -m "$TMPDIR")"
+    fi
+    export TMPDIR
+    ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -236,11 +248,17 @@ selected_task_audit() {
 closeout_head_fingerprint() {
   git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf '%s\n' "non-git-fixture"
 }
+sha256_file() {
+  python3 - "$1" <<'PY'
+import hashlib,pathlib,sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+}
 AUDIT_INPUT_HEAD="$(closeout_head_fingerprint)"
-AUDIT_INPUT_MAPPING_SHA="$(shasum -a 256 "$ROOT_DIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-AUDIT_INPUT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && shasum -a 256 "$REVIEW_PACKET_FILE" | awk '{print $1}' || printf none)"
-AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && shasum -a 256 "$REVIEW_LEDGER_PATH" | awk '{print $1}' || printf none)"
-AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && shasum -a 256 "$PR_MERGE_RECEIPT" | awk '{print $1}' || printf none)"
+AUDIT_INPUT_MAPPING_SHA="$(sha256_file "$ROOT_DIR/.pm/github-project-sync/tasks.json")"
+AUDIT_INPUT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && sha256_file "$REVIEW_PACKET_FILE" || printf none)"
+AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && sha256_file "$REVIEW_LEDGER_PATH" || printf none)"
+AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE_RECEIPT" || printf none)"
 if [[ "$TARGET_STATUS" != "deferred" ]]; then
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
   if [[ "$CLAIM_TYPE" == "ready_for_pr" && -n "$CI_READY_RECEIPT" ]]; then
@@ -267,10 +285,10 @@ PY
 fi
 
 CURRENT_HEAD="$(closeout_head_fingerprint)"
-CURRENT_MAPPING_SHA="$(shasum -a 256 "$ROOT_DIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-CURRENT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && shasum -a 256 "$REVIEW_PACKET_FILE" | awk '{print $1}' || printf none)"
-CURRENT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && shasum -a 256 "$REVIEW_LEDGER_PATH" | awk '{print $1}' || printf none)"
-CURRENT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && shasum -a 256 "$PR_MERGE_RECEIPT" | awk '{print $1}' || printf none)"
+CURRENT_MAPPING_SHA="$(sha256_file "$ROOT_DIR/.pm/github-project-sync/tasks.json")"
+CURRENT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && sha256_file "$REVIEW_PACKET_FILE" || printf none)"
+CURRENT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && sha256_file "$REVIEW_LEDGER_PATH" || printf none)"
+CURRENT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE_RECEIPT" || printf none)"
 [[ "$CURRENT_HEAD" == "$AUDIT_INPUT_HEAD" && "$CURRENT_MAPPING_SHA" == "$AUDIT_INPUT_MAPPING_SHA" && \
    "$CURRENT_REVIEW_SHA" == "$AUDIT_INPUT_REVIEW_SHA" && "$CURRENT_LEDGER_SHA" == "$AUDIT_INPUT_LEDGER_SHA" && \
    "$CURRENT_PR_RECEIPT_SHA" == "$AUDIT_INPUT_PR_RECEIPT_SHA" ]] \
