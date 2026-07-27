@@ -68,8 +68,8 @@
 | --- | --- | --- |
 | `distfs/` production hardening | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-production-hardening.prd.md` | 历史 phase1~phase9 已语义收敛；原 phase 身份仅在历史 audit/review 文字和 Git history 中保留，不作为当前入口或 readiness 依据 |
 | `distfs/` distributed resilience | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | 异构 provider 选择、无单机完整依赖、自愈控制/轮询与受限 NodeRuntime 接线统一收敛；NodeRuntime 仍仅是依赖齐备时运行、失败不阻断 tick 的增量边界 |
-| `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | `observer-sync-source-dht-mode` 仅作为 DHT 组合链路 delta |
-| `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 仅作为增量入口 |
+| `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | DHT 组合链路已吸收进默认权威 |
+| `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | runtime bridge 与 observability 已吸收进默认权威 |
 | `viewer-live/` decision mode | `doc/p2p/viewer-live/README.md` -> `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | 两组 2026-02 源三件套已语义回填并退役；历史变更从 Git 与 GitHub task evidence 追溯 |
 
 ## 完整专题检索清单（按文件名精确检索）
@@ -114,8 +114,6 @@
 | `doc/p2p/node/node-execution-reward-consensus-bridge.prd.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.design.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.project.md` |
 | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.prd.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.design.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.project.md` |
 | `doc/p2p/node/node-keypair-config-bootstrap.prd.md` | `doc/p2p/node/node-keypair-config-bootstrap.design.md` | `doc/p2p/node/node-keypair-config-bootstrap.project.md` |
-| `doc/p2p/node/node-redeemable-power-asset-audit-hardening.prd.md` | `doc/p2p/node/node-redeemable-power-asset-audit-hardening.design.md` | `doc/p2p/node/node-redeemable-power-asset-audit-hardening.project.md` |
-| `doc/p2p/node/node-redeemable-power-asset-signature-governance-phase3.prd.md` | `doc/p2p/node/node-redeemable-power-asset-signature-governance-phase3.design.md` | `doc/p2p/node/node-redeemable-power-asset-signature-governance-phase3.project.md` |
 | `doc/p2p/node/node-redeemable-power-asset.prd.md` | `doc/p2p/node/node-redeemable-power-asset.design.md` | `doc/p2p/node/node-redeemable-power-asset.project.md` |
 | `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.prd.md` | `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.design.md` | `doc/p2p/node/node-pos-slot-clock-real-time-2026-03-07.project.md` |
 | `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md` | `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.design.md` | `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.project.md` |
@@ -126,10 +124,7 @@
 | `doc/p2p/node/node-storage-system-reward-pool.prd.md` | `doc/p2p/node/node-storage-system-reward-pool.design.md` | `doc/p2p/node/node-storage-system-reward-pool.project.md` |
 | `doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md` | `doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md` | `doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md` |
 | `doc/p2p/node/node-uptime-base-reward.prd.md` | `doc/p2p/node/node-uptime-base-reward.design.md` | `doc/p2p/node/node-uptime-base-reward.project.md` |
-| `doc/p2p/observer/observer-sync-mode-metrics-runtime-bridge.prd.md` | `doc/p2p/observer/observer-sync-mode-metrics-runtime-bridge.design.md` | `doc/p2p/observer/observer-sync-mode-metrics-runtime-bridge.project.md` |
-| `doc/p2p/observer/observer-sync-mode-observability.prd.md` | `doc/p2p/observer/observer-sync-mode-observability.design.md` | `doc/p2p/observer/observer-sync-mode-observability.project.md` |
 | `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md` |
-| `doc/p2p/observer/observer-sync-source-dht-mode.prd.md` | `doc/p2p/observer/observer-sync-source-dht-mode.design.md` | `doc/p2p/observer/observer-sync-source-dht-mode.project.md` |
 | `doc/p2p/observer/observer-sync-source-mode.prd.md` | `doc/p2p/observer/observer-sync-source-mode.design.md` | `doc/p2p/observer/observer-sync-source-mode.project.md` |
 | `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.design.md` | `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.project.md` |
 | `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.design.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.project.md` |
@@ -143,7 +138,7 @@
 | 发布说明 | 对应专题 |
 | --- | --- |
 | `doc/p2p/node/node-redeemable-power-asset.release.md` | `doc/p2p/node/node-redeemable-power-asset.prd.md` |
-| `doc/p2p/node/node-redeemable-power-asset-audit-hardening.release.md` | `doc/p2p/node/node-redeemable-power-asset-audit-hardening.prd.md` |
+| `doc/p2p/node/node-redeemable-power-asset-audit-hardening.release.md` | `doc/p2p/node/node-redeemable-power-asset.prd.md`（历史 AHA provenance） |
 | `doc/p2p/token/mainchain-token-allocation-mechanism.release.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` |
 
 ## 说明
@@ -154,11 +149,11 @@
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 另有执行 companion：`doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`。
-- ROUND-002 主从口径（observer）：`observer-sync-source-mode` 为主文档；`observer-sync-source-dht-mode` 为 DHT 增量子文档。
-- ROUND-002 主从口径（observer）：`observer-sync-mode-runtime-metrics` 为主文档；`metrics-runtime-bridge` 与 `observability` 为增量子文档。
+- Observer source 专业权威：DHT 增量专题（`PRD-P2P-MIG-109-001`）已合并进 `observer-sync-source-mode.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
+- Observer metrics 专业权威：统计桥接（`PRD-P2P-MIG-106-001`）与策略可观测性（`PRD-P2P-MIG-107-001`）已合并进 `observer-sync-mode-runtime-metrics.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
 - NodePoints 专业权威：runtime closure（`PRD-P2P-MIG-090-001`）与 multi-node closure test（`PRD-P2P-MIG-089-001`）的有效语义已合并进 `doc/p2p/node/node-contribution-points.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除；历史过程只从 Git history 与 GitHub task evidence 追溯。
 - Node network 专业权威：net stack unification（`PRD-P2P-MIG-105-001`）与 wasm32/libp2p compile guard（`PRD-P2P-MIG-104-001`）的有效语义已合并进 `doc/p2p/network/readme-p1-network-production-hardening.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除。
-- ROUND-002 主从口径（node）：`node-redeemable-power-asset` 为主文档；`audit-hardening` 与 `signature-governance-phase3` 为增量子文档。
+- Redeemable power asset 专业权威：审计加固（`PRD-P2P-MIG-096-001`）与签名治理（`PRD-P2P-MIG-097-001`）已合并进 `node-redeemable-power-asset.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除；历史 AHA release companion 保留并重定向到当前权威。
 - DistFS distributed resilience：`distfs-distributed-resilience` 是异构 provider 兼容/选择、无单机完整依赖、分布覆盖、自愈控制/轮询与 NodeRuntime 接线的唯一主入口。NodeRuntime 接线仍受“依赖齐备才运行、缺依赖跳过、单轮失败不阻断 tick”约束，不能被误述为全局自治恢复或 readiness 结论。
 - DistFS production hardening：`distfs-production-hardening` 是 Phase 1-9 的唯一当前专业权威；历史 phase 文件名只保留为 audit/review provenance 和 Git history，后续删除必须保留该身份而不得改写为重复的当前路径。
 - DistFS feedback ledger and replication：`distfs-feedback-ledger-and-replication` 是公开 feedback 的 append-only 账本、签名/nonce、announce/fetch 复制和 NodeRuntime 有界接线的唯一当前专业 authority。三个 2026-03 feedback 源三件套已删除；其追溯仅保留在 Git 与 `.pm` task evidence，且不构成 current entry、consensus/finality 或 readiness 依据。

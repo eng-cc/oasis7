@@ -3,8 +3,9 @@
 审计轮次: 5
 ## 发布范围
 - 设计/项目文档：
-  - `doc/p2p/node/node-redeemable-power-asset-audit-hardening.prd.md`
-  - `doc/p2p/node/node-redeemable-power-asset-audit-hardening.project.md`
+  - 当前权威：`doc/p2p/node/node-redeemable-power-asset.prd.md`
+  - 当前追踪：`doc/p2p/node/node-redeemable-power-asset.project.md`
+  - 本文件仅保留历史 AHA 发布 provenance，不是现行 operator runbook。
 - 代码主线：
   - `crates/oasis7/src/runtime/reward_asset.rs`
   - `crates/oasis7/src/runtime/world/resources.rs`
@@ -24,7 +25,7 @@
 - 新增模型：
   - `RewardAssetInvariantReport`
   - `RewardAssetInvariantViolation`
-- Reward runtime 报表新增字段：
+- 历史 Reward runtime 报表新增字段：
   - `reward_asset_invariant_status`
   - `reward_asset_invariant_report`
 
@@ -44,3 +45,4 @@
 ## 已知事项
 - `mintsig:v1` 仍为可重算摘要语义，不等同于真实私钥签名；后续可平滑升级到硬签名方案（如 `mintsig:v2`）。
 - 工作区仍存在无关格式化漂移：`crates/oasis7/src/runtime/node_points.rs`，本轮未回退。
+- 历史 `oasis7_viewer_live` 命令与 flags 不再构成当前运行入口；现行证据以 chain-runtime CLI、runtime root 与 report artifacts 为准。
