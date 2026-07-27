@@ -351,9 +351,14 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
         raise MigrationError("committed migration record digest disagrees with migration receipt")
 
     historical_record = historical.get("task_record")
+    historical_epoch = historical_record.get("bootstrap_epoch") if isinstance(historical_record, dict) else None
+    if (isinstance(historical_record, dict) and "bootstrap_epoch" not in historical_record
+            and receipt.get("old_epoch") == 1):
+        # Archives written before epoch normalization omitted this implicit initial epoch.
+        historical_epoch = 1
     if not isinstance(historical_record, dict) or any((
             historical_record.get("task_uid") != task_uid,
-            historical_record.get("bootstrap_epoch") != receipt.get("old_epoch"),
+            historical_epoch != receipt.get("old_epoch"),
             historical_record.get("canonical_worktree") != receipt.get("old_worktree"),
             historical_record.get("task_branch") != receipt.get("old_branch"),
     )):

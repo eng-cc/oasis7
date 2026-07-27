@@ -494,6 +494,48 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(journal_after_retry["state"], "committed")
         self.assertEqual(journal_after_retry["receipt"], committed_receipt)
 
+    def test_pre_fix_committed_archive_without_bootstrap_epoch_recovers_as_epoch_one(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+
+        committed_record = self.mapping_record()
+        historical_record = committed_record["historical_epochs"]["1"]["task_record"]
+        historical_record.pop("bootstrap_epoch")
+        self.replace_mapping_record(committed_record)
+
+        receipt = self.assert_migrated(self.run_helper())
+
+        self.assertEqual(receipt["old_epoch"], 1)
+        self.assertFalse(self.snapshot.exists())
+
+    def test_committed_archive_with_malformed_bootstrap_epoch_remains_fail_closed(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+
+        committed_record = self.mapping_record()
+        committed_record["historical_epochs"]["1"]["task_record"]["bootstrap_epoch"] = None
+        self.replace_mapping_record(committed_record)
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("committed historical task record disagrees", retried.stderr)
+        self.assertTrue(self.snapshot.exists())
+
+    def test_committed_archive_with_conflicting_bootstrap_epoch_remains_fail_closed(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+
+        committed_record = self.mapping_record()
+        committed_record["historical_epochs"]["1"]["task_record"]["bootstrap_epoch"] = 2
+        self.replace_mapping_record(committed_record)
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("committed historical task record disagrees", retried.stderr)
+        self.assertTrue(self.snapshot.exists())
+
     def test_committed_journal_recovery_rejects_corrupted_common_dir(self) -> None:
         interrupted = self.run_helper(crash_after="mapping_committed")
         self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
