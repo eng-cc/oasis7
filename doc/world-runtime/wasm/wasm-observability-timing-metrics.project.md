@@ -55,6 +55,18 @@
     - `bash scripts/oasis7-node-wasm-metrics-monitor.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] wasm-module-observability-standardization (PRD-WORLD_RUNTIME-037) [test_tier_required]: 落地 module-local observe spec、通用 runner、wrapper、模板与 `m1_rule_move` 样例，复用 build/executor/router metrics delta。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
+  - 历史来源：task_20b6ee42182247ccbebe6a6a2c2db469。
+  - 当前 evidence:
+    - `tools/wasm_module_observe`
+    - `scripts/oasis7-wasm-module-observe.sh`
+    - `crates/oasis7_builtin_wasm_modules/_templates/module_observe.json`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`
+    - `env -u RUSTC_WRAPPER cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json --out-dir .tmp/wasm_module_observe_m1_check`
+    - `bash -n scripts/oasis7-wasm-module-observe.sh`
+- [x] wasm-observability-authority-consolidation (PRD-WORLD_RUNTIME-036/037) [test_tier_required]: 将 module-local 与 global observability 归入同一稳定权威并删除独立三件套。 Trace: #2668 (task_dcb5171aaffd48f8bead02c326045d5e)
 
 ## 后续实现切片建议
 - WMTM-1: 为 `tools/wasm_build_suite` 增加 canonical build timing schema，并将 `total_build_wall_ms/cargo_build_ms/canonicalize_ms/hash_ms/receipt_write_ms` 写入 metadata/receipt。
@@ -74,7 +86,7 @@
 
 ## 状态
 - 更新日期: 2026-04-21
-- 当前阶段: `WMTM-4` 已完成；当前已落地 build timing、executor/router cumulative snapshot、`/v1/chain/status.wasm`、reset-aware window delta、bucket-derived p50/p95 与热点摘要，后续增量聚焦 bounded top-N 与 payload budget 回归
+- 当前阶段: global timing/status/window 与 module-local contract/perf observe 已归入同一稳定权威；后续增量聚焦更多模块 spec、bounded top-N 与 payload budget 回归
 - owner role: `wasm_platform_engineer`
 - 联审角色: `runtime_engineer`、`producer_system_designer`
 - 验证角色: `qa_engineer`

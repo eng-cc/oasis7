@@ -12,8 +12,8 @@
 - 想先回答 world-runtime 模块在管什么、哪些边界是当前真值：先读 `doc/world-runtime/prd.md`
 - 想先回答当前还在推进什么、阻断在哪里、下一步是什么：先读 `doc/world-runtime/project.md`
 - 想直接进入 Docker canonical build / release evidence 主入口：先读 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
-- 想直接进入 WASM build / executor / router 的观测与耗时指标：先读 `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
-- 想直接进入单模块标准化功能/性能观测入口：先读 `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
+- 想直接进入 WASM 全局 timing/status/window 或单模块 contract/perf 观测：先读 `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+- 想直接进入 SDK no_std、共享 wire 与 codec 兼容契约：先读 `doc/world-runtime/wasm/wasm-sdk.prd.md`
 - 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
@@ -32,8 +32,8 @@
 
 ## 活跃补充文档
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`：Docker canonical build、receipt、identity 与 release evidence 主入口。
-- `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`：build/executor/router timing、`/v1/chain/status.wasm` 与外部窗口汇总主入口。
-- `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`：module-local observe spec、共享 runner、wrapper script 与模板化接入主入口。
+- `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`：build/executor/router timing、`/v1/chain/status.wasm`、窗口汇总与 module-local observe spec/runner/template 主入口。
+- `doc/world-runtime/wasm/wasm-sdk.prd.md`：默认 no_std、共享 Canonical-CBOR wire、codec 错误与 builtin 兼容主入口。
 - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities.prd.md`：玩家发布实体与模块发布链路衔接入口。
@@ -78,14 +78,10 @@
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.project.md` |
-| `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.prd.md` | `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.design.md` | `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.project.md` |
 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md` |
 | `doc/world-runtime/wasm/wasm-executor.prd.md` | `doc/world-runtime/wasm/wasm-executor.design.md` | `doc/world-runtime/wasm/wasm-executor.project.md` |
-| `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md` | `doc/world-runtime/wasm/wasm-module-observability-standardization.design.md` | `doc/world-runtime/wasm/wasm-module-observability-standardization.project.md` |
 | `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md` |
-| `doc/world-runtime/wasm/wasm-sandbox-security-hardening.prd.md` | `doc/world-runtime/wasm/wasm-sandbox-security-hardening.design.md` | `doc/world-runtime/wasm/wasm-sandbox-security-hardening.project.md` |
-| `doc/world-runtime/wasm/wasm-sdk-no-std.prd.md` | `doc/world-runtime/wasm/wasm-sdk-no-std.design.md` | `doc/world-runtime/wasm/wasm-sdk-no-std.project.md` |
-| `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.prd.md` | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.design.md` | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.project.md` |
+| `doc/world-runtime/wasm/wasm-sdk.prd.md` | `doc/world-runtime/wasm/wasm-sdk.design.md` | `doc/world-runtime/wasm/wasm-sdk.project.md` |
 
 ## 证据 / 模板 / 清单 / 交接补充入口
 | 文档路径 | 类型 | 用途 |
