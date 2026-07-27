@@ -56,4 +56,3 @@ network、consensus 与 DistFS 的专业合同，不复制或改写这些实现�
 本设计只定义可重复的测试与证据解释。它不把任何 local/proxy/short-window
 结果升级为生产拓扑、长期 endurance、public-testnet、mainnet 或 release
 就绪，也不把流量注入成功升级为业务服务 SLA。
-
