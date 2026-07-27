@@ -18,7 +18,16 @@ def git(root: Path, *args: str) -> bytes:
     git_command = os.environ.get("OASIS7_GIT_COMMAND")
     command = ["git", "-C", str(root), *args]
     if bash_executable and git_command:
-        command = [bash_executable, git_command, "-C", str(root), *args]
+        command = [
+            bash_executable,
+            "-c",
+            'exec "$@"',
+            "oasis7-git-bridge",
+            git_command,
+            "-C",
+            str(root),
+            *args,
+        ]
     return subprocess.check_output(
         command, stderr=subprocess.DEVNULL
     )
@@ -53,6 +62,8 @@ def main() -> None:
         paths_raw = git(root, "ls-files", "-co", "--exclude-standard", "-z")
         paths = sorted({item.decode("utf-8", "surrogateescape") for item in paths_raw.split(b"\0") if item})
     except subprocess.CalledProcessError:
+        if (root / ".git").exists():
+            raise
         # Isolated helper fixtures may intentionally omit Git. Keep their epoch
         # guard useful without claiming a HEAD/index boundary.
         head = "non-git-fixture"
