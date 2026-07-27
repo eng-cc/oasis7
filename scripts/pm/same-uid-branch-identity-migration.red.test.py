@@ -194,6 +194,16 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(history["snapshot_sha256"], hashlib.sha256(self.snapshot_bytes).hexdigest())
         self.assertEqual(base64.b64decode(history["snapshot_bytes_b64"]), self.snapshot_bytes)
         self.assertEqual(receipt["historical_artifact_digests"]["snapshot_sha256"], history["snapshot_sha256"])
+        self.assertEqual(receipt["old_common_dir"], str(self.root.resolve() / ".git"))
+        self.assertEqual(receipt["new_common_dir"], str(self.root.resolve() / ".git"))
+        self.assertEqual(receipt["old_worktree"], history["task_record"]["canonical_worktree"])
+        self.assertEqual(receipt["old_branch"], history["task_record"]["task_branch"])
+        self.assertEqual(receipt["new_worktree"], record["canonical_worktree"])
+        self.assertEqual(receipt["new_branch"], record["task_branch"])
+        self.assertEqual(receipt["implementation_head"], record["branch_identity_migration"]["implementation_head"])
+        self.assertEqual(receipt["comparison_ref"], record["branch_identity_migration"]["comparison_ref"])
+        self.assertEqual(receipt["comparison_oid"], record["branch_identity_migration"]["comparison_oid"])
+        self.assertEqual(receipt, record["branch_identity_migration_receipt"])
 
         self.assertEqual(record["phase_receipts"], {})
         self.assertEqual(record["evidence"], {})
@@ -201,6 +211,8 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertNotIn("claim_verifications", record)
         invalidated = record["invalidated_authority"]
         self.assertEqual(invalidated["migration_receipt_sha256"], receipt["digest"])
+        self.assertEqual(receipt["invalidated_authority"]["reason"], invalidated["reason"])
+        self.assertEqual(receipt["invalidated_authority"]["fields"], invalidated["fields"])
         self.assertIn("phase_receipts", invalidated["fields"])
         self.assertIn("bootstrap_snapshot", invalidated["fields"])
 

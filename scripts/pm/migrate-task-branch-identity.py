@@ -307,6 +307,64 @@ def finish_active_snapshot_cleanup(journal: dict[str, Any]) -> None:
     source.unlink()
 
 
+def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
+                                 receipt: dict[str, Any]) -> dict[str, Any]:
+    """Reload and validate the durable migration record before authority is emitted."""
+    try:
+        committed_mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MigrationError(f"cannot read committed task mapping: {exc}") from exc
+    record = require_record(committed_mapping, task_uid)
+    committed_receipt = record.get("branch_identity_migration_receipt")
+    if not isinstance(committed_receipt, dict) or committed_receipt != receipt:
+        raise MigrationError("committed task mapping receipt disagrees with migration receipt")
+    if committed_receipt.get("digest") != digest(committed_receipt):
+        raise MigrationError("committed migration receipt digest is invalid")
+
+    migration = record.get("branch_identity_migration")
+    historical = (record.get("historical_epochs") or {}).get(str(receipt.get("old_epoch")))
+    invalidated = record.get("invalidated_authority")
+    receipt_invalidation = receipt.get("invalidated_authority")
+    if not isinstance(migration, dict) or not isinstance(historical, dict):
+        raise MigrationError("committed task mapping lacks migration history")
+    if not isinstance(invalidated, dict) or not isinstance(receipt_invalidation, dict):
+        raise MigrationError("committed task mapping lacks invalidated authority")
+
+    pairs = (
+        ("bootstrap_epoch", "new_epoch"),
+        ("canonical_worktree", "new_worktree"),
+        ("task_branch", "new_branch"),
+    )
+    if any(record.get(record_field) != receipt.get(receipt_field)
+           for record_field, receipt_field in pairs):
+        raise MigrationError("committed task identity disagrees with migration receipt")
+    migration_fields = (
+        "old_epoch", "new_epoch", "old_worktree", "old_branch", "old_common_dir",
+        "new_worktree", "new_branch", "new_common_dir", "implementation_head",
+        "comparison_ref", "comparison_oid",
+    )
+    if any(migration.get(field) != receipt.get(field) for field in migration_fields):
+        raise MigrationError("committed migration record disagrees with migration receipt")
+    if migration.get("digest") != receipt.get("migration_record_sha256"):
+        raise MigrationError("committed migration record digest disagrees with migration receipt")
+
+    historical_record = historical.get("task_record")
+    if not isinstance(historical_record, dict) or any((
+            historical_record.get("task_uid") != task_uid,
+            historical_record.get("bootstrap_epoch") != receipt.get("old_epoch"),
+            historical_record.get("canonical_worktree") != receipt.get("old_worktree"),
+            historical_record.get("task_branch") != receipt.get("old_branch"),
+    )):
+        raise MigrationError("committed historical task record disagrees with migration receipt")
+    if historical.get("snapshot_sha256", "") != receipt.get("historical_artifact_digests", {}).get("snapshot_sha256", ""):
+        raise MigrationError("committed historical snapshot disagrees with migration receipt")
+    if (invalidated.get("migration_receipt_sha256") != receipt.get("digest") or
+            invalidated.get("reason") != receipt_invalidation.get("reason") or
+            invalidated.get("fields") != receipt_invalidation.get("fields")):
+        raise MigrationError("committed invalidated authority disagrees with migration receipt")
+    return record
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     root = pathlib.Path(args.repo_root).resolve()
     mapping_path = pathlib.Path(args.tasks_json).resolve()
@@ -438,21 +496,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "comparison_ref": args.comparison_ref, "comparison_oid": comparison_oid,
         }
         migration_record["digest"] = digest(migration_record)
+        invalidated_fields = ["bootstrap_snapshot", "phase_receipts", "phase_receipt_sha256", "evidence",
+                              "claim_verifications", "pr_number", "pr_url", "merge_receipt",
+                              "merge_receipt_sha256", "main_sync_receipt", "cleanup_receipt"]
+        receipt_invalidation = {"reason": args.reason, "fields": invalidated_fields}
         receipt = {
             "schema": "oasis7_task_branch_identity_migration_receipt/v1", "task_uid": args.task_uid,
             "repository": authoritative_repository,
             "old_epoch": old_epoch, "new_epoch": new_epoch, "implementation_head": head,
             "comparison_ref": args.comparison_ref, "comparison_oid": comparison_oid,
-            "old_worktree": str(root), "old_branch": record["task_branch"],
+            "old_worktree": str(root), "old_branch": record["task_branch"], "old_common_dir": str(common_dir),
             "new_worktree": str(replacement), "new_branch": args.replacement_branch,
+            "new_common_dir": str(path_common_dir(replacement)),
             "journal_revision": int(journal.get("revision", 1)),
             "historical_artifact_digests": {"snapshot_sha256": historical.get("snapshot_sha256", "")},
             "migration_record_sha256": migration_record["digest"],
+            "invalidated_authority": receipt_invalidation,
         }
         receipt["digest"] = digest(receipt)
-        invalidated_fields = ["bootstrap_snapshot", "phase_receipts", "phase_receipt_sha256", "evidence",
-                              "claim_verifications", "pr_number", "pr_url", "merge_receipt",
-                              "merge_receipt_sha256", "main_sync_receipt", "cleanup_receipt"]
         new_record = json.loads(json.dumps(record))
         new_record.update({"canonical_worktree": str(replacement), "task_branch": args.replacement_branch,
                            "bootstrap_epoch": new_epoch, "workflow_phase": "bootstrap",
@@ -468,6 +529,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 new_record.pop(field, None)
         mapping["tasks"][args.task_uid] = new_record
         durable_store.atomic_replace_json(mapping_path, mapping)
+        readback_committed_migration(mapping_path, args.task_uid, receipt)
         if os.environ.get("OASIS7_PM_TEST_MIGRATION_CRASH_AFTER") == "mapping_committed":
             raise MigrationError("injected crash after mapping committed")
 
