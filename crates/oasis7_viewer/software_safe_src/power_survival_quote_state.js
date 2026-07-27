@@ -18,7 +18,7 @@ export function createPowerSurvivalQuoteStateModule({ clone, getSearchParams, is
     return true;
   }
   function handlePowerSurvivalQuoteError(error) {
-    if (String(error?.action_id || "").trim() !== "quote_power_survival") return false;
+    if (String(error?.action_id || "").trim() !== "quote_power_survival" || state.powerSurvivalQuoteRequest?.status !== "pending") return false;
     state.powerSurvivalQuoteRequest = { status: "error", error: String(error?.message || error?.code || "power survival quote request failed") };
     return true;
   }
