@@ -1,11 +1,11 @@
 # engineering/doc-governance 专题入口
 
-本目录是 `doc/` 文档树治理的唯一上游分流入口，收拢文档组织、路径落位、入口减重与存量维护成本治理。读者应先从这里判断问题属于哪一类，再进入对应 PRD / design / project 三件套；不要把同一治理规则继续复制到模块 README 或零散专题里。
+本目录是 `doc/` 文档树治理的唯一上游分流入口，收拢文档组织、路径落位、入口减重与存量维护成本治理。读者应先从这里判断问题属于哪一类，再进入当前 authority；不要把同一治理规则继续复制到模块 README 或零散专题里。
 
 ## 首读路径
 - 文档组织规则、后缀职责、模块 README 边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 默认阅读面减重与根/模块入口职责：`doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
-- 文档存量、热点目录、近限文件与维护成本判断：`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
+- 默认阅读面、活跃真值/审计留痕/历史归档/兼容跳转的消费边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 文档存量、热点目录、近限文件与维护成本判断：`doc/engineering/governance/README.md`，并用 `scripts/doc-inventory-report.sh` 复算
 - 已收口的 `world-simulator/viewer` 与 `readme/governance` 热点路径：直接进入各自 landing page；一次性路径治理三件套已退役，历史从 git 与 GitHub task evidence 追溯
 - 全量专题三件套索引：`doc/engineering/prd.index.md`
 
@@ -13,8 +13,8 @@
 | 问题 | Canonical 入口 | 说明 |
 | --- | --- | --- |
 | 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/project/manual/runbook 边界 |
-| 根入口或模块 README 过长、重复维护共享规则 | `doc-surface-area-governance-2026-04-10.prd.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
-| 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `doc-corpus-maintenance-governance-2026-04-17.prd.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
+| 根入口或模块 README 过长、重复维护共享规则 | `doc-structure-standard.design.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
+| 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `../governance/README.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
 | `world-simulator` / Viewer 首读分流或主题簇维护 | `../../world-simulator/viewer/README.md` | 已收口的热点路径；当前 landing page 承接分流与维护触发器 |
 | `p2p/node` 首读分流或主题簇维护 | `../../p2p/node/README.md` | 当前 node 子域的 canonical landing page；完整文件检索回到 `../../p2p/prd.index.md` |
 | testing evidence 与手册/门禁文档混叠 | `../../testing/evidence/README.md` | 现行 evidence 子域入口；与 testing 模块入口、文件级索引和 operator 手册分层 |

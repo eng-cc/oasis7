@@ -64,7 +64,6 @@ readonly DESIGN_SECTION_EXEMPT_PROJECT_DOCS=(
 readonly GRANDFATHERED_ADDED_PROJECT_TASK_ROWS=(
   "doc/engineering/project.md::- [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 \`AGENTS.md\`、角色职责卡与 handoff 模板的 \`.pm\` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 \`doc/devlog\` 必写残留要求。"
   "doc/engineering/project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006) [test_tier_required]: 完成 3 份根入口 redirect project 文档收口（root game-test、world-runtime 与 world-simulator project shells 后续均已删除）。"
-  "doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md::- [x] borrowing-governance-baseline (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-002) [test_tier_required]: 冻结 \`superpowers\` adopted / rejected / deferred 矩阵，补齐 \`claim-ready.sh\` 完成前 fresh verification gate，本地化四个已裁定可借鉴 skill，并补一份 conflict / reopen reference。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml"
 )
 readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
   "__no_reference_existence_exempt_docs__"

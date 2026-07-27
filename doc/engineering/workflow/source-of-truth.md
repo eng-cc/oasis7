@@ -265,6 +265,15 @@ small question into a heavyweight workflow.
 Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea;
 same-task evidence stays in the bound GitHub task.
 
+Learning artifacts are supporting context, never task truth: raw
+session/transcript material may be used only as explicit evidence, must first
+be distilled into task-scoped `working_memory` or a reflection signal, and may
+not directly update long-term memory, formal documents, or GitHub task state.
+Owner review decides promotion to a candidate task or source-backed memory;
+otherwise the artifact is retained only for the task, discarded, or allowed to
+expire. Recall must stay role/phase-scoped and budgeted; provisional beliefs
+require review or supersession rather than indefinite active use.
+
 Detailed game-design documentation follows `doc/game/README.md`,
 `doc/game/prd.md`, `doc/game/prd.index.md`, and matching topic documents.
 Route design conclusions to the relevant professional roles; require

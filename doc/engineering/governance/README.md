@@ -6,6 +6,7 @@
 
 - 想确认项目 `local` / `test` / `production` 环境边界、云上服务清单、`public_testnet` 与 `mainnet` 的声明限制：`environment-lanes-and-inventory-2026-05-29.md`
 - 想执行仓库健康巡检、判定 findings 归属或进行季度复核：继续阅读本页。
+- 想判断文档治理是入口阅读面问题还是库存维护成本问题：先按 `scripts/doc-inventory-report.sh` 复算总量、模块/热点路径密度、`doc/devlog` backlog 与非归档近限文件；入口失去首读分流时回到 `../doc-governance/README.md`，其余结果按路径治理、历史压缩、近限拆分或季度复核建立 bounded follow-up。
 
 ## 边界
 

@@ -226,18 +226,8 @@
   - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 Git history logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
   - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
   - historical self-evolution file-based PM background: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`; current task truth / evidence rules live in `doc/engineering/workflow/source-of-truth.md`
-  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
-  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
-  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
-  - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
-  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
-  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
-  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
-  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
-  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
-  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
+  - current self-evolution, memory, reflection and external-workflow boundaries: `doc/engineering/workflow/source-of-truth.md`; pending scope is retained in `doc/engineering/project.md`, and default-vs-library skill reachability is in `.agents/skills/README.md`
+  - current document organization and consumption-layer rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost follow-up routing: `doc/engineering/governance/README.md`
   - historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
   - historical `world-simulator-viewer-path-governance` triplet（后续已删除；当前 `world-simulator/viewer` 首读分流与维护边界由 `doc/world-simulator/viewer/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
   - historical `p2p-node-path-governance` triplet（后续已删除；当前 `p2p/node` 首读分流、主题簇与维护边界由 `doc/p2p/node/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
