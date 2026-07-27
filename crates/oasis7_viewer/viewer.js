@@ -3409,6 +3409,9 @@ function createPowerSurvivalQuoteRequestModule({
     return { scheme: "ed25519", player_id: auth.playerId, public_key: auth.publicKey, nonce, signature: await signAuthPayload2(signingPayload, auth) };
   }
   async function requestPowerSurvivalQuote2(sellerAgentId, amount, requestedPricePerPu) {
+    if (state2.powerSurvivalQuoteRequest?.status === "pending") {
+      return { ok: false, reason: "power survival quote request already pending" };
+    }
     const seller = String(sellerAgentId || "").trim();
     const amountNumber = Number(amount);
     const priceNumber = Number(requestedPricePerPu);
@@ -3439,6 +3442,7 @@ function createPowerSurvivalQuoteRequestModule({
       await ensureRegisteredPlayerSession2(boundAgentId);
       const request = { seller_agent_id: seller, amount: amountNumber, requested_price_per_pu: priceNumber, player_id: state2.auth.playerId, public_key: state2.auth.publicKey };
       request.auth = await buildAuthProof(request, state2.auth);
+      state2.powerSurvivalQuote = null;
       state2.powerSurvivalQuoteRequest = { status: "pending", error: null };
       sendJson2({ type: "quote_power_survival", request });
       return { ok: true, request: clone2(request) };
@@ -3469,10 +3473,11 @@ const visualFixtureQuote = Object.freeze({
   recommended_power_action: "buy_power_partial"
 });
 function createPowerSurvivalQuoteStateModule({ clone: clone2, getSearchParams: getSearchParams2, isTestApiEnabled: isTestApiEnabled2, render: render2, state: state2 }) {
-  function handlePowerSurvivalQuote(quote) {
-    if (!quote || typeof quote !== "object") return;
+  function handlePowerSurvivalQuote(quote, acceptUnsolicited = false) {
+    if (!quote || typeof quote !== "object" || !acceptUnsolicited && state2.powerSurvivalQuoteRequest?.status !== "pending") return false;
     state2.powerSurvivalQuote = clone2(quote);
     state2.powerSurvivalQuoteRequest = { status: "received", error: null };
+    return true;
   }
   function handlePowerSurvivalQuoteError(error) {
     if (String(error?.action_id || "").trim() !== "quote_power_survival") return false;
@@ -3481,15 +3486,19 @@ function createPowerSurvivalQuoteStateModule({ clone: clone2, getSearchParams: g
   }
   function injectPowerSurvivalQuoteForTest2(quote) {
     if (!isTestApiEnabled2()) throw new Error("injectPowerSurvivalQuoteForTest requires test_api=1");
-    handlePowerSurvivalQuote(quote);
+    handlePowerSurvivalQuote(quote, true);
     render2();
     return clone2(state2.powerSurvivalQuote);
   }
+  function invalidatePowerSurvivalQuote() {
+    state2.powerSurvivalQuote = null;
+    state2.powerSurvivalQuoteRequest = { status: "idle", error: null };
+  }
   function installPowerSurvivalQuoteVisualFixture2() {
     if (!isTestApiEnabled2() || getSearchParams2().get("fixture") !== VISUAL_FIXTURE_NAME) return;
-    handlePowerSurvivalQuote(visualFixtureQuote);
+    handlePowerSurvivalQuote(visualFixtureQuote, true);
   }
-  return { handlePowerSurvivalQuote, handlePowerSurvivalQuoteError, injectPowerSurvivalQuoteForTest: injectPowerSurvivalQuoteForTest2, installPowerSurvivalQuoteVisualFixture: installPowerSurvivalQuoteVisualFixture2 };
+  return { handlePowerSurvivalQuote, handlePowerSurvivalQuoteError, injectPowerSurvivalQuoteForTest: injectPowerSurvivalQuoteForTest2, installPowerSurvivalQuoteVisualFixture: installPowerSurvivalQuoteVisualFixture2, invalidatePowerSurvivalQuote };
 }
 function createPowerSurvivalQuoteIntegration(getDependencies) {
   const dependencies = getDependencies();
@@ -5177,6 +5186,7 @@ function addRecentEvent(event) {
 }
 function handleSnapshot(snapshot) {
   clearInitialSnapshotRetryTimer();
+  powerSurvivalQuote.invalidatePowerSurvivalQuote();
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
@@ -10850,7 +10860,7 @@ function PowerSurvivalQuotePanel(props) {
     insert(_el$31, () => tr2(locale(), "每单位报价", "Price per unit"));
     _el$32.$$input = (event) => setPrice(event.currentTarget.value);
     insert(_el$33, (() => {
-      var _c$ = memo(() => !!requesting());
+      var _c$ = memo(() => !!(requesting() || remote().status === "pending"));
       return () => _c$() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求补电预估", "Request power quote");
     })());
     insert(_el$22, (() => {
@@ -10870,7 +10880,7 @@ function PowerSurvivalQuotePanel(props) {
       })() : null;
     })(), null);
     insert(_el$22, (() => {
-      var _c$4 = memo(() => !!stale());
+      var _c$4 = memo(() => !!(stale() && remote().status !== "pending"));
       return () => _c$4() ? (() => {
         var _el$36 = _tmpl$6$2();
         insert(_el$36, () => tr2(locale(), "输入已变更；当前预估已过期。请重新请求预估后再购买电力。", "Inputs changed; this quote is stale. Request a new quote before buying power."));
@@ -10878,8 +10888,16 @@ function PowerSurvivalQuotePanel(props) {
       })() : null;
     })(), null);
     insert(_el$22, (() => {
-      var _c$5 = memo(() => !!props.quote);
-      return () => _c$5() ? createComponent(PowerSurvivalQuoteCard, {
+      var _c$5 = memo(() => remote().status === "pending");
+      return () => _c$5() ? (() => {
+        var _el$37 = _tmpl$5$3();
+        insert(_el$37, () => tr2(locale(), "正在刷新预估；旧预估已失效。", "Refreshing the quote; the previous quote is no longer current."));
+        return _el$37;
+      })() : null;
+    })(), null);
+    insert(_el$22, (() => {
+      var _c$6 = memo(() => !!(props.quote && remote().status !== "pending"));
+      return () => _c$6() ? createComponent(PowerSurvivalQuoteCard, {
         get quote() {
           return props.quote;
         },
@@ -10890,7 +10908,7 @@ function PowerSurvivalQuotePanel(props) {
       }) : null;
     })(), null);
     createRenderEffect((_p$) => {
-      var _v$4 = tr2(locale(), "卖方 Agent", "Seller Agent"), _v$5 = tr2(locale(), "补电量", "Power amount"), _v$6 = tr2(locale(), "每单位报价", "Price per unit"), _v$7 = requesting();
+      var _v$4 = tr2(locale(), "卖方 Agent", "Seller Agent"), _v$5 = tr2(locale(), "补电量", "Power amount"), _v$6 = tr2(locale(), "每单位报价", "Price per unit"), _v$7 = requesting() || remote().status === "pending";
       _v$4 !== _p$.e && setAttribute(_el$26, "aria-label", _p$.e = _v$4);
       _v$5 !== _p$.t && setAttribute(_el$29, "aria-label", _p$.t = _v$5);
       _v$6 !== _p$.a && setAttribute(_el$32, "aria-label", _p$.a = _v$6);

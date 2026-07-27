@@ -23,6 +23,9 @@ export function createPowerSurvivalQuoteRequestModule({
   }
 
   async function requestPowerSurvivalQuote(sellerAgentId, amount, requestedPricePerPu) {
+    if (state.powerSurvivalQuoteRequest?.status === "pending") {
+      return { ok: false, reason: "power survival quote request already pending" };
+    }
     const seller = String(sellerAgentId || "").trim();
     const amountNumber = Number(amount);
     const priceNumber = Number(requestedPricePerPu);
@@ -53,6 +56,7 @@ export function createPowerSurvivalQuoteRequestModule({
       await ensureRegisteredPlayerSession(boundAgentId);
       const request = { seller_agent_id: seller, amount: amountNumber, requested_price_per_pu: priceNumber, player_id: state.auth.playerId, public_key: state.auth.publicKey };
       request.auth = await buildAuthProof(request, state.auth);
+      state.powerSurvivalQuote = null;
       state.powerSurvivalQuoteRequest = { status: "pending", error: null };
       sendJson({ type: "quote_power_survival", request });
       return { ok: true, request: clone(request) };

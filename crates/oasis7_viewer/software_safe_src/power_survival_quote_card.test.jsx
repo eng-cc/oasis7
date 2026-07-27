@@ -62,4 +62,12 @@ describe("PowerSurvivalQuote", () => {
     fireEvent.input(screen.getByRole("spinbutton", { name: "Power amount" }), { target: { value: "25" } });
     expect(screen.getByTestId("power-survival-quote-stale")).toHaveTextContent(/quote is stale/i);
   });
+
+  it("hides an old quote while a same-input refresh is pending", () => {
+    render(() => <PowerSurvivalQuotePanel quote={quote} requestState={{ status: "pending" }} requestPowerSurvivalQuote={vi.fn()} locale="en" tr={tr} />);
+    expect(screen.queryByTestId("power-survival-quote")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/previous quote is no longer current/i);
+    expect(screen.queryByTestId("power-survival-quote-stale")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /requesting quote/i })).toBeDisabled();
+  });
 });

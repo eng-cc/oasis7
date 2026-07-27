@@ -1360,7 +1360,7 @@ function addRecentEvent(event) {
 }
 
 function handleSnapshot(snapshot) {
-  clearInitialSnapshotRetryTimer();
+  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote();
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;

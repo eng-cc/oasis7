@@ -24,8 +24,13 @@ describe("requestPowerSurvivalQuote", () => {
     expect(await core.requestPowerSurvivalQuote("agent-1", 0, 0)).toEqual(expect.objectContaining({ ok: false }));
     sockets[0].open();
     core.state.auth = { ...core.state.auth, available: true, playerId: "player-power-quote", publicKey: "09".repeat(32), privateKey: "07".repeat(32), registrationStatus: "registered", runtimeStatus: "registered", boundAgentId: "agent-0" };
+    core.state.powerSurvivalQuote = { seller_agent_id: "agent-old" };
     expect(await window.__AW_TEST__.requestPowerSurvivalQuote("agent-1", 18, 3)).toEqual(expect.objectContaining({ ok: true, request: expect.objectContaining({ seller_agent_id: "agent-1", amount: 18, requested_price_per_pu: 3 }) }));
+    expect(core.state.powerSurvivalQuote).toBeNull();
+    expect(core.state.powerSurvivalQuoteRequest.status).toBe("pending");
+    expect(await window.__AW_TEST__.requestPowerSurvivalQuote("agent-1", 18, 3)).toEqual(expect.objectContaining({ ok: false, reason: expect.stringContaining("already pending") }));
     const message = sentMessages.find((entry) => entry.type === "quote_power_survival");
+    expect(sentMessages.filter((entry) => entry.type === "quote_power_survival")).toHaveLength(1);
     expect(message).toEqual(expect.objectContaining({ request: expect.objectContaining({ seller_agent_id: "agent-1", amount: 18, requested_price_per_pu: 3 }) }));
     const actualSigningPayload = new Uint8Array(signSpy.mock.calls.at(-1)[2]);
     const expectedSigningPayload = buildAuthEnvelope({ operation: "gameplay_action", action_id: "quote_power_survival", target_agent_id: "seller_agent_id:agent-1|amount:18|requested_price_per_pu:3", player_id: message.request.auth.player_id, public_key: message.request.auth.public_key, nonce: message.request.auth.nonce });
