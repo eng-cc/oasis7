@@ -3,7 +3,7 @@
 更新时间: 2026-07-06
 
 ## 从这里开始
-- 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
+- 想快速理解核心玩法骨架：先在 `../prd.md` 确认活跃基线与路由，再读 `gameplay-top-level-design.prd.md` 的 bounded 专业合同
 - 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 看 `../project.md`
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
@@ -16,6 +16,7 @@
 - 当前页只承担 `gameplay/` 子目录 landing page 职责，不复制完整长表。
 - `../README.md` 是 game 模块级 landing page，负责在模块 PRD、执行台账、文件级索引和少量高频 gameplay 专题之间分流。
 - `../prd.md` 是 game 模块目标态与阶段口径真值。
+- `gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` early-retention 的详细合同；它不替代 `../prd.md` 的活跃路由/状态职责，也不覆盖其他 topic 或 `doc/product/` 的声明范围。
 - `../project.md` 是 game 模块执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进状态。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
@@ -26,7 +27,7 @@
 ## 首读主题簇
 
 ### 1. 核心玩法骨架
-- 首读入口: `gameplay-top-level-design.prd.md`
+- 首读入口: 先 `../prd.md`，再 `gameplay-top-level-design.prd.md`
 - 适合问题:
   - 游戏的核心循环、玩家目标和世界互动骨架是什么
   - gameplay 主题之间的关系如何理解

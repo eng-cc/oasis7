@@ -52,6 +52,18 @@
 
 等待只有在存在明确触发条件、复查时机和预期变化时才是有效恢复。无期限等待、反复同一操作或隐藏自动改道不能伪装成持续游玩。
 
+### 3.1 面向当前目标的恢复比较
+
+每次代表性 disruption 都必须把 repair、rebuild 与 pivot 放在同一个当前目标下比较，而不是只给出技术上可执行的修复动作。比较至少回答：
+
+| 路径 | 相对当前目标的时间/阶段成本 | 资源成本 | 保留与失去的价值 | 主要风险 | 推荐理由与独立路线 |
+| --- | --- | --- | --- | --- | --- |
+| `repair` | 恢复现有能力所需的阶段与延后。 | 为修补关键缺口所需的主要投入。 | 尽可能保留现有位置、关系、进度或用途；说明仍会损失什么。 | 原故障可能复发，或恢复后仍受原约束限制。 | 适合现有能力仍能服务当前目标且可独立恢复时；说明为什么不是盲目维持。 |
+| `rebuild` | 放弃或暂停当前据点后，重新形成同类能力的阶段与延后。 | 重建地点、基础能力或首个交付所需的主要投入。 | 保留可迁移经验、关系或部分成果；失去旧据点、时间或已锁定投入。 | 新位置/能力形成前的暴露期，或重建后仍不适配目标。 | 适合旧路线不能可靠恢复而同类独立能力仍值得重建时。 |
+| `pivot` | 转换为不同区域用途前的学习、准备或目标改写阶段。 | 将已有投入转为新用途所需的主要补足或机会成本。 | 保留可复用的能力、材料、信誉或本地知识；失去原路线的专用收益。 | 新用途的需求、协作或供给条件可能变化。 | 适合原路线不再服务当前目标而已有投入仍能支撑独立的区域贡献时。 |
+
+推荐必须指向当前目标的最合适路径，而不是默认选择最低眼前成本。若三条独立路径均不可行，必须说明是哪项当前约束使独立 lane 暂不可行、外部依赖解决什么、以及何时可重新比较；不得把加入 major power、接受赞助或退出当前目标伪装为唯一正常答案。
+
 ## 4. Anti-grind 与玩家影响判据
 
 每个阶段成果至少需要证明以下一项发生了真实变化：
@@ -85,6 +97,7 @@
 - MW-5：区域影响保持有限，不被误报为全局治理权、联盟领导权或跨区控制。
 - MW-6：Viewer 与 pure API 分别提供玩家可读证据，runtime、Agent 和 gameplay 专业域对行动、后果、恢复与依赖边界保持一致。
 - MW-7：`test_tier_required` 证明合同和可读性；`test_tier_full` 的 fresh mature-world 样例才能给出当前路线 verdict。历史完成态或文档迁移本身不能代替 fresh evidence。
+- MW-8：代表性 disruption 样例针对同一个 active goal 比较 repair、rebuild 与 pivot 的时间/阶段成本、资源成本、保留/失去价值、主要风险、推荐理由和独立 lane 可行性；若独立路径不可行，样例说明约束与重评条件。
 
 ### 6.1 验收追踪
 
@@ -94,6 +107,7 @@
 | MW-2 | gameplay_designer / agent_engineer / viewer_engineer | PRD-GAME-015 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-simulator/prd.md` | 专业化第一项贡献的玩家可读预览 | test_tier_required |
 | MW-4 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | failure 到 repair / rebuild / pivot 的组合证据 | test_tier_required |
 | MW-6 / MW-7 | qa_engineer / runtime_engineer / viewer_engineer | PRD-TESTING-003 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/testing/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | Viewer、pure API 与权威状态对账及 fresh sample verdict | test_tier_full |
+| MW-8 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一 active goal 下三条恢复路径、独立性与受迫外部依赖边界的组合证据 | test_tier_required |
 
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 

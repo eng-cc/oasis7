@@ -26,6 +26,8 @@
 - 关键 runtime 数据: `RegionalInfrastructure`, `MicroDepotEvalInput`, `MicroDepotProposal`, `MicroDepotServiceApplied`
 - 关键 player-facing 数据: install quote, upkeep state, service radius, before/after preview, blocker, receipt, module evidence
 
+资源 provenance 边界：设施/材料 inventory 与 records 只在本专题授权的生命周期和 receipt 中使用，不自动成为 `Electricity`、`Data`、restricted slot-1 claim/upkeep support 或 liquid starter OC；它们也不得形成持续或无成本设施补给。跨模块来源与 sink 类别见 [`doc/product/world-infrastructure/prd.md`](../../product/world-infrastructure/prd.md#26-跨模块资源-provenance-边界)，本专题继续拥有具体 lifecycle、费用与实现合同。
+
 ## 里程碑
 
 - M0 (2026-07-05): topic PRD/design/project triplet formalized and rooted in `PRD-GAME-016` routes.
@@ -33,6 +35,8 @@
 - M2: runtime state/events and quote pipeline support install/service/reclaim with structured blockers.
 - M3: Viewer / pure API / agent surfaces expose quote, receipt, module evidence and next useful action.
 - M4: QA smoke proves one repair/logistics action becomes cheaper, faster or less risky because of depot, while remaining blocker is visible.
+
+M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段变化或公开 claim。任何当前状态只能由 `doc/game/project.md` 的活跃执行/阻断、同一候选的新鲜专业证据与根 `README.md` 的统一 claim envelope 共同确认；本 topic PRD 及历史或局部样本不能代签。
 
 ## 风险
 
@@ -103,6 +107,8 @@
   - AC-12: Applied receipts expose exact debit and inventory/throughput before/after. Reachable depletion is reported as insufficient inventory with reclaim/fresh reinstall or another action; throughput `16` is retained as a defense-in-depth ceiling/replay invariant, not an independently naturally reachable gameplay blocker or recovery loop. Independent preview-confirm concurrency and stale-preview recovery are not current acceptance.
   - AC-13: v2 MVP accepts exactly `supported_resource_kinds == ["data"]`; empty, non-Data, mixed, duplicate, or case-variant lists reject atomically without charging install cost or creating facility state.
   - Future follow-up, not current acceptance or current playability evidence: authorized refill, canonical epoch clock, throughput rollover/reset, and configurable commissioning/debit curves require gameplay/runtime joint design and their own acceptance/tests.
+
+当前可用性与 release/public claim guard：上述 AC 与路线图定义目标合同和验收边界，不改变当前 stage 或 claim。只有同一新鲜候选具备适用的 runtime、WASM、Viewer/pure API、QA/playtest 及需要时 recovery/sync 证据，并经产品决策与 LiveOps 同步后，才可由根 `README.md` 评估或表达公开 claim；单项实现、topic 文档、历史证据或局部 green 均不能代签。
 - Non-Goals:
   - No block placement, digging, terraforming, free-build construction, or direct embodied control.
   - No arbitrary player-uploaded WASM in MVP; only repo-authored allowlisted module hashes.

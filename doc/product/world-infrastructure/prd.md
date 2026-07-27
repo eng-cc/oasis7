@@ -64,6 +64,19 @@ oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组�
 
 所有资源与领域记录仍须遵守权威校验、权限、审计、metering 和治理边界。具体成本、经济数值、数据结构、ABI、manifest、capability 与玩家可读规则继续由对应 gameplay、runtime 和 WASM 专业合同及证据定义，本产品层不把实现现状冻结为永久资源目录。
 
+### 2.6 跨模块资源 provenance 边界
+
+本表只统一来源、可用 sink 类别与不可跨越的边界；不定义数值、汇率、runtime 字段或实现状态。任何条目都必须由相应专业域的权威状态和 receipt 证明，不能由产品层文字产生余额、可用性或公开 claim。
+
+| 资源 / 记录 | 允许的来源与 sink 类别 | 不可转移 / 转换边界 | 反补贴边界 | 专业 owner / 合同 |
+| --- | --- | --- | --- | --- |
+| `Electricity` / `Data` | 通用资源可按权威规则用于已授权的世界操作、工业/服务消耗与经批准的设施 commission、service 或 upkeep sink。 | 不因材料、产品、设施记录或任何 starter 支持而自动转换、铸造、转移所有权或扩大可用范围。 | 不构成持续赠与；设施不得把它们重写为无成本或无限供给。 | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) |
+| restricted slot-1 claim/upkeep support | 仅可在符合资格时支持首个非零 Agent claim 及其声明的 upkeep 承诺。 | 不可变为自由余额、玩家间转移、liquid starter OC、设施库存或材料。 | 不是免费认领，也不提供持续 claim/upkeep 或设施补贴。 | [`Agent ownership and stewardship`](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)、[`agent claim economy contract`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md) |
+| liquid starter OC | 仅在 Agent 已存在后承担首次对话解锁这一受限用途。 | 不支付或延长 claim/upkeep，不能转为 restricted support、设施库存、材料或通用资源。 | 不形成持续对话、认领或设施补贴。 | [`Agent ownership and stewardship`](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)、[`agent claim economy contract`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md) |
+| facility / material inventory and records | 仅在授权设施/材料生命周期内记录 commission、服务、维护、回收和可审计 receipt；允许的 sink 由对应专题声明。 | 不是通用资源类型，不能自动转换为 `Electricity`、`Data`、claim support 或 liquid starter OC，也不自动获得转移/结算权。 | 设施库存/记录不能成为持续或无成本设施补给；补充、重置或新设施来源必须由专业合同另行授权。 | [`micro_depot contract`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) |
+
+本矩阵不改变任何专业域的现有生命周期或当前 availability；发生来源、sink 或转换冲突时，按表中专业 owner 合同与 fresh evidence 处理，并由根 `README.md` 保持公开 claim envelope。
+
 ## 3. 权威与冲突处理
 
 产品层拥有区域设施、世界执行与分布式状态组成的端到端承诺；`doc/game/prd.md`、`doc/world-runtime/prd.md` 与 `doc/p2p/prd.md` 分别拥有其玩家规则、执行合同与分布式状态证明。冲突时不得由产品层静默改写专业合同，必须由产品 owner 与相应专业 owner 形成显式跨域决策。
@@ -95,6 +108,8 @@ oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组�
 - SC-8：玩家可读说明将统一持久世界模型与入口、运行环境、`world_id`、network tier 和 readiness 分层表达，不把技术分区或环境包装成不同玩家世界，也不由产品术语推导未经证据支持的公开 claim。
 - SC-9：至少一个区域设施样例以同一 facility/action/receipt identity 贯通玩家报价与确认、权威执行、持久化/replay、复制或 state sync、重连后的玩家可见结果与失败恢复；game、runtime 或 P2P 的孤立通过不得替代该端到端组合证据。
 - SC-10：至少一条可达工业生命周期贯通资源获取或 sourcing、转化或生产、能力或区域服务用途，以及维护、恢复或退役；不得依赖未解释的预置收益，且全过程保持资源守恒、权限校验、回放一致和可读的下一决策。具体 ledger、运输、排程与产品校验动作顺序由专业域拥有。
+
+SC-3、SC-9 与 SC-10 是设施/工业闭环的目标验收，描述达成时需要证明什么，不声明 `micro_depot` 或后续路线当前已可用、已合入或可对外发布。当前可用性与任何公开 claim 必须绑定同一新鲜候选的专业域证据；候选 gate、产品决策、QA 与 LiveOps 同步成立后，仍只由根 [`README.md`](../../../README.md) 的 claim envelope 对外表达。历史样本、局部通过或单域实现不能代签该结论。
 
 验收证据由下层专业域提供：设施体验与经济走 `game`；确定性、WASM、receipt 和 replay 走 `world-runtime`；共识、复制、恢复与多节点一致性走 `p2p`。产品层只汇总是否形成端到端闭环，不复制各域测试步骤。
 

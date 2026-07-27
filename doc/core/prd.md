@@ -117,7 +117,7 @@
 ### 当前阶段收口优先级（Stage Closure Backlog）
 | 优先级 | 目标 | 主要 owner | 输入 | 输出 | 完成定义 |
 | --- | --- | --- | --- | --- | --- |
-| P0 | 完成玩法微循环收口 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/project.md` 中 `TASK-GAME-018`、当前 runtime_live 体验证据、Viewer Web 闭环能力 | 视觉优化二期、截图/视频/结论证据包、`game` 状态回写 | 玩家可直观看到控制结果、默认模式负担下降、世界可读性提升，且至少一轮截图闭环通过 |
+| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、`doc/game/project.md` 的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应 game project/evidence | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline/project 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
 | P0 | 补齐 runtime 核心边界验收 | `runtime_engineer`（联审：`producer_system_designer`） | 确定性 / WASM / 治理边界、当前 runtime 测试与限制说明 | 验收清单、阻断条件、例外口径 | 每条关键边界都有测试映射，并能直接用于发布评审 |
 | P0 | 建立 testing 触发矩阵与发布证据包 | `qa_engineer`（联审：`producer_system_designer`） | `testing-manual.md`、各模块 `test_tier_required/full`、现有脚本与证据产物 | S0~S10 触发矩阵、证据包模板、放行摘要格式 | 任一任务都能反推必跑测试，PRD-ID / 任务 / 测试结果可串联 |
 | P0 | 补齐 playability 反馈闭环 V1 | `qa_engineer`（联审：`producer_system_designer`） | 现有 playability 输出、截图/视频、玩法目标 | 反馈卡字段、评分口径、高优问题追踪模板 | 每条体验问题都有固定记录格式，且可进入发布讨论 |
@@ -126,6 +126,8 @@
 | P1 | 收口自动化残余不稳定点 | `viewer_engineer` / `qa_engineer` | `agent-browser` 闭环现状、A/B 首连与录屏问题 | 稳定复跑方案、限制说明 | 主闭环可复跑，不再影响版本级证据收集 |
 | P2 | launcher / explorer 体验 polish | `viewer_engineer` | 当前 launcher / explorer 成果、体验问题清单 | 次级体验优化项 | 不新增核心复杂度，不挤占 P0/P1 资源 |
 | P2 | README / site / scripts / engineering 治理补完 | 对应模块 owner | 未完成治理任务、入口与脚本使用痛点 | 一致性检查、链接检查、趋势统计等治理产物 | 提升维护性，但不阻塞当前阶段发布 |
+
+`TASK-GAME-018` 及其截图/视频 closure 是已完成的历史任务与证据追溯入口，不再是当前唯一 P0、当前 release 依据或公开 claim 的代签；当前事实按上述 game baseline/project 与统一根 README/product gate 路由。
 
 ### 项目模块地图（Design Map）
 产品信息架构由 `doc/product/README.md` 统一导航，固定为“世界规则与核心玩法 / 大世界基础设施 / 智能体与世界模拟 / 玩家入口与发行”四个入口。`core` 仍是项目级设计总览与跨模块治理基线，不是第五个产品模块；下表继续表达工程实现与治理模块地图。

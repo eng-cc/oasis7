@@ -111,6 +111,17 @@
 - 两者不得混写：`restricted starter claim balance` 解决“能否付出首个 agent claim 承诺成本”，`starter OC` 解决“首个 agent 已存在后，是否已完成 LLM/agent agency 对话的首聊解锁”。starter OC 不是免费 agent claim、不是通用补贴，也不是 `slot-1` claim/upkeep 的 restricted bucket。
 - 平衡口径仍未冻结：`starter OC` 的授予额度、实际消耗模型、滥用边界，以及未来是否要把 chat 重新绑定到可耗尽预算，需要后续基于真实 cold-start 样本单独复核；当前文档只冻结资源边界、runtime 现状和首读路由。
 
+### 2.2.1 First `slot-1` Claim Commitment Packet
+
+首个 `slot-1` claim 的 canonical quote / choice 必须作为一个决策包呈现，而不是将已有成本字段拆成需要玩家自行拼接的技术信息。确认前，它必须让玩家理解：
+
+- 当前候选的用途、与其他候选的差异、对首个工业目标的帮助和主要风险；若推荐当前候选，必须有可读理由。
+- 非零 upfront 成本，以及扣除该成本后可覆盖的 upkeep runway、下一次持续义务和低 runway 风险。
+- 主动 release、欠费进入 grace 或持续闲置而 forced reclaim 的可读触发，并说明相应的保留/失去结果以及补足、恢复或重新选择的可行动路径。
+- 当前候选之外的最佳决策：比较候选、等待可读条件，或先补足资金/降低当前扩张压力；不得把“现在确认”写成无替代的默认成功路径。
+
+该决策包复用本专题已有的 canonical quote、claim、upkeep、release 与 reclaim 语义，不新增字段、数值、状态或 Viewer 布局。`restricted starter claim balance` 只可支持首个 `slot-1` 的 non-zero claim/upkeep 成本；其一次性受限帮助不是 free claim，也不是后续 upkeep 的无限/持续补贴。`starter OC` 则在 Agent 已经通过 `claim_first_agent` 建立后处理首聊的 liquid OC 解锁，两者不得相互计入、替代或被表述为同一资金来源。
+
 ### 2.3 First-Chat Unlock Value Preview
 
 - `starter_oc_quote` / `first_chat_unlock_preview` 是 `claim_starter_oc` 确认前的玩家侧价值合同：它解释已完成首个 agent claim 的玩家为何现在解锁首聊，而不把 `starter OC` 呈现为第二道不透明支付门。
@@ -154,6 +165,7 @@
   - 首次认领候选缺少差异理由：若 `slot-1` quote 只能展示成本和资格，但缺少位置、能力/当前任务、首个工业目标帮助、风险或推荐理由，必须标记为 `candidate_rationale_missing`；玩家不应在非零承诺成本下盲选 agent。
   - 首次认领缺少持有 runway：若玩家能支付 upfront，但 quote 不展示确认后可支撑的 upkeep epoch、下一次 upkeep 时间或预计 grace/reclaim 风险，必须标记为 `claim_runway_missing`；玩家不应把长期占有成本误读成一次性解锁。
   - 首次认领缺少路线选择判断：若 `slot-1` quote 不能让玩家比较“当前候选 / 其他候选 / 等待或补资金”，或缺少 `claim_now_route_fit / compare_candidates_first / wait_or_fund_first` 分类与推荐动作，必须标记为 `slot_1_claim_choice_missing`；玩家不应把第一次 agent ownership 承诺误读成单纯付费门槛。
+  - 首次认领承诺包不完整：若确认前无法同时读到候选用途/差异、upfront 成本、确认后 upkeep runway、release/grace/reclaim 触发、恢复或重新选择以及最佳等待/替代动作，必须标记为 `first_claim_commitment_packet_missing`；不得让玩家靠账本字段或事后回收事件重建风险。
   - 首聊解锁缺少价值预览：若 `claim_starter_oc` 前没有 `starter_oc_quote` / `first_chat_unlock_preview`，或缺少 `chat_purpose`、`immediate_playable_help`、`first_question_or_action_hint`、`resource_boundary`、`defer_effect`、`recommended_unlock_action` 中任一项，必须标记为 `first_chat_unlock_value_missing`；玩家不应在完成 slot-1 claim 后仍把首聊解锁误读成第二道不透明支付门。
   - 新账号进入已有世界：若 world snapshot 已有 Agent 但当前 `player_session` 没有 `bound_agent_id` 或 canonical claimer，Viewer 必须进入“当前账号还没有 Agent”的 onboarding，并在 runtime 发布 `claim_first_agent` 时展示认领入口；若 runtime 只发布 canonical `slot-1` quote，则展示对应 onboarding。默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。不得把全局第一个 Agent 自动标为“我的 Agent”，也不得把该 Agent 的 chat/command 入口显示为 ready。
   - 并发争抢：两个提交同时命中同一 `agent_id` 时，只允许第一个写入 `claim_owner_id`；第二个返回冲突，不得重复扣费。

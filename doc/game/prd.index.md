@@ -10,13 +10,13 @@
 - 模块设计总览：`doc/game/design.md`
 - 模块标准执行入口：`doc/game/project.md`
 - gameplay 子域入口：`doc/game/gameplay/README.md`
-- 核心玩法骨架入口：`doc/game/gameplay/gameplay-top-level-design.prd.md`
+- 核心玩法骨架专题：`doc/game/gameplay/gameplay-top-level-design.prd.md`（活跃基线与路由先看 `doc/game/prd.md`）
 
 ## 首读分流
 - 想先回答 game 模块当前目标态、阶段判断与完成定义：先读 `doc/game/prd.md`
 - 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
 - 想先进入 gameplay 热点子域，而不是直接面对完整 gameplay 文档长表：先读 `doc/game/gameplay/README.md`
-- 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
+- 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/prd.md` 确认活跃基线与路由，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看首局与持续游玩的产品承诺：先读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；exact gameplay 合同读 `doc/game/gameplay/gameplay-top-level-design.prd.md`，当前 verdict 读 `doc/game/project.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 gameplay 顶层合同
@@ -34,7 +34,7 @@
 
 ## 活跃补充文档
 - `doc/game/gameplay/README.md`：`gameplay/` 热点子域 landing page，适合先做簇级分流，再决定进入玩法骨架、留存、agency、preview/beta gate 或 economy/claim 专题。
-- `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
+- `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架的专题入口；活跃基线与路由先看 `doc/game/prd.md`。
 - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`：首局、后引导、首次持续能力与失败恢复的产品承诺；专业玩法合同见 `doc/game/gameplay/gameplay-top-level-design.prd.md`，执行状态见 `doc/game/project.md`。
 - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
 - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力的产品主入口。
@@ -85,5 +85,5 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- ROUND-002 口径：`doc/game/gameplay/gameplay-top-level-design.prd.md` 为 gameplay 主文档，其余 gameplay 专题文档仅维护增量。
+- authority 口径：`doc/game/prd.md` 是活跃基线与路由根入口；`doc/game/gameplay/gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` 的专题细节，其他 topic 在各自声明范围内拥有细节。历史 ROUND-002 主从表述不构成现行优先级。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入下一轮路径级治理。
