@@ -7,7 +7,8 @@ const quote = {
   power_state_before: "shutdown", recovery_action: "buy_power", recovery_amount: 18,
   power_gain_estimate: 18, requested_price_per_pu: 3, price_per_pu: 3, price_or_time_cost: 54,
   power_state_after_recovery: "low_power", survival_runway_ticks: 18,
-  next_action_affordability_after_recovery: "limited", shutdown_avoidance_reason: "internal-only",
+  next_action_affordability_after_recovery: "limited",
+  shutdown_avoidance_reason: "recovery restores 18 runway ticks and lifts agent from shutdown to low_power; recommended action: buy_power_partial",
   recommended_power_action: "buy_power_partial",
 };
 const tr = (locale, zh, en) => locale === "zh" ? zh : en;
@@ -24,16 +25,24 @@ describe("PowerSurvivalQuote", () => {
     expect(within(card).getByText("Estimated cost")).toBeInTheDocument();
     expect(within(card).getByText("Shutdown → Low power")).toBeInTheDocument();
     expect(within(card).getByText("Next action limited")).toBeInTheDocument();
-    expect(within(card).getByTestId("power-survival-shutdown-avoidance")).toHaveTextContent(/bring the Agent out of shutdown/i);
+    expect(within(card).getByTestId("power-survival-shutdown-avoidance")).toHaveTextContent(/restores 18 ticks of runway and lifts the Agent from Shutdown to Low power/i);
     expect(within(card).getByTestId("power-survival-recommendation")).toHaveTextContent(/Buy more power before acting/i);
     expect(within(card).queryByText("buy_power_partial")).not.toBeInTheDocument();
     expect(within(card).queryByText("low_power")).not.toBeInTheDocument();
-    expect(within(card).queryByText("internal-only")).not.toBeInTheDocument();
+    expect(within(card).queryByText(quote.shutdown_avoidance_reason)).not.toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /buy|submit|commit/i })).not.toBeInTheDocument();
 
     render(() => <PowerSurvivalQuoteCard quote={quote} locale="zh" tr={tr} />);
     expect(screen.getAllByText("18 步").at(-1)).toBeInTheDocument();
     expect(screen.queryByText("18 tick")).not.toBeInTheDocument();
+  });
+
+  it("keeps materially different runtime shutdown reasons distinguishable without raw enum leakage", () => {
+    render(() => <PowerSurvivalQuoteCard quote={{ ...quote, power_state_before: "critical", power_state_after_recovery: "shutdown", survival_runway_ticks: 4, shutdown_avoidance_reason: "recovery leaves agent in shutdown with 4 runway ticks; recommended action: buy_more_power" }} locale="en" tr={tr} />);
+    const reason = screen.getByTestId("power-survival-shutdown-avoidance");
+    expect(reason).toHaveTextContent(/leaves the Agent in Shutdown with 4 ticks of runway/i);
+    expect(reason).not.toHaveTextContent(/lifts the Agent/i);
+    expect(reason).not.toHaveTextContent(/buy_more_power|recovery leaves agent in/i);
   });
 
   it("requests the signed quote with all three bound inputs and marks an old quote stale", async () => {

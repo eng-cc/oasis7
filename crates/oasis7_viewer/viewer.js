@@ -10726,6 +10726,17 @@ function recommendation(value, locale, tr2) {
     buy_more_power: tr2(locale, "先补充更多电力", "Buy more power first")
   }[String(value || "")] || tr2(locale, "重新请求预估后再决定", "Request a fresh quote before deciding");
 }
+function shutdownAvoidanceReason(quote, locale, tr2) {
+  const reason = String(quote.shutdown_avoidance_reason || "");
+  const runway = `${display(quote.survival_runway_ticks)} ${tr2(locale, "步", "ticks")}`;
+  if (reason.includes("lifts agent from")) {
+    return tr2(locale, `本次补电恢复 ${runway} 可行动时长，并让 Agent 从${powerState(quote.power_state_before, locale, tr2)}恢复到${powerState(quote.power_state_after_recovery, locale, tr2)}。`, `This recovery restores ${runway} of runway and lifts the Agent from ${powerState(quote.power_state_before, locale, tr2)} to ${powerState(quote.power_state_after_recovery, locale, tr2)}.`);
+  }
+  if (reason.includes("leaves agent in")) {
+    return tr2(locale, `本次补电后 Agent 仍处于${powerState(quote.power_state_after_recovery, locale, tr2)}，可行动时长为 ${runway}。`, `This recovery leaves the Agent in ${powerState(quote.power_state_after_recovery, locale, tr2)} with ${runway} of runway.`);
+  }
+  return tr2(locale, "运行时已返回防停机说明；请结合电力状态、可行动时长和建议决定是否补电。", "The runtime returned shutdown guidance; use the power state, runway, and recommendation to decide whether to buy.");
+}
 function Metric(props) {
   return (() => {
     var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
@@ -10787,7 +10798,7 @@ function PowerSurvivalQuoteCard(props) {
         return affordability(quote().next_action_affordability_after_recovery, locale(), tr2);
       }
     }), null);
-    insert(_el$15, () => `${tr2(locale(), "防停机判断", "Shutdown avoidance")}: ${quote().power_state_before === "shutdown" && quote().power_state_after_recovery !== "shutdown" ? tr2(locale(), "本次补电可让 Agent 脱离停机状态。", "This purchase can bring the Agent out of shutdown.") : quote().power_state_after_recovery === "shutdown" ? tr2(locale(), "本次补电后仍会停机；请先补充更多电力。", "This amount still leaves the Agent shut down; buy more power first.") : tr2(locale(), "本次补电保留了可行动的电力状态。", "This purchase keeps the Agent in an actionable power state.")}`);
+    insert(_el$15, () => `${tr2(locale(), "防停机原因", "Why this avoids shutdown")}: ${shutdownAvoidanceReason(quote(), locale(), tr2)}`);
     insert(_el$16, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation(quote().recommended_power_action, locale(), tr2)}`);
     createRenderEffect((_p$) => {
       var _v$ = display(quote().seller_agent_id), _v$2 = display(quote().recovery_amount), _v$3 = display(quote().requested_price_per_pu);

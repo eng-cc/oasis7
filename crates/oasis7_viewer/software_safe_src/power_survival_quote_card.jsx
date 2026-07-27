@@ -10,6 +10,17 @@ function affordability(value, locale, tr) {
 function recommendation(value, locale, tr) {
   return ({ buy_power: tr(locale, "按此补电后继续", "Buy this power, then continue"), buy_power_partial: tr(locale, "继续补电后再行动", "Buy more power before acting"), buy_more_power: tr(locale, "先补充更多电力", "Buy more power first") })[String(value || "")] || tr(locale, "重新请求预估后再决定", "Request a fresh quote before deciding");
 }
+function shutdownAvoidanceReason(quote, locale, tr) {
+  const reason = String(quote.shutdown_avoidance_reason || "");
+  const runway = `${display(quote.survival_runway_ticks)} ${tr(locale, "步", "ticks")}`;
+  if (reason.includes("lifts agent from")) {
+    return tr(locale, `本次补电恢复 ${runway} 可行动时长，并让 Agent 从${powerState(quote.power_state_before, locale, tr)}恢复到${powerState(quote.power_state_after_recovery, locale, tr)}。`, `This recovery restores ${runway} of runway and lifts the Agent from ${powerState(quote.power_state_before, locale, tr)} to ${powerState(quote.power_state_after_recovery, locale, tr)}.`);
+  }
+  if (reason.includes("leaves agent in")) {
+    return tr(locale, `本次补电后 Agent 仍处于${powerState(quote.power_state_after_recovery, locale, tr)}，可行动时长为 ${runway}。`, `This recovery leaves the Agent in ${powerState(quote.power_state_after_recovery, locale, tr)} with ${runway} of runway.`);
+  }
+  return tr(locale, "运行时已返回防停机说明；请结合电力状态、可行动时长和建议决定是否补电。", "The runtime returned shutdown guidance; use the power state, runway, and recommendation to decide whether to buy.");
+}
 function Metric(props) { return <div class="metric"><div class="metric__label">{props.label}</div><div class="metric__value">{props.value}</div></div>; }
 
 export function PowerSurvivalQuoteCard(props) {
@@ -19,7 +30,7 @@ export function PowerSurvivalQuoteCard(props) {
     <div class="panel__body stack">
       <div class="badge-row"><span class="badge badge--accent">{tr(locale(), "预估", "quote")}</span><span class="badge">{`${tr(locale(), "卖方", "Seller")}: ${display(quote().seller_agent_id)}`}</span><span class="badge">{`${tr(locale(), "补电量", "Power amount")}: ${display(quote().recovery_amount)}`}</span><span class="badge">{`${tr(locale(), "报价", "Quoted price")}: ${display(quote().price_per_pu)}`}</span></div>
       <div class="summary-grid"><Metric label={tr(locale(), "预计补电", "Expected gain")} value={display(quote().power_gain_estimate)} /><Metric label={tr(locale(), "预计成本", "Estimated cost")} value={display(quote().price_or_time_cost)} /><Metric label={tr(locale(), "电力状态", "Power state")} value={`${powerState(quote().power_state_before, locale(), tr)} → ${powerState(quote().power_state_after_recovery, locale(), tr)}`} /><Metric label={tr(locale(), "可行动时长", "Action runway")} value={`${display(quote().survival_runway_ticks)} ${tr(locale(), "步", "ticks")}`} /><Metric label={tr(locale(), "下一步可负担性", "Next-action affordability")} value={affordability(quote().next_action_affordability_after_recovery, locale(), tr)} /></div>
-      <div class="feedback-summary" data-testid="power-survival-shutdown-avoidance">{`${tr(locale(), "防停机判断", "Shutdown avoidance")}: ${quote().power_state_before === "shutdown" && quote().power_state_after_recovery !== "shutdown" ? tr(locale(), "本次补电可让 Agent 脱离停机状态。", "This purchase can bring the Agent out of shutdown.") : quote().power_state_after_recovery === "shutdown" ? tr(locale(), "本次补电后仍会停机；请先补充更多电力。", "This amount still leaves the Agent shut down; buy more power first.") : tr(locale(), "本次补电保留了可行动的电力状态。", "This purchase keeps the Agent in an actionable power state.")}`}</div>
+      <div class="feedback-summary" data-testid="power-survival-shutdown-avoidance">{`${tr(locale(), "防停机原因", "Why this avoids shutdown")}: ${shutdownAvoidanceReason(quote(), locale(), tr)}`}</div>
       <div class="feedback-summary" data-testid="power-survival-recommendation">{`${tr(locale(), "建议", "Recommended")}: ${recommendation(quote().recommended_power_action, locale(), tr)}`}</div>
     </div>
   </section>;
