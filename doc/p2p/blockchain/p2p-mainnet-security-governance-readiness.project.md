@@ -10,11 +10,14 @@
 ## 任务拆解
 
 - [x] p2p-mainnet-security-governance-authority-consolidation (PRD-P2P-MAINNET-001/002/003/004) [test_tier_required]: 吸收历史 crypto/readiness/custody/governance/genesis 合同并保留负向 gate。 Trace: #2672 (task_b23df712ec4d4bb8b314c84a50278873)
-- [x] 保留历史专题中“规格已定义”与“真实操作/QA 未完成”的区别。
-- [ ] production custody：受控 backend、rotation、revocation 与审计链需由 runtime/blockchain ops 后续以当前证据验证。
-- [ ] genesis：真实 recipient/controller binding、ceremony 与 QA `pass` 仍是 `not_mint_ready` 的阻断项。
-- [ ] governance：shared-network probation、扩展 rotation/revocation/failover 覆盖仍需对应专业证据。
-- [ ] mainnet：formal tier、frozen genesis、no-reset commitment 和全部跨域 gate 必须共同满足；本页不授予升级结论。
+
+未关闭的专业条件：
+
+- 历史专题中“规格已定义”与“真实操作/QA 未完成”的区别必须持续保留。
+- production custody：受控 backend、rotation、revocation 与审计链需由 runtime/blockchain ops 后续以当前证据验证。
+- genesis：真实 recipient/controller binding、ceremony 与 QA `pass` 仍是 `not_mint_ready` 的阻断项。
+- governance：shared-network probation、扩展 rotation/revocation/failover 覆盖仍需对应专业证据。
+- mainnet：formal tier、frozen genesis、no-reset commitment 和全部跨域 gate 必须共同满足；本页不授予升级结论。
 
 ## 验证入口
 
