@@ -8,6 +8,7 @@ import { createViewerBrowserPersistenceModule } from "./viewer_browser_persisten
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
+import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
 import {
   buildViewerEntityLists,
   renderViewerEntityList,
@@ -182,6 +183,8 @@ const {
 
 const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
+const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
+const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
 
 function normalizeU64Display(value) {
   if (value == null) {
@@ -3089,7 +3092,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error)) {
+  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3510,6 +3513,9 @@ function handleViewerMessage(message) {
       break;
     case "product_validation_quote_preflight":
       productValidationQuote.handleProductValidationQuote(message.quote);
+      break;
+    case "power_survival_quote_preflight":
+      powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -4257,6 +4263,7 @@ function installTestApi() {
     sendGameplayAction,
     requestRefineQuote,
     requestProductValidationQuote,
+    requestPowerSurvivalQuote,
     runSteps,
     setMode,
     focus,
@@ -4269,6 +4276,7 @@ function installTestApi() {
     injectSnapshot,
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
+    injectPowerSurvivalQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4292,6 +4300,7 @@ function bootstrap() {
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture();
   productValidationQuote.installProductValidationQuoteVisualFixture();
+  powerSurvivalQuote.installPowerSurvivalQuoteVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -4383,6 +4392,7 @@ export {
   injectSnapshot,
   injectRefineQuotePreflightForTest,
   injectProductValidationQuoteForTest,
+  injectPowerSurvivalQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4411,6 +4421,7 @@ export {
   sendGameplayAction,
   requestRefineQuote,
   requestProductValidationQuote,
+  requestPowerSurvivalQuote,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,

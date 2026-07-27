@@ -79,6 +79,35 @@ fn signed_product_validation_quote_request(
     request
 }
 
+fn signed_power_survival_quote_request(
+    seller_agent_id: &str,
+    amount: i64,
+    requested_price_per_pu: i64,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::PowerSurvivalQuoteRequest {
+    let mut request = crate::viewer::PowerSurvivalQuoteRequest {
+        seller_agent_id: seller_agent_id.to_string(),
+        amount,
+        requested_price_per_pu,
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_power_survival_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign power survival quote auth"),
+    );
+    request
+}
+
 #[test]
 fn runtime_product_validation_quote_is_signed_read_only_and_advisory_before_submission() {
     let _guard = lock_test_llm_env();
@@ -316,6 +345,100 @@ fn runtime_refine_quote_is_signed_deterministic_and_non_mutating() {
         ))
         .expect_err("insufficient electricity rejected");
     assert_eq!(insufficient.code, "refine_quote_rejected");
+}
+
+#[test]
+fn runtime_power_survival_quote_is_signed_deterministic_non_mutating_and_binds_buy_parameters() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(27);
+    register_runtime_session(
+        &mut server,
+        "player-power-survival-quote",
+        Some(agent_id.as_str()),
+        271,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            5,
+        )
+        .expect("seed critical electricity");
+    let state_before = server.world.state().clone();
+    let request = signed_power_survival_quote_request(
+        agent_id.as_str(),
+        1,
+        1,
+        "player-power-survival-quote",
+        272,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let quote = server
+        .handle_power_survival_quote(request.clone())
+        .expect("signed buy power survival quote");
+    assert_eq!(quote.buyer_agent_id, agent_id);
+    assert_eq!(quote.seller_agent_id, request.seller_agent_id);
+    assert_eq!(quote.recovery_action, "buy_power");
+    assert_eq!(quote.recovery_amount, request.amount);
+    assert_eq!(quote.requested_price_per_pu, request.requested_price_per_pu);
+    assert_eq!(quote.price_per_pu, 1);
+    assert_eq!(quote.power_state_before, "critical");
+    assert_eq!(quote.power_state_after_recovery, "low_power");
+    assert_eq!(quote.power_gain_estimate, 1);
+    assert_eq!(
+        server
+            .handle_power_survival_quote(request)
+            .expect("repeat quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+
+    let invalid = server
+        .handle_power_survival_quote(signed_power_survival_quote_request(
+            agent_id.as_str(),
+            0,
+            1,
+            "player-power-survival-quote",
+            273,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("invalid buy amount preserves simulator rejection");
+    assert_eq!(invalid.code, "power_survival_quote_rejected");
+    assert_eq!(invalid.action_id.as_deref(), Some("quote_power_survival"));
+
+    let mut tampered = signed_power_survival_quote_request(
+        agent_id.as_str(),
+        1,
+        1,
+        "player-power-survival-quote",
+        274,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered.requested_price_per_pu = 2;
+    let tampered_error = server
+        .handle_power_survival_quote(tampered)
+        .expect_err("signed buy parameters must reject tampering");
+    assert_eq!(tampered_error.code, "auth_signature_invalid");
 }
 
 #[test]

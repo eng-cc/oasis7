@@ -42,6 +42,8 @@ export function createSoftwareSafeState() {
     refineQuoteRequest: { status: "idle", error: null },
     productValidationQuote: null,
     productValidationQuoteRequest: { status: "idle", error: null },
+    powerSurvivalQuote: null,
+    powerSurvivalQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {
       actionKey: null,
       label: null,
