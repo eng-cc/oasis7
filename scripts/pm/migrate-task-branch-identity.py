@@ -345,6 +345,8 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
     )
     if any(migration.get(field) != receipt.get(field) for field in migration_fields):
         raise MigrationError("committed migration record disagrees with migration receipt")
+    if migration.get("digest") != digest(migration):
+        raise MigrationError("committed migration record digest is invalid")
     if migration.get("digest") != receipt.get("migration_record_sha256"):
         raise MigrationError("committed migration record digest disagrees with migration receipt")
 

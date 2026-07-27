@@ -502,6 +502,23 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         )
         self.assertNotEqual(journal["state"], "committed")
 
+    def test_mapping_commit_recovery_rejects_migration_payload_digest_mismatch(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+        committed_record = self.mapping_record()
+        committed_record["branch_identity_migration"]["issuer"] = "unauthorized-replacement"
+        self.replace_mapping_record(committed_record)
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("committed migration record digest is invalid", retried.stderr)
+        self.assertTrue(self.snapshot.exists())
+        journal = json.loads(
+            (self.root / ".pm" / "scratch" / UID / "branch-identity-migration.json").read_text(encoding="utf-8")
+        )
+        self.assertNotEqual(journal["state"], "committed")
+
     def test_retry_after_post_branch_creation_crash_reuses_one_branch_and_one_epoch(self) -> None:
         interrupted = self.run_helper(crash_after="replacement_branch_created")
         self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
