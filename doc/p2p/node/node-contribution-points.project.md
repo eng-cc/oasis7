@@ -21,7 +21,7 @@
 - doc/p2p/node/node-contribution-points.prd.md
 - `crates/oasis7/src/runtime/mod.rs`
 - `crates/oasis7/src/runtime`（新增节点积分模块）
-- `doc/p2p/distributed/distributed-runtime.prd.md`
+- `doc/p2p/prd.md`（分布式运行时与复制恢复合同）
 - `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
 
 ## 状态

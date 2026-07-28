@@ -17,6 +17,9 @@
 - 公钥策略层：共享 32-byte hex 规范化、小写比较、重复拒绝和字段级错误，以避免 membership 与 sequencer 漂移。
 - Replication guard 层：拒绝空 world/writer 和零 epoch/sequence；同 writer/epoch 的 sequence 严格递增，epoch 或 writer 切换从 sequence 1 开始且不允许 epoch 回退。
 - Replay 层：逐条调用与在线路径相同的 `apply_replication_record`；只有 hash 校验和 store 写入成功后才提交 guard，首个失败立即终止并保留失败前的确定状态。
+- Commit/execution 层：ordered actions 与 `action_root` 经 commit context 进入 node execution；result 的 block/state root 和持久 snapshot 字段用于恢复兼容。旧 viewer-live driver 与 bridge-default 接线只作历史 provenance。
+- Block hash 层：execution bridge 对 canonical-CBOR `oasis7_proto::distributed::WorldBlock` 计算 commitment；现行字段以该类型的 `world_id/height/prev_block_hash/action_root/event_root/state_root/journal_ref/snapshot_ref/receipts_root/proposer_id/timestamp_ms/signature` 为准，旧路线图不能反向新增另一套 payload schema。
+- DistFS proof 层：当前 gate 使用 `ReplicationNetworkEndpoint` 做 provider/DHT/fetch-route 探测，并区分 hard failure 与有界 degraded/fallback；历史 Phase C 的专用 request/proof envelope、challenge topics 与 challenge driver 未形成当前合同。
 
 ## 约束
 
@@ -36,3 +39,5 @@
 ## 历史演进
 
 `MIG-046` 至 `MIG-052` 的详细阶段、决策和完成日期由同名 PRD 的交叉表保存。Phase 8 的共享化取代了 Phase 6/7 的重复实现，不删除其兼容边界或历史验证证据。
+
+`MIG-058`、`MIG-064` 与 `MIG-065` 分别保存 production-grade 路线、Phase B commit-execution 与 Phase C challenge-network 的压缩历史；Phase C 是未形成当前能力的历史目标，而非已上线网络证明。

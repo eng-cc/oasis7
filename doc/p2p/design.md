@@ -25,6 +25,10 @@
 - 节点执行层：execution record/receipt、奖励、执行校验与治理对接。
 - 观测与投影层：observer/ops 证据、API/viewer projection 与 claim boundary。
 
+历史 `distributed-*` 专题的稳定设计已归入上述分层：`oasis7_net` 拥有 transport/peer/DHT，`oasis7_consensus` 拥有 proposer/attestation/action-root，`oasis7_distfs` 拥有 CAS/replication/challenge，node/chain-runtime 拥有 commit 后执行与恢复接线，`oasis7_proto` 只拥有共享 wire 类型。`oasis7_wasm_abi` 是 `ModuleManifest` 与 runtime ABI 类型的单一来源，不得在 net/proto/viewer 再定义副本。
+
+当前设计不承诺历史 `/aw/rr/*`、固定 bitswap/graphsync、每次 zone commit 的 lease 接管、viewer 默认执行 bridge 或跨节点 DistFS challenge topic/envelope。production WASM 只消费外部 canonical binary + receipt；本地 source compile fallback 仅可作为显式 dev/test 兼容，不是节点生产路径。
+
 ## 4. 集成点
 - `doc/world-runtime/prd.md`
 - `doc/headless-runtime/prd.md`
@@ -35,7 +39,7 @@
 - mixed-topology / 非全公网主链级覆盖网络进入 `network/mainnet-private-reachability-architecture.*`
 - 数据与复制进入 `distfs/`
 - 节点执行与奖励进入 `node/`
-- 区块链和生产化扩展进入 `blockchain/`、`distributed/`
+- 区块链和生产化扩展进入 `blockchain/`；分布式运行时总体边界由本页与根 PRD 承载，`distributed/README.md` 仅作 successor 导航
 - 模块级自闭环、claim level 与测试层级进入 `testing-manual.md#s9a链上大世界状态底座自闭环`
 
 ## 设计目标

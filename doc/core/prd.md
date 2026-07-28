@@ -165,7 +165,7 @@
 - 场景矩阵: `doc/world-simulator/scenario/scenario-files.prd.md`
 - Web 闭环测试策略: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 玩家访问模式产品契约: `doc/product/player-entry-distribution/prd.md`
-- 分布式路线图: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
+- 分布式路线与历史阶段: `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
 - 系统性测试手册: `testing-manual.md`
 
 ### 全局术语（Glossary）

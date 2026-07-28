@@ -100,7 +100,7 @@
   - `crates/oasis7/src/runtime/builtin_wasm_materializer.rs`
   - `crates/oasis7_distfs/src/bin/sync_builtin_wasm_identity.rs`
   - `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md`
-  - `doc/p2p/distributed/distributed-pos-consensus.prd.md`
+  - `doc/p2p/prd.md`（PoS 与 committed execution 当前合同）
 - Edge Cases & Error Handling:
   - 线上 manifest 不可达：节点保持上一版 `active_manifest_hash`，拒绝切换到未验证新版本。
   - 证书阈值不足或签名重复：`GovernanceFinalityInvalid` 并阻断 apply。

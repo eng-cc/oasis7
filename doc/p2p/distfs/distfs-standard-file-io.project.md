@@ -13,7 +13,7 @@
 ## 依赖
 - doc/p2p/distfs/distfs-standard-file-io.prd.md
 - `crates/oasis7_distfs`
-- `doc/p2p/distributed/distributed-runtime.prd.md`
+- `doc/p2p/prd.md`（分布式运行时与复制恢复合同）
 - `README.md`（crate 分工）
 
 ## 状态

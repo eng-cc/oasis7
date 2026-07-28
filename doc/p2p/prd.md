@@ -29,6 +29,15 @@
 - node block、action root、execution block/state roots、journal 与 snapshot references 作为同一权威记录持久化。被拒动作必须显式 requeue 或失败；execution/root/journal/proof mismatch 阻断恢复，不能继续推进状态。
 - 本合同只拥有共识载荷完整性、提交顺序与恢复一致性，不代表 topology health、deployment、release readiness、市场规则或玩家体验结论。
 
+### 分布式运行时、PoS 与复制恢复合同
+
+- 分布式状态由内容寻址 blob、snapshot/journal、world head 与 execution record 共同锚定；head follower 和恢复路径只能接受可验证的同 world 单调进展。state root、journal、checkpoint 或 proof 不一致时必须停止恢复，不能以重启、覆盖或跳过失败项推进状态。
+- PoS 当前合同是 stake-weighted validator set、slot/epoch、确定 proposer、attestation 与 double/surround-vote 拒绝及其持久恢复边界。它不等于完整以太坊 beacon chain、BLS 聚合、经济惩罚或 mainnet finality。
+- node 默认不替所有 validator 自动 attestation。提交前执行、ordered `action_root`、`NodeExecutionCommitContext/Result`、execution height/hash/state-root snapshot 字段和 committed replay 组成同一绑定；observer/viewer 不是默认执行控制面。
+- replication 的现行请求协议是 `/aw/node/replication/fetch-commit/1.0.0` 与 `/aw/node/replication/fetch-blob/1.0.0`。writer epoch/sequence 必须单调，切换 writer 或 epoch 时从 sequence 1 开始；鉴权、hash 或写入失败不得污染 guard。
+- storage challenge 的本地 self-probe 对错误 blob 或验证失败保持 fail-closed；provider、DHT 或 fetch route 的部分可重试不可用允许进入有界 fallback/degraded 路径，不能被概括为“任何网络失败都拒绝提交”。
+- 历史 `/aw/rr/1.0.0/*` 草案、固定 bitswap/graphsync 选型、lease 覆盖每次 zone commit 与未接线 PoS 风险均不是当前合同。Phase-C 专用 DistFS request/proof envelope、challenge topic 和 specialized challenge driver 仍是未来能力缺口；这不否定现有 provider/DHT/fetch-route 网络探测 gate。
+
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
 - 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套已退役，完成记录从 Git 与 GitHub task evidence 追溯。
@@ -182,7 +191,7 @@
 - Acceptance Criteria:
   - AC-1: p2p PRD 覆盖网络、共识、存储、激励四条主线。
   - AC-2: p2p project 文档任务项明确映射 PRD-P2P-ID。
-  - AC-3: 与 `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md` 等设计文档口径一致。
+  - AC-3: 与 `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` 等稳定设计权威口径一致。
   - AC-4: S9/S10 相关测试套件在 testing 手册中有对应条目。
   - AC-5: 轻客户端专题以稳定三件套 `p2p-mobile-light-client-authoritative-state.*` 维护，并映射到独立维护责任；历史 `TASK-P2P-MLC-*` 只作追溯，不单独构成现时完成或发布结论。
   - AC-6: PoS fixed slot/epoch wall-clock、漏槽与时间窗口合同已由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 承载；历史任务链 `TASK-P2P-008` 只作追溯。
@@ -236,8 +245,8 @@
 ## 4. Technical Specifications
 - Architecture Overview: p2p 模块负责 `oasis7_net`/`oasis7_consensus`/`oasis7_distfs` 与 node 侧分布式运行协同，强调一致性与故障恢复。
 - Integration Points:
-  - `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
-  - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
+  - `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
+  - `doc/p2p/design.md`
   - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
   - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`

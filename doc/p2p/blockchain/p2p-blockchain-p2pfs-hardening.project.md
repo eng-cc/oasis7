@@ -14,6 +14,9 @@
 | HP6-0..2 | `PRD-P2P-MIG-050` | completed | 2026-02-17 | membership policy 规范化与 fail-fast。 |
 | HP7-0..2 | `PRD-P2P-MIG-051` | completed | 2026-02-17 | sequencer allowlist 规范化与 fail-fast。 |
 | HP8-0..2 | `PRD-P2P-MIG-052` | completed | 2026-02-17 | 共享 signer policy 工具与回归。 |
+| PRG-1..4 | `PRD-P2P-MIG-058` | historical-completed | 2026-02-18 | production-grade blockchain/P2PFS 路线、链式哈希与签名结算的阶段 provenance。 |
+| PRG-B | `PRD-P2P-MIG-064` | historical-completed | 2026-02-19 | commit-execution context/result 与 snapshot 接线；旧 viewer-live/bridge 入口已 superseded。 |
+| PRG-C | `PRD-P2P-MIG-065` | retired-future-gap | 2026-02-19 | Phase-C 专用 DistFS request/proof envelope、challenge topic 与 specialized driver 仅为历史目标；现有 provider/DHT/fetch-route 网络探测 gate 不在此缺口内。 |
 
 ## 依赖
 
@@ -26,5 +29,6 @@
 
 - Phase 2–8 的历史任务均已完成；该状态仅保留工程 provenance，不构成当前 production、recovery 或 release readiness。
 - 旧 Phase 2 损坏状态 fallback 及 distributed-runtime 的 HMAC-only 描述已标记为 superseded；当前合同为损坏状态 fail-closed、缺失状态才允许默认初始化。
+- production-grade roadmap 与 Phase B/Phase C 独立三件套已在 2026-07-28 归并。PRG-C 的历史完成标签不代表其专用 envelope/topic/driver 已实现；若重启该专用能力，仍需新 runtime + blockchain ops + QA 专题。
 - 此处记录的是历史工程完成，不是当前生产/恢复/发布 gate。节点 inventory、health/readiness 采样、state-sync/restore drill、升级或 rollback 证据需要进入正式 runbook 和 `doc/testing/evidence/`。
 - 非 readiness：production keystore/signer custody、governance signer externalization、genesis binding 与 ceremony/QA gate 仍由 mainnet readiness 专题追踪；不得由本记录推导 mainnet-grade。
