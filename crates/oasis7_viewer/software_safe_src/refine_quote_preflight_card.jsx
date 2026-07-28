@@ -70,7 +70,7 @@ function linkageCopy(value, locale, tr) {
 
 function QuoteMetric(props) {
   return (
-    <div class="metric">
+    <div class={props.class ? `metric ${props.class}` : "metric"}>
       <div class="metric__label">{props.label}</div>
       <div class="metric__value">{displayValue(props.value)}</div>
       {props.detail ? <div class="metric__detail">{props.detail}</div> : null}
@@ -104,11 +104,15 @@ export function RefineQuotePreflightCard(props) {
           <span class="badge">{`${tr(locale(), "Agent", "Agent")}: ${displayValue(quote().owner_agent_id)}`}</span>
         </div>
         <div class="summary-grid">
+          <QuoteMetric
+            class="metric--target-gap-outcome"
+            label={tr(locale(), "目标缺口", "Target gap")}
+            value={`${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`}
+          />
           <QuoteMetric label={tr(locale(), "精炼量", "Refine amount")} value={`${displayValue(quote().compound_mass_g)} g`} />
           <QuoteMetric label={tr(locale(), "电力成本", "Electricity cost")} value={quote().electricity_cost} />
           <QuoteMetric label={tr(locale(), "剩余电力", "Electricity remaining")} value={quote().electricity_after} />
           <QuoteMetric label={tr(locale(), "硬件产出", "Hardware output")} value={quote().hardware_output} />
-          <QuoteMetric label={tr(locale(), "目标缺口", "Target gap")} value={`${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`} />
           <QuoteMetric label={tr(locale(), "建议精炼量", "Recommended amount")} value={`${displayValue(quote().recommended_refine_amount)} g`} />
         </div>
         <div class="feedback-summary">
