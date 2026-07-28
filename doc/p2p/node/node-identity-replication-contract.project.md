@@ -5,17 +5,11 @@
 
 ## 任务拆解
 
-- [x] `PRD-P2P-MIG-088`: validator signer binding, apply-before-observe
-  replication ingest, and explicit PoS recovery failure absorbed.
-- [x] `PRD-P2P-MIG-092`: signed DistFS replication, guard persistence, stale or
-  duplicate rejection, and recovery boundary absorbed.
-- [x] `PRD-P2P-MIG-095`: local config keypair bootstrap and explicit invalid or
-  unwritable-config failure boundary absorbed.
-- [x] `PRD-P2P-MIG-099`: node replication network injection and world/topic
-  isolation absorbed without making UDP fallback or `aw.*` names current truth.
-- [x] `node-identity-replication-contract-consolidation`
-  (`task_466ecbb2e1ab4e79915c58de7e95dd78`): established the stable authority;
-  historical source triplets are retired after shared index/route repair.
+- [x] node-identity-replication-signer-binding (PRD-P2P-MIG-088) [test_tier_required]: absorbed validator signer binding, apply-before-observe replication ingest, and explicit PoS recovery failure. Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
+- [x] node-identity-replication-distfs (PRD-P2P-MIG-092) [test_tier_required]: absorbed signed DistFS replication, guard persistence, stale or duplicate rejection, and recovery boundary. Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
+- [x] node-identity-replication-keypair-bootstrap (PRD-P2P-MIG-095) [test_tier_required]: absorbed local config keypair bootstrap and the explicit invalid or unwritable-config failure boundary. Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
+- [x] node-identity-replication-network-injection (PRD-P2P-MIG-099) [test_tier_required]: absorbed node replication network injection and world/topic isolation without making UDP fallback or `aw.*` names current truth. Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
+- [x] node-identity-replication-contract-consolidation (PRD-P2P-MIG-088/092/095/099) [test_tier_required]: established the stable authority and retired historical source triplets after shared index/route repair. Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
 
 ## 依赖
 
