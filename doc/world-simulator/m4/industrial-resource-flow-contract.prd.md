@@ -21,6 +21,10 @@
 
 GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_impact_preview`、`product_validation_quote` / `validation_unlock_preview`、`power_survival_quote` / `energy_recovery_preview`、`power_sale_quote` / `energy_liquidity_preview`、`market_quote_decision_preview`、`refine_quote` / `refine_preview` 与 data-access recovery 仍是未收口的可读性债务。它们只要求未来实现解释既有规则与后果，不代表本次文档迁移已经实现 quote、Viewer surface、ABI 变更、数值重平衡或发布 readiness。
 
+工业恢复的玩家语义由 gameplay agency/top-level 合同承接：资源不足、采空、不可达或精炼短缺不能把 Agent 的自动裁剪、改道或拒绝伪装成原意图已经完成；正式 surface 将原 accepted intent、约束原因、保留进度和 wait / repair / reroute / reprioritize 的下一决策连在同一因果链。`refine_value_class` 的唯一现行玩家分类是 `enough_to_advance / partial_progress / poor_power_tradeoff`；历史 `enough_for_next_step` 只作该首项的迁移别名，不另行冻结公式或行为。
+
+历史 LLM debug 资源注入保持 `LLMSKIP`/debug-probe 边界：默认不暴露给正式玩家，非 debug 模式必须拒绝，且不得作为工业 progression、经济结果、active-LLM formal lane 或 playability/release 证据。该边界不新增调试工具、玩家资源入口或运行时实现承诺。
+
 ### Out of Scope
 
 - 完整物流寻路/拥塞网络、金融市场、科技树或职业系统。

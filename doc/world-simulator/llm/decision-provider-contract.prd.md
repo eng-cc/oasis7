@@ -93,6 +93,10 @@
   - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
 - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
 - 当前内置 Responses provider 的 transport、tool-only prompt、bounded repair、memory-budget 与 chat trace 基线由 `llm-agent-behavior.prd.md` 承载；本专题定义 provider-agnostic 约束，不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority。
+- 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。
+- `--jobs` 只描述执行并行度，不是行为等价或性能比较的充分条件。外部 provider 的非确定性运行必须在相同输入下重复采样；任一场景的 timeout、invalid output、stuck-loop、trace-completeness 缺口或未解释的错误不能因聚合均值/总量而被掩盖。
+- 工业调试注入属于显式 debug capability，不属于普通 `ActionCatalog`、默认体验或 provider parity 样本。provider 只能选择当前 catalog 中已声明且经 runtime 校验的候选动作；资源、精炼 quote、经济与 replay 语义不由 provider contract 重定义。
+- 已完成的历史多场景/工业长跑样本只保留为实现与风险演进证据；其旧阈值、prompt、计数或成功结论不得提升为当前 provider 成本、稳定性、parity 或发布准入证明。实际 parity/rollout 门槛以 `provider-agent-experience-parity.prd.md` 为准。
 - Local Provider Adapter Strategy:
   - 使用 adapter 把 `ObservationEnvelope` 转成 `Local Provider` 可消费的会话输入。
   - 通过有限 `tool`/`action` 暴露 world 可执行动作，而不是开放任意外部命令。
@@ -146,6 +150,7 @@
 | PRD-WORLD_SIMULATOR-036 | TASK-WORLD_SIMULATOR-112 | `test_tier_required` | `./scripts/doc-governance-check.sh` | 模块文档入口、专题索引、owner/边界定义 |
 | PRD-WORLD_SIMULATOR-036 | T1/T2/T3/T4/T5 | `test_tier_required` / `test_tier_full` | fixture contract test + mock provider + future adapter PoC tests | agent provider abstraction、外部 provider 接入边界、trace 与 memory 桥接 |
 | PRD-WORLD_SIMULATOR-036 | runtime-live bridge baseline | `test_tier_required` | event/snapshot schema exhaustiveness + provider timeout/invalid-output trace + reconnect/replay idempotence + state/journal recovery proof | runtime/Agent/Viewer 桥接；不得以 Viewer snapshot 作为恢复真值 |
+| PRD-WORLD_SIMULATOR-036 | multi-scenario evaluation evidence | `test_tier_required` / `test_tier_full` | fixed scenario/fixture/profile epoch; retain per-scenario plus aggregate artifacts; repeated samples for nondeterministic providers | comparability, stuck-loop/error visibility, and parity evidence; historical long-run samples alone are insufficient |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

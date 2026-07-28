@@ -85,6 +85,11 @@
 - 请求以 `instructions + input + tools` 组装。Responses 的 function call 优先映射为受限内部模块或 `agent_submit_decision`；文本 JSON 仅保留兼容解析路径，不能绕过 schema、当前 Agent 身份或 runtime 校验。
 - provider / parser / tool 失败必须区分写入 `llm_error`、`parse_error`、step trace 与 diagnostics；diagnostics 可以记录 model、延迟、prompt/completion/total token 和有限 retry count。它们是观测与成本输入，不等同于计费、发布准入或 runtime receipt。
 
+### 工业调试能力与评测边界
+- Agent 只能经 schema 受限的候选决策提出采矿、精炼等已注册动作；动作目录、资源/经济语义、quote、拒绝与 replay 仍由 runtime / gameplay authority 定义和裁定，provider 不获得直接世界状态写权限。
+- `agent_debug_grant_resource` 仅在显式 `debug_mode=true` 时加入 provider tool 集；普通模式不得暴露它，模型即使伪造该动作也必须收敛为可解释错误或无状态变化的 `Wait`。带调试注入的运行仅可构造/诊断场景，不能充当正常工业行为、provider parity、成本或稳定性样本。
+- 多场景长跑的 trace、`report.json`、`run.log` 与 `summary.txt` 是行为诊断工件。它们能揭示 action、错误、prompt 大小和卡死/回退信号，但单次样本、聚合总量或并行运行本身不证明 provider parity、真实成本稳定性、默认启用资格或玩家体验等价；这些结论仍须使用 `decision-provider-contract` 和 provider parity 专题的固定口径与证据。
+
 ### Prompt、记忆和有界决策循环
 - 当前 prompt 是 tool-only：每个对话 turn 只允许一个查询工具或最终 `agent_submit_decision`，不得混用查询与最终决策，也不得把自由文本当成动作授权。
 - `PromptBudget` 对 observation、conversation/module history 与 memory digest 施加优先级和裁剪；协议/schema 等高优先级段优先保留，软段先压缩。记忆是本地权威上下文，不把外部 provider 缓存当成世界事实。
