@@ -9,8 +9,8 @@ use std::path::Path;
 use super::kernel::WorldEvent;
 use super::kernel::{ChunkRuntimeConfig, MicroDepotPlayerFacilitySnapshot};
 use super::types::{
-    ActionEnvelope, ActionId, CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION,
-    WorldEventId, WorldTime,
+    ActionEnvelope, ActionId, WorldEventId, WorldTime, CHUNK_GENERATION_SCHEMA_VERSION,
+    JOURNAL_VERSION, SNAPSHOT_VERSION,
 };
 use super::world_model::{WorldConfig, WorldModel};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
@@ -153,6 +153,17 @@ pub struct PlayerGameplayPrimaryIntent {
     pub message: Option<String>,
     #[serde(default)]
     pub resume_required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayWaitResolutionQuote {
+    #[serde(default)]
+    pub safe_to_wait: bool,
+    pub resolution_trigger: String,
+    pub recheck_tick_or_event: String,
+    pub expected_change: String,
+    pub unresolved_risk: String,
+    pub alternative_unlock_condition: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -311,6 +322,8 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_intent: Option<PlayerGameplayPrimaryIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_resolution_quote: Option<PlayerGameplayWaitResolutionQuote>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
     #[serde(default)]
     pub micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
@@ -436,6 +449,8 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     primary_intent: Option<PlayerGameplayPrimaryIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    wait_resolution_quote: Option<PlayerGameplayWaitResolutionQuote>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_claim: Option<PlayerAgentClaimSnapshot>,
     #[serde(default)]
     micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
@@ -538,6 +553,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
             primary_intent: legacy.primary_intent,
+            wait_resolution_quote: legacy.wait_resolution_quote,
             agent_claim: legacy.agent_claim,
             micro_depot_facilities: legacy.micro_depot_facilities,
             small_player_lane_id: legacy

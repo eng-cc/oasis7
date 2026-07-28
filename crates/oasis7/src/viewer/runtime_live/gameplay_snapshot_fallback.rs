@@ -1,6 +1,35 @@
 use crate::simulator::persist::{
-    PlayerGameplayAction, PlayerGameplayFallbackTradeoffOption, PlayerGameplaySnapshot,
+    PlayerGameplayAction, PlayerGameplayFallbackTradeoffOption, PlayerGameplayRecentFeedback,
+    PlayerGameplaySnapshot, PlayerGameplayWaitResolutionQuote,
 };
+
+pub(super) fn player_gameplay_wait_resolution_quote(
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<PlayerGameplayWaitResolutionQuote> {
+    let feedback = recent_feedback?;
+    if !matches!(feedback.stage.as_str(), "accepted" | "queued") {
+        return None;
+    }
+
+    Some(PlayerGameplayWaitResolutionQuote {
+        safe_to_wait: false,
+        resolution_trigger: format!(
+            "committed feedback for {} is pending runtime application",
+            feedback.action
+        ),
+        recheck_tick_or_event: format!(
+            "recheck after the next committed runtime event for {}",
+            feedback.action
+        ),
+        expected_change: feedback.effect.clone(),
+        unresolved_risk: feedback.reason.clone().unwrap_or_else(|| {
+            "the committed action may still be blocked or leave world state unchanged".to_string()
+        }),
+        alternative_unlock_condition: feedback.hint.clone().unwrap_or_else(|| {
+            "request a fresh gameplay snapshot and choose an enabled action".to_string()
+        }),
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct FallbackTradeoffDecision {

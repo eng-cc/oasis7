@@ -31,6 +31,7 @@ mod snapshot_progress_empty_world;
 mod snapshot_reprioritize;
 #[path = "tests_support.rs"]
 mod tests_support;
+mod wait_resolution_quote;
 
 use tests_support::*;
 
