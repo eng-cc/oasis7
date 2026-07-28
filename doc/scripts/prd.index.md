@@ -15,7 +15,6 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/scripts/precommit/pre-commit.prd.md` | 操作契约已收口于 PRD，不再维护独立 design | `doc/scripts/precommit/pre-commit.project.md` |
-| `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | `doc/scripts/wasm/builtin-wasm-nightly-build-std.design.md` | `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
@@ -23,6 +22,6 @@
 - 默认文档配对为 `*.prd.md`、`*.design.md` 与同名 `*.project.md`；表内显式标记收口的专题不再为重复内容保留空壳 design。
 - 首次选择 pre-commit 的当前门禁契约或失败修复流程时，先读
   `doc/scripts/precommit/README.md`；本页保留精确文件检索。
-- 首次进入 WASM 专题时，先读 `doc/scripts/wasm/README.md`；它会把 historical
-  build-std 追溯与 world-runtime 的发布级 canonical pipeline 分开，本页只保留精确
-  triplet 检索。
+- 首次进入 WASM 专题时，先读 `doc/scripts/wasm/README.md`；它会把 absorbed historical
+  build-std 记录与 world-runtime 的发布级 canonical pipeline 分开。历史记录位于
+  `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`。

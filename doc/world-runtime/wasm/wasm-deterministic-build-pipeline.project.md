@@ -18,6 +18,19 @@
   - [x] WDBP-3.3 (PRD-WORLD_RUNTIME-022) [test_tier_required]: 在 production runtime / node 主入口绑定 hardened `ReleaseSecurityPolicy`，并把 effective policy 写入 status / acceptance evidence。
 - [x] WDBP-4 (PRD-WORLD_RUNTIME-022) [test_tier_required]: 把 `compile_module_artifact_from_source` 的生产路径外移到 external Docker builder 或 production 默认禁用，runtime 只消费 binary + build receipt。
 
+## 已吸收的 historical nightly build-std 记录
+
+早期 nightly build-std 专题已完成，并已将其唯一仍有价值的历史语义收口到本节；它不是当前发布链路，也不恢复 host-native build 为有效入口。
+
+- 历史问题与目标：为 builtin WASM 固定输入闭环，消除宿主预编译 `std` 差异造成的 hash 漂移；当时通过路径归一化（`--remap-path-prefix`）和 WASM custom-section canonicalize，使 hash 只反映可执行语义。
+- 历史构建约束：pinned `nightly-2025-12-11`、`rust-src`、`wasm32-unknown-unknown`，并以 `OASIS7_WASM_BUILD_STD=1`、`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort` 和空的 `OASIS7_WASM_BUILD_STD_FEATURES` 驱动 `-Z build-std`（不追加 `-Z build-std-features`）。
+- 历史范围边界：该轮不改 runtime ABI、DistFS 协议、hash 算法或 manifest 文件格式，也不定义发布级 Docker canonical builder；后者现由本专题的 active contract 定义。
+- 历史实施与验证：`scripts/build-wasm-module.sh` 负责 toolchain/组件准备，`tools/wasm_build_suite` 注入受环境变量控制的 `-Z build-std*` 参数；CI 固化对应环境与组件；m1/m4 hash 清单完成同步，并通过 `scripts/sync-m1-builtin-wasm-artifacts.sh --check`、`scripts/sync-m4-builtin-wasm-artifacts.sh --check` 和 `CI_VERBOSE=1 ./scripts/ci-tests.sh required`。
+- 已完成的 NBS-1 至 NBS-8：需求/设计/项目文档、nightly 构建入口、build-suite 参数、CI 环境、m1/m4 清单同步及 required-tier 回归均于 2026-02-17 收口；2026-03-03 仅完成命名迁移，不改变该历史结论。
+- 历史风险：`-Z build-std` 首次构建成本较高；nightly 升级或不可用会改变 hash 或阻断 CI，故必须显式 pin 并按升级流程重新验证。
+
+当前 authoritative policy 取代上述历史实现：所有 publishable WASM 走 digest-pinned Docker canonical builder，发布清单只写 `linux-x86_64` canonical token，并以 build receipt、identity/release evidence、cross-host Docker evidence 和 binary-only runtime consumption 作为有效发布边界。历史 build-std 记录只用于参数、旧 CI 约束和 hash 漂移背景追溯。
+
 ## 依赖
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
 - `scripts/build-wasm-module.sh`

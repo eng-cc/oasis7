@@ -107,7 +107,7 @@
 | `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md` |
 | `doc/p2p/observer/observer-sync-source-mode.prd.md` | `doc/p2p/observer/observer-sync-source-mode.design.md` | `doc/p2p/observer/observer-sync-source-mode.project.md` |
 | `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.design.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.project.md` |
-| `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md` | `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md` | `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.project.md` |
+| `doc/p2p/token/mainchain-token-ideal-transaction.prd.md` | `doc/p2p/token/mainchain-token-ideal-transaction.design.md` | `doc/p2p/token/mainchain-token-ideal-transaction.project.md` |
 | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md` | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md` | `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md` |
 | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md` |
 | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md` |
@@ -128,6 +128,7 @@
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`。
 - Observer source 专业权威：DHT 增量专题（`PRD-P2P-MIG-109-001`）已合并进 `observer-sync-source-mode.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
+- Ideal transaction 专业权威：2026-06-08 理想交易升级三件套已合并进 `mainchain-token-ideal-transaction.{prd,design,project}.md`；`PRD-P2P-ITX-001/002/003` 由继任 project 任务行承接，历史过程只从 Git 与 GitHub task evidence 追溯。
 - Observer metrics 专业权威：统计桥接（`PRD-P2P-MIG-106-001`）与策略可观测性（`PRD-P2P-MIG-107-001`）已合并进 `observer-sync-mode-runtime-metrics.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
 - NodePoints 专业权威：runtime closure（`PRD-P2P-MIG-090-001`）与 multi-node closure test（`PRD-P2P-MIG-089-001`）的有效语义已合并进 `doc/p2p/node/node-contribution-points.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除；历史过程只从 Git history 与 GitHub task evidence 追溯。
 - Node network 专业权威：net stack unification（`PRD-P2P-MIG-105-001`）与 wasm32/libp2p compile guard（`PRD-P2P-MIG-104-001`）的有效语义已合并进 `doc/p2p/network/readme-p1-network-production-hardening.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除。

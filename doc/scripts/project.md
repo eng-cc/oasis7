@@ -54,7 +54,7 @@
     - `git diff --check`
 - [x] TASK-SCRIPTS-013 (PRD-SCRIPTS-001/002) [test_tier_required]: 补齐 `doc/scripts/wasm/**` 活跃手册中遗漏的 builtin wasm artifact 当前路径口径，统一到 `crates/oasis7/...`。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "crates/oasis7/src/runtime/world/artifacts/m[14]_builtin_modules.sha256" doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
+    - 历史验收记录：builtin WASM 的 build-std 输入、m1/m4 hash 清单与同步检查已吸收到 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`；当前 artifact 路径以 scripts 与 world-runtime canonical pipeline 为准。
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-014 (PRD-SCRIPTS-004) [test_tier_required]: 新增 worktree-isolated harness 主入口，收口 `run-game-test.sh` / `run-producer-playtest.sh` 的 worktree 隔离契约，并同步 scripts/testing 文档。

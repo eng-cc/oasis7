@@ -108,7 +108,6 @@
     - `doc/world-runtime/project.md`
     - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
     - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`
-    - `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
     - `scripts/build-wasm-module.sh`
     - `scripts/sync-m1-builtin-wasm-artifacts.sh`
     - `scripts/ci-m1-wasm-summary.sh`

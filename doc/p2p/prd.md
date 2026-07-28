@@ -228,7 +228,7 @@
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
   - AC-37: `formal-network-tiers-testnet-mechanism` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层 operator/runtime network-tier 模型、`public_testnet_rehearsal` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate；这些 tier 不作为玩家世界模型。
   - AC-38: `hosted-public-join-managed-identity-custody` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
-  - AC-38A: `mainchain-token-ideal-transaction-upgrade-2026-06-08` 专题文档必须落盘并映射任务链 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)`，明确理想交易对象字段分组、完整 JSON 草案、理想签名域、理想回执与最小理想升级集，并显式声明其为 ideal target 而非当前实现真值。
+  - AC-38A: 稳定权威 `mainchain-token-ideal-transaction` 承接 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)` 与 `PRD-P2P-ITX-001/002/003`：明确 signed metadata 字段、完整 JSON、签名域、回执与 Phase 1 最小升级集；fee quote 仍是 metadata-only，真实 fee/auth execution 属于独立 Phase 2+，不得误称当前实现真值。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`；这些是判定枚举，placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 必须保持阻断。
   - AC-40: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以 runbook/project 当前 verdict 约束 public claims。
   - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
@@ -259,7 +259,7 @@
   - `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
-  - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`
+  - `doc/p2p/token/mainchain-token-ideal-transaction.prd.md`
   - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/product/world-rules-core-gameplay/prd.md`
