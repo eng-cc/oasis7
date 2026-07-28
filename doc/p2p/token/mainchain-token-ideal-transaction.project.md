@@ -5,11 +5,11 @@
 
 ## 任务拆解（含吸收任务谱系）
 
-- [x] ideal-transaction-doc-freeze (PRD-P2P-ITX-001) [test_tier_required]: the former dated topic is absorbed into this stable authority; historical process remains traceable through Git and GitHub task evidence. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
+- [x] ideal-transaction-doc-freeze (PRD-P2P-ITX-001/002/003) [test_tier_required]: the former dated topic is absorbed into this stable authority; historical process remains traceable through Git and GitHub task evidence. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
 - [x] ideal-transaction-v2-context (PRD-P2P-ITX-001) [test_tier_required]: chain id, transaction version/type and validity reached submit, signing, node verification, explorer and launcher. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
-- [x] ideal-transaction-asset-metadata (PRD-P2P-ITX-002) [test_tier_required]: asset, memo and network metadata reached the same closure. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
+- [x] ideal-transaction-asset-metadata (PRD-P2P-ITX-001/002) [test_tier_required]: asset, memo and network metadata reached the same closure. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
 - [x] ideal-transaction-live-chain-status (PRD-P2P-ITX-001) [test_tier_required]: chain/network identity is live-runtime only, with no launcher fallback. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
-- [x] ideal-transaction-fee-quote-metadata (PRD-P2P-ITX-002) [test_tier_required]: payload hash, fee quote and client-request metadata are propagated without fee execution. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
+- [x] ideal-transaction-fee-quote-metadata (PRD-P2P-ITX-001/002) [test_tier_required]: payload hash, fee quote and client-request metadata are propagated without fee execution. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
 - [x] ideal-transaction-phase-two-scope (PRD-P2P-ITX-003) [test_tier_required]: payer, sponsor, priority and actual fee economics stay out of Phase 1. Trace: #2735 (task_9d8c13c232d04249b8c3e4dfb709acb2)
 
 ## 依赖

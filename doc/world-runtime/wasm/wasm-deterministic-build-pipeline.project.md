@@ -23,9 +23,9 @@
 早期 nightly build-std 专题已完成，并已将其唯一仍有价值的历史语义收口到本节；它不是当前发布链路，也不恢复 host-native build 为有效入口。
 
 - 历史问题与目标：为 builtin WASM 固定输入闭环，消除宿主预编译 `std` 差异造成的 hash 漂移；当时通过路径归一化（`--remap-path-prefix`）和 WASM custom-section canonicalize，使 hash 只反映可执行语义。
-- 历史构建约束：pinned `nightly-2025-12-11`、`rust-src`、`wasm32-unknown-unknown`，并以 `OASIS7_WASM_BUILD_STD=1`、`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort` 和空的 `OASIS7_WASM_BUILD_STD_FEATURES` 驱动 `-Z build-std`（不追加 `-Z build-std-features`）。
+- 历史构建约束：pinned `nightly-2025-12-11`（`OASIS7_WASM_TOOLCHAIN=nightly-2025-12-11`）、`rust-src`、`wasm32-unknown-unknown`，并以 `OASIS7_WASM_BUILD_STD=1`、`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort` 和空的 `OASIS7_WASM_BUILD_STD_FEATURES` 驱动 `-Z build-std`（不追加 `-Z build-std-features`）。
 - 历史范围边界：该轮不改 runtime ABI、DistFS 协议、hash 算法或 manifest 文件格式，也不定义发布级 Docker canonical builder；后者现由本专题的 active contract 定义。
-- 历史实施与验证：`scripts/build-wasm-module.sh` 负责 toolchain/组件准备，`tools/wasm_build_suite` 注入受环境变量控制的 `-Z build-std*` 参数；CI 固化对应环境与组件；m1/m4 hash 清单完成同步，并通过 `scripts/sync-m1-builtin-wasm-artifacts.sh --check`、`scripts/sync-m4-builtin-wasm-artifacts.sh --check` 和 `CI_VERBOSE=1 ./scripts/ci-tests.sh required`。
+- 历史实施与验证：`scripts/build-wasm-module.sh` 与 aggregate 入口 `scripts/build-builtin-wasm-modules.sh` 负责 toolchain/组件准备，`tools/wasm_build_suite` 注入受环境变量控制的 `-Z build-std*` 参数；CI 固化对应环境与组件；m1/m4 hash 清单完成同步，并通过 `scripts/sync-m1-builtin-wasm-artifacts.sh --check`、`scripts/sync-m4-builtin-wasm-artifacts.sh --check` 和 `CI_VERBOSE=1 ./scripts/ci-tests.sh required`。
 - 已完成的 NBS-1 至 NBS-8：需求/设计/项目文档、nightly 构建入口、build-suite 参数、CI 环境、m1/m4 清单同步及 required-tier 回归均于 2026-02-17 收口；2026-03-03 仅完成命名迁移，不改变该历史结论。
 - 历史风险：`-Z build-std` 首次构建成本较高；nightly 升级或不可用会改变 hash 或阻断 CI，故必须显式 pin 并按升级流程重新验证。
 
