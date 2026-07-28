@@ -18,7 +18,7 @@
 - `scripts/llm-longrun-stress.sh`
 - `README.md`
 - `doc/world-simulator/llm/llm-multi-scenario-evaluation.prd.md`
-- `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md`
+- `doc/world-simulator/llm/llm-agent-behavior.prd.md`（当前 tool-only、预算、repair 与 multi-segment collapse 合同）
 
 ## 状态
 - 当前阶段：LMSO30（已完成）

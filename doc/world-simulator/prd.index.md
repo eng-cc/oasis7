@@ -82,10 +82,7 @@
 | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md` | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.project.md` |
 | `doc/world-simulator/llm/indirect-control-tick-lifecycle-long-term-memory.prd.md` | `doc/world-simulator/llm/indirect-control-tick-lifecycle-long-term-memory.design.md` | `doc/world-simulator/llm/indirect-control-tick-lifecycle-long-term-memory.project.md` |
 | `doc/world-simulator/llm/llm-agent-behavior.prd.md` | `doc/world-simulator/llm/llm-agent-behavior.design.md` | `doc/world-simulator/llm/llm-agent-behavior.project.md` |
-| `doc/world-simulator/llm/llm-async-openai-responses.prd.md` | `doc/world-simulator/llm/llm-async-openai-responses.design.md` | `doc/world-simulator/llm/llm-async-openai-responses.project.md` |
-| `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.design.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md` |
 | `doc/world-simulator/llm/decision-provider-contract.prd.md` | `doc/world-simulator/llm/decision-provider-contract.design.md` | `doc/world-simulator/llm/decision-provider-contract.project.md` |
-| `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.design.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md` |
 | `doc/world-simulator/llm/provider-loopback-http-contract.prd.md` | `doc/world-simulator/llm/provider-loopback-http-contract.design.md` | `doc/world-simulator/llm/provider-loopback-http-contract.project.md` |
 | `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` | `doc/world-simulator/llm/provider-agent-experience-parity.design.md` | `doc/world-simulator/llm/provider-agent-experience-parity.project.md` |
 | `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` | `—` | `doc/world-simulator/llm/provider-agent-dual-mode.project.md` |
@@ -94,8 +91,6 @@
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | `doc/world-simulator/llm/llm-lmso29-stability.project.md` |
 | `doc/world-simulator/llm/llm-multi-scenario-evaluation.prd.md` | `doc/world-simulator/llm/llm-multi-scenario-evaluation.design.md` | `doc/world-simulator/llm/llm-multi-scenario-evaluation.project.md` |
 | `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.design.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.project.md` |
-| `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.prd.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.design.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md` |
-| `doc/world-simulator/llm/llm-prompt-system.prd.md` | `doc/world-simulator/llm/llm-prompt-system.design.md` | `doc/world-simulator/llm/llm-prompt-system.project.md` |
 | `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.project.md` |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md` |
 | `doc/world-simulator/scenario/asteroid-fragment-renaming.prd.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.design.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` |
