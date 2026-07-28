@@ -23,9 +23,9 @@ the same reference and must not auto-close the task before terminal finalization
 REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
 mergeStateStatus=BEHIND is advisory by itself; if GitHub can still merge the PR
 cleanly, the workflow does not force a local rebase before merge.
-When mergeStateStatus=BLOCKED is only missing review approval and user/task
-policy explicitly allows skipping it, the normal flow may use repo admin merge
-after re-checking checks, mergeability, requested changes, comments, and threads.
+When mergeStateStatus=BLOCKED is only missing review approval, the fresh live gate
+may emit `use_admin_merge: true` under standing policy; no additional authorization.
+See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
 
 Default conventions:
 - source branch: current branch
@@ -1161,11 +1161,18 @@ if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
 import json,os,sys
 p,worktree,branch=sys.argv[1:]
 d=json.load(open(p,encoding='utf-8'))
-hits=[]
+canonical_hits=[]
+legacy_hits=[]
+resolved_worktree=os.path.realpath(worktree)
 for uid,r in (d.get('tasks') or {}).items():
+    canonical_worktree=os.path.realpath(str(r.get('canonical_worktree') or '')) if r.get('canonical_worktree') else ''
+    task_branch=str(r.get('task_branch') or '')
+    if canonical_worktree==resolved_worktree and task_branch==branch:
+        canonical_hits.append((uid,r))
     hint=os.path.realpath(str(r.get('worktree_hint') or '')) if r.get('worktree_hint') else ''
     if hint==os.path.realpath(worktree) or str(r.get('branch') or r.get('source_branch') or '')==branch:
-        hits.append((uid,r))
+        legacy_hits.append((uid,r))
+hits=canonical_hits or legacy_hits
 if len(hits)!=1: raise SystemExit(f'draft_candidate requires exactly one bound task mapping, found {len(hits)}')
 uid,r=hits[0]; print(uid); print(r.get('issue_url') or ''); print(r.get('issue_number') or '')
 PY

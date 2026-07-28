@@ -307,6 +307,53 @@ def finish_active_snapshot_cleanup(journal: dict[str, Any]) -> None:
     source.unlink()
 
 
+def replacement_tasks_json_path(root: pathlib.Path, mapping_path: pathlib.Path,
+                                replacement: pathlib.Path) -> pathlib.Path:
+    """Map the active worktree's task cache path into the replacement worktree."""
+    try:
+        relative = mapping_path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise MigrationError("tasks mapping must be inside the active canonical worktree") from exc
+    target = (replacement / relative).resolve()
+    try:
+        target.relative_to(replacement)
+    except ValueError as exc:
+        raise MigrationError("replacement tasks mapping escapes the replacement worktree") from exc
+    return target
+
+
+def materialize_replacement_mapping(root: pathlib.Path, mapping_path: pathlib.Path,
+                                    replacement: pathlib.Path, task_uid: str,
+                                    receipt: dict[str, Any]) -> pathlib.Path:
+    """Publish and read back the committed mapping where replacement bootstrap reads it."""
+    if (not replacement.is_dir()
+            or not active_identity_matches_receipt(replacement, receipt)
+            or path_common_dir(replacement) != path_common_dir(root)):
+        raise MigrationError("replacement identity readback failed before mapping materialization")
+    try:
+        committed_mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MigrationError(f"cannot read committed task mapping: {exc}") from exc
+    readback_committed_migration(mapping_path, task_uid, receipt)
+    target = replacement_tasks_json_path(root, mapping_path, replacement)
+    if target.exists():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise MigrationError(f"cannot read replacement task mapping: {exc}") from exc
+        current = (existing.get("tasks") or {}).get(task_uid)
+        if isinstance(current, dict) and current.get("bootstrap_epoch") == receipt.get("new_epoch"):
+            if (current.get("canonical_worktree") != receipt.get("new_worktree")
+                    or current.get("task_branch") != receipt.get("new_branch")
+                    or current.get("branch_identity_migration_receipt") != receipt):
+                raise MigrationError("replacement same-epoch mapping conflicts with migration receipt")
+            readback_committed_migration(target, task_uid, receipt)
+            return target
+    durable_store.atomic_replace_json(target, committed_mapping)
+    readback_committed_migration(target, task_uid, receipt)
+    return target
+
+
 def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
                                  receipt: dict[str, Any]) -> dict[str, Any]:
     """Reload and validate the durable migration record before authority is emitted."""
@@ -334,6 +381,7 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
         ("bootstrap_epoch", "new_epoch"),
         ("canonical_worktree", "new_worktree"),
         ("task_branch", "new_branch"),
+        ("worktree_hint", "new_worktree"),
     )
     if any(record.get(record_field) != receipt.get(receipt_field)
            for record_field, receipt_field in pairs):
@@ -372,6 +420,99 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
     return record
 
 
+def repair_worktree_hint_for_exact_retry(mapping_path: pathlib.Path, task_uid: str,
+                                         receipt: dict[str, Any]) -> None:
+    """Repair only the derived active-worktree mirror for an otherwise exact receipt."""
+    try:
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MigrationError(f"cannot read exact retry task mapping: {exc}") from exc
+    record = require_record(mapping, task_uid)
+    if (record.get("bootstrap_epoch") != receipt.get("new_epoch")
+            or record.get("canonical_worktree") != receipt.get("new_worktree")
+            or record.get("task_branch") != receipt.get("new_branch")
+            or record.get("branch_identity_migration_receipt") != receipt):
+        raise MigrationError("exact retry task mapping disagrees with migration receipt")
+    record["worktree_hint"] = receipt["new_worktree"]
+    durable_store.atomic_replace_json(mapping_path, mapping)
+
+
+def active_identity_matches_receipt(root: pathlib.Path, receipt: dict[str, Any]) -> bool:
+    """Require the prior identity, while allowing later commits that extend its exact head."""
+    try:
+        prior_head = str(receipt.get("implementation_head") or "")
+        current_head = git(root, "rev-parse", "HEAD")
+        return (
+            root == pathlib.Path(str(receipt.get("new_worktree") or "")).resolve()
+            and git(root, "symbolic-ref", "--quiet", "--short", "HEAD") == receipt.get("new_branch")
+            and str(path_common_dir(root)) == receipt.get("new_common_dir")
+            and bool(prior_head)
+            and git_ok(root, "merge-base", "--is-ancestor", prior_head, current_head)
+        )
+    except MigrationError:
+        return False
+
+
+def committed_request_kind(args: argparse.Namespace, replacement: pathlib.Path,
+                           receipt: dict[str, Any], record: dict[str, Any]) -> str:
+    """Classify a request against the last committed migration without guessing intent."""
+    old_worktree = pathlib.Path(str(receipt.get("new_worktree") or "")).resolve()
+    same_worktree = replacement == old_worktree
+    same_branch = args.replacement_branch == receipt.get("new_branch")
+    migration = record.get("branch_identity_migration")
+    exact = (
+        same_worktree
+        and same_branch
+        and args.comparison_ref == receipt.get("comparison_ref")
+        and isinstance(migration, dict)
+        and args.issuer == migration.get("issuer")
+        and args.reason == migration.get("reason")
+    )
+    if exact:
+        return "exact"
+    if same_worktree or same_branch:
+        return "ambiguous"
+    return "new"
+
+
+def start_next_journal_revision(path: pathlib.Path, task_uid: str,
+                                prior_receipt: dict[str, Any]) -> dict[str, Any]:
+    """Durably retain a completed epoch before the same UID starts its next one."""
+    prior_revision = positive_integer(prior_receipt.get("journal_revision"), "committed journal revision")
+    result: dict[str, Any] = {}
+
+    def reset(current: dict[str, Any]) -> None:
+        if current:
+            if current.get("schema") != JOURNAL_SCHEMA or current.get("task_uid") != task_uid:
+                raise MigrationError("migration journal identity mismatch")
+            positive_integer(current.get("revision"), "journal revision")
+            history = current.get("history", [])
+            if not isinstance(history, list):
+                raise MigrationError("migration journal history must be a list")
+            next_revision = max(int(current["revision"]), prior_revision) + 1
+        else:
+            history = []
+            next_revision = prior_revision + 1
+        entry = {"revision": prior_revision, "receipt": prior_receipt}
+        matching = [item for item in history if isinstance(item, dict) and item.get("revision") == prior_revision]
+        if matching and matching != [entry]:
+            raise MigrationError("migration journal history disagrees with committed receipt")
+        if not matching:
+            history = [*history, entry]
+        current.clear()
+        current.update({
+            "schema": JOURNAL_SCHEMA,
+            "task_uid": task_uid,
+            "revision": next_revision,
+            "state": "intent",
+            "history": history,
+        })
+        result.update(current)
+
+    durable_store.transact_json(path, reset, {})
+    return result
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     root = pathlib.Path(args.repo_root).resolve()
     mapping_path = pathlib.Path(args.tasks_json).resolve()
@@ -385,6 +526,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         record = require_record(mapping, args.task_uid)
         old_epoch = positive_integer(record.get("bootstrap_epoch", 1), "bootstrap epoch")
         prior_journal = load_journal(journal_file, args.task_uid)
+        starting_next_epoch = False
         if prior_journal.get("state") == "committed":
             receipt = prior_journal.get("receipt")
             if (isinstance(receipt, dict) and receipt.get("task_uid") == args.task_uid
@@ -392,21 +534,44 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     and record.get("bootstrap_epoch") == receipt.get("new_epoch")
                     and record.get("canonical_worktree") == receipt.get("new_worktree")
                     and record.get("task_branch") == receipt.get("new_branch")):
+                repair_worktree_hint_for_exact_retry(mapping_path, args.task_uid, receipt)
                 readback_committed_migration(mapping_path, args.task_uid, receipt)
-                finish_active_snapshot_cleanup(prior_journal)
-                return receipt
-            raise MigrationError("committed migration journal disagrees with active task mapping")
+                request_kind = committed_request_kind(args, replacement, receipt, record)
+                if request_kind == "exact":
+                    materialize_replacement_mapping(
+                        root, mapping_path, pathlib.Path(str(receipt["new_worktree"])), args.task_uid, receipt
+                    )
+                    finish_active_snapshot_cleanup(prior_journal)
+                    return receipt
+                if request_kind == "ambiguous" or not active_identity_matches_receipt(root, receipt):
+                    raise MigrationError("committed migration journal disagrees with requested active identity")
+                prior_journal = start_next_journal_revision(journal_file, args.task_uid, receipt)
+                starting_next_epoch = True
+            else:
+                raise MigrationError("committed migration journal disagrees with active task mapping")
         recovered_receipt = record.get("branch_identity_migration_receipt")
-        if (isinstance(recovered_receipt, dict) and recovered_receipt.get("task_uid") == args.task_uid
+        if (not starting_next_epoch and isinstance(recovered_receipt, dict)
+                and recovered_receipt.get("task_uid") == args.task_uid
                 and recovered_receipt.get("digest") == digest(recovered_receipt)
                 and record.get("bootstrap_epoch") == recovered_receipt.get("new_epoch")
                 and record.get("canonical_worktree") == recovered_receipt.get("new_worktree")
                 and record.get("task_branch") == recovered_receipt.get("new_branch")):
+            repair_worktree_hint_for_exact_retry(mapping_path, args.task_uid, recovered_receipt)
             readback_committed_migration(mapping_path, args.task_uid, recovered_receipt)
-            finish_active_snapshot_cleanup(prior_journal)
-            update_journal(journal_file, {"task_uid": args.task_uid, "state": "committed",
-                                          "receipt": recovered_receipt})
-            return recovered_receipt
+            request_kind = committed_request_kind(args, replacement, recovered_receipt, record)
+            if request_kind == "exact":
+                materialize_replacement_mapping(
+                    root, mapping_path, pathlib.Path(str(recovered_receipt["new_worktree"])),
+                    args.task_uid, recovered_receipt,
+                )
+                finish_active_snapshot_cleanup(prior_journal)
+                update_journal(journal_file, {"task_uid": args.task_uid, "state": "committed",
+                                              "receipt": recovered_receipt})
+                return recovered_receipt
+            if request_kind == "ambiguous" or not active_identity_matches_receipt(root, recovered_receipt):
+                raise MigrationError("committed migration receipt disagrees with requested active identity")
+            prior_journal = start_next_journal_revision(journal_file, args.task_uid, recovered_receipt)
+            starting_next_epoch = True
         if pathlib.Path(str(record["canonical_worktree"])).resolve() != root:
             raise MigrationError("active canonical worktree does not match --repo-root")
         if git(root, "symbolic-ref", "--quiet", "--short", "HEAD") != record["task_branch"]:
@@ -432,6 +597,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "old_snapshot_sha256": hashlib.sha256(snapshot_bytes).hexdigest() if snapshot_bytes else "",
             "replacement_worktree": str(replacement),
             "replacement_branch": args.replacement_branch, "implementation_head": head,
+            "replacement_tasks_json": str(replacement_tasks_json_path(root, mapping_path, replacement)),
             "comparison_ref": args.comparison_ref, "comparison_oid": comparison_oid,
             "authoritative_repository": authoritative_repository,
             "authoritative_remote_names": authoritative_remote_names,
@@ -527,6 +693,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         receipt["digest"] = digest(receipt)
         new_record = json.loads(json.dumps(record))
         new_record.update({"canonical_worktree": str(replacement), "task_branch": args.replacement_branch,
+                           "worktree_hint": str(replacement),
                            "bootstrap_epoch": new_epoch, "workflow_phase": "bootstrap",
                            "workflow_state": "action_required", "phase_receipts": {}, "evidence": {},
                            "branch_identity_migration": migration_record,
@@ -541,6 +708,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         mapping["tasks"][args.task_uid] = new_record
         durable_store.atomic_replace_json(mapping_path, mapping)
         readback_committed_migration(mapping_path, args.task_uid, receipt)
+        replacement_mapping = materialize_replacement_mapping(
+            root, mapping_path, replacement, args.task_uid, receipt
+        )
+        update_journal(journal_file, {
+            "task_uid": args.task_uid,
+            "replacement_mapping_sha256": hashlib.sha256(replacement_mapping.read_bytes()).hexdigest(),
+        })
         if os.environ.get("OASIS7_PM_TEST_MIGRATION_CRASH_AFTER") == "mapping_committed":
             raise MigrationError("injected crash after mapping committed")
 

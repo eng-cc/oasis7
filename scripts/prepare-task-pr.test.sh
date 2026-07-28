@@ -690,7 +690,7 @@ write_task_binding
 write_project_trace
 mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
+{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","worktree_hint":"$TMPDIR/historical-worktree","branch":"task/historical"}},"version":1}
 EOF
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
@@ -731,6 +731,27 @@ for forbidden in ("FIELD_STATUS","FIELD_PM_STATUS","FIELD_WORKFLOW_PHASE"):
     if any(forbidden in line for line in project_writes):
         raise SystemExit(f"draft candidate advanced lifecycle field {forbidden}: {project_writes}")
 PY
+
+# A migrated task retains historical compatibility hints, but its canonical
+# worktree/branch binding must drive draft-candidate task inference.
+rm -rf "$SMOKE_WORKTREE/.pm/tasks"
+cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"bootstrap","task_uid":"$TASK_UID","title":"migrated draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","worktree_hint":"$TMPDIR/historical-worktree","branch":"task/historical"}},"version":1}
+EOF
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/tasks
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: migrated draft candidate mapping fixture" >/dev/null
+migrated_draft_log="$TMPDIR/gh-migrated-draft-candidate.log"
+migrated_draft_git_log="$TMPDIR/git-migrated-draft-candidate.log"
+if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
+  run_prepare "$migrated_draft_log" "$migrated_draft_git_log" --draft-candidate >/dev/null 2>"$TMPDIR/migrated-draft-candidate.err"; then
+  cat "$TMPDIR/migrated-draft-candidate.err" >&2
+  exit 1
+fi
 
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(

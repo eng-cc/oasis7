@@ -29,8 +29,8 @@ import json, os, sys
 m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); s=next_record["status"]
 state_file=os.environ.get("GH_PROJECT_STATE_FILE")
 if state_file and os.path.exists(state_file): s=open(state_file).read().strip() or s
-status={"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"Done"}.get(s,"In Progress")
-phase={"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"task_done"}.get(s,"execution")
+status={"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(s,"In Progress")
+phase={"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(s,"execution")
 nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":s,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
 if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
 node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"nodes":nodes}}
@@ -176,7 +176,10 @@ esac
 SH
 chmod +x "$TMPDIR/bin/gh"
 rm -f "$TMPDIR/xcrun_db"
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nxcrun_db\ntmp.*\n' > "$TMPDIR/.gitignore"
+# The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
+# scratch file in the fixture repository.  This is confined to the disposable
+# fixture; the production freeze check still reports every other untracked path.
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
@@ -361,7 +364,7 @@ assert record["project_item_id"] == "ITEM_ID", record
 assert record["status"] == "done", record
 assert record["pr_url"] == "https://github.com/eng-cc/oasis7/pull/2002", record
 assert record["pr_number"] == 2002, record
-assert record["worktree_hint"].endswith("/worktree"), record
+assert record["worktree_hint"] == str(pathlib.Path(sys.argv[1]).parents[2].resolve()), record
 assert len(comments) >= 7, comments
 assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record
 assert record["claim_verifications"][-1]["status"] == "verified", record

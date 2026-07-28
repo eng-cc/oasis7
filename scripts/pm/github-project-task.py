@@ -871,9 +871,16 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
-    repository_identity = authoritative_repository_identity(
+    # A supplied hint may only identify a worktree in this repository family;
+    # it never chooses the refreshed canonical worktree.  Validate it first so
+    # a foreign repository still fails closed, then persist the command root.
+    authoritative_repository_identity(
         args.root.resolve(), args.repo, str(live.get("worktree_hint") or args.root.resolve())
     )
+    repository_identity = authoritative_repository_identity(
+        args.root.resolve(), args.repo, str(args.root.resolve())
+    )
+    live["worktree_hint"] = repository_identity["canonical_worktree"]
     recovered: dict[str, Any] = {}
     item_id = str(existing.get("project_item_id") or "")
     project_fields: dict[str, str] = {}
@@ -922,8 +929,9 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                     recovered = {"project_item_id": item_id, "issue_url": matches[0].get("url"),
                                  "issue_number": matches[0].get("number")}
                     break
-        if not item_id:
-            die(f"refresh-task: task-scoped Project item recovery failed for {args.task_uid}")
+        # The issue is still authoritative when its project item is temporarily
+        # unavailable to this refresh query.  Preserve the refreshed issue and
+        # repository identity; a later refresh can recover the project fields.
     if item_id:
         if nodes:
             for value in (((nodes[0] or {}).get("fieldValues") or {}).get("nodes") or []):
