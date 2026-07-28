@@ -66,7 +66,7 @@
 - Acceptance Criteria:
   - AC-1: headless-runtime PRD 定义生命周期、鉴权、归档三条主线。
   - AC-2: headless-runtime project 文档维护对应任务拆解与状态。
-  - AC-3: 与 `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md` 等专题文档一致。
+  - AC-3: 鉴权、防重放、恢复与归档语义与当前协议、runtime storage authority 及定向回归一致。
   - AC-4: 对外行为变更时同步补齐测试证据，并在对应 GitHub task issue evidence comments 记录任务执行证据。
 - Non-Goals:
   - 不在本 PRD 中重写 viewer UI 行为。
@@ -79,9 +79,18 @@
 ## 4. Technical Specifications
 - Architecture Overview: headless-runtime 作为无界面运行链路，连接 runtime/p2p 能力并提供生产可运维能力，强调协议一致性与可恢复性。
 - Integration Points:
-  - `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md`
-  - `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.prd.md`
+  - `crates/oasis7_proto/src/viewer.rs` 的 `PlayerAuthProof` 与受保护请求字段。
+  - `crates/oasis7/src/viewer/auth.rs`、simulator live auth 路由与 `WorldModel.player_auth_last_nonce`。
+  - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md` 的 checkpoint、replay、retention 与 GC 合同。
   - `testing-manual.md`
+- Auth and replay contract:
+  - 签名负载必须版本化、规范化，并绑定动作类型、关键业务字段、`player_id`、`public_key` 与 nonce；proof 与请求字段不一致、签名篡改或缺失 proof 必须显式拒绝。
+  - 每个 player 的 nonce 必须严格单调递增；服务端在业务授权与业务逻辑之前完成 proof 校验并消费 nonce，重复 nonce 显式返回 replay rejection。
+  - 已接受 nonce 随 snapshot 持久化并在恢复后继续生效，防重放不能因重启或 replay 静默回退。
+- Long-run retention contract:
+  - pending actions、动态 peer、committed batches 与热日志必须有明确容量、TTL 或热窗口边界；达到边界时保留可诊断计数与拒绝、跳过或淘汰原因。
+  - 冷数据使用内容寻址 blob 与小型 refs/index 保持可追溯性；headless 层不承诺单机冷数据永久可得，复制、checkpoint、retained-height replay 与 GC 服从 world-runtime storage authority。
+  - 事故追溯继续使用 `templates/longrun-archive-incident-template.md`；敏感 proof、key 与凭据不得进入未脱敏归档。
 - Edge Cases & Error Handling:
   - 网络中断：连接断开时进入可重连状态并保留会话诊断。
   - 鉴权失败：返回明确拒绝原因，不允许进入运行态。

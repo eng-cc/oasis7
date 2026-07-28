@@ -31,11 +31,12 @@
 - [x] launcher-rust-governance-provider-contract (PRD-WORLD_SIMULATOR-037/040/043) [test_tier_required]: 收口 launcher Rust governance review 的四项优化：web launcher agent-provider schema/config/args contract、provider-backed validation/transport policy、`trusted_local_only` internal local-playtest wording、shared HTTP base URL parser coverage。 Trace: .pm/tasks/task_169255fb26a2410a9c9edfaa839fc466.yaml
 
 ### 历史压缩索引
+- Kernel 资源与 required-test 历史收口：`Compound/Hardware` 已从内建 `ResourceKind` 硬移除，当前仅保留 `Electricity/Data`；历史十项 runtime required ignore 已在根因修复后全部恢复执行。两组 completed 三件套已退役，稳定边界读模块 PRD/design，历史实施只从 Git history 与 GitHub task issue evidence comments 追溯。
 - 初始 world-simulator PRD/schema/acceptance、launcher 转账、Web 控制台、shared UI schema、Web wasm 与 native/web control plane 历史：回看 `doc/world-simulator/prd.index.md`、相关 topic project 与 GitHub task issue evidence comments。
 - 早期 launcher 链上转账基础条款 `PRD-WORLD_SIMULATOR-004/005` 已从旧 singleton 分册退役；当前专业边界通过 `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` 进入，逐任务证据通过 Git history 与 GitHub task issue evidence comments 追溯。
 - Viewer live/runtime-world、LLM/provider、software_safe、pixel-world 与 visual cleanup 历史：回看 `doc/world-simulator/viewer/`、`doc/world-simulator/llm/`、`doc/testing/evidence/` 与对应 task trace。
 - Release distribution、platform native entrypoints、Windows installer、Linux AppImage 与 upgrade policy 历史：回看 `doc/world-simulator/launcher/`、`doc/site/github-pages/` 与对应 task trace。
-- simulator kernel rule-hook、Wasm readiness/executor/sandbox bridge/module-governance、Rust-to-Wasm build-suite 与 2026-03-06 simulator `PowerStorage` hard-removal 七组 completed 三件套已退役删除。现行技术边界读 `doc/world-simulator/design.md`、`m4/industrial-resource-flow-contract.prd.md` 与 `doc/world-runtime/wasm/`；历史实施与完成证据只从 Git history 和 GitHub task issue evidence comments 追溯。
+- simulator kernel rule-hook、Wasm readiness/executor/sandbox bridge/module-governance、Rust-to-Wasm build-suite、`PowerStorage` hard-removal、内建 `Compound/Hardware` hard-migration 与 runtime required 十项临时 ignore 共九组 completed 三件套已退役删除。现行技术边界读 `doc/world-simulator/design.md`、`m4/industrial-resource-flow-contract.prd.md` 与 `doc/world-runtime/wasm/`；历史实施与完成证据只从 Git history 和 GitHub task issue evidence comments 追溯。
 - 本主项目页只维护当前/最近任务索引；完整执行证据以 topic project、testing evidence 与 GitHub task issue evidence comments 为准。
 
 ## 依赖
@@ -50,7 +51,6 @@
 - `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
-- `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/llm/decision-provider-contract.project.md`
 - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`

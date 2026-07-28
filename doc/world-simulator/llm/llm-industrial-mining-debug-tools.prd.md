@@ -49,7 +49,7 @@
   - `mine_compound_max_per_location_g`：单 location 累计可采上限（用于迫使迁移采集）。
 - 采矿结算：
   - 从 location `fragment_budget` 与 chunk budget 扣减元素质量。
-  - 向 owner 增加 `ResourceKind::Compound`。
+  - 向 owner 的专业材料账本增加字符串 kind 为 `compound` 的 material；这不是 simulator 内建 resource kind，旧内建项已硬移除。
   - 记录 location 累计已采质量。
 
 ### 3) 精炼语义升级
