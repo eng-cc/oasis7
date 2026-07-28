@@ -4,6 +4,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] site-pages-release-contract-consolidation (PRD-SITE-002/PRD-SITE-003/PRD-SITE-008) [test_tier_required]: 将当前 Pages 静态入口、四项质量门禁、Release 平台资产、信任/安装器 blocker、Viewer 手册镜像与手动升级边界收敛到 site root authority；dated GitHub Pages 专题只保留历史追溯，不再承担当前发布就绪结论。验证：`./scripts/site-link-check.sh && ./scripts/site-homepage-claim-check.sh && ./scripts/site-manual-sync-check.sh && ./scripts/site-download-check.sh`，以及 `git diff --check`。 Trace: #2563 (task_57970b526b30498b862ae51c66c619ca)
+- [x] github-pages-professional-authority-consolidation-batch-41 (PRD-SITE-001/003/004/009/010) [test_tier_required]: 将已完成的架构图、对标、Hero 动效/指针与精简科技感五组微专题回填到 site root authority；保留当前页面级设计稿，删除不可复现的 dated review/coverage 文件。当前静态 Canvas/指针/时间线/SVG、响应式/无障碍和 page-coverage 路由以 `doc/site/design.md` 为准；历史完成证据从 GitHub task issue evidence comments 与 git history 追溯。后续实质页面变更须补齐真实桌面/移动浏览器证据，不得复活旧专题。 Trace: #2702 (task_c94738bd21d14d70837975c4fd9c3a72)
 - [x] github-pages-visual-content-refresh-20260718 (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略、模拟与生存游戏官网，把中英首页首屏从多层解释面板收敛为“压力抉择 + 玩家角色 + 持续后果 + 双 CTA + 精确预览状态”；使用明确标注为概念图而非 gameplay capture 的 Image2 小行星文明主视觉，并将真实 Viewer 证据继续保留在证据链语境。 Trace: #2438 (task_adfbfbfea1e64f4eb8904b9779b4c2bb)
   - 产物文件:
     - `site/index.html`
@@ -73,7 +74,6 @@
     - `doc/site/deck/assets/html-roadshow-deck-*-image2-2026-06-19.png`
     - `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`
     - `doc/site/github-pages/assets/github-pages-homepage-*-image2-2026-06-19.png`
-    - `doc/site/github-pages/page-design-coverage-2026-06-19.md`
     - `site/index.html`
     - `site/en/index.html`
     - `site/story/index.html`

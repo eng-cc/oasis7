@@ -24,7 +24,7 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `github-pages/` 当前默认活跃专题三件套 | 动态统计 | 公开首页、下载链路、内容同步、SEO 与质量门禁 |
+| `github-pages/` 当前补充设计 | 动态统计 | 公开首页页面级层级、首屏内容与后果链节奏；当前合同回到模块 root authority |
 | `github-pages/` 已退役删除旧专题 | 见下方清单 | 完成态公告占位、CTA、视觉打磨与 dated batch 增量已删除；只从当前入口、GitHub task issue evidence comments 与 git history 追溯 |
 | `manual/` 路由入口与正式专题三件套 | 7 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
@@ -33,6 +33,9 @@
 - `doc/site/prd.md`：站点主叙事、docs hub、下载链路、质量门禁、镜像与公开版本说明的当前 authority。
 - `doc/site/project.md`：当前站点任务、验证状态与历史追溯入口。
 - `doc/site/manual/README.md`：静态 docs hub、Viewer 手册镜像与 canonical/manual 映射的首读入口；再分流到主专题或已完成增量记录。
+- `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`：首页页面级层级基线；它是 Image2 设计证据，不是新的 visual-designer signoff。
+- `doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`：当前首屏内容、概念图边界与响应式验收。
+- `doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`：当前后果链节奏与渐进披露。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 github-pages 与 manual 专题表。
@@ -50,11 +53,6 @@
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.design.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` |
-| `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.design.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` |
-| `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | `doc/site/github-pages/github-pages-hero-motion-layer.design.md` | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` |
-| `doc/site/github-pages/github-pages-hero-pointer-interaction.prd.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.design.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.project.md` |
-| `doc/site/github-pages/github-pages-lean-tech-refresh.prd.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.design.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.project.md` |
 | `doc/site/manual/site-manual-static-docs.prd.md` | `doc/site/manual/site-manual-static-docs.design.md` | `doc/site/manual/site-manual-static-docs.project.md` |
 
 ## 历史压缩专题清单
@@ -82,6 +80,8 @@
 | `github-pages-game-first-home-2026-02-25` | 该完成态首页游戏优先重排三件套已删除；当前公开首页语义与状态边界以 `doc/site/prd.md`、`doc/site/project.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
 | `github-pages-showcase` | 该完成态首版对外展示站三件套已删除；当前公开站点结构、双语入口与状态边界以 `doc/site/prd.md`、`doc/site/project.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
 | `github-pages-dated-batch-2026-02-to-03` | game-engine reposition、home conversion、radical redesign、quality/SEO、release/download 与 user-perspective 六个完成态三件套已删除；当前站点/下载/镜像 authority 以 `doc/site/prd.md`、`doc/site/design.md` 与 `doc/site/project.md` 为准，玩家发行体验以 `doc/product/player-entry-distribution/prd.md` 为准；历史细节从 GitHub task #2563 evidence comments 与 git history 追溯。 |
+| `github-pages-architecture-svg-refresh`、`github-pages-benchmark-polish-v3`、`github-pages-hero-motion-layer`、`github-pages-hero-pointer-interaction`、`github-pages-lean-tech-refresh` | 五组完成态微专题三件套已删除；当前 Canvas/指针/时间线/SVG、双语响应式和无障碍约束以 `doc/site/design.md` 与 `doc/site/prd.md` 为准，任务过程以 GitHub task #2702 evidence comments 与 git history 追溯。 |
+| `github-pages-cinematic-consequence-visual-review-card-2026-07-19`、`page-design-coverage-2026-06-19` | dated review/coverage 文件已删除；前者的冻结评审与残余风险以 GitHub task #2449 evidence comments 与 git history 追溯，后者的 site 页面覆盖/fixture 路由已回填 `doc/site/design.md`，跨模块页面继续由各自专业设计 authority 承担。 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
