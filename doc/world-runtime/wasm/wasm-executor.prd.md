@@ -6,7 +6,7 @@
 审计轮次: 4
 
 
-本分册描述将真实 WASM 执行器接入 `ModuleSandbox` 的最小方案，并作为已完成 agent-os 对齐增强与 sandbox 安全硬化的稳定专业权威。模块工件持久化生命周期仍由 `doc/world-runtime/module/module-storage.prd.md` 拥有。
+本分册描述将真实 WASM 执行器接入 `ModuleSandbox` 的最小方案，并作为已完成 agent-os 对齐增强与 sandbox 安全硬化的稳定专业权威。模块工件持久化生命周期仍由 `doc/world-runtime/prd.md` 拥有。
 
 ## 1. Executive Summary
 - 在现有 `ModuleSandbox` 抽象之上提供真实 WASM 执行实现（首选 Wasmtime）。

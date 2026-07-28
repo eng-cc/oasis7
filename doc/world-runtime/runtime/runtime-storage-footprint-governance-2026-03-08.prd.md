@@ -107,7 +107,7 @@
   - `crates/oasis7_node/src/replication.rs`
   - `crates/oasis7_distfs/src/lib.rs`
   - `doc/world-runtime/runtime/runtime-integration.md`
-  - `doc/world-runtime/module/module-storage.prd.md`
+  - `doc/world-runtime/prd.md`
 - Edge Cases & Error Handling:
   - 保存新 generation 时磁盘写满：必须中止切换、保留旧 generation、标记 `last_gc_result=save_failed`。
   - GC 扫描过程中发现 latest ref 缺失：立即停止 sweep，状态置为 `degraded`，禁止继续删除。

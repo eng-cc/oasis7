@@ -41,6 +41,13 @@
 - 追踪主键: `PRD-WORLD_RUNTIME-xxx`
 - 测试与发布参考: `testing-manual.md`
 
+### ModuleStore persistence and recovery contract
+
+- Default `World::save_to_dir` / `load_from_dir` persist the module registry, manifest metadata, and content-addressed artifact bytes together. Compatibility `*_with_modules` APIs remain directed callers, not a second persistence truth.
+- A legacy directory without a module store loads compatibly. Once registry/meta/artifact files exist, restore verifies their mutual consistency and artifact hash; missing or damaged data must return `ModuleStoreVersionMismatch`, `ModuleStoreArtifactMissing`, or `ModuleStoreManifestMismatch` (or governed recovery), never silently substitute bytes.
+- Persisted instances retain module identity/version/hash, owner, install target, activation state, and installation time so replay routes by stable instance identity rather than global `module_id` replacement. Upgrade validates artifact/interface/owner compatibility and atomically aligns registry, instance state, and event chain or writes nothing.
+- Evidence anchors: `crates/oasis7/src/runtime/module_store.rs`, `runtime/error.rs`, and `runtime/tests/persistence.rs` cover default roundtrip, tamper rejection, and legacy no-store load.
+
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
 - M2: 补齐模块设计验收清单与关键指标。

@@ -32,6 +32,13 @@
 - 运行时行为进入 `runtime/`
 - 执行器与 ABI 进入 `wasm/`
 
+## 6. ModuleStore persistence / restore boundary
+
+- The default world directory owns one module-store closure: registry, manifest metadata, and content-addressed wasm artifacts. `save_to_dir` / `load_from_dir` are the normal route; compatibility `*_with_modules` entrypoints do not establish a parallel format.
+- Restore accepts legacy directories without a store, but an existing store must validate registry/meta/artifact hash consistency and return structured version, missing-artifact, or manifest-mismatch errors rather than silently repairing bytes.
+- Module instance identity/version/hash, owner, install target, active state, and install time are persisted for replay routing. Upgrades validate compatibility before one atomic registry/state/event transition.
+- Runtime anchors are `crates/oasis7/src/runtime/module_store.rs`, `runtime/error.rs`, and `runtime/tests/persistence.rs`.
+
 ## 设计目标
 - 提供 `world-runtime` 模块的总体设计入口。
 

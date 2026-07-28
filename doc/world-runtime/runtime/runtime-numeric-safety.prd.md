@@ -3,7 +3,7 @@
 - 对应设计文档：`doc/world-runtime/runtime/runtime-numeric-safety.design.md`
 - 对应项目文档：`doc/world-runtime/runtime/runtime-numeric-safety.project.md`
 - 专业权威：`runtime_engineer`
-- 吸收范围：已完成的 numeric-correctness phase 1–12；phase 13–15 仍由各自专题承载。
+- 吸收范围：已完成的 numeric-correctness phase 1–15 与 infinite-sequence rollover 专题。
 
 ## 1. 目标
 
@@ -38,12 +38,16 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | PoS 比率与 required stake | 超多数配置使用无乘法溢出的 `> 1/2` 判定，并在 proto、consensus、node 三层保持一致；required-stake 使用加宽计算和可失败窄化，无法表示时拒绝。 |
 | Membership recovery/replay | retry attempt、backoff timestamp、调度间隔、policy/rollback cooldown 与计数/容量聚合采用受检算术；阈值和比率比较不得以饱和乘法改变数学判断，失败不更新 replay、pending、dead-letter 或 policy 状态。 |
 | Governance archive/audit | recovery drill、audit retention、tiered offload、rollback streak 与 alert window 的时间和计数运算采用受检语义；时间回拨或边界异常在 archive、governance、alert 状态写入前失败。 |
+| Membership reconciliation / sync / mempool | 调度与 revocation-dedup 时间差、reconciliation/sync report 计数、mempool batch/zone payload 字节数采用 checked 算术；溢出以带现场值的 `WorldError::DistributedValidationFailed` 返回，schedule、dedup、report 与 batch 状态不部分更新。 |
+| Federated replay archive | 聚合扫描、复合游标 offset 与 archive 查询计数采用 checked helper；溢出不污染 cursor 或聚合结果。 |
+| Runtime sequence rollover | event/action/intent/proposal 四类 `next_*_id` 在 `u64::MAX` 后以持久化的 `era + 1, sequence = 1` 滚动；snapshot 的 era 字段以 `serde(default)` 兼容旧快照（era=0），恢复与 replay 保持同一 era。 |
 
 ## 4. 验收
 
 - 每条可失败推进路径至少有一个边界测试，验证错误类型与状态未变。
 - 涉及 durable write 的路径必须验证失败前未写入或写入事务整体回滚。
 - 涉及 replay/recovery 的路径必须验证拒绝结果可观测，且不会生成新的 committed history。
+- rollover 必须验证边界分配、snapshot roundtrip 与缺失 era 字段的 legacy load；它只消除溢出失效，纯 `u64` ID 在不同 era 极端远期仍可能复用，不能表述为全链路复合 ID 唯一性。
 - 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design/project 以及相关测试。
 
 ## 5. 里程碑
@@ -56,7 +60,7 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 ## 6. 风险与边界
 
 - 本文不要求全仓库立即采用 BigInt 或统一 newtype。
-- 本文不替代 phase 13–15 尚未吸收的 membership/mempool 专题语义。
+- 本文不要求将纯 `u64` 外部 ID 立即迁为复合 ID。
 - 本文不把实现路径、测试任务状态或运维阈值迁入产品 PRD。
 - 本文不宣称模块、集成、长稳或发布就绪；发布证据仍由对应测试与任务 evidence 承载。
 

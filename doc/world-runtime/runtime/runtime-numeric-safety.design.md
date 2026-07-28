@@ -24,6 +24,9 @@
 | PoS ratio/required stake | `crates/oasis7_proto/src/distributed_pos.rs`、`crates/oasis7_consensus/src/pos.rs`、`crates/oasis7_node/src/pos_validation.rs` | `> 1/2` 判定不通过可能溢出的乘法实现；required stake 以加宽计算和可失败窄化保持三层一致。 |
 | Membership retry/replay | `crates/oasis7_consensus/src/membership_recovery/types.rs`、`mod.rs`、`replay.rs` | retry/backoff、调度/cooldown 与计数/容量后继值先受检；阈值/比率比较保持数学语义；失败不部分持久化。 |
 | Governance archive/audit | `membership_recovery/replay_archive.rs`、`replay_archive_tiered.rs`、`replay_audit.rs` | drill、retention、offload、rollback 与 alert window 的时间/计数异常在状态更新前显式失败。 |
+| Reconciliation/sync/mempool | `membership_reconciliation.rs`、`membership_recovery_support.rs`、`mempool.rs` | 时间差、report counter 与 payload aggregation 使用 checked helper；溢出返回 `WorldError::DistributedValidationFailed`，不得污染 schedule、dedup、report 或 batch。 |
+| Federated archive | `membership_recovery/replay_archive_federated.rs` | 聚合与 composite cursor 后继值先受检；失败保留 cursor/aggregate state。 |
+| Rolling IDs | `runtime/snapshot.rs`、`runtime/world/mod.rs`、`runtime/world/persistence.rs` | event/action/intent/proposal 的 `era + sequence` 一起持久化；`u64::MAX` 后分配 `(era + 1, 1)`，缺失 era 的旧 snapshot 按 `serde(default)` 读取为 0。 |
 
 ## 3. 状态转移模式
 
@@ -52,4 +55,4 @@ read current state
 
 ## 6. 演进边界
 
-phase 13–15 仍是独立专题。后续吸收时应追加子系统权威图和 evidence ledger，而不是把未复核内容预先归入本文。
+rollover 不建立全链路复合 ID ABI：仅 runtime 内持久化 era 并保持恢复/同步兼容，纯 `u64` ID 仍可能跨 era 复用。所有失败路径继续要求结构化错误、rejection evidence 与状态/持久化未变化的回归。

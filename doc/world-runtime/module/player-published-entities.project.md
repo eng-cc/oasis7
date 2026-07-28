@@ -17,7 +17,7 @@
 - doc/world-runtime/module/player-published-entities.prd.md
 - doc/world-runtime/wasm/wasm-interface.md
 - doc/world-runtime/module/module-lifecycle.md
-- doc/world-runtime/module/module-storage.prd.md
+- doc/world-runtime/prd.md
 - doc/world-runtime/runtime/runtime-integration.md
 - testing-manual.md
 

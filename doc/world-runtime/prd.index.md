@@ -71,16 +71,10 @@
 | `doc/world-runtime/module/agent-default-modules.prd.md` | `doc/world-runtime/module/agent-default-modules.design.md` | `doc/world-runtime/module/agent-default-modules.project.md` |
 | `doc/world-runtime/module/player-published-entities.prd.md` | `doc/world-runtime/module/player-published-entities.design.md` | `doc/world-runtime/module/player-published-entities.project.md` |
 | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md` |
-| `doc/world-runtime/module/module-storage.prd.md` | `doc/world-runtime/module/module-storage.design.md` | `doc/world-runtime/module/module-storage.project.md` |
 | `doc/world-runtime/module/module-subscription-filters.prd.md` | `doc/world-runtime/module/module-subscription-filters.design.md` | `doc/world-runtime/module/module-subscription-filters.project.md` |
-| `doc/world-runtime/runtime/bootstrap-power-modules.prd.md` | `doc/world-runtime/runtime/bootstrap-power-modules.design.md` | `doc/world-runtime/runtime/bootstrap-power-modules.project.md` |
-| `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.prd.md` | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.design.md` | `doc/world-runtime/runtime/runtime-infinite-sequence-rollover.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-safety.prd.md` | `doc/world-runtime/runtime/runtime-numeric-safety.design.md` | `doc/world-runtime/runtime/runtime-numeric-safety.project.md` |
 | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md` |
 | `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
-| `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase13.project.md` |
-| `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase14.project.md` |
-| `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.prd.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.design.md` | `doc/world-runtime/runtime/runtime-numeric-correctness-phase15.project.md` |
 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md` |
 | `doc/world-runtime/wasm/wasm-executor.prd.md` | `doc/world-runtime/wasm/wasm-executor.design.md` | `doc/world-runtime/wasm/wasm-executor.project.md` |
 | `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md` |

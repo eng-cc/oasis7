@@ -25,6 +25,7 @@
 
 ### ADM-S4 安装与场景
 - [x] 提供 `World::install_m1_agent_default_modules(actor)` 安装入口
+  - 当前组成证据：power bootstrap、agent default package 与 power-first scenario bootstrap 分为三个入口；default-package toggle 保持兼容。
 - [x] 在场景初始化中支持“是否安装默认模块包”开关
 - [x] 保证重复安装幂等（已激活版本跳过）
 
@@ -44,3 +45,4 @@
 - 当前阶段：ADM-S5 完成（默认模块体系 V1 收口）
 - 下一阶段：接口模块来源机制分册定稿（制造/交易/回收/奖励）
 - 最近更新：完成 BMS-51 文档口径清理，统一到 wasm-only 现状（2026-02-13）
+- 验证 anchors：`crates/oasis7/src/runtime/world/bootstrap_power.rs`；`runtime/tests/power_bootstrap.rs`、`power_bootstrap_release_manifest_full.rs`、`agent_default_modules.rs` 覆盖治理安装、幂等/re-activate、power 行为与 scenario composition。

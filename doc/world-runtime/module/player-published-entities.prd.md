@@ -70,7 +70,7 @@
 - Integration Points:
   - `doc/world-runtime/wasm/wasm-interface.md`（WASM ABI）
   - `doc/world-runtime/module/module-lifecycle.md`（发布/治理事件）
-  - `doc/world-runtime/module/module-storage.prd.md`（模块存储）
+  - `doc/world-runtime/prd.md`（模块存储）
   - `doc/world-runtime/runtime/runtime-integration.md`（执行/路由）
   - `crates/oasis7_wasm_abi`（`ModuleManifest` / `ProductProfileV1` / `RecipeProfileV1` / `FactoryProfileV1`）
 - Edge Cases & Error Handling:

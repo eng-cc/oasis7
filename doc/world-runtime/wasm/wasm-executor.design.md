@@ -29,7 +29,7 @@
 - 新 ABI/schema 字段保持 optional/default compatible，不把 agent-os 参考实现升级为 Oasis ABI 替代品。
 - pure policy hook 只判定，不产生递归副作用；cap slot 未声明或冲突时 fail closed。
 - `max_gas=0` 回退到配置 fuel；epoch 与 memory limiter 保证可抢占和有界资源。
-- compiled cache 按 engine/OS/arch 隔离，损坏缓存降级为 miss；storage lifecycle 仍由 module-storage 拥有。
+- compiled cache 按 engine/OS/arch 隔离，损坏缓存降级为 miss；storage lifecycle 仍由 root world-runtime authority 拥有。
 
 ## 5. 设计演进计划
 - 先接执行入口。
