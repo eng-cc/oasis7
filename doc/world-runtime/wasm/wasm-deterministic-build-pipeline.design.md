@@ -420,3 +420,10 @@ CI/report 只能提供开发期或候选期证据；真正进入 `ModuleReleaseS
 - Docker 只解决发布级构建确定性，不进入 wasm 执行期 sandbox。
 - 本设计不要求立即删除现有 build suite；它是容器内核心执行器。
 - 本设计不把 CI 变成生产发布者；CI 只是运行同一容器镜像做验证。
+
+## 10. Source package guardrail 与生产边界
+
+- 生产 runtime 不执行 host source compile，也不回退到仓库 build script；它只消费 external Docker canonical builder 产生的 binary、manifest 与 receipt。
+- dev/test 显式 opt-in 的 source package 入口必须限制文件数量、单文件/总字节数和相对路径，拒绝绝对路径与 `..`，在隔离临时目录中以最小环境和明确 timeout 执行。
+- dev/test 编译失败返回结构化 policy/validation 原因；这些 guardrail 只降低测试工具污染风险，不等价于 OS container、seccomp 或生产级 sandbox。
+- 任何面向发布的产物仍必须重新进入 canonical builder、hash/identity/receipt 校验链；dev/test compile 结果不能直接提升为 publish authority。

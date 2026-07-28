@@ -848,3 +848,11 @@ early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-ses
 为能源线焦虑，
 
 游戏就活了。
+
+## 9.5 市场决策与交换
+
+- 当市场动作会改变当前工业目标时，预览必须说明 offer/limit price、结算资源与数量、ownership/eligibility blocker、相关库存或 power runway、当前会成交还是保持 open、可取消/恢复动作以及它与下一目标的关系。
+- 模块 artifact 是有 owner 的可转移能力：玩家可 offer、bid、purchase、delist 或 destroy，但 active use、权限、资源不足或不兼容价格必须形成可读拒绝与下一安全动作。
+- power 交易必须继续满足 `power_survival_quote` / `power_sale_quote`：展示交易后的续航、下一动作可负担性和 interruption/shutdown 风险，不能只展示现金收益。
+- offer/order 不承诺成交或 escrow。权威 runtime 决定资格、报价、price/time 确定性撮合、结算与回放；未成交订单保持可取消，失败至少区分资金不足、ownership/permission、价格不兼容、active-use destruction blocker 或当前无匹配。
+- 本文不冻结 action/event 字段、订单 ID、费用公式或价格带数值；这些属于 runtime/simulator 实现和专业验证真值。

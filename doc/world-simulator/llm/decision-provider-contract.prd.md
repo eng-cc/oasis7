@@ -131,6 +131,13 @@
   - 风险-5: 若没有 fixture 与统一错误签名，多个 provider 的评估将无法横向比较。
 
 ## 6. Validation & Decision Record
+
+## 共识提交、结果反馈与重放
+
+- 稳定决策生命周期是 `observe -> propose/wait -> catalog/schema guard -> submit when consensus-backed -> committed replay -> runtime execute/reject -> feedback`；这些词描述阶段，不新增持久 decision ledger 或协议枚举。
+- consensus-backed live execution 中，proposal acceptance 或 submit acceptance 都不更新世界记忆；只有 committed action 被 replay 后的权威 `ActionResult` 才进入 `on_action_result`、recent summary 与后续决策上下文。
+- provider failure、malformed output 或 unknown action reference 确定收敛为带 trace/error 的无状态变化 `Wait`，不得生成 heuristic substitute action。
+- replay 从持久事件重建后果，不重新请求 provider，也不把 `replay_id` 当幂等授权。provider memory write 仍只是 policy-governed intent，不是世界事实。
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |

@@ -29,7 +29,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `governance/` | 动态 | release communication 操作模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口；产品承诺从 `doc/product/` 进入 |
-| `gap/` | 28 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口；先从 `gap/README.md` 区分主收口、增量与历史追溯 |
+| `gap/` | 动态 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口；先从 `gap/README.md` 区分主收口、增量与历史追溯 |
 | `production/` | 16 | 生产收口、阶段边界、readiness 与受台账约束的素材；先由 `production/README.md` 分流 |
 
 ## 活跃补充文档
@@ -70,13 +70,6 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` |
-| `doc/readme/gap/readme-gap-infra-exec-compiler-sandbox.prd.md` | `doc/readme/gap/readme-gap-infra-exec-compiler-sandbox.design.md` | `doc/readme/gap/readme-gap-infra-exec-compiler-sandbox.project.md` |
-| `doc/readme/gap/readme-gap-wasm-live-persistence-instance-upgrade.prd.md` | `doc/readme/gap/readme-gap-wasm-live-persistence-instance-upgrade.design.md` | `doc/readme/gap/readme-gap-wasm-live-persistence-instance-upgrade.project.md` |
-| `doc/readme/gap/readme-gap12-consensus-market-lifecycle-closure.prd.md` | `doc/readme/gap/readme-gap12-consensus-market-lifecycle-closure.design.md` | `doc/readme/gap/readme-gap12-consensus-market-lifecycle-closure.project.md` |
-| `doc/readme/gap/readme-gap12-market-closure.prd.md` | `doc/readme/gap/readme-gap12-market-closure.design.md` | `doc/readme/gap/readme-gap12-market-closure.project.md` |
-| `doc/readme/gap/readme-gap123-runtime-consensus-metering.prd.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.design.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.project.md` |
-| `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.prd.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.design.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.project.md` |
-| `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.design.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.design.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.project.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
 | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` |
@@ -102,6 +95,7 @@
 | 2026-03 Moltbook promotion/post/runbook 三组 dated triplet 与 promotion plan | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-moltbook-liveops-runbook.md`；`doc/readme/governance/readme-moltbook-post-pack.md` | 渠道产品边界进入产品树，稳定策略合并到无日期 runbook，素材库去日期；历史平台快照、固定排期和任务包装只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03-22 closed-beta candidate runbook triplet | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 与 `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露活跃操作面语义，已收敛为 limited preview invite / execution 入口 |
 | 2026-03-22 closed-beta candidate feedback / incident templates | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 的 signal bucket、claim drift、producer summary 字段 | 旧模板命名继续暗示 closed beta candidate 当前可操作；保留历史 evidence，不保留当前 template surface |
+| README gap runtime/WASM/consensus/market/LLM 七组完成 triplet | `doc/world-runtime/prd.md`、`doc/world-runtime/module/`、`doc/world-runtime/wasm/`、`doc/p2p/consensus/`、`doc/world-simulator/llm/`、`doc/game/gameplay/gameplay-top-level-design.prd.md` | 仍有效合同已按专业 owner 合并；生产 source compile 旧口径被 binary + receipt 当前安全边界替代，历史任务包装从 Git history 与 GitHub evidence 追溯 |
 
 ## Material / Execution / SOP 补充入口
 | 文档路径 | 类型 | 用途 |

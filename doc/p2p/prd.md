@@ -22,6 +22,13 @@
 
 ## 当前专题路由
 
+### 共识动作到执行与恢复合同
+
+- 共识动作是有界、确定排序的 payload 序列；admission 校验 submitter/authentication、非零 identity、payload limits 与 queue capacity。
+- proposer 从该精确有序序列计算 `action_root`；proposal/commit replication 与 `NodeExecutionCommitContext` 携带相同序列和 root。执行只接受下一 committed height，重新计算并验证 root，拒绝不可解码 payload，再通过 committed runtime context 应用动作。
+- node block、action root、execution block/state roots、journal 与 snapshot references 作为同一权威记录持久化。被拒动作必须显式 requeue 或失败；execution/root/journal/proof mismatch 阻断恢复，不能继续推进状态。
+- 本合同只拥有共识载荷完整性、提交顺序与恢复一致性，不代表 topology health、deployment、release readiness、市场规则或玩家体验结论。
+
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
 - 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套已退役，完成记录从 Git 与 GitHub task evidence 追溯。

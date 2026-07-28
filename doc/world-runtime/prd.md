@@ -308,3 +308,13 @@
 | DEC-WR-002 | WASM 生命周期走治理流程 | 模块直接热替换 | 无治理热替换难以保证安全与一致性。 |
 | DEC-WR-003 | 安全事件必须输出可验证 receipt | 仅日志文本记录 | 签名收据可支撑事后审计与取证。 |
 | DEC-WR-004 | 每个 wasm 模块通过 module-local observe spec 接入共享 runner | 每个模块自写 perf/contract harness | 标准入口更适合长期扩展，也能让新模块自然继承观测与契约测试能力。 |
+
+## 7. 模块执行、市场与历史 gap 合并边界
+
+- 模块安装目标属于持久 runtime 状态。基础设施目标使用可审计的独立 tick origin；未记录目标与 self-agent 目标保持兼容。实例按稳定 `instance_id` 顺序执行，安装、升级、重放和恢复不得退回 `module_id` 全局单实例覆盖。
+- 默认 world 保存/加载包含 module registry、metadata 与 artifact；旧目录缺少 module store 时仍可兼容加载。升级必须保持 module identity，并通过 owner、interface/export、subscription、capability 与 limit 兼容检查；失败不得产生部分状态。
+- 生产 runtime 只消费 external Docker canonical builder 产出的 binary + receipt，并拒绝 runtime source compile。源码包文件数、大小、路径、超时和最小环境限制只属于显式 dev/test opt-in guardrail，不构成“世界内生产编译”承诺。
+- 模块调用计费由确定性输入/输出/effect/emit 计量产生审计事件；余额不足时在输出、状态与 emit 应用前结构化拒绝。费用只在成功路径生效，replay 应用已提交的计费事件，不重新推导价格。
+- 模块 artifact 的 listing、bid、purchase、delist、destroy 与 fee 是 runtime 权威动作/事件/状态：只允许当前 owner 操作，结算需资源充足，成交转移 ownership 并清理相关挂单，仍被 active instance 使用的 artifact 不得销毁。价格、玩家价值与恢复提示由 game 专业权威拥有。
+- live/viewer 只回放共识已提交的有序动作；空轮询不构成逻辑世界推进。共识 action root、payload 完整性与提交验证由 P2P 专业权威拥有，LLM/provider 只提交意图，不成为第二执行权威。
+- 本节吸收已完成 README gap 专题中的仍有效 runtime 合同；历史里程碑、旧路径与完成状态从 Git history 和 GitHub task evidence 追溯。

@@ -305,3 +305,11 @@ ManifestMigrated {
   reason,
 }
 ```
+
+## 稳定实例、交易与升级合同
+
+- 活动模块以持久 `instance_id` 区分，同一 module artifact 可在不同 owner/target 下形成独立实例；确定性执行使用稳定实例顺序。
+- deploy/register、install、activate、deactivate、upgrade、list/bid/purchase/delist/destroy 均通过 validated action -> domain event -> state apply 进入权威状态并可重放，不允许直接改 registry 或 instance cache。
+- upgrade 保持 module identity，校验 owner、interface version、required exports、subscriptions、capability slots 与 limits；不兼容升级被拒绝且不产生部分事件。
+- artifact 市场只允许当前 owner 上架、下架或销毁；结算时校验正价格、价格资源类型与余额，成交后转移 ownership 并清理相关 offer/bid。active instance 仍引用 artifact 时拒绝销毁。
+- 费用事件只在成功动作路径产生；旧事件新增字段使用明确兼容默认值，replay 不重新撮合、不重新报价，也不把历史订单视为保证成交。

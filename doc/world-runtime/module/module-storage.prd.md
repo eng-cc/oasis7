@@ -88,3 +88,10 @@ struct ModuleRegistryFile {
 - 原“范围” -> 第 2 章 User Experience & Functionality。
 - 原“接口 / 数据” -> 第 4 章 Technical Specifications。
 - 原“里程碑/风险” -> 第 5 章 Risks & Roadmap。
+
+## 7. 默认持久化与实例恢复合同
+
+- `save_to_dir` / `load_from_dir` 的默认闭环包含 module registry、manifest metadata 与内容寻址 artifact；显式 `*_with_modules` 入口只保留兼容/定向调用价值，不得形成第二套持久化真值。
+- 旧 snapshot 或目录没有 module store 时按兼容默认加载；一旦存在 registry/meta/artifact，恢复必须校验三者一致性与 artifact hash，损坏或缺失以结构化错误或受治理恢复处理，不静默替换。
+- 持久实例至少保持 module identity/version/hash、owner、install target、active state 与安装时间的可回放关系。恢复后按稳定 instance identity 路由，不能回退到同 `module_id` 的全局覆盖语义。
+- 升级后的 registry、instance state 与事件链必须原子一致；接口或订阅不兼容、owner 不匹配或 artifact 校验失败时不写入部分升级结果。

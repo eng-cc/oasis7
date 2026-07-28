@@ -102,3 +102,11 @@
 
 ## 6. Validation & Decision Record
 - 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+
+## 7. 模块生命周期与市场决策边界
+
+- LLM/provider 可以表达 compile/deploy/install、offer/bid/purchase/delist/destroy/cancel 等模块意图，但 parser/schema 通过不等于动作已接受；所有意图必须进入 runtime 权威校验、共识提交与结果回执。
+- production 不允许 runtime source compile。相关决策在 production 返回结构化不可用/外部 builder 恢复提示；仅显式 dev/test 环境可使用受限 source package。
+- 决策字段中的 actor 只能解析为当前被授权 Agent；hash、版本、价格、订单标识与必填 payload 必须严格校验，非法输出收敛为结构化拒绝或无状态变化的 `Wait`。
+- `module.lifecycle.status` 或等价观测只读取已知 artifact、instance、ownership、listing/order 和 installed 状态；它是派生观测，不是第二 registry，也不能宣称真实激活或保证成交。
+- 只有 committed action 的 replay/result 才更新行为回执与长期记忆；空轮询、parser success、submit acceptance 或 viewer snapshot 不得伪造世界进展。
