@@ -98,6 +98,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
             "repository": "eng-cc/oasis7",
             "canonical_worktree": str(self.root.resolve()),
             "task_branch": "task/engineering-old",
+            "worktree_hint": str(self.root.resolve()),
             "default_branch": "main",
             "bootstrap_epoch": 1,
             "acceptance": ["same UID migration preserves the implementation head"],
@@ -218,6 +219,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         record = self.mapping_record()
         self.assertEqual(record["canonical_worktree"], str(self.replacement.resolve()))
         self.assertEqual(record["task_branch"], self.replacement_branch)
+        self.assertEqual(record["worktree_hint"], str(self.replacement.resolve()))
         self.assertEqual(record["bootstrap_epoch"], 2)
         self.assertEqual(record["workflow_phase"], "bootstrap")
         self.assertEqual(record["workflow_state"], "action_required")
@@ -227,6 +229,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         history = record["historical_epochs"]["1"]
         self.assertEqual(history["task_record"]["canonical_worktree"], str(self.root.resolve()))
         self.assertEqual(history["task_record"]["task_branch"], "task/engineering-old")
+        self.assertEqual(history["task_record"]["worktree_hint"], str(self.root.resolve()))
         archived_snapshot = pathlib.Path(history["snapshot_path"])
         self.assertEqual(archived_snapshot.read_bytes(), self.snapshot_bytes)
         self.assertEqual(history["snapshot_sha256"], hashlib.sha256(self.snapshot_bytes).hexdigest())
@@ -676,6 +679,21 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         replacement_record = json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]
         self.assertEqual(replacement_record["bootstrap_epoch"], 2)
         self.assertEqual(replacement_record["canonical_worktree"], str(self.replacement.resolve()))
+
+    def test_exact_retry_repairs_stale_active_worktree_hint(self) -> None:
+        receipt = self.assert_migrated(self.run_helper())
+        record = self.mapping_record()
+        record["worktree_hint"] = str(self.root.resolve())
+        self.replace_mapping_record(record)
+
+        retried = self.assert_migrated(self.run_helper())
+        self.assertEqual(retried, receipt)
+        self.assertEqual(self.mapping_record()["worktree_hint"], str(self.replacement.resolve()))
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        self.assertEqual(
+            json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]["worktree_hint"],
+            str(self.replacement.resolve()),
+        )
 
     def test_pre_fix_committed_archive_without_bootstrap_epoch_recovers_as_epoch_one(self) -> None:
         interrupted = self.run_helper(crash_after="mapping_committed")

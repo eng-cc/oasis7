@@ -368,6 +368,7 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
         ("bootstrap_epoch", "new_epoch"),
         ("canonical_worktree", "new_worktree"),
         ("task_branch", "new_branch"),
+        ("worktree_hint", "new_worktree"),
     )
     if any(record.get(record_field) != receipt.get(receipt_field)
            for record_field, receipt_field in pairs):
@@ -404,6 +405,23 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
             invalidated.get("fields") != receipt_invalidation.get("fields")):
         raise MigrationError("committed invalidated authority disagrees with migration receipt")
     return record
+
+
+def repair_worktree_hint_for_exact_retry(mapping_path: pathlib.Path, task_uid: str,
+                                         receipt: dict[str, Any]) -> None:
+    """Repair only the derived active-worktree mirror for an otherwise exact receipt."""
+    try:
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MigrationError(f"cannot read exact retry task mapping: {exc}") from exc
+    record = require_record(mapping, task_uid)
+    if (record.get("bootstrap_epoch") != receipt.get("new_epoch")
+            or record.get("canonical_worktree") != receipt.get("new_worktree")
+            or record.get("task_branch") != receipt.get("new_branch")
+            or record.get("branch_identity_migration_receipt") != receipt):
+        raise MigrationError("exact retry task mapping disagrees with migration receipt")
+    record["worktree_hint"] = receipt["new_worktree"]
+    durable_store.atomic_replace_json(mapping_path, mapping)
 
 
 def active_identity_matches_receipt(root: pathlib.Path, receipt: dict[str, Any]) -> bool:
@@ -503,6 +521,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     and record.get("bootstrap_epoch") == receipt.get("new_epoch")
                     and record.get("canonical_worktree") == receipt.get("new_worktree")
                     and record.get("task_branch") == receipt.get("new_branch")):
+                repair_worktree_hint_for_exact_retry(mapping_path, args.task_uid, receipt)
                 readback_committed_migration(mapping_path, args.task_uid, receipt)
                 request_kind = committed_request_kind(args, replacement, receipt, record)
                 if request_kind == "exact":
@@ -524,6 +543,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 and record.get("bootstrap_epoch") == recovered_receipt.get("new_epoch")
                 and record.get("canonical_worktree") == recovered_receipt.get("new_worktree")
                 and record.get("task_branch") == recovered_receipt.get("new_branch")):
+            repair_worktree_hint_for_exact_retry(mapping_path, args.task_uid, recovered_receipt)
             readback_committed_migration(mapping_path, args.task_uid, recovered_receipt)
             request_kind = committed_request_kind(args, replacement, recovered_receipt, record)
             if request_kind == "exact":
@@ -660,6 +680,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         receipt["digest"] = digest(receipt)
         new_record = json.loads(json.dumps(record))
         new_record.update({"canonical_worktree": str(replacement), "task_branch": args.replacement_branch,
+                           "worktree_hint": str(replacement),
                            "bootstrap_epoch": new_epoch, "workflow_phase": "bootstrap",
                            "workflow_state": "action_required", "phase_receipts": {}, "evidence": {},
                            "branch_identity_migration": migration_record,
