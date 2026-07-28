@@ -17,6 +17,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HELPER = ROOT / "scripts" / "pm" / "migrate-task-branch-identity.py"
+BOOTSTRAP_HELPER = ROOT / "scripts" / "pm" / "bootstrap-task-snapshot.py"
 UID = "task_11111111111111111111111111111111"
 
 
@@ -70,6 +71,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
             "commit-tree", "HEAD^{tree}", "-p", "refs/heads/main", "-m", "comparison moved"
         )
         self.write_mapping()
+        self.old_mapping_bytes = self.mapping.read_bytes()
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -86,6 +88,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
     def write_mapping(self, **changes: object) -> None:
         task = {
             "task_uid": UID,
+            "title": "same UID migration bootstrap fixture",
             "issue_number": 2660,
             "issue_url": "https://example.invalid/issues/2660",
             "project_item_id": "PVTI_test",
@@ -185,6 +188,24 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(receipt["comparison_oid"], self.git("rev-parse", "refs/heads/main"))
         return receipt
 
+    def run_replacement_bootstrap(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(BOOTSTRAP_HELPER),
+                "validate-or-create",
+                "--repo-root",
+                str(self.replacement),
+                "--task-uid",
+                UID,
+                "--producer",
+                "tpm",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
     def test_migration_archives_old_epoch_preserves_exact_head_and_invalidates_authority(self) -> None:
         receipt = self.assert_migrated(self.run_helper())
         record = self.mapping_record()
@@ -225,6 +246,19 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(receipt["invalidated_authority"]["fields"], invalidated["fields"])
         self.assertIn("phase_receipts", invalidated["fields"])
         self.assertIn("bootstrap_snapshot", invalidated["fields"])
+
+    def test_migration_materializes_replacement_mapping_for_normal_bootstrap(self) -> None:
+        self.assert_migrated(self.run_helper())
+
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        replacement_record = json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(replacement_record["canonical_worktree"], str(self.replacement.resolve()))
+        self.assertEqual(replacement_record["task_branch"], self.replacement_branch)
+        self.assertEqual(replacement_record["bootstrap_epoch"], 2)
+
+        bootstrap = self.run_replacement_bootstrap()
+        self.assertEqual(bootstrap.returncode, 0, bootstrap.stderr)
+        self.assertEqual(json.loads(bootstrap.stdout)["status"], "created")
 
     def test_legacy_record_without_bootstrap_epoch_migrates_as_epoch_one(self) -> None:
         self.remove_bootstrap_epoch()
@@ -493,6 +527,21 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         )
         self.assertEqual(journal_after_retry["state"], "committed")
         self.assertEqual(journal_after_retry["receipt"], committed_receipt)
+
+    def test_mapping_commit_recovery_replaces_stale_replacement_mapping(self) -> None:
+        interrupted = self.run_helper(crash_after="mapping_committed")
+        self.assertNotEqual(interrupted.returncode, 0, interrupted.stdout)
+
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        replacement_mapping.write_bytes(self.old_mapping_bytes)
+        self.assertEqual(
+            json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]["bootstrap_epoch"], 1
+        )
+
+        self.assert_migrated(self.run_helper())
+        replacement_record = json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(replacement_record["bootstrap_epoch"], 2)
+        self.assertEqual(replacement_record["canonical_worktree"], str(self.replacement.resolve()))
 
     def test_pre_fix_committed_archive_without_bootstrap_epoch_recovers_as_epoch_one(self) -> None:
         interrupted = self.run_helper(crash_after="mapping_committed")
