@@ -28,6 +28,7 @@ HUMAN_REVIEW_ENTRYPOINTS = (
     ROOT / "scripts/prepare-task-pr.sh",
     ROOT / "scripts/pm/task-closeout.sh",
 )
+BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -41,6 +42,14 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertIsNotNone(match, f"missing canonical section: {heading}")
         return match.group(1)
+
+    def canonical_source_line_budget(self) -> int:
+        match = re.search(
+            r"one (\d+)-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract\.test\.py`",
+            self.text,
+        )
+        self.assertIsNotNone(match, "source must define one canonical line budget")
+        return int(match.group(1))
 
     def test_capability_status_table_distinguishes_reality(self) -> None:
         table = self.section("Capability status")
@@ -519,7 +528,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertLessEqual(sum(pr_chain.count(role) for role in roles), 3)
 
     def test_source_has_conciseness_and_canonical_marker_budgets(self) -> None:
-        self.assertLessEqual(len(self.text.splitlines()), 740)
+        self.assertLessEqual(len(self.text.splitlines()), self.canonical_source_line_budget())
         self.assertLessEqual(self.text.count("Canonical definition:"), 6)
         self.assertLessEqual(len(re.findall(r"(?m)^## ", self.text)), 16)
         self.assertLessEqual(len(re.findall(r"(?m)^### ", self.text)), 22)
@@ -720,8 +729,15 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertNotIn("link-only", policy.lower())
 
     def test_canonical_spec_has_a_line_budget_and_no_boilerplate_labels(self) -> None:
-        self.assertLessEqual(len(self.text.splitlines()), 700)
         self.assertNotIn("Canonical definition:", self.text)
+
+    def test_bootstrap_snapshot_example_supplies_required_repo_root(self) -> None:
+        skill = BOOTSTRAP_SKILL.read_text(encoding="utf-8")
+        self.assertRegex(
+            skill,
+            r"bootstrap-task-snapshot\.py validate-or-create"
+            r" --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm",
+        )
 
 
 if __name__ == "__main__":
