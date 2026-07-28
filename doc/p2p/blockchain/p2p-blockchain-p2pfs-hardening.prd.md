@@ -57,8 +57,13 @@
 | Phase 7 | `PRD-P2P-MIG-051` | 2026-02-17 | sequencer action signer allowlist 规范化和配置 fail-fast。 |
 | Phase 8 | `PRD-P2P-MIG-052` | 2026-02-17 | 共享 ed25519 规范化工具，以及 membership/sequencer/signature 一致接线。 |
 | Security hardening | `PRD-P2P-MIG-053` | 2026-02-23 | guard 原子性、writer/fetch 鉴权、有界 subscription 与签名优先 restore 的稳定合同。 |
+| Production-grade roadmap | `PRD-P2P-MIG-058` | 2026-02-18 | 链式哈希、签名结算与 P2PFS 路线的历史收口；“production-grade”只是一轮专题名。当前 block hash payload 以 `world_id/height/slot/prev_block_hash/batch_id/state_root` 为准，不采用旧 `parent_block_hash/proposer_id/epoch` 模型。 |
+| Phase B | `PRD-P2P-MIG-064` | 2026-02-19 | commit 后 `NodeExecutionCommitContext/Result`、execution snapshot 字段与避免双执行的历史接线；当前执行入口是 node/chain-runtime，不是 `oasis7_viewer_live` 或 bridge fallback。 |
+| Phase C | `PRD-P2P-MIG-065` | 2026-02-19 | 跨节点 DistFS challenge/proof networking 的历史目标。当前只有本地 CAS self-probe；request/proof envelope、`aw.<world>.distfs.challenge.*` topic 与 network driver 未形成当前实现，必须视为 future gap。 |
 
 每一阶段的 HP 任务全部完成仅证明该阶段的实现/回归当时已收口；它不覆盖部署 inventory、节点拓扑、restore drill、生产密钥托管、治理 signer 外部化或 QA release verdict。
+
+奖励结算只保留当前可验证的签名 mint/transport 边界，不由本专题推导生产结算或 mainnet 可用。Builtin WASM identity 继续由 `../consensus/builtin-wasm-identity-consensus.prd.md` 持有；production 工件由 world-runtime deterministic build authority 持有，历史本地 source compile fallback 不属于生产合同。
 
 ## 5. 风险、验证与运维要求
 

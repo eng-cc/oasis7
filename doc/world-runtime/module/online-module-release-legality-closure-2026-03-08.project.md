@@ -26,7 +26,7 @@
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - `doc/world-runtime/module/player-published-entities.prd.md`
 - `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md`
-- `doc/p2p/distributed/distributed-pos-consensus.prd.md`
+- `doc/p2p/prd.md`（PoS 与 committed execution 当前合同）
 - `testing-manual.md`
 
 ## 状态
