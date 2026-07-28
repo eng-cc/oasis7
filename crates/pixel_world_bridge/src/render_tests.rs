@@ -74,6 +74,7 @@ struct PixelRegressionSummary {
     grid_pixels: usize,
     location_pixels: usize,
     selected_location_cue_pixels: usize,
+    selected_agent_cue_pixels: usize,
     agent_pixels: usize,
     agent_core_pixels: usize,
     hotspot_pixels: usize,
@@ -295,6 +296,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("grid", sprite, transform)),
     );
+    let mut selected_agent_cue_query =
+        world.query::<(&PixelWorldSelectedAgentCue, &Sprite, &Transform)>();
+    layers.extend(
+        selected_agent_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("selected_agent_cue", sprite, transform)),
+    );
 
     let mut fragment_shadow_query =
         world.query::<(&PixelWorldFragmentShadowVisual, &Sprite, &Transform)>();
@@ -412,6 +420,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "agent_core" => 9,
         "hotspot" => 10,
         "hotspot_core" => 11,
+        "selected_agent_cue" => 12,
         _ => 0,
     }
 }
@@ -471,6 +480,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
+    let selected_agent_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 12).count();
     let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
     let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
 
@@ -503,6 +513,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         fragment_fleck_pixels,
         location_pixels,
         selected_location_cue_pixels,
+        selected_agent_cue_pixels,
         agent_pixels,
         agent_core_pixels,
         hotspot_pixels,
@@ -1095,27 +1106,6 @@ fn bevy_pixel_regression_exports_unoccluded_detail_fleck() {
 }
 
 #[test]
-fn bevy_pixel_regression_exports_selected_location_ring_with_world_layers() {
-    let mut app = render_test_app(sample_render_state_with_beacon_candidates(
-        "location", "loc-0",
-    ));
-    let (image, summary) = rasterize_pixel_regression(&mut app);
-
-    assert!(summary.grid_pixels > 0);
-    assert!(summary.fragment_pixels > 0);
-    assert!(summary.location_pixels > 0);
-    assert!(summary.selected_location_cue_pixels > 0);
-    assert!(summary.agent_pixels > 0);
-    assert!(summary.agent_pixels > summary.selected_location_cue_pixels);
-    assert!(
-        image.pixels().any(|pixel| pixel.0 == [251, 191, 36, 255]),
-        "selected location ring must contribute opaque amber pixels"
-    );
-
-    write_pixel_probe_if_requested(&image, &summary);
-}
-
-#[test]
 fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection() {
     for (kind, id) in [("agent", "agent-0"), ("location", "loc-0")] {
         let mut app = render_test_app(sample_render_state_with_selection(12_000.0, kind, id));
@@ -1194,6 +1184,9 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
         );
     }
 }
-
 #[path = "render_hotspot_core_tests.rs"]
 mod hotspot_core_tests;
+#[path = "render_selected_agent_cue_tests.rs"]
+mod selected_agent_cue_tests;
+#[path = "render_selected_raster_tests.rs"]
+mod selected_raster_tests;
