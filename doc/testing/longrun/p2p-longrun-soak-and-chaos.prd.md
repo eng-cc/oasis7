@@ -24,6 +24,15 @@ chaos 以及 feedback 流量探针。
   新鲜度、stall、lag、DistFS failure ratio 与 invariant 状态。
 - `metric_gate=insufficient_data` 在 smoke 中只能产生告警，在 endurance 或
   release 档位必须失败；缺样本、跳过档位或只存在模板都不是 pass。
+- S9/S10 的 reward-runtime 指标只读取 `oasis7_chain_runtime` 的
+  `/v1/chain/status.reward_runtime` 快照；`metrics_available`、mint、DistFS、
+  settlement 与 invariant 字段不得由兼容字段回推。每个可用节点先取累计值
+  最大的样本再聚合比例，缺失节点保留告警；status 不可达必须记为 HTTP failure
+  并终止该次门禁判定。
+- `distfs_total_checks=0` 是 `insufficient_data`，不得与超阈值混写；
+  `reward_asset_invariant_violation` 只可由
+  `reward_runtime.invariant_ok=false` 触发，`running_false` 或 `http_failure`
+  的 chaos 瞬态必须作为独立失败分类保留。
 - 当前 state-sync、commit closure、observer catch-up 与 claim tier 由
   `game-world-state-sync-commit-closure-2026-06-26.prd.md` 拥有，本专题只提供
   S9 执行证据。

@@ -32,7 +32,7 @@
 - 模块设计总览：`doc/headless-runtime/design.md`
 - doc/headless-runtime/prd.index.md
 - `crates/oasis7_proto/src/viewer.rs`、`crates/oasis7/src/viewer/auth.rs` 与 simulator auth/persist regressions
-- `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
 - `testing-manual.md`
 - `skills/prd/check.md`
 

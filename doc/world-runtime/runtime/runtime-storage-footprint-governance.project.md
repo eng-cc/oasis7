@@ -1,14 +1,14 @@
 # oasis7 Runtime：执行桥接与运行态存储体积治理（项目管理文档）
 
-- 对应设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
-- 对应需求文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- 对应设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
+- 对应需求文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
 
 审计轮次: 4
 
 ## 任务拆解（含 PRD-ID 映射）
 ### T0 建档与文档树接线
 - [x] T0 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 新建专题 PRD / project，并回写 `doc/world-runtime/prd.md`、`doc/world-runtime/project.md`、`doc/world-runtime/prd.index.md` 的映射关系。
-- [x] T0.1 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 输出详细技术设计文档 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`，明确 canonical replay log / checkpoint / GC / metrics / migration 方案。
+- [x] runtime-storage-footprint-governance-design-authority (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 输出详细技术设计文档 `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`，明确 canonical replay log / checkpoint / GC / metrics / migration 方案；历史任务映射为 `TASK-WORLD_RUNTIME-034`（`doc/world-runtime/project.md`）。 Trace: #2739 (task_4ea0e1735e664bdaa0f6d0c2587d57f6)
 
 ### T1 Canonical replay contract
 - [x] T1.1 (PRD-WORLD_RUNTIME-014) [test_tier_required]: 定义 `ExecutionBridgeRecordV2` 持久化字段与兼容读取策略，明确 `commit_log_ref` / `checkpoint_ref` / `latest_state_ref` / `external_effect_ref` 的角色边界。
@@ -52,7 +52,7 @@
 
 ### T7 Footprint gate / 回归 / 收口
 - [x] T7.1 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 构造 `>= 2500` heights 的可复现实验样本，作为 footprint gate 与 replay regression 的统一输入基线。
-- [ ] T7.2 (PRD-WORLD_RUNTIME-014/015) [test_tier_required]: 建立默认 profile 的体积预算、restart recovery、retained-height replay gate，并输出失败时的目录/指标差异。
+- [x] runtime-storage-footprint-governance-storage-gate (PRD-WORLD_RUNTIME-014/015) [test_tier_required]: 建立默认 profile 的体积预算、restart recovery、retained-height replay gate，并输出失败时的目录/指标差异。修复后 QA 复验已确认 `release_default` 在 height 47 保持 `full_log_only`，在 height 65 进入 `checkpoint_plus_log`；证据见 `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`。 Trace: #2739 (task_4ea0e1735e664bdaa0f6d0c2587d57f6)
 - [x] T7.3 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 建立 GC fail-safe、profile 切换、archive read、checkpoint corruption、replay mismatch 的全量回归套件。
 - [x] T7.4 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 对接 launcher / chain runtime / soak 场景，验证 `dev_local`、`release_default`、`soak_forensics` 三档 profile 口径一致。
 - [x] T7.5 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 回写专题 PRD / project、模块项目文档、`testing-manual.md`（如测试入口变化）与 `doc/devlog/README.md`，归档体积对比与回放验证结论。
@@ -69,8 +69,8 @@
 - 并行边界: T2 与 T3 可在 T1 完成后并行；T4 可与 T2/T3 并行推进，但 T5 / T6 需等待冷热目录语义稳定后再收口。
 
 ## 依赖
-- `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
-- `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
+- `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
+- `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
 - `doc/world-runtime/prd.md`
 - `doc/world-runtime/project.md`
 - `doc/world-runtime/prd.index.md`

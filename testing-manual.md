@@ -597,6 +597,13 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
   - `topologies[].metrics.consensus_hash_consistent` 必须为 `true`，且 `consensus_hash_mismatch_count == 0`（若失败需检查 `topology/.consensus_hash_mismatch.tsv`）；
   - 如启用 chaos，`chaos_events.log` 与 `summary.json.totals.chaos_events_total` 一致。
   - 如启用 feedback events，`summary.json.totals.feedback_events_total == summary.json.totals.feedback_events_success_total + summary.json.totals.feedback_events_failed_total`，且 `feedback_events.log` 中 `phase=completed/failed` 事件数量与 `feedback_events_total` 一致。
+- reward-runtime 指标口径：S9/S10 只消费 `oasis7_chain_runtime` 的
+  `/v1/chain/status.reward_runtime` 原生快照，禁止以兼容字段回推。每个可用节点
+  先取累计最大值再聚合；缺失节点必须留告警，status 不可达记为 HTTP failure 并
+  终止门禁判定。`distfs_total_checks=0` 为 `insufficient_data`，不得与比例超阈值
+  混写；仅 `reward_runtime.invariant_ok=false` 可触发
+  `reward_asset_invariant_violation`，`running_false/http_failure` 必须保留为独立
+  失败分类，即使发生于 chaos 恢复窗口。
 - 漂移定位/回滚演练门禁（TASK-GAME-014）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::persistence::rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift -- --nocapture
@@ -966,6 +973,10 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `summary.json` 中 `run.status == "ok"`，并产出 `timeline.csv`；
   - `summary.json` 中 `run.metric_gate.status == "pass"`（一般告警通过 `run.metric_gate.notes` 留痕，不应降级为 `insufficient_data`）；
   - 若失败，必须保留 `failures.md` 作为分诊依据。
+- metric-source boundary：S10 的 mint、DistFS、settlement 与 invariant 只以
+  `reward_runtime` 原生快照为准；每节点累计最大值聚合、缺失节点告警、
+  `distfs_total_checks=0 -> insufficient_data`、以及 invariant/HTTP/运行状态的
+  独立分类均与 S9 一致。历史 run 或空集 probe seed 不能替代本次完整 metric gate。
 - 参考文档：`doc/testing/longrun/s10-five-node-real-game-soak.prd.md`、`doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`、`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。
 
 ### 发布门禁一键收口（S0 + S1 + S6 + S9 + S10）
