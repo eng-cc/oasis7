@@ -30,6 +30,7 @@ HUMAN_REVIEW_ENTRYPOINTS = (
 )
 BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
+PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -232,6 +233,21 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"stale or incorrect.{0,160}no code change.{0,160}evidence-backed disposition",
         )
         self.assertNotIn("explicitly authorizes skipping", skill)
+
+    def test_prepare_task_pr_help_matches_approval_only_admin_merge_policy(self) -> None:
+        """The operator-facing helper must link to, not add, approval-only authority."""
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.lower()
+        normalized = re.sub(r"\s+", " ", help_text)
+        self.assertIn("source-of-truth.md#ready-and-done", normalized)
+        self.assertRegex(normalized, r"fresh live gate.{0,120}use_admin_merge: true")
+        self.assertIn("no additional authorization", normalized)
+        self.assertNotIn("user/task policy explicitly allows", normalized)
 
     def test_finishing_pre_pr_transition_is_ready_not_task_closeout(self) -> None:
         finishing = FINISHING.read_text(encoding="utf-8")

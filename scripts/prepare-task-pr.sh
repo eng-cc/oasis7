@@ -23,9 +23,9 @@ the same reference and must not auto-close the task before terminal finalization
 REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
 mergeStateStatus=BEHIND is advisory by itself; if GitHub can still merge the PR
 cleanly, the workflow does not force a local rebase before merge.
-When mergeStateStatus=BLOCKED is only missing review approval and user/task
-policy explicitly allows skipping it, the normal flow may use repo admin merge
-after re-checking checks, mergeability, requested changes, comments, and threads.
+When mergeStateStatus=BLOCKED is only missing review approval, the fresh live gate
+may emit `use_admin_merge: true` under standing policy; no additional authorization.
+See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
 
 Default conventions:
 - source branch: current branch
