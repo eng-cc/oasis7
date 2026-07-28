@@ -55,6 +55,7 @@
   - 不变更 runtime 对 builtin wasm manifest 的消费协议。
   - 不恢复 `darwin-arm64` 作为发布级 canonical token。
   - 不调整业务模块的 wasm 功能逻辑。
+  - 不把 `scripts/ci-tests.sh required/full` 重新定义为 builtin m1/m4/m5 manifest/hash gate；这些校验只由独立 `wasm-determinism-gate` 与发布级 WASM authority 拥有。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题为构建与 CI 治理）。
@@ -82,12 +83,15 @@
   - manifest 含重复平台 token：严格失败并报告 `module_id + platform`。
   - runner 缺摘要或摘要重复：汇总脚本失败并列出缺失 / 重复 runner。
   - required check 注入时分支未保护：脚本应创建最小保护策略后继续注入。
+  - 目标安装边界：命中 WASM scope 的 Rust job 在当前默认 toolchain 下安装 `wasm32-unknown-unknown`；full/determinism job在 pinned WASM toolchain 下安装同一 target。该事实不表示所有 CI job 或所有 toolchain 都预装 target。
+  - required-check 策略：`scripts/ci-ensure-required-checks.py` 的更新必须保留既有上下文并执行去重并集；dry-run 不写远端，未受保护分支不得被本地文档推导成已启用保护。仓库文档和脚本不能单独证明 GitHub live branch protection。
 - Non-Functional Requirements:
   - NFR-WASMHARD-1: canonical manifest 与 identity 计算在同一 commit、同一 builder image digest 下 100% 可复现。
   - NFR-WASMHARD-2: canonical summary / evidence 对账失败信息须包含 `runner/module_id/hash`，单次运行内可定位。
   - NFR-WASMHARD-3: 新增治理链路不改变 `scripts/ci-tests.sh required/full` 的职责边界。
   - NFR-WASMHARD-4: 本地默认路径无写权限时不会修改任何 tracked manifest 文件。
-  - NFR-WASMHARD-5: docs-only / 无关 PR 不得实际执行 builtin wasm summary collect，但 required check context 名称保持不变。
+- NFR-WASMHARD-5: docs-only / 无关 PR 不得实际执行 builtin wasm summary collect，但 required check context 名称保持不变。
+- NFR-WASMHARD-6: Linux canonical evidence只证明 canonical Docker 产物与稳定 required contexts；跨宿主 closure 还需要真实 Docker-capable `darwin-arm64` full-tier summary，不能由 Linux-only pass 外推。
 - Security & Privacy: 仅处理模块源码路径、hash token、receipt evidence 与 CI metadata；不处理敏感业务数据。
 
 ## 5. Risks & Roadmap

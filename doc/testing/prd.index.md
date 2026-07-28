@@ -69,20 +69,15 @@ Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流�
 
 Performance observability historical/provenance note: 2026-02-25 的 runtime foundation、LLM/API decoupling、Viewer native bottleneck 与 Viewer methodology 四组三件套已完成专业权威合并并物理删除；当前 authority 为 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md` 与 `testing-manual.md`。旧 Viewer native `RenderPerfSummary` / `PerfHotspot` / runtime-stage / CSV contract 随 old `perf_probe` / `viewer-owr4-stress` 退役；当前浏览器 probe 不承诺 hotspot 分类或 runtime-stage diagnosis。历史里程碑、阈值来源与完成证据仅从 Git/GitHub task evidence 追溯。
 
-Builtin wasm m1 determinism historical/provenance note: `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.*` 是已完成的 historical triplet，旧 independent multi-runner / host-native 对账口径已并入当前 Docker canonical `wasm-determinism-gate`。当前 builtin wasm 独立 gate 入口为 `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` 与 `.github/workflows/wasm-determinism-gate.yml`；删除该 legacy triplet 前，需 focused `rg` 确认只剩 self/provenance 引用。
-
-Wasm build determinism guard historical/provenance note: `doc/testing/governance/wasm-build-determinism-guard.*` 是已完成的 historical QA gate substrate，记录早期脚本护栏、污染环境变量拦截和 workspace 编译期风险前置。当前 WASM 发布级 canonical build / release evidence 入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`；required / full gate 归属继续以 `doc/testing/prd.md`、`doc/testing/project.md`、`testing-manual.md` 与当前 task truth 为准。删除该 legacy triplet 前，需 focused `rg` 确认只剩 self/provenance 引用。
+Builtin WASM CI 历史收口：早期 m1 independent multi-runner、required-check protection、base-gate hash、wasm32 target install 与 build-determinism guard 五组三件套已退役删除。当前测试入口为 `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md`、`doc/testing/prd.md`、`testing-manual.md` 与 `.github/workflows/wasm-determinism-gate.yml`；发布级 build/hash/identity/release evidence authority 为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`。历史实施与完成证据只从 Git history 和 GitHub task issue evidence comments 追溯。
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md` |
 | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.project.md` |
-| `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.project.md` |
-| `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.prd.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.design.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.project.md` |
 | `doc/testing/ci/ci-test-coverage.prd.md` | `doc/testing/ci/ci-test-coverage.design.md` | `doc/testing/ci/ci-test-coverage.project.md` |
 | `doc/testing/ci/ci-testcase-tiering.prd.md` | `doc/testing/ci/ci-testcase-tiering.design.md` | `doc/testing/ci/ci-testcase-tiering.project.md` |
 | `doc/testing/ci/ci-tiered-execution.prd.md` | `doc/testing/ci/ci-tiered-execution.design.md` | `doc/testing/ci/ci-tiered-execution.project.md` |
-| `doc/testing/ci/ci-wasm32-target-install.prd.md` | `doc/testing/ci/ci-wasm32-target-install.design.md` | `doc/testing/ci/ci-wasm32-target-install.project.md` |
 | `doc/testing/governance/llm-skip-tick-ratio-metric.prd.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.design.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.project.md` |
 | `doc/testing/prd.md`（Durable Playability Evidence Governance） | `testing-manual.md` 的 L4A/L4B/L5 operator steps | 已吸收的 2026-05 playability governance batch：Git history 与 GitHub task evidence |
 | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.prd.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.design.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md` |
