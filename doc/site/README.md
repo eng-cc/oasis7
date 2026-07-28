@@ -33,12 +33,12 @@
 ## 模块职责
 - 维护公开首页、docs hub、下载入口与公开叙事边界。
 - 维护可直接抓取的 raw Markdown skill 分发入口。
-- 维护 github-pages 子域下的站点结构、内容同步、CTA、发布流水线与质量门禁专题。
+- 维护 github-pages 子域下的站点结构、内容同步、CTA、发布流水线与质量门禁；已完成的页面微专题回填到模块 root authority 后只从索引、GitHub task issue evidence comments 与 git history 追溯。
 - 维护 manual 子域下的静态文档站与 Viewer 手册镜像策略。
 - 承接公开“技术预览 / not playable yet / diagnostics only”口径与仓库 canonical 文档之间的一致性。
 
 ## 热点子域导航
-- `github-pages/` 当前默认活跃专题三件套：公开首页、下载链路、质量门禁、内容同步与公开叙事边界。
+- `github-pages/` 当前补充设计：公开首页的页面级层级、首屏内容与后果链节奏；当前合同仍以模块 root authority 为准。
 - `github-pages/` 已退役删除旧专题：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
 - `manual/` 路由入口与正式专题三件套：静态文档站与 Viewer 手册镜像策略。
 - 模块根入口：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
