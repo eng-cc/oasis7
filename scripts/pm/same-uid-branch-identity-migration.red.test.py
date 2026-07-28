@@ -132,6 +132,10 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         *,
         crash_after: str | None = None,
         comparison_oid_after_branch_created: str | None = None,
+        repo_root: pathlib.Path | None = None,
+        tasks_json: pathlib.Path | None = None,
+        replacement_worktree: pathlib.Path | None = None,
+        replacement_branch: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         environment = dict(os.environ)
         environment["OASIS7_PM_TEST_REMOTE_REPOSITORY_MAP"] = json.dumps(self.remote_repository_map)
@@ -145,11 +149,11 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
             [
                 sys.executable,
                 str(HELPER),
-                "--repo-root", str(self.root),
+                "--repo-root", str(repo_root or self.root),
                 "--task-uid", UID,
-                "--tasks-json", str(self.mapping),
-                "--replacement-worktree", str(self.replacement),
-                "--replacement-branch", self.replacement_branch,
+                "--tasks-json", str(tasks_json or self.mapping),
+                "--replacement-worktree", str(replacement_worktree or self.replacement),
+                "--replacement-branch", replacement_branch or self.replacement_branch,
                 "--comparison-ref", "refs/heads/main",
                 "--issuer", "tpm",
                 "--reason", "same UID canonical worktree collision",
@@ -189,13 +193,16 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         return receipt
 
     def run_replacement_bootstrap(self) -> subprocess.CompletedProcess[str]:
+        return self.run_bootstrap(self.replacement)
+
+    def run_bootstrap(self, root: pathlib.Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 sys.executable,
                 str(BOOTSTRAP_HELPER),
                 "validate-or-create",
                 "--repo-root",
-                str(self.replacement),
+                str(root),
                 "--task-uid",
                 UID,
                 "--producer",
@@ -259,6 +266,67 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         bootstrap = self.run_replacement_bootstrap()
         self.assertEqual(bootstrap.returncode, 0, bootstrap.stderr)
         self.assertEqual(json.loads(bootstrap.stdout)["status"], "created")
+
+    def test_sequential_migration_advances_epoch_preserves_history_and_is_idempotent(self) -> None:
+        first = self.assert_migrated(self.run_helper())
+        replacement_two = self.root.parent / "replacement-worktree-two"
+        branch_two = "task/engineering-replacement-two"
+        epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+
+        second = self.run_helper(
+            repo_root=self.replacement,
+            tasks_json=epoch_two_mapping,
+            replacement_worktree=replacement_two,
+            replacement_branch=branch_two,
+        )
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_receipt = json.loads(second.stdout)
+        self.assertEqual(second_receipt["old_epoch"], 2)
+        self.assertEqual(second_receipt["new_epoch"], 3)
+        self.assertGreater(second_receipt["journal_revision"], first["journal_revision"])
+
+        final_mapping = replacement_two / ".pm" / "github-project-sync" / "tasks.json"
+        final_record = json.loads(final_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(final_record["bootstrap_epoch"], 3)
+        self.assertEqual(final_record["canonical_worktree"], str(replacement_two.resolve()))
+        self.assertEqual(final_record["task_branch"], branch_two)
+        self.assertEqual(set(final_record["historical_epochs"]), {"1", "2"})
+        self.assertEqual(
+            final_record["historical_epochs"]["2"]["task_record"]["branch_identity_migration_receipt"], first
+        )
+        bootstrap = self.run_bootstrap(replacement_two)
+        self.assertEqual(bootstrap.returncode, 0, bootstrap.stderr)
+        self.assertEqual(json.loads(bootstrap.stdout)["status"], "created")
+
+        repeated = self.run_helper(
+            repo_root=self.replacement,
+            tasks_json=epoch_two_mapping,
+            replacement_worktree=replacement_two,
+            replacement_branch=branch_two,
+        )
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(json.loads(repeated.stdout), second_receipt)
+        self.assertEqual(
+            self.git("worktree", "list", "--porcelain").count(f"branch refs/heads/{branch_two}"), 1
+        )
+
+    def test_sequential_migration_rejects_ambiguous_prior_branch_request(self) -> None:
+        self.assert_migrated(self.run_helper())
+        replacement_two = self.root.parent / "replacement-worktree-two"
+        epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        before_mapping = epoch_two_mapping.read_bytes()
+
+        ambiguous = self.run_helper(
+            repo_root=self.replacement,
+            tasks_json=epoch_two_mapping,
+            replacement_worktree=replacement_two,
+            replacement_branch=self.replacement_branch,
+        )
+
+        self.assertNotEqual(ambiguous.returncode, 0, ambiguous.stdout)
+        self.assertIn("requested active identity", ambiguous.stderr)
+        self.assertEqual(epoch_two_mapping.read_bytes(), before_mapping)
+        self.assertFalse(replacement_two.exists())
 
     def test_legacy_record_without_bootstrap_epoch_migrates_as_epoch_one(self) -> None:
         self.remove_bootstrap_epoch()
