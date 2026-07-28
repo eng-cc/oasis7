@@ -33,3 +33,4 @@
 - 发起建模: `producer_system_designer`
 - 备注: `T1/T2` 已完成并形成离线 required 测试基座；后续 `T3/T5` 仍必须同时满足 `PRD-WORLD_SIMULATOR-038` 的 parity 门禁，禁止把 provider 接通视作功能完成。
 - 专业权威合并不改变 `T3/T4/T5` pending；历史 runtime-live bridge 文档退役不代表 adapter parity、trace/error mapping 或成本稳定性已完成。
+- 已吸收的多场景评测与工业调试长跑只提供历史 harness / 风险演进证据：后续评测须固定 scenario/fixture/profile、provider/adapter/协议版本、timeout、tick budget 与并行度，保留分场景和聚合工件，并对非确定性 provider 重复采样。它们不关闭 T3/T4/T5，不证明当前 provider parity、成本或默认启用资格；debug resource injection 运行也不得纳入普通 parity 样本。

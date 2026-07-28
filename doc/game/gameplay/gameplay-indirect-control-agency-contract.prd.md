@@ -16,7 +16,8 @@
   - SC-3: headed Web/UI 与 pure API 都能直接回答 4 个问题：`我刚刚让系统做什么`、`系统是否接受了`、`为什么当前这样推进/没推进`、`我现在最有效的下一步是什么`。
   - SC-4: future UX / runtime / agent contract 变更可以被 QA 按本专题直接判定为 `strengthens / preserves / weakens control-feeling`，而不是只看 smoke 是否还能跑。
   - SC-5: 本专题不改变 `PRD-GAME-012` 当前正式 verdict；它负责定义 trust/capability 修复所依赖的“控制感合同”，而不是替代 active-LLM 留存验证本身。
-  - SC-6: 若 agent 使用长期记忆影响当前行动，玩家必须能看到“记住了什么 / 来自哪里 / 为什么影响当前行动 / 如何纠正”的最小可读合同。
+- SC-6: 若 agent 使用长期记忆影响当前行动，玩家必须能看到“记住了什么 / 来自哪里 / 为什么影响当前行动 / 如何纠正”的最小可读合同。
+- SC-7: Agent guardrail、记忆或世界约束若使工业/资源动作改道、裁剪或拒绝，必须保留原 accepted intent、替换/override 原因和下一步恢复面；不得把自动改写或 debug 工具结果包装成玩家已经完成的世界后果。
 
 ## 2. User Experience & Functionality
 
@@ -71,6 +72,8 @@
 请求、提案或玩家意图被接受，只表示系统已承认并会在权威边界内处理它；它不等同于规则已应用、投票已结算、社会关系已改变、冲突已开始或任何预期后果已发生。receipt 必须把“已接受”“正在按规则处理”“权威应用或未应用的结果”区分开，并在被阻塞、改道、被替换或纠正后保留同一条因果链。
 
 本 receipt 定义 gameplay 可读性与验收语义，不新增 runtime 字段、状态枚举、治理规则、Agent 推理保证或 Viewer/API 布局。具体事实、可中断性和何时应用仍以对应权威状态与专业合同为准。
+
+同一边界适用于采集、精炼、移动和排程等工业恢复动作：若 Agent 因资源不足、地点不可达、世界约束或 guardrail 改写而不能按原意图推进，receipt 必须把原意图与替换动作/拒绝原因连接起来，并进入既有的 wait、repair、reroute 或 reprioritize 恢复面。仅 debug/probe 可用的资源注入不属于玩家意图、玩家奖励或正式 playability 样本，不能用于伪造该因果链。
 
 - Acceptance Criteria:
   - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。

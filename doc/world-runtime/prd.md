@@ -31,6 +31,7 @@
 - Base module governance 负责通用 identity、version、artifact、interface/export、subscription、capability 与 limit 校验，只把 Gameplay contract 和变更后 active-set slot 冲突交给 gameplay layer。这是内部实现职责拆分，不创建新的 ABI 或规则语义边界；公开协议仍以本页和 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 发生 tick-consensus drift 时，runtime 恢复必须让受影响 action 得到显式处置（保留、replay，或带恢复路径的拒绝），不得静默丢失。可执行 governed rollback v2 的 custody、C/T reconciliation、nonce、journal/root 校验与 all-clear 流程仍由现行 rollback runbook 承载；历史 release `Go`、RTO/RPO 或一次性 soak 结果不得充当当前 release authority。
 - 生命周期事件与状态仍受本 PRD 的确定性、receipt、replay、恢复与 ABI 兼容合同约束；持久化保留和恢复细则见 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`。历史 closure 的实现过程从 Git history 与 GitHub task evidence 追溯，不再作为长期 runtime 权威入口。
+- 对激活且订阅 `tick` 的模块，runtime 只在 logical time 到期时调用，并将 schedule 随 snapshot/replay 持久化；一次 tick 调用先消费旧 schedule，只有模块明确请求 wake 才建立下一次调度，`suspend` 或缺省指令不再调度。ABI wire shape、最小 wake clamp、tick context 与结构化失败约定以 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 链 PoS 的时间锚、slot/tick 相位、严格滞后恢复、控制面参数、status 与 restart/replay 边界由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 唯一承接；它不定义 validator 经济、节点运维或发布结论。
 
 ## 接口 / 数据

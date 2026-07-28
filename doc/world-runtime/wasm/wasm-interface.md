@@ -51,6 +51,12 @@ struct ModuleManifest {
 - `stage`: `"pre_action" | "post_action" | "post_event" | "tick"`（动作/事件/周期路由阶段）
 - `filters`: 可选过滤条件（例如仅关注某类 owner/地点）
 
+**Tick 生命周期调度（执行器合同）**
+- 只有激活且订阅 `tick` 的模块实例进入调度表；激活时初次安排在当前 logical tick。调度表以 `instance_id -> next_wake_tick` 持久化在世界 snapshot 中，因此 restart/replay 不得把尚未到期的唤醒丢失或提前。
+- `step_with_modules` 每次推进 logical time 后只调用到期实例。tick 调用的 `ctx.stage` 为 `"tick"`，`event` 与 `action` 均省略；reducer 仍携带其受限 `state`，pure 模块不携带 `state`。
+- 执行器在调用前移除该实例的旧 schedule。调用成功后，只有 `tick_lifecycle.wake_after_ticks` 才写入下一次 schedule；`ticks=0` 按 `1` clamp。`tick_lifecycle.suspend` 或字段缺省均不重排。调用失败同样不会自动恢复已消费的 schedule，宿主必须返回结构化失败而不能静默重试。
+- 这一定时语义不改变模块权限、artifact identity 或 manifest hash 规则；新增/变更 tick subscription 仍按普通 manifest 和 artifact 校验链处理。
+
 **ModuleLimits（示意字段）**
 ```rust
 struct ModuleLimits {
@@ -135,18 +141,23 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 - `event`/`action` 字段均为 canonical CBOR bytes。
 - reducer 调用会携带 `state`（空字节串代表无历史状态），pure 调用省略 `state`。
 - `pre_action` 阶段仅提供 `action`；`post_action` 阶段提供 `action` + `event`（动作落盘后的结果事件）；`post_event` 阶段仅提供 `event`。
+- `tick` 阶段不提供 `event` 或 `action`；其 schedule/重排语义以上述执行器合同为准。
 
 **ModuleOutput（CBOR Map）**
 ```
 {
   "new_state": Bytes | null,
   "effects": [ Bytes ], // EffectIntent 的 canonical CBOR 列表
-  "emits": [ Bytes ]    // WorldEvent 的 canonical CBOR 列表
+  "emits": [ Bytes ],   // WorldEvent 的 canonical CBOR 列表
+  "tick_lifecycle": { "mode": "wake_after_ticks", "ticks": u64 }
+                    | { "mode": "suspend" } // 可选；缺省表示不重排
 }
 ```
 
 - 当 `new_state` 为非空时，运行时记录 `ModuleStateUpdated` 事件并更新模块状态。
 - Pure 模块不得返回 `new_state`，否则视为 InvalidOutput。
+- `tick_lifecycle` 是 ABI 的可选、serde-defaulted 扩展：旧模块输出省略该字段仍可解码，且其既有非-tick 调用行为不变；若该输出来自 tick 调用，缺省的兼容含义是 suspend（不再调度），而不是隐式每 tick 重试。
+- 回归至少覆盖：激活初排、仅到期调用、`wake_after_ticks` 重排、`suspend`/缺省不重排、零 ticks clamp、调用失败不重排，以及 schedule 的 snapshot round-trip。
 
 **错误约定**
 - 模块返回非规范 CBOR、输出超限或字段缺失时，宿主记录 `ModuleCallFailed` 事件并拒绝输出。
