@@ -18,10 +18,10 @@ use sha2::{Digest, Sha256};
 
 mod agent_chat_intent;
 mod llm_sidecar;
+#[path = "control_plane/prompt_profile.rs"]
+mod prompt_profile;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
-use agent_chat_intent::{
-    apply_accepted_primary_intent, apply_short_term_goal_primary_intent, resolve_agent_chat_intent,
-};
+use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
@@ -759,70 +759,6 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(request.agent_id.clone()),
             })?;
         Ok(verified)
-    }
-
-    fn current_prompt_version(&self, agent_id: &str) -> Option<u64> {
-        self.llm_sidecar
-            .prompt_profiles
-            .get(agent_id)
-            .map(|profile| profile.version)
-    }
-
-    fn record_primary_intent_from_short_term_goal(
-        &mut self,
-        agent_id: &str,
-        short_term_goal: Option<&str>,
-    ) {
-        let primary_intent = apply_short_term_goal_primary_intent(
-            self.llm_sidecar.primary_intents.get(agent_id),
-            short_term_goal,
-        );
-        self.llm_sidecar
-            .primary_intents
-            .insert(agent_id.to_string(), primary_intent);
-    }
-
-    fn current_prompt_profile(
-        &self,
-        agent_id: &str,
-    ) -> Result<AgentPromptProfile, PromptControlError> {
-        if !self.world.state().agents.contains_key(agent_id) {
-            return Err(PromptControlError {
-                code: "agent_not_found".to_string(),
-                message: format!("agent not found: {agent_id}"),
-                agent_id: Some(agent_id.to_string()),
-                current_version: None,
-            });
-        }
-        Ok(self
-            .llm_sidecar
-            .prompt_profiles
-            .get(agent_id)
-            .cloned()
-            .unwrap_or_else(|| AgentPromptProfile::for_agent(agent_id.to_string())))
-    }
-
-    fn lookup_prompt_profile_version(
-        &self,
-        agent_id: &str,
-        version: u64,
-    ) -> Option<AgentPromptProfile> {
-        self.llm_sidecar
-            .prompt_profile_history
-            .get(agent_id)
-            .and_then(
-                |versions: &std::collections::BTreeMap<u64, AgentPromptProfile>| {
-                    versions.get(&version).cloned()
-                },
-            )
-            .or_else(|| {
-                let profile = self.llm_sidecar.prompt_profiles.get(agent_id)?;
-                if profile.version == version {
-                    Some(profile.clone())
-                } else {
-                    None
-                }
-            })
     }
 
     fn bind_agent_player_access(
