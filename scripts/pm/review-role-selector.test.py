@@ -59,4 +59,39 @@ class ReviewRoleSelectorTests(unittest.TestCase):
         for kind in ("unknown", "mixed"):
             self.assertIn("manual", self.select("--change-class", kind, ok=False).lower())
 
+    def test_unknown_or_mixed_accept_explicit_canonical_manual_roles(self):
+        expected = ["runtime_engineer", "qa_engineer", "repository_health_engineer"]
+        for kind in ("unknown", "mixed"):
+            with self.subTest(kind=kind):
+                selected = self.select(
+                    "--change-class", kind,
+                    "--manual-role", "runtime_engineer",
+                    "--manual-role", "qa_engineer",
+                    "--manual-role", "repository_health_engineer",
+                )
+                self.assertEqual(expected, selected["roles"])
+                self.assertEqual(kind, selected["change_class"])
+                self.assertEqual("manual", selected["selection_mode"])
+
+    def test_manual_role_selection_rejects_duplicates_tpm_and_unknown_roles(self):
+        for role_args in (
+            ("runtime_engineer", "runtime_engineer"),
+            ("tpm",),
+            ("not_a_canonical_role",),
+        ):
+            with self.subTest(role_args=role_args):
+                args = ["--change-class", "unknown"]
+                for role in role_args:
+                    args.extend(("--manual-role", role))
+                error = self.select(*args, ok=False)
+                self.assertIn("manual role", error.lower())
+
+    def test_explicit_document_classes_do_not_accept_manual_role_override(self):
+        error = self.select(
+            "--change-class", "workflow-doc",
+            "--manual-role", "runtime_engineer",
+            ok=False,
+        )
+        self.assertIn("manual role", error.lower())
+
 if __name__ == "__main__": unittest.main()

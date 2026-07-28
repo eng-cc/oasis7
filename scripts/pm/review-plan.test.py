@@ -161,6 +161,42 @@ class ReviewPlanTests(unittest.TestCase):
         result = self.run_plan("--comparison-oid", "c" * 40, ok=False)
         self.assertIn("--comparison-oid mismatch", result.stderr)
 
+    def test_manual_unknown_plan_binds_roles_comparison_and_packet_refs(self) -> None:
+        plan = self.plan(
+            "--change-class", "unknown",
+            "--manual-role", "runtime_engineer",
+            "--manual-role", "qa_engineer",
+            "--manual-role", "repository_health_engineer",
+            "--out", str(self.root / "manual-plan.json"),
+        )
+        self.assertEqual(
+            ["runtime_engineer", "qa_engineer", "repository_health_engineer"],
+            plan["roles"],
+        )
+        self.assertEqual(self.comparison_ref, plan["comparison_ref"])
+        self.assertEqual(self.comparison_oid, plan["comparison_oid"])
+        self.assertEqual(plan["roles"], [item["role"] for item in plan["expected_slices"]])
+        self.assertEqual(
+            [item["slice_id"] for item in plan["expected_slices"]],
+            [item["slice_id"] for item in plan["packet_refs"]],
+        )
+        self.assertEqual(
+            [
+                f".pm/scratch/{TASK}/slice-packets/{item['slice_id']}.json"
+                for item in plan["expected_slices"]
+            ],
+            [item["packet_ref"] for item in plan["packet_refs"]],
+        )
+
+    def test_manual_roles_are_part_of_the_immutable_plan_identity(self) -> None:
+        result = self.run_plan(
+            "--change-class", "mixed",
+            "--manual-role", "runtime_engineer",
+            "--manual-role", "runtime_engineer",
+            ok=False,
+        )
+        self.assertIn("duplicate manual role", result.stderr.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
