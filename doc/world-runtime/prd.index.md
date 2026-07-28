@@ -49,7 +49,7 @@
 | 文档路径 | 当前状态 | 当前阅读入口 |
 | --- | --- | --- |
 | `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | 历史实现证据；记录 nightly build-std 方案，不再作为发布级 canonical build 入口 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` |
-| `doc/testing/governance/wasm-build-determinism-guard.prd.md` | 历史 QA gate substrate；记录脚本护栏和编译期拦截，不替代当前 release evidence / Docker canonical 口径 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` 与 `doc/testing/prd.md` |
+| 早期 WASM build determinism QA guard（已退役） | 历史脚本护栏和编译期拦截只从 Git/GitHub task evidence 追溯，不替代当前 release evidence / Docker canonical 口径 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` 与 `doc/testing/prd.md` |
 | `doc/testing/evidence/viewer-wasm-only-runtime-proof-2026-05-13.md` | dated evidence；只证明当轮 viewer wasm-only runtime proof，不替代 required/full gate | `doc/world-simulator/viewer/README.md` 与当前 viewer/testing task truth |
 
 ## 默认阅读面边界
