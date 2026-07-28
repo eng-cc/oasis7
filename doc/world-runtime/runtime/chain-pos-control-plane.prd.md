@@ -65,7 +65,7 @@
 
 - restart 读取已持久化的 consensus/timing snapshot 后继续单调计数，不得把恢复前已观测的 slot/tick 倒退或重复计为新进度。
 - replay 以已记录的事件、snapshot 和 canonical log 为准；它验证时间/状态后果，不重新根据“现在的 wall clock”补发历史提案。
-- timing counters、missed accounting 和 status 所见配置属于恢复诊断输入。保存、checkpoint、retention 和 retained-height replay 的具体存储合同仍由 `runtime-storage-footprint-governance-2026-03-08.*` 承接。
+- timing counters、missed accounting 和 status 所见配置属于恢复诊断输入。保存、checkpoint、retention 和 retained-height replay 的具体存储合同仍由 `runtime-storage-footprint-governance.*` 承接。
 
 ## 3. Technical Ownership and Interfaces
 

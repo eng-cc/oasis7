@@ -12,7 +12,7 @@
 ## 依赖
 
 - 当前代码合同：`crates/oasis7/src/chain_pos_defaults.rs` 与 `crates/oasis7/src/bin/oasis7_chain_runtime/` 的 CLI、status、startup reconcile 路径。
-- 持久化/retention 细则：`runtime-storage-footprint-governance-2026-03-08.*`。
+- 持久化/retention 细则：`runtime-storage-footprint-governance.*`。
 
 ## 当前合同清单
 

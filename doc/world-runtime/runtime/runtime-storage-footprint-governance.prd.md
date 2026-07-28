@@ -1,11 +1,11 @@
-# oasis7 Runtime：执行桥接与运行态存储体积治理（2026-03-08）
+# oasis7 Runtime：执行桥接与运行态存储体积治理
 
-- 对应设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
-- 对应项目管理文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md`
+- 对应设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
+- 对应项目管理文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md`
 
 审计轮次: 4
 
-- 详细技术设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
+- 详细技术设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
 
 ## 1. Executive Summary
 - Problem Statement: 当前 `oasis7_viewer_live` / `oasis7_chain_runtime` 的默认运行态持久化在短时本地闭环中也会产生明显的磁盘膨胀：一次约 `2102` 高度的运行样本中，`output/chain-runtime/viewer-live-node/store` 约 `1.18 GiB`、`reward-runtime-execution-world/.distfs-state/blobs` 约 `635 MiB`，而当前最新执行世界实际只引用约 `1.55 MiB` 的 sidecar blob。执行桥接按高度保留全量 `snapshot_ref`、执行世界 sidecar 缺少引用回收、`snapshot.json` 中 `tick_consensus_records` 持续增长，导致本地调试、重复启动与长跑验证的磁盘成本过高。

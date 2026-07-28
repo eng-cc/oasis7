@@ -44,6 +44,21 @@
 | 门禁判定 | `max_stall`、`max_lag_p95`、`max_distfs_failure_ratio`、`max_settlement_apply_failure_ratio` | 根据指标阈值给出 pass/fail | `collecting -> gated` | failure_ratio 以 attempts 为分母，需 `attempts>0` | 发布门禁消费 |
 | 证据产物 | `run_config.json`、`timeline.csv`、`summary.json`、`summary.md`、`nodes/*` | 输出统一目录并保留关键日志 | `collected -> archived` | 失败时生成 `failures.md` | QA/发布读取 |
 | DistFS probe bootstrap | `storage_root/blobs`、seed result、`distfs_total_checks` | 仅空集时写入最小非敏感 seed；非空跳过；失败记录错误并继续 | `checked -> seeded/skipped/error_recorded -> sampled` | 幂等、不得无界重复写入；seed 只提供样本，不改变阈值 | runtime 自动执行，QA解释结果 |
+
+### Reward-runtime metric source and classification
+
+- S10 直接消费 `oasis7_chain_runtime` 的
+  `/v1/chain/status.reward_runtime` 快照；`metrics_available` 与 mint、DistFS、
+  settlement、invariant 字段以 runtime 输出为准，禁止用兼容字段回推。
+- 聚合时，每个可用节点先取累计指标最大值，再计算跨节点比例；缺失节点必须在
+  summary/failures 中保留告警，不能静默补零。
+- `distfs_total_checks=0` 必须分类为 `insufficient_data`，与比例超阈值分离。
+  `reward_asset_invariant_violation` 仅在
+  `reward_runtime.invariant_ok=false` 时成立；`running_false` 与 `http_failure`
+  即使发生于 chaos 恢复窗口，也必须作为独立失败分类，不能转换成 invariant
+  violation。status 不可达时写入 HTTP failure 并终止门禁判定。
+- `run_config.json`、`summary.json`、`summary.md` 与 `failures.md` 继续是兼容
+  证据接口；一次历史通过或 probe seed 成功均不能替代当前完整 metric gate。
 - Acceptance Criteria:
   - AC-1: 脚本支持五节点拓扑启动/停止、dry-run、帮助输出。
   - AC-2: `summary.json` 含所有 S10 门禁字段，并与 `summary.md` 一致。
