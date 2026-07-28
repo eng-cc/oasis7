@@ -1,6 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
-
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
@@ -9,6 +8,7 @@ import { PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, R
 import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { installProductValidationQuoteVisualFixture } from "./product_validation_quote_visual_fixture.js";
 import { installPowerSurvivalQuoteVisualFixture } from "./power_survival_quote_visual_fixture.js";
+import { installWaitResolutionQuoteVisualFixture } from "./wait_resolution_quote_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { fallbackTradeoffVisualFixture } from "./viewer_fallback_tradeoff_fixture.js";
@@ -20,7 +20,6 @@ import {
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
-
 function observeViewerStateRevision() {
   viewerStateRevision();
 }
@@ -4332,6 +4331,7 @@ function installViewerVisualFixture() {
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installPowerSurvivalQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installWaitResolutionQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();
