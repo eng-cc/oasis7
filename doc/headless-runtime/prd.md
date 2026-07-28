@@ -81,7 +81,7 @@
 - Integration Points:
   - `crates/oasis7_proto/src/viewer.rs` 的 `PlayerAuthProof` 与受保护请求字段。
   - `crates/oasis7/src/viewer/auth.rs`、simulator live auth 路由与 `WorldModel.player_auth_last_nonce`。
-  - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md` 的 checkpoint、replay、retention 与 GC 合同。
+  - `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md` 的 checkpoint、replay、retention 与 GC 合同。
   - `testing-manual.md`
 - Auth and replay contract:
   - 签名负载必须版本化、规范化，并绑定动作类型、关键业务字段、`player_id`、`public_key` 与 nonce；proof 与请求字段不一致、签名篡改或缺失 proof 必须显式拒绝。

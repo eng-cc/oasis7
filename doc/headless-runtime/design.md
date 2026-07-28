@@ -42,7 +42,7 @@
 ## 7. 长稳与冷归档边界
 
 - 内存队列、动态 peer、committed batch 与热日志采用容量、TTL 或热窗口守卫；冷历史通过 CAS blob 加 refs/index 追溯。
-- 归档不得阻塞在线主路径，也不得把本机 refs 等同分布式可得性。checkpoint、retention、GC、replay 与恢复的技术 authority 是 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`。
+- 归档不得阻塞在线主路径，也不得把本机 refs 等同分布式可得性。checkpoint、retention、GC、replay 与恢复的技术 authority 是 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`。
 - 旧专题中的 split-crate 文件路径仅是历史实施细节，不得复制为当前 authority；操作清单、事故模板和 release-gate 对接继续由 `checklists/` 与 `templates/` 承载。
 
 ## 设计目标

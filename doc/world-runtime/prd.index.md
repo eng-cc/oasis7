@@ -14,7 +14,7 @@
 - 想直接进入 Docker canonical build / release evidence 主入口：先读 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
 - 想直接进入 WASM 全局 timing/status/window 或单模块 contract/perf 观测：先读 `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
 - 想直接进入 SDK no_std、共享 wire 与 codec 兼容契约：先读 `doc/world-runtime/wasm/wasm-sdk.prd.md`
-- 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
 - 想直接进入链 PoS 时间锚、slot/tick 相位、控制面参数与 restart/replay 边界：先读 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想确认 module install target、location 校验、legacy `SelfAgent` 默认值与 snapshot/replay 持久化：先读 `doc/world-runtime/prd.md#7-模块执行市场与历史-gap-合并边界`，详细生命周期读 `doc/world-runtime/module/module-lifecycle.md#稳定实例交易与升级合同`
@@ -36,7 +36,7 @@
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`：Docker canonical build、receipt、identity 与 release evidence 主入口。
 - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`：build/executor/router timing、`/v1/chain/status.wasm`、窗口汇总与 module-local observe spec/runner/template 主入口。
 - `doc/world-runtime/wasm/wasm-sdk.prd.md`：默认 no_std、共享 Canonical-CBOR wire、codec 错误与 builtin 兼容主入口。
-- `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
+- `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
 - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`：链 PoS 时间、tick 相位、控制面 status 与恢复合同主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities.prd.md`：玩家发布实体与模块发布链路衔接入口。
@@ -74,7 +74,7 @@
 | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md` | `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md` |
 | `doc/world-runtime/module/module-subscription-filters.prd.md` | `doc/world-runtime/module/module-subscription-filters.design.md` | `doc/world-runtime/module/module-subscription-filters.project.md` |
 | `doc/world-runtime/runtime/runtime-numeric-safety.prd.md` | `doc/world-runtime/runtime/runtime-numeric-safety.design.md` | `doc/world-runtime/runtime/runtime-numeric-safety.project.md` |
-| `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md` |
+| `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md` | `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md` |
 | `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md` |
 | `doc/world-runtime/wasm/wasm-executor.prd.md` | `doc/world-runtime/wasm/wasm-executor.design.md` | `doc/world-runtime/wasm/wasm-executor.project.md` |
@@ -91,7 +91,7 @@
 | `doc/world-runtime/templates/runtime-security-numeric-regression-template.md` | `template` | 安全与数值语义回归模板 |
 | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` | `checklist` | runtime 核心边界验收清单 |
 
-已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md` 与 GitHub task issue evidence comments 追溯。
+已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、`doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md` 与 GitHub task issue evidence comments 追溯。
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

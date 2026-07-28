@@ -160,14 +160,14 @@
     - `doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.design.md`
     - `doc/world-runtime/runtime/runtime-numeric-safety.project.md`
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md`
     - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
     - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
     - `doc/world-runtime/project.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7(_consensus|_node|_net|_distfs|_proto|_wasm_executor)?|crates/oasis7" doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
+    - `rg -n "oasis7(_consensus|_node|_net|_distfs|_proto|_wasm_executor)?|crates/oasis7" doc/world-runtime/runtime/runtime-numeric-safety.prd.md doc/world-runtime/runtime/runtime-numeric-safety.design.md doc/world-runtime/runtime/runtime-numeric-safety.project.md doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-051 (PRD-WORLD_RUNTIME-001/010/011/012) [test_tier_required]: 收口 `world-runtime` 其余活跃 module/testing/governance 与 numeric-correctness 专题中仍把旧 `oasis7*` crate/path/command 写成当前实现载体的口径，统一到 `oasis7*`。
@@ -186,16 +186,16 @@
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-052 (PRD-WORLD_RUNTIME-001/015/020/021/022) [test_tier_required]: 收口 `world-runtime` 仍活跃专题中把旧 builtin 模块命名、旧品牌 storage profile key 与旧品牌 wasm fallback 写成当前入口的口径，统一到 `oasis7_builtin_wasm`、`OASIS7_CHAIN_STORAGE_PROFILE`、`OASIS7_WASM_*` 与 `OASIS7_BUILTIN_WASM_*` 当前入口。
   - 产物文件:
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md`
-    - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
+    - `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md`
     - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
     - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`
     - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md`
     - `doc/world-runtime/module/agent-default-modules.project.md`
     - `doc/world-runtime/project.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_builtin_wasm|OASIS7_CHAIN_STORAGE_PROFILE|OASIS7_WASM_|OASIS7_BUILTIN_WASM_" doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md doc/world-runtime/module/agent-default-modules.project.md`
+    - `rg -n "oasis7_builtin_wasm|OASIS7_CHAIN_STORAGE_PROFILE|OASIS7_WASM_|OASIS7_BUILTIN_WASM_" doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md doc/world-runtime/module/agent-default-modules.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-053 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 执行 ROUND-010 `world-runtime` 模块入口分流治理，明确 README、`prd.index.md` 与三个高频 runtime/wasm/module 专题的阅读边界。
@@ -700,7 +700,7 @@
 - 模块设计总览：`doc/world-runtime/design.md`
 - doc/world-runtime/prd.index.md
 - `doc/world-runtime/runtime/runtime-integration.md`
-- `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
+- `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
 - `doc/world-runtime/wasm/wasm-interface.md`
 - `scripts/build-wasm-module.sh`

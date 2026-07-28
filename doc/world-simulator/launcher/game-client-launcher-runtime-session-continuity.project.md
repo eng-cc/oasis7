@@ -28,7 +28,7 @@
 
 ## 依赖与验证责任
 
-- [运行态存储体积治理](../../world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md) 是 execution-world retention、GC、checkpoint、replay 和 latest-state recovery 的当前 runtime authority。
+- [运行态存储体积治理](../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md) 是 execution-world retention、GC、checkpoint、replay 和 latest-state recovery 的当前 runtime authority。
 - Launcher 改动应验证参数构造、状态分类和恢复建议；runtime storage 改动应运行其 retention/recovery/determinism 回归；浏览器可见改动应补 S6 证据。
 - 文档迁移验证：`./scripts/doc-governance-check.sh && ./scripts/readme-link-check.sh && git diff --check`。
 

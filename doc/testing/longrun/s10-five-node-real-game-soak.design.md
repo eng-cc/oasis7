@@ -11,6 +11,9 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - 五节点编排层：定义 sequencer、storage、observer 节点拓扑、运行时长和脚本入口。
 - 游戏数据流层：覆盖 gameplay 数据、reward/settlement、mint 与资产不变量。
 - 稳定性观测层：采集 committed progress、lag、DistFS、settlement apply 与关键告警。
+- reward-runtime 观测只消费 `/v1/chain/status.reward_runtime` 的原生快照：每个
+  可用节点取累计最大值后聚合，缺失值显式告警；`distfs_total_checks=0` 与比例
+  超阈值分离，且只有 `invariant_ok=false` 可分类为资产不变量违规。
 - DistFS probe 预热层：reward worker 启动时仅在 blob set 为空时写入幂等、非敏感 seed；失败局部记录而不阻断主循环。
 - 验收归档层：沉淀 `summary.json`、`summary.md`、`timeline.csv`、节点日志、失败签名与门禁结论。
 
@@ -25,6 +28,9 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - S10 不负责 chaos 注入编排；需要故障恢复覆盖时升级到 S9/GWSC 关联套件。
 - S10 五进程或本地五节点结果不得冒充 real-env/public_testnet readiness。
 - probe seed 只让 `distfs_total_checks` 具备产生样本的前提；它不改变算法阈值，不把 `insufficient_data`、其他门禁失败或缺少同窗口证据升级为 pass。
+- `running_false`、`http_failure` 与 status 不可达是独立的运行/采样失败，不得
+  在 chaos 窗口内改写为 invariant violation；status 不可达须终止门禁判定并保留
+  failures 证据。
 - 不在本专题扩展新的线上编排平台。
 
 ## 5. 设计演进计划

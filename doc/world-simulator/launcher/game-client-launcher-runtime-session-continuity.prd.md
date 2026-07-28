@@ -29,7 +29,7 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 - 仅当本地 chain runtime 退出日志同时表明 `DistributedValidationFailed` 与 latest state-root mismatch 时，Launcher 才把失败分类为 `stale_execution_world`；端口、参数、二进制或其他启动失败必须保持其原有错误语义。
 - 默认恢复建议是非破坏性的 fresh node id 与相应 status bind。它不修复、更改或删除旧执行世界。
 - 重置 execution world 属于破坏性操作，必须由明确确认的实现路径执行；本专题不授权按目录、时间或猜测自动清理运行时数据。
-- latest head、checkpoint、replay、GC、storage profile、pin set 与恢复一致性由 [运行态存储体积治理](../../world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md) 定义。Launcher 只消费其已发布状态，不能替代该运行时合同。
+- latest head、checkpoint、replay、GC、storage profile、pin set 与恢复一致性由 [运行态存储体积治理](../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md) 定义。Launcher 只消费其已发布状态，不能替代该运行时合同。
 
 ### Web/WASM 会话兼容
 
@@ -57,6 +57,6 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 ## 追溯与验证
 
 - 实现入口：`crates/oasis7_client_launcher/`、`crates/oasis7/src/bin/oasis7_{game_launcher,web_launcher,chain_runtime}.rs` 及其拆分模块和测试。
-- 运行时持久化、回放和存储验证：`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.{prd,design,project}.md`。
+- 运行时持久化、回放和存储验证：`doc/world-runtime/runtime/runtime-storage-footprint-governance.{prd,design,project}.md`。
 - 文档变更验证：`./scripts/doc-governance-check.sh && ./scripts/readme-link-check.sh && git diff --check`。
 - 本稳定专题吸收的日期化 Launcher session 变更及其完成证据由 Git history 和 GitHub task issue evidence comments 追溯。
