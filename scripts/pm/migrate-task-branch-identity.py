@@ -327,8 +327,7 @@ def materialize_replacement_mapping(root: pathlib.Path, mapping_path: pathlib.Pa
                                     receipt: dict[str, Any]) -> pathlib.Path:
     """Publish and read back the committed mapping where replacement bootstrap reads it."""
     if (not replacement.is_dir()
-            or git(replacement, "rev-parse", "HEAD") != receipt.get("implementation_head")
-            or git(replacement, "symbolic-ref", "--quiet", "--short", "HEAD") != receipt.get("new_branch")
+            or not active_identity_matches_receipt(replacement, receipt)
             or path_common_dir(replacement) != path_common_dir(root)):
         raise MigrationError("replacement identity readback failed before mapping materialization")
     try:

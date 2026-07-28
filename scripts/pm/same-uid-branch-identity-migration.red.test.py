@@ -354,6 +354,46 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(epoch_two_mapping.read_bytes(), before_mapping)
         self.assertFalse(replacement_two.exists())
 
+    def test_exact_retry_repairs_missing_descendant_mapping_then_allows_next_epoch(self) -> None:
+        first = self.assert_migrated(self.run_helper())
+        epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        (self.replacement / "POST_MIGRATION_CHANGE").write_text("ordinary later implementation\n", encoding="utf-8")
+        self.git("add", "POST_MIGRATION_CHANGE", cwd=self.replacement)
+        self.git("commit", "-m", "ordinary later implementation", cwd=self.replacement)
+        advanced_head = self.git("rev-parse", "HEAD", cwd=self.replacement)
+        epoch_two_mapping.unlink()
+
+        retried = self.assert_migrated(self.run_helper())
+        self.assertEqual(retried, first)
+        repaired = json.loads(epoch_two_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(repaired["bootstrap_epoch"], 2)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.replacement), advanced_head)
+        self.assertEqual(
+            self.git("worktree", "list", "--porcelain").count(f"branch refs/heads/{self.replacement_branch}"), 1
+        )
+
+        replacement_two = self.root.parent / "replacement-worktree-two"
+        second = self.run_helper(
+            repo_root=self.replacement,
+            tasks_json=epoch_two_mapping,
+            replacement_worktree=replacement_two,
+            replacement_branch="task/engineering-replacement-two",
+        )
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(json.loads(second.stdout)["new_epoch"], 3)
+
+    def test_exact_retry_rejects_non_ancestor_replacement_history(self) -> None:
+        self.assert_migrated(self.run_helper())
+        epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        self.git("reset", "--hard", "main", cwd=self.replacement)
+        epoch_two_mapping.unlink()
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("replacement identity readback", retried.stderr)
+        self.assertFalse(epoch_two_mapping.exists())
+
     def test_legacy_record_without_bootstrap_epoch_migrates_as_epoch_one(self) -> None:
         self.remove_bootstrap_epoch()
 
