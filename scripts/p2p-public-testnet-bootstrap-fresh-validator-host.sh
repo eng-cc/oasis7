@@ -257,6 +257,7 @@ for source in \
   public-testnet-governed-bootstrap-validator-registry-2026-06-06.json \
   node.env; do require_file "$config_dir/$source"; done
 for source in snapshot.json world-generation-provenance.json; do require_file "$world_dir/$source"; done
+require_dir "$world_dir/generated-scenario-world"
 jq -e . "$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null \
   || die "config bundle JSON is malformed"
 jq -e . "$config_dir/public-testnet-governed-bootstrap-genesis-2026-06-06.json" >/dev/null \

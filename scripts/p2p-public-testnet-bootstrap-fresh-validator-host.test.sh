@@ -146,6 +146,7 @@ test -f "$stack_root_abs/config/public-testnet-governed-bootstrap-genesis-2026-0
 test -f "$stack_root_abs/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
 test -f "$stack_root_abs/staged-world/snapshot.json"
 test -f "$stack_root_abs/staged-world/world-generation-provenance.json"
+test -f "$stack_root_abs/staged-world/generated-scenario-world/manifest.json"
 test -f "$systemd_dir/oasis7-triad-sequencer.service"
 test ! -e "$TMP_DIR/systemctl.log" || fail "test-only bootstrap must render only and never call systemctl"
 jq -e \
@@ -202,6 +203,11 @@ expect_fail "test" bootstrap_with --stack-root /opt/oasis7/p2p-testnet --bundle-
 cp -a "$config_dir" "$TMP_DIR/malformed-config"
 printf '{not-json\n' >"$TMP_DIR/malformed-config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 expect_fail "malformed" bootstrap_with --stack-root "$TMP_DIR/malformed-config-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$TMP_DIR/malformed-config" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/malformed-config-receipt.json"
+
+mkdir -p "$TMP_DIR/missing-sidecar-world"
+cp "$world_dir/snapshot.json" "$TMP_DIR/missing-sidecar-world/"
+cp "$world_dir/world-generation-provenance.json" "$TMP_DIR/missing-sidecar-world/"
+expect_fail "missing directory" bootstrap_with --stack-root "$TMP_DIR/missing-sidecar-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$TMP_DIR/missing-sidecar-world" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/missing-sidecar-receipt.json"
 
 expect_fail "service" bootstrap_with --stack-root "$TMP_DIR/malformed-unit-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name '../unsafe.service' --receipt "$TMP_DIR/malformed-unit-receipt.json"
 

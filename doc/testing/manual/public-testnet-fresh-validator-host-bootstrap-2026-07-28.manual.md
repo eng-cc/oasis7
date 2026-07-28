@@ -14,9 +14,9 @@ public-only receipt for later topology review.
 
 - `oasis7-linux-x64-bundle.tar.gz` from the approved package artifact.
 - A governed stage `config/` containing the bootstrap bundle, genesis,
-  validator registry, public signer evidence, and `node.env`.
-- A governed stage `generated-world/` containing `snapshot.json` and
-  `world-generation-provenance.json`.
+  validator registry, `node.env`, and the production manifest and bootstrap-peer inputs.
+- A governed stage `generated-world/` containing `snapshot.json`,
+  `world-generation-provenance.json`, and `generated-scenario-world/`.
 
 Run as the host operator:
 
