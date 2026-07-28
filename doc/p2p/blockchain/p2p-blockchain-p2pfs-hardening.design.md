@@ -18,8 +18,8 @@
 - Replication guard 层：拒绝空 world/writer 和零 epoch/sequence；同 writer/epoch 的 sequence 严格递增，epoch 或 writer 切换从 sequence 1 开始且不允许 epoch 回退。
 - Replay 层：逐条调用与在线路径相同的 `apply_replication_record`；只有 hash 校验和 store 写入成功后才提交 guard，首个失败立即终止并保留失败前的确定状态。
 - Commit/execution 层：ordered actions 与 `action_root` 经 commit context 进入 node execution；result 的 block/state root 和持久 snapshot 字段用于恢复兼容。旧 viewer-live driver 与 bridge-default 接线只作历史 provenance。
-- Block hash 层：当前 payload 以 sequencer 的 `world_id/height/slot/prev_block_hash/batch_id/state_root` 为代码锚点；旧路线图字段不能反向覆盖当前 schema。
-- DistFS proof 层：当前只有本地 CAS self-probe；历史 Phase C 的跨节点 request/proof envelope、challenge topics 与 driver 未实现，不作为现行设计。
+- Block hash 层：execution bridge 对 canonical-CBOR `oasis7_proto::distributed::WorldBlock` 计算 commitment；现行字段以该类型的 `world_id/height/prev_block_hash/action_root/event_root/state_root/journal_ref/snapshot_ref/receipts_root/proposer_id/timestamp_ms/signature` 为准，旧路线图不能反向新增另一套 payload schema。
+- DistFS proof 层：当前 gate 使用 `ReplicationNetworkEndpoint` 做 provider/DHT/fetch-route 探测，并区分 hard failure 与有界 degraded/fallback；历史 Phase C 的专用 request/proof envelope、challenge topics 与 challenge driver 未形成当前合同。
 
 ## 约束
 
