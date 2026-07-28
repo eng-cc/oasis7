@@ -36,7 +36,7 @@
 - node 默认不替所有 validator 自动 attestation。提交前执行、ordered `action_root`、`NodeExecutionCommitContext/Result`、execution height/hash/state-root snapshot 字段和 committed replay 组成同一绑定；observer/viewer 不是默认执行控制面。
 - replication 的现行请求协议是 `/aw/node/replication/fetch-commit/1.0.0` 与 `/aw/node/replication/fetch-blob/1.0.0`。writer epoch/sequence 必须单调，切换 writer 或 epoch 时从 sequence 1 开始；鉴权、hash 或写入失败不得污染 guard。
 - storage challenge 的本地 self-probe 对错误 blob 或验证失败保持 fail-closed；provider、DHT 或 fetch route 的部分可重试不可用允许进入有界 fallback/degraded 路径，不能被概括为“任何网络失败都拒绝提交”。
-- 历史 `/aw/rr/1.0.0/*` 草案、固定 bitswap/graphsync 选型、lease 覆盖每次 zone commit、未接线 PoS 风险和跨节点 DistFS challenge network 均不是当前合同。后者仍是未来能力缺口。
+- 历史 `/aw/rr/1.0.0/*` 草案、固定 bitswap/graphsync 选型、lease 覆盖每次 zone commit 与未接线 PoS 风险均不是当前合同。Phase-C 专用 DistFS request/proof envelope、challenge topic 和 specialized challenge driver 仍是未来能力缺口；这不否定现有 provider/DHT/fetch-route 网络探测 gate。
 
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
