@@ -40,6 +40,7 @@
 - 旧的 simulator 内存 artifact registry 是已完成接线阶段的局部实现细节；hook、evaluator 与 registry 都是 process-local，snapshot restore 时重置，不是当前模块生命周期或持久化 authority。replay 只消费已记录的 journal event，不重新求值 hook；`ActionRejected` 在 replay 中不改变 world state。当前 ABI / `rule.decision` wire contract、executor limits、artifact registry、release governance 和 Docker-canonical build 分别由 `doc/world-runtime/wasm/wasm-interface.md`、`wasm-executor.prd.md`、`doc/world-runtime/prd.md` 与 `wasm-deterministic-build-pipeline.prd.md` 拥有。
 - `tools/wasm_build_suite` 仍是活跃实现入口，但其发布级构建语义只服从 Docker-canonical build authority；不得由历史 host-side build-suite 文档推导发布或跨宿主确定性结论。
 - simulator `PowerStorage`、`StorePower`、`DrawPower` 与 Location electricity pool 已下线；该移除边界由 `m4/industrial-resource-flow-contract.prd.md` 维护。它不删除名称相近但独立的 runtime builtin `m1_power_storage`，也不取消对 legacy `require_power_storages` 输入的明确拒绝。
+- simulator 内建 `ResourceKind` 只保留 `Electricity` 与 `Data`。`Compound` / `Hardware` 不接受旧别名或自动迁移，也不得作为内建 kind 重新进入 kernel、parser、Viewer 统计或 LLM prompt；工业材料语义由 M4/domain contract 表达，模块资产与 ABI/执行权限由 `doc/world-runtime/wasm/` authority 拥有。该边界不等于已经提供通用 WASM 资产标准。
 
 ## 设计目标
 - 提供 `world-simulator` 模块的总体设计入口。
