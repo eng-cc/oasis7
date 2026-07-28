@@ -39,7 +39,7 @@
 - `tick` 只作为 `logicalTime` 的兼容 alias 保留；它不是 browser polling、mailbox drive 或“每个 step 必有进展”的承诺。新自动化优先读取 `logicalTime` 与 `eventSeq`。
 - `sendControl` 的 accepted/queued 只表示客户端已通过本地校验并已尝试发送。只有后续的 runtime snapshot/event 或 completion feedback 才能标记观察到的增量；无增量不得伪造 event。
 - `seek_event` 与 `seek` 一样不是 live 控制动作。playback 可按 profile 暴露 seek；live 必须在发送前返回 unsupported-action，而非以断链、重连或成功替代该结果。
-- `prompt_control`、`agent_chat`、目标重排和记忆纠正的本地发送、accepted/queued 同样不等于 runtime 已应用或已产生世界后果。Viewer 只能按 canonical snapshot/feedback 呈现 accepted/applied/rejected/blocked、原因、影响范围和可执行恢复入口；不得从客户端状态、重连或 `logicalTime`/`eventSeq` 推导这些结果。玩家因果与恢复合同见 [`间接控制 agency 合同`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)，Prompt 结果语义见 [`Agent 对话与 Prompt 控制`](../../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 与 [`Viewer 手册`](viewer-manual.manual.md)。
+- `prompt_control`、`agent_chat`、目标重排和记忆纠正的本地发送、accepted/queued 同样不等于 runtime 已应用或已产生世界后果。Viewer 只能按 canonical snapshot/feedback 呈现 accepted/applied/rejected/blocked、原因、影响范围和可执行恢复入口；不得从客户端状态、重连或 `logicalTime`/`eventSeq` 推导这些结果。玩家因果与恢复合同见 [`间接控制 agency 合同`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)，Prompt 结果语义见 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 与 [`Viewer 手册`](viewer-manual.manual.md)。
 - live 的 `seek` / `seek_event` 不支持不是玩家纠正、重排或恢复机制。纠正、重排和续玩只能走权威的 Prompt/Agent feedback、`reconnect_sync` / resume anchor 或明确的 reprioritize flow，不能通过本地回退逻辑时间、事件序号或重放 Viewer snapshot 实现。记忆驱动行动时，Viewer 仅呈现脱敏的摘要、来源、当前用途、staleness 和 correction outcome；不得暴露私有 prompt、内部 trace，也不得自造记忆真值。
 
 ## 验证与边界
