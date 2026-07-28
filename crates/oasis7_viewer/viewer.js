@@ -10929,7 +10929,7 @@ function PowerSurvivalQuotePanel(props) {
   })();
 }
 delegateEvents(["input"]);
-var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=metric__detail>`), _tmpl$3$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=refine-quote-preflight data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary></div><div class=feedback-summary data-testid=refine-quote-next-decision>`), _tmpl$4$2 = /* @__PURE__ */ template(`<section id=viewer-refine-quote-panel class="panel panel--nested"data-testid=refine-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=refine-quote-request-form><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$5$2 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
+var _tmpl$$2 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=metric__detail>`), _tmpl$3$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=refine-quote-preflight data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary></div><div class=feedback-summary data-testid=refine-quote-next-decision>`), _tmpl$4$2 = /* @__PURE__ */ template(`<section id=viewer-refine-quote-panel class="panel panel--nested"data-testid=refine-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=refine-quote-request-form><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$5$2 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
 function displayValue(value) {
   if (value === null || value === void 0 || value === "") return "-";
   return String(value);
@@ -10989,6 +10989,7 @@ function QuoteMetric(props) {
         return _el$4;
       })() : null;
     })(), null);
+    createRenderEffect(() => className(_el$, props.class ? `metric ${props.class}` : "metric"));
     return _el$;
   })();
 }
@@ -11004,6 +11005,15 @@ function RefineQuotePreflightCard(props) {
     insert(_el$11, () => tr2(locale(), "预估", "quote"));
     insert(_el$12, () => `${tr2(locale(), "目标", "target")}: ${targetCopy(quote().target_id, locale(), tr2)}`);
     insert(_el$13, () => `${tr2(locale(), "Agent", "Agent")}: ${displayValue(quote().owner_agent_id)}`);
+    insert(_el$14, createComponent(QuoteMetric, {
+      "class": "metric--target-gap-outcome",
+      get label() {
+        return tr2(locale(), "目标缺口", "Target gap");
+      },
+      get value() {
+        return `${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`;
+      }
+    }), null);
     insert(_el$14, createComponent(QuoteMetric, {
       get label() {
         return tr2(locale(), "精炼量", "Refine amount");
@@ -11034,14 +11044,6 @@ function RefineQuotePreflightCard(props) {
       },
       get value() {
         return quote().hardware_output;
-      }
-    }), null);
-    insert(_el$14, createComponent(QuoteMetric, {
-      get label() {
-        return tr2(locale(), "目标缺口", "Target gap");
-      },
-      get value() {
-        return `${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`;
       }
     }), null);
     insert(_el$14, createComponent(QuoteMetric, {

@@ -32,6 +32,9 @@ describe("RefineQuotePreflightCard", () => {
     expect(within(card).getByText("Electricity remaining")).toBeInTheDocument();
     expect(within(card).getByText("Hardware output")).toBeInTheDocument();
     expect(within(card).getByText("20 → 0")).toBeInTheDocument();
+    const targetGap = within(card).getByText("Target gap").closest(".metric");
+    expect(targetGap).toHaveClass("metric--target-gap-outcome");
+    expect(card.querySelector(".summary-grid")?.firstElementChild).toBe(targetGap);
     expect(within(card).getByText(/This output satisfies the factory hardware target/i)).toBeInTheDocument();
     expect(within(card).getByText(/Value assessment: Enough to advance/i)).toBeInTheDocument();
     expect(within(card).getByText(/Next decision: This quote can advance the target/i)).toBeInTheDocument();
