@@ -12,7 +12,7 @@
 - 统一七类核心能力模块边界：`身体`、`发电`、`储能`、`感知`、`移动`、`记忆`、`存储`。
 - 与现有 WASM First 路线对齐：除位置/资源/基础物理不变量外，能力语义尽量由模块承载。
 
-> 现状对齐（2026-02-13）：默认模块安装与执行已统一为 wasm-only 链路，通过 `World::install_m1_agent_default_modules` 安装 wasm 工件模块。
+> 现状对齐：默认模块安装与执行已统一为 wasm-only 链路。`World::install_m1_power_bootstrap_modules` 安装两个 power 模块；`World::install_m1_agent_default_modules` 安装 sensor/mobility/memory/cargo；`World::install_m1_scenario_bootstrap_modules` 先安装 power，再按配置安装默认包。
 
 ## 2. User Experience & Functionality
 ### In Scope
@@ -117,6 +117,12 @@ struct ModuleSlot {
 
 建议最小拒绝语义：
 - `rule.decision.verdict = deny`，`notes` 给出缺口电量。
+
+### 安装、治理与兼容边界
+- 两个 power module ID 固定为 `m1.power.radiation_harvest` 与 `m1.power.storage`：前者低速补能并发出 audit emission，后者维护私有有限 capacity/level，并在 `pre_action` 移动前拒绝能量不足。
+- 三个安装入口都通过 `propose -> shadow -> approve -> apply`，重复安装或“已注册但停用”必须幂等地跳过重复 register 并恢复 activate。
+- `install_m1_scenario_bootstrap_modules` 的 power-first composition 与默认-package toggle 是场景兼容合同；不得把 `install_m1_agent_default_modules` 误写成安装七个模块。
+- 当前安装代码以 `manifest.version.saturating_add(1)` 构造治理 manifest；这是既有实现残余，不构成数值安全方案或精确版本推进承诺。
 
 ## 6) 感知模块（Sensor Basic）
 
