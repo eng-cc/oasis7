@@ -37,7 +37,7 @@
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.{prd,design,project}.md`
-- `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.{prd,project}.md`
+- `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 - `crates/oasis7_viewer/package.json`
 - `crates/oasis7_viewer/vite.software-safe.config.mjs`

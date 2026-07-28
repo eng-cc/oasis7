@@ -6,7 +6,6 @@
 - Related entrypoints:
   - `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
   - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
-  - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
   - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`
 
@@ -51,12 +50,14 @@ Out of scope:
   GitHub required review.
 
 ## 3. Source Documents Consolidated
-This specification consolidates and does not replace:
+This specification consolidates the durable visual semantics from:
 - `viewer-gameplay-release-experience-overhaul.prd.md`: Player mode,
   Director mode, world-first release experience, and command discoverability.
-- `viewer-web-entry-visual-redesign-2026-05-12.prd.md`: industrial world
-  command table direction, stage-first layout, diagnostics demotion, and
-  `World / Targets / Command` mobile route.
+- the retired Viewer Web entry redesign scope: industrial world command-table
+  direction, stage-first layout, diagnostics demotion, one-step command
+  discovery, honest unavailable states, and the `World / Targets / Command`
+  mobile route. The historical PRD/project are no longer current authorities;
+  implementation and runtime contracts remain with their topic owners.
 - `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`: sparse snapshot
   semantic positioning, `location_derived` honesty, and relationship-line
   readability.
@@ -363,6 +364,13 @@ Pixel-world specific blockers:
 - Derived or missing positions lack an honest source marker.
 - Sparse snapshots do not show relationships, route, or readable world state.
 
+The screenshots and probes recorded for task
+`task_a25bf76359be45719edfcda1759626d1` are historical visual-review evidence
+only and remain traceable through Git history and GitHub task evidence. Their
+past verdict does not satisfy a future review, QA or release approval,
+real-player comprehension, runtime or authentication truth, or a public claim.
+Every later visible change requires fresh evidence under the current SOP.
+
 ## 13. Implementation Brief for Viewer Work
 Viewer implementation tasks that change visible surfaces should include:
 - target mode: Player, Director, or both;
@@ -372,6 +380,13 @@ Viewer implementation tasks that change visible surfaces should include:
 - desktop and mobile screenshot plan;
 - DOM or semantic test anchors that must remain stable;
 - explicit non-goals, especially protocol, runtime, and art-pipeline boundaries.
+
+For a structural or visual change with material information-architecture,
+layout, or state-presentation trade-offs, prepare two or three bounded compare
+artifacts before implementation. Record the recommended direction, rejected
+directions and reasons, and the inherited decision in GitHub task evidence.
+This is an ideation and implementation-planning input; it is never a visual-pass
+or release-readiness claim.
 
 ## 14. Acceptance Criteria for Future Visual Changes
 - The change preserves world-first reading order.

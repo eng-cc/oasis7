@@ -17,6 +17,7 @@
 - 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
 - 想直接进入链 PoS 时间锚、slot/tick 相位、控制面参数与 restart/replay 边界：先读 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
+- 想确认 module install target、location 校验、legacy `SelfAgent` 默认值与 snapshot/replay 持久化：先读 `doc/world-runtime/prd.md#7-模块执行市场与历史-gap-合并边界`，详细生命周期读 `doc/world-runtime/module/module-lifecycle.md#稳定实例交易与升级合同`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 热点子域导航

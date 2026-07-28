@@ -1,7 +1,8 @@
 # oasis7: README 季度口径审查与修复节奏（2026-03-11）
 
-- 对应设计文档: `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.design.md`
-- 对应项目管理文档: `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.project.md`
+- 执行模板: `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md`
+- 修复模板: `doc/readme/governance/readme-remediation-log-template-2026-03-11.md`
+- 历史设计与完成态项目包装已退役；实施追溯使用 Git history 与 GitHub task evidence。
 
 审计轮次: 4
 

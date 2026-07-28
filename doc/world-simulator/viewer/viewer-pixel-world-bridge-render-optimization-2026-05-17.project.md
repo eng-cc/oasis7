@@ -10,7 +10,7 @@
 - [ ] viewer-pixel-world-bridge-regression-recheck (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 回跑 wasm check、前端 repo-owned 测试与 diff hygiene，确认优化后 runtime 行为与 unavailable 合同稳定。 Trace: .pm/tasks/task_40310c312e9f4681805b5b74b30cac9a.yaml
 
 ## 依赖
-- `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
+- `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 - `crates/pixel_world_bridge/src/lib.rs`
 - `crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_wasm.js`
 - `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`

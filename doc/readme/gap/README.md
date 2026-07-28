@@ -4,8 +4,7 @@
 
 - 想先理解 README 与实现/流程缺口的总收口边界：读 `readme-gap-distributed-prod-hardening-gap12345.prd.md`；它是本子域主文档。
 - 想确认该主收口的完成动作、验证与后续状态：读 `readme-gap-distributed-prod-hardening-gap12345.project.md`。
-- 想按具体增量下钻：从 `doc/readme/prd.index.md` 的历史压缩专题清单按文件名进入；该索引保留精确检索，不是本子域的首读入口。
-- 想追溯已完成的模块安装目标语义增量：按需进入 `readme-gap3-install-target-infrastructure.prd.md`；它只保留历史证据，不承担当前动作。
+- 想追溯已完成的模块安装目标语义增量：当前合同已由 `readme-gap-distributed-prod-hardening-gap12345.{prd,design,project}.md` 吸收；历史实施只从 Git history 与 GitHub task evidence 追溯。
 
 ## 权威边界
 
@@ -16,5 +15,4 @@
 
 ## 保留与清理边界
 
-- `readme-gap3-install-target-infrastructure.*` 已由主文档承接当前入口，但仍被文件索引和 core review 审计记录引用，故保留为可定位历史，不删除。
 - 退役源文件只从 Git history 与 GitHub task evidence 追溯；新增或退役专题时，先完成专业权威吸收与引用修复，再同步本页与 `doc/readme/prd.index.md`。

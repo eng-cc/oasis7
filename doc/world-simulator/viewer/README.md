@@ -48,14 +48,13 @@
   - `viewer-visual-design-spec-2026-06-05.design.md`
   - `viewer-page-module-design-2026-06-18.design.md`
   - `viewer-brand-system-2026-06-05.design.md`
-  - `viewer-visual-system-review-card-2026-06-05.design.md`
 - 适合问题:
   - Viewer / player-facing surface 的统一视觉方向是什么
   - 世界、目标、Agent、路径、回执、诊断的视觉层级怎么排
   - pixel-world、2D 地图、移动端和视觉 review gate 应该按什么标准验收
   - 本轮 image2 视觉目标如何拆成首屏总体设计、Stage Hero、Pixel World Board、Command Strip、Action Receipt、Targets、Details 和 Diagnostics
   - brand book、语义 token、icon/status vocabulary、资产语言和截图矩阵如何执行
-  - 本轮视觉系统大项的截图矩阵与模型视觉 review verdict 是什么
+  - 当前可见改动需要按什么截图矩阵与视觉 review gate 取得新证据
 
 ### 3. `viewer` 与正式 Web 主入口
 - 首读入口:

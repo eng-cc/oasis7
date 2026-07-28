@@ -4,7 +4,6 @@
 - 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.project.md`
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md`
-  - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
   - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 
 审计轮次: 1
