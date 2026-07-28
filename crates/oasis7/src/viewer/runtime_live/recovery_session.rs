@@ -11,6 +11,7 @@ pub(super) struct RuntimeSessionMutationSnapshot {
     player_auth_last_nonce: BTreeMap<String, u64>,
     player_chat_intent_acks:
         BTreeMap<(String, String, u64), super::control_plane::RuntimeChatIntentAckRecord>,
+    primary_intents: BTreeMap<String, super::control_plane::RuntimePrimaryIntent>,
     pending_virtual_events: VecDeque<WorldEvent>,
 }
 
@@ -66,6 +67,7 @@ impl ViewerRuntimeLiveServer {
                 )
             })
             .collect();
+        llm_sidecar.primary_intents = persisted.primary_intents.clone();
     }
 
     pub(super) fn persisted_session_side_effects(
@@ -89,6 +91,7 @@ impl ViewerRuntimeLiveServer {
                     }
                 })
                 .collect(),
+            primary_intents: self.llm_sidecar.primary_intents.clone(),
             pending_virtual_events: self.pending_virtual_events.clone(),
         }
     }
@@ -102,6 +105,7 @@ impl ViewerRuntimeLiveServer {
             agent_public_key_bindings: self.llm_sidecar.agent_public_key_bindings.clone(),
             player_auth_last_nonce: self.llm_sidecar.player_auth_last_nonce.clone(),
             player_chat_intent_acks: self.llm_sidecar.player_chat_intent_acks.clone(),
+            primary_intents: self.llm_sidecar.primary_intents.clone(),
             pending_virtual_events: self.pending_virtual_events.clone(),
         }
     }
@@ -117,6 +121,7 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar.agent_public_key_bindings = snapshot.agent_public_key_bindings;
         self.llm_sidecar.player_auth_last_nonce = snapshot.player_auth_last_nonce;
         self.llm_sidecar.player_chat_intent_acks = snapshot.player_chat_intent_acks;
+        self.llm_sidecar.primary_intents = snapshot.primary_intents;
         self.pending_virtual_events = snapshot.pending_virtual_events;
     }
 

@@ -141,6 +141,20 @@ pub struct PlayerGameplayRecentFeedback {
     pub delta_event_seq: u64,
 }
 
+/// The durable, player-authored intent currently handed to an in-world Agent.
+///
+/// This deliberately carries only the player-visible instruction and its handoff
+/// state. Prompt overrides and decision traces remain private implementation
+/// detail and must not be projected through gameplay snapshots.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayPrimaryIntent {
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub resume_required: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAgentClaimQuoteSnapshot {
     pub slot_index: u8,
@@ -295,6 +309,8 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_intent: Option<PlayerGameplayPrimaryIntent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
     #[serde(default)]
     pub micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
@@ -418,6 +434,8 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    primary_intent: Option<PlayerGameplayPrimaryIntent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_claim: Option<PlayerAgentClaimSnapshot>,
     #[serde(default)]
     micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
@@ -519,6 +537,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             resume_next_step: legacy.resume_next_step,
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
+            primary_intent: legacy.primary_intent,
             agent_claim: legacy.agent_claim,
             micro_depot_facilities: legacy.micro_depot_facilities,
             small_player_lane_id: legacy

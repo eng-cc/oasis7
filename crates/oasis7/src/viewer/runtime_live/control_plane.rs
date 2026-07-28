@@ -18,7 +18,10 @@ use sha2::{Digest, Sha256};
 
 mod agent_chat_intent;
 mod llm_sidecar;
-use agent_chat_intent::resolve_agent_chat_intent;
+pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
+use agent_chat_intent::{
+    apply_accepted_primary_intent, apply_short_term_goal_primary_intent, resolve_agent_chat_intent,
+};
 pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
@@ -227,6 +230,12 @@ impl ViewerRuntimeLiveServer {
         apply_prompt_patch_runtime(&mut candidate, &request);
         let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
         let digest = prompt_profile_digest_runtime(&candidate);
+        if request.short_term_goal_override.is_some() {
+            self.record_primary_intent_from_short_term_goal(
+                request.agent_id.as_str(),
+                candidate.short_term_goal_override.as_deref(),
+            );
+        }
         if applied_fields.is_empty() {
             return Ok(PromptControlAck {
                 agent_id: request.agent_id,
@@ -330,7 +339,7 @@ impl ViewerRuntimeLiveServer {
                     current_version: Some(current.version),
                 })?
         };
-
+        let target_short_term_goal = target.short_term_goal_override.clone();
         let mut candidate = current.clone();
         candidate.system_prompt_override = target.system_prompt_override;
         candidate.short_term_goal_override = target.short_term_goal_override;
@@ -347,6 +356,11 @@ impl ViewerRuntimeLiveServer {
                 current_version: Some(current.version),
             });
         }
+
+        self.record_primary_intent_from_short_term_goal(
+            request.agent_id.as_str(),
+            target_short_term_goal.as_deref(),
+        );
 
         candidate.version = current.version.saturating_add(1);
         candidate.updated_at_tick = self.world.state().time;
@@ -520,6 +534,13 @@ impl ViewerRuntimeLiveServer {
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
+        let primary_intent = apply_accepted_primary_intent(
+            self.llm_sidecar.primary_intents.get(agent_id.as_str()),
+            message.as_str(),
+        );
+        self.llm_sidecar
+            .primary_intents
+            .insert(agent_id.clone(), primary_intent);
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: "agent_chat".to_string(),
             stage: "accepted".to_string(),
@@ -745,6 +766,20 @@ impl ViewerRuntimeLiveServer {
             .prompt_profiles
             .get(agent_id)
             .map(|profile| profile.version)
+    }
+
+    fn record_primary_intent_from_short_term_goal(
+        &mut self,
+        agent_id: &str,
+        short_term_goal: Option<&str>,
+    ) {
+        let primary_intent = apply_short_term_goal_primary_intent(
+            self.llm_sidecar.primary_intents.get(agent_id),
+            short_term_goal,
+        );
+        self.llm_sidecar
+            .primary_intents
+            .insert(agent_id.to_string(), primary_intent);
     }
 
     fn current_prompt_profile(

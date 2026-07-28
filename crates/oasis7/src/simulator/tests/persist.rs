@@ -479,6 +479,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         stage_status: PlayerGameplayStageStatus::Blocked,
         execution_state: PlayerGameplayExecutionState::Blocked,
         accepted_intent_id: Some("step".to_string()),
+        primary_intent: None,
         intent_summary: Some("advance the live world by 1 step(s)".to_string()),
         intent_scope: Some("world_control".to_string()),
         intent_target: None,

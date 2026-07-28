@@ -4,8 +4,9 @@ use crate::runtime::{
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
-    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
-    PlayerGameplayStageId, PlayerGameplayStageStatus, ProductValidationUnlockPreview,
+    PlayerGameplayGoalKind, PlayerGameplayPrimaryIntent, PlayerGameplayRecentFeedback,
+    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
+    ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
@@ -404,6 +405,7 @@ pub(super) fn build_player_gameplay_snapshot(
     controlled_agent_id: Option<&str>,
     confirmed_gameplay_progress: bool,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+    primary_intent: Option<PlayerGameplayPrimaryIntent>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
     gameplay_enabled: bool,
     gameplay_disabled_reason: Option<&str>,
@@ -428,13 +430,15 @@ pub(super) fn build_player_gameplay_snapshot(
     let industry_stage = state.industry_progress.stage;
     let validation_unlock_preview = product_validation_unlock_preview(state);
     let finalize = |gameplay| {
-        finalize_player_gameplay_snapshot(
+        let mut gameplay = finalize_player_gameplay_snapshot(
             gameplay,
             industry_stage,
             validation_unlock_preview.clone(),
             recent_feedback,
             causality_signal,
-        )
+        );
+        gameplay.primary_intent = primary_intent.clone();
+        gameplay
     };
     if !gameplay_enabled {
         let disabled_reason = gameplay_disabled_reason
@@ -444,6 +448,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -564,6 +569,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 stage_status: PlayerGameplayStageStatus::Blocked,
                 execution_state: PlayerGameplayExecutionState::Executing,
                 accepted_intent_id: None,
+                primary_intent: None,
                 intent_summary: None,
                 intent_scope: None,
                 intent_target: None,
@@ -636,6 +642,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -715,6 +722,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -801,6 +809,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_status: PlayerGameplayStageStatus::Active,
                     execution_state: PlayerGameplayExecutionState::Executing,
                     accepted_intent_id: None,
+                    primary_intent: None,
                     intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
@@ -856,8 +865,9 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
-                    accepted_intent_id: None,
-                    intent_summary: None,
+            accepted_intent_id: None,
+            primary_intent: None,
+            intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
                     can_reprioritize: false,
@@ -915,8 +925,9 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
-                    accepted_intent_id: None,
-                    intent_summary: None,
+            accepted_intent_id: None,
+            primary_intent: None,
+            intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
                     can_reprioritize: false,
@@ -978,6 +989,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1035,6 +1047,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1092,6 +1105,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1148,6 +1162,7 @@ pub(super) fn build_player_gameplay_snapshot(
         stage_status: PlayerGameplayStageStatus::Active,
         execution_state: PlayerGameplayExecutionState::Executing,
         accepted_intent_id: None,
+        primary_intent: None,
         intent_summary: None,
         intent_scope: None,
         intent_target: None,

@@ -326,7 +326,7 @@ fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_
     );
 
     let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &state, None, true, None, None, true, None, false, true, None,
+        &state, None, true, None, None, None, true, None, false, true, None,
     );
 
     assert_eq!(
@@ -377,6 +377,7 @@ fn runtime_gameplay_snapshot_marks_forced_major_power_dependency_when_no_local_r
         None,
         true,
         Some(&feedback),
+        None,
         None,
         true,
         None,
@@ -656,6 +657,7 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
         &state,
         Some("missing-agent"),
         true,
+        None,
         None,
         None,
         true,
