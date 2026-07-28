@@ -23,6 +23,7 @@
 - [x] T2.3 (PRD-WORLD_RUNTIME-013/014) [test_tier_required]: 基于显式 pin set sweep 历史 `snapshot_ref` / `journal_ref`，删除后不得留下 dangling refs。
 - [x] T2.4 (PRD-WORLD_RUNTIME-013/014) [test_tier_required]: 完成 `ExecutionBridgeRecordV1 -> V2` 向后兼容读取与渐进迁移，保证旧样本可读且不强制一次性重写。
 - [x] T2.5 (PRD-WORLD_RUNTIME-013/014) [test_tier_required]: 补齐 head-window retention、稀疏 checkpoint、restart recovery、dangling-ref 拒绝回归测试。
+- [x] execution-bridge-v3-authority (PRD-WORLD_RUNTIME-014) [test_tier_required]: 记录 v3 record/proof contract；定向回归覆盖 restart、checkpoint install、stale/non-contiguous height、retained-height replay 与 V1/V2 compatibility。bridge proof 仅声明本地 committed-context/CAS/checkpoint 一致性。 Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
 
 ### T3 Sidecar generation GC
 - [x] T3.1 (PRD-WORLD_RUNTIME-013/014) [test_tier_required]: 定义 `SidecarGenerationIndex` 目录布局、manifest 字段与 generation pin 集，区分 staging / latest / rollback-safe generation。

@@ -143,6 +143,7 @@ DomainEvent::PowerRedeemRejected {
 - `RewardSignatureGovernancePolicy` 显式控制 `require_mintsig_v2`、`allow_mintsig_v1_fallback` 与 `require_redeem_signature`；策略要求无法满足时必须 fail closed。
 - `RewardAssetInvariantReport` 汇总 mint/burn/balance/record 并列出异常；它用于检测和审计，不自动修复或对账。旧快照即使可通过 serde 默认值反序列化，恢复/同步验收仍必须复核签名策略与 invariant report。
 - 当前 operator 证据入口是 chain-runtime CLI、runtime root 与 report artifacts；历史 `oasis7_viewer_live` 参数只作为发布 provenance，不是现行 runbook。
+- 本地 collector 重置或配置中的 signer 绑定不构成跨组织 custody、HSM/KMS 治理、mainnet readiness 或资产对账结论；这些边界不得由本专题扩大。
 
 #### 测试策略
 - `test_tier_required`：

@@ -102,16 +102,11 @@
 | `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
 | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
-| `doc/p2p/node/node-consensus-signer-binding-replication-hardening.prd.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.design.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.project.md` |
 | `doc/p2p/node/node-contribution-points.prd.md` | `doc/p2p/node/node-contribution-points.design.md` | `doc/p2p/node/node-contribution-points.project.md` |
-| `doc/p2p/node/node-distfs-replication-network-closure.prd.md` | `doc/p2p/node/node-distfs-replication-network-closure.design.md` | `doc/p2p/node/node-distfs-replication-network-closure.project.md` |
-| `doc/p2p/node/node-execution-reward-consensus-bridge.prd.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.design.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.project.md` |
 | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.prd.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.design.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.project.md` |
-| `doc/p2p/node/node-keypair-config-bootstrap.prd.md` | `doc/p2p/node/node-keypair-config-bootstrap.design.md` | `doc/p2p/node/node-keypair-config-bootstrap.project.md` |
+| `doc/p2p/node/node-identity-replication-contract.prd.md` | `doc/p2p/node/node-identity-replication-contract.design.md` | `doc/p2p/node/node-identity-replication-contract.project.md` |
 | `doc/p2p/node/node-redeemable-power-asset.prd.md` | `doc/p2p/node/node-redeemable-power-asset.design.md` | `doc/p2p/node/node-redeemable-power-asset.project.md` |
 | `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
-| `doc/p2p/node/node-replication-libp2p-migration.prd.md` | `doc/p2p/node/node-replication-libp2p-migration.design.md` | `doc/p2p/node/node-replication-libp2p-migration.project.md` |
-| `doc/p2p/node/node-reward-runtime-production-hardening-phase1.prd.md` | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.design.md` | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.project.md` |
 | `doc/p2p/node/node-reward-settlement-native-transaction.prd.md` | `doc/p2p/node/node-reward-settlement-native-transaction.design.md` | `doc/p2p/node/node-reward-settlement-native-transaction.project.md` |
 | `doc/p2p/node/node-storage-system-reward-pool.prd.md` | `doc/p2p/node/node-storage-system-reward-pool.design.md` | `doc/p2p/node/node-storage-system-reward-pool.project.md` |
 | `doc/p2p/node/node-triad-operations-observability.prd.md` | `doc/p2p/node/node-triad-operations-observability.design.md` | `doc/p2p/node/node-triad-operations-observability.project.md` |

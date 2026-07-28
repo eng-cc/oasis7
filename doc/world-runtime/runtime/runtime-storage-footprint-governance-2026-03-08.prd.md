@@ -68,7 +68,12 @@
   - AC-6 (PRD-WORLD_RUNTIME-015): status / metrics 输出必须暴露 `storage_profile`、`effective_budget`、`bytes_by_dir`、`retained_heights`、`checkpoint_count`、`replay_summary`、`last_gc_result`、`last_gc_error`、`degraded_reason`，并可被 launcher 或脚本直接采样，无需额外扫描内部目录。
   - AC-6.1 (PRD-WORLD_RUNTIME-015): `oasis7_chain_runtime`、`oasis7_game_launcher`、`oasis7_web_launcher` 与 launcher UI 必须暴露同名 profile 枚举输入，并沿进程边界无损透传到链运行时。bundle 入口 `run-game.sh`、`run-web-launcher.sh`、`run-chain-runtime.sh` 必须共享同一 `OASIS7_CHAIN_STORAGE_PROFILE` 覆盖通道，且未设置时继承各自二进制默认值，不在 shell 中重复硬编码默认 profile。
   - AC-7 (PRD-WORLD_RUNTIME-015): `snapshot.json` 在 `2500` heights 样本下 `<= 512 KiB`；旧 `tick_consensus_records` 通过 archive index 可按区间读取并通过链路校验。
-  - AC-8 (PRD-WORLD_RUNTIME-013/014/015): required/full 测试矩阵中必须包含 footprint 上限、restart recovery、GC fail-safe、profile 切换、archive 读取与 retained-height replay 回归。
+- AC-8 (PRD-WORLD_RUNTIME-013/014/015): required/full 测试矩阵中必须包含 footprint 上限、restart recovery、GC fail-safe、profile 切换、archive 读取与 retained-height replay 回归。
+
+### Execution bridge record compatibility
+- 当前 `ExecutionBridgeRecord` 为 schema v3：除 `world_id`、height、node/execution hash、state root、journal length、latest/snapshot/journal/commit/checkpoint/external-effect refs 外，还记录 `prev_node_block_hash`、`proposer_id`、`action_root` 与 world-head-proof ref/hash。
+- V1/V2 记录仍可兼容读取；V2 不是当前最终 schema。bridge 仅证明本地 committed context、CAS refs、checkpoint manifest 与执行记录的一致性，不是 light-client、state/receipt proof、DA sampling、public-testnet 或 mainnet finality 证明。
+- 恢复必须保存并校验 `last_applied_committed_height`：stale 或 non-contiguous committed height 失败关闭，checkpoint install/restart 后仍以 canonical log 与保留 checkpoint 重建并校验 state root。
 - Non-Goals:
   - 不修改共识协议、区块语义或 DistFS challenge 计费语义。
   - 不对 `target/`、打包产物或 third-party 工具链缓存做统一清理策略。

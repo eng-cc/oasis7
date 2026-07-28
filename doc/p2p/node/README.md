@@ -1,13 +1,12 @@
 # `p2p/node` 热点子域入口
 
-更新时间: 2026-06-26
+更新时间: 2026-07-28
 
 ## 从这里开始
 - 想确认 P2P/DistFS/consensus/execution/observer 的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 node 子域入口。
 - 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md` 或 `node-reward-settlement-native-transaction.prd.md`
-- 想确认复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-replication-libp2p-migration.prd.md`、`node-distfs-replication-network-closure.prd.md` 或 `node-consensus-signer-binding-replication-hardening.prd.md`
+- 想确认节点身份引导、复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-identity-replication-contract.prd.md`
 - 想确认 PoS 时间、slot clock 与控制面对齐：先读 `../../world-runtime/runtime/chain-pos-control-plane.prd.md`
-- 想确认节点身份引导、keypair bootstrap 与初始化入口：先读 `node-keypair-config-bootstrap.prd.md`
 - 想确认 `wasm32/libp2p` 编译约束：先读 `../network/readme-p1-network-production-hardening.prd.md`；想确认 builtin wasm fallback：先读 `node-builtin-wasm-fetch-fallback-compile.prd.md`
 - 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据，以及模块级优化点：先读 `node-triad-operations-observability.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -35,15 +34,13 @@
   - 奖励、执行验证与原生交易结算的关系是什么
 - 说明: contribution points 的 `runtime-closure` / `multi-node-closure-test` 与 redeemable power asset 的 `audit-hardening` / `signature-governance-phase3` 语义均已合并进各自主三件套并删除源文件；历史过程由 Git 与 GitHub task evidence 追溯。
 
-### 2. 复制、网络与 signer binding
+### 2. 身份、复制、网络与 signer binding
 - 首读入口:
-  - `node-replication-libp2p-migration.prd.md`
-  - `node-distfs-replication-network-closure.prd.md`
-  - `node-consensus-signer-binding-replication-hardening.prd.md`
+  - `node-identity-replication-contract.prd.md`
 - 适合问题:
-  - 节点复制链路现在哪个专题是主文档
-  - DistFS 节点复制与 libp2p migration 的当前边界是什么
-  - 共识 signer binding 与复制硬化需要看哪里
+  - 节点 keypair bootstrap、复制链路与 signer binding 的当前边界是什么
+  - DistFS 节点复制、network injection 和历史 libp2p migration 的现行合同在哪里
+  - 共识 signer binding、复制摄取顺序与恢复硬化需要看哪里
 
 ### 3. PoS 时间与控制面对齐
 - 首读入口:
@@ -53,14 +50,7 @@
   - 槽内 tick phase 和 proposal pacing 怎么理解
   - runtime / launcher / script 控制面参数应该看哪份专题
 
-### 4. 身份引导与初始化
-- 首读入口:
-  - `node-keypair-config-bootstrap.prd.md`
-- 适合问题:
-  - 节点 keypair 与 config bootstrap 的当前真值在哪
-  - 新节点身份初始化和配置入口怎么对齐
-
-### 5. WASM 编译与兼容护栏
+### 4. WASM 编译与兼容护栏
 - 首读入口:
   - `../network/readme-p1-network-production-hardening.prd.md`
   - `node-builtin-wasm-fetch-fallback-compile.prd.md`
@@ -68,7 +58,7 @@
   - `wasm32/libp2p` 的编译守卫和限制是什么
   - builtin wasm fetch fallback 的编译闭环要看哪里
 
-### 6. 三节点监控与运行证据
+### 5. 三节点监控与运行证据
 - 首读入口:
   - `node-triad-operations-observability.prd.md`
 - 适合问题:
