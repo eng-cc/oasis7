@@ -17,7 +17,15 @@ export function installWaitResolutionQuoteVisualFixture(fixtures, {
     Object.assign(snapshot.player_gameplay, {
       stage_status: "accepted",
       execution_state: "accepted",
-      fallback_tradeoff_preview: [],
+      fallback_tradeoff_preview: [{
+        value_class: "repair_now",
+        available: true,
+        cost: "spend repair materials",
+        progress_kept: "keeps the current capability",
+        opportunity_cost: "uses the repair reserve",
+        reason: "the local blocker is repairable",
+        recommended: true,
+      }],
       no_safe_fallback_reason: null,
       required_next_decision_action_id: null,
       required_next_decision_class: null,

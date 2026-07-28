@@ -900,7 +900,7 @@ export function createViewerFeedbackModule({
     );
     if (waitResolutionQuote) {
       const safeWaitIndex = fallbackTradeoffPreview.findIndex((option) => option.valueClass === "safe_wait");
-      fallbackTradeoffPreview[safeWaitIndex < 0 ? 0 : safeWaitIndex] = waitResolutionQuote.fallbackTradeoffOption;
+      fallbackTradeoffPreview.splice(safeWaitIndex < 0 ? fallbackTradeoffPreview.length : safeWaitIndex, safeWaitIndex < 0 ? 0 : 1, waitResolutionQuote.fallbackTradeoffOption);
     }
     const noSafeFallbackReason = displayableString(
       gameplay.no_safe_fallback_reason ?? gameplay.noSafeFallbackReason,
