@@ -112,3 +112,174 @@ fn compat_snapshot_omits_wait_resolution_quote_for_blocked_feedback() {
         "blocked feedback is not presented as a safe-wait quote"
     );
 }
+
+#[test]
+fn compat_snapshot_quotes_a_real_pending_runtime_gameplay_action() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let target_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(221);
+    register_runtime_session(
+        &mut server,
+        "player-pending-runtime-action",
+        Some(target_agent_id.as_str()),
+        220,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id,
+            actor_agent_id: None,
+            player_id: "player-pending-runtime-action".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        221,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let ack = server
+        .handle_gameplay_action(request)
+        .expect("runtime gameplay action is accepted for later application");
+    assert!(
+        ack.runtime_action_id > 0,
+        "the normal gameplay path must remain a pending runtime action"
+    );
+
+    let gameplay = server
+        .compat_snapshot(Some("player-pending-runtime-action"))
+        .player_gameplay
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay.wait_resolution_quote.is_some(),
+        "a real queued runtime action must tell the player when to recheck"
+    );
+}
+
+#[test]
+fn compat_snapshot_omits_wait_quote_after_synchronous_existing_first_agent_claim() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.world = crate::runtime::World::new_production_hardened();
+    server
+        .world
+        .submit_action(crate::runtime::Action::RegisterAgent {
+            agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+                .expect("formal release starter spawn"),
+        });
+    server.world.step().expect("register existing first Agent");
+
+    let (public_key, private_key) = test_signer(222);
+    register_runtime_session(
+        &mut server,
+        "player-synchronous-first-agent-claim",
+        None,
+        222,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.to_string(),
+            target_agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            actor_agent_id: None,
+            player_id: "player-synchronous-first-agent-claim".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        223,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let ack = server
+        .handle_gameplay_action(request)
+        .expect("existing first Agent binding succeeds immediately");
+    assert_eq!(
+        ack.runtime_action_id, 0,
+        "this claim did not enter the runtime queue"
+    );
+
+    let gameplay = server
+        .compat_snapshot(Some("player-synchronous-first-agent-claim"))
+        .player_gameplay
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay.wait_resolution_quote.is_none(),
+        "a synchronously completed claim must not be presented as pending runtime work"
+    );
+}
+
+#[test]
+fn compat_snapshot_omits_wait_quote_after_accepted_agent_chat() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_agent_chat_echo_enabled(true),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(224);
+    register_runtime_session(
+        &mut server,
+        "player-agent-chat",
+        Some(agent_id.as_str()),
+        224,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-agent-chat".to_string()),
+            public_key: None,
+            auth: None,
+            message: "inspect the current production line".to_string(),
+            intent_tick: None,
+            intent_seq: Some(225),
+        },
+        225,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .handle_agent_chat(request)
+        .expect("agent chat is accepted without becoming a runtime gameplay action");
+
+    let gameplay = server
+        .compat_snapshot(Some("player-agent-chat"))
+        .player_gameplay
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay.wait_resolution_quote.is_none(),
+        "accepted agent chat must not be framed as pending runtime application"
+    );
+}

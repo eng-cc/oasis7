@@ -7,7 +7,7 @@ pub(super) fn player_gameplay_wait_resolution_quote(
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
 ) -> Option<PlayerGameplayWaitResolutionQuote> {
     let feedback = recent_feedback?;
-    if !matches!(feedback.stage.as_str(), "accepted" | "queued") {
+    if !matches!(feedback.stage.as_str(), "queued" | "submitted") {
         return None;
     }
 
