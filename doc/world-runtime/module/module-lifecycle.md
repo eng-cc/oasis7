@@ -309,6 +309,14 @@ ManifestMigrated {
 ## 稳定实例、交易与升级合同
 
 - 活动模块以持久 `instance_id` 区分，同一 module artifact 可在不同 owner/target 下形成独立实例；确定性执行使用稳定实例顺序。
+- `ModuleInstallTarget` 只允许 `SelfAgent` 与
+  `LocationInfrastructure { location_id }`。target-aware install 及其
+  finality 变体携带该字段；legacy install 归一化为 `SelfAgent`。location
+  目标必须非空、存在且与 installer 当前 location 一致，失败路径不写状态。
+- action、`ModuleInstalled` domain event、pending/release 状态与 installed
+  instance 都持久化 `install_target`；历史缺失字段以 `SelfAgent` 为 serde
+  默认值。snapshot/replay 不重新选择目标，基础设施实例继续使用已记录的
+  infrastructure tick origin。
 - deploy/register、install、activate、deactivate、upgrade、list/bid/purchase/delist/destroy 均通过 validated action -> domain event -> state apply 进入权威状态并可重放，不允许直接改 registry 或 instance cache。
 - upgrade 保持 module identity，校验 owner、interface version、required exports、subscriptions、capability slots 与 limits；不兼容升级被拒绝且不产生部分事件。
 - artifact 市场只允许当前 owner 上架、下架或销毁；结算时校验正价格、价格资源类型与余额，成交后转移 ownership 并清理相关 offer/bid。active instance 仍引用 artifact 时拒绝销毁。

@@ -318,7 +318,21 @@
 
 ## 7. 模块执行、市场与历史 gap 合并边界
 
-- 模块安装目标属于持久 runtime 状态。基础设施目标使用可审计的独立 tick origin；未记录目标与 self-agent 目标保持兼容。实例按稳定 `instance_id` 顺序执行，安装、升级、重放和恢复不得退回 `module_id` 全局单实例覆盖。
+- `ModuleInstallTarget` 仅包含 `SelfAgent` 与
+  `LocationInfrastructure { location_id }`。`InstallModuleToTargetFromArtifact`
+  及其携带 finality 的动作显式携带目标；legacy
+  `InstallModuleFromArtifact` 动作统一归一化为 `SelfAgent`。
+- location-infrastructure 目标要求 `location_id` 非空且已经存在，并且
+  installer 当前位于该 location；任一校验失败都不得写入 installed-module
+  状态。`ModuleInstalled` / `DomainEvent::ModuleInstalled`、pending/release
+  状态与 installed instance 持久化 `install_target`；历史字段缺失时按
+  `SelfAgent` 反序列化，使 legacy action、event、snapshot 与 replay 保持原
+  行为。
+- target selection 必须沿 validated action -> domain event -> state apply
+  进入权威状态并可重放；基础设施实例使用其记录的 infrastructure tick
+  origin。实例按稳定 `instance_id` 顺序执行，安装、升级、重放和恢复不得
+  退回 `module_id` 全局单实例覆盖。详细生命周期合同见
+  `doc/world-runtime/module/module-lifecycle.md#稳定实例交易与升级合同`。
 - 默认 world 保存/加载包含 module registry、metadata 与 artifact；旧目录缺少 module store 时仍可兼容加载。升级必须保持 module identity，并通过 owner、interface/export、subscription、capability 与 limit 兼容检查；失败不得产生部分状态。
 - 生产 runtime 只消费 external Docker canonical builder 产出的 binary + receipt，并拒绝 runtime source compile。源码包文件数、大小、路径、超时和最小环境限制只属于显式 dev/test opt-in guardrail，不构成“世界内生产编译”承诺。
 - 模块调用计费由确定性输入/输出/effect/emit 计量产生审计事件；余额不足时在输出、状态与 emit 应用前结构化拒绝。费用只在成功路径生效，replay 应用已提交的计费事件，不重新推导价格。
