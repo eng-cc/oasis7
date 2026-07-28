@@ -3,7 +3,7 @@
 - Owner role: `game_visual_interaction_designer`
 - Covered pages: `site/index.html`, `site/en/index.html`
 - Related PRD: `doc/site/prd.md`
-- Historical design context: `doc/site/design.md`, `doc/site/github-pages/*.design.md`
+- Current design authority: `doc/site/design.md`
 - Related task: GitHub issue #1484
   (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
   live in `.pm/github-project-sync/task-archive.jsonl`)
@@ -21,7 +21,6 @@ fallback artifact generated from existing repo truth:
 - `site/en/index.html`
 - `doc/site/prd.md`
 - `doc/site/design.md`
-- historical `doc/site/github-pages/*.design.md`
 
 Do not cite this document as a fresh visual-designer-authored conclusion. It is
 page-level Image2 design evidence with the fallback boundary recorded in the
@@ -96,18 +95,18 @@ Create a mobile web page design target for the oasis7 GitHub Pages homepage, 390
   first viewport must not imply that creator-facing modules or a public mod
   platform are currently open.
 
-## 6. Relationship To Older Design Documents
+## 6. Relationship To Current And Historical Authorities
 
-The older GitHub Pages design documents remain valid historical and topical
-design evidence for site information architecture, CTA cleanup, content sync,
-visual polish, release/download communication, and quality gates. This document
-does not replace those records.
+The current visual and interaction contract is `doc/site/design.md`, together
+with the page-level design targets that `doc/site/prd.index.md` still lists as
+active supplements. Deleted GitHub Pages microtopics are historical task
+evidence only; trace them through GitHub task issue evidence comments and Git
+history, not as current topical authorities.
 
-This document adds the missing page-level Image2 target required for the current
-homepage route family. When implementation and historical docs disagree, use
-the current PRD and this page-level target for first-viewport visual hierarchy
-and claim-boundary validation, then use older topical design docs for the
-specific subtopic they own.
+This document remains the Image2 hierarchy target for the current homepage
+route family. When implementation and this target disagree, use
+`doc/site/prd.md` for public claims and `doc/site/design.md` for current visual,
+interaction, responsive, and evidence-routing rules.
 
 ## Implementation Comparison Notes
 
