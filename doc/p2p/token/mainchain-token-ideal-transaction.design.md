@@ -34,4 +34,3 @@ No field may be added merely as an optional string. `fee_payer` requires separat
 ## Rollout and residual risk
 
 Phase 1 is the implemented metadata-only closure. The residual risk is semantic, not an operational shortcut: presenting fee quote fields as charged fees, or future fields as supported sponsor/priority execution, is false. This design cannot be used as mainnet readiness, external-custody, or token-economics authority.
-
