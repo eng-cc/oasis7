@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.13.0**
-Last Updated: **2026-07-27**
+Version: **v1.13.1**
+Last Updated: **2026-07-28**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -12,6 +12,7 @@ Mandatory rule:
 
 ### GitHub query budget and terminal defaults
 
+- The canonical source remains concise through one 780-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract.test.py`; do not add a second line-limit contract elsewhere.
 - Terminal refresh, sync, PR-watch audit, and closeout require the selected `task_uid`; broad Project or repository issue traversal requires explicit `--global-maintenance`.
 - Selected terminal audit is `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`; repository-wide repair is the separate operator action `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`, guarded by the live GraphQL budget before issue listing.
 - Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.

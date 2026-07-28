@@ -1,5 +1,7 @@
 # Cross-platform test contract: setup must run on Windows PowerShell and Linux/macOS without weakening Git fallback coverage.
 
+from __future__ import annotations
+
 import json
 import pathlib
 import shutil
