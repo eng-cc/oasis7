@@ -336,6 +336,19 @@ def materialize_replacement_mapping(root: pathlib.Path, mapping_path: pathlib.Pa
         raise MigrationError(f"cannot read committed task mapping: {exc}") from exc
     readback_committed_migration(mapping_path, task_uid, receipt)
     target = replacement_tasks_json_path(root, mapping_path, replacement)
+    if target.exists():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise MigrationError(f"cannot read replacement task mapping: {exc}") from exc
+        current = (existing.get("tasks") or {}).get(task_uid)
+        if isinstance(current, dict) and current.get("bootstrap_epoch") == receipt.get("new_epoch"):
+            if (current.get("canonical_worktree") != receipt.get("new_worktree")
+                    or current.get("task_branch") != receipt.get("new_branch")
+                    or current.get("branch_identity_migration_receipt") != receipt):
+                raise MigrationError("replacement same-epoch mapping conflicts with migration receipt")
+            readback_committed_migration(target, task_uid, receipt)
+            return target
     durable_store.atomic_replace_json(target, committed_mapping)
     readback_committed_migration(target, task_uid, receipt)
     return target

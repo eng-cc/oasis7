@@ -270,6 +270,58 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(bootstrap.returncode, 0, bootstrap.stderr)
         self.assertEqual(json.loads(bootstrap.stdout)["status"], "created")
 
+    def test_exact_retry_preserves_same_epoch_replacement_handoff_state(self) -> None:
+        receipt = self.assert_migrated(self.run_helper())
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        replacement = json.loads(replacement_mapping.read_text(encoding="utf-8"))
+        record = replacement["tasks"][UID]
+        record.update({
+            "status": "ready",
+            "workflow_phase": "pre_pr_ready",
+            "pr_number": 2701,
+            "pr_url": "https://example.invalid/pull/2701",
+            "phase_receipts": {"pre_pr": "replacement-pre-pr-receipt"},
+        })
+        replacement_mapping.write_text(json.dumps(replacement), encoding="utf-8")
+
+        self.assertEqual(self.assert_migrated(self.run_helper()), receipt)
+        preserved = json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(preserved["status"], "ready")
+        self.assertEqual(preserved["workflow_phase"], "pre_pr_ready")
+        self.assertEqual(preserved["pr_number"], 2701)
+        self.assertEqual(preserved["pr_url"], "https://example.invalid/pull/2701")
+        self.assertEqual(preserved["phase_receipts"], {"pre_pr": "replacement-pre-pr-receipt"})
+        self.assertEqual(preserved["branch_identity_migration_receipt"], receipt)
+
+    def test_exact_retry_repairs_missing_or_older_replacement_mapping(self) -> None:
+        receipt = self.assert_migrated(self.run_helper())
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        replacement_mapping.unlink()
+        self.assertEqual(self.assert_migrated(self.run_helper()), receipt)
+        self.assertEqual(
+            json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]["bootstrap_epoch"], 2
+        )
+
+        replacement_mapping.write_bytes(self.old_mapping_bytes)
+        self.assertEqual(self.assert_migrated(self.run_helper()), receipt)
+        repaired = json.loads(replacement_mapping.read_text(encoding="utf-8"))["tasks"][UID]
+        self.assertEqual(repaired["bootstrap_epoch"], 2)
+        self.assertEqual(repaired["branch_identity_migration_receipt"], receipt)
+
+    def test_exact_retry_rejects_conflicting_same_epoch_replacement_mapping_before_write(self) -> None:
+        self.assert_migrated(self.run_helper())
+        replacement_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        replacement = json.loads(replacement_mapping.read_text(encoding="utf-8"))
+        replacement["tasks"][UID]["branch_identity_migration_receipt"] = {"digest": "conflict"}
+        replacement_mapping.write_text(json.dumps(replacement), encoding="utf-8")
+        before = replacement_mapping.read_bytes()
+
+        retried = self.run_helper()
+
+        self.assertNotEqual(retried.returncode, 0, retried.stdout)
+        self.assertIn("same-epoch mapping conflicts", retried.stderr)
+        self.assertEqual(replacement_mapping.read_bytes(), before)
+
     def test_sequential_migration_advances_epoch_preserves_history_and_is_idempotent(self) -> None:
         first = self.assert_migrated(self.run_helper())
         replacement_two = self.root.parent / "replacement-worktree-two"
