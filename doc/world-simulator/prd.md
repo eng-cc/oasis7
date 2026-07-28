@@ -54,7 +54,7 @@
 ## 模块基线
 - world-simulator 连接 runtime 与 viewer，负责把世界状态、场景初始化、规则执行、LLM/provider 决策与启动器控制面收敛为可交互体验。
 - 模块覆盖六个主题域：scenario、viewer、launcher、kernel、llm、m4；热点子域和完整文档清单以 `prd.index.md` 为准。
-- 主 PRD 只保留模块级 Why / What / Done；专题级 How、细节矩阵、历史 decision 和任务证据由同名专题 PRD/design/project、GitHub task issue evidence comments 与 archive-only review logs 承担。
+- 主 PRD 只保留模块级 Why / What / Done；专题级 How、细节矩阵、历史 decision 和任务证据由专题 authority、GitHub task issue evidence comments 与 archive-only review logs 承担。已完成的 simulator kernel rule-hook / Wasm 接线历史以 `design.md` 的简明边界说明和 Git history 追溯，不恢复为 active 专题三件套。
 
 ## Active Requirement Baseline
 

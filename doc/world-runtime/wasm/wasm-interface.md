@@ -89,6 +89,7 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 - `RuleDecisionRecorded { action_id, module_id, stage, verdict, override_action?, cost, notes }`
 - `ActionOverridden { action_id, original_action, override_action }`
 - Rule 模块通过 `ModuleOutput.emits` 输出 `kind="rule.decision"`，`payload` 为 `RuleDecision` 的 JSON 序列化。
+- simulator 的 historical `WorldKernel` adapter 可将单个 pre-action call 映射到这一 payload；它不扩展本 ABI 的 module lifecycle、artifact governance 或多模块编排语义，且无效 payload / action id 必须由 adapter 结构化拒绝，不能静默降级。
 
 ## ABI 与序列化（草案）
 

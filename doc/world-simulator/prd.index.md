@@ -62,6 +62,7 @@
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 Git history 与 Git history 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
 - 已删除的 intent/distributed/runtime closure 与 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯；当前阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与长期 world-simulator、P2P、runtime、gameplay 权威。
+- kernel rule-hook、Wasm readiness/executor/sandbox bridge/module-governance、Rust-to-Wasm build-suite 与 2026-03-06 simulator `PowerStorage` hard-removal 七组 completed 三件套已退役删除。当前 simulator adapter / removal boundary 读 `doc/world-simulator/design.md` 与 `m4/industrial-resource-flow-contract.prd.md`；ABI、executor、artifact lifecycle 与 canonical build 读 `doc/world-runtime/wasm/` 和 `doc/world-runtime/module/module-storage.prd.md`，历史实施只从 Git history / GitHub task issue evidence 追溯。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
@@ -71,15 +72,8 @@
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md` | `doc/world-simulator/kernel/kernel-rule-hook-foundation.design.md` | `doc/world-simulator/kernel/kernel-rule-hook-foundation.project.md` |
-| `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.project.md` |
-| `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.project.md` |
-| `doc/world-simulator/kernel/kernel-rule-wasm-readiness.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-readiness.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-readiness.project.md` |
-| `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-sandbox-bridge.project.md` |
-| `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md` | `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.design.md` | `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.project.md` |
 | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.prd.md` | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.design.md` | `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.project.md` |
 | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.prd.md` | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.design.md` | `doc/world-simulator/kernel/resource-kind-compound-hardware-hard-migration.project.md` |
-| `doc/world-simulator/kernel/rust-wasm-build-suite.prd.md` | `doc/world-simulator/kernel/rust-wasm-build-suite.design.md` | `doc/world-simulator/kernel/rust-wasm-build-suite.project.md` |
 | `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md` | `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md` | `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md` | `doc/world-simulator/launcher/game-client-launcher-feedback.design.md` | `doc/world-simulator/launcher/game-client-launcher-feedback.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.project.md` |
