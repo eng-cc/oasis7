@@ -132,6 +132,8 @@ EpochSettlementReport {
 - runtime 以 epoch 边界消费节点贡献快照并产出 `EpochSettlementReport`；同一 epoch 的 settlement 必须具备幂等键或等价去重语义。
 - 恢复、重放或重复 tick 只能复现同一结算结果，不得增加 `awarded_points` 或 `cumulative_points`。
 - 快照采集与奖励结算分层：更新 compute/storage/uptime/reliability 样本本身不得提前写入积分台账。
+- `NodePointsRuntimeCollectorSnapshot` 是采样器实现状态，不是结算授权：它持久化 ledger、heuristics、epoch 起点、每节点 cursor 与当前 epoch accumulator。`oasis7_chain_runtime` 在采样前恢复它，以保持 epoch 幂等；重复 tick、重启或 replay 不得因恢复而新增 `awarded_points` 或 `cumulative_points`。
+- collector 状态由 `reward-runtime-state.json` 原子写入。文件不可读时 runtime 会显式发出 warning/metric 并以新 collector 启动；这不是资产对账、已结算状态恢复或生产 custody 成功的证明。
 - 多节点验证最小拓扑为 3 个具有可区分贡献画像的节点，跨越至少 2 个 epoch；验证固定池守恒、贡献更高者排序不反转、显式或义务惩罚会降低得分，以及每个节点累计积分不回退。
 - 该夹具证明确定性业务闭环，不证明采样真实性、复杂证明协议、真实传输或生产网络 readiness。
 
@@ -145,6 +147,7 @@ EpochSettlementReport {
   - 参数不当可能导致单一资源（大存储或大算力）垄断积分，需要通过 `sqrt(storage)` 与权重平衡缓解。
   - 若没有真实证明接线，`verify_pass_ratio/availability_ratio` 的真实性依赖上层采样器，后续需替换为链路证明数据。
   - 积分池固定时，低活跃 epoch 可能出现“有效贡献过少”，需在后续迭代加入最小活跃阈值与回收池机制。
+  - collector 状态文件损坏会丢失未结算采样上下文；它必须以可观测降级处理，不能被表述为已结算资产的安全恢复。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

@@ -84,7 +84,7 @@
 - 输入:
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
-  - `doc/p2p/node/node-replication-libp2p-migration.prd.md`
+  - `doc/p2p/node/node-identity-replication-contract.prd.md`
 - 输出:
   - peer record schema
   - discovery source taxonomy

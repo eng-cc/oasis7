@@ -9,7 +9,7 @@
 ## 2. 设计结构
 - 贡献采集层：采集在线、复制、执行与协作等贡献事件。
 - 积分计算层：按规则累计积分并处理去重、衰减与封顶。
-- Runtime 结算层：在 epoch 边界把快照映射为结算报告，以 epoch/node 幂等身份抵抗重复 tick、恢复与重放；快照写入不直接修改奖励台账。
+- Runtime 结算层：`oasis7_chain_runtime` 在采样前从原子 `reward-runtime-state.json` 恢复 collector 实现状态（ledger、heuristics、epoch 起点、cursor、当前 epoch accumulator），并在采样后持久化；以 epoch/node 幂等身份抵抗重复 tick、恢复与重放。快照写入不直接修改奖励台账；不可读状态文件只产生显式告警/指标和新 collector，不构成资产对账恢复。
 - 奖励映射层：把积分映射到奖励结算与治理口径。
 - 观测审计层：输出节点贡献明细、汇总结果与回归证据；3 节点、2 epoch 夹具覆盖计算、存储、在线、可靠性和惩罚画像。
 

@@ -25,10 +25,10 @@
   - AC-3: 该动作走既有 action 主路径，不再通过 runtime 旁路直接改状态。
   - AC-4: **NSTX-2：新增领域事件与状态应用**
   - AC-5: 新增 `DomainEvent::NodePointsSettlementApplied`，作为奖励结算主路径事件。
-  - AC-6: 在 `WorldState::apply_domain_event` 中实现 mint 账本写入、系统订单池预算扣减、幂等与守恒校验。
+- AC-6: 在 `WorldState::apply_domain_event` 中实现 mint 账本写入、系统订单池预算扣减、幂等与守恒校验。
 - Non-Goals:
   - 跨节点奖励调度器与链上提案器（多节点共识下自动发起奖励结算交易）。
-  - 将 NodePoints 采样器直接并入 `oasis7_node` 主循环并跨节点同步。
+- 将 NodePoints 采样器直接并入 `oasis7_node` 主循环并跨节点同步。
   - 奖励市场化定价、可转账代币化和完整清算系统。
 
 ## 3. AI System Requirements (If Applicable)
@@ -76,6 +76,11 @@ DomainEvent::NodePointsSettlementApplied {
   - `node_credit_allocated[node] += minted_power_credits`
 - 幂等与一致性：
   - 同 `epoch_index + node_id` 已存在记录时拒绝重复应用。
+
+### 当前 collector 接线边界
+- `oasis7_chain_runtime` 的 collector 只在满足本地 readiness 条件后提交 `Action::ApplyNodePointsSettlementSigned { report, signer_node_id, mint_records }`，再通过 `submit_action -> step -> DomainEvent::NodePointsSettlementApplied -> WorldState::apply_domain_event` 落账。
+- 该路径的签名、守恒、预算与重复记录校验都在 action/event 主链路拒绝；collector 不得直接改写奖励资产状态。
+- 这不是多节点自动调度器、共识提案器或 `aw.*` topic/envelope 协议。历史观察轨迹、sequencer 广播和 UDP 表述不构成当前接口或传输权威。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:

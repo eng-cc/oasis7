@@ -22,6 +22,7 @@
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs（`#[cfg(test)]`）`
 
 ## 状态
-- 当前阶段：NSTX-0~NSTX-5 全部完成；奖励结算已切换为网络共识主路径原生交易。
+- 当前阶段：NSTX-0~NSTX-5 全部完成；奖励结算已切换为 runtime 原生 action/event 主路径。该完成态不声明跨节点自动调度、网络 envelope、mainnet 或 finality readiness。
+- 当前生产 worker 为 `oasis7_chain_runtime`；历史 `oasis7_viewer_live` 参数不构成现行运行入口。
 - 阻塞项：无。
 - 最近更新：2026-02-17。

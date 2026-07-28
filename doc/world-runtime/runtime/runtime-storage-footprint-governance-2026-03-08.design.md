@@ -128,29 +128,37 @@ struct StorageProfileConfig {
 }
 ```
 
-### 6.2 ExecutionBridgeRecordV2
+### 6.2 ExecutionBridgeRecord schema v3 and compatible readers
 ```rust
-struct ExecutionBridgeRecordV2 {
+struct ExecutionBridgeRecordV3 {
+    schema_version: u32,
     world_id: String,
     height: u64,
     node_block_hash: Option<String>,
+    prev_node_block_hash: Option<String>,
+    proposer_id: Option<String>,
+    action_root: Option<String>,
     execution_block_hash: String,
     execution_state_root: String,
     journal_len: usize,
-    commit_ref: String,
-    retention_class: ExecutionRetentionClass,
-    checkpoint_anchor: Option<CheckpointAnchor>,
-    hot_snapshot_ref: Option<String>,
-    hot_journal_ref: Option<String>,
+    latest_state_ref: Option<String>,
+    snapshot_ref: Option<String>,
+    journal_ref: Option<String>,
+    commit_log_ref: Option<String>,
+    checkpoint_ref: Option<String>,
+    external_effect_ref: Option<String>,
+    world_head_proof_ref: Option<String>,
+    world_head_proof_hash: Option<String>,
     simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
     timestamp_ms: i64,
 }
 ```
 
 #### 设计说明
-- `commit_ref` 指向 canonical replay log 中该高度的 commit 内容（或其 hash / path）。
-- `hot_snapshot_ref` / `hot_journal_ref` 仅在 latest/hot window/checkpoint 高度存在。
-- 普通 archive-only 高度只保留 replay 所需轻索引，不再强制持有独占完整快照。
+- `commit_log_ref` 指向 canonical replay log 中该高度的 commit 内容（或其 hash / path）；snapshot/journal refs 只在 retention/pin 集要求时保留。
+- V1/V2 记录可读，缺失字段按 legacy compatibility 处理；新写入为 v3，V2 不再被表述为最终当前 schema。
+- `last_applied_committed_height` 是持久 bridge state：恢复后只接受连续的下一高度，stale/non-contiguous 输入失败关闭。checkpoint install/restart 必须重新验证 record refs、canonical log 与 state root。
+- world-head proof/ref 只绑定本地 committed context、CAS refs 与 checkpoint manifest；不是 light-client、receipt/state proof、DA sampling、public-testnet 或 mainnet finality 证明。
 
 ### 6.3 ExecutionCheckpointManifest
 ```rust
@@ -289,7 +297,7 @@ struct StorageReplaySummary {
    - latest head
    - hot window
    - sparse checkpoint
-5. 写入 `ExecutionBridgeRecordV2`：
+5. 写入 schema-v3 `ExecutionBridgeRecord`：
    - 所有高度都记录 `commit_ref`、`execution_state_root`、`execution_block_hash`。
    - 只有 hot/checkpoint 高度才写 `hot_snapshot_ref` / `hot_journal_ref`。
 6. 更新 latest execution world 目录。
@@ -449,7 +457,7 @@ struct StorageReplaySummary {
 
 ## 15. 代码落点建议
 - `crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge.rs`
-  - `ExecutionBridgeRecordV2`
+- schema-v3 `ExecutionBridgeRecord` 与 V1/V2 compatible reader
   - checkpoint 写入逻辑
   - pin set 计算与 retention manager
 - `crates/oasis7/src/runtime/world/persistence.rs`

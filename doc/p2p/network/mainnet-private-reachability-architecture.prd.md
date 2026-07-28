@@ -98,8 +98,7 @@
   - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
-  - `doc/p2p/node/node-replication-libp2p-migration.prd.md`
-  - `doc/p2p/node/node-distfs-replication-network-closure.prd.md`
+  - `doc/p2p/node/node-identity-replication-contract.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 自动探测结果不稳定：若公网检测、NAT 类型与打洞结果互相矛盾，默认回退到较保守的 `私有安全` 或 `relay_only`，而不是默认升级到公网入口。
