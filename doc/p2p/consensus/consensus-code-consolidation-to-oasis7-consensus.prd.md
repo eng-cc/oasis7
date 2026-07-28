@@ -100,3 +100,10 @@
 - 原“目标” -> 第 1 章。
 - 原“范围” -> 第 2 章。
 - 原“接口/数据、里程碑、风险” -> 第 4~6 章。
+
+## 7. 有序动作载荷与 committed replay 合同
+
+- proposal/commit/replication 携带版本化、有序动作 envelope；action root 对完整有序列表做确定性承诺，签名、复制和执行上下文必须绑定同一 root 与 payload。
+- 接收方在提交或回放前验证 payload hash、action root、顺序与 envelope 版本；未知的非 runtime payload 可按版本化边界跳过或拒绝，但不得使已知 committed runtime action 静默丢失。
+- viewer/live/simulator 只消费已提交动作并按提交顺序回放；submit acceptance、pending proposal 或空 committed batch 都不等于世界推进。
+- 共识层拥有动作完整性与提交顺序，不拥有市场价格、WASM 生命周期、LLM 决策或 runtime state apply 规则。
