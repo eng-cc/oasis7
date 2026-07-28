@@ -35,6 +35,7 @@
 - 早期 launcher 链上转账基础条款 `PRD-WORLD_SIMULATOR-004/005` 已从旧 singleton 分册退役；当前专业边界通过 `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` 进入，逐任务证据通过 Git history 与 GitHub task issue evidence comments 追溯。
 - Viewer live/runtime-world、LLM/provider、software_safe、pixel-world 与 visual cleanup 历史：回看 `doc/world-simulator/viewer/`、`doc/world-simulator/llm/`、`doc/testing/evidence/` 与对应 task trace。
 - Release distribution、platform native entrypoints、Windows installer、Linux AppImage 与 upgrade policy 历史：回看 `doc/world-simulator/launcher/`、`doc/site/github-pages/` 与对应 task trace。
+- simulator kernel rule-hook、Wasm readiness/executor/sandbox bridge/module-governance、Rust-to-Wasm build-suite 与 2026-03-06 simulator `PowerStorage` hard-removal 七组 completed 三件套已退役删除。现行技术边界读 `doc/world-simulator/design.md`、`m4/industrial-resource-flow-contract.prd.md` 与 `doc/world-runtime/wasm/`；历史实施与完成证据只从 Git history 和 GitHub task issue evidence comments 追溯。
 - 本主项目页只维护当前/最近任务索引；完整执行证据以 topic project、testing evidence 与 GitHub task issue evidence comments 为准。
 
 ## 依赖
@@ -59,7 +60,7 @@
 - `doc/world-simulator/llm/{provider-agent-dual-mode.{prd,project}.md,provider-agent-dual-mode-contract.md}`
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
 - Runtime live migration 与后续 event-drive/LLM bridge/node split 历史三件套已退役删除；当前 authority 收敛到 `doc/world-simulator/prd.md`、`doc/world-simulator/llm/decision-provider-contract.prd.md`、`doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`、`doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md` 与 `doc/world-simulator/viewer/viewer-manual.manual.md`；历史完成态只从 GitHub task issue evidence comments 与 git history 追溯。
-- `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
+- `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`
 - `crates/oasis7_launcher_ui/src/lib.rs`

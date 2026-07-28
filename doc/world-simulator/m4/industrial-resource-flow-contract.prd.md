@@ -25,7 +25,7 @@ GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_im
 
 - 完整物流寻路/拥塞网络、金融市场、科技树或职业系统。
 - 电价、电耗、产率、阈值、损耗、速度、吞吐或维护公式重平衡。
-- LLM/provider 策略、Viewer 图谱/缩放、PowerStorage hard-removal 历史专题及其各自的专业合同。
+- LLM/provider 策略、Viewer 图谱/缩放；simulator `PowerStorage` hard-removal 的当前边界已在本文收敛，历史实施仅从 Git history / GitHub task evidence 追溯。
 
 ## 3. AI System Requirements (If Applicable)
 
@@ -42,6 +42,7 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 ### 电力与设施
 
 - Owner-held electricity 是唯一当前口径：初始化清洗 Location electricity，运行时拒绝 Location 入账与已下线充放电路径。
+- 这里的 `PowerStorage` 仅指已移除的 simulator facility/action/event 语义；不等同于仍由 runtime 专业域管理的 `m1_power_storage` builtin，也不得据此删除 legacy scenario runner 对 `require_power_storages` 的明确拒绝。
 - `BuildFactory(factory.power.radiation.mk1)` 的设施注册、owner/location 继承和发电入账由 runtime 实现拥有。
 - 历史包含 storage 或 Location pool 的快照/事件必须由专业实现明确兼容或拒绝，不能静默吞错。
 
