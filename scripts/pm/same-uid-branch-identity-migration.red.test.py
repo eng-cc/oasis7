@@ -272,6 +272,10 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         replacement_two = self.root.parent / "replacement-worktree-two"
         branch_two = "task/engineering-replacement-two"
         epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        (self.replacement / "POST_MIGRATION_CHANGE").write_text("ordinary later implementation\n", encoding="utf-8")
+        self.git("add", "POST_MIGRATION_CHANGE", cwd=self.replacement)
+        self.git("commit", "-m", "ordinary later implementation", cwd=self.replacement)
+        advanced_head = self.git("rev-parse", "HEAD", cwd=self.replacement)
 
         second = self.run_helper(
             repo_root=self.replacement,
@@ -283,6 +287,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         second_receipt = json.loads(second.stdout)
         self.assertEqual(second_receipt["old_epoch"], 2)
         self.assertEqual(second_receipt["new_epoch"], 3)
+        self.assertEqual(second_receipt["implementation_head"], advanced_head)
         self.assertGreater(second_receipt["journal_revision"], first["journal_revision"])
 
         final_mapping = replacement_two / ".pm" / "github-project-sync" / "tasks.json"
@@ -290,6 +295,7 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
         self.assertEqual(final_record["bootstrap_epoch"], 3)
         self.assertEqual(final_record["canonical_worktree"], str(replacement_two.resolve()))
         self.assertEqual(final_record["task_branch"], branch_two)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=replacement_two), advanced_head)
         self.assertEqual(set(final_record["historical_epochs"]), {"1", "2"})
         self.assertEqual(
             final_record["historical_epochs"]["2"]["task_record"]["branch_identity_migration_receipt"], first
@@ -325,6 +331,26 @@ class SameUidBranchIdentityMigrationRedTests(unittest.TestCase):
 
         self.assertNotEqual(ambiguous.returncode, 0, ambiguous.stdout)
         self.assertIn("requested active identity", ambiguous.stderr)
+        self.assertEqual(epoch_two_mapping.read_bytes(), before_mapping)
+        self.assertFalse(replacement_two.exists())
+
+    def test_sequential_migration_rejects_non_ancestor_rewritten_history(self) -> None:
+        self.assert_migrated(self.run_helper())
+        replacement_two = self.root.parent / "replacement-worktree-two"
+        branch_two = "task/engineering-replacement-two"
+        epoch_two_mapping = self.replacement / ".pm" / "github-project-sync" / "tasks.json"
+        before_mapping = epoch_two_mapping.read_bytes()
+        self.git("reset", "--hard", "main", cwd=self.replacement)
+
+        rewritten = self.run_helper(
+            repo_root=self.replacement,
+            tasks_json=epoch_two_mapping,
+            replacement_worktree=replacement_two,
+            replacement_branch=branch_two,
+        )
+
+        self.assertNotEqual(rewritten.returncode, 0, rewritten.stdout)
+        self.assertIn("requested active identity", rewritten.stderr)
         self.assertEqual(epoch_two_mapping.read_bytes(), before_mapping)
         self.assertFalse(replacement_two.exists())
 

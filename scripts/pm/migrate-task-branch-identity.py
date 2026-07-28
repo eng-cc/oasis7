@@ -408,13 +408,16 @@ def readback_committed_migration(mapping_path: pathlib.Path, task_uid: str,
 
 
 def active_identity_matches_receipt(root: pathlib.Path, receipt: dict[str, Any]) -> bool:
-    """A new epoch may begin only from the exact active identity of the prior receipt."""
+    """Require the prior identity, while allowing later commits that extend its exact head."""
     try:
+        prior_head = str(receipt.get("implementation_head") or "")
+        current_head = git(root, "rev-parse", "HEAD")
         return (
             root == pathlib.Path(str(receipt.get("new_worktree") or "")).resolve()
-            and git(root, "rev-parse", "HEAD") == receipt.get("implementation_head")
             and git(root, "symbolic-ref", "--quiet", "--short", "HEAD") == receipt.get("new_branch")
             and str(path_common_dir(root)) == receipt.get("new_common_dir")
+            and bool(prior_head)
+            and git_ok(root, "merge-base", "--is-ancestor", prior_head, current_head)
         )
     except MigrationError:
         return False
