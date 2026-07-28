@@ -84,6 +84,8 @@ def selector_roles(args: argparse.Namespace) -> list[str]:
     command = [sys.executable, str(selector), "--change-class", args.change_class, "--json"]
     if args.domain_role:
         command.extend(("--domain-role", args.domain_role))
+    for role in args.manual_role:
+        command.extend(("--manual-role", role))
     if args.verification_affected:
         command.append("--verification-affected")
     if args.changed_path_list is not None:
@@ -244,6 +246,7 @@ def main() -> int:
                         choices=("mechanical-doc", "workflow-doc", "domain-semantic-doc",
                                  "external-messaging", "unknown", "mixed"))
     parser.add_argument("--domain-role")
+    parser.add_argument("--manual-role", action="append", default=[])
     parser.add_argument("--verification-affected", action="store_true")
     parser.add_argument("--changed-path-list")
     parser.add_argument("--preflight-dir")
