@@ -112,6 +112,121 @@ describe("viewer feedback module", () => {
     });
   });
 
+  it("presents every wait-resolution quote field through the existing non-actionable recovery panel model", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          wait_resolution_quote: {
+            safe_to_wait: false,
+            resolution_trigger: "a committed runtime event applies the queued smelter",
+            recheck_tick_or_event: "event 8",
+            expected_change: "smelter construction becomes visible",
+            unresolved_risk: "the action can still be blocked",
+            alternative_unlock_condition: "refresh the snapshot and choose an enabled action",
+          },
+        },
+      },
+      uiLocale: "en",
+    };
+
+    const summary = createFeedbackModule(state).buildGameplaySummary();
+
+    expect(summary.waitResolutionQuote).toEqual(expect.objectContaining({
+      safeToWait: false,
+      resolutionTrigger: "a committed runtime event applies the queued smelter",
+      recheckTickOrEvent: "event 8",
+      expectedChange: "smelter construction becomes visible",
+      unresolvedRisk: "the action can still be blocked",
+      alternativeUnlockCondition: "refresh the snapshot and choose an enabled action",
+    }));
+    expect(summary.fallbackTradeoffPreview[0]).toEqual(expect.objectContaining({
+      valueClass: "safe_wait",
+      available: false,
+      recommended: false,
+      reason: expect.stringContaining("Trigger: a committed runtime event applies the queued smelter"),
+      progressKept: "Expected change: smelter construction becomes visible",
+      cost: "Recheck: event 8",
+      opportunityCost: "Alternative unlock: refresh the snapshot and choose an enabled action",
+    }));
+    expect(summary.fallbackTradeoffPreview[0].reason).toContain("Unresolved risk: the action can still be blocked");
+  });
+
+  it("appends an unavailable wait quote without dropping a published repair choice", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          fallback_tradeoff_preview: [
+            { value_class: "repair_now", available: true, cost: "materials", progress_kept: "the line", opportunity_cost: "reserve", reason: "repairable", recommended: true },
+          ],
+          wait_resolution_quote: {
+            safe_to_wait: false,
+            resolution_trigger: "a committed runtime event applies the queued smelter",
+            recheck_tick_or_event: "event 8",
+            expected_change: "smelter construction becomes visible",
+            unresolved_risk: "the action can still be blocked",
+            alternative_unlock_condition: "refresh the snapshot and choose an enabled action",
+          },
+        },
+      },
+      uiLocale: "en",
+    };
+
+    const options = createFeedbackModule(state).buildGameplaySummary().fallbackTradeoffPreview;
+
+    expect(options).toHaveLength(2);
+    expect(options[0]).toEqual(expect.objectContaining({
+      valueClass: "repair_now",
+      available: true,
+      recommended: true,
+      reason: "repairable",
+    }));
+    expect(options[1]).toEqual(expect.objectContaining({
+      valueClass: "safe_wait",
+      available: false,
+      recommended: false,
+    }));
+  });
+
+  it("replaces an existing safe-wait option once while preserving other choices", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          fallback_tradeoff_preview: [
+            { value_class: "repair_now", available: true, cost: "materials", progress_kept: "the line", opportunity_cost: "reserve", reason: "repairable", recommended: true },
+            { value_class: "safe_wait", available: true, cost: "stale", progress_kept: "stale", opportunity_cost: "stale", reason: "stale", recommended: true },
+          ],
+          wait_resolution_quote: {
+            safe_to_wait: false,
+            resolution_trigger: "a committed runtime event applies the queued smelter",
+            recheck_tick_or_event: "event 8",
+            expected_change: "smelter construction becomes visible",
+            unresolved_risk: "the action can still be blocked",
+            alternative_unlock_condition: "refresh the snapshot and choose an enabled action",
+          },
+        },
+      },
+      uiLocale: "en",
+    };
+
+    const options = createFeedbackModule(state).buildGameplaySummary().fallbackTradeoffPreview;
+
+    expect(options).toHaveLength(2);
+    expect(options[0]).toEqual(expect.objectContaining({ valueClass: "repair_now", reason: "repairable" }));
+    expect(options.filter((option) => option.valueClass === "safe_wait")).toEqual([
+      expect.objectContaining({
+        available: false,
+        recommended: false,
+        reason: expect.stringContaining("Trigger: a committed runtime event applies the queued smelter"),
+      }),
+    ]);
+  });
+
   it("preserves English product-validation preview values and labels", () => {
     const state = {
       lastGameplayActionFeedback: null,

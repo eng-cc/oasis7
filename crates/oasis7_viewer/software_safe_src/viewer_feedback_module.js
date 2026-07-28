@@ -1,11 +1,10 @@
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
 import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
-
+import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
-
 function displayableStrings(value) {
   return Array.isArray(value)
     ? value
@@ -14,11 +13,9 @@ function displayableStrings(value) {
       .filter(Boolean)
     : [];
 }
-
 function displayableString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-
 export function createViewerFeedbackModule({
   clone,
   feedbackBadgeClass,
@@ -43,7 +40,6 @@ export function createViewerFeedbackModule({
       deltaTraceCount: feedback.deltaTraceCount || 0,
     };
   }
-
   function snapshotSemanticFeedback(feedback) {
     if (!feedback) return null;
     return {
@@ -59,7 +55,6 @@ export function createViewerFeedbackModule({
       response: clone(feedback.response) || null,
     };
   }
-
   function semanticFeedbackCode(feedback) {
     if (feedback?.stage !== "error") {
       return null;
@@ -71,7 +66,6 @@ export function createViewerFeedbackModule({
     const effectCode = String(feedback?.effect || "").trim();
     return effectCode || null;
   }
-
   function semanticFeedbackMessage(feedback) {
     const responseMessage = String(feedback?.response?.message || "").trim();
     if (responseMessage) {
@@ -899,6 +893,15 @@ export function createViewerFeedbackModule({
         reason: displayableString(option.reason) || null,
         recommended: option.recommended === true,
       }));
+    const waitResolutionQuote = buildWaitResolutionQuoteDisplayModel(
+      gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
+      locale,
+      localeText,
+    );
+    if (waitResolutionQuote) {
+      const safeWaitIndex = fallbackTradeoffPreview.findIndex((option) => option.valueClass === "safe_wait");
+      fallbackTradeoffPreview.splice(safeWaitIndex < 0 ? fallbackTradeoffPreview.length : safeWaitIndex, safeWaitIndex < 0 ? 0 : 1, waitResolutionQuote.fallbackTradeoffOption);
+    }
     const noSafeFallbackReason = displayableString(
       gameplay.no_safe_fallback_reason ?? gameplay.noSafeFallbackReason,
     );
@@ -1169,6 +1172,7 @@ export function createViewerFeedbackModule({
       agencyMoves,
       progressionProof,
       fallbackTradeoffPreview,
+      waitResolutionQuote,
       noSafeFallbackHandoff,
       matureWorldContinuation,
       shareReplay,

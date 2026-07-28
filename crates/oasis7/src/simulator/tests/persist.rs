@@ -525,6 +525,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
             delta_logical_time: 0,
             delta_event_seq: 0,
         }),
+        wait_resolution_quote: None,
         agent_claim: None,
         micro_depot_facilities: vec![MicroDepotPlayerFacilitySnapshot {
             facility_id: "depot-public-snapshot".to_string(),

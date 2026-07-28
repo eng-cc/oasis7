@@ -26,7 +26,7 @@ use super::gameplay_validation_preview::product_validation_unlock_preview;
 use super::player_gameplay::extend_available_actions;
 use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
-    player_gameplay_fallback_tradeoff_preview,
+    player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
 };
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
 
@@ -35,7 +35,6 @@ pub(super) struct PlayerGameplayCausalitySignal {
     pub kind: PlayerGameplayCausalityKind,
     pub detail: String,
 }
-
 fn first_session_runtime_sync_blocker(
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
 ) -> Option<(String, String, String)> {
@@ -351,6 +350,7 @@ fn finalize_player_gameplay_snapshot(
         player_gameplay_response_window_class(&gameplay, recent_feedback);
     gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, recent_feedback);
     gameplay.escalation_hint = player_gameplay_escalation_hint(&gameplay, recent_feedback);
+    gameplay.wait_resolution_quote = player_gameplay_wait_resolution_quote(recent_feedback);
     let fallback_action =
         player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
@@ -465,6 +465,7 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
+            wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -581,7 +582,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 resume_next_step: None,
                 branch_recommendations: Vec::new(),
                 available_actions,
-                recent_feedback: recent_feedback.cloned(),
+                recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
                 agent_claim,
                 micro_depot_facilities: Vec::new(),
                 small_player_lane_id: None,
@@ -652,7 +653,7 @@ pub(super) fn build_player_gameplay_snapshot(
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
-            recent_feedback: recent_feedback.cloned(),
+            recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -735,6 +736,7 @@ pub(super) fn build_player_gameplay_snapshot(
             branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
+            wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -819,7 +821,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
-                    recent_feedback: recent_feedback.cloned(),
+                    recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
                     agent_claim,
                     micro_depot_facilities: Vec::new(),
                     small_player_lane_id: None,
@@ -879,7 +881,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
-                    recent_feedback: recent_feedback.cloned(),
+                    recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
                     agent_claim,
                     micro_depot_facilities: Vec::new(),
                     small_player_lane_id: None,
@@ -939,7 +941,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     resume_next_step: None,
                     branch_recommendations: Vec::new(),
                     available_actions,
-                    recent_feedback: recent_feedback.cloned(),
+                    recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
                     agent_claim,
                     micro_depot_facilities: Vec::new(),
                     small_player_lane_id: None,
@@ -999,7 +1001,7 @@ pub(super) fn build_player_gameplay_snapshot(
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
-            recent_feedback: recent_feedback.cloned(),
+            recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -1057,7 +1059,7 @@ pub(super) fn build_player_gameplay_snapshot(
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
-            recent_feedback: recent_feedback.cloned(),
+            recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -1115,7 +1117,7 @@ pub(super) fn build_player_gameplay_snapshot(
             resume_next_step: None,
             branch_recommendations: Vec::new(),
             available_actions,
-            recent_feedback: recent_feedback.cloned(),
+            recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
             agent_claim,
             micro_depot_facilities: Vec::new(),
             small_player_lane_id: None,
@@ -1172,7 +1174,7 @@ pub(super) fn build_player_gameplay_snapshot(
         resume_next_step: None,
         branch_recommendations: Vec::new(),
         available_actions,
-        recent_feedback: recent_feedback.cloned(),
+        recent_feedback: recent_feedback.cloned(), wait_resolution_quote: None,
         agent_claim,
         micro_depot_facilities: Vec::new(),
         small_player_lane_id: None,

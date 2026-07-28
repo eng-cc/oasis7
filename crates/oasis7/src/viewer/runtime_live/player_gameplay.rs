@@ -873,7 +873,7 @@ impl ViewerRuntimeLiveServer {
             )?;
             self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
                 action: format!("gameplay_action:{}", request.action_id),
-                stage: "accepted".to_string(),
+                stage: "completed_advanced".to_string(),
                 effect: format!(
                     "bound existing unclaimed first Agent {} to player {}",
                     request.target_agent_id, verified.player_id
@@ -984,7 +984,7 @@ impl ViewerRuntimeLiveServer {
         }
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: format!("gameplay_action:{}", request.action_id),
-            stage: "accepted".to_string(),
+            stage: "queued".to_string(),
             effect: format!(
                 "queued gameplay action {} for {} as runtime action {}",
                 request.action_id, request.target_agent_id, runtime_action_id

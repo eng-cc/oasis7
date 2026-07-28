@@ -1503,6 +1503,45 @@ function buildValidationUnlockPreviewDisplayModel(rawPreview, locale, isLocaleZh
     localizedNextStepHint
   };
 }
+function displayableString$1(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function buildWaitResolutionQuoteDisplayModel(rawQuote, locale, localeText2) {
+  if (!rawQuote || typeof rawQuote !== "object" || Array.isArray(rawQuote)) {
+    return null;
+  }
+  const resolutionTrigger = displayableString$1(rawQuote.resolution_trigger ?? rawQuote.resolutionTrigger);
+  const recheckTickOrEvent = displayableString$1(rawQuote.recheck_tick_or_event ?? rawQuote.recheckTickOrEvent);
+  const expectedChange = displayableString$1(rawQuote.expected_change ?? rawQuote.expectedChange);
+  const unresolvedRisk = displayableString$1(rawQuote.unresolved_risk ?? rawQuote.unresolvedRisk);
+  const alternativeUnlockCondition = displayableString$1(
+    rawQuote.alternative_unlock_condition ?? rawQuote.alternativeUnlockCondition
+  );
+  if (![resolutionTrigger, recheckTickOrEvent, expectedChange, unresolvedRisk, alternativeUnlockCondition].some(Boolean)) {
+    return null;
+  }
+  const safeToWait = rawQuote.safe_to_wait === true || rawQuote.safeToWait === true;
+  return {
+    safeToWait,
+    resolutionTrigger,
+    recheckTickOrEvent,
+    expectedChange,
+    unresolvedRisk,
+    alternativeUnlockCondition,
+    fallbackTradeoffOption: {
+      valueClass: "safe_wait",
+      available: safeToWait,
+      reason: [
+        `${localeText2(locale, "触发条件", "Trigger")}: ${resolutionTrigger || "—"}`,
+        `${localeText2(locale, "未解决风险", "Unresolved risk")}: ${unresolvedRisk || "—"}`
+      ].join(" · "),
+      progressKept: `${localeText2(locale, "预期变化", "Expected change")}: ${expectedChange || "—"}`,
+      cost: `${localeText2(locale, "复查点", "Recheck")}: ${recheckTickOrEvent || "—"}`,
+      opportunityCost: `${localeText2(locale, "替代解锁条件", "Alternative unlock")}: ${alternativeUnlockCondition || "—"}`,
+      recommended: safeToWait
+    }
+  };
+}
 function isRecord$1(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -2196,6 +2235,15 @@ function createViewerFeedbackModule({
       reason: displayableString(option.reason) || null,
       recommended: option.recommended === true
     }));
+    const waitResolutionQuote = buildWaitResolutionQuoteDisplayModel(
+      gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
+      locale,
+      localeText2
+    );
+    if (waitResolutionQuote) {
+      const safeWaitIndex = fallbackTradeoffPreview.findIndex((option) => option.valueClass === "safe_wait");
+      fallbackTradeoffPreview.splice(safeWaitIndex < 0 ? fallbackTradeoffPreview.length : safeWaitIndex, safeWaitIndex < 0 ? 0 : 1, waitResolutionQuote.fallbackTradeoffOption);
+    }
     const noSafeFallbackReason = displayableString(
       gameplay.no_safe_fallback_reason ?? gameplay.noSafeFallbackReason
     );
@@ -2390,6 +2438,7 @@ function createViewerFeedbackModule({
       agencyMoves,
       progressionProof,
       fallbackTradeoffPreview,
+      waitResolutionQuote,
       noSafeFallbackHandoff,
       matureWorldContinuation,
       shareReplay,
@@ -11266,6 +11315,43 @@ function installPowerSurvivalQuoteVisualFixture(fixtures, { core: core2, setFixt
     core2.injectPowerSurvivalQuoteForTest(powerSurvivalQuoteFixture);
   };
 }
+const waitResolutionQuoteFixture = Object.freeze({
+  safe_to_wait: false,
+  resolution_trigger: "committed runtime event applies the queued smelter",
+  recheck_tick_or_event: "event 8",
+  expected_change: "smelter construction becomes visible",
+  unresolved_risk: "the action can still be blocked",
+  alternative_unlock_condition: "refresh the snapshot and choose an enabled action"
+});
+function installWaitResolutionQuoteVisualFixture(fixtures, {
+  core: core2,
+  setFixturePlayerAuth: setFixturePlayerAuth2,
+  viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2
+}) {
+  fixtures.wait_resolution_quote = () => {
+    const snapshot = viewerFixtureBaseSnapshot2();
+    Object.assign(snapshot.player_gameplay, {
+      stage_status: "accepted",
+      execution_state: "accepted",
+      fallback_tradeoff_preview: [{
+        value_class: "repair_now",
+        available: true,
+        cost: "spend repair materials",
+        progress_kept: "keeps the current capability",
+        opportunity_cost: "uses the repair reserve",
+        reason: "the local blocker is repairable",
+        recommended: true
+      }],
+      no_safe_fallback_reason: null,
+      required_next_decision_action_id: null,
+      required_next_decision_class: null,
+      wait_resolution_quote: { ...waitResolutionQuoteFixture }
+    });
+    core2.injectSnapshot(snapshot, { returnState: false });
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+  };
+}
 var _tmpl$$1 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
 function ReprioritizeActionForm(props) {
   const [open, setOpen] = createSignal(false);
@@ -17084,6 +17170,11 @@ function installViewerVisualFixture() {
     viewerFixtureBaseSnapshot
   });
   installPowerSurvivalQuoteVisualFixture(fixtures, {
+    core,
+    setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
+  installWaitResolutionQuoteVisualFixture(fixtures, {
     core,
     setFixturePlayerAuth,
     viewerFixtureBaseSnapshot
