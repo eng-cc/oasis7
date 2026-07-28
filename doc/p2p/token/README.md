@@ -11,12 +11,12 @@
 | 已有 runtime 的 Token 分配、治理 bridge 与 release 语义如何演进？ | `mainchain-token-allocation-mechanism.prd.md` | 已完成的基础分配机制与 release companion；不替代当前创世 freeze 口径。 |
 | 已实现的地址绑定、治理 gate 与 treasury 分发语义在哪里？ | `mainchain-token-allocation-mechanism.prd.md` | 当前 runtime 内部 Token 分配 authority；不等于外部钱包、custody、公开分发或 release readiness。 |
 | 签名交易授权与托管/自托管边界在哪里？ | `../blockchain/p2p-mainnet-security-governance-readiness.prd.md` | 当前 signed transfer contract；生产 signer custody 的模块级边界仍回到 `doc/p2p/blockchain/README.md`。 |
-| 不受当前实现约束的理想交易模型是什么？ | `mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md` | 目标态草案，不是当前 runtime contract。 |
+| 主链 Token 的 signed transaction metadata 与 Phase 2+ 边界是什么？ | `mainchain-token-ideal-transaction.prd.md` | 当前 Phase 1 metadata-only contract；不是实际 fee debit、sponsor 或 priority execution。 |
 | `OC -> LetAI Run OpenAPI` quota bridge 如何部署、演练与回滚？ | `mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`，再读同名 `.runbook.md` | 专题规格与 operator companion；不替代 world-runtime 服务运行手册。 |
 
 ## 阅读与维护边界
 
 - 每组 `*.prd.md`、`*.design.md`、`*.project.md` 分别保存规格、设计和执行证据；本页只承担首次分流，不复制其参数、命令或状态台账。
 - 当前 P2P 模块总边界与活跃执行状态分别回到 `doc/p2p/prd.md` 与 `doc/p2p/project.md`；按精确文件名追溯使用 `doc/p2p/prd.index.md`。
-- 历史 release 与理想化交易文档仍有模块、测试或审计互链。它们不能仅因日期较早或已完成而删除；只有现行替代真值落盘、调用迁移完成并复核无活跃引用后才可退休。
+- 历史 release 仍可能有模块、测试或审计互链，不能仅因日期较早或已完成而删除。理想交易的 2026-06-08 源三件套已由 `mainchain-token-ideal-transaction.{prd,design,project}.md` 吸收；历史过程从 Git 与 GitHub task evidence 追溯，不构成当前 authority。
 - 新增 Token 专题时，先更新本页的分流/边界，再保留 `doc/p2p/prd.index.md` 的精确 triplet 行；共享目录规则以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
