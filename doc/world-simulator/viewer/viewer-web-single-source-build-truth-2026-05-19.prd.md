@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.design.md`
 - 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.project.md`
 - 关联主专题:
-  - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
+  - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.prd.md`
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 
