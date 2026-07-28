@@ -91,7 +91,8 @@
   - `DecisionRequest`: `observation + action_catalog + provider_config_ref + timeout_budget`。
   - `DecisionResponse`: `decision(wait/act) + action_ref + args + provider_error? + diagnostics + trace_payload`。
   - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
-  - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
+- `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
+- 当前内置 Responses provider 的 transport、tool-only prompt、bounded repair、memory-budget 与 chat trace 基线由 `llm-agent-behavior.prd.md` 承载；本专题定义 provider-agnostic 约束，不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority。
 - Local Provider Adapter Strategy:
   - 使用 adapter 把 `ObservationEnvelope` 转成 `Local Provider` 可消费的会话输入。
   - 通过有限 `tool`/`action` 暴露 world 可执行动作，而不是开放任意外部命令。
@@ -138,6 +139,7 @@
 - consensus-backed live execution 中，proposal acceptance 或 submit acceptance 都不更新世界记忆；只有 committed action 被 replay 后的权威 `ActionResult` 才进入 `on_action_result`、recent summary 与后续决策上下文。
 - provider failure、malformed output 或 unknown action reference 确定收敛为带 trace/error 的无状态变化 `Wait`，不得生成 heuristic substitute action。
 - replay 从持久事件重建后果，不重新请求 provider，也不把 `replay_id` 当幂等授权。provider memory write 仍只是 policy-governed intent，不是世界事实。
+- **当前 effect/receipt debt：** `AgentDecisionTrace` 的 module-call intent/receipt 与 journal event 是诊断事实，但尚未单独证明 intent 与权威 `ActionResult` 的完整因果映射、replay 时绝不重调 provider、或恢复时绝不重复外部副作用。T4/T5 必须补齐这组 runtime-owned proof；在此之前不得把 trace 的存在宣传为完整 receipt/replay closure。
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
