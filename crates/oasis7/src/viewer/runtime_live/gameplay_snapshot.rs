@@ -4,13 +4,16 @@ use crate::runtime::{
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
-    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
-    PlayerGameplayStageId, PlayerGameplayStageStatus, ProductValidationUnlockPreview,
+    PlayerGameplayGoalKind, PlayerGameplayPrimaryIntent, PlayerGameplayRecentFeedback,
+    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
+    ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
 #[path = "gameplay_snapshot_fallback.rs"]
 mod fallback;
+#[path = "gameplay_snapshot_intent.rs"]
+mod intent;
 
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
@@ -25,6 +28,7 @@ use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview,
 };
+use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -89,32 +93,6 @@ pub(super) fn player_gameplay_causality_from_runtime_events(
     override_fallback.map(|fallback| PlayerGameplayCausalitySignal {
         kind: PlayerGameplayCausalityKind::AgentOverride,
         detail: override_detail.unwrap_or(fallback),
-    })
-}
-
-fn player_gameplay_intent_scope(action: &str) -> Option<&'static str> {
-    if action.starts_with("gameplay_action:") {
-        Some("gameplay_action")
-    } else if action.starts_with("prompt_control.") {
-        Some("prompt_control")
-    } else if action == "agent_chat" {
-        Some("agent_chat")
-    } else if matches!(action, "play" | "pause" | "step" | "seek") {
-        Some("world_control")
-    } else if action == "chain_sync" {
-        Some("world_sync")
-    } else {
-        None
-    }
-}
-
-fn player_gameplay_intent_summary(feedback: &PlayerGameplayRecentFeedback) -> Option<String> {
-    feedback.intent_summary.clone().or_else(|| {
-        if feedback.action.is_empty() {
-            None
-        } else {
-            Some(feedback.action.replace('_', " "))
-        }
     })
 }
 
@@ -404,6 +382,7 @@ pub(super) fn build_player_gameplay_snapshot(
     controlled_agent_id: Option<&str>,
     confirmed_gameplay_progress: bool,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+    primary_intent: Option<PlayerGameplayPrimaryIntent>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
     gameplay_enabled: bool,
     gameplay_disabled_reason: Option<&str>,
@@ -428,13 +407,15 @@ pub(super) fn build_player_gameplay_snapshot(
     let industry_stage = state.industry_progress.stage;
     let validation_unlock_preview = product_validation_unlock_preview(state);
     let finalize = |gameplay| {
-        finalize_player_gameplay_snapshot(
+        let mut gameplay = finalize_player_gameplay_snapshot(
             gameplay,
             industry_stage,
             validation_unlock_preview.clone(),
             recent_feedback,
             causality_signal,
-        )
+        );
+        gameplay.primary_intent = primary_intent.clone();
+        gameplay
     };
     if !gameplay_enabled {
         let disabled_reason = gameplay_disabled_reason
@@ -444,6 +425,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -564,6 +546,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 stage_status: PlayerGameplayStageStatus::Blocked,
                 execution_state: PlayerGameplayExecutionState::Executing,
                 accepted_intent_id: None,
+                primary_intent: None,
                 intent_summary: None,
                 intent_scope: None,
                 intent_target: None,
@@ -636,6 +619,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -715,6 +699,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -801,6 +786,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_status: PlayerGameplayStageStatus::Active,
                     execution_state: PlayerGameplayExecutionState::Executing,
                     accepted_intent_id: None,
+                    primary_intent: None,
                     intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
@@ -856,8 +842,9 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
-                    accepted_intent_id: None,
-                    intent_summary: None,
+            accepted_intent_id: None,
+            primary_intent: None,
+            intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
                     can_reprioritize: false,
@@ -915,8 +902,9 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
-                    accepted_intent_id: None,
-                    intent_summary: None,
+            accepted_intent_id: None,
+            primary_intent: None,
+            intent_summary: None,
                     intent_scope: None,
                     intent_target: None,
                     can_reprioritize: false,
@@ -978,6 +966,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1035,6 +1024,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1092,6 +1082,7 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
             accepted_intent_id: None,
+            primary_intent: None,
             intent_summary: None,
             intent_scope: None,
             intent_target: None,
@@ -1148,6 +1139,7 @@ pub(super) fn build_player_gameplay_snapshot(
         stage_status: PlayerGameplayStageStatus::Active,
         execution_state: PlayerGameplayExecutionState::Executing,
         accepted_intent_id: None,
+        primary_intent: None,
         intent_summary: None,
         intent_scope: None,
         intent_target: None,

@@ -572,3 +572,133 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
         Some(2)
     );
 }
+
+#[test]
+fn runtime_prompt_control_keeps_the_canonical_primary_intent_truth() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(94);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let apply_goal = |expected_version, nonce, short_term_goal_override| {
+        signed_prompt_control_apply_request(
+            crate::viewer::PromptControlApplyRequest {
+                agent_id: agent_id.clone(),
+                player_id: "player-a".to_string(),
+                public_key: None,
+                auth: None,
+                strong_auth_grant: None,
+                expected_version,
+                updated_by: None,
+                system_prompt_override: None,
+                short_term_goal_override,
+                long_term_goal_override: None,
+            },
+            crate::viewer::PromptControlAuthIntent::Apply,
+            nonce,
+            public_key.as_str(),
+            private_key.as_str(),
+        )
+    };
+    let primary_intent = |server: &mut ViewerRuntimeLiveServer| {
+        serde_json::to_value(
+            server
+                .compat_snapshot(Some("player-a"))
+                .player_gameplay
+                .expect("bound player gameplay snapshot"),
+        )
+        .expect("serialize gameplay snapshot")
+    };
+
+    server
+        .handle_prompt_control(crate::viewer::PromptControlCommand::Apply {
+            request: apply_goal(
+                Some(0),
+                2,
+                Some(Some("Keep the iron line stable.".to_string())),
+            ),
+        })
+        .expect("first goal accepted");
+    server
+        .handle_prompt_control(crate::viewer::PromptControlCommand::Apply {
+            request: apply_goal(
+                Some(1),
+                3,
+                Some(Some("Keep the iron line stable.".to_string())),
+            ),
+        })
+        .expect("same goal is an accepted unchanged handoff");
+    let unchanged = primary_intent(&mut server);
+    assert_eq!(
+        unchanged
+            .pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("unchanged")
+    );
+    assert_eq!(
+        unchanged
+            .pointer("/primary_intent/message")
+            .and_then(serde_json::Value::as_str),
+        Some("Keep the iron line stable.")
+    );
+
+    server
+        .handle_prompt_control(crate::viewer::PromptControlCommand::Apply {
+            request: apply_goal(Some(1), 4, Some(None)),
+        })
+        .expect("clearing the shared goal requires resume");
+    let resume_required = primary_intent(&mut server);
+    assert_eq!(
+        resume_required
+            .pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("resume_required")
+    );
+    assert_eq!(
+        resume_required
+            .pointer("/primary_intent/message")
+            .and_then(serde_json::Value::as_str),
+        Some("Keep the iron line stable.")
+    );
+    assert_eq!(
+        resume_required
+            .pointer("/primary_intent/resume_required")
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+
+    let rejected = server
+        .handle_prompt_control(crate::viewer::PromptControlCommand::Apply {
+            request: apply_goal(
+                Some(999),
+                5,
+                Some(Some("Expand immediately despite the outage.".to_string())),
+            ),
+        })
+        .expect_err("stale version must reject without replacing the handoff");
+    assert_eq!(rejected.code, "version_conflict");
+    assert_eq!(primary_intent(&mut server), resume_required);
+}

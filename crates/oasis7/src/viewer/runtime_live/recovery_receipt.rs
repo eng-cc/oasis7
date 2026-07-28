@@ -34,6 +34,8 @@ pub(super) struct RuntimePersistedSessionSideEffects {
     pub(super) agent_public_key_bindings: BTreeMap<String, String>,
     pub(super) player_auth_last_nonce: BTreeMap<String, u64>,
     pub(super) player_chat_intent_acks: Vec<RuntimePersistedChatIntentAck>,
+    #[serde(default)]
+    pub(super) primary_intents: BTreeMap<String, super::control_plane::RuntimePrimaryIntent>,
     pub(super) pending_virtual_events: VecDeque<WorldEvent>,
 }
 

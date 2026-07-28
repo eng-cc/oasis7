@@ -18,7 +18,10 @@ use sha2::{Digest, Sha256};
 
 mod agent_chat_intent;
 mod llm_sidecar;
-use agent_chat_intent::resolve_agent_chat_intent;
+#[path = "control_plane/prompt_profile.rs"]
+mod prompt_profile;
+pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
+use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
@@ -227,6 +230,12 @@ impl ViewerRuntimeLiveServer {
         apply_prompt_patch_runtime(&mut candidate, &request);
         let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
         let digest = prompt_profile_digest_runtime(&candidate);
+        if request.short_term_goal_override.is_some() {
+            self.record_primary_intent_from_short_term_goal(
+                request.agent_id.as_str(),
+                candidate.short_term_goal_override.as_deref(),
+            );
+        }
         if applied_fields.is_empty() {
             return Ok(PromptControlAck {
                 agent_id: request.agent_id,
@@ -330,7 +339,7 @@ impl ViewerRuntimeLiveServer {
                     current_version: Some(current.version),
                 })?
         };
-
+        let target_short_term_goal = target.short_term_goal_override.clone();
         let mut candidate = current.clone();
         candidate.system_prompt_override = target.system_prompt_override;
         candidate.short_term_goal_override = target.short_term_goal_override;
@@ -347,6 +356,11 @@ impl ViewerRuntimeLiveServer {
                 current_version: Some(current.version),
             });
         }
+
+        self.record_primary_intent_from_short_term_goal(
+            request.agent_id.as_str(),
+            target_short_term_goal.as_deref(),
+        );
 
         candidate.version = current.version.saturating_add(1);
         candidate.updated_at_tick = self.world.state().time;
@@ -520,6 +534,13 @@ impl ViewerRuntimeLiveServer {
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
+        let primary_intent = apply_accepted_primary_intent(
+            self.llm_sidecar.primary_intents.get(agent_id.as_str()),
+            message.as_str(),
+        );
+        self.llm_sidecar
+            .primary_intents
+            .insert(agent_id.clone(), primary_intent);
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: "agent_chat".to_string(),
             stage: "accepted".to_string(),
@@ -738,56 +759,6 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(request.agent_id.clone()),
             })?;
         Ok(verified)
-    }
-
-    fn current_prompt_version(&self, agent_id: &str) -> Option<u64> {
-        self.llm_sidecar
-            .prompt_profiles
-            .get(agent_id)
-            .map(|profile| profile.version)
-    }
-
-    fn current_prompt_profile(
-        &self,
-        agent_id: &str,
-    ) -> Result<AgentPromptProfile, PromptControlError> {
-        if !self.world.state().agents.contains_key(agent_id) {
-            return Err(PromptControlError {
-                code: "agent_not_found".to_string(),
-                message: format!("agent not found: {agent_id}"),
-                agent_id: Some(agent_id.to_string()),
-                current_version: None,
-            });
-        }
-        Ok(self
-            .llm_sidecar
-            .prompt_profiles
-            .get(agent_id)
-            .cloned()
-            .unwrap_or_else(|| AgentPromptProfile::for_agent(agent_id.to_string())))
-    }
-
-    fn lookup_prompt_profile_version(
-        &self,
-        agent_id: &str,
-        version: u64,
-    ) -> Option<AgentPromptProfile> {
-        self.llm_sidecar
-            .prompt_profile_history
-            .get(agent_id)
-            .and_then(
-                |versions: &std::collections::BTreeMap<u64, AgentPromptProfile>| {
-                    versions.get(&version).cloned()
-                },
-            )
-            .or_else(|| {
-                let profile = self.llm_sidecar.prompt_profiles.get(agent_id)?;
-                if profile.version == version {
-                    Some(profile.clone())
-                } else {
-                    None
-                }
-            })
     }
 
     fn bind_agent_player_access(

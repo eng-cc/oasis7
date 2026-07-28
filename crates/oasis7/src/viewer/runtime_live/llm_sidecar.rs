@@ -193,6 +193,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) player_auth_last_nonce: BTreeMap<String, u64>,
     pub(in crate::viewer::runtime_live) player_chat_intent_acks:
         BTreeMap<(String, String, u64), RuntimeChatIntentAckRecord>,
+    pub(in crate::viewer::runtime_live) primary_intents:
+        BTreeMap<String, super::agent_chat_intent::RuntimePrimaryIntent>,
     llm_decision_mailbox: u64,
     runner: Option<RuntimeDecisionRunner>,
     shadow_kernel: Option<WorldKernel>,
@@ -221,6 +223,7 @@ impl RuntimeLlmSidecar {
             agent_public_key_bindings: BTreeMap::new(),
             player_auth_last_nonce: BTreeMap::new(),
             player_chat_intent_acks: BTreeMap::new(),
+            primary_intents: BTreeMap::new(),
             llm_decision_mailbox: 0,
             runner: None,
             shadow_kernel: None,

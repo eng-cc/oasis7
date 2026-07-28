@@ -144,6 +144,18 @@ impl ViewerRuntimeLiveServer {
             snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
+            snapshot_bound_agent_id.and_then(|agent_id| {
+                self.llm_sidecar
+                    .primary_intents
+                    .get(agent_id)
+                    .map(
+                        |intent| crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                            status: intent.status.clone(),
+                            message: intent.message.clone(),
+                            resume_required: intent.resume_required,
+                        },
+                    )
+            }),
             self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),

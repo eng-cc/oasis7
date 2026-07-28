@@ -629,6 +629,169 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
 }
 
 #[test]
+fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
+    let _guard = lock_test_llm_env();
+    // SAFETY: This test holds the runtime LLM env lock while mutating process env.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(92);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        91,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server
+        .handle_agent_chat(signed_agent_chat_request(
+            crate::viewer::AgentChatRequest {
+                agent_id: agent_id.clone(),
+                player_id: Some("player-a".to_string()),
+                public_key: None,
+                auth: None,
+                message: "Prioritize the iron line before expanding.".to_string(),
+                intent_tick: Some(92),
+                intent_seq: Some(92),
+            },
+            92,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("accepted player instruction");
+    assert!(!ack.idempotent_replay);
+
+    let gameplay = server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect("bound player gameplay snapshot");
+    let contract = serde_json::to_value(gameplay).expect("serialize gameplay snapshot");
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("accepted_new"),
+        "an accepted instruction must publish a durable primary-intent handoff, not only transient feedback"
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/message")
+            .and_then(serde_json::Value::as_str),
+        Some("Prioritize the iron line before expanding."),
+        "the durable handoff must retain the accepted player instruction verbatim"
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/resume_required")
+            .and_then(serde_json::Value::as_bool),
+        Some(false),
+        "a newly accepted primary intent must clear any resume-required state"
+    );
+}
+
+#[test]
+fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
+    let _guard = lock_test_llm_env();
+    // SAFETY: This test holds the runtime LLM env lock while mutating process env.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    }
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(93);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        91,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    for (nonce, message) in [
+        (92, "Prioritize the iron line before expanding."),
+        (93, "Stabilize power before expanding the iron line."),
+    ] {
+        server
+            .handle_agent_chat(signed_agent_chat_request(
+                crate::viewer::AgentChatRequest {
+                    agent_id: agent_id.clone(),
+                    player_id: Some("player-a".to_string()),
+                    public_key: None,
+                    auth: None,
+                    message: message.to_string(),
+                    intent_tick: Some(nonce),
+                    intent_seq: Some(nonce),
+                },
+                nonce,
+                public_key.as_str(),
+                private_key.as_str(),
+            ))
+            .expect("accepted player instruction");
+    }
+
+    let gameplay = server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect("bound player gameplay snapshot");
+    let contract = serde_json::to_value(gameplay).expect("serialize gameplay snapshot");
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("reprioritized")
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/message")
+            .and_then(serde_json::Value::as_str),
+        Some("Stabilize power before expanding the iron line.")
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/resume_required")
+            .and_then(serde_json::Value::as_bool),
+        Some(false)
+    );
+}
+
+#[test]
 fn runtime_agent_chat_requires_starter_oc_balance() {
     let _guard = lock_test_llm_env();
     // SAFETY: This test holds the runtime LLM env lock while mutating process env.

@@ -66,6 +66,7 @@ impl ViewerRuntimeLiveServer {
                 )
             })
             .collect();
+        self.llm_sidecar.primary_intents = generation.session_side_effects.primary_intents;
         self.pending_virtual_events = generation.session_side_effects.pending_virtual_events;
         self.rebuild_settlement_ranking_gate();
         Ok(())
