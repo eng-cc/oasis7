@@ -29,6 +29,7 @@ HUMAN_REVIEW_ENTRYPOINTS = (
     ROOT / "scripts/pm/task-closeout.sh",
 )
 BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
+RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -217,6 +218,20 @@ class WorkflowDocumentationContract(unittest.TestCase):
         for marker in ("required checks", "mergeability", "requested changes", "comments", "review threads"):
             self.assertIn(marker, normalized)
         self.assertNotIn("complete-ruleset runtime receipt", normalized)
+
+    def test_receiving_review_skill_matches_approval_and_thread_disposition_policy(self) -> None:
+        """Review handling must not add authorization or push requirements absent from the gate."""
+        skill = re.sub(
+            r"\s+", " ", RECEIVING_CODE_REVIEW_SKILL.read_text(encoding="utf-8").lower()
+        )
+        self.assertIn("source-of-truth.md#ready-and-done", skill)
+        self.assertIn("approval-only admin path needs no additional authorization", skill)
+        self.assertRegex(skill, r"push only when.{0,100}code change.{0,140}resolve")
+        self.assertRegex(
+            skill,
+            r"stale or incorrect.{0,160}no code change.{0,160}evidence-backed disposition",
+        )
+        self.assertNotIn("explicitly authorizes skipping", skill)
 
     def test_finishing_pre_pr_transition_is_ready_not_task_closeout(self) -> None:
         finishing = FINISHING.read_text(encoding="utf-8")
