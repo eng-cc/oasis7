@@ -1,0 +1,23 @@
+[Unit]
+Description=oasis7 public testnet triad sequencer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oasis7-testnet
+Group=oasis7-testnet
+WorkingDirectory=@STACK_ROOT@
+EnvironmentFile=@STACK_ROOT@/config/node.env
+ExecStart=@STACK_ROOT@/bin/start-node.sh
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=@STACK_ROOT@
+
+[Install]
+WantedBy=multi-user.target
