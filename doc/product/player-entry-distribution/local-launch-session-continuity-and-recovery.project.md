@@ -47,4 +47,4 @@
 ## 状态
 
 - 文档生命周期：`active`。
-- 迁移收据：`pending professional backfill and source deletion`。
+- 迁移收据：`finalized`。六组三件套共 18 个历史源文件已在 `a7149afb9` 删除；当前专业后继为 Launcher runtime-session-continuity、cross-surface-action-parity 与 control-plane-and-machine-interface authority，历史过程只从 Git 与 GitHub task evidence 追溯。

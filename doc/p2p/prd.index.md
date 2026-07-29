@@ -82,15 +82,9 @@
 | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md` |
 | `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.project.md` |
 | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.project.md` |
-| `doc/p2p/distfs/distfs-builtin-wasm-api-closure.prd.md` | `doc/p2p/distfs/distfs-builtin-wasm-api-closure.design.md` | `doc/p2p/distfs/distfs-builtin-wasm-api-closure.project.md` |
-| `doc/p2p/distfs/distfs-builtin-wasm-storage.prd.md` | `doc/p2p/distfs/distfs-builtin-wasm-storage.design.md` | `doc/p2p/distfs/distfs-builtin-wasm-storage.project.md` |
 | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.project.md` |
 | `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | `doc/p2p/distfs/distfs-distributed-resilience.design.md` | `doc/p2p/distfs/distfs-distributed-resilience.project.md` |
-| `doc/p2p/distfs/distfs-path-index-observer-bootstrap.prd.md` | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.design.md` | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.project.md` |
 | `doc/p2p/distfs/distfs-production-hardening.prd.md` | `doc/p2p/distfs/distfs-production-hardening.design.md` | `doc/p2p/distfs/distfs-production-hardening.project.md` |
-| `doc/p2p/distfs/distfs-runtime-path-index.prd.md` | `doc/p2p/distfs/distfs-runtime-path-index.design.md` | `doc/p2p/distfs/distfs-runtime-path-index.project.md` |
-| `doc/p2p/distfs/distfs-standard-file-io.prd.md` | `doc/p2p/distfs/distfs-standard-file-io.design.md` | `doc/p2p/distfs/distfs-standard-file-io.project.md` |
-| `doc/p2p/network/net-runtime-bridge-closure.prd.md` | `doc/p2p/network/net-runtime-bridge-closure.design.md` | `doc/p2p/network/net-runtime-bridge-closure.project.md` |
 | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md` |
 | `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
@@ -136,3 +130,4 @@
 - DistFS distributed resilience：`distfs-distributed-resilience` 是异构 provider 兼容/选择、无单机完整依赖、分布覆盖、自愈控制/轮询与 NodeRuntime 接线的唯一主入口。NodeRuntime 接线仍受“依赖齐备才运行、缺依赖跳过、单轮失败不阻断 tick”约束，不能被误述为全局自治恢复或 readiness 结论。
 - DistFS production hardening：`distfs-production-hardening` 是 Phase 1-9 的唯一当前专业权威；历史 phase 文件名只保留为 audit/review provenance 和 Git history，后续删除必须保留该身份而不得改写为重复的当前路径。
 - DistFS feedback ledger and replication：`distfs-feedback-ledger-and-replication` 是公开 feedback 的 append-only 账本、签名/nonce、announce/fetch 复制和 NodeRuntime 有界接线的唯一当前专业 authority。三个 2026-03 feedback 源三件套已删除；其追溯仅保留在 Git 与 `.pm` task evidence，且不构成 current entry、consensus/finality 或 readiness 依据。
+- DistFS 基础接口与 builtin artifact：早期 builtin storage/API、标准 FileStore、runtime path-index、observer/bootstrap 与 net runtime-bridge 六组完成态三件套已语义合并并删除。FileStore/current blob 回收由 `distfs-production-hardening` 承接；builtin artifact hydrate/hash/loader 由 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.*` 承接；dormant path-index 与空 `runtime_bridge` compatibility feature 的负向边界由 `doc/p2p/{prd,design,project}.md` 承接。历史过程只从 Git 与 GitHub task evidence 追溯。

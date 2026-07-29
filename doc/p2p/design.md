@@ -29,6 +29,8 @@
 
 当前设计不承诺历史 `/aw/rr/*`、固定 bitswap/graphsync、每次 zone commit 的 lease 接管、viewer 默认执行 bridge 或跨节点 DistFS challenge topic/envelope。production WASM 只消费外部 canonical binary + receipt；本地 source compile fallback 仅可作为显式 dev/test 兼容，不是节点生产路径。
 
+早期 `execution_storage` path-index、observer/bootstrap path-index 与 `runtime_bridge` compile closure 只保留历史 provenance：相关 net 源文件未由当前 crate facade 暴露，`runtime_bridge` 只是空兼容 feature。设计不得把 dormant source 或 feature 可编译提升为当前恢复、同步或 bridge 能力。
+
 ## 4. 集成点
 - `doc/world-runtime/prd.md`
 - `doc/headless-runtime/prd.md`

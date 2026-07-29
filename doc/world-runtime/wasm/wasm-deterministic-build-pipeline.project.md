@@ -48,6 +48,7 @@
 ## 状态
 - 更新日期: 2026-06-28
 - 当前阶段: WDBP-3 跨宿主 evidence 已收口（WDBP-3.1 / WDBP-3.2 / WDBP-3.3 已完成，WDBP-4 已完成）
+- 专业权威合并：已吸收早期 builtin DistFS storage/API closure 的有效合同，按当前 `m1/m4/m5`、SHA-256 hydrate、loader re-verification、identity/receipt 与 production hardened policy 重述；旧的 m1/m4-only 和 local-DistFS-only 描述不再作为当前真值。
 - WDBP-3 收口证据:
   - `WDBP-3.2`: 真实 Docker-capable `darwin-arm64` summary/evidence 已由本机 self-hosted runner `oasis7-Mac-darwin-arm64-docker` 产出，并在 `Wasm Darwin Docker Evidence` main run `28297899706` 中与 GitHub-hosted `linux-x86_64` summaries 完成 cross-host report；Darwin job `83840926310` 与 Linux verify job `83843884654` 均通过。Trace: .pm/tasks/task_0a6477b5b6b34b869c8b85c81c554dc0.yaml
 - owner role: `wasm_platform_engineer`

@@ -19,6 +19,8 @@
 
 ### 本地索引完整性（MIG-067）
 
+- `FileStore` 以规范化相对路径映射 `FileMetadata { path, content_hash, size_bytes, updated_at_ms }`，拒绝空路径、绝对路径与 `..` 穿越。写入顺序是先写 CAS，再原子更新本地 `files_index.json`；路径索引是本地可变入口，CAS 内容寻址仍是底层真相。
+- `write_file` / `read_file` / `stat_file` / `list_files` / `delete_file` 只提供本地最小文件抽象，不承诺 ACL、租约锁、高阶目录操作、跨进程或跨节点线性化。删除路径映射后，实现会回收已不再被文件索引引用且未 pin 的 blob；不能沿用“删除永不处理底层 blob”的旧描述。
 - `LocalCasStore::write_file_if_match` / `delete_file_if_match` 是同一进程内的逻辑 compare-precondition API：给出 `expected_content_hash` 时只在当前索引 hash 匹配时写入或删除；`None` 保留无前置条件兼容路径。
 - 该 API 不是跨进程、多写者或跨节点的线性化保证。调用方必须处理版本冲突、重试节流和并发所有权，不能把它作为分布式锁或复制一致性证明。
 - `FileIndexAuditReport` 用于定位缺失 blob、悬挂 pin 和孤儿 blob；孤儿回收仅面向未被索引且未被 pin 的集合。
@@ -60,6 +62,12 @@
 | Phase 9 | MIG-075 | 本地 backoff 决策状态字段与兼容恢复；非外部 telemetry。 |
 
 每项历史任务完成只证明当时实现与回归收口，不能推导出当前生产 custody、真实多节点 challenge、数据可用性 SLA、自动恢复、public_testnet 或 release pass。
+
+## 已吸收的早期基础合同
+
+- `PRD-P2P-MIG-080` 的标准 FileStore I/O 已由“本地索引完整性”段按当前实现承接；旧文件的无 blob 回收说法已纠正。
+- `PRD-P2P-MIG-059/060` 的 builtin WASM artifact hash/hydrate/loader 合同已迁入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.{prd,design,project}.md`。反馈账本的作者签名、append-only、tombstone、审计与限流继续由 `distfs-feedback-ledger-and-replication` 拥有，不属于 builtin artifact 权限。
+- 历史 source triplet 的任务完成态只从 Git history 与 GitHub task evidence 追溯，不是当前 readiness 证据。
 
 ## 风险、运维、证据与非 readiness
 

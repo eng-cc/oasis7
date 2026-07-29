@@ -16,9 +16,10 @@
 - `crates/oasis7_net/src/observer.rs`
 - `crates/oasis7_net/src/head_follow.rs`
 - `crates/oasis7_net/src/lib.rs`
-- `doc/p2p/distfs/distfs-path-index-observer-bootstrap.prd.md`
+- `doc/p2p/prd.md`（早期 path-index source 未由当前 net facade 暴露的负向边界）
 
 ## 状态
 - 当前阶段：Observer 同步源策略化完成（OSSM-1~OSSM-4 全部完成）。
-- 下一步：按运行环境验证 DHT/路径索引失败诊断，不把组件 green 外推为模块 readiness。
+- 下一步：如需重新激活 DHT/路径索引，先由 runtime owner 建 task、接回 crate facade 并补定向回归；在此之前不把 dormant source 外推为模块能力或 readiness。
 - 最近更新：2026-07-27（专业权威合并）。
+- 早期 path-index observer/bootstrap 专题仅作历史 provenance；当前 `oasis7_net` facade 未暴露该路径，不得把旧完成态写成 active fallback 或恢复保证。

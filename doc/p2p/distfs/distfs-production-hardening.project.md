@@ -16,6 +16,7 @@
 | DPH7-1..4 | PRD-P2P-MIG-073 | completed | reason-aware 调度与配置治理。 |
 | DPH8-1..4 | PRD-P2P-MIG-074 | completed | adaptive multiplier CLI 接线与校验。 |
 | DPH9-1..4 | PRD-P2P-MIG-075 | completed | backoff decision state 与兼容回归。 |
+| DFIO-1..4 | PRD-P2P-MIG-080 | completed / absorbed | FileStore、路径净化、CAS-first 原子索引与当前 blob 回收边界。 |
 
 ## 依赖与当前锚点
 
@@ -23,6 +24,7 @@
 - 早期“CAS”不是跨进程/跨节点一致性承诺；challenge probe 不是远程或多节点 attestation。
 - Phase 5 的详细 epoch-report 字段由 aggregate checks/failures/ratio 的当前合同取代；Phase 8 CLI 属于 `oasis7_chain_runtime`；Phase 9 backoff 仅为本地 probe-state，并非对外 metrics telemetry。
 - malformed/unreadable probe state 的 warning + default-state 行为仅维持 local scheduler best-effort continuity，不能被叙述为 checkpoint、state-sync 或生产恢复成功。
+- builtin DistFS storage/API 的 artifact materialization 合同已迁入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.*`；本专题只保留通用 `FileStore` 与本地索引合同。
 
 ## 状态与非 readiness
 

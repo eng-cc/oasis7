@@ -70,6 +70,12 @@ canonical packaged wasm
 
 ## 5. 详细设计
 
+### 5.0 Builtin 工件 materialization
+
+- `m1/m4/m5` 的 canonical binary 经 sync/check 与 SHA-256 manifest 对账后，由 `hydrate_builtin_wasm` 写入按 SHA-256 配置的 `LocalCasStore`。
+- materializer 读取 DistFS candidate 后复算 SHA-256；本地候选不可用时，当前实现仍会继续 fetch 与 builtin source-compile fallback。materializer 不接收 identity、receipt 或 release policy。
+- DistFS 只承载 binary materialization/cache，不改变 canonical build/identity 的权威关系。identity/receipt/signature/release policy 由外围 artifact selection / release-gated pipeline 校验；`Action::CompileModuleArtifactFromSource` 的 production policy gate 不覆盖 builtin materializer fallback，不能据此声明生产入口已经关闭后者。
+
 ### 5.1 Canonical Builder Image
 目标新增一份固定 builder image，例如：
 - `docker/wasm-builder/Dockerfile`

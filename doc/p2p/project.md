@@ -7,6 +7,7 @@
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+专业权威合并说明：PRD-P2P-MIG-066/076/085 的 path-index/bootstrap/runtime-bridge closure 历史三件套已退役；“源码未由当前 `oasis7_net` facade 暴露、`runtime_bridge` 是空兼容 feature”的负向边界由根 PRD/design 承接。未来重新激活必须另建 runtime 任务并补定向测试，历史 completed 状态不代签当前能力。迁移证据见 GitHub issue #2765。
 - [x] chain-pos-defaults-8s-config-source (PRD-P2P-009) [test_tier_required]: 将默认 PoS block/slot 周期调整为 8s，并把 runtime、game/web/client launcher、S9/S10 scripts 与相关 smoke fixture 的默认 PoS timing 收敛到 `config/chain-pos-defaults.env` 单一配置源；当前 PR 仅声明默认/config propagation，不声明 8s 多节点生产 rollout safety。 Trace: .pm/tasks/task_2b5be157dc044c3ba7a9a341806ff404.yaml
 - [x] chain-world-state-doc-conflict-audit (PRD-P2P-031) [test_tier_required]: 审计旧 P2P/P2PFS/reachability 文档与“链上大世界状态底座”口径的语义冲突；保留历史路线图作为 provenance，给 current-facing 入口和历史阶段文档补 S9A / PRD-P2P-031 claim boundary，避免组件 green 被误读为 `module_full`、`integration_required` 或 `release_full`。 Trace: .pm/tasks/task_0ff885b320474f738ea908b6e9e06c8c.yaml
 - [x] p2p-observer-fetch-head-peer-cache-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet clean observer 通过 validated gap-sync fetch-commit 前进后仍不记录 peer head、导致 `consensus_peer_head_unavailable` 长期阻塞 readiness 的根因；正常 gap-sync 在执行与持久化后更新 peer-head freshness path，fetch-head-only 仍不作为信任来源。 Trace: .pm/tasks/task_c5278d401f864d5c99b62374cad65f08.yaml
