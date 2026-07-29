@@ -1098,8 +1098,9 @@ impl World {
 #[path = "action_to_event_economy_support.rs"]
 mod action_to_event_economy_support;
 
+pub(crate) use action_to_event_economy_support::build_material_market_quotes;
 use action_to_event_economy_support::{
-    build_material_market_quotes, compute_local_scarcity_delay_ticks, industry_stage_label,
+    compute_local_scarcity_delay_ticks, industry_stage_label,
     merge_recipe_consume_with_maintenance_sink, product_unlock_stage_allowed,
     recipe_preferred_tags_compatible, recipe_stage_gate_allowed, resolve_recipe_bottleneck_tags,
 };

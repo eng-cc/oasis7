@@ -238,7 +238,7 @@ fn governance_tax_bps_for_material_quotes(world: &World) -> u16 {
         .min(10_000)
 }
 
-pub(super) fn build_material_market_quotes(
+pub(crate) fn build_material_market_quotes(
     world: &World,
     preferred_consume_ledger: &MaterialLedgerId,
     consume: &[MaterialStack],

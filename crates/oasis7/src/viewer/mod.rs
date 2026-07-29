@@ -26,6 +26,7 @@ pub use auth::{
     preflight_hosted_registration_replay_ledger, sign_agent_chat_auth_proof,
     sign_collect_data_auth_proof, sign_fragment_refill_preview_auth_proof,
     sign_gameplay_action_auth_proof, sign_hosted_prompt_control_strong_auth_grant,
+    sign_market_quote_decision_auth_proof,
     sign_power_survival_quote_auth_proof, sign_product_validation_quote_auth_proof,
     sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
     sign_refine_quote_auth_proof, sign_session_register_auth_proof, verify_agent_chat_auth_proof,
@@ -33,8 +34,9 @@ pub use auth::{
     verify_gameplay_action_auth_proof, verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_power_survival_quote_auth_proof, verify_product_validation_quote_auth_proof,
-    verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
-    verify_refine_quote_auth_proof, verify_session_register_auth_proof,
+    verify_market_quote_decision_auth_proof, verify_prompt_control_apply_auth_proof,
+    verify_prompt_control_rollback_auth_proof, verify_refine_quote_auth_proof,
+    verify_session_register_auth_proof,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use demo::{ViewerDemoError, ViewerDemoSummary, generate_viewer_demo};
@@ -68,7 +70,9 @@ pub use protocol::{
     FragmentRefillElementRemaining, FragmentRefillPreviewChunk, FragmentRefillPreviewPreflight,
     FragmentRefillPreviewProtocolRequest, FragmentRefillPreviewRequest,
     FragmentRefillPreviewResponse, GameplayActionAck, GameplayActionError, GameplayActionRequest,
-    HostedStrongAuthGrant, LiveControl, PlaybackControl, PlayerAuthProof, PlayerAuthScheme,
+    HostedStrongAuthGrant, LiveControl, MarketQuoteDecisionPreflight, MarketQuoteDecisionRequest,
+    MarketQuoteMaterialContribution,
+    MarketQuoteMaterialRequest, PlaybackControl, PlayerAuthProof, PlayerAuthScheme,
     PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest, ProductValidationQuotePreflight,
     ProductValidationQuoteRequest, PromptControlAck, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,

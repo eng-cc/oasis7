@@ -13,6 +13,8 @@ mod power_survival_quote;
 pub use power_survival_quote::*;
 mod fragment_refill_preview;
 pub use fragment_refill_preview::*;
+mod market_quote_decision;
+pub use market_quote_decision::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
@@ -94,6 +96,9 @@ pub enum ViewerRequest {
     PreviewFragmentReplenishment {
         request: FragmentRefillRequest,
     },
+    QuoteMarketDecision {
+        request: MarketQuoteDecisionRequest,
+    },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
     },
@@ -147,7 +152,6 @@ pub struct PromptControlApplyRequest {
     )]
     pub long_term_goal_override: Option<Option<String>>,
 }
-
 fn deserialize_override_field<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -155,7 +159,6 @@ where
     let value = Option::<String>::deserialize(deserializer)?;
     Ok(Some(value))
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PromptControlRollbackRequest {
     pub agent_id: String,
@@ -199,7 +202,6 @@ pub struct GameplayActionRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<PlayerAuthProof>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum AuthoritativeChallengeCommand {
@@ -632,6 +634,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     FragmentRefillPreviewPreflight {
         quote: FragmentRefillResponse,
+    },
+    MarketQuoteDecisionPreflight {
+        quote: MarketQuoteDecisionPreflight,
     },
     Error {
         message: String,
@@ -1188,13 +1193,13 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "viewer/protocol_v2_tests.rs"]
-mod protocol_v2_tests;
-
-#[cfg(test)]
 #[path = "viewer/collect_data_tests.rs"]
 mod collect_data_tests;
-
 #[cfg(test)]
 #[path = "viewer/control_roundtrip_tests.rs"]
 mod control_roundtrip_tests;
+#[cfg(test)]
+mod market_quote_decision_tests;
+#[cfg(test)]
+#[path = "viewer/protocol_v2_tests.rs"]
+mod protocol_v2_tests;

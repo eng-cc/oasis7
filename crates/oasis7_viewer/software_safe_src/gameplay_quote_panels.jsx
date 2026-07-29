@@ -1,6 +1,7 @@
 import { ProductValidationQuotePanel } from "./product_validation_quote_card.jsx";
 import { PowerSurvivalQuotePanel } from "./power_survival_quote_card.jsx";
 import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
+import { MarketQuoteDecisionPanel } from "./market_quote_decision_card.jsx";
 
 export function RefineQuoteGameplayPanel(props) {
   return <RefineQuotePreflightPanel
@@ -31,3 +32,5 @@ export function PowerSurvivalQuoteGameplayPanel(props) {
     tr={props.tr}
   />;
 }
+
+export function MarketQuoteDecisionGameplayPanel(props) { return <MarketQuoteDecisionPanel quote={props.core.state.marketQuoteDecision} requestState={props.core.state.marketQuoteDecisionRequest} requestMarketQuoteDecision={props.core.requestMarketQuoteDecision} locale={props.locale} tr={props.tr} />; }

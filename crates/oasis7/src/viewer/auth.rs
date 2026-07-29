@@ -24,6 +24,10 @@ mod power_survival_quote;
 pub use power_survival_quote::{
     sign_power_survival_quote_auth_proof, verify_power_survival_quote_auth_proof,
 };
+mod market_quote_decision;
+pub use market_quote_decision::{
+    sign_market_quote_decision_auth_proof, verify_market_quote_decision_auth_proof,
+};
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
 pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =

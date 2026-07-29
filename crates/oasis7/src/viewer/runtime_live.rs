@@ -58,6 +58,7 @@ mod gameplay_snapshot_helpers;
 mod gameplay_snapshot_lane;
 mod gameplay_validation_preview;
 mod mapping;
+mod market_quote_decision;
 mod player_gameplay;
 mod recovery;
 mod recovery_audit;
@@ -147,7 +148,6 @@ pub struct ViewerRuntimeLiveServer {
 
 const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 12;
 const BACKGROUND_PLAY_TRANSIENT_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(5);
-
 fn should_emit_runtime_advance_snapshot(
     session: &mut RuntimeLiveSession,
     action: &str,
@@ -159,7 +159,6 @@ fn should_emit_runtime_advance_snapshot(
     }
     session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
 }
-
 impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
@@ -345,7 +344,6 @@ impl ViewerRuntimeLiveServer {
         server.rebuild_settlement_ranking_gate();
         Ok(server)
     }
-
     pub fn run(self) -> Result<(), ViewerRuntimeLiveServerError> {
         let listener = TcpListener::bind(&self.config.bind_addr)?;
         let shared = Arc::new(Mutex::new(self));
@@ -804,6 +802,9 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
             ViewerRequest::PreviewFragmentReplenishment { request } => {
                 self.preview_refill(request, writer)?
+            }
+            ViewerRequest::QuoteMarketDecision { request } => {
+                self.handle_market_quote_decision_request(request, writer)?
             }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
