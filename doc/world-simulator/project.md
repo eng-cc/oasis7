@@ -16,6 +16,7 @@
   - gameplay 回指：首局推荐 starter frag 需要材质预期、可达性理由和第一工业目标关联，属于 PRD-GAME-012 / first industrial goal readability，见 scenario/viewer 三份 PRD 与 GitHub #2166。
 
 ### 最近完成（保留一跳 Trace）
+- [x] scenario-specialization-authority-consolidation (PRD-WORLD_SIMULATOR-001/002/003) [test_tier_required]: 将四组已完成的 asteroid-fragment 命名、间距、场景 override 与电力设施基线三件套吸收到稳定的 chunk/scenario authority，修复索引后删除 12 个源文件。保留 R0-R2 完成态只用于迁移追溯；该记录不单独证明当前 runtime/replay 或 release readiness。 Trace: #2763 (task_542a4b4dddbb4d5d9cdcb5623949a506)
 - [x] local-only-world-playtest-startup (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 收敛本地大世界试玩脚本为 local-only 语义，修复 first Agent claim / starter OC pending 体验、链提交快照同步与 Viewer 本地世界措辞，并保留 testnet attach 为独立 runbook。 Trace: .pm/tasks/task_52ecb41a63a54808bad86bc9ffc77c15.yaml
 - [x] viewer-retired-visualization-route-cleanup (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 清理活跃 Viewer/source/docs/site 中旧第二 Viewer 入口、native 启动口径与视觉专项工具链残留，保留历史 provenance 但不再作为当前入口或评审权威。 Trace: .pm/tasks/task_e6edcb09bd774941bdcbde32bb9ea007.yaml
 - [x] chain-side-manifest-delta-runtime-readiness (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 定义链侧资源 manifest/delta schema，接入 simulator/runtime snapshot、provider/testnet readiness 与本地 standalone submit 闭环。 Trace: .pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.yaml

@@ -10,7 +10,7 @@
 | 新世界如何初始化，基础、多地点与 P2P 场景各服务什么验证？ | `world-initialization.prd.md` | 初始化场景矩阵与用途；不是 production readiness 结论。 |
 | seed、地点和 deterministic spawn 如何生成？ | `scenario-seed-locations.prd.md` | location/agent 初始化专题；统一资源 manifest 语义继续读 `unified-world-seed-fragment-runtime.prd.md`。 |
 | chunk、frag 资源预算、补种与 onboarding 如何衔接？ | `chunked-fragment-generation.prd.md` | 生成、预算和补种主入口；首局资源选择读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，初始位置继续读 `agent-frag-initial-spawn-position.prd.md`。 |
-| asteroid fragment 的 override、spacing、设施基线或命名迁移在哪里？ | `scenario-asteroid-fragment-overrides.prd.md` | 专项配置入口；按问题下钻 `fragment-spacing`、`scenario-power-facility-baseline` 或 `asteroid-fragment-renaming`。 |
+| asteroid fragment 的规范命名、override、spacing、设施基线和 replay 边界在哪里？ | `scenario-files.prd.md` + `chunked-fragment-generation.prd.md` | 场景 authority 负责 effective config 与显式设施注入；生成 authority 负责 spacing、跨 chunk 确定性和 committed-delta replay。 |
 
 ## 阅读与维护边界
 

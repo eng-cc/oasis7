@@ -141,6 +141,8 @@
 - `asteroid_fragment.bootstrap_chunks: Vec<ChunkCoord>`：场景可显式声明启动即生成的 chunk 列表。
 - 初始化顺序：`seed_positions -> bootstrap_chunks -> agent_spawn_positions`。
 - 分块尺寸固定：`20km × 20km × 10km`（常量 `CHUNK_SIZE_X/Y/Z_CM`），场景不可覆盖。
+- 当前场景与生成器只接受规范名 `asteroid_fragment`；已完成的旧命名迁移不保留字段兼容别名。
+- `min_fragment_spacing_cm` 的生成器默认值为 `50_000` cm（500m）；有效值 `<= 0` 表示关闭额外 spacing 约束。场景未显式覆盖时沿用 `WorldConfig.asteroid_fragment`，覆盖优先级与初始化边界由 `scenario-files.prd.md` 定义。
 
 ### Frag 密度、材质分布与保底配置
 
@@ -256,6 +258,7 @@
 - 保留写入：若邻块处于 `Unexplored` 且候选碎片到邻块包围盒距离 `<= radius + spacing`，写入 `BoundaryReservation`。
 - 保留消费：邻块未来生成时先消费（remove）该 chunk 的 reservations，再据此过滤候选碎片。
 - 确定性策略：冲突默认“已存在碎片优先（先生成者优先）”，保证同 seed + 同触发序列结果可复现。
+- 回归边界：相同 `world_seed + effective asteroid_fragment config + chunk trigger order` 必须得到相同布局；验证既覆盖已放置碎片，也覆盖跨 chunk 邻居和 reservation。replay 只应用已提交的生成/补种 delta，不用当前默认值重新生成历史布局。
 
 ### 性能预算与降级策略（CG9 落地）
 新增三档硬预算（`AsteroidFragmentConfig`）：

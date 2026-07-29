@@ -29,9 +29,12 @@
 
 ## 4. 约束与边界
 - 同一 seed 的生成结果必须稳定。
+- 生成器和场景只使用规范配置名 `asteroid_fragment`，不保留旧字段兼容别名。
+- `min_fragment_spacing_cm` 默认 `50_000` cm；场景未设置时继承 `WorldConfig`，有效值 `<= 0` 关闭额外 spacing。候选需同时检查已放置碎片、26 邻块与 boundary reservation。
 - 保底候选必须受固定尝试上限、spacing 与 chunk 数量预算约束；不可达时允许不足，但不得无限尝试。
 - 补种只在启用的 asteroid-fragment runtime、有效周期和未满 chunk 上发生；location 与两级资源预算必须和事件原子一致。
 - replay 应用事件中的既成补种明细，不隐式重算生成结果。
+- 同 seed、effective config 与 chunk trigger order 的回归必须稳定；历史 replay 使用 committed delta，不能按迁移后的默认值重算布局。
 - 资源池变更不得破坏既有场景可加载性。
 - 精炼预览只解释现有 `RefineCompound` 公式和当前目标缺口，不改变产率、电力成本、动作 ABI 或回放语义。
 - `refine_quote_missing` 是玩家侧机会成本可读性缺口，不代表要新增完整加工链或市场系统。

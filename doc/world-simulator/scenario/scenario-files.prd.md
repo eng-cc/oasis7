@@ -45,7 +45,9 @@
 }
 ```
 
-`asteroid_fragment.min_fragment_spacing_cm` 为可选字段，用于覆盖小行星碎片最小间距（cm）；未设置则沿用 `WorldConfig.asteroid_fragment`。
+`asteroid_fragment.min_fragment_spacing_cm` 为可选字段，用于覆盖小行星碎片最小间距（cm）；未设置则沿用 `WorldConfig.asteroid_fragment` 的 `50_000` cm 默认值，有效值 `<= 0` 表示关闭额外 spacing 约束。
+
+初始化时先复制 `WorldConfig.asteroid_fragment`，再应用场景 JSON 中显式出现的字段，形成本次 `WorldInitConfig` 的 effective asteroid-fragment config。覆盖只在初始化阶段生效，不修改全局默认值，也不是运行期 hot configuration。相同场景 seed、effective config 与 chunk trigger order 必须产生相同布局；replay 使用已提交的生成/补种 delta，不以当前默认值重算历史结果。
 
 ### 地点生成表达
 - `seed`：场景随机根种子。
@@ -78,7 +80,7 @@
 | `minimal` | 最小初始化基线（origin + 默认 agent） | `scenario_specs_match_ids`、`scenario_templates_build_models`、`scenarios_are_stable`、`oasis7_init_demo_runs_summary_only`、`oasis7_init_demo_runs_from_scenario_file` |
 | `two_bases` | 双基地拓扑与双 agent 基础分布 | `scenario_specs_match_ids`、`scenario_templates_build_models`、`scenarios_are_stable`、`scenario_aliases_parse(two-bases)` |
 | `llm_bootstrap` | LLM 驱动预置基线（双站点 + 辐射 profile + data/electricity 资源） | `scenario_specs_match_ids`、`scenario_templates_build_models`、`scenarios_are_stable`、`scenario_aliases_parse(llm)`、`oasis7_init_demo_runs_llm_bootstrap_summary` |
-| `power_bootstrap` | 电力设施（plant/storage）与 owner 约束 | `scenario_specs_match_ids`、`scenario_templates_build_models`、`scenarios_are_stable`、`scenario_aliases_parse(bootstrap)` |
+| `power_bootstrap` | 显式 `power_plants` 场景夹具与 owner 约束（不代表 storage/runtime ABI） | `scenario_specs_match_ids`、`scenario_templates_build_models`、`scenarios_are_stable`、`scenario_aliases_parse(bootstrap)` |
 | `resource_bootstrap` | 资源初值注入（origin/agent） | `resource_bootstrap_seeds_stock`、`scenario_specs_match_ids`、`scenarios_are_stable`、`scenario_aliases_parse(resources)` |
 | `twin_region_bootstrap` | 双区域结构（location/agents） | `twin_region_bootstrap_seeds_regions`、`scenarios_are_stable`、`scenario_aliases_parse(twin-regions)`、`plan_demo_actions_includes_move_for_multi_location_scenario` |
 | `triad_region_bootstrap` | 三区域结构（location/agents/resource） | `triad_region_bootstrap_seeds_regions`、`scenarios_are_stable`、`scenario_aliases_parse(triad-regions)`、`oasis7_init_demo_runs_triad_summary` |
@@ -102,7 +104,8 @@
 - 通过以上口径，确保“owner/location 多账本 + 物流约束”在场景层具备可验证闭环，而非仅停留在数据结构层。
 
 说明：
-- 自 2026-02-07 起，除 `power_bootstrap` 外，内置场景不再默认注入 `power_plants`；如需设施，需在场景 JSON 中显式声明。
+- 只有显式 `power_bootstrap` 场景 JSON 注入 `power_plants`；其他内置场景（包括全部 `asteroid_fragment*` 场景）均无隐式电力设施。如需设施，必须在场景数据中显式声明。
+- `WorldInitConfig` / `build_world_model` 的设施注入只是场景数据初始化行为，不新增 runtime 电力规则、WASM/动作 ABI、owner 电力余额、链上经济或治理权威，也不得与 `m1_power_storage` 语义混同。
 - `scenario_specs_match_ids` 定位于 `crates/oasis7/src/simulator/scenario.rs`，用于约束“枚举 ID 与 JSON ID 一致”。
 - 其余命名测试主要位于 `crates/oasis7/src/simulator/tests/init.rs` 与 `crates/oasis7/tests/oasis7_init_demo.rs`。
 - 场景矩阵应随测试变更同步更新，避免“文档保留但测试漂移”。

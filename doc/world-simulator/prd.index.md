@@ -85,12 +85,8 @@
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | `doc/world-simulator/llm/llm-lmso29-stability.project.md` |
 | `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.project.md` |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md` |
-| `doc/world-simulator/scenario/asteroid-fragment-renaming.prd.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.design.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` |
 | `doc/world-simulator/scenario/chunked-fragment-generation.prd.md` | `doc/world-simulator/scenario/chunked-fragment-generation.design.md` | `doc/world-simulator/scenario/chunked-fragment-generation.project.md` |
-| `doc/world-simulator/scenario/fragment-spacing.prd.md` | `doc/world-simulator/scenario/fragment-spacing.design.md` | `doc/world-simulator/scenario/fragment-spacing.project.md` |
-| `doc/world-simulator/scenario/scenario-asteroid-fragment-overrides.prd.md` | `doc/world-simulator/scenario/scenario-asteroid-fragment-overrides.design.md` | `doc/world-simulator/scenario/scenario-asteroid-fragment-overrides.project.md` |
 | `doc/world-simulator/scenario/scenario-files.prd.md` | `doc/world-simulator/scenario/scenario-files.design.md` | `doc/world-simulator/scenario/scenario-files.project.md` |
-| `doc/world-simulator/scenario/scenario-power-facility-baseline.prd.md` | `doc/world-simulator/scenario/scenario-power-facility-baseline.design.md` | `doc/world-simulator/scenario/scenario-power-facility-baseline.project.md` |
 | `doc/world-simulator/scenario/scenario-seed-locations.prd.md` | `doc/world-simulator/scenario/scenario-seed-locations.design.md` | `doc/world-simulator/scenario/scenario-seed-locations.project.md` |
 | `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md` | `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.design.md` | `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.project.md` |
 | `doc/world-simulator/scenario/world-initialization.prd.md` | `doc/world-simulator/scenario/world-initialization.design.md` | `doc/world-simulator/scenario/world-initialization.project.md` |
