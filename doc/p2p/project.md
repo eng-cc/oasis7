@@ -55,6 +55,7 @@
 - PoS 时间锚定、viewer-live 旧入口删除、legacy path cleanup、early p2p schema/acceptance 历史：回看 `doc/p2p/prd.index.md` 与 `.pm/tasks/*.execution.md`。
 - `distributed-runtime`、PoS Head、Phase 7 crate hard split 与 production gap 1/2/3/4/5/6/8 的专题任务已完成并在 2026-07-28 归入根 PRD/design；源三件套退役，精确完成项从 Git 与 GitHub task evidence 追溯。Phase-C 专用 request/proof envelope、challenge topic 与 specialized driver 未形成当前能力，仍是显式 future gap；现有 provider/DHT/fetch-route gate 不在此缺口内。
 - production-grade blockchain/P2PFS roadmap、Phase B commit-execution 接线与 Phase C challenge-network 历史归入 `blockchain/p2p-blockchain-p2pfs-hardening.*`；历史“完成”不构成 mainnet、production recovery 或 release readiness。
+- node reward 的 builtin materialization、native settlement、storage/uptime 积分语义已分别归入 WASM pipeline、Token allocation 与 node-contribution-points 稳定权威；旧 reward leader/failover 声称因无当前实现而按负向边界退役。15 个源文件的迁移证据见 #2768，历史完成过程仅从 Git 与 GitHub task evidence 追溯。
 - Mainnet-grade、signer custody、governance signer、genesis ceremony、claims policy、token/Oasis Coin 与 bridge/newapi 历史：回看 `doc/p2p/blockchain/`、`doc/p2p/token/` 与相关 topic project。
 - Hosted access/account、public testnet、network tier、real-env triad、observability、state-sync 与 recovery guardrails 历史：回看 `doc/p2p/node/`、`doc/p2p/network/`、`doc/testing/evidence/` 与对应 task trace。
 - 本主项目页只维护当前/最近任务索引；完整执行拆解、产物文件和验收命令以 topic project、runbook、testing evidence 与 task execution log 为准。
