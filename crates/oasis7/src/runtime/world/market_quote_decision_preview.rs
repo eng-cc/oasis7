@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::super::{MaterialLedgerId, MaterialMarketQuote, MaterialStack};
-use super::event_processing::action_to_event_economy::build_material_market_quotes;
 use super::World;
+use super::event_processing::action_to_event_economy::build_material_market_quotes;
 
 /// A conditional, read-only explanation of the material market inputs that a
 /// recipe submission would use at the current world state.
@@ -35,18 +35,18 @@ impl World {
         preferred_consume_ledger: &MaterialLedgerId,
         consume: &[MaterialStack],
     ) -> MarketQuoteDecisionPreview {
-        let market_quotes =
-            build_material_market_quotes(self, preferred_consume_ledger, consume);
+        let market_quotes = build_material_market_quotes(self, preferred_consume_ledger, consume);
         let mut total_unsatisfied_shortfall = 0_i64;
         let local_vs_world_delta = market_quotes
             .iter()
             .map(|quote| {
-                let world_cover_amount = quote.world_available_amount.min(quote.local_deficit_amount);
+                let world_cover_amount =
+                    quote.world_available_amount.min(quote.local_deficit_amount);
                 let unsatisfied_shortfall_amount = quote
                     .local_deficit_amount
                     .saturating_sub(world_cover_amount);
-                total_unsatisfied_shortfall = total_unsatisfied_shortfall
-                    .saturating_add(unsatisfied_shortfall_amount);
+                total_unsatisfied_shortfall =
+                    total_unsatisfied_shortfall.saturating_add(unsatisfied_shortfall_amount);
                 MarketQuoteSupplyDelta {
                     kind: quote.kind.clone(),
                     local_deficit_amount: quote.local_deficit_amount,

@@ -713,18 +713,30 @@ mod tests {
         let events = vec![];
         let mut session = ViewerSession::new(&events);
         let (mut writer, peer) = test_writer_pair();
-        session.handle_request(
-            ViewerRequest::QuoteMarketDecision {
-                request: crate::viewer::MarketQuoteDecisionRequest { consume: vec![], player_id: "player".to_string(), public_key: None, auth: None },
-            },
-            &mut writer,
-            &WorldKernel::new().snapshot(),
-            "test-world",
-        ).expect("unsupported request is a response");
+        session
+            .handle_request(
+                ViewerRequest::QuoteMarketDecision {
+                    request: crate::viewer::MarketQuoteDecisionRequest {
+                        consume: vec![],
+                        player_id: "player".to_string(),
+                        public_key: None,
+                        auth: None,
+                    },
+                },
+                &mut writer,
+                &WorldKernel::new().snapshot(),
+                "test-world",
+            )
+            .expect("unsupported request is a response");
         writer.flush().expect("flush response");
         let mut line = String::new();
-        BufReader::new(peer).read_line(&mut line).expect("read response");
-        let response: crate::viewer::ViewerResponse = serde_json::from_str(line.trim()).expect("decode response");
-        assert!(matches!(response, crate::viewer::ViewerResponse::GameplayActionError { error } if error.code == "unsupported_in_offline_server" && error.action_id.as_deref() == Some("quote_market_decision")));
+        BufReader::new(peer)
+            .read_line(&mut line)
+            .expect("read response");
+        let response: crate::viewer::ViewerResponse =
+            serde_json::from_str(line.trim()).expect("decode response");
+        assert!(
+            matches!(response, crate::viewer::ViewerResponse::GameplayActionError { error } if error.code == "unsupported_in_offline_server" && error.action_id.as_deref() == Some("quote_market_decision"))
+        );
     }
 }

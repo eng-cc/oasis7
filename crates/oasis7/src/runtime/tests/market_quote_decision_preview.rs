@@ -1,7 +1,7 @@
 use super::pos;
 use crate::runtime::{
-    Action, GovernanceProposalStatus, MaterialDefaultPriority, MaterialLedgerId,
-    MaterialProfileV1, MaterialTransportLossClass, World,
+    Action, GovernanceProposalStatus, MaterialDefaultPriority, MaterialLedgerId, MaterialProfileV1,
+    MaterialTransportLossClass, World,
 };
 use oasis7_wasm_abi::MaterialStack;
 
@@ -14,7 +14,11 @@ fn market_quote_decision_preview_is_conditional_and_read_only() {
         pos: pos(0, 0),
     });
     world.step().expect("register preview operator");
-    authorize_policy_update(&mut world, "preview-operator", "proposal.preview.market-tax");
+    authorize_policy_update(
+        &mut world,
+        "preview-operator",
+        "proposal.preview.market-tax",
+    );
     world.submit_action(Action::UpdateGameplayPolicy {
         operator_agent_id: "preview-operator".to_string(),
         electricity_tax_bps: 900,
@@ -28,7 +32,9 @@ fn market_quote_decision_preview_is_conditional_and_read_only() {
     world
         .set_ledger_material_balance(local.clone(), "iron_ingot", 2)
         .expect("seed local inventory");
-    world.set_material_balance("iron_ingot", 3).expect("seed world inventory");
+    world
+        .set_material_balance("iron_ingot", 3)
+        .expect("seed world inventory");
     world
         .upsert_material_profile(MaterialProfileV1 {
             kind: "iron_ingot".to_string(),
@@ -41,7 +47,8 @@ fn market_quote_decision_preview_is_conditional_and_read_only() {
         })
         .expect("insert material profile");
     let before = world.snapshot();
-    let preview = world.market_quote_decision_preview(&local, &[MaterialStack::new("iron_ingot", 6)]);
+    let preview =
+        world.market_quote_decision_preview(&local, &[MaterialStack::new("iron_ingot", 6)]);
 
     assert!(preview.conditional);
     assert_eq!(preview.market_quotes.len(), 1);
@@ -77,9 +84,12 @@ fn authorize_policy_update(world: &mut World, operator_agent_id: &str, proposal_
     });
     world.step().expect("cast governance vote");
     for _ in 0..2 {
-        if world.state().governance_proposals.get(proposal_key).is_some_and(|proposal| {
-            proposal.status == GovernanceProposalStatus::Open
-        }) {
+        if world
+            .state()
+            .governance_proposals
+            .get(proposal_key)
+            .is_some_and(|proposal| proposal.status == GovernanceProposalStatus::Open)
+        {
             world.step().expect("advance governance proposal");
         }
     }
