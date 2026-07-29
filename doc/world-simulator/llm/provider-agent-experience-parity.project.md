@@ -17,14 +17,14 @@
 ## 依赖
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template.md`
 - `doc/world-simulator/prd.md`
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/prd.index.md`
-- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
+- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md`
 - `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`
 
 ## 状态

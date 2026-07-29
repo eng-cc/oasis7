@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 现有 `Decision Provider` 与 `Local Provider(Local HTTP)` 方案已经回答了“如何接入”和“首期如何启动 PoC”，但尚未把“对玩家来说必须获得与内置 agent 层等价的游戏体验”写成硬性目标。若没有独立的 parity 目标、场景矩阵和阻断线，`Local Provider` 可能在技术上可接，却在体验上长期低于内置 agent。
-- Proposed Solution: 新增 `Local Provider vs 内置 Agent 体验等价（parity）` 专题，定义体验等价的范围、分层指标、场景矩阵、通过线与阻断线，并将 `Local Provider(Local HTTP)` 的交付目标从“可玩 PoC”升级为“在指定场景下达到用户可感知等价”。本专题引用 `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template-2026-03-12.md` 与 `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md` 作为统一场景、评分、聚合与玩法口径模板。只有通过 parity 验收的 provider 才允许进入默认体验或更大范围试点。
+- Proposed Solution: 新增 `Local Provider vs 内置 Agent 体验等价（parity）` 专题，定义体验等价的范围、分层指标、场景矩阵、通过线与阻断线，并将 `Local Provider(Local HTTP)` 的交付目标从“可玩 PoC”升级为“在指定场景下达到用户可感知等价”。本专题引用 `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol.md`、`doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template.md` 与 `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md` 作为统一场景、评分、聚合与玩法口径模板。只有通过 parity 验收的 provider 才允许进入默认体验或更大范围试点。
 - Success Criteria:
   - SC-1: 对首期纳入范围的场景，`Local Provider` 与内置 agent 的任务完成率差值不超过 5 个百分点。
   - SC-2: 对首期纳入范围的场景，真实在线 LLM provider 的 parity 时延采用“分层口径”而非单一绝对值硬门禁：行为等价硬门禁看 `relative_wait_gap`（Local Provider 相对 builtin 的 `median_extra_wait_ms_gap` / `p95_extra_wait_ms_gap`），发布/扩面附加门槛看 `latency_class`。
@@ -75,10 +75,10 @@
 - Integration Points:
   - `doc/world-simulator/llm/decision-provider-contract.prd.md`
   - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
-  - `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
-  - `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
-  - `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`
-  - `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template-2026-03-12.md`
+  - `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix.md`
+  - `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md`
+  - `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol.md`
+  - `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template.md`
 - `crates/oasis7/src/simulator/agent.rs`
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`

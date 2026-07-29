@@ -379,8 +379,8 @@ with failures_md.open("w") as handle:
 scorecard_links = out_dir / "scorecard-links.md"
 with scorecard_links.open("w") as handle:
     handle.write(f"# Scorecard Links for {run_id}\n\n")
-    handle.write("- QA 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md\n")
-    handle.write("- Producer 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md\n")
+    handle.write("- QA 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md\n")
+    handle.write("- Producer 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md\n")
     handle.write(f"- 自动 benchmark 证据路径: {summary_dir}\n")
     handle.write(f"- 样本输出根目录: {out_dir / 'samples'}\n")
 PY

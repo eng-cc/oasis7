@@ -1,4 +1,4 @@
-# Local Provider vs 内置 Agent parity 评分卡模板（2026-03-12）
+# Local Provider vs 内置 Agent parity 评分卡模板
 
 审计轮次: 2
 
