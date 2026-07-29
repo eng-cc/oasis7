@@ -8,7 +8,7 @@
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `../../product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的玩法合同
-- 想确认访问模式、limited preview 或 release readiness：先读 `../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前 preview 执行状态看 `../project.md` 与对应 round execution record
+- 想确认访问模式、limited preview 或 release readiness：先读 `../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前 preview 执行状态看 `../project.md`。已关闭 Round 1 的发布、渠道 fallback、信号与关闭证据从 Git history 和 GitHub issue `eng-cc/oasis7#48` 追溯
 - 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-economy-contract.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
 - 想精确找某份 gameplay 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -78,7 +78,7 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
-- runbook、evidence、checklist 和必要的历史执行补充材料继续保留可检索性，但默认不作为首读入口；一次性 role handoff brief 在对应 project / evidence / GitHub task issue evidence comments 已能追溯后应退役删除。旧 MLF008 viewer-to-QA handoff、limited-preview 与 closed-beta role handoff briefs 已退役删除；TASK-GAME-018 当前追溯通过 micro-loop topic project / evidence surfaces / core review logs / GitHub task issue evidence comments，TASK-GAME-029~032 当前追溯通过 closed beta 专题 project、runtime / viewer / QA / liveops evidence surfaces 与 GitHub task issue evidence comments，TASK-GAME-036/037 当前追溯通过 limited preview 专题 project、round-1 execution record 与 QA gate evidence。
+- runbook、evidence、checklist 和必要的历史执行补充材料继续保留可检索性，但默认不作为首读入口；一次性 role handoff brief 在对应 project / evidence / GitHub task issue evidence comments 已能追溯后应退役删除。旧 MLF008 viewer-to-QA handoff、limited-preview 与 closed-beta role handoff briefs 已退役删除；TASK-GAME-018 当前追溯通过 micro-loop topic project / evidence surfaces / core review logs / GitHub task issue evidence comments，TASK-GAME-029~032 当前追溯通过 closed beta 专题 project、runtime / viewer / QA / liveops evidence surfaces 与 GitHub task issue evidence comments，TASK-GAME-036/037 当前追溯通过 `../project.md`、QA gate evidence、Git history 与 GitHub issue `eng-cc/oasis7#48`。
 - 如果问题需要玩法正确性、平衡、release 放行或对外口径结论，本页只提供文档入口；结论必须回到 `gameplay_designer`、`qa_engineer` 或 `liveops_community` 对应任务证据。
 - 历史专题不因出现在本页附近而重新成为当前真值；当前判断以模块 PRD/project、活跃专题、正式 evidence surfaces 与 GitHub task issue evidence comments 为准。
 
