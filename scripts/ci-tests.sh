@@ -223,6 +223,7 @@ run_required_gate_checks() {
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
+  run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh
   run_provider_remote_https_smoke
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
   run_required_component "cargo-dev library contract" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run ./scripts/cargo-dev-lib.test.sh
