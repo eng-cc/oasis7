@@ -14,7 +14,7 @@ use crate::viewer::protocol::{
 const ACTION_ID: &str = "preview_fragment_replenishment";
 
 impl ViewerRuntimeLiveServer {
-    pub(in crate::viewer::runtime_live) fn preview_fragment_refill(
+    pub(in crate::viewer::runtime_live) fn preview_refill(
         &mut self,
         request: FragmentRefillPreviewProtocolRequest,
         writer: &mut BufWriter<TcpStream>,

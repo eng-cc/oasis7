@@ -825,7 +825,9 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
-            ViewerRequest::PreviewFragmentReplenishment { request } => self.preview_fragment_refill(request, writer)?,
+            ViewerRequest::PreviewFragmentReplenishment { request } => {
+                self.preview_refill(request, writer)?
+            }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {
@@ -1056,7 +1058,6 @@ impl ViewerRuntimeLiveServer {
             {
                 self.confirm_player_gameplay_progress();
             }
-
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
             runtime_events_for_feedback.extend(new_events.iter().cloned());
             let mut mapped_events = Vec::new();
@@ -1110,7 +1111,6 @@ impl ViewerRuntimeLiveServer {
                         );
                     }
                 };
-
             if let Some(trace) = decision_trace {
                 if session.explicitly_subscribed_to(ViewerStream::Events) {
                     send_response(writer, &ViewerResponse::DecisionTrace { trace })?;

@@ -1,8 +1,8 @@
 use super::*;
 use crate::simulator::{AgentDecision, ResourceOwner};
 use crate::simulator::{
-    ProviderExecutionMode, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    ProviderExecutionMode,
 };
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};

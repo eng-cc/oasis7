@@ -8,10 +8,10 @@ use std::thread;
 use tracing::Level;
 
 use super::protocol::{
-    viewer_event_kind_matches, AgentChatError, AuthoritativeChallengeError,
-    AuthoritativeRecoveryError, ControlCompletionAck, ControlCompletionStatus, PlaybackControl,
-    PromptControlError, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
-    ViewerStream, VIEWER_PROTOCOL_VERSION,
+    AgentChatError, AuthoritativeChallengeError, AuthoritativeRecoveryError, ControlCompletionAck,
+    ControlCompletionStatus, PlaybackControl, PromptControlError, VIEWER_PROTOCOL_VERSION,
+    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
+    viewer_event_kind_matches,
 };
 use crate::observability::emit_stderr_or_event;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
