@@ -69,7 +69,9 @@ use status_payload_state_sync::{
 };
 #[path = "status_payload_world_resource.rs"]
 mod status_payload_world_resource;
-use status_payload_world_resource::{ChainWorldResourceStatus, build_world_resource_status};
+use status_payload_world_resource::{
+    ChainWorldResourceStatus, build_world_resource_status_with_authoritative_execution,
+};
 #[path = "status_payload_p2p.rs"]
 mod status_payload_p2p;
 pub(super) use status_payload_p2p::{
@@ -952,8 +954,13 @@ pub(super) fn build_chain_status_payload_with_storage_root(
         .sum::<u64>();
     let pending_slashing_intent_count = pending_slashing_intent_count(&snapshot);
     let applied_slashing_receipt_count = applied_slashing_receipt_hashes(&snapshot).len();
-    let world_resource =
-        build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
+    let world_resource = build_world_resource_status_with_authoritative_execution(
+        &snapshot,
+        execution_world_dir,
+        execution_records_dir,
+        execution_storage_root,
+        loaded_network_tier_manifest,
+    );
     let chain_proof = build_chain_proof_status(execution_records_dir, execution_storage_root);
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
     let pending_proposal = snapshot
