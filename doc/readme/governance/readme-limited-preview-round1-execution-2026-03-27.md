@@ -72,3 +72,21 @@
 - Keep `limited playable technical preview` wording unchanged in maintainer replies.
 - Log the first 3 valid signals into `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` current signal / incident rows with source, candidate evidence, severity, owner, response, escalation, and next action.
 - Once at least one gate-relevant signal lands, hand off to `qa_engineer` for `TASK-GAME-037`.
+
+## Closure Correction（2026-07-28）
+
+The sections above preserve the state and operating instructions recorded when
+Round 1 was published. They are historical evidence, not the current status.
+
+- Current execution status: `closed_no_actionable_follow_up`.
+- Issue [`eng-cc/oasis7#48`](https://github.com/eng-cc/oasis7/issues/48) was closed on `2026-07-28`.
+- The owner closure record reports that no actionable feedback requiring an
+  unresolved QA, engineering, or product follow-up was located.
+- The closure does not announce closed beta, public launch, broader access, or
+  a release-stage change. The public status remains the root `README.md`
+  `limited playable technical preview` claim.
+- New concrete reproductions or proposals use a focused issue or PR; the
+  historical `published_waiting_signals`, `OPEN`, monitoring, and handoff text
+  above must not be interpreted as an active Round 1 instruction.
+- Closure evidence:
+  `https://github.com/eng-cc/oasis7/issues/48#issuecomment-5104107752`.

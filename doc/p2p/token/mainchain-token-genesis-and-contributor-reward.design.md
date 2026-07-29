@@ -1,7 +1,7 @@
-# oasis7 主链 Token 初始分配与早期贡献奖励口径（2026-03-22）设计
+# oasis7 主链 Token 创世分配与早期贡献奖励设计
 
-- 对应需求文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+- 对应需求文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
+- 对应项目管理文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
 
 ## 1. 设计定位
 定义主链 Token 创世分配、创世绝对发行量、控制边界、低流通门禁与早期贡献奖励的统一设计，让 Token 发行从一开始就是“可审计的战略配置”，而不是“事后补解释的营销行为”。

@@ -14,8 +14,8 @@
 - 发放层：继续使用 `eligible-small / eligible-medium / eligible-large / no-token-recommendation` 档位，但固定映射为 `300 / 800 / 1500 / 0 OC`，并在 producer 审批后回填 `actual_amount` 与 `distribution_ref`。
 
 ## 3. 关键接口 / 入口
-- `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 - `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 

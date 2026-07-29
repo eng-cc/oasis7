@@ -64,7 +64,7 @@
 - `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
 - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
 - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
-- `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+- `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `README.md`

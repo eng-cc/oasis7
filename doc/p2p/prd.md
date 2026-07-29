@@ -207,7 +207,7 @@
   - AC-16: `oasis7_viewer_live` 进一步移除 `--runtime-world` 兼容别名与旧 split CLI 路径，定向测试覆盖 `--release-config/--runtime-world/--node-*` 拒绝行为。
   - AC-17: 历史文档中 `oasis7_viewer_live` 子目录旧路径完成迁移（对齐 `oasis7_viewer_live.rs` 与 `oasis7_chain_runtime/*` 现行布局），文档门禁通过。
   - AC-18: `doc/p2p/**` 仍可读历史专题的首行标题必须统一使用 `oasis7 Runtime` 或 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文、证据原文与兼容说明中。
-  - AC-19: `mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22` 专题文档落盘并映射任务链 `TASK-P2P-031`，明确 `10000 bps` 创世分配表、项目战略控制 `5000 bps`、协议奖励池 `3500 bps`、单人直持目标/上限、低流通边界与“贡献制奖励而非 P2E”口径。
+  - AC-19: `mainchain-token-genesis-and-contributor-reward` 专题文档落盘并映射任务链 `TASK-P2P-031`，明确 `10000 bps` 创世分配表、项目战略控制 `5000 bps`、协议奖励池 `3500 bps`、单人直持目标/上限、低流通边界与“贡献制奖励而非 P2E”口径。
   - AC-20: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-032` 的密码学基线，保持整体 verdict 为 `not_mainnet_grade`，固定交易授权、custody、治理 signer 与创世控制 blocker。
   - AC-21: `p2p-mainnet-security-governance-readiness` 承载当前 signed transfer contract：`POST /v1/chain/transfer/submit` 必须校验 `public_key/signature`、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归；历史任务链 `TASK-P2P-033` 只作追溯。
   - AC-22: 稳定权威 `p2p-mainnet-security-governance-readiness` 吸收 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
@@ -225,7 +225,7 @@
   - AC-33: `TASK-P2P-047` 必须把当前链上代币的创世 `initial_supply` 冻结为 `10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 同步回写到 token 专题与模块执行台账。
   - AC-34: `triad-observability-stack` 必须把 real-env triad 的 host/process、chain status、traffic window、wasm window 收敛到统一 repo-owned 监控入口，并在 `testing-manual.md` 冻结 canonical 命令与产物路径。
   - AC-35: `triad-three-equal-validator-topology` 必须把当前 real-env triad 从“本机 observer + 两台云端 validator”提升为“三节点等权 validator”可审计基线，至少覆盖：`3` 个 validator 的 stake/signer binding、local 节点不再以 observer-only 角色运行、repo-owned snapshot/manual 不再把 `partial_with_observer_blocker` 当成唯一有效 claim、same-window evidence 对 legacy service label 与真实 runtime role 的区分，以及 `oasis7_chain_runtime` 在 execution world 已落盘 `governance_finality_signer_registry` 时会优先用该 world-state registry 恢复 validator membership / signer binding；`--node-validator*` 只保留为 bootstrap 或显式运维覆盖。
-  - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
+  - AC-36: `mainchain-token-newapi-quota-bridge` 专题文档落盘并映射任务链，明确 `one-way OC -> LetAI Run OpenAPI quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、动态 project/`token_key`、query verification 与 manual review 风控，以及“不支持自动提现/不承诺公开兑换所”边界。
   - AC-37: `formal-network-tiers-testnet-mechanism` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/public_testnet/mainnet` 三层 operator/runtime network-tier 模型、`public_testnet_rehearsal` 的 legacy/rehearsal evidence 边界、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate；这些 tier 不作为玩家世界模型。
   - AC-38: `hosted-public-join-managed-identity-custody` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-38A: 稳定权威 `mainchain-token-ideal-transaction` 承接 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)` 与 `PRD-P2P-ITX-001/002/003`：明确 signed metadata 字段、完整 JSON、签名域、回执与 Phase 1 最小升级集；fee quote 仍是 metadata-only，真实 fee/auth execution 属于独立 Phase 2+，不得误称当前实现真值。
@@ -249,7 +249,7 @@
   - `doc/p2p/design.md`
   - `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
   - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
@@ -258,7 +258,7 @@
   - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
-  - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
+  - `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
   - `doc/p2p/token/mainchain-token-ideal-transaction.prd.md`
   - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）

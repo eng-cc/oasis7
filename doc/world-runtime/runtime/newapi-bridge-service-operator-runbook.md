@@ -133,7 +133,7 @@ provider bridge 会自动解析到对应的 `token_key`。
 
 ## 测试步骤入口
 
-完整的测试环境全链路步骤以 `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md#67-全链路测试步骤矩阵` 为准，覆盖：
+完整的测试环境全链路步骤以 `doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md#67-全链路测试步骤矩阵` 为准，覆盖：
 
 - 从 `~/Documents/keys/test_keys.txt` 选择 fake-email + chain keypair persona。
 - `POST /v1/bridge/bind` 建立 `newapi_user_ref -> bridge_user_id -> LetAI project/token_key` 绑定。

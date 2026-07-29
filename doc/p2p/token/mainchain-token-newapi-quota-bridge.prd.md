@@ -1,7 +1,7 @@
-# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案（2026-05-06）
+# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案
 
-- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md`
+- 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md`
 
 审计轮次: 2
 
@@ -81,7 +81,7 @@
   - `crates/oasis7/src/runtime/main_token.rs`
   - `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs`
   - `crates/oasis7/src/bin/oasis7_web_launcher/server.rs`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - LetAI Run OpenAPI `Baseurl: https://api.letai.run`

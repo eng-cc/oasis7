@@ -1,4 +1,4 @@
-# Limited Preview Contributor Reward Ledger（2026-03-22）
+# Limited Preview Contributor Reward Ledger
 
 审计轮次: 1
 
@@ -14,7 +14,7 @@
 
 ## 1. Intake Rules
 - Only record contribution-based rows.
-- Use the scoring rules from `readme-limited-preview-contributor-reward-pack-2026-03-22.md`.
+- Use the scoring rules from `readme-limited-preview-contributor-reward-pack.md`.
 - Use `Contributor` and `Public Handle / GitHub` for review identity; keep `Reward Account` as the execution field.
 - If `Source Type=PR`, first read the optional reward intake block from `.github/pull_request_template.md`.
 - Do not include signup, login, casual play, online time, AFK, or vague praise as rewardable rows.

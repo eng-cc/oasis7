@@ -200,10 +200,10 @@
   - `site/en/index.html`
   - `testing-manual.md`
 - `doc/README.md`
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md`
   - `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
   - `scripts/readme-reward-pr-intake-import.py`
   - `scripts/readme-reward-pr-intake-round-scan.py`
 - Edge Cases & Error Handling:

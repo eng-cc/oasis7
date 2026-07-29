@@ -1,8 +1,8 @@
-# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案（Operator Runbook）
+# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接 Operator Runbook
 
-- 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
-- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+- 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
+- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md`
+- 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md`
 
 审计轮次: 1
 
@@ -548,7 +548,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 ## 10. 证据回写
 每次正式部署、首次演练或异常收口后，至少回写：
 - GitHub task issue evidence comments
-- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md`
 - 必要时附：
   - health 快照
   - 定向测试命令与结果

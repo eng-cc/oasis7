@@ -22,5 +22,5 @@
 
 ## Notes
 - These repo-owned JSON mirrors are public-only signer truth. They intentionally omit private keys and operator-local custody paths.
-- Mainnet controller thresholds and bucket/controller bindings remain governed by `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`.
+- Mainnet controller thresholds and bucket/controller bindings remain governed by `doc/p2p/token/mainchain-token-genesis-freeze-sheet.md`.
 - Public testnet remains a resettable test surface; binding these signer truths does not upgrade its claim boundary to `mainnet_live`.

@@ -1,7 +1,7 @@
-# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案（项目管理文档）
+# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接项目
 
-- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md`
-- 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
+- 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md`
+- 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
 
 审计轮次: 2
 
@@ -34,7 +34,7 @@
   - `deposit_token` 只做辅助归因，不把整包加密业务数据塞进链上消息；账号池并发混单仍需另一个 custody/allocator 任务放开
 
 ## 依赖
-- `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+- `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
 - operator-provided `--chain-base-url`
@@ -52,8 +52,8 @@
 
 ## 验证命令
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture`
-- `rg -n "LetAI|token_key|platform_user_id|platform_project_id|external_order_id|OpenAPI|one-way|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
-- `rg -n "bridge-service|operator runbook|manual_review|external_order_id|token_key|独立部署|回滚" doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`
+- `rg -n "LetAI|token_key|platform_user_id|platform_project_id|external_order_id|OpenAPI|one-way|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md`
+- `rg -n "bridge-service|operator runbook|manual_review|external_order_id|token_key|独立部署|回滚" doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
@@ -66,7 +66,7 @@
 - 新签发 NewAPI bridge route 已使用链上 `message/memo` 承载短 `deposit_token`；legacy route 缺少 token 时仍按旧路径接受，便于状态兼容。
 
 ## 活跃补充文档
-- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md`
   - 覆盖 operator 输入、推荐启动命令、首次演练、日常巡检、manual review 与回滚边界。
 
 ## 后续实现子任务

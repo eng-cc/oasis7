@@ -1,9 +1,9 @@
-# oasis7 主链 Token 创世分配审计清单（2026-03-22）
+# oasis7 主链 Token 创世分配审计清单
 
-- 对应设计文档: `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md`
-- 对应项目管理文档: `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md`
+- 对应设计文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.design.md`
+- 对应项目管理文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.project.md`
 
-审计轮次: 1
+状态: `active`；首次真实控制主体冻结前仍须执行独立的正式审计。
 
 ## 1. Executive Summary
 - Problem Statement: oasis7 已经冻结了 Token 初始分配比例与创世参数草案，但如果没有 QA 审计清单，团队很容易把 `custody account`、`treasury bucket`、个人直持比例和首年流通边界混在一起，导致创世配置带病进入执行。
@@ -48,7 +48,7 @@
     - 将 `custody account` 误写成已初始化 treasury bucket
     - 使用 `play-to-earn`、`login reward`、`time played = token` 叙事
   - AC-3: checklist 模板可以直接填入 `TIGR-1` 参数表并给出 `pass/block` verdict。
-  - AC-4: 专题必须与 `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md` 互链。
+  - AC-4: 专题必须与 `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md` 互链。
 - Non-Goals:
   - 本专题不决定最终总供应量绝对值。
   - 不取代法律/税务/证券意见。
@@ -61,11 +61,11 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该 checklist 作为 QA 层 required-tier 审计入口，读取 `p2p token` 侧的创世参数表草案，按固定字段输出 `pass/block` verdict，并沉淀到 testing 证据体系中。
 - Integration Points:
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
   - `crates/oasis7/src/runtime/main_token.rs`
   - `crates/oasis7/src/runtime/world/event_processing.rs`
-  - `doc/testing/evidence/token-genesis-allocation-audit-template-2026-03-22.md`
+  - `doc/testing/evidence/token-genesis-allocation-audit-template.md`
 - Edge Cases & Error Handling:
   - 若参数表暂时没有真实多签地址，只给逻辑账户名，允许 `conditional draft review`，但不得给最终 `pass`。
   - 若 bucket 比例正确但 custody/treasury 语义写错，仍必须 `block`。
@@ -103,7 +103,7 @@
 ## 7. 创世分配审计清单（执行版）
 
 ### 7.1 Verdict 规则
-- `pass`: 所有硬阻断项通过，且已填入真实控制主体/多签信息。
+- `pass`: 所有硬阻断项通过，且已填入真实控制主体/多签信息并归档该次审计证据；它只支持该次创世执行决策，不是一般发布结论。
 - `block`: 任一硬阻断项失败。
 - `conditional_draft_only`: 比例与结构正确，但真实控制主体、个人拆分或执行细节仍未补齐，不允许 mint。
 
