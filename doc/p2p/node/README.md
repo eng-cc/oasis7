@@ -4,10 +4,10 @@
 
 ## 从这里开始
 - 想确认 P2P/DistFS/consensus/execution/observer 的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 node 子域入口。
-- 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md` 或 `node-reward-settlement-native-transaction.prd.md`
+- 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md`，主链 Token bridge 再读 `../token/mainchain-token-allocation-mechanism.prd.md`
 - 想确认节点身份引导、复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-identity-replication-contract.prd.md`
 - 想确认 PoS 时间、slot clock 与控制面对齐：先读 `../../world-runtime/runtime/chain-pos-control-plane.prd.md`
-- 想确认 `wasm32/libp2p` 编译约束：先读 `../network/readme-p1-network-production-hardening.prd.md`；想确认 builtin wasm fallback：先读 `node-builtin-wasm-fetch-fallback-compile.prd.md`
+- 想确认 `wasm32/libp2p` 编译约束：先读 `../network/readme-p1-network-production-hardening.prd.md`；想确认 builtin wasm materialization/fallback：先读 `../../world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
 - 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据，以及模块级优化点：先读 `node-triad-operations-observability.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -27,12 +27,12 @@
 - 首读入口:
   - `node-contribution-points.prd.md`
   - `node-redeemable-power-asset.prd.md`
-  - `node-reward-settlement-native-transaction.prd.md`
+  - `../token/mainchain-token-allocation-mechanism.prd.md`
 - 适合问题:
   - 节点奖励怎么计、贡献分如何结算
   - 可赎回 power asset 与治理签名阶段如何拆分
   - 奖励、执行验证与原生交易结算的关系是什么
-- 说明: contribution points 的 `runtime-closure` / `multi-node-closure-test` 与 redeemable power asset 的 `audit-hardening` / `signature-governance-phase3` 语义均已合并进各自主三件套并删除源文件；历史过程由 Git 与 GitHub task evidence 追溯。
+- 说明: contribution points 的 runtime/multi-node/storage-pool/uptime 增量、redeemable power asset 的 audit/signature 增量及 native settlement 专题均已合并进稳定权威并删除源文件；builtin fallback 转入 WASM pipeline。历史 reward leader/failover 完成态因无当前实现而退役，不构成现行能力。
 
 ### 2. 身份、复制、网络与 signer binding
 - 首读入口:
@@ -53,10 +53,10 @@
 ### 4. WASM 编译与兼容护栏
 - 首读入口:
   - `../network/readme-p1-network-production-hardening.prd.md`
-  - `node-builtin-wasm-fetch-fallback-compile.prd.md`
+  - `../../world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
 - 适合问题:
   - `wasm32/libp2p` 的编译守卫和限制是什么
-  - builtin wasm fetch fallback 的编译闭环要看哪里
+  - builtin wasm materialization、hash 校验与 fallback 边界要看哪里
 
 ### 5. 三节点监控与运行证据
 - 首读入口:

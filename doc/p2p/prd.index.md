@@ -88,16 +88,11 @@
 | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md` |
 | `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
-| `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
 | `doc/p2p/node/node-contribution-points.prd.md` | `doc/p2p/node/node-contribution-points.design.md` | `doc/p2p/node/node-contribution-points.project.md` |
-| `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.prd.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.design.md` | `doc/p2p/node/node-execution-verification-reward-leader-failover-hardening.project.md` |
 | `doc/p2p/node/node-identity-replication-contract.prd.md` | `doc/p2p/node/node-identity-replication-contract.design.md` | `doc/p2p/node/node-identity-replication-contract.project.md` |
 | `doc/p2p/node/node-redeemable-power-asset.prd.md` | `doc/p2p/node/node-redeemable-power-asset.design.md` | `doc/p2p/node/node-redeemable-power-asset.project.md` |
 | `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
-| `doc/p2p/node/node-reward-settlement-native-transaction.prd.md` | `doc/p2p/node/node-reward-settlement-native-transaction.design.md` | `doc/p2p/node/node-reward-settlement-native-transaction.project.md` |
-| `doc/p2p/node/node-storage-system-reward-pool.prd.md` | `doc/p2p/node/node-storage-system-reward-pool.design.md` | `doc/p2p/node/node-storage-system-reward-pool.project.md` |
 | `doc/p2p/node/node-triad-operations-observability.prd.md` | `doc/p2p/node/node-triad-operations-observability.design.md` | `doc/p2p/node/node-triad-operations-observability.project.md` |
-| `doc/p2p/node/node-uptime-base-reward.prd.md` | `doc/p2p/node/node-uptime-base-reward.design.md` | `doc/p2p/node/node-uptime-base-reward.project.md` |
 | `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md` |
 | `doc/p2p/observer/observer-sync-source-mode.prd.md` | `doc/p2p/observer/observer-sync-source-mode.design.md` | `doc/p2p/observer/observer-sync-source-mode.project.md` |
 | `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.design.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.project.md` |
@@ -125,6 +120,7 @@
 - Ideal transaction 专业权威：2026-06-08 理想交易升级三件套已合并进 `mainchain-token-ideal-transaction.{prd,design,project}.md`；`PRD-P2P-ITX-001/002/003` 由继任 project 任务行承接，历史过程只从 Git 与 GitHub task evidence 追溯。
 - Observer metrics 专业权威：统计桥接（`PRD-P2P-MIG-106-001`）与策略可观测性（`PRD-P2P-MIG-107-001`）已合并进 `observer-sync-mode-runtime-metrics.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
 - NodePoints 专业权威：runtime closure（`PRD-P2P-MIG-090-001`）与 multi-node closure test（`PRD-P2P-MIG-089-001`）的有效语义已合并进 `doc/p2p/node/node-contribution-points.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除；历史过程只从 Git history 与 GitHub task evidence 追溯。
+- Node reward 专业权威：storage pool（`PRD-P2P-MIG-102-001`）与 uptime reward（`PRD-P2P-MIG-103-001`）已合并进 `node-contribution-points.*`；native settlement 由 Token allocation authority 承接；builtin materialization 由 WASM deterministic-build pipeline 承接。旧 reward leader/failover 完成态无当前实现，按根 PRD 负向边界退役。15 个源文件已删除，历史过程只从 Git 与 GitHub task evidence 追溯。
 - Node network 专业权威：net stack unification（`PRD-P2P-MIG-105-001`）与 wasm32/libp2p compile guard（`PRD-P2P-MIG-104-001`）的有效语义已合并进 `doc/p2p/network/readme-p1-network-production-hardening.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除。
 - Redeemable power asset 专业权威：审计加固（`PRD-P2P-MIG-096-001`）与签名治理（`PRD-P2P-MIG-097-001`）已合并进 `node-redeemable-power-asset.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除；历史 AHA release companion 保留并重定向到当前权威。
 - DistFS distributed resilience：`distfs-distributed-resilience` 是异构 provider 兼容/选择、无单机完整依赖、分布覆盖、自愈控制/轮询与 NodeRuntime 接线的唯一主入口。NodeRuntime 接线仍受“依赖齐备才运行、缺依赖跳过、单轮失败不阻断 tick”约束，不能被误述为全局自治恢复或 readiness 结论。

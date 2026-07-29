@@ -20,7 +20,8 @@
 - doc/p2p/token/mainchain-token-allocation-mechanism.prd.md
 - `doc/p2p/prd.md`
 - `doc/p2p/node/node-redeemable-power-asset.prd.md`
-- `doc/p2p/node/node-reward-settlement-native-transaction.prd.md`
+- `doc/p2p/node/node-contribution-points.prd.md`（积分来源与双池结算）
+- `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`（native action/event 与主链 Token bridge 当前权威）
 - `crates/oasis7/src/runtime/reward_asset.rs`
 - `crates/oasis7/src/runtime/state.rs`
 - `crates/oasis7/src/runtime/world/resources.rs`

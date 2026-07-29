@@ -16,6 +16,8 @@
 - [x] node-points-runtime-closure (PRD-P2P-MIG-090-001) [test_tier_required]: 承接原 runtime-closure 专题 ID，完成 epoch 幂等结算与恢复/重放闭环，保证快照更新不静默改写奖励台账。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
 - [x] node-points-multi-node-closure (PRD-P2P-MIG-089-001) [test_tier_required]: 承接原 multi-node-closure-test 专题 ID，完成至少 3 节点、连续 2 epoch 的闭环验证，覆盖积分池守恒、贡献排序、惩罚效果与累计积分单调性。 Trace: #2652 (task_33241c6a236149efbe1790f03e1cc1f6)
 - [x] reward-runtime-production-hardening-phase1-authority (PRD-P2P-MIG-100) [test_tier_required]: 已吸收 collector snapshot/restart、显式身份绑定与兑换 signer-match 收口；后续回归继续覆盖 collector 恢复、epoch 幂等与重复 tick/replay 不增发。历史过程只由 Git history 与 GitHub task evidence 追溯。 Trace: #2684 (task_466ecbb2e1ab4e79915c58de7e95dd78)
+- [x] node-points-dual-pool-authority (PRD-P2P-MIG-102-001) [test_tier_required]: 吸收双固定池、挑战资格、质押封顶、独立分配与反重复存储奖励合同；原专题三件套退役后从 Git history 与 GitHub task evidence 追溯。 Trace: #2768 (task_f98e5ca7d8c84f20988039c03f90dde5)
+- [x] node-points-challenge-uptime-authority (PRD-P2P-MIG-103-001) [test_tier_required]: 吸收挑战优先、时长回退与阈值归一化在线积分合同；原专题三件套退役后从 Git history 与 GitHub task evidence 追溯。 Trace: #2768 (task_f98e5ca7d8c84f20988039c03f90dde5)
 
 ## 依赖
 - doc/p2p/node/node-contribution-points.prd.md
@@ -25,5 +27,5 @@
 - `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
 
 ## 状态
-- 当前阶段：节点贡献积分激励阶段完成（NCP-1~NCP-6 全部完成）；本地闭环不构成真实公网证明或生产 readiness。
-- 最近更新：2026-07-27（专业权威合并）。
+- 当前阶段：节点贡献积分激励及 storage/uptime 专业权威合并完成；本次只合并现有语义，不证明新行为、参数重调、真实公网或生产 readiness。
+- 最近更新：2026-07-29（专业权威合并）。

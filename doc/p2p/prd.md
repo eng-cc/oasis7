@@ -37,6 +37,7 @@
 - replication 的现行请求协议是 `/aw/node/replication/fetch-commit/1.0.0` 与 `/aw/node/replication/fetch-blob/1.0.0`。writer epoch/sequence 必须单调，切换 writer 或 epoch 时从 sequence 1 开始；鉴权、hash 或写入失败不得污染 guard。
 - storage challenge 的本地 self-probe 对错误 blob 或验证失败保持 fail-closed；provider、DHT 或 fetch route 的部分可重试不可用允许进入有界 fallback/degraded 路径，不能被概括为“任何网络失败都拒绝提交”。
 - 历史 `/aw/rr/1.0.0/*` 草案、固定 bitswap/graphsync 选型、lease 覆盖每次 zone commit 与未接线 PoS 风险均不是当前合同。Phase-C 专用 DistFS request/proof envelope、challenge topic 和 specialized challenge driver 仍是未来能力缺口；这不否定现有 provider/DHT/fetch-route 网络探测 gate。
+- 历史 reward leader/failover closure 曾描述 `reward_runtime_leader_*` 与 `oasis7_viewer_live` 控制面，但当前代码没有该 leader election/failover 合同；现行 reward worker 只按本地 signer 与本地 consensus readiness 提交。旧完成态不得被解释为多节点自动 leader、failover SOP、分区去重或 release readiness，未来若需要该能力必须另立 runtime/consensus 任务与回归。
 
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
 - 早期 DistFS path-index / observer bootstrap 源码仍存在于 `oasis7_net`，但当前 `lib.rs` 未声明这些模块；它们不是当前 checkpoint、replay、observer recovery 或自动 fallback API。未来重新暴露必须建立 runtime 任务、验证路径并重新审查，不能从历史完成态推导 active capability。

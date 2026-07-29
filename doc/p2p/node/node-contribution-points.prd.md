@@ -6,7 +6,8 @@
 审计轮次: 5
 ## 专业权威口径
 - 本文件是节点贡献积分产品与专业规则的当前主入口。
-- 既有 runtime closure 与 multi-node closure test 增量文档的有效语义已合并到本三件套；源文件删除后，历史过程由 Git history 与对应 GitHub task evidence 追溯。
+- 既有 runtime closure、multi-node closure test、存储系统奖励池与基础在线时长奖励增量文档的有效语义已合并到本三件套；源文件删除后，历史过程由 Git history 与对应 GitHub task evidence 追溯。
+- 本文件定义专业积分与结算合同，不承诺玩家可用性、当前数值平衡、公开网络经济安全或 release readiness。
 
 ## 1. Executive Summary
 - Problem Statement: 在 oasis7 的区块链 + P2P FS 闭环内，引入可审计的节点积分激励（Node Points）。
@@ -63,6 +64,11 @@ NodePointsConfig {
   epoch_duration_seconds: u64,
   epoch_pool_points: u64,
   min_self_sim_compute_units: u64,
+  storage_pool_points: u64,
+  min_uptime_challenge_pass_ratio: f64,
+  min_storage_challenge_pass_ratio: f64,
+  min_storage_challenge_checks: u64,
+  max_rewardable_storage_to_staked_ratio: f64,
   delegated_compute_multiplier: f64,
   maintenance_compute_multiplier: f64,
   weight_compute: f64,
@@ -82,6 +88,11 @@ NodeContributionSample {
   world_maintenance_compute_units: u64,
   effective_storage_bytes: u64,
   uptime_seconds: u64,
+  uptime_valid_checks: u64,
+  uptime_total_checks: u64,
+  storage_valid_checks: u64,
+  storage_total_checks: u64,
+  staked_storage_bytes: u64,
   verify_pass_ratio: f64,
   availability_ratio: f64,
   explicit_penalty_points: f64,
@@ -97,8 +108,12 @@ NodeSettlement {
   storage_score: f64,
   uptime_score: f64,
   reliability_score: f64,
+  storage_reward_score: f64,
+  rewardable_storage_bytes: u64,
   penalty_score: f64,
   total_score: f64,
+  main_awarded_points: u64,
+  storage_awarded_points: u64,
   awarded_points: u64,
   cumulative_points: u64,
 }
@@ -106,7 +121,10 @@ NodeSettlement {
 EpochSettlementReport {
   epoch_index: u64,
   pool_points: u64,
+  storage_pool_points: u64,
   distributed_points: u64,
+  storage_distributed_points: u64,
+  total_distributed_points: u64,
   settlements: Vec<NodeSettlement>,
 }
 ```
@@ -118,8 +136,15 @@ EpochSettlementReport {
 - 存储分：
   - `storage_gib = effective_storage_bytes / 1024^3`
   - `storage_score = sqrt(storage_gib) * availability_ratio`
+- 独立存储奖励池：
+  - `epoch_pool_points` 与 `storage_pool_points` 是两个独立的固定 epoch 积分预算；各自只向正的合格得分分配，允许出现未分配余额，不承诺自动结转。
+  - 当 `storage_pool_points > 0` 时，主池归一化权重会把 `weight_storage` 置零，避免同一存储贡献同时从主池和存储池重复获奖。
+  - 只有 `storage_total_checks >= min_storage_challenge_checks` 且通过率严格高于 `min_storage_challenge_pass_ratio` 时，存储奖励得分才为正；挑战质量按阈值以上区间归一化。
+  - `max_rewardable_storage_to_staked_ratio > 0` 时，可奖励存储不超过 `staked_storage_bytes * ratio`；启用封顶但质押为零时可奖励量为零。零值或非有限 ratio 表示不启用该封顶。
+  - `storage_reward_score = sqrt(rewardable_storage_gib) * normalized_challenge_quality * availability_ratio`。
 - 在线分：
-  - `uptime_score = min(1.0, uptime_seconds / epoch_duration_seconds)`
+  - epoch 内存在挑战记录时，以 `uptime_valid_checks / uptime_total_checks` 为原始在线率；没有挑战记录时才回退到 `uptime_seconds / epoch_duration_seconds`。
+  - 原始在线率在 `min_uptime_challenge_pass_ratio` 及以下得分为零，超过阈值后在剩余区间线性归一化到 `[0, 1]`。
 - 可靠性分：
   - `reliability_score = (verify_pass_ratio + availability_ratio) / 2`
 - 总分：
@@ -127,6 +152,13 @@ EpochSettlementReport {
   - `total < 0` 则按 `0` 处理。
 - 基础义务惩罚：
   - 当 `self_sim_compute_units < min_self_sim_compute_units` 时，额外加罚 `obligation_penalty_points`。
+- 结算合并：
+  - `awarded_points = main_awarded_points + storage_awarded_points`；累计积分只在 epoch 结算中更新，采样或快照写入不得直接增发。
+
+### 积分与资产结算边界
+- NodePoints 可进入既有 PowerCredit 路径，但仍须通过身份、签名、预算、reserve、nonce 与 replay gate；积分不是自动流动价值，也不证明 custody、市场或兑付 readiness。
+- 主链 Token 的 NodePoints bridge 是另一条独立路径：它从同 epoch 的 `node_service_reward` 发行预算按 `awarded_points` 确定性分配，不是存储池或主池本身，也不是积分自动兑换。
+- 同时启用多条激励路径存在重复奖励风险。调整池权重、阈值、兑换比例或发行分桶必须另行经过经济治理和 runtime 复核。
 
 ### Runtime 与多节点闭环约束
 - runtime 以 epoch 边界消费节点贡献快照并产出 `EpochSettlementReport`；同一 epoch 的 settlement 必须具备幂等键或等价去重语义。
@@ -148,6 +180,8 @@ EpochSettlementReport {
   - 若没有真实证明接线，`verify_pass_ratio/availability_ratio` 的真实性依赖上层采样器，后续需替换为链路证明数据。
   - 积分池固定时，低活跃 epoch 可能出现“有效贡献过少”，需在后续迭代加入最小活跃阈值与回收池机制。
   - collector 状态文件损坏会丢失未结算采样上下文；它必须以可观测降级处理，不能被表述为已结算资产的安全恢复。
+  - uptime/storage challenge 与 collector 字段只是启发式采样输入，不是 PoRep/PoSt、VRF、多观察点证明、抵押罚没、公开网络真实性或生产经济安全证明。
+  - 挑战频率过低会放大在线率或存储资格波动；存储封顶、挑战阈值和多激励路径配置不当会压制真实贡献或造成重复激励。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
