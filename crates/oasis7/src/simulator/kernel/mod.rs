@@ -1,6 +1,7 @@
 //! WorldKernel: time, events, actions, and observation.
 
 mod actions;
+mod fragment_refill_quote;
 mod fragment_replenish;
 mod micro_depot;
 mod micro_depot_commissioning;

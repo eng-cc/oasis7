@@ -1,8 +1,8 @@
 use super::*;
 use crate::simulator::{AgentDecision, ResourceOwner};
 use crate::simulator::{
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
-    ProviderExecutionMode,
+    ProviderExecutionMode, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;
+mod auth_actions_fragment_replenishment;
 mod authoritative;
 mod background_play;
 mod chain_sync;

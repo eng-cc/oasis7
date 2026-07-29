@@ -10,6 +10,10 @@ use super::protocol::{
 
 mod collect_data;
 pub use collect_data::{sign_collect_data_auth_proof, verify_collect_data_auth_proof};
+mod fragment_refill_preview;
+pub use fragment_refill_preview::{
+    sign_fragment_refill_preview_auth_proof, verify_fragment_refill_preview_auth_proof,
+};
 mod refine_quote;
 pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
 mod product_validation_quote;
@@ -832,11 +836,11 @@ mod registration_replay;
 #[path = "auth_registration_replay_lock.rs"]
 mod registration_replay_lock;
 use registration_replay::ensure_registration_grant_nonce_unused;
-pub use registration_replay::{
-    HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, preflight_hosted_registration_replay_ledger,
-};
 pub(crate) use registration_replay::{
     claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
+};
+pub use registration_replay::{
+    preflight_hosted_registration_replay_ledger, HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
 };
 pub use registration_replay_lock::ExclusiveDirectoryProcessLock;
 

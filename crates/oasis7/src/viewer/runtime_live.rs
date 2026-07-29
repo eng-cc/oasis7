@@ -51,6 +51,7 @@ mod control_plane;
 mod control_utils;
 #[path = "runtime_live/decision_trace.rs"]
 mod decision_trace;
+mod fragment_refill_preview;
 mod gameplay_snapshot;
 mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
@@ -97,9 +98,7 @@ use support::{
     bootstrap_runtime_world, is_expected_disconnect_error, is_timeout_error,
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
-
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
-
 const AUTHORITATIVE_BATCH_CONFIRM_DELAY_TICKS: u64 = 1;
 const AUTHORITATIVE_BATCH_FINALITY_WINDOW_TICKS: u64 = 2;
 const MAX_AUTHORITATIVE_BATCH_HISTORY: usize = 256;
@@ -826,6 +825,7 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
+            ViewerRequest::PreviewFragmentReplenishment { request } => self.preview_fragment_refill(request, writer)?,
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {

@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use super::chunking::ChunkCoord;
+
 // ============================================================================
 // Type Aliases
 // ============================================================================
@@ -426,6 +428,30 @@ pub struct RefineQuote {
     pub first_goal_relevance: String,
     pub recommended_refine_amount: i64,
     pub refine_value_class: String,
+}
+
+/// Read-only forecast of the existing asteroid-fragment replenishment cadence.
+///
+/// This deliberately describes a chunk-level opportunity, rather than a future
+/// generated fragment: placement and material composition remain subject to the
+/// normal deterministic replenishment path when its tick is actually processed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FragmentRefillPreview {
+    pub chunk_coord: ChunkCoord,
+    pub target_frag_id: Option<LocationId>,
+    pub current_frag_remaining_summary: String,
+    pub chunk_remaining_summary: String,
+    pub remaining_by_element_g: BTreeMap<FragmentElementKind, i64>,
+    pub replenishment_enabled: bool,
+    pub replenishment_due: bool,
+    pub next_replenish_tick: Option<WorldTime>,
+    pub ticks_until_replenish: Option<WorldTime>,
+    pub wait_cost_ticks: WorldTime,
+    pub estimated_replenished_frag_count: i64,
+    pub estimated_replenished_resource_hint: String,
+    pub next_industrial_goal_relevance: String,
+    pub wait_cost_summary: String,
+    pub recommended_resource_action: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

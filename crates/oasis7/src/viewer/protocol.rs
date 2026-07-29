@@ -1,7 +1,8 @@
 use oasis7_proto::viewer as proto;
 
 use crate::simulator::{
-    AgentDecisionTrace, RunnerMetrics, WorldEvent, WorldEventKind, WorldSnapshot, WorldTime,
+    AgentDecisionTrace, ChunkCoord, FragmentRefillPreview, RunnerMetrics, WorldEvent,
+    WorldEventKind, WorldSnapshot, WorldTime,
 };
 
 pub use proto::{
@@ -14,19 +15,21 @@ pub use proto::{
     AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, CollectDataCommand, CollectDataPreflight,
-    CollectDataRequest, ControlCompletionStatus, GOVERNED_ROLLBACK_REPLAY_CAPABILITY,
-    GameplayActionError, GameplayActionRequest, HostedStrongAuthGrant, LiveControl,
-    NegotiatedViewerProtocol, PlaybackControl, PlayerActionDisposition, PlayerAuthProof,
-    PlayerAuthScheme, PlayerCompensationState, PlayerCompensationStatus, PlayerRollbackDisposition,
-    PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest, ProductValidationQuotePreflight,
-    ProductValidationQuoteRequest, PromptControlApplyRequest, PromptControlCommand,
-    PromptControlError, PromptControlOperation, PromptControlRollbackRequest, RefineQuotePreflight,
-    RefineQuoteRequest, RollbackApprovalSignature, RollbackAttributionResolution,
-    RollbackAttributionResolutionRequest, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackCheckpointRef, RollbackCompensationTransitionRequest, RollbackIntent,
-    RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
-    RollbackSourceEventRef, RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl,
-    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    CollectDataRequest, ControlCompletionStatus, FragmentRefillElementRemaining,
+    FragmentRefillPreviewChunk, FragmentRefillPreviewProtocolRequest,
+    FragmentRefillPreviewResponse, GameplayActionError, GameplayActionRequest,
+    HostedStrongAuthGrant, LiveControl, NegotiatedViewerProtocol, PlaybackControl,
+    PlayerActionDisposition, PlayerAuthProof, PlayerAuthScheme, PlayerCompensationState,
+    PlayerCompensationStatus, PlayerRollbackDisposition, PowerSurvivalQuotePreflight,
+    PowerSurvivalQuoteRequest, ProductValidationQuotePreflight, ProductValidationQuoteRequest,
+    PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
+    PromptControlRollbackRequest, RefineQuotePreflight, RefineQuoteRequest,
+    RollbackApprovalSignature, RollbackAttributionResolution, RollbackAttributionResolutionRequest,
+    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackCheckpointRef,
+    RollbackCompensationTransitionRequest, RollbackIntent, RollbackOperatorAuthorization,
+    RollbackReceiptAccessRequest, RollbackReplayTarget, RollbackSourceEventRef,
+    RollbackStrictAuditEvidence, ViewerControl, ViewerControlProfile, ViewerEventKind,
+    ViewerRequest, ViewerStream, GOVERNED_ROLLBACK_REPLAY_CAPABILITY, VIEWER_PROTOCOL_VERSION,
 };
 
 pub type ViewerResponse =
@@ -35,6 +38,20 @@ pub type PromptControlAck = proto::PromptControlAck<WorldTime>;
 pub type AgentChatAck = proto::AgentChatAck<WorldTime>;
 pub type GameplayActionAck = proto::GameplayActionAck<WorldTime>;
 pub type ControlCompletionAck = proto::ControlCompletionAck<WorldTime>;
+
+/// A signed, read-only request for the current chunk's fragment-replenishment forecast.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FragmentRefillPreviewRequest {
+    pub chunk: ChunkCoord,
+    pub player_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<PlayerAuthProof>,
+}
+
+/// The authoritative, non-mutating kernel forecast returned for a fragment-refill preflight.
+pub type FragmentRefillPreviewPreflight = FragmentRefillPreview;
 
 pub fn viewer_event_kind_matches(filter: &ViewerEventKind, kind: &WorldEventKind) -> bool {
     match (filter, kind) {

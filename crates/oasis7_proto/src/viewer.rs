@@ -11,6 +11,8 @@ mod product_validation_quote;
 pub use product_validation_quote::*;
 mod power_survival_quote;
 pub use power_survival_quote::*;
+mod fragment_refill_preview;
+pub use fragment_refill_preview::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
@@ -89,6 +91,7 @@ pub enum ViewerRequest {
     QuotePowerSurvival {
         request: PowerSurvivalQuoteRequest,
     },
+    PreviewFragmentReplenishment { request: FragmentRefillRequest },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
     },
@@ -629,6 +632,7 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     PowerSurvivalQuotePreflight {
         quote: PowerSurvivalQuotePreflight,
     },
+    FragmentRefillPreviewPreflight { quote: FragmentRefillResponse },
     Error {
         message: String,
     },

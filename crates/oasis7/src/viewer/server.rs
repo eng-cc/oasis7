@@ -8,10 +8,10 @@ use std::thread;
 use tracing::Level;
 
 use super::protocol::{
-    AgentChatError, AuthoritativeChallengeError, AuthoritativeRecoveryError, ControlCompletionAck,
-    ControlCompletionStatus, PlaybackControl, PromptControlError, VIEWER_PROTOCOL_VERSION,
-    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
-    viewer_event_kind_matches,
+    viewer_event_kind_matches, AgentChatError, AuthoritativeChallengeError,
+    AuthoritativeRecoveryError, ControlCompletionAck, ControlCompletionStatus, PlaybackControl,
+    PromptControlError, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
+    ViewerStream, VIEWER_PROTOCOL_VERSION,
 };
 use crate::observability::emit_stderr_or_event;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
@@ -334,6 +334,20 @@ impl<'a> ViewerSession<'a> {
                             message: "quote_power_survival is only available in runtime live mode"
                                 .to_string(),
                             action_id: Some("quote_power_survival".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
+            ViewerRequest::PreviewFragmentReplenishment { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_offline_server".to_string(),
+                            message: "preview_fragment_replenishment is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("preview_fragment_replenishment".to_string()),
                             target_agent_id: None,
                         },
                     },

@@ -136,10 +136,10 @@ pub use types::{
     CHUNK_GENERATION_SCHEMA_VERSION, CM_PER_KM, ChunkResourceBudget,
     DEFAULT_ELEMENT_RECOVERABILITY_PPM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY,
     DEFAULT_VISIBILITY_RANGE_CM, ElementBudgetError, ElementComposition, FacilityId,
-    FragmentElementKind, FragmentResourceBudget, JOURNAL_VERSION, LocationId, LocationProfile,
-    MaterialKind, ModuleInstallTarget, PPM_BASE, PowerOrderSide, RefineQuote, ResourceKind,
-    ResourceOwner, ResourceStock, SNAPSHOT_VERSION, ScheduleQuote, StockError, WorldEventId,
-    WorldTime,
+    FragmentElementKind, FragmentRefillPreview, FragmentResourceBudget, JOURNAL_VERSION,
+    LocationId, LocationProfile, MaterialKind, ModuleInstallTarget, PPM_BASE, PowerOrderSide,
+    RefineQuote, ResourceKind, ResourceOwner, ResourceStock, SNAPSHOT_VERSION, ScheduleQuote,
+    StockError, WorldEventId, WorldTime,
 };
 pub use world_model::{
     Agent, AgentExecutionDebugContext, AgentKinematics, AgentPromptProfile, Asset, AssetKind,
