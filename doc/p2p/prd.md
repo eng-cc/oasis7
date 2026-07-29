@@ -39,6 +39,8 @@
 - 历史 `/aw/rr/1.0.0/*` 草案、固定 bitswap/graphsync 选型、lease 覆盖每次 zone commit 与未接线 PoS 风险均不是当前合同。Phase-C 专用 DistFS request/proof envelope、challenge topic 和 specialized challenge driver 仍是未来能力缺口；这不否定现有 provider/DHT/fetch-route 网络探测 gate。
 
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
+- 早期 DistFS path-index / observer bootstrap 源码仍存在于 `oasis7_net`，但当前 `lib.rs` 未声明这些模块；它们不是当前 checkpoint、replay、observer recovery 或自动 fallback API。未来重新暴露必须建立 runtime 任务、验证路径并重新审查，不能从历史完成态推导 active capability。
+- `oasis7_net` 的 `runtime_bridge` feature 当前是空的兼容 feature；历史 compile-closure 文档不代表 runtime bridge 逻辑仍由该 crate 暴露。当前执行/证明 bridge 以现行 runtime、proof 与 S9A authority 为准。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
 - 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套已退役，完成记录从 Git 与 GitHub task evidence 追溯。
 

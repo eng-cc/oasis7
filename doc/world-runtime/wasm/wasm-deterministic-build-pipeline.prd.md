@@ -123,6 +123,13 @@
   - Docker socket 权限只应出现在受控 builder 节点或本地开发机，不应进入普通 runtime 节点的默认生产权限面。
   - 私钥、发布证书与阈值签名分片不得进入 builder image、构建日志或 receipt。
 
+### Builtin 工件的 DistFS materialization 与加载边界
+
+- `m1/m4/m5` 同步入口把 canonical build 输出和 manifest 交给 `hydrate_builtin_wasm`；hydrate 使用 SHA-256 `LocalCasStore`，且只写入 built hash 已被 manifest 接受的工件。Git 跟踪 canonical hash、identity 与 release evidence，不跟踪本地 DistFS blob。
+- builtin materializer 从 DistFS 读取候选时再次按 SHA-256 验证；本地缺失或 hash 不匹配时，当前实现还会依次尝试 fetch 与 builtin source-compile fallback。materializer 本身不接收 identity、receipt 或 `ReleaseSecurityPolicy`，不能把它的 hash 校验描述成完整发布授权。
+- DistFS 是工件 materialization/cache 路径，不是唯一来源或新的信任根。manifest identity、build receipt、canonical token、签名与 release policy 由外围 artifact selection / release-gated pipeline 承担；当前 production policy 对 `Action::CompileModuleArtifactFromSource` 的门禁不等于关闭 builtin materializer 的 compile fallback。本次迁移只记录该边界，不宣称 fallback 已被生产入口关闭。
+- 该合同取代早期仅覆盖 `m1/m4`、只从本地 DistFS 读取的完成态描述；它不引入 WASM ABI、capability 或权限模型变化。
+
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP (WDBP-0): 修正文档目标态，明确 Docker-first canonical build、单 canonical publish hash 与 source compile 外移边界。

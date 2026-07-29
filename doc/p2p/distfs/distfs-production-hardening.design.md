@@ -9,7 +9,7 @@
 
 ## 结构与边界
 
-- 文件索引层：CAS precondition、审计、孤儿判定和 manifest 导入导出保护本地 `files_index`；并发冲突由调用者处理，不能由接口名推导跨进程线性化。
+- 文件索引层：规范化相对路径映射 `FileMetadata`；写入先落 CAS，再原子更新本地 `files_index.json`。CAS precondition、审计、孤儿判定和 manifest 导入导出保护本地索引；删除会回收未被索引引用且未 pin 的 blob。并发冲突由调用者处理，不能由接口名推导跨进程线性化。
 - 本地 probe 层：cursor 和 policy 从本地 CAS 选择 blob，生成本地自检报告；它不验证远程 provider 也不构成多节点 attestation。
 - reward-runtime 层：`oasis7_chain_runtime` 解析 `--reward-distfs-*` 参数，加载/原子写入 probe state，并把错误降为 warning + default cursor，保持主链路可用。
 - adaptive 层：每轮预算、原因分类 multiplier 和最大 backoff 控制局部 I/O 压力；状态字段默认化确保旧 probe state 可读。
