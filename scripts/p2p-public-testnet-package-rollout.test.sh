@@ -1529,7 +1529,7 @@ if ! python3 - \
   "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \
   "$package_dir/macos/oasis7-macos-arm64.dmg" \
   "$ROOT_DIR/doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md" \
-  "$ROOT_DIR/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md" \
+  "$ROOT_DIR/doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md" \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" <<'PY'
 from pathlib import Path
 import contextlib
@@ -3911,7 +3911,7 @@ for raw_path in sys.argv[1:]:
     assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), f"UTF-8 BOM forbidden: {path}"
 PY
 
-if ! python3 - "$ROOT_DIR/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md" <<'PY'
+if ! python3 - "$ROOT_DIR/doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md" <<'PY'
 from pathlib import Path
 import sys
 

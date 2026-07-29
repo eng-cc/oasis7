@@ -17,7 +17,7 @@ from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 COLLECTOR = ROOT_DIR / "scripts" / "p2p-public-testnet-fleet-health.py"
-RUNBOOK = ROOT_DIR / "doc" / "p2p" / "blockchain" / "p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md"
+RUNBOOK = ROOT_DIR / "doc" / "p2p" / "blockchain" / "public-testnet-governed-bootstrap.runbook.md"
 INVENTORY = ROOT_DIR / "doc" / "testing" / "evidence" / "public-testnet-five-node-inventory-2026-06-23.md"
 NO_CHECKPOINT = object()
 

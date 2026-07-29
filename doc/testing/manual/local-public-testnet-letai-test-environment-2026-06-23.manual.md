@@ -183,7 +183,7 @@ rtk curl -sS http://127.0.0.1:19083/v1/chain/status | jq '{
 若 public_testnet submit endpoint 或本机 observer 不是 `ready`，不要通过手工 checkpoint/data copy “修同步”。允许的恢复判断只有两种：
 
 1. 等待或修复自动恢复路径：manifest bootstrap peers、runtime 进程、端口、provider discovery、replication/head exchange 正常后，让节点自己追平。
-2. 若自动恢复被 deployment truth 漂移或本地状态污染阻断，按 `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md` 从当前 deployment truth 从零重建 validator pair。
+2. 若自动恢复被 deployment truth 漂移或本地状态污染阻断，按 `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md` 从当前 deployment truth 从零重建 validator pair。
 
 在这两种路径之外得到的状态，不能作为本 runbook 的 readiness 证据。
 

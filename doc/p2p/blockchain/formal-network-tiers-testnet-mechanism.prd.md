@@ -74,7 +74,7 @@
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
-  - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+  - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`
   - `testing-manual.md`
   - `scripts/release-candidate-bundle.sh`
   - `scripts/shared-network-track-gate.sh`

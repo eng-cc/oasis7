@@ -23,7 +23,7 @@ scan_paths = [
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md",
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
     "testing-manual.md",
 ]
 pattern = r"shared_devnet|shared_network|shared-devnet|shared-network"
@@ -35,7 +35,7 @@ boundary_files = {
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md",
     "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md",
-    "doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md",
+    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
 }
 boundary_markers = (
     "legacy",
