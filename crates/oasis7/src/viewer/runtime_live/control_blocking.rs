@@ -1,5 +1,5 @@
 use super::*;
-use crate::simulator::WorldKernel;
+use crate::simulator::{ChunkRuntimeConfig, WorldKernel};
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn tolerate_background_play_gameplay_block(
