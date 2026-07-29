@@ -16,6 +16,151 @@ pub(super) struct NodeKeypairConfig {
     pub public_key_hex: String,
 }
 
+pub(super) const PROVISIONED_NODE_KEYPAIR_FILE: &str = "node-keypair.toml";
+
+/// Ensures the dedicated bootstrap key file exists without accepting a partial,
+/// redirected, or weakly protected pre-existing identity.
+pub(super) fn ensure_node_keypair_in_secure_config_dir(
+    config_dir: &Path,
+) -> Result<(NodeKeypairConfig, PathBuf), String> {
+    if !config_dir.is_absolute() {
+        return Err("--config-dir must be an absolute path".to_string());
+    }
+    reject_symlink_path_components(config_dir)?;
+    let metadata = fs::metadata(config_dir).map_err(|err| {
+        format!(
+            "read config directory {} failed: {err}",
+            config_dir.display()
+        )
+    })?;
+    if !metadata.is_dir() {
+        return Err(format!(
+            "config directory {} is not a directory",
+            config_dir.display()
+        ));
+    }
+    set_exact_mode(config_dir, 0o700, "config directory")?;
+
+    let key_path = config_dir.join(PROVISIONED_NODE_KEYPAIR_FILE);
+    match fs::symlink_metadata(&key_path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "key config path {} must not be a symlink",
+                    key_path.display()
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(format!(
+                    "key config path {} is not a regular file",
+                    key_path.display()
+                ));
+            }
+            require_exact_mode(&key_path, 0o600, "key config")?;
+            validate_complete_keypair_config(&key_path)?;
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(format!(
+                "inspect key config {} failed: {err}",
+                key_path.display()
+            ));
+        }
+    }
+
+    let keypair = ensure_node_keypair_in_config(&key_path)?;
+    set_exact_mode(&key_path, 0o600, "key config")?;
+    Ok((keypair, key_path))
+}
+
+fn validate_complete_keypair_config(path: &Path) -> Result<(), String> {
+    let table = load_config_table(path)?;
+    let node = table
+        .get(NODE_TABLE_KEY)
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("key config {} must contain a [node] table", path.display()))?;
+    let private_key = node
+        .get(NODE_PRIVATE_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("key config {} missing node.private_key", path.display()))?;
+    let public_key = node
+        .get(NODE_PUBLIC_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("key config {} missing node.public_key", path.display()))?;
+    validate_node_keypair_hex(private_key, public_key)
+}
+
+fn reject_symlink_path_components(path: &Path) -> Result<(), String> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "config directory path contains symlink: {}",
+                    current.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => break,
+            Err(err) => {
+                return Err(format!(
+                    "inspect config directory component {} failed: {err}",
+                    current.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn require_exact_mode(path: &Path, expected: u32, label: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let actual = fs::metadata(path)
+        .map_err(|err| format!("read {label} {} failed: {err}", path.display()))?
+        .permissions()
+        .mode()
+        & 0o777;
+    if actual != expected {
+        return Err(format!(
+            "{label} {} must have mode {:o}, found {:o}",
+            path.display(),
+            expected,
+            actual
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_exact_mode(path: &Path, expected: u32, label: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(expected)).map_err(|err| {
+        format!(
+            "set {label} {} mode {:o} failed: {err}",
+            path.display(),
+            expected
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn require_exact_mode(_path: &Path, _expected: u32, _label: &str) -> Result<(), String> {
+    Err("identity provisioning requires Unix filesystem permissions".to_string())
+}
+
+#[cfg(not(unix))]
+fn set_exact_mode(_path: &Path, _expected: u32, _label: &str) -> Result<(), String> {
+    Err("identity provisioning requires Unix filesystem permissions".to_string())
+}
+
 pub(super) fn ensure_node_keypair_in_config(path: &Path) -> Result<NodeKeypairConfig, String> {
     let _lock = ConfigFileLock::acquire(path)?;
     ensure_node_keypair_in_config_unlocked(path)
@@ -221,6 +366,18 @@ mod tests {
             .join("config.toml")
     }
 
+    #[cfg(unix)]
+    fn secure_config_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::current_dir()
+            .expect("current worktree")
+            .join(".tmp")
+            .join(format!("oasis7-node-keypair-config-{label}-{unique}"))
+    }
+
     #[test]
     fn concurrent_first_writers_share_one_generated_keypair() {
         let config_path = temp_config_path("concurrent");
@@ -249,5 +406,60 @@ mod tests {
             ensure_node_keypair_in_config(&config_path).expect("read persisted keypair");
         assert_eq!(persisted, *first);
         let _ = fs::remove_dir_all(config_path.parent().expect("config parent"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secure_config_dir_creates_a_mode_restricted_complete_keypair() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let config_dir = secure_config_dir("secure");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let (keypair, key_path) =
+            ensure_node_keypair_in_secure_config_dir(&config_dir).expect("provision keypair");
+
+        assert_eq!(key_path, config_dir.join(PROVISIONED_NODE_KEYPAIR_FILE));
+        assert_eq!(
+            fs::metadata(&config_dir)
+                .expect("config dir")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&key_path)
+                .expect("key file")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        validate_node_keypair_hex(
+            keypair.private_key_hex.as_str(),
+            keypair.public_key_hex.as_str(),
+        )
+        .expect("generated keypair is complete");
+        let _ = fs::remove_dir_all(config_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secure_config_dir_rejects_a_symlinked_key_file() {
+        use std::os::unix::fs::symlink;
+
+        let config_dir = secure_config_dir("symlink");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let target = config_dir.join("target.toml");
+        fs::write(&target, "").expect("write target");
+        symlink(&target, config_dir.join(PROVISIONED_NODE_KEYPAIR_FILE)).expect("symlink key");
+
+        let err =
+            ensure_node_keypair_in_secure_config_dir(&config_dir).expect_err("must reject symlink");
+        assert!(
+            err.contains("must not be a symlink"),
+            "unexpected error: {err}"
+        );
+        let _ = fs::remove_dir_all(config_dir);
     }
 }

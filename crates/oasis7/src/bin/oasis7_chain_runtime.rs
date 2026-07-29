@@ -48,6 +48,8 @@ mod feedback_submit_api;
 mod gameplay_submit_api;
 #[path = "oasis7_chain_runtime/governance_registry.rs"]
 mod governance_registry;
+#[path = "oasis7_chain_runtime/identity_provision.rs"]
+mod identity_provision;
 #[path = "oasis7_chain_runtime/main_token_submit_api.rs"]
 mod main_token_submit_api;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
@@ -332,6 +334,16 @@ fn stop_storage_metrics_worker(worker: &mut StorageMetricsWorker) {
 fn main() {
     init_tracing("oasis7_chain_runtime");
     let raw_args: Vec<String> = env::args().skip(1).collect();
+    if raw_args
+        .first()
+        .is_some_and(|arg| arg == "provision-identity")
+    {
+        if let Err(err) = identity_provision::run(raw_args.iter().skip(1).map(String::as_str)) {
+            error!(error = %err, "identity provisioning failed");
+            process::exit(1);
+        }
+        return;
+    }
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
         return;
