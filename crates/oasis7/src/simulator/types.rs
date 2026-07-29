@@ -80,6 +80,69 @@ pub enum FragmentElementKind {
     Thorium,
 }
 
+impl FragmentElementKind {
+    /// Stable player/protocol identifier for element-resource summaries.
+    pub const fn wire_label(self) -> &'static str {
+        match self {
+            Self::Oxygen => "oxygen",
+            Self::Silicon => "silicon",
+            Self::Magnesium => "magnesium",
+            Self::Aluminum => "aluminum",
+            Self::Calcium => "calcium",
+            Self::Iron => "iron",
+            Self::Nickel => "nickel",
+            Self::Cobalt => "cobalt",
+            Self::Titanium => "titanium",
+            Self::Chromium => "chromium",
+            Self::Hydrogen => "hydrogen",
+            Self::Carbon => "carbon",
+            Self::Nitrogen => "nitrogen",
+            Self::Sulfur => "sulfur",
+            Self::Copper => "copper",
+            Self::Zinc => "zinc",
+            Self::Lithium => "lithium",
+            Self::Neodymium => "neodymium",
+            Self::Uranium => "uranium",
+            Self::Thorium => "thorium",
+        }
+    }
+}
+
+#[cfg(test)]
+mod fragment_element_kind_tests {
+    use super::FragmentElementKind;
+
+    #[test]
+    fn fragment_element_wire_labels_are_explicit_stable_snake_case() {
+        let cases = [
+            (FragmentElementKind::Oxygen, "oxygen"),
+            (FragmentElementKind::Silicon, "silicon"),
+            (FragmentElementKind::Magnesium, "magnesium"),
+            (FragmentElementKind::Aluminum, "aluminum"),
+            (FragmentElementKind::Calcium, "calcium"),
+            (FragmentElementKind::Iron, "iron"),
+            (FragmentElementKind::Nickel, "nickel"),
+            (FragmentElementKind::Cobalt, "cobalt"),
+            (FragmentElementKind::Titanium, "titanium"),
+            (FragmentElementKind::Chromium, "chromium"),
+            (FragmentElementKind::Hydrogen, "hydrogen"),
+            (FragmentElementKind::Carbon, "carbon"),
+            (FragmentElementKind::Nitrogen, "nitrogen"),
+            (FragmentElementKind::Sulfur, "sulfur"),
+            (FragmentElementKind::Copper, "copper"),
+            (FragmentElementKind::Zinc, "zinc"),
+            (FragmentElementKind::Lithium, "lithium"),
+            (FragmentElementKind::Neodymium, "neodymium"),
+            (FragmentElementKind::Uranium, "uranium"),
+            (FragmentElementKind::Thorium, "thorium"),
+        ];
+
+        for (element, expected) in cases {
+            assert_eq!(element.wire_label(), expected);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ElementComposition {
     pub ppm: BTreeMap<FragmentElementKind, u32>,

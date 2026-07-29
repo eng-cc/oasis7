@@ -103,7 +103,23 @@ impl ViewerRuntimeLiveServer {
             &self.llm_sidecar,
             self.seed_model.as_ref(),
         );
-        WorldKernel::with_model(self.snapshot_config.clone(), model)
+        let mut kernel = WorldKernel::with_model_and_chunk_runtime(
+            self.snapshot_config.clone(),
+            model,
+            self.llm_sidecar.chunk_runtime.clone(),
+        );
+        let mut snapshot = kernel.snapshot();
+        snapshot.time = self.world.state().time;
+        kernel =
+            WorldKernel::from_snapshot(snapshot, kernel.journal_snapshot()).map_err(|err| {
+                GameplayActionError {
+                    code: "fragment_refill_preview_projection_failed".to_string(),
+                    message: format!("{ACTION_ID} projection failed: {err:?}"),
+                    action_id: Some(ACTION_ID.to_string()),
+                    target_agent_id: Some(agent_id.to_string()),
+                }
+            })?;
+        kernel
             .quote_fragment_refill_preview(request.chunk)
             .map_err(|reason| GameplayActionError {
                 code: "fragment_refill_preview_rejected".to_string(),
@@ -128,7 +144,7 @@ fn fragment_refill_preview_response(quote: FragmentRefillPreview) -> FragmentRef
             .remaining_by_element_g
             .into_iter()
             .map(|(element, remaining_g)| FragmentRefillElementRemaining {
-                element: format!("{element:?}"),
+                element: element.wire_label().to_string(),
                 remaining_g,
             })
             .collect(),
@@ -142,5 +158,37 @@ fn fragment_refill_preview_response(quote: FragmentRefillPreview) -> FragmentRef
         next_industrial_goal_relevance: quote.next_industrial_goal_relevance,
         wait_cost_summary: quote.wait_cost_summary,
         recommended_resource_action: quote.recommended_resource_action,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::simulator::FragmentElementKind;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn wire_response_uses_canonical_element_label_not_debug_formatting() {
+        let mut remaining_by_element_g = BTreeMap::new();
+        remaining_by_element_g.insert(FragmentElementKind::Iron, 17);
+        let response = fragment_refill_preview_response(FragmentRefillPreview {
+            chunk_coord: ChunkCoord { x: 1, y: 2, z: 3 },
+            target_frag_id: None,
+            current_frag_remaining_summary: "none".to_string(),
+            chunk_remaining_summary: "17g".to_string(),
+            remaining_by_element_g,
+            replenishment_enabled: true,
+            replenishment_due: false,
+            next_replenish_tick: Some(10),
+            ticks_until_replenish: Some(5),
+            wait_cost_ticks: 5,
+            estimated_replenished_frag_count: 0,
+            estimated_replenished_resource_hint: "unknown".to_string(),
+            next_industrial_goal_relevance: "current".to_string(),
+            wait_cost_summary: "wait".to_string(),
+            recommended_resource_action: "wait_current_chunk".to_string(),
+        });
+
+        assert_eq!(response.remaining_by_element_g[0].element, "iron");
     }
 }

@@ -57,6 +57,20 @@ fn runtime_fragment_refill_preview_is_authenticated_deterministic_non_mutating_a
         .chunks
         .insert(chunk, crate::simulator::ChunkState::Generated);
     server.seed_model = Some(seed_model);
+    server.llm_sidecar.chunk_runtime = crate::simulator::ChunkRuntimeConfig {
+        world_seed: 7,
+        asteroid_fragment_enabled: true,
+        asteroid_fragment_seed_offset: 1,
+        min_fragment_spacing_cm: None,
+    };
+    for _ in 0..40 {
+        server
+            .world
+            .step()
+            .expect("advance runtime world to preview tick");
+    }
+    let preview_tick = server.world.state().time;
+    assert!(preview_tick > 0 && preview_tick < 100);
     let state_before = server.world.state().clone();
     let request = signed_fragment_refill_preview_request(
         chunk,
@@ -70,7 +84,10 @@ fn runtime_fragment_refill_preview_is_authenticated_deterministic_non_mutating_a
         .handle_fragment_refill_preview(request.clone())
         .expect("signed fragment refill preview");
 
-    assert!(quote.next_replenish_tick.is_some() || !quote.replenishment_enabled);
+    assert!(quote.replenishment_enabled);
+    assert!(!quote.replenishment_due);
+    assert_eq!(quote.next_replenish_tick, Some(100));
+    assert_eq!(quote.wait_cost_ticks, 100 - preview_tick);
     assert!(quote.estimated_replenished_frag_count >= 0);
     assert!(!quote.next_industrial_goal_relevance.is_empty());
     assert!(!quote.recommended_resource_action.is_empty());
