@@ -6,6 +6,12 @@
 
 审计轮次: 1
 
+## 稳定 authority 与证据边界
+
+- 本文件是 formal `public_testnet` live-candidate checklist 的稳定专业 authority；它聚合 lane owner、evidence、命令和 claim boundary，但不是节点部署、升级、重启、回滚或恢复 SOP。上述运行面操作只可按 `public-testnet-governed-bootstrap.runbook.md` 与当轮 deployment truth 执行。
+- 文中带日期的 manifest、bundle、lane TSV、health snapshot 和 current verdict 都是对应证据窗口的历史输入，不是当前节点健康或 release readiness 的持续声明。任何真实执行、对外状态或发布判断前，必须重新采集当轮 bundle、genesis、bootstrap peer、host/service 和 status evidence。
+- `producer_system_designer` 维护 checklist/政策边界；`qa_engineer` 收口 release-blocking 与 claims review verdict；`liveops_community` 负责任何外部发布口径。runbook 的 `ready_for_live_candidate` 结果本身不授权部署、发布或对外恢复承诺。
+
 ## Meta
 - Owner Role: `producer_system_designer`
 - Review Roles:

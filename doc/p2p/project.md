@@ -71,6 +71,7 @@
 - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
 - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`（legacy rehearsal provenance only）
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md` 与 `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`（current public-testnet operator authority；历史 verdict 仍受各自证据日期与 readiness gate 约束）
 - `TASK-P2P-041` hosted player access/session auth 已完成并收敛：长期专业合同见 `doc/p2p/prd.md`，operator procedure 见 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`，玩家承诺见 `doc/product/player-entry-distribution/prd.md`；原日期型专题从 GitHub task evidence 与 Git history 追溯。
 
 ## 状态

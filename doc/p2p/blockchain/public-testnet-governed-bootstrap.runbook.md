@@ -14,6 +14,12 @@
 
 审计轮次: 2
 
+## Stable authority and evidence boundary
+
+- This is the stable operator authority for public-testnet topology, deployment truth, rollout, rollback and recovery drills. The frozen bootstrap topology remains historical provenance; the managed-five-node inventory is an execution target only after a fresh Phase A truth capture. Neither records present fleet health or release readiness by itself.
+- Dated manifests, bundles, peer lists, package hashes, status snapshots and evidence files remain evidence-window inputs. Before each deployment, recovery update, or readiness assertion, operators must recapture the current deployment truth and bounded same-window health evidence; QA owns release-blocking verdicts and LiveOps/community owns external status or recovery wording.
+- Restart, port cleanup, reseed, data isolation and waiting for recovery may collect evidence or provide temporary recovery only. For peer-head drift, execution/resource divergence, signer/peer identity mismatch, or degraded replication, identify and repair the code, configuration, package, manifest, deployment artifact, or state-contract root cause before clean redeploy/rebuild; never treat an operational restart as the durable resolution.
+
 ## 1. Purpose
 这份 runbook 的目标不是描述理念，而是定义一条可以重复执行的 `public_testnet` 部署、补更、重建和恢复流程：
 

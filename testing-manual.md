@@ -996,7 +996,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 six-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
 - Canonical docs:
   - Current network-tier source of truth: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
-  - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+  - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`
   - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.project.md`
   - Benchmark background: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
 - Canonical commands:

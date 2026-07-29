@@ -2,7 +2,7 @@
 
 ## 从这里开始
 
-- 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `formal-network-tiers-testnet-mechanism.prd.md`；执行时再进入同名 runbook 和 `p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
+- 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `formal-network-tiers-testnet-mechanism.prd.md`；执行时再进入 `formal-network-tiers-testnet-mechanism.runbook.md` 和 `public-testnet-governed-bootstrap.runbook.md`。
 - 想确认主链安全基线、剩余 mainnet-grade blocker、signer custody 或 genesis ceremony：先读 `p2p-mainnet-security-governance-readiness.prd.md`，再下钻到资产授权、registry drill 和 network-tier 专业证据。
 - 想确认普通玩家的 `hosted_public_join`、邮箱登录、托管 player signer 和后续自托管升级：先读 `hosted-public-join-managed-identity-custody.prd.md`。它不覆盖 node、validator 或 governance signer custody。
 - 想查看 `blockchain-p2pfs-hardening-phase*` 的历史合同与阶段追溯：先读 `p2p-blockchain-p2pfs-hardening.prd.md`，再按需进入同名 design/project；精确文件检索回到 `../prd.index.md`。

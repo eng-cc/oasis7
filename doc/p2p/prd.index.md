@@ -37,8 +37,8 @@
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
 - `doc/p2p/blockchain/README.md`：`blockchain/` 高密度子域 landing page，按现行 network tier、mainnet-grade security、hosted player identity 与历史 P2PFS hardening 分流读者。
 - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`：hosted player join 分享、信任面隔离、session 处置、claim freeze 与最小披露的稳定 operator 入口；不定义产品 claim 或 custody 实现。
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
-- `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
+- `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
 - `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
 - `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet readiness evidence / claims-boundary / mixed-topology / legacy shared-network 证据的当前入口与归档边界。
@@ -124,8 +124,8 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - `*.release.md` 为发布补充材料，不参与 PRD 任务配对规则。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24` 另有执行 companion：`doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`。
-- `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 另有执行 companion：`doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`。
-- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`。
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有执行 companion：`doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`。
+- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`。
 - Observer source 专业权威：DHT 增量专题（`PRD-P2P-MIG-109-001`）已合并进 `observer-sync-source-mode.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
 - Ideal transaction 专业权威：2026-06-08 理想交易升级三件套已合并进 `mainchain-token-ideal-transaction.{prd,design,project}.md`；`PRD-P2P-ITX-001/002/003` 由继任 project 任务行承接，历史过程只从 Git 与 GitHub task evidence 追溯。
