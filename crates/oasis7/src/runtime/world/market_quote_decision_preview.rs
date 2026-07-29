@@ -36,15 +36,26 @@ impl World {
         consume: &[MaterialStack],
     ) -> MarketQuoteDecisionPreview {
         let market_quotes = build_material_market_quotes(self, preferred_consume_ledger, consume);
+        let uses_local_ledger = market_quotes
+            .iter()
+            .all(|quote| quote.local_available_amount >= quote.requested_amount);
         let mut total_unsatisfied_shortfall = 0_i64;
         let local_vs_world_delta = market_quotes
             .iter()
             .map(|quote| {
-                let world_cover_amount =
-                    quote.world_available_amount.min(quote.local_deficit_amount);
+                let world_cover_amount = if uses_local_ledger {
+                    0
+                } else {
+                    quote.world_available_amount.min(quote.requested_amount)
+                };
+                let selected_ledger_available = if uses_local_ledger {
+                    quote.local_available_amount
+                } else {
+                    quote.world_available_amount
+                };
                 let unsatisfied_shortfall_amount = quote
-                    .local_deficit_amount
-                    .saturating_sub(world_cover_amount);
+                    .requested_amount
+                    .saturating_sub(selected_ledger_available);
                 total_unsatisfied_shortfall =
                     total_unsatisfied_shortfall.saturating_add(unsatisfied_shortfall_amount);
                 MarketQuoteSupplyDelta {
@@ -55,22 +66,19 @@ impl World {
                 }
             })
             .collect::<Vec<_>>();
-        let has_local_deficit = market_quotes
-            .iter()
-            .any(|quote| quote.local_deficit_amount > 0);
         let (market_pressure, recommendation, rationale, next_reduction_action) =
             if total_unsatisfied_shortfall > 0 {
                 (
                     "unsatisfied_shortfall",
                     "reduce_or_source_materials",
-                    "world inventory cannot cover the local material deficit",
+                    "neither the preferred ledger nor the world fallback can satisfy the request",
                     "reduce_requested_amount",
                 )
-            } else if has_local_deficit {
+            } else if !uses_local_ledger {
                 (
                     "world_supply_pressure",
                     "submit_with_world_supply",
-                    "world supply covers the local deficit; tax and transit remain conditional",
+                    "the world fallback ledger covers the full request; tax and transit remain conditional",
                     "use_local_materials",
                 )
             } else {

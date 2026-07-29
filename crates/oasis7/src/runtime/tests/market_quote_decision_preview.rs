@@ -57,7 +57,8 @@ fn market_quote_decision_preview_is_conditional_and_read_only() {
     assert_eq!(preview.market_quotes[0].transit_loss_bps, 20);
     assert_eq!(preview.market_quotes[0].governance_tax_bps, 1_600);
     assert_eq!(preview.market_quotes[0].effective_cost_index_ppm, 1_828_600);
-    assert_eq!(preview.total_unsatisfied_shortfall, 1);
+    assert_eq!(preview.local_vs_world_delta[0].world_cover_amount, 3);
+    assert_eq!(preview.total_unsatisfied_shortfall, 3);
     assert_eq!(preview.market_pressure, "unsatisfied_shortfall");
     assert_eq!(preview.recommendation, "reduce_or_source_materials");
     assert_eq!(preview.next_reduction_action, "reduce_requested_amount");
