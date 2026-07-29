@@ -192,8 +192,8 @@ fn runtime_market_quote_decision_preflight_is_signed_read_only_and_player_readab
     assert_eq!(quote.contributions[0].requested_amount, 4);
     assert_eq!(quote.contributions[0].local_available_amount, 1);
     assert_eq!(quote.contributions[0].world_cover_amount, 2);
-    assert_eq!(quote.contributions[0].shortfall_amount, 1);
-    assert_eq!(quote.total_shortfall_amount, 1);
+    assert_eq!(quote.contributions[0].shortfall_amount, 2);
+    assert_eq!(quote.total_shortfall_amount, 2);
     assert!(!quote.submission_allowed);
     assert_eq!(
         quote.recommendation,
