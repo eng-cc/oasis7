@@ -366,6 +366,22 @@ fn load_latest_execution_record_resource_snapshot(
     if !resource_snapshot_matches(&snapshot.chain_resource_manifest, world_id, chain_id) {
         return Err("latest execution snapshot resource identity mismatch".to_string());
     }
+    let latest_delta = snapshot
+        .latest_chain_resource_delta
+        .as_ref()
+        .ok_or_else(|| "latest execution snapshot missing resource delta".to_string())?;
+    if snapshot.chain_resource_manifest.manifest_height != record.height
+        || latest_delta.block_height != record.height
+        || latest_delta.ordering_key.height != record.height
+    {
+        return Err(format!(
+            "latest execution snapshot height mismatch record_height={} manifest_height={} delta_height={} ordering_height={}",
+            record.height,
+            snapshot.chain_resource_manifest.manifest_height,
+            latest_delta.block_height,
+            latest_delta.ordering_key.height,
+        ));
+    }
     Ok(Some((
         snapshot.chain_resource_manifest,
         snapshot.latest_chain_resource_delta,
@@ -847,6 +863,70 @@ mod tests {
         fs::create_dir_all(records_dir.as_path()).expect("create execution records");
         fs::write(records_dir.join("00000000000000000003.json"), b"{")
             .expect("write invalid latest execution record");
+
+        let status = build_world_resource_status_with_authoritative_execution(
+            &ready_node_snapshot(),
+            dir.as_path(),
+            Some(records_dir.as_path()),
+            Some(store_dir.as_path()),
+            None,
+        );
+
+        assert_authoritative_execution_record_failure(&status);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn status_rejects_newer_execution_record_with_stale_verified_snapshot_height() {
+        let dir = temp_dir("stale-authoritative-execution-snapshot-height");
+        let records_dir = dir.join("records");
+        let store_dir = dir.join("store");
+        let world = RuntimeWorld::new();
+        world
+            .save_to_dir_with_chain_resource_context(
+                dir.as_path(),
+                ChainResourceDerivationContext {
+                    world_id: "world-a",
+                    chain_id: "world-a",
+                    genesis_ref: None,
+                    created_at_height: 0,
+                    manifest_height: 3,
+                    commit_block_hash: Some("block-h3"),
+                    tick: world.state().time,
+                },
+                "world-a-config",
+                "world-a-generation",
+            )
+            .expect("save ready legacy execution-world json");
+        fs::create_dir_all(records_dir.as_path()).expect("create execution records");
+
+        let stale_snapshot = world.snapshot_with_chain_resource_context(
+            ChainResourceDerivationContext {
+                world_id: "world-a",
+                chain_id: "world-a",
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: 2,
+                commit_block_hash: Some("block-h2"),
+                tick: world.state().time,
+            },
+            "world-a-config",
+            "world-a-generation",
+        );
+        let store = LocalCasStore::new(store_dir.as_path());
+        let snapshot_ref = store
+            .put_bytes(
+                serde_cbor::to_vec(&stale_snapshot)
+                    .expect("serialize stale authoritative snapshot")
+                    .as_slice(),
+            )
+            .expect("store stale authoritative snapshot");
+        fs::write(
+            records_dir.join("00000000000000000003.json"),
+            format!(r#"{{"world_id":"world-a","height":3,"latest_state_ref":"{snapshot_ref}"}}"#),
+        )
+        .expect("write newer execution record");
 
         let status = build_world_resource_status_with_authoritative_execution(
             &ready_node_snapshot(),
