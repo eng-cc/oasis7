@@ -11,6 +11,8 @@ mod product_validation_quote;
 pub use product_validation_quote::*;
 mod power_survival_quote;
 pub use power_survival_quote::*;
+mod fragment_refill_preview;
+pub use fragment_refill_preview::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
@@ -89,6 +91,9 @@ pub enum ViewerRequest {
     QuotePowerSurvival {
         request: PowerSurvivalQuoteRequest,
     },
+    PreviewFragmentReplenishment {
+        request: FragmentRefillRequest,
+    },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
     },
@@ -109,7 +114,6 @@ pub enum PromptControlCommand {
         request: PromptControlRollbackRequest,
     },
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PromptControlApplyRequest {
     pub agent_id: String,
@@ -260,7 +264,6 @@ pub enum AuthoritativeRecoveryCommand {
         request: AuthoritativeSessionRotateRequest,
     },
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthoritativeRollbackRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -271,7 +274,6 @@ pub struct AuthoritativeRollbackRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<RollbackAuthorizationEnvelope>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RollbackAuthorizationEnvelope {
     pub intent: RollbackIntent,
@@ -315,7 +317,6 @@ pub struct RollbackApprovalSignature {
     pub signature_scheme: String,
     pub signature_hex: String,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RollbackAuthorityRole {
@@ -628,6 +629,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     PowerSurvivalQuotePreflight {
         quote: PowerSurvivalQuotePreflight,
+    },
+    FragmentRefillPreviewPreflight {
+        quote: FragmentRefillResponse,
     },
     Error {
         message: String,

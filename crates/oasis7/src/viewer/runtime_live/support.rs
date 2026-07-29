@@ -3,7 +3,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
-use crate::simulator::{Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel};
+use crate::simulator::{
+    ChunkRuntimeConfig, Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel,
+};
 use crate::viewer::gameplay_actions::formal_release_default_seed_model;
 
 use super::*;
@@ -310,16 +312,75 @@ impl RuntimeLiveSession {
 pub(super) fn bootstrap_runtime_world(
     scenario: WorldScenario,
 ) -> Result<(RuntimeWorld, WorldConfig), String> {
+    let (world, config, _) = bootstrap_runtime_world_with_chunk_runtime(scenario)?;
+    Ok((world, config))
+}
+
+pub(super) fn bootstrap_runtime_live_world(
+    config: &ViewerRuntimeLiveServerConfig,
+) -> Result<
+    (
+        RuntimeWorld,
+        WorldConfig,
+        Option<WorldModel>,
+        ChunkRuntimeConfig,
+    ),
+    String,
+> {
+    if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
+        let (world, snapshot_config, seed_model, chunk_runtime) =
+            bootstrap_generated_sidecar_runtime_world_with_chunk_runtime(generated_world_dir)?;
+        return Ok((world, snapshot_config, Some(seed_model), chunk_runtime));
+    }
+
+    match config.scenario.clone() {
+        Some(scenario) => {
+            let (world, snapshot_config, chunk_runtime) =
+                bootstrap_runtime_world_with_chunk_runtime(scenario)?;
+            Ok((world, snapshot_config, None, chunk_runtime))
+        }
+        None if config.chain_status_bind.is_some() => Ok((
+            RuntimeWorld::new_production_hardened(),
+            WorldConfig::default(),
+            None,
+            ChunkRuntimeConfig::default(),
+        )),
+        None => {
+            let (world, snapshot_config) = bootstrap_formal_release_runtime_world()?;
+            Ok((world, snapshot_config, None, ChunkRuntimeConfig::default()))
+        }
+    }
+}
+
+pub(super) fn bootstrap_runtime_world_with_chunk_runtime(
+    scenario: WorldScenario,
+) -> Result<(RuntimeWorld, WorldConfig, ChunkRuntimeConfig), String> {
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(scenario, &config);
     let (model, _) = build_world_model(&config, &init)
         .map_err(|err| format!("runtime live bootstrap build_world_model failed: {err:?}"))?;
-    bootstrap_runtime_world_from_model(config, &model, "runtime live bootstrap")
+    let chunk_runtime = ChunkRuntimeConfig {
+        world_seed: init.seed,
+        asteroid_fragment_enabled: init.asteroid_fragment.enabled,
+        asteroid_fragment_seed_offset: init.asteroid_fragment.seed_offset,
+        min_fragment_spacing_cm: init.asteroid_fragment.min_fragment_spacing_cm,
+    };
+    let (world, config) =
+        bootstrap_runtime_world_from_model(config, &model, "runtime live bootstrap")?;
+    Ok((world, config, chunk_runtime))
 }
 
 pub fn bootstrap_generated_sidecar_runtime_world(
     generated_world_dir: &Path,
 ) -> Result<(RuntimeWorld, WorldConfig, WorldModel), String> {
+    let (world, config, model, _) =
+        bootstrap_generated_sidecar_runtime_world_with_chunk_runtime(generated_world_dir)?;
+    Ok((world, config, model))
+}
+
+pub(super) fn bootstrap_generated_sidecar_runtime_world_with_chunk_runtime(
+    generated_world_dir: &Path,
+) -> Result<(RuntimeWorld, WorldConfig, WorldModel, ChunkRuntimeConfig), String> {
     let sidecar_dir = generated_world_dir.join("generated-scenario-world");
     let provenance_path = generated_world_dir.join("world-generation-provenance.json");
     if !provenance_path.is_file() {
@@ -335,11 +396,12 @@ pub fn bootstrap_generated_sidecar_runtime_world(
         )
     })?;
     let snapshot = kernel.snapshot();
+    let chunk_runtime = snapshot.chunk_runtime.clone();
     let config = snapshot.config;
     let model = snapshot.model;
     let (world, config) =
         bootstrap_runtime_world_from_model(config, &model, "runtime live generated sidecar")?;
-    Ok((world, config, model))
+    Ok((world, config, model, chunk_runtime))
 }
 
 fn bootstrap_runtime_world_from_model(

@@ -1,5 +1,5 @@
-use crate::simulator::RuntimePerfSnapshot;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
+use crate::simulator::RuntimePerfSnapshot;
 
 impl LiveScript {
     fn new(kernel: &WorldKernel) -> Self {
@@ -621,8 +621,9 @@ impl ViewerLiveSession {
                     &ViewerResponse::GameplayActionError {
                         error: crate::viewer::GameplayActionError {
                             code: "unsupported_in_live_server".to_string(),
-                            message: "quote_validate_product is only available in runtime live mode"
-                                .to_string(),
+                            message:
+                                "quote_validate_product is only available in runtime live mode"
+                                    .to_string(),
                             action_id: Some("quote_validate_product".to_string()),
                             target_agent_id: None,
                         },
@@ -635,10 +636,24 @@ impl ViewerLiveSession {
                     &ViewerResponse::GameplayActionError {
                         error: crate::viewer::GameplayActionError {
                             code: "unsupported_in_live_server".to_string(),
-                            message:
-                                "quote_power_survival is only available in runtime live mode"
-                                    .to_string(),
+                            message: "quote_power_survival is only available in runtime live mode"
+                                .to_string(),
                             action_id: Some("quote_power_survival".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
+            ViewerRequest::PreviewFragmentReplenishment { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message:
+                                "preview_fragment_replenishment is only available in runtime live mode"
+                                    .to_string(),
+                            action_id: Some("preview_fragment_replenishment".to_string()),
                             target_agent_id: None,
                         },
                     },

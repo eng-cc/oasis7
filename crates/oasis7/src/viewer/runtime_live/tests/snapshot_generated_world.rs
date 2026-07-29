@@ -66,6 +66,49 @@ fn generated_world_sidecar_initializes_runtime_live_snapshot_map() {
         !first_agent.location_id.starts_with("runtime-"),
         "viewer should not replace sidecar location ids with runtime fallback ids"
     );
+    assert!(
+        server.llm_sidecar.chunk_runtime.asteroid_fragment_enabled,
+        "generated sidecar chunk runtime config should remain authoritative for previews"
+    );
+    let chunk = server
+        .seed_model
+        .as_ref()
+        .expect("generated sidecar seed model")
+        .chunks
+        .iter()
+        .find_map(|(coord, state)| {
+            matches!(state, crate::simulator::ChunkState::Generated).then_some(*coord)
+        })
+        .expect("generated sidecar chunk");
+    let (public_key, private_key) = test_signer(252);
+    register_runtime_session(
+        &mut server,
+        "generated-sidecar-refill-preview-player",
+        Some(first_agent.id.as_str()),
+        269,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let mut request = crate::viewer::FragmentRefillPreviewRequest {
+        chunk,
+        player_id: "generated-sidecar-refill-preview-player".to_string(),
+        public_key: Some(public_key.clone()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_fragment_refill_preview_auth_proof(
+            &request,
+            270,
+            public_key.as_str(),
+            private_key.as_str(),
+        )
+        .expect("sign generated sidecar refill preview"),
+    );
+    let quote = server
+        .handle_fragment_refill_preview(request)
+        .expect("generated sidecar refill preview");
+    assert!(quote.replenishment_enabled);
+    assert!(quote.next_replenish_tick.is_some());
 
     std::fs::remove_dir_all(generated_world_dir).expect("cleanup generated sidecar fixture");
 }

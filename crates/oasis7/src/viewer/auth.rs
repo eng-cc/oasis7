@@ -10,6 +10,10 @@ use super::protocol::{
 
 mod collect_data;
 pub use collect_data::{sign_collect_data_auth_proof, verify_collect_data_auth_proof};
+mod fragment_refill_preview;
+pub use fragment_refill_preview::{
+    sign_fragment_refill_preview_auth_proof, verify_fragment_refill_preview_auth_proof,
+};
 mod refine_quote;
 pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
 mod product_validation_quote;

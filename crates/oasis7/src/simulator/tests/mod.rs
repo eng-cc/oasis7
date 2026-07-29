@@ -57,6 +57,7 @@ mod conservation;
 mod consistency;
 mod decision_provider;
 mod fragment_physics;
+mod fragment_replenishment_quote;
 mod init;
 mod init_agent_frag_spawn;
 mod init_position_contract;

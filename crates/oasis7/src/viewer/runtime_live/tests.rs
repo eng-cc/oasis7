@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;
+mod auth_actions_fragment_replenishment;
 mod authoritative;
 mod background_play;
 mod chain_sync;

@@ -21,10 +21,10 @@ use crate::runtime::{
     WorldError as RuntimeWorldError, WorldEventBody as RuntimeWorldEventBody, blake3_hex,
 };
 use crate::simulator::{
-    AgentDecisionTrace, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    PlayerGameplayRecentFeedback, RejectReason as SimulatorRejectReason, ResourceKind,
-    RunnerMetrics, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldInitConfig, WorldModel,
-    WorldScenario, WorldSnapshot, build_world_model,
+    AgentDecisionTrace, CHUNK_GENERATION_SCHEMA_VERSION, PlayerGameplayRecentFeedback,
+    RejectReason as SimulatorRejectReason, ResourceKind, RunnerMetrics, SNAPSHOT_VERSION,
+    WorldConfig, WorldEvent, WorldInitConfig, WorldModel, WorldScenario, WorldSnapshot,
+    build_world_model,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
@@ -51,6 +51,7 @@ mod control_plane;
 mod control_utils;
 #[path = "runtime_live/decision_trace.rs"]
 mod decision_trace;
+mod fragment_refill_preview;
 mod gameplay_snapshot;
 mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
@@ -93,13 +94,10 @@ pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_form
 pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 use support::{
     FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
-    bootstrap_formal_release_runtime_world, bootstrap_generated_sidecar_runtime_world,
-    bootstrap_runtime_world, is_expected_disconnect_error, is_timeout_error,
+    bootstrap_runtime_live_world, is_expected_disconnect_error, is_timeout_error,
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
-
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
-
 const AUTHORITATIVE_BATCH_CONFIRM_DELAY_TICKS: u64 = 1;
 const AUTHORITATIVE_BATCH_FINALITY_WINDOW_TICKS: u64 = 2;
 const MAX_AUTHORITATIVE_BATCH_HISTORY: usize = 256;
@@ -166,31 +164,8 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
-        let (mut world, snapshot_config, seed_model) =
-            if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
-                let (world, snapshot_config, seed_model) =
-                    bootstrap_generated_sidecar_runtime_world(generated_world_dir)
-                        .map_err(ViewerRuntimeLiveServerError::Init)?;
-                (world, snapshot_config, Some(seed_model))
-            } else {
-                match config.scenario {
-                    Some(scenario) => {
-                        let (world, snapshot_config) = bootstrap_runtime_world(scenario)
-                            .map_err(ViewerRuntimeLiveServerError::Init)?;
-                        (world, snapshot_config, None)
-                    }
-                    None if config.chain_status_bind.is_some() => (
-                        RuntimeWorld::new_production_hardened(),
-                        WorldConfig::default(),
-                        None,
-                    ),
-                    None => {
-                        let (world, snapshot_config) = bootstrap_formal_release_runtime_world()
-                            .map_err(ViewerRuntimeLiveServerError::Init)?;
-                        (world, snapshot_config, None)
-                    }
-                }
-            };
+        let (mut world, snapshot_config, seed_model, chunk_runtime) =
+            bootstrap_runtime_live_world(&config).map_err(ViewerRuntimeLiveServerError::Init)?;
         let mut recovered_generation = None;
         if let Some(recovery_dir) = config
             .generated_world_dir
@@ -266,6 +241,7 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        llm_sidecar.chunk_runtime = chunk_runtime;
         if let Some(generation) = recovered_generation.as_ref() {
             Self::restore_persisted_session_side_effects(
                 &mut llm_sidecar,
@@ -826,6 +802,9 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
+            ViewerRequest::PreviewFragmentReplenishment { request } => {
+                self.preview_refill(request, writer)?
+            }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {
@@ -1056,7 +1035,6 @@ impl ViewerRuntimeLiveServer {
             {
                 self.confirm_player_gameplay_progress();
             }
-
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
             runtime_events_for_feedback.extend(new_events.iter().cloned());
             let mut mapped_events = Vec::new();
@@ -1110,7 +1088,6 @@ impl ViewerRuntimeLiveServer {
                         );
                     }
                 };
-
             if let Some(trace) = decision_trace {
                 if session.explicitly_subscribed_to(ViewerStream::Events) {
                     send_response(writer, &ViewerResponse::DecisionTrace { trace })?;

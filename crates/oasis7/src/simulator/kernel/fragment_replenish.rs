@@ -178,7 +178,7 @@ impl WorldKernel {
     }
 }
 
-fn compute_replenish_target(
+pub(super) fn compute_replenish_target(
     max_fragments_per_chunk: usize,
     percent_ppm: i64,
     missing: usize,
@@ -193,7 +193,11 @@ fn compute_replenish_target(
     ceil_target.max(1).min(missing)
 }
 
-fn count_chunk_fragments(model: &WorldModel, space: &SpaceConfig, coord: ChunkCoord) -> usize {
+pub(super) fn count_chunk_fragments(
+    model: &WorldModel,
+    space: &SpaceConfig,
+    coord: ChunkCoord,
+) -> usize {
     model
         .locations
         .values()

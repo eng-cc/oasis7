@@ -203,6 +203,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
     runtime_seed_locations: Vec<Location>,
     runtime_seed_model: Option<WorldModel>,
+    pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -232,6 +233,7 @@ impl RuntimeLlmSidecar {
             provider_check_snapshot: None,
             runtime_seed_locations: Vec::new(),
             runtime_seed_model: None,
+            chunk_runtime: ChunkRuntimeConfig::default(),
         }
     }
 
