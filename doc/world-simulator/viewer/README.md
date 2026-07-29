@@ -6,12 +6,12 @@
 - 想先理解 Pixel-world 对玩家承诺的首读层级、空间关系来源、可归因因果与诊断边界：读 [`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；具体 DTO、LOD、renderer 与验证仍回到本目录专业文档。
 - 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及本轮 image2 视觉目标、首屏总体设计与分模块落地时继续读 `viewer-page-module-design-2026-06-18.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
-- 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
-- 想确认 Viewer 前端 `js/html/jsx` 文件何时拆分、怎么抽组件/模块、generated artifact 与 compat alias 怎么评审：先读 `viewer-frontend-structure-standard-2026-07-06.prd.md`
-- 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
-- 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 rendered DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
-- 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
-- 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
+- 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-entry-compatibility.prd.md`
+- 想确认 Viewer 前端 `js/html/jsx` 文件何时拆分、怎么抽组件/模块、generated artifact 与 compat alias 怎么评审：先读 `viewer-frontend-structure-standard.prd.md`
+- 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-build-truth.prd.md`
+- 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 rendered DOM 定位：先读 `viewer-pixel-world-semantic-positioning.prd.md`
+- 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod.prd.md`
+- 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-player-readable-rendering.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-control-plane-split-live-playback.prd.md`；操作、进程与 runtime-live 观测边界读 `viewer-manual.manual.md`，Agent/provider 语义读 `../llm/decision-provider-contract.prd.md`
 - 想先理解 Agent 对话、预设/草稿、Prompt/目标调整与反馈恢复的产品语义：读 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 及其配对产品设计；当前 surface、协议、操作边界与自动化合同继续读 `viewer-manual.manual.md` 和 `viewer-web-semantic-test-api.prd.md`
@@ -58,9 +58,9 @@
 
 ### 3. `viewer` 与正式 Web 主入口
 - 首读入口:
-  - `viewer-web-software-safe-mode-2026-03-16.prd.md`
+  - `viewer-web-entry-compatibility.prd.md`
   - `viewer-web-semantic-test-api.prd.md`
-  - `viewer-web-single-source-build-truth-2026-05-19.prd.md`
+  - `viewer-web-build-truth.prd.md`
 - 适合问题:
   - 为什么正式 Web 默认走 `viewer`
   - 弱机 / CI / 无 GPU 环境下的 canonical 路径是什么

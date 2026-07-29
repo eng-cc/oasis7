@@ -1,9 +1,9 @@
-# Viewer Pixel World Bridge 渲染优化（2026-05-17）
+# Viewer Pixel World Bridge Rendering
 
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.project.md`
+- 已完成的实施追溯见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
-  - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+  - `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
 
 审计轮次: 1
 

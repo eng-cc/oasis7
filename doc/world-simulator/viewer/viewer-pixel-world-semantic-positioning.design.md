@@ -1,4 +1,4 @@
-# Viewer Pixel World Semantic Positioning 详细设计（2026-05-26）
+# Viewer Pixel World Semantic Positioning 详细设计
 
 ## Current State
 - `pixel_world_host.jsx` already converts snapshot state into `world_bounds`, `locations`, `agents`, `links`, and `visual_hotspots`.

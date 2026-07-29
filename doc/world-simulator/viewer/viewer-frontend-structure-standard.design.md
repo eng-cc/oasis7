@@ -1,7 +1,7 @@
-# Viewer Frontend Structure Standard (2026-07-06) Design
+# Viewer Frontend Structure Standard Design
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.project.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.prd.md`
+- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`
 
 审计轮次: 1
 

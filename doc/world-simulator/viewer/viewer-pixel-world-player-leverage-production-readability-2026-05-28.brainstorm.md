@@ -1,7 +1,7 @@
 # Viewer Pixel World Player Leverage & Production Readability Brainstorm（2026-05-28）
 
-- 上游设计文档: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.design.md`
-- 上游 PRD: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
+- 上游设计文档: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md`
+- 上游 PRD: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`
 - 当前性质: bounded brainstorming / next-slice design brief。
 
 ## Decision

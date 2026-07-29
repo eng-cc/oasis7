@@ -1,6 +1,6 @@
-# Viewer Pixel World Commercial Rendering Loop 详细设计（2026-05-28）
+# Viewer Pixel World Player-Readable Rendering 详细设计
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`
 - 历史任务追溯: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## Current State

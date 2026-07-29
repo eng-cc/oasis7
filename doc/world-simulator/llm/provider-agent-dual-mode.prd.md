@@ -3,7 +3,7 @@
 - 对应项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
 - 关联专题:
   - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
-  - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+  - `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
   - `doc/product/player-entry-distribution/prd.md`
 
 审计轮次: 1
@@ -24,7 +24,7 @@
 - PRD 主文档: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`
 - 项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
 - 关联 parity 专题: `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
-- 关联 software-safe 专题: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+- 关联 software-safe 专题: `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
 - supporting contract: `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`
 - product taxonomy: `doc/product/player-entry-distribution/prd.md`
 - 追踪主键: `PRD-WORLD_SIMULATOR-040`

@@ -1,7 +1,7 @@
-# Viewer Web Software-Safe Mode（2026-03-16）
+# Viewer Web Entry Compatibility
 
-- 对应设计文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
+- 对应设计文档: `doc/world-simulator/viewer/viewer-web-entry-compatibility.design.md`
+- 已完成的实施追溯见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 审计轮次: 3
 

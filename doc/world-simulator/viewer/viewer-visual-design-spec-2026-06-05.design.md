@@ -6,7 +6,7 @@
 - Related entrypoints:
   - `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
   - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
+  - `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`
   - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`
 
 ## 1. Purpose
@@ -58,10 +58,10 @@ This specification consolidates the durable visual semantics from:
   discovery, honest unavailable states, and the `World / Targets / Command`
   mobile route. The historical PRD/project are no longer current authorities;
   implementation and runtime contracts remain with their topic owners.
-- `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`: sparse snapshot
+- `viewer-pixel-world-semantic-positioning.prd.md`: sparse snapshot
   semantic positioning, `location_derived` honesty, and relationship-line
   readability.
-- `viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`:
+- `viewer-pixel-world-player-readable-rendering.prd.md`:
   commercial HUD, player leverage, route readability, and diagnostics collapse.
 - `doc/product/agents-world-simulation/player-readable-world-stage.design.md`:
   durable object, relationship, scale-honesty, and diagnostic-demotion product

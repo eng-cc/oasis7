@@ -1,7 +1,7 @@
-# Viewer 产业链图谱化与分层符号化（2026-02-28）
+# Viewer 产业链图谱化与语义缩放
 
-- 对应设计文档: `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md`
+- 对应设计文档: `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.design.md`
+- 已完成的实施追溯见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 审计轮次: 5
 

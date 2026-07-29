@@ -1,11 +1,11 @@
-# Viewer Pixel World Commercial Rendering Loop（2026-05-28）
+# Viewer Pixel World Player-Readable Rendering
 
-- 对应设计文档: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.design.md`
+- 对应设计文档: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md`
 - 历史任务追溯: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 - 关联专题:
   - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
+  - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md`
+  - `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md`
 - 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文继续拥有 HUD/DTO、renderer 信息架构、测试与历史实现证据。
 
 审计轮次: 1

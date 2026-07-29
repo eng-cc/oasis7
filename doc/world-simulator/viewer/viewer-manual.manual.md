@@ -171,6 +171,6 @@ agent-browser close
 ## 参考文档
 - `testing-manual.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
-- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+- `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
 - `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md`
 - `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md`

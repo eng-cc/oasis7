@@ -1,7 +1,7 @@
-# Viewer Web 单一真值构建与 Legacy Core 拆分（2026-05-19）设计
+# Viewer Web Build Truth and Legacy Core Split 设计
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.project.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-web-build-truth.prd.md`
+- 未完成的 facade 拆分债务见 `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`。
 
 审计轮次: 1
 

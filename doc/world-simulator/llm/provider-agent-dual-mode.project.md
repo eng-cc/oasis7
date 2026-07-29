@@ -3,7 +3,7 @@
 - 对应需求文档: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`
 - 关联专题:
   - `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
-  - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
+  - `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`（完成态项目 trace 已归入模块项目与 GitHub task archive）
 
 审计轮次: 1
 
@@ -25,8 +25,7 @@
 ## 依赖
 - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
 - `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
-- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
+- `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
 - `doc/world-simulator/llm/provider-loopback-http-contract.prd.md`
 - `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - `doc/world-simulator/prd.md`

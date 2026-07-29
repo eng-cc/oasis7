@@ -1,7 +1,7 @@
-# Viewer Pixel World Bridge 渲染优化设计（2026-05-17）
+# Viewer Pixel World Bridge Rendering 设计
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.project.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md`
+- 已完成的实施追溯见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## 1. 设计定位
 将 `pixel_world_bridge` 从“每帧重建整个 Bevy scene”的临时实现，收口到可持续扩展的增量更新结构，同时保持当前 Web 宿主合同与 wasm-only 出货边界不变。

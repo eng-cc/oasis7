@@ -1,7 +1,7 @@
 # Viewer 产业链图谱与语义缩放设计
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.prd.md`
+- 已完成的实施追溯见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## 1. 设计定位
 定义工业/经营/运营导航统一图谱化方案：通过 `IndustryGraphViewModel` 把文本摘要、Overlay 主图层和语义缩放收敛到同一中间层，形成可跳转、可分层、可聚焦的产业链视图。
