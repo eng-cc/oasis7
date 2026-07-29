@@ -78,8 +78,8 @@
 
 | 专题 PRD | 关联执行入口 |
 | --- | --- |
-| `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md` |
-| `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md` |
+| `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack.md` |
+| `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md` |
 
 ## 历史压缩专题清单（保留原址与互链）
 | 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |

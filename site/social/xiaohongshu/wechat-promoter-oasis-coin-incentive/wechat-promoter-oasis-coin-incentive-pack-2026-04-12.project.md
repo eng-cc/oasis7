@@ -14,10 +14,10 @@
 - `doc/readme/prd.md`
 - `doc/readme/project.md`
 - `doc/readme/prd.index.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
-- `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+- `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 
 ## 状态
 - 更新日期: 2026-04-12

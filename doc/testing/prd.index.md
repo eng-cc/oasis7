@@ -80,7 +80,7 @@ Builtin WASM CI 历史收口：早期 m1 independent multi-runner、required-che
 | `doc/testing/ci/ci-tiered-execution.prd.md` | `doc/testing/ci/ci-tiered-execution.design.md` | `doc/testing/ci/ci-tiered-execution.project.md` |
 | `doc/testing/governance/llm-skip-tick-ratio-metric.prd.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.design.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.project.md` |
 | `doc/testing/prd.md`（Durable Playability Evidence Governance） | `testing-manual.md` 的 L4A/L4B/L5 operator steps | 已吸收的 2026-05 playability governance batch：Git history 与 GitHub task evidence |
-| `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` |
+| `doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist.project.md` |
 | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md` |
 | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md` | 当前设计决策与验收记录已并入 PRD | 已完成项目拆解见 Git 历史与 GitHub task evidence |
 | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` | 当前执行设计与分层清单已并入 PRD | 已完成项目拆解见 Git 历史与 GitHub task evidence |

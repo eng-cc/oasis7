@@ -7,7 +7,7 @@
 - 想确认 hosted access、浏览器鉴权、web surface 或滥用矩阵：先读 `hosted-world-browser-auth-surface-2026-03-26.md`、`hosted-world-abuse-suite-matrix-2026-03-27.md` 或 `mainchain-token-signed-transfer-web-validation-2026-03-23.md`
 - 想确认 public-testnet readiness evidence、claims boundary、triad rollout 或 legacy shared-network rehearsal：先读 `public-testnet-current-required-lanes-2026-07-03.md`、`public-testnet-claims-boundary-review-2026-07-06.md`、`public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`、`shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md` 或 `p2p-mixed-topology-validation-matrix-2026-04-07.md`
 - 想确认治理演练、live world drill 或 finality 证据：先读 `governance-registry-live-world-drill-finality-2026-03-24.md`、`governance-registry-live-world-drill-foundation-ops-2026-03-24.md` 或 `governance-registry-clone-world-drill-foundation-ops-2026-03-24.md`
-- 想确认 claim/restricted grant、token allocation audit 或质量基线：先读 `game-agent-claim-abuse-matrix-2026-03-27.md`、`token-genesis-allocation-audit-template-2026-03-22.md` 或 `testing-quality-trend-baseline-2026-03-11.md`
+- 想确认 claim/restricted grant、token allocation audit 或质量基线：先读 `game-agent-claim-abuse-matrix-2026-03-27.md`、`token-genesis-allocation-audit-template.md` 或 `testing-quality-trend-baseline-2026-03-11.md`
 - 想确认 provider recertification、software-safe web entry、pure-api parity、headless smoke 或 launcher UX：先读 `provider-agent-dual-mode-recertification-evidence-2026-04-07.md`、`software-safe-primary-web-entry-evidence-2026-04-07.md` 或 `post-onboarding-headless-smoke-2026-03-19.md`
 - 想精确找某份 evidence 文件，而不是按问题阅读：回到 `../prd.index.md` 或直接按文件名进入目标 evidence
 
@@ -81,7 +81,7 @@
 ### 5. Claim、grant、token audit 与质量基线
 - 首读入口:
   - `game-agent-claim-abuse-matrix-2026-03-27.md`
-  - `token-genesis-allocation-audit-template-2026-03-22.md`
+  - `token-genesis-allocation-audit-template.md`
   - `testing-quality-trend-baseline-2026-03-11.md`
 - 适合问题:
   - claim abuse / restricted grant / restricted starter balance 矩阵该从哪里进

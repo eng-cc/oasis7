@@ -216,7 +216,7 @@
 - `doc/p2p/prd.index.md`
 - `doc/p2p/prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
-- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
 - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
 - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
 - `crates/oasis7/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs`

@@ -1,4 +1,4 @@
-# oasis7 Limited Preview Early Contributor Reward Pack（2026-03-22）
+# oasis7 Limited Preview Early Contributor Reward Pack
 
 审计轮次: 1
 
@@ -64,8 +64,8 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该操作包位于 liveops 层，负责把 limited preview 的贡献信号转成结构化奖励建议，再回流给 producer；不直接触发链上分发，也不对外承诺固定 token 兑换规则。
 - Integration Points:
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-  - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
+  - `doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `scripts/readme-reward-pr-intake-import.py`
 - Edge Cases & Error Handling:

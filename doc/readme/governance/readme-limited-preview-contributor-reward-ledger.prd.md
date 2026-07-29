@@ -1,4 +1,4 @@
-# oasis7 Limited Preview Contributor Reward Ledger（2026-03-22）
+# oasis7 Limited Preview Contributor Reward Ledger
 
 审计轮次: 1
 
@@ -62,7 +62,7 @@
   - AC-11: 若 producer 认为某条 planned grant 高于其实际增量价值，必须在 distribution 前先下调 `Recommended Band` 或 `Actual Amount`，并在 approval summary / row notes 中留下 actual-value review 理由。
 - Non-Goals:
   - 本专题不决定每个档位对应的具体 token 数量。
-  - 不替代 `readme-limited-preview-contributor-reward-pack-2026-03-22` 的评分规则定义。
+  - 不替代 `readme-limited-preview-contributor-reward-pack` 的评分规则定义。
   - 不替代创世参数或 treasury 审计模板。
   - 不把普通 merged PR 的审批 ceiling 扩写成公开 bounty 报价。
 
@@ -73,10 +73,10 @@
 ## 4. Technical Specifications
 - Architecture Overview: 本专题是 reward pack 的执行收口层。`readme-limited-preview-contributor-reward-pack` 定义“怎么评分”，本 ledger 定义“真实一轮怎么记账、怎么审、怎么回填发放记录、怎么归档”。
 - Integration Points:
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
   - `scripts/readme-reward-pr-intake-import.py`
   - `scripts/readme-reward-pr-intake-round-scan.py`
 - Edge Cases & Error Handling:

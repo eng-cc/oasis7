@@ -6,13 +6,13 @@
 
 | 需要回答的问题 | 首读专题 | 边界 |
 | --- | --- | --- |
-| 当前 `Oasis Coin / 绿洲币` 的创世总量、低流通、早期贡献奖励和 freeze gate 是什么？ | `mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md` | 当前创世与贡献奖励口径；实际地址绑定、mint 与 release readiness 仍以对应 project、freeze sheet 和 P2P 模块状态为准。 |
-| 创世 bucket、controller slot、签名策略与尚待绑定项在哪里追溯？ | `mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md` | formal freeze companion；不是已完成 production mint 的声明。 |
+| 当前 `Oasis Coin / 绿洲币` 的创世总量、低流通、早期贡献奖励和 freeze gate 是什么？ | `mainchain-token-genesis-and-contributor-reward.prd.md` | 当前创世与贡献奖励口径；实际地址绑定、mint 与 release readiness 仍以对应 project、freeze sheet 和 P2P 模块状态为准。 |
+| 创世 bucket、controller slot、签名策略与尚待绑定项在哪里追溯？ | `mainchain-token-genesis-freeze-sheet.md` | formal freeze companion；不是已完成 production mint 的声明。 |
 | 已有 runtime 的 Token 分配、治理 bridge 与 release 语义如何演进？ | `mainchain-token-allocation-mechanism.prd.md` | 已完成的基础分配机制与 release companion；不替代当前创世 freeze 口径。 |
 | 已实现的地址绑定、治理 gate 与 treasury 分发语义在哪里？ | `mainchain-token-allocation-mechanism.prd.md` | 当前 runtime 内部 Token 分配 authority；不等于外部钱包、custody、公开分发或 release readiness。 |
 | 签名交易授权与托管/自托管边界在哪里？ | `../blockchain/p2p-mainnet-security-governance-readiness.prd.md` | 当前 signed transfer contract；生产 signer custody 的模块级边界仍回到 `doc/p2p/blockchain/README.md`。 |
 | 主链 Token 的 signed transaction metadata 与 Phase 2+ 边界是什么？ | `mainchain-token-ideal-transaction.prd.md` | 当前 Phase 1 metadata-only contract；不是实际 fee debit、sponsor 或 priority execution。 |
-| `OC -> LetAI Run OpenAPI` quota bridge 如何部署、演练与回滚？ | `mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`，再读同名 `.runbook.md` | 专题规格与 operator companion；不替代 world-runtime 服务运行手册。 |
+| `OC -> LetAI Run OpenAPI` quota bridge 如何部署、演练与回滚？ | `mainchain-token-newapi-quota-bridge.prd.md`，再读同名 `.runbook.md` | 专题规格与 operator companion；不替代 world-runtime 服务运行手册。 |
 
 ## 阅读与维护边界
 

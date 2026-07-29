@@ -9,7 +9,7 @@
 - 活跃任务:
   - [ ] `test-coverage-gate-fill` (PRD-TESTING-002/003) [test_tier_required] + [test_tier_full]: 补齐 Rust CI 测试覆盖缺口，让 `full-support` 直接触达 workspace support crates，并为 `required-gate` changed-path planner 增加 regression，防止未分类代码路径绕过 full fallback。Trace: `.pm/tasks/task_ce44b8a269824fbcb718febd2140c425.yaml`
   - [ ] `qa-test-governance-simplify` (PRD-TESTING-001/002/003) [governance]: 按“影响面覆盖 + 最小充分测试”收紧测试选择树、skip reason 与 claim boundary；不关闭 `test-coverage-gate-fill` 覆盖缺口。Trace: .pm/tasks/task_1ed6ad641a634905a3e7bc6423d61504.yaml
-  - [ ] token genesis allocation audit follow-up: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` 与对应模板执行首轮正式审计。
+  - [ ] token genesis allocation audit follow-up: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `doc/testing/governance/token-genesis-allocation-audit-checklist.project.md` 与对应模板执行首轮正式审计。
 - 当前门禁/治理摘要:
   - `required-gate-ondemand-launcher-web-build`、`rust-required-gate-ondemand-scope` 与 `wasm-determinism-gate-ondemand-scope` 已把 GitHub required gate 收口为 stable context + changed-path on-demand 执行；launcher/shared runtime 命中时会额外补跑 launcher Web `trunk build`。
   - `engineering-code-quality-performance-baselines` 已为 `required-gate` 增补 Viewer changed-path perf smoke scope；`viewer-performance-probe.sh --profile smoke` 当前是 report-only scoped gate，不作为 blocking failure。

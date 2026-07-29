@@ -1,7 +1,7 @@
-# oasis7 主链 Token 初始分配与早期贡献奖励口径（项目管理文档）
+# oasis7 主链 Token 创世分配与早期贡献奖励项目
 
-- 对应设计文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md`
-- 对应需求文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+- 对应设计文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md`
+- 对应需求文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 
 审计轮次: 6
 ## 任务拆解（含 PRD-ID 映射）
@@ -37,7 +37,7 @@
 
 ## TIGR-5 正式执行清单结论
 - 产物：
-  - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+  - `doc/p2p/token/mainchain-token-genesis-freeze-sheet.md`
 - 已冻结内容：
   - 7 个 bucket 的 `recipient_slot_id / controller_slot_id / signer_policy / start_epoch / cliff_epochs / linear_unlock_epochs / claim cadence`
   - runtime 真值落点：`InitializeMainTokenGenesis -> MainTokenGenesisAllocationBucketState -> recipient.vested_balance`
@@ -110,13 +110,13 @@
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-- `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
-- `doc/testing/evidence/token-genesis-allocation-audit-template-2026-03-22.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
-- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
-- `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+- `doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md`
+- `doc/testing/evidence/token-genesis-allocation-audit-template.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-pack.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md`
+- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md`
+- `doc/p2p/token/mainchain-token-genesis-freeze-sheet.md`
 - `doc/p2p/prd.md`
 - `doc/game/prd.md`
 - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`

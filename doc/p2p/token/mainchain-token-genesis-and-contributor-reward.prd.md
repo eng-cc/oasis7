@@ -1,7 +1,7 @@
-# oasis7 主链 Token 初始分配与早期贡献奖励口径（2026-03-22）
+# oasis7 主链 Token 创世分配与早期贡献奖励口径
 
-- 对应设计文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+- 对应设计文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md`
+- 对应项目管理文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
 
 审计轮次: 3
 ## 1. Executive Summary
@@ -96,7 +96,7 @@
 - Integration Points:
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-  - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+  - `doc/p2p/token/mainchain-token-genesis-freeze-sheet.md`
   - `doc/game/prd.md`
   - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
   - `crates/oasis7/src/runtime/main_token.rs`

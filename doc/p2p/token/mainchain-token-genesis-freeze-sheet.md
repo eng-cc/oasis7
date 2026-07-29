@@ -1,11 +1,11 @@
-# oasis7 主链 Token 创世参数正式执行清单（2026-03-22）
+# oasis7 主链 Token 创世参数正式执行清单
 
 审计轮次: 2
 
 ## Meta
 - Owner Role: `runtime_engineer`
 - Review Roles: `producer_system_designer`, `qa_engineer`
-- Source Topic: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+- Source Topic: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - Freeze Status: `logic_frozen_supply_set_address_binding_pending`
 - Runtime Anchor:
   - `Action::InitializeMainTokenGenesis`
@@ -98,7 +98,7 @@
 - [ ] 绑定全部 `controller_slot_id` 对应真实 multisig / governance account
 - [x] 冻结全部 controller slot 的 `threshold / allowed_public_keys`（public-only；当前统一为 `2-of-3`）
 - [ ] 输出创始人个人受益拆分表，并证明任一自然人直接受益 `<=1500 bps`
-- [ ] 用本清单 + `token-genesis-allocation-audit-template-2026-03-22.md` 跑 QA 审计
+- [ ] 用本清单 + `token-genesis-allocation-audit-template.md` 跑 QA 审计
 - [ ] 获得最终 QA `pass`
 - [ ] 确认执行 payload 使用 runtime rounding 规则，而不是人工 spreadsheet 改写
 

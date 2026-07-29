@@ -67,10 +67,10 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该专题位于 `readme/governance`，作为“小红书博主 / 微信公众号”两类宣传对象的激励治理层，承接小红书笔记与微信公众号文章，把外部传播贡献转成可审计的绿洲币奖励建议，再回流 producer 审批与后续 distribution 流程。
 - Integration Points:
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
-  - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
+  - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
-  - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - Edge Cases & Error Handling:
   - 同一内容同时发小红书和公众号：默认只保留一个主资产 full credit，另一个作为补充证明或小额加分，不重复给 full credit。
   - 高阅读但低质量：若只有阅读量或播放量，没有准确性、原创性或生态回流，默认 `no-token-recommendation`。
