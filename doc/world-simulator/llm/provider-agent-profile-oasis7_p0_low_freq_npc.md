@@ -1,4 +1,4 @@
-# Local Provider 专用玩法 Profile：`oasis7_p0_low_freq_npc`（2026-03-13）
+# Local Provider 专用玩法 Profile：`oasis7_p0_low_freq_npc`
 
 - 关联 PRD: `PRD-WORLD_SIMULATOR-037`、`PRD-WORLD_SIMULATOR-038`
 - owner: `agent_engineer`

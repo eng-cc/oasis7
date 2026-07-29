@@ -92,7 +92,7 @@
   - `DecisionResponse`: `decision(wait/act) + action_ref + args + provider_error? + diagnostics + trace_payload`。
   - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
 - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
-- 当前内置 Responses provider 的 transport、tool-only prompt、bounded repair、memory-budget 与 chat trace 基线由 `llm-agent-behavior.prd.md` 承载；本专题定义 provider-agnostic 约束，不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority。
+- 内置 Responses provider 的具体基线也由本专题承载，但不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority；provider-agnostic contract 仍是外部接入的唯一边界。
 - 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。
 - `--jobs` 只描述执行并行度，不是行为等价或性能比较的充分条件。外部 provider 的非确定性运行必须在相同输入下重复采样；任一场景的 timeout、invalid output、stuck-loop、trace-completeness 缺口或未解释的错误不能因聚合均值/总量而被掩盖。
 - 工业调试注入属于显式 debug capability，不属于普通 `ActionCatalog`、默认体验或 provider parity 样本。provider 只能选择当前 catalog 中已声明且经 runtime 校验的候选动作；资源、精炼 quote、经济与 replay 语义不由 provider contract 重定义。
@@ -157,3 +157,15 @@
 | DEC-DP-001 | 以 `Decision Provider` 标准层隔离 world-simulator 与外部 agent framework | 直接让 `Local Provider` 替代现有 Agent 层 | 当前 runtime / trace / memory 契约已存在，直接替换风险过高且难以验证边界。 |
 | DEC-DP-002 | 将 `Local Provider` 定位为 adapter/provider，而非 kernel/runtime 替代物 | 让 `Local Provider` 直接控制世界状态或规则执行 | runtime 权威与 replay/QA 契约必须保留在本地内核。 |
 | DEC-DP-003 | 首期仅开放低频、低破坏性动作集做 PoC | 首轮就接入高频战斗/经济关键 agent | 先验证抽象层与 error policy，再决定是否扩面，能显著降低产品与工程风险。 |
+
+## 内置 Responses Provider 基线与诊断 receipt 边界
+
+- builtin provider 使用 OpenAI-compatible Responses transport；`base_url` 可规范化 API base、`/v1/`、旧 chat-completions 或 responses 后缀。配置解析优先级为 `[llm]` 直接值、选中 profile/provider、root、环境变量与 builtin default；agent override 以规范化 agent 名称选择。坏 TOML 必须显式失败，不能因单键可回退而静默吞掉整份配置错误。
+- 未配置 `system_prompt` 时 builtin fallback 为“硅基个体存在的意义是保障硅基文明存续和发展；”。这只是可配置的 provider 指令默认值，不是世界规则、玩家承诺或对目标达成的保证。
+- profile 是 `DecisionRequest.provider_config_ref` 的受控配置，而非世界记忆或兼容别名。未知 profile 必须结构化失败；不得静默改用通用 profile。单次 `timeout_ms` 是明确上限，有限 retry 只适用于可解释 provider error；超时、格式错误、预算耗尽、未知工具或非法动作都留下分类 trace/error，并收敛为无状态变化的 `Wait` 或 `ActionRejected`，不得生成启发式替代动作。
+- builtin prompt 保持 tool-only：每 turn 只能查询或提交一个最终 `agent_submit_decision`，不以自由文本授权动作。`PromptBudget` 按优先级裁剪 observation、conversation/module history 与 memory digest；module calls、decision turns 与 repair rounds 均有上限。多个可解析片段只选择一个稳定终态并记录 collapse trace，绝不顺序执行同一 completion 的多个动作。
+- 感知/上下文/短长期目标进入结构化 request；候选决策经 catalog/schema 与 runtime 校验后执行；只有 committed replayed `ActionResult` 回写 feedback、recent summary 和本地权威 memory。player、agent、tool、system chat role 分离；原始 provider JSON 不得伪装为玩家可读消息。外部 memory 只可提出 write intent，长期记忆影响玩家当前行动时的可读、可纠正合同仍由游戏专业 authority 证明，内部 history/trace 不能替代该证明。
+- `agent_debug_grant_resource` 仅是显式 debug capability；普通 catalog、parity、成本与稳定性样本均不得使用它。token、延迟、prompt/completion 计数和有限 retry count 是诊断与评测输入，不是计费、发布或默认启用证据。
+- `LlmEffectIntentTrace` / `LlmEffectReceiptTrace` 记录 `llm.prompt.module_call`、intent id、params、capability ref、origin、status、payload 与预留 cost；`max_module_calls` 控制体积，旧 trace 以默认字段兼容。这些是 simulator diagnostic facts：在 runtime-owned T4/T5 证明 intent-to-ActionResult causality、replay never re-calls provider、以及恢复不重复外部副作用前，不得宣称完整 effect/receipt 或 replay closure。
+- simulator diagnostic event 名称固定为 `LlmEffectQueued { agent_id, intent }` 与 `LlmReceiptAppended { agent_id, receipt }`。写入顺序是：`LlmAgentBehavior` 处理 module call 时生成 intent/receipt，`AgentRunner::tick` 从 `AgentDecisionTrace` 读取，再逐条写入 `WorldKernel.journal`。该顺序仅描述诊断记录，不把 intent/receipt 提升为权威 effect、ActionResult 因果或 replay 幂等证明。
+- provider 可表达 compile/deploy/install、offer/bid/purchase/delist/destroy/cancel 等模块意图，但 parser/schema 通过不等于动作已接受；所有意图仍经 runtime 权威校验、共识提交和结果回执。production 禁止 runtime source compile，只有显式 dev/test 可用受限 source package；actor、hash、版本、价格、订单标识与必填 payload 必须严格校验。`module.lifecycle.status` 只派生自已知 artifact/instance/ownership/listing/order/installed 状态，不是第二 registry，也不宣称激活、所有权或成交。

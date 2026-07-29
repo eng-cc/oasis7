@@ -36,3 +36,10 @@
 - 再实现 `MockProvider`，验证标准层与本地 trace / memory / action mapping 正常闭环。
 - 再实现 `Local ProviderAdapter` PoC，并限制到单一低频 NPC 场景。
 - 最后依据动作有效率、超时率、成本与诊断完整度，决定是否扩展到更多 agent 类型。
+
+## 6. 内置 provider 适配与诊断流
+
+- builtin Responses adapter 将感知、裁剪后的本地 memory、目标、有限工具 catalog 与 timeout budget 组装为 request；它只返回一个结构化候选。profile/provider 覆盖、endpoint 规范化、有限 retry 与错误分类属于 adapter 配置层，不能改变 world state 或 runtime 权威。
+- 安全流固定为 `perceive/context/goal -> request -> one structured decision -> catalog/schema guard -> runtime validate/execute -> committed ActionResult feedback`。无终态、超量 repair、非法动作、超时或 provider failure 收敛为可诊断的 `Wait`/`ActionRejected`；不执行多片段 completion，也不以 parser 成功伪造进展。
+- Trace bridge 保存角色分离的 chat/tool trace、预算/latency/repair diagnostics、module-call intent/receipt 与 feedback。它裁剪和脱敏后供诊断使用；Viewer delivery、runtime event/replay 与玩家记忆纠正仍由各自专业 authority 负责。
+- receipt flow 是 `prompt module-call -> diagnostic intent/receipt -> journal/trace -> later reconciliation`。它保留上下文与兼容默认值，但并未证明 action-result 因果、重放不重调 provider 或恢复不重复外部副作用；这些 T4/T5 proof 必须由 runtime 设计与验证完成。

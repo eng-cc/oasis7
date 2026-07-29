@@ -36,9 +36,9 @@
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`：launcher explorer 当前 authority，收敛既有概览、七个只读业务视图与状态呈现；五组历史源三件套已退役删除，历史追溯仅使用 Git 与 GitHub task issue evidence，且不得将历史 mainnet-grade/public-chain 命名外推为 readiness、公开服务、结算或 validator 承诺。
 - `doc/world-simulator/scenario/README.md`：`scenario/` 子域 landing page，适合先按场景文件、world initialization、seed/location、资源生成或 asteroid-fragment 问题分流，再进入精确专题。
 - launcher transfer 当前入口：`doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` 承接早期 `PRD-WORLD_SIMULATOR-004/005` 的链上转账基础条款；旧 `world-simulator` launcher blockchain-transfer singleton 分册与四组 2026-03 源三件套均已退役删除，不再作为 active supporting doc。
-- `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
+- `doc/world-simulator/llm/provider-agent-dual-mode.project.md`：保留 2026-04 direct-connect review 的 remediation disposition、retained recertification evidence 与 completed-versus-experimental 边界。
 - `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
-- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
+- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
 
 ## 覆盖规则（ROUND-005 统一）
 - 纳入规则：纳入 `doc/world-simulator/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
@@ -77,14 +77,12 @@
 | `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.prd.md` | `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.design.md` | `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md` | `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.design.md` | `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md` | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.project.md` |
-| `doc/world-simulator/llm/llm-agent-behavior.prd.md` | `doc/world-simulator/llm/llm-agent-behavior.design.md` | `doc/world-simulator/llm/llm-agent-behavior.project.md` |
 | `doc/world-simulator/llm/decision-provider-contract.prd.md` | `doc/world-simulator/llm/decision-provider-contract.design.md` | `doc/world-simulator/llm/decision-provider-contract.project.md` |
 | `doc/world-simulator/llm/provider-loopback-http-contract.prd.md` | `doc/world-simulator/llm/provider-loopback-http-contract.design.md` | `doc/world-simulator/llm/provider-loopback-http-contract.project.md` |
 | `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` | `doc/world-simulator/llm/provider-agent-experience-parity.design.md` | `doc/world-simulator/llm/provider-agent-experience-parity.project.md` |
 | `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` | `—` | `doc/world-simulator/llm/provider-agent-dual-mode.project.md` |
 | `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.project.md` |
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | `doc/world-simulator/llm/llm-lmso29-stability.project.md` |
-| `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.design.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.project.md` |
 | `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.project.md` |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md` |
 | `doc/world-simulator/scenario/asteroid-fragment-renaming.prd.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.design.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` |
@@ -122,7 +120,7 @@
 - 专业权威合并（runtime-to-Web）：event-driven phase8/9/10、runtime-world LLM bridge、Viewer/node decouple、两轮 build pruning 与 runtime-fatal 的当前语义已分别归入 control-plane、world-simulator、DecisionProvider、Launcher session continuity、single-source build truth、semantic test API 与 Viewer manual；18 个历史源文件已删除，日期化完成态与 byte-size 样本仅从 Git/GitHub task evidence 追溯。
 
 ## 补充验收模板
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template.md`

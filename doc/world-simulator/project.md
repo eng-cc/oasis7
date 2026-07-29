@@ -60,7 +60,7 @@
 - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
 - `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
 - `doc/world-simulator/llm/{provider-agent-dual-mode.{prd,project}.md,provider-agent-dual-mode-contract.md}`
-- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
+- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md`
 - Runtime live migration 与后续 event-drive/LLM bridge/node split 历史三件套已退役删除；当前 authority 收敛到 `doc/world-simulator/prd.md`、`doc/world-simulator/llm/decision-provider-contract.prd.md`、`doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`、`doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md` 与 `doc/world-simulator/viewer/viewer-manual.manual.md`；历史完成态只从 GitHub task issue evidence comments 与 git history 追溯。
 - `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`、`skills/prd/check.md`

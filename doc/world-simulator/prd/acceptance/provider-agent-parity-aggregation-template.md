@@ -1,4 +1,4 @@
-# Local Provider vs 内置 Agent parity 聚合结论模板（2026-03-12）
+# Local Provider vs 内置 Agent parity 聚合结论模板
 
 审计轮次: 2
 

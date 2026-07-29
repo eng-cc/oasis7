@@ -1,4 +1,4 @@
-# Local Provider vs 内置 Agent parity benchmark 协议（2026-03-12）
+# Local Provider vs 内置 Agent parity benchmark 协议
 
 审计轮次: 1
 

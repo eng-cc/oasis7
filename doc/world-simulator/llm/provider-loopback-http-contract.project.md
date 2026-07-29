@@ -18,7 +18,7 @@
 - `doc/world-simulator/prd.md`
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/prd.index.md`
-- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
+- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md`
 - `crates/oasis7/src/simulator/agent.rs`
 - `crates/oasis7/src/simulator/memory.rs`
 - `crates/oasis7_proto/src/viewer.rs`
@@ -35,7 +35,7 @@
 - 进展备注: `T3` 的实现范围已落地：`Local ProviderAdapter` 已完成 mock local HTTP binding、`ProviderBackedAgentBehavior -> runtime -> feedback` 闭环回归，并补齐 `wait` / `wait_ticks` / `move_agent` / `speak_to_nearby` / `inspect_target` / `simple_interact` 六类 phase-1 白名单动作；其中后三者当前以 lightweight event 语义执行。`T3` 的最终签收仍继续挂到 `PRD-WORLD_SIMULATOR-038` parity 通过线，因此项目阶段前移到 `T4`。
 - T4 预热进展: 已在 `oasis7_proto` / `viewer::protocol` 补齐 `AgentSpoke`、`TargetInspected`、`SimpleInteractionPerformed` 事件筛选枚举与匹配测试，为后续 Viewer 侧 provider 最近动作展示预留过滤入口。
 - T4 完成备注: launcher 已补 `Local Provider(Local HTTP)` 顶栏状态徽标、provider check info/health/total 延迟、最近错误与队列深度摘要；viewer 已补 `Provider Debug` 文本卡片，输出最近 provider/model、最近延迟、最近动作/trace 摘要，并提供 `全部 / 仅 Local Provider / 仅错误` 三档调试筛选入口。required 回归已覆盖 launcher provider compatibility check 与 viewer provider debug summary。
-- T5 预热补充: 已新增 `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`，并把 `DecisionRequest.agent_profile` 接通到 `ProviderBackedAgentBehavior -> Local ProviderAdapter -> local HTTP` 与 parity bench / batch 脚本；当前首期 `P0` 默认 profile 已切到 `oasis7_p0_low_freq_npc`。
+- T5 预热补充: 已新增 `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md`，并把 `DecisionRequest.agent_profile` 接通到 `ProviderBackedAgentBehavior -> Local ProviderAdapter -> local HTTP` 与 parity bench / batch 脚本；当前首期 `P0` 默认 profile 已切到 `oasis7_p0_low_freq_npc`。
 - T5 bridge 预热: 本机已确认 `Local Provider Gateway` 正在 `127.0.0.1:18789` 运行，但默认安装未直接暴露 world-simulator provider 协议；因此追加 `oasis7_provider_local_bridge` 作为 loopback-only 兼容桥，负责把 `provider agent --json` 转译成 `/v1/provider/info|health|/v1/world-simulator/decision|feedback`。
 - T5 bridge 完成备注: `oasis7_provider_local_bridge` 已落地到 `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`，实机验证 `GET /v1/provider/info`、`GET /v1/provider/health`、`POST /v1/world-simulator/decision`、`POST /v1/world-simulator/feedback` 均可通过已安装的 `Local Provider Gateway/CLI` 工作；真实 `P0` parity smoke 已能完成 2 步 decision 并产出 trace，但当前样本仍表现为 `wait` x2、`goal_completed=false`、`median_latency_ms≈4799`，所以 T5 仍保持 `experimental`，后续重点转向 prompt/profile 优化与更长样本采证。
 - T5 session/guardrail 完成备注: 已补 `provider_config_ref` run-scoped session id，避免 bridge 把历史 `loc-2` 等旧样本上下文泄漏到新 benchmark；同时为 `P0-001` 补齐 scenario memory hint、reachable patrol guardrail 与“最近可见 location = 当前点”估算修正。实机 `P0-001` smoke（`output/provider_parity/provider_parity_20260313_170850/...`）现已达到 `goal_completed=true`、`move_agent=4`、`invalid_action_count=0`，但 `llm_api median_latency_ms≈4781` 仍高于最终 parity 通过线，所以 T5 依然保持 `experimental`。
