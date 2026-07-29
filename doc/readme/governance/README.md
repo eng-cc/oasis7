@@ -97,7 +97,7 @@
 - 当前边界:
   - 这些是历史实例或预备 runbook，不再作为默认活跃首读入口。
   - 当前公开状态以根 `../../../README.md` 为准：limited playable technical preview；不是 closed beta、public launch 或正式玩家发布。
-  - release communication 产品边界从产品分册进入，操作复用从两份无日期模板进入；四组 2026-03-11 brief/template/draft 专题三件套已退役删除。旧 closed-beta runbook 与 playability 模板已退役删除，claim-control 当前从 `readme-limited-preview-invite-pack-2026-03-22.md` 与 `readme-limited-preview-round1-execution-2026-03-27.md` 进入。
+  - release communication 产品边界从产品分册进入，操作复用从两份无日期模板进入；四组 2026-03-11 brief/template/draft 专题三件套已退役删除。旧 closed-beta runbook 与 playability 模板已退役删除；当前 claim-control 从 `readme-limited-preview-invite-pack-2026-03-22.md` 与产品分册进入。Round 1 已关闭，其发布、渠道 fallback、信号与关闭证据从 Git history 和 GitHub issue `eng-cc/oasis7#48` 追溯。
 
 ### 5. 小红书与外宣激励
 - 首读入口:

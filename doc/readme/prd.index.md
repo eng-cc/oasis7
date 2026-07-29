@@ -45,7 +45,6 @@
 - `site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
 - `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
 - 根 `README.md`：当前公开状态真值；配合 `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`、一致性 checklist、季度复核与 release communication surfaces 判断最新对外口径。
-- `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`：invite-only limited preview 首轮执行记录，保留为按需进入的 execution_log 入口。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
@@ -92,14 +91,13 @@
 | README consistency checklist dated source set | 根 `README.md`；`scripts/readme-link-check.sh`；`doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md`；`doc/readme/project.md` | 一次性人工 checklist 已被可执行链接检查、季度复核和模块台账吸收；不再保留重复 dated 三件套与 supporting copy |
 | 2026-03-11 release communication / announcement 四组 dated triplet | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-release-communication-template.md`；`doc/readme/governance/readme-release-announcement-template.md` | 长期产品合同已进入产品树，操作模板去日期稳定化；历史 candidate brief / draft、模板设计过程和任务状态只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03 Moltbook promotion/post/runbook 三组 dated triplet 与 promotion plan | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-moltbook-liveops-runbook.md`；`doc/readme/governance/readme-moltbook-post-pack.md` | 渠道产品边界进入产品树，稳定策略合并到无日期 runbook，素材库去日期；历史平台快照、固定排期和任务包装只从 Git history 与 GitHub evidence 追溯 |
-| 2026-03-22 closed-beta candidate runbook triplet | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 与 `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露活跃操作面语义，已收敛为 limited preview invite / execution 入口 |
+| 2026-03-22 closed-beta candidate runbook triplet 与 Round 1 execution log | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`；Round 1 发布、渠道 fallback、信号和关闭证据从 Git history 与 GitHub issue `eng-cc/oasis7#48` 追溯 | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露的可复用沟通语义收敛到 limited preview invite pack。Round 1 已于 2026-07-28 关闭且无待处理 follow-up，不再保留失效监控指令作为活跃 execution 入口 |
 | 2026-03-22 closed-beta candidate feedback / incident templates | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 的 signal bucket、claim drift、producer summary 字段 | 旧模板命名继续暗示 closed beta candidate 当前可操作；保留历史 evidence，不保留当前 template surface |
 | README gap runtime/WASM/consensus/market/LLM 七组完成 triplet | `doc/world-runtime/prd.md`、`doc/world-runtime/module/`、`doc/world-runtime/wasm/`、`doc/p2p/consensus/`、`doc/world-simulator/llm/`、`doc/game/gameplay/gameplay-top-level-design.prd.md` | 仍有效合同已按专业 owner 合并；生产 source compile 旧口径被 binary + receipt 当前安全边界替代，历史任务包装从 Git history 与 GitHub evidence 追溯 |
 
 ## Material / Execution / SOP 补充入口
 | 文档路径 | 类型 | 用途 |
 | --- | --- | --- |
-| `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md` | `overview` | 面向第一次接触项目读者的白皮书式 Explanation 总览 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
 | `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md` | `material` | 小红书真实累计 token 用量主题帖素材包，已收口为“AI 进入长期项目后会变成研发流程参与成本”的推荐发布版 |
