@@ -140,7 +140,6 @@ export function setRenderHook(nextHook) {
 function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
-
 function isTestApiEnabled() {
   const value = String(getSearchParams().get("test_api") || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes" || value === "on";
@@ -155,7 +154,6 @@ function resolveAgentChatOverallTimeoutMs() {
   }
   return Math.min(value, 45000);
 }
-
 function normalizeWsAddr(raw) {
   const value = String(raw || "").trim();
   if (!value) return DEFAULT_WS_ADDR;
@@ -164,11 +162,9 @@ function normalizeWsAddr(raw) {
   if (value.startsWith("https://")) return `wss://${value.slice("https://".length)}`;
   return `ws://${value}`;
 }
-
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
-
 const {
   handleRefineQuotePreflight,
   handleRefineQuoteError,
@@ -181,14 +177,12 @@ const {
   render,
   state,
 });
-
 const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -3453,6 +3447,7 @@ function handleAuthoritativeRecoveryError(error) {
 }
 
 function handleViewerMessage(message) {
+  if (message?.type === "market_quote_decision_preflight") { marketQuoteDecision.handleMarketQuoteDecision(message.quote); return; }
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
@@ -3519,9 +3514,6 @@ function handleViewerMessage(message) {
       break;
     case "power_survival_quote_preflight":
       powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
-      break;
-    case "market_quote_decision_preflight":
-      marketQuoteDecision.handleMarketQuoteDecision(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -4270,8 +4262,7 @@ function installTestApi() {
     requestRefineQuote,
     requestProductValidationQuote,
     requestPowerSurvivalQuote,
-    requestMarketQuoteDecision,
-    injectMarketQuoteDecisionForTest,
+    requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
     focus,
@@ -4430,8 +4421,7 @@ export {
   requestRefineQuote,
   requestProductValidationQuote,
   requestPowerSurvivalQuote,
-  requestMarketQuoteDecision,
-  injectMarketQuoteDecisionForTest,
+  requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,

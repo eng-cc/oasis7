@@ -1,3 +1,4 @@
+// Generated canonical Viewer bundle; source truth lives in ./software_safe_src/.
 const IS_DEV = false;
 const equalFn = (a, b) => a === b;
 const $PROXY = /* @__PURE__ */ Symbol("solid-proxy");
@@ -7202,6 +7203,10 @@ function handleAuthoritativeRecoveryError(error) {
   void recoverHostedSessionFromError(error);
 }
 function handleViewerMessage(message) {
+  if (message?.type === "market_quote_decision_preflight") {
+    marketQuoteDecision.handleMarketQuoteDecision(message.quote);
+    return;
+  }
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
@@ -7268,9 +7273,6 @@ function handleViewerMessage(message) {
       break;
     case "power_survival_quote_preflight":
       powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
-      break;
-    case "market_quote_decision_preflight":
-      marketQuoteDecision.handleMarketQuoteDecision(message.quote);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -11455,45 +11457,13 @@ function MarketQuoteDecisionGameplayPanel(props) {
     }
   });
 }
-const refineQuotePreflightFixture = Object.freeze({
-  owner_agent_id: "agent-0",
-  compound_mass_g: 40,
-  electricity_cost: 12,
-  electricity_after: 88,
-  hardware_output: 20,
-  target_id: "factory_build_hardware",
-  target_gap_before: 20,
-  target_gap_after: 0,
-  target_linkage: "enables_factory_build_hardware_goal",
-  recommended_refine_amount: 40,
-  value_classification: "enough_to_advance"
-});
-function installRefineQuotePreflightVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
-  fixtures.refine_quote_preflight = () => {
+const quote = Object.freeze({ consuming_agent_id: "agent-0", contributions: [{ material: "Iron ingot", requested_amount: 4, local_available_amount: 1, world_available_amount: 2, world_cover_amount: 2, shortfall_amount: 1, transit_loss_bps: 20, governance_tax_bps: 100, effective_cost_index_ppm: 1002e3 }], total_shortfall_amount: 1, submission_allowed: false, conditional_notice: "This is a conditional preview. Inventory, tax, transit, and price may change before submission.", recommendation: "Reduce the request or obtain more materials", rationale: "Available local and world materials do not cover this request.", next_action: "Reduce requested amounts or source the missing materials" });
+function installMarketQuoteDecisionVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.market_quote_decision = () => {
     core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
     core2.applySelection({ kind: "agent", id: "agent-0" });
     setFixturePlayerAuth2();
-    core2.injectRefineQuotePreflightForTest(refineQuotePreflightFixture);
-  };
-}
-const productValidationQuoteFixture = Object.freeze({
-  product_id: "logistics_drone",
-  product_role: "explore",
-  tradable: true,
-  stage_before: "bootstrap",
-  stage_after: "bootstrap",
-  unlock_or_value_class: "scale_out",
-  recommended_action: "advance_industry_stage",
-  submission_allowed: true,
-  missing_prerequisite: "industry_stage=scale_out",
-  reachable_advance_or_recovery: "complete_reachable_industry_progress"
-});
-function installProductValidationQuoteVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
-  fixtures.product_validation_quote = () => {
-    core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
-    core2.applySelection({ kind: "agent", id: "agent-0" });
-    setFixturePlayerAuth2();
-    core2.injectProductValidationQuoteForTest(productValidationQuoteFixture);
+    core2.injectMarketQuoteDecisionForTest(quote);
   };
 }
 const powerSurvivalQuoteFixture = Object.freeze({
@@ -11521,13 +11491,45 @@ function installPowerSurvivalQuoteVisualFixture(fixtures, { core: core2, setFixt
     core2.injectPowerSurvivalQuoteForTest(powerSurvivalQuoteFixture);
   };
 }
-const quote = Object.freeze({ consuming_agent_id: "agent-0", contributions: [{ material: "Iron ingot", requested_amount: 4, local_available_amount: 1, world_available_amount: 2, world_cover_amount: 2, shortfall_amount: 1, transit_loss_bps: 20, governance_tax_bps: 100, effective_cost_index_ppm: 1002e3 }], total_shortfall_amount: 1, submission_allowed: false, conditional_notice: "This is a conditional preview. Inventory, tax, transit, and price may change before submission.", recommendation: "Reduce the request or obtain more materials", rationale: "Available local and world materials do not cover this request.", next_action: "Reduce requested amounts or source the missing materials" });
-function installMarketQuoteDecisionVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
-  fixtures.market_quote_decision = () => {
+const productValidationQuoteFixture = Object.freeze({
+  product_id: "logistics_drone",
+  product_role: "explore",
+  tradable: true,
+  stage_before: "bootstrap",
+  stage_after: "bootstrap",
+  unlock_or_value_class: "scale_out",
+  recommended_action: "advance_industry_stage",
+  submission_allowed: true,
+  missing_prerequisite: "industry_stage=scale_out",
+  reachable_advance_or_recovery: "complete_reachable_industry_progress"
+});
+function installProductValidationQuoteVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.product_validation_quote = () => {
     core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
     core2.applySelection({ kind: "agent", id: "agent-0" });
     setFixturePlayerAuth2();
-    core2.injectMarketQuoteDecisionForTest(quote);
+    core2.injectProductValidationQuoteForTest(productValidationQuoteFixture);
+  };
+}
+const refineQuotePreflightFixture = Object.freeze({
+  owner_agent_id: "agent-0",
+  compound_mass_g: 40,
+  electricity_cost: 12,
+  electricity_after: 88,
+  hardware_output: 20,
+  target_id: "factory_build_hardware",
+  target_gap_before: 20,
+  target_gap_after: 0,
+  target_linkage: "enables_factory_build_hardware_goal",
+  recommended_refine_amount: 40,
+  value_classification: "enough_to_advance"
+});
+function installRefineQuotePreflightVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.refine_quote_preflight = () => {
+    core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+    core2.injectRefineQuotePreflightForTest(refineQuotePreflightFixture);
   };
 }
 const waitResolutionQuoteFixture = Object.freeze({
