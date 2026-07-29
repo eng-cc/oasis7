@@ -9,6 +9,7 @@ import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
+import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
 import {
   buildViewerEntityLists,
   renderViewerEntityList,
@@ -139,7 +140,6 @@ export function setRenderHook(nextHook) {
 function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
-
 function isTestApiEnabled() {
   const value = String(getSearchParams().get("test_api") || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes" || value === "on";
@@ -154,7 +154,6 @@ function resolveAgentChatOverallTimeoutMs() {
   }
   return Math.min(value, 45000);
 }
-
 function normalizeWsAddr(raw) {
   const value = String(raw || "").trim();
   if (!value) return DEFAULT_WS_ADDR;
@@ -163,11 +162,9 @@ function normalizeWsAddr(raw) {
   if (value.startsWith("https://")) return `wss://${value.slice("https://".length)}`;
   return `ws://${value}`;
 }
-
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
-
 const {
   handleRefineQuotePreflight,
   handleRefineQuoteError,
@@ -180,12 +177,12 @@ const {
   render,
   state,
 });
-
 const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
-
+const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
+const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -1360,7 +1357,7 @@ function addRecentEvent(event) {
 }
 
 function handleSnapshot(snapshot) {
-  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote();
+  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote(); state.marketQuoteDecision = null; state.marketQuoteDecisionRequest = { status: "idle", error: null };
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
@@ -3092,7 +3089,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error)) {
+  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error) || marketQuoteDecision.handleMarketQuoteDecisionError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3450,6 +3447,7 @@ function handleAuthoritativeRecoveryError(error) {
 }
 
 function handleViewerMessage(message) {
+  if (message?.type === "market_quote_decision_preflight") { marketQuoteDecision.handleMarketQuoteDecision(message.quote); return; }
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
@@ -4264,6 +4262,7 @@ function installTestApi() {
     requestRefineQuote,
     requestProductValidationQuote,
     requestPowerSurvivalQuote,
+    requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
     focus,
@@ -4422,6 +4421,7 @@ export {
   requestRefineQuote,
   requestProductValidationQuote,
   requestPowerSurvivalQuote,
+  requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,

@@ -363,6 +363,28 @@ fn step_control_is_deferred_from_request_handler() {
 }
 
 #[test]
+fn legacy_live_server_rejects_market_quote_decision_with_stable_code() {
+    let config = WorldConfig::default();
+    let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
+    let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Script).expect("init world");
+    let mut session = ViewerLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    session.handle_request(
+        ViewerRequest::QuoteMarketDecision {
+            request: crate::viewer::MarketQuoteDecisionRequest { consume: vec![], player_id: "player".to_string(), public_key: None, auth: None },
+        },
+        &mut writer,
+        &mut world,
+        "test-world",
+    ).expect("unsupported request is a response");
+
+    let line = read_response_line(&peer, Duration::from_secs(1)).expect("response line");
+    let response: crate::viewer::ViewerResponse = serde_json::from_str(line.trim()).expect("decode response");
+    assert!(matches!(response, crate::viewer::ViewerResponse::GameplayActionError { error } if error.code == "unsupported_in_live_server" && error.action_id.as_deref() == Some("quote_market_decision")));
+}
+
+#[test]
 fn seek_control_is_ignored_in_live_request_handler() {
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);

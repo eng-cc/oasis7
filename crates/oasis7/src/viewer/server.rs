@@ -353,6 +353,20 @@ impl<'a> ViewerSession<'a> {
                     },
                 )?;
             }
+            ViewerRequest::QuoteMarketDecision { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_offline_server".to_string(),
+                            message: "market cost preview is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("quote_market_decision".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::AuthoritativeChallenge { command: _ } => {
                 send_response(
                     writer,
@@ -576,7 +590,7 @@ fn unsupported_viewer_runtime_perf_snapshot() -> RuntimePerfSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulator::{RejectReason, WorldEventKind};
+    use crate::simulator::{RejectReason, WorldEventKind, WorldKernel};
     use std::io::{BufRead, BufReader, BufWriter};
     use std::net::{TcpListener, TcpStream};
     use std::time::{Duration, Instant};
@@ -692,5 +706,37 @@ mod tests {
         assert_eq!(ack.status, ControlCompletionStatus::TimeoutNoProgress);
         assert_eq!(ack.delta_logical_time, 0);
         assert_eq!(ack.delta_event_seq, 0);
+    }
+
+    #[test]
+    fn offline_server_rejects_market_quote_decision_with_stable_code() {
+        let events = vec![];
+        let mut session = ViewerSession::new(&events);
+        let (mut writer, peer) = test_writer_pair();
+        session
+            .handle_request(
+                ViewerRequest::QuoteMarketDecision {
+                    request: crate::viewer::MarketQuoteDecisionRequest {
+                        consume: vec![],
+                        player_id: "player".to_string(),
+                        public_key: None,
+                        auth: None,
+                    },
+                },
+                &mut writer,
+                &WorldKernel::new().snapshot(),
+                "test-world",
+            )
+            .expect("unsupported request is a response");
+        writer.flush().expect("flush response");
+        let mut line = String::new();
+        BufReader::new(peer)
+            .read_line(&mut line)
+            .expect("read response");
+        let response: crate::viewer::ViewerResponse =
+            serde_json::from_str(line.trim()).expect("decode response");
+        assert!(
+            matches!(response, crate::viewer::ViewerResponse::GameplayActionError { error } if error.code == "unsupported_in_offline_server" && error.action_id.as_deref() == Some("quote_market_decision"))
+        );
     }
 }

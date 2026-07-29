@@ -86,6 +86,7 @@ mod governance_validator_admission;
 mod governance_vote_quote;
 mod main_token;
 mod main_token_economy_audit;
+mod market_quote_decision_preview;
 mod module_action_loop;
 mod module_runtime_metering;
 mod modules;

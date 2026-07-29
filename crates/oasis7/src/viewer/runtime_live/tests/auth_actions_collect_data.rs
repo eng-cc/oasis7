@@ -108,6 +108,149 @@ fn signed_power_survival_quote_request(
     request
 }
 
+fn signed_market_quote_decision_request(
+    material: &str,
+    amount: i64,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::MarketQuoteDecisionRequest {
+    let mut request = crate::viewer::MarketQuoteDecisionRequest {
+        consume: vec![crate::viewer::MarketQuoteMaterialRequest {
+            material: material.to_string(),
+            amount,
+        }],
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_market_quote_decision_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign market decision quote auth"),
+    );
+    request
+}
+
+#[test]
+fn runtime_market_quote_decision_preflight_is_signed_read_only_and_player_readable() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(251);
+    register_runtime_session(
+        &mut server,
+        "player-market-quote",
+        Some(agent_id.as_str()),
+        251,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .world
+        .set_ledger_material_balance(
+            crate::runtime::MaterialLedgerId::agent(agent_id.as_str()),
+            "iron_ingot",
+            1,
+        )
+        .expect("seed local inventory");
+    server
+        .world
+        .set_material_balance("iron_ingot", 2)
+        .expect("seed world inventory");
+    let state_before = server.world.state().clone();
+
+    let quote = server
+        .handle_market_quote_decision(signed_market_quote_decision_request(
+            "iron_ingot",
+            4,
+            "player-market-quote",
+            262,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("signed market quote");
+
+    assert_eq!(quote.consuming_agent_id, agent_id);
+    assert_eq!(quote.contributions[0].material, "Iron ingot");
+    assert_eq!(quote.contributions[0].requested_amount, 4);
+    assert_eq!(quote.contributions[0].local_available_amount, 1);
+    assert_eq!(quote.contributions[0].world_cover_amount, 2);
+    assert_eq!(quote.contributions[0].shortfall_amount, 2);
+    assert_eq!(quote.total_shortfall_amount, 2);
+    assert!(!quote.submission_allowed);
+    assert_eq!(
+        quote.recommendation,
+        "Reduce the request or obtain more materials"
+    );
+    assert_eq!(
+        quote.next_action,
+        "Reduce requested amounts or source the missing materials"
+    );
+    assert!(quote.conditional_notice.contains("conditional preview"));
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_market_quote_decision_requires_valid_auth() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let unsigned = crate::viewer::MarketQuoteDecisionRequest {
+        consume: vec![crate::viewer::MarketQuoteMaterialRequest {
+            material: "iron_ingot".to_string(),
+            amount: 1,
+        }],
+        player_id: "player-market-quote".to_string(),
+        public_key: None,
+        auth: None,
+    };
+    assert_eq!(
+        server
+            .handle_market_quote_decision(unsigned)
+            .expect_err("unsigned market preview must fail")
+            .code,
+        "auth_proof_required"
+    );
+
+    let (public_key, private_key) = test_signer(253);
+    let mut tampered = signed_market_quote_decision_request(
+        "iron_ingot",
+        1,
+        "player-market-quote",
+        264,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered.auth.as_mut().expect("signature").signature = "00".repeat(64);
+    assert_eq!(
+        server
+            .handle_market_quote_decision(tampered)
+            .expect_err("tampered market preview must fail")
+            .code,
+        "auth_signature_invalid"
+    );
+}
+
 #[test]
 fn runtime_product_validation_quote_is_signed_read_only_and_advisory_before_submission() {
     let _guard = lock_test_llm_env();
