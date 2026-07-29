@@ -254,7 +254,7 @@
     - `doc/core/project.md`
     - player access mode dated companion set (retired/deleted; historical task evidence)
     - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+    - `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
     - `.pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md`
   - 验收命令 (`test_tier_required`):
     - historical terminology scan covered `doc/core/prd.md`, `doc/core/project.md`, the now-retired/deleted player access mode dated companion set, `doc/world-simulator/prd.md`, and the retired legacy Viewer topic

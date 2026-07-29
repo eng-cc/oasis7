@@ -1,15 +1,15 @@
-# Viewer Frontend Structure Standard (2026-07-06)
+# Viewer Frontend Structure Standard
 
-- 对应设计文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.project.md`
+- 对应设计文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.design.md`
+- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`
 - 关联主专题:
-  - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.prd.md`
+  - `doc/world-simulator/viewer/viewer-web-build-truth.prd.md`
   - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 
 审计轮次: 1
 
 ## 1. 摘要
-- Viewer Web 已有局部拆分真值：`viewer-web-single-source-build-truth-2026-05-19` 要求 `legacy_core.js` 退化为 facade，并把主要实现下沉到 `software_safe_src/` 子模块。
+- Viewer Web 已有局部拆分真值：`viewer-web-build-truth` 要求 `legacy_core.js` 退化为 facade，并把主要实现下沉到 `software_safe_src/` 子模块。
 - 当前缺口是没有一份面向 Viewer 前端 `js/html/jsx` 的通用结构标准。结果是 `legacy_core.js`、`main.jsx`、`pixel_world_host.jsx` 仍可能按专题继续膨胀，评审时缺少统一的拆分触发条件和目标边界。
 - 本标准把外部方法收敛为 oasis7 可执行规则：Feature-Sliced-inspired 分层、Solid 组件边界、Google HTML/CSS 基础卫生、ESLint/Prettier gate，以及 Viewer generated artifact 单一真值。
 

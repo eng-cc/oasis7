@@ -1,7 +1,7 @@
-# viewer-frontend-structure-standard-2026-07-06 项目管理
+# Viewer Frontend Structure Standard 项目管理
 
-- 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
-- 对应设计文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.design.md`
+- 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.prd.md`
+- 对应设计文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.design.md`
 
 审计轮次: 1
 
@@ -36,7 +36,7 @@
   - `software_safe.js` remains a generated compat alias to `viewer.js`; `software_safe.html` must remain a byte-for-byte compat copy of `viewer.html`.
 
 ## 依赖
-- `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.{prd,design,project}.md`
+- `doc/world-simulator/viewer/viewer-web-build-truth.{prd,design}.md`
 - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
 - `crates/oasis7_viewer/package.json`
@@ -49,3 +49,9 @@
 - 当前状态: baseline_standard_and_audit_gate_active
 - 当前任务: `task_83cf644a36ba4044812827ad49b597d5`
 - 下一任务: 后续按 project 中的 tooling gate、legacy_core facade burn-down、main.jsx component boundary slices 进入独立 GitHub-backed tasks。
+
+## Retained legacy-core facade debt
+
+- `legacy_core.js` is still not the final facade. The prior split moved constants/routes, initial state shape, and auth/CBOR crypto helpers into `software_safe_src/`, but control, semantic-command, DOM-rendering, and bootstrap assembly remain in `legacy_core.js`.
+- This remains active Viewer-owner debt under `task_f77968a2f95a4b8fa34a542a62a0aec0`; it must not be represented as complete merely because the canonical bundle and generated-runtime flow are complete.
+- Any next `legacy_core.js` slice must preserve the build-truth source/generated/compat boundary, record before/after line counts and owner, and run the scoped UI/build/feedback and diff-hygiene checks named in the active task row above.
