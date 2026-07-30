@@ -456,7 +456,7 @@ fn stage_sidecar_generation(
         &generation_record,
         staging_payload_dir.join("generation.json").as_path(),
     )?;
-    fs::File::open(staging_payload_dir.as_path())?.sync_all()?;
+    super::super::super::util::sync_directory(staging_payload_dir.as_path())?;
     Ok((generation_id, generation_record))
 }
 
@@ -496,7 +496,9 @@ fn finalize_sidecar_generation(
         fs::remove_dir_all(payload_dir.as_path())?;
     }
     fs::rename(staging_payload_dir.as_path(), payload_dir.as_path())?;
-    fs::File::open(sidecar_generation_payloads_dir(store_root))?.sync_all()?;
+    super::super::super::util::sync_directory(
+        sidecar_generation_payloads_dir(store_root).as_path(),
+    )?;
     let staged_root = sidecar_generation_staging_dir(store_root);
     if staged_root.exists() {
         fs::create_dir_all(staged_root.as_path())?;
