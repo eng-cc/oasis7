@@ -162,8 +162,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("oasis7-runtime-util-{label}-{unique}"));
+        let path = std::env::temp_dir().join(format!("oasis7-runtime-util-{label}-{unique}"));
         fs::create_dir_all(&path).expect("create tempdir");
         path
     }
