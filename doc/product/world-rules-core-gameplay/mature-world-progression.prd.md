@@ -8,7 +8,7 @@
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)
 
-本文是长期产品分册，承载玩家完成首个持续能力后，在已有组织、治理和历史的成熟世界中继续形成独立价值的产品承诺。它不冻结状态字段、数值、Agent 决策顺序、界面结构、任务状态或当前放行结论。
+本文是长期产品分册，承载玩家完成首个持续能力后，在已有组织、治理和历史的成熟世界中继续形成独立价值的产品承诺。长期目标不是世界通关，而是持续完成有边界、可审计并留下世界后果的阶段成果。它不冻结状态字段、数值、Agent 决策顺序、界面结构、任务状态或当前放行结论。
 
 ## 1. 产品问题
 
@@ -21,6 +21,8 @@
 默认产品路径为：
 
 `本地立足 -> 区域专业化贡献 -> 有限范围的区域影响`
+
+这三段构成系统的长期推荐轴：建立并守住可恢复能力、服务区域需求、获得有限且可审计的区域影响。它们允许在当前世界状态下改道、重排或回退，不是必须逐级完成的职业树。组织、协议或治理等文明尺度项目是自愿共同扩展，不能取代该独立路线或成为唯一有效的成长答案。
 
 ### 2.1 本地立足
 
@@ -39,6 +41,7 @@
 - 持续的区域贡献可以形成局部优先级、机会、信任、可见度或协调能力。
 - 这类影响必须低于全局治理权、联盟领导权或跨区域军政控制，不能把小玩家成长静默升级为 major-power 路线。
 - 玩家可以自愿进入更大组织或更深治理，但产品不能把这种升级包装成成熟世界中唯一有效的成长答案。
+- 文明尺度项目即使产生更大范围的协作或制度后果，也不构成全体玩家的胜利条件；只有在受影响范围内经授权形成后，才作为参与者可选择的共同目标。
 
 ## 3. 失败、恢复与独立性
 
@@ -75,6 +78,8 @@
 
 如果结果只有产量、库存或重复次数上升，而没有上述变化，应判定为 grind 风险，不能作为成熟世界成长成立的证据。
 
+系统默认维持一个当前主目标并提供继续路径；阶段成果后最多呈现少量实质不同的下一方向，玩家也可以主动换向。目标作用域识别、canonical 转译、资源与权限校验、共同治理、反支配和审计留在后台，除非它们改变当前选择的成本、锁定、恢复、共同承诺或可用替代路径。该边界不要求玩家逐行动确认或审核内部流程。
+
 玩家影响证据必须形成同一条因果链：
 
 `玩家行动 -> 可归因的世界变化 -> 新增能力或区域价值 -> 下一决策或回访理由`
@@ -98,6 +103,7 @@
 - MW-6：Viewer 与 pure API 分别提供玩家可读证据，runtime、Agent 和 gameplay 专业域对行动、后果、恢复与依赖边界保持一致。
 - MW-7：`test_tier_required` 证明合同和可读性；`test_tier_full` 的 fresh mature-world 样例才能给出当前路线 verdict。历史完成态或文档迁移本身不能代替 fresh evidence。
 - MW-8：代表性 disruption 样例针对同一个 active goal 比较 repair、rebuild 与 pivot 的时间/阶段成本、资源成本、保留/失去价值、主要风险、推荐理由和独立 lane 可行性；若独立路径不可行，样例说明约束与重评条件。
+- MW-9：成熟世界样例证明系统围绕三条长期推荐轴提供一个当前主目标、继续路径及少量实质不同的分支或主动换向；文明尺度项目保持自愿共同扩展，后台治理/转译/反支配护栏只在实质相关时进入玩家决策。
 
 ### 6.1 验收追踪
 
@@ -108,6 +114,7 @@
 | MW-4 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | failure 到 repair / rebuild / pivot 的组合证据 | test_tier_required |
 | MW-6 / MW-7 | qa_engineer / runtime_engineer / viewer_engineer | PRD-TESTING-003 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/testing/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | Viewer、pure API 与权威状态对账及 fresh sample verdict | test_tier_full |
 | MW-8 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一 active goal 下三条恢复路径、独立性与受迫外部依赖边界的组合证据 | test_tier_required |
+| MW-9 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-014 / PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 三条长期推荐轴、单一主目标、继续/分支/换向、文明项目自愿性与后台护栏组合证据 | test_tier_required |
 
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 
@@ -116,4 +123,5 @@
 - 不新增免费 claim、无限补贴、经济旁路或永久保护区。
 - 不承诺完整职业树、固定专业化数值或全局影响力成长曲线。
 - 不把区域专业化扩展为默认战争、联盟或全局治理主线。
+- 不把文明尺度共同项目、目标作用域、canonical 转译或治理校验包装成逐动作的玩家表单、重复确认或默认主线。
 - 不用历史任务完成态、旧样本或本次文档整理声称当前 mature-world 体验已经通过。
