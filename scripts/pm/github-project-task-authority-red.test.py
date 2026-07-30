@@ -105,6 +105,77 @@ class AuthoritativeMappingContract(unittest.TestCase):
         mapping = MODULE.load_mapping(mapping_path)
         self.assert_complete_identity(mapping["tasks"][self.uid])
 
+    def test_default_root_refresh_preserves_registered_task_worktree_identity(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        MODULE.save_mapping(mapping_path, {
+            "version": 1,
+            "tasks": {self.uid: {
+                "task_uid": self.uid,
+                "status": "done",
+                **self.expected,
+            }},
+        })
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "done",
+            "priority": "P2",
+            "worktree_hint": str(self.worktree),
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql", return_value={"data": {"nodes": []}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assert_complete_identity(refreshed)
+        self.assertNotEqual(str(self.repo.resolve()), refreshed["canonical_worktree"])
+        self.assertNotEqual("main", refreshed["task_branch"])
+
+    def test_refresh_rejects_conflicting_registered_task_identities_without_mutation(self) -> None:
+        other = pathlib.Path(self.tmp.name) / "other-task-worktree"
+        subprocess.run([
+            "git", "-C", str(self.repo), "worktree", "add", "-qb",
+            "task/other-authority-contract", str(other),
+        ], check=True, stdout=subprocess.DEVNULL)
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        original = {"version": 1, "tasks": {self.uid: {
+            "task_uid": self.uid,
+            "status": "committed",
+            **self.expected,
+        }}}
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "committed",
+            "priority": "P2",
+            "worktree_hint": str(other),
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaises(SystemExit):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(original, MODULE.load_mapping(mapping_path))
+
     def test_refresh_rejects_worktree_hint_from_different_git_common_dir(self) -> None:
         args = self.args()
         args.task_uid = self.uid

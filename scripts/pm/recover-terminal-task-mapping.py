@@ -146,6 +146,19 @@ def import_recovered(store: Any, mapping_path: pathlib.Path, task_uid: str,
             fail("default task mapping changed to a conflicting task record during recovery")
     store.transact_json(mapping_path, import_if_absent, {"version": 1, "tasks": {}})
 
+def reconcile_recovered(store: Any, mapping_path: pathlib.Path, task_uid: str,
+                        previous: dict[str, Any] | None,
+                        recovered: dict[str, Any]) -> None:
+    def replace_if_unchanged(mapping: dict[str, Any]) -> None:
+        tasks = mapping.setdefault("tasks", {})
+        if not isinstance(tasks, dict):
+            fail("default task mapping has invalid tasks structure")
+        current = tasks.get(task_uid)
+        if current != previous:
+            fail("default task mapping changed during terminal identity recovery")
+        tasks[task_uid] = recovered
+    store.transact_json(mapping_path, replace_if_unchanged, {"version": 1, "tasks": {}})
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -165,9 +178,17 @@ def main() -> int:
     registry = registered_worktrees(root)
     default = read_mapping(mapping_path)
     default_tasks = default.get("tasks") or {}
-    if args.task_uid in default_tasks:
-        print("existing")
-        return 0
+    existing = default_tasks.get(args.task_uid)
+    if existing is not None:
+        existing_canonical = normalized(str(existing.get("canonical_worktree") or ""))
+        root_canonical = normalized(str(root))
+        existing_branch = str(existing.get("task_branch") or "")
+        # Preserve the established fast path for a task-bound destination.
+        # Recovery is required only for the known poisoned signature where a
+        # terminal task was rebound to the default root/default branch.
+        if existing_canonical != root_canonical and existing_branch != args.main_ref:
+            print("existing")
+            return 0
 
     discovered: list[tuple[pathlib.Path, dict[str, Any]]] = []
     for entry in registry.values():
@@ -197,8 +218,22 @@ def main() -> int:
     recovered = copy.deepcopy(authoritative[0])
 
     store = load_store(pathlib.Path(__file__).resolve().parent)
-    import_recovered(store, mapping_path, args.task_uid, recovered)
-    print("imported")
+    if existing is not None:
+        try:
+            validated_existing = validate_record(
+                existing, task_uid=args.task_uid, main_ref=args.main_ref,
+                receipt=receipt, registry=registry,
+            )
+        except SystemExit:
+            validated_existing = None
+        if validated_existing is not None and task_identity(validated_existing) == task_identity(recovered):
+            print("existing")
+            return 0
+        reconcile_recovered(store, mapping_path, args.task_uid, existing, recovered)
+        print("repaired")
+    else:
+        import_recovered(store, mapping_path, args.task_uid, recovered)
+        print("imported")
     return 0
 
 
