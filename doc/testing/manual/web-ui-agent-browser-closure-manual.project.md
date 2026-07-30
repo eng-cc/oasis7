@@ -29,7 +29,6 @@
 - `scripts/viewer-software-safe-chat-regression.sh`
 - `agent-browser` CLI（二进制命令；默认直接通过 `PATH` 调用）
 - `scripts/agent-browser-lib.sh`
-- `doc/testing/manual/systematic-application-testing-manual.prd.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
 

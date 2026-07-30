@@ -248,6 +248,19 @@
 | PRD-TESTING-009 | durable simulated-player persona panel | `test_tier_required` | catalog, card schema, handoff and L4/L5-boundary sampling | 多风格内部玩家视角治理 |
 | PRD-TESTING-010 | durable L4 synthetic/agent split | `test_tier_required` | L4A/L4B/L5 boundary, manual entry and L4B runner sampling | synthetic/agent/real-human 玩法证据治理 |
 | PRD-TESTING-011 | model-visual-review-sop | `test_tier_required` | 模型视觉评审 SOP、输出模板、testing 根入口和 S6 手册互链、doc governance 检查 | routine 人工视觉 review 替代路径 |
+
+### 已退役的系统测试手册工程化标识
+
+`PRD-TESTING-MANUAL-001..003` 与 `TMAN-1..4` 是 2026-02-26 手册工程化收口的 completed / historical 标识，不再作为活跃专题：
+
+| 历史标识 | 当前承接 |
+| --- | --- |
+| `PRD-TESTING-MANUAL-001` / `TMAN-1` | `testing-manual.md` 是唯一 canonical operator manual。 |
+| `PRD-TESTING-MANUAL-002` / `TMAN-2` | `testing-manual.md` 的 L0–L5、S0–S10 与 required/full 章节拥有当前测试分层、套件和触发矩阵。 |
+| `PRD-TESTING-MANUAL-003` / `TMAN-3/4` | `testing-manual.md` 的证据规则、`doc/testing/templates/release-evidence-bundle-template.md`、`doc/testing/evidence/README.md` 以及 Web UI 手册拥有当前证据、fail-fast、GPU/headed 与维护口径。 |
+
+历史 `DEC-TMAN-001..004` 已分别由当前的主手册/分册结构、required/full 策略、发布证据硬门禁与逐篇语义迁移治理吸收；原任务实现过程从 Git history 与 GitHub task evidence 追溯。若当前手册、脚本或 CI 漂移，应修改现行权威和新任务证据，不恢复已退役专题。
+
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
