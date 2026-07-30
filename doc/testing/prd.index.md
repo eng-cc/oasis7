@@ -87,7 +87,6 @@ Builtin WASM CI 历史收口：早期 m1 independent multi-runner、required-che
 | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.project.md` |
 | `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md` | `doc/testing/longrun/p2p-longrun-soak-and-chaos.design.md` | `doc/testing/longrun/p2p-longrun-soak-and-chaos.project.md` |
 | `doc/testing/longrun/s10-five-node-real-game-soak.prd.md` | `doc/testing/longrun/s10-five-node-real-game-soak.design.md` | `doc/testing/longrun/s10-five-node-real-game-soak.project.md` |
-| `doc/testing/manual/systematic-application-testing-manual.prd.md` | `doc/testing/manual/systematic-application-testing-manual.design.md` | `doc/testing/manual/systematic-application-testing-manual.project.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
