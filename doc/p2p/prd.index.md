@@ -104,9 +104,7 @@
 ## 发布说明文档（release，补充材料）
 | 发布说明 | 对应专题 |
 | --- | --- |
-| `doc/p2p/node/node-redeemable-power-asset.release.md` | `doc/p2p/node/node-redeemable-power-asset.prd.md` |
 | `doc/p2p/node/node-redeemable-power-asset-audit-hardening.release.md` | `doc/p2p/node/node-redeemable-power-asset.prd.md`（历史 AHA provenance） |
-| `doc/p2p/token/mainchain-token-allocation-mechanism.release.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
