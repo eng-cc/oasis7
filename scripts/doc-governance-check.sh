@@ -580,13 +580,17 @@ check_allowlist_match "module root markdown set" "$MODULE_ROOT_MD_ALLOWLIST_FILE
 rm -f "$doc_root_actual_tmp" "$module_root_actual_tmp"
 
 # 5) canonical role names must be used in devlogs and handoff templates
-for file in "${devlog_files[@]}"; do
-  check_devlog_role_labels "$file"
-done
+if [[ ${#devlog_files[@]} -gt 0 ]]; then
+  for file in "${devlog_files[@]}"; do
+    check_devlog_role_labels "$file"
+  done
+fi
 
-for file in "${handoff_template_files[@]}"; do
-  check_handoff_role_fields "$file"
-done
+if [[ ${#handoff_template_files[@]} -gt 0 ]]; then
+  for file in "${handoff_template_files[@]}"; do
+    check_handoff_role_fields "$file"
+  done
+fi
 
 project_task_policy_diff=""
 if git rev-parse --verify origin/main >/dev/null 2>&1; then
