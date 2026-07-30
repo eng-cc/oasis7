@@ -166,6 +166,20 @@
       "signer_id": "signer03",
       "scheme": "ed25519",
       "public_key_hex": "46bd2f2c506645909b63a2f1fda24eaa72ff814bfb40dde6d71b4da960b5deb6"
+    },
+    {
+      "slot_id": "ops.rollback.on_call.v1",
+      "signer_id": "public-testnet-rollback-on-call-01",
+      "scheme": "ed25519",
+      "threshold": 1,
+      "public_key_hex": "9dfad9943645344153bfd0efa982cf4dec8f09aa7d1a3146e65883fd4c997657"
+    },
+    {
+      "slot_id": "governance.rollback.v1",
+      "signer_id": "public-testnet-rollback-governance-01",
+      "scheme": "ed25519",
+      "threshold": 1,
+      "public_key_hex": "d9f35c8fc0e0e5df53475cc7059f2f38ab901ee39a5c9c464f65b09ef811bf4a"
     }
   ]
 }

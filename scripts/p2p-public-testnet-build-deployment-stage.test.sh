@@ -11,6 +11,29 @@ cat >"$TMP_DIR/bootstrap-peers.txt" <<'EOF'
 /ip4/127.0.0.1/tcp/6832/p2p/12D3KooWTestStorage
 EOF
 
+jq -e '
+  ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")] | length) == 1
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0] == {
+    "slot_id": "ops.rollback.on_call.v1",
+    "signer_id": "public-testnet-rollback-on-call-01",
+    "scheme": "ed25519",
+    "threshold": 1,
+    "public_key_hex": "9dfad9943645344153bfd0efa982cf4dec8f09aa7d1a3146e65883fd4c997657"
+  })
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")] | length) == 1
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")][0] == {
+    "slot_id": "governance.rollback.v1",
+    "signer_id": "public-testnet-rollback-governance-01",
+    "scheme": "ed25519",
+    "threshold": 1,
+    "public_key_hex": "d9f35c8fc0e0e5df53475cc7059f2f38ab901ee39a5c9c464f65b09ef811bf4a"
+  })
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].signer_id
+    != [.entries[] | select(.slot_id == "governance.rollback.v1")][0].signer_id)
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].public_key_hex
+    != [.entries[] | select(.slot_id == "governance.rollback.v1")][0].public_key_hex)
+' "$ROOT_DIR/doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json" >/dev/null
+
 assert_fails_containing() {
   local expected="$1"
   shift
@@ -59,6 +82,16 @@ jq -e '
   and ([.entries[] | select(.slot_id == "governance.finality.v1")][1].public_key_hex == "858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6")
   and ([.entries[] | select(.slot_id == "governance.finality.v1")][2].signer_id == "triad-testnet-fourth-local")
   and ([.entries[] | select(.slot_id == "governance.finality.v1")][2].public_key_hex == "f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af")
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")] | length) == 1
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].signer_id == "public-testnet-rollback-on-call-01")
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].scheme == "ed25519")
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].threshold == 1)
+  and ([.entries[] | select(.slot_id == "ops.rollback.on_call.v1")][0].public_key_hex == "9dfad9943645344153bfd0efa982cf4dec8f09aa7d1a3146e65883fd4c997657")
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")] | length) == 1
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")][0].signer_id == "public-testnet-rollback-governance-01")
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")][0].scheme == "ed25519")
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")][0].threshold == 1)
+  and ([.entries[] | select(.slot_id == "governance.rollback.v1")][0].public_key_hex == "d9f35c8fc0e0e5df53475cc7059f2f38ab901ee39a5c9c464f65b09ef811bf4a")
   and .truth_kind == "deployment_public_signers"
 ' "$TMP_DIR/stage/config/public-testnet-governance-public-signers-deployment-2026-06-06.json" >/dev/null
 

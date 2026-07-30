@@ -29,7 +29,27 @@ class WindowsGovernedClosureTests(unittest.TestCase):
         config = stage / "config"
         evidence = config / "doc/testing/evidence"
         evidence.mkdir(parents=True)
-        (evidence / "governance.json").write_text("{}\n", encoding="utf-8")
+        governance = {
+            "entries": [
+                {
+                    "slot_id": "ops.rollback.on_call.v1",
+                    "signer_id": "public-testnet-rollback-on-call-01",
+                    "scheme": "ed25519",
+                    "threshold": 1,
+                    "public_key_hex": "9dfad9943645344153bfd0efa982cf4dec8f09aa7d1a3146e65883fd4c997657",
+                },
+                {
+                    "slot_id": "governance.rollback.v1",
+                    "signer_id": "public-testnet-rollback-governance-01",
+                    "scheme": "ed25519",
+                    "threshold": 1,
+                    "public_key_hex": "d9f35c8fc0e0e5df53475cc7059f2f38ab901ee39a5c9c464f65b09ef811bf4a",
+                },
+            ]
+        }
+        (evidence / "governance.json").write_text(
+            json.dumps(governance), encoding="utf-8"
+        )
         (evidence / "binding.md").write_text("binding\n", encoding="utf-8")
         (stage / "deployment-truth.md").write_text("truth\n", encoding="utf-8")
         world = stage / "generated-world/world"
@@ -104,6 +124,13 @@ class WindowsGovernedClosureTests(unittest.TestCase):
             self.assertEqual(bundle["generated_world_sidecar"]["ref"], "generated-world/generated-scenario-world")
             self.assertTrue((out / "generated-world/world/world.json").is_file())
             self.assertTrue((out / "doc/testing/evidence/governance.json").is_file())
+            localized_governance = json.loads(
+                (out / "doc/testing/evidence/governance.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                [entry["slot_id"] for entry in localized_governance["entries"]],
+                ["ops.rollback.on_call.v1", "governance.rollback.v1"],
+            )
             self.assertEqual(
                 genesis["governance_bootstrap_refs"]["governance_public_manifest_ref"],
                 "doc/testing/evidence/governance.json",
