@@ -892,11 +892,9 @@ def command_refresh_task(args: argparse.Namespace) -> int:
             identity_candidates.append(candidate)
     if len(identity_candidates) > 1:
         die("refresh-task: cached and live canonical worktree identities disagree")
-    repository_identity = (
-        identity_candidates[0]
-        if identity_candidates
-        else authoritative_repository_identity(root, args.repo, str(root))
-    )
+    if not identity_candidates:
+        die("refresh-task: no registered canonical task worktree identity is available")
+    repository_identity = identity_candidates[0]
     live["worktree_hint"] = repository_identity["canonical_worktree"]
     recovered: dict[str, Any] = {}
     item_id = str(existing.get("project_item_id") or "")

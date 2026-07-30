@@ -176,6 +176,40 @@ class AuthoritativeMappingContract(unittest.TestCase):
                 MODULE.command_refresh_task(args)
         self.assertEqual(original, MODULE.load_mapping(mapping_path))
 
+    def test_default_root_refresh_rejects_missing_task_identity_without_mutation(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        missing = pathlib.Path(self.tmp.name) / "missing-task-worktree"
+        original = {"version": 1, "tasks": {self.uid: {
+            "task_uid": self.uid,
+            "status": "committed",
+            "repository": "eng-cc/oasis7",
+            "canonical_worktree": str(missing),
+            "task_branch": "task/missing",
+            "default_branch": "main",
+        }}}
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "committed",
+            "priority": "P2",
+            "worktree_hint": str(missing),
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaises(SystemExit):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(original, MODULE.load_mapping(mapping_path))
+
     def test_refresh_rejects_worktree_hint_from_different_git_common_dir(self) -> None:
         args = self.args()
         args.task_uid = self.uid
