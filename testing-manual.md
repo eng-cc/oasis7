@@ -272,9 +272,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_full simulator::t
 ./scripts/main-token-regression.sh required
 ./scripts/main-token-regression.sh full
 ```
-- 运行与审计口径补充：
-  - 设计与运行要点：`doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
-  - 发布说明：`doc/p2p/token/mainchain-token-allocation-mechanism.release.md`
+- 当前运行与审计权威：`doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`。
 - 用途：
   - 快速定位 `oasis7` 内部模块回归，不必每次跑全套 full。
 
