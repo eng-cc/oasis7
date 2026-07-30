@@ -10,6 +10,52 @@ use std::path::Path;
 
 use super::error::WorldError;
 
+#[cfg(windows)]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(unix)]
+pub(crate) fn sync_directory(path: &Path) -> Result<(), WorldError> {
+    fs::File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn sync_directory(_path: &Path) -> Result<(), WorldError> {
+    Ok(())
+}
+
 pub fn deserialize_btreemap_u64_keys<'de, D, V>(
     deserializer: D,
 ) -> Result<BTreeMap<u64, V>, D::Error>
@@ -89,8 +135,8 @@ pub fn atomic_write_bytes_to_path(data: &[u8], path: &Path) -> Result<(), WorldE
     file.write_all(data)?;
     file.sync_all()?;
     drop(file);
-    fs::rename(tmp.as_path(), path)?;
-    fs::File::open(parent)?.sync_all()?;
+    platform_atomic_replace(tmp.as_path(), path)?;
+    sync_directory(parent)?;
     Ok(())
 }
 
@@ -102,4 +148,42 @@ pub fn atomic_write_json_to_path<T: Serialize>(value: &T, path: &Path) -> Result
 pub fn read_json_from_path<T: DeserializeOwned>(path: &Path) -> Result<T, WorldError> {
     let data = fs::read(path)?;
     Ok(serde_json::from_slice(&data)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{atomic_write_bytes_to_path, sync_directory};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("oasis7-runtime-util-{label}-{unique}"));
+        fs::create_dir_all(&path).expect("create tempdir");
+        path
+    }
+
+    #[test]
+    fn atomic_write_replaces_an_existing_destination() {
+        let temp = temp_dir("replace");
+        let path = temp.join("state.json");
+        fs::write(&path, b"old").expect("write existing destination");
+
+        atomic_write_bytes_to_path(b"new", &path).expect("replace existing destination");
+
+        assert_eq!(fs::read(path).expect("read replaced destination"), b"new");
+        fs::remove_dir_all(temp).expect("remove tempdir");
+    }
+
+    #[test]
+    fn syncing_a_directory_uses_supported_platform_semantics() {
+        let temp = temp_dir("sync-directory");
+        sync_directory(&temp).expect("sync directory");
+        fs::remove_dir_all(temp).expect("remove tempdir");
+    }
 }
