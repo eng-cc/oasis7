@@ -532,6 +532,36 @@ fn micro_depot_install_quote_is_non_mutating_and_makes_the_finite_commission_vis
 }
 
 #[test]
+fn micro_depot_install_quote_reports_funded_post_install_upkeep_horizon_without_mutation() {
+    let (mut kernel, _) = install_fixture(12);
+    configure_two_unit_service(&mut kernel);
+    let model_before = kernel.model().clone();
+    let journal_before = kernel.journal_snapshot();
+
+    let quote = kernel
+        .micro_depot_install_quote(&install_action("depot-upkeep-horizon", vec!["data"]))
+        .expect("funded prospective install quote");
+    let quote = serde_json::to_value(quote).expect("serialize install quote");
+
+    assert_eq!(quote["deployable"], true);
+    assert_eq!(
+        quote["upkeep_horizon_epochs"],
+        serde_json::json!(2),
+        "after reserving the ten-data install cost, two liquid Data cover two one-Data upkeep epochs"
+    );
+    assert_eq!(
+        kernel.model(),
+        &model_before,
+        "quoting funded upkeep horizon must not reserve or debit"
+    );
+    assert_eq!(
+        kernel.journal_snapshot(),
+        journal_before,
+        "quoting funded upkeep horizon must not emit canonical history"
+    );
+}
+
+#[test]
 fn micro_depot_install_quote_returns_non_mutating_structured_reasons_for_non_deployable_cases() {
     let cases = [
         (9, vec!["data"], "insufficient install resources"),

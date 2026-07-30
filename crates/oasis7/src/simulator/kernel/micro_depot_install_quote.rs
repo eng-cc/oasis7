@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use super::super::types::ResourceKind;
+use super::super::types::{ResourceKind, ResourceStock};
 use super::micro_depot::{
     MICRO_DEPOT_UPKEEP_DATA_COST, MicroDepotActionContext, MicroDepotActionKind,
     MicroDepotDecision, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
@@ -23,6 +23,7 @@ pub struct MicroDepotInstallQuote {
     pub commissioning_sink_resources: Vec<MicroDepotResourceDebit>,
     pub commissioned_inventory_by_kind: BTreeMap<String, i64>,
     pub upkeep_per_epoch_resources: Vec<MicroDepotResourceDebit>,
+    pub upkeep_horizon_epochs: i64,
     pub projected_commissioning_service_uses: i64,
     pub break_even_uses: i64,
     pub low_use_warning: bool,
@@ -62,6 +63,18 @@ impl WorldKernel {
             kind: ResourceKind::Data,
             amount: MICRO_DEPOT_UPKEEP_DATA_COST,
         }];
+        let upkeep_horizon_epochs = self
+            .model
+            .agents
+            .get(installer_agent_id)
+            .map(|agent| {
+                micro_depot_post_install_upkeep_horizon_epochs(
+                    &agent.resources,
+                    &commissioning.install_cost_resources,
+                    &upkeep_per_epoch_resources,
+                )
+            })
+            .unwrap_or(0);
         let mut reasons = Vec::new();
 
         if self.model.regional_infrastructure.contains_key(facility_id) {
@@ -235,6 +248,7 @@ impl WorldKernel {
             commissioning_sink_resources: commissioning.sink_resources,
             commissioned_inventory_by_kind: commissioning.inventory_by_kind,
             upkeep_per_epoch_resources,
+            upkeep_horizon_epochs,
             projected_commissioning_service_uses,
             break_even_uses,
             low_use_warning,
@@ -247,6 +261,40 @@ impl WorldKernel {
             quote.reasons.is_empty() && quote.projected_commissioning_service_uses > 0;
         Ok(quote)
     }
+}
+
+fn micro_depot_post_install_upkeep_horizon_epochs(
+    resources: &ResourceStock,
+    install_cost_resources: &[MicroDepotResourceDebit],
+    upkeep_per_epoch_resources: &[MicroDepotResourceDebit],
+) -> i64 {
+    let install_debit_for_kind = |kind| {
+        install_cost_resources
+            .iter()
+            .filter(|debit| debit.kind == kind)
+            .fold(0_i64, |total, debit| total.saturating_add(debit.amount))
+    };
+
+    if install_cost_resources
+        .iter()
+        .any(|debit| resources.get(debit.kind) < install_debit_for_kind(debit.kind))
+    {
+        return 0;
+    }
+
+    upkeep_per_epoch_resources
+        .iter()
+        .map(|upkeep| {
+            if upkeep.amount <= 0 {
+                return 0;
+            }
+            let post_install_balance = resources
+                .get(upkeep.kind)
+                .saturating_sub(install_debit_for_kind(upkeep.kind));
+            post_install_balance / upkeep.amount
+        })
+        .min()
+        .unwrap_or(0)
 }
 
 fn micro_depot_projected_commissioning_uses(
