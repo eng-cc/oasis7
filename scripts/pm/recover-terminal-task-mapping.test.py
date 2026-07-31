@@ -106,7 +106,9 @@ class RecoveryTest(unittest.TestCase):
 
     def test_does_not_import_over_existing_incomplete_entry(self) -> None:
         self.mapping.write_text(json.dumps({"version": 1, "tasks": {UID: None}}) + "\n", encoding="utf-8")
-        self.assertIn("existing", self.invoke().stdout)
+        before = self.mapping.read_bytes()
+        self.assertIn("existing terminal task record is incomplete", self.invoke(ok=False).stderr)
+        self.assertEqual(before, self.mapping.read_bytes())
         mapping = json.loads(self.mapping.read_text(encoding="utf-8"))
         self.assertIsNone(mapping["tasks"][UID])
 

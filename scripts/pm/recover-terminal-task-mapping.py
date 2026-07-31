@@ -178,6 +178,8 @@ def main() -> int:
     registry = registered_worktrees(root)
     default = read_mapping(mapping_path)
     default_tasks = default.get("tasks") or {}
+    if args.task_uid in default_tasks and not isinstance(default_tasks[args.task_uid], dict):
+        fail("existing terminal task record is incomplete")
     existing = default_tasks.get(args.task_uid)
     if existing is not None:
         existing_canonical = normalized(str(existing.get("canonical_worktree") or ""))
