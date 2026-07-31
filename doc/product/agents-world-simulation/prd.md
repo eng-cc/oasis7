@@ -21,6 +21,8 @@
 - [玩家可读的世界舞台](player-readable-world-stage.prd.md)：约束正式世界表面的首读层级、空间关系来源、可归因玩家因果与按需诊断边界。
 - [玩家可读表面的连续性](player-readable-surface-continuity.prd.md)：约束 viewport、信息密度、语言与连接状态变化时，主要决策面仍可读、可操作且可恢复。
 - [Agent 对话与 Prompt 控制](agent-conversation-and-prompt-control.prd.md)：区分一次对话、预设/草稿与持续 Prompt/目标调整，并配对承载跨 surface 产品交互设计和迁移追踪。
+- [Agent 权限、资产与责任连续性](agent-authority-ownership-and-accountability.prd.md)：承载自治模式、预授权、团队扩张、转让后的身份连续性、异议/override 与因果责任边界。
+- [Provider、学习认证与情报连续性](provider-learning-intelligence-and-cadence.prd.md)：可选择的认证 provider、固定权威节奏、可审计训练/重训与有期限情报的长期产品边界。
 
 ## 1. 产品承诺
 
@@ -74,6 +76,9 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 - SC-8：正式玩家 surface 能区分当前账号绑定/权威认领的可控制 Agent 与共享世界中的其他或未绑定 Agent；首次认领前可读一次性承诺、持续维护、可维持时间和主要风险，并在无法维持时给出真实的恢复、释放或重新规划下一步；受限启动帮助不会被表达为免费控制、通用补贴或可转让资产。
 - SC-9：正式玩家 surface 能区分 Agent 对话、预设/草稿填充与持续 Prompt/目标调整；目标 Agent、内容来源、提交结果和缺失能力边界可读，本地填充或 request acceptance 不会被呈现为已应用。
 - SC-10：正式玩家 surface 在受支持的 viewport、信息密度、语言和连接状态变化中仍能保留当前目标、主要 blocker、可信行动反馈与下一决策；断连恢复、语言或布局变化不会改写权威结果或代签玩家进展。
+- SC-11：玩家可在高自治和有界授权模式间作出可读选择；严重后果只在有效的提前授权或后续有效确认下执行。Agent 团队扩张、转让、异议、owner override 与组织责任保持身份连续、授权边界和可审计因果，不把 Agent 当作责任替身。
+- SC-12：代表性 Agent 样例证明可选择 provider profile 只能经证据优先的准入、有限试点/分层/范围与暂停/撤销后使用，且不会改变固定权威节奏或 action slots；训练、认证、重训与情报在可审计、可更新和安全披露边界下形成连续历史，不以现有 Local Provider parity 或局部证据代签当前 readiness。
+- SC-13：长期空间世界舞台样例证明世界、目标、相关行动者或路线、blocker 与下一步始终是默认 primary decision surface；相邻的目标/command/receipt/selection 管理保持可展开且 command path 可发现，语义缩放先收敛次级 labels，terrain/blocks 不暗示直接 edit/harvest/build，且不将该方向写成当前 2D 或 zoom 已交付。
 
 ### 5.1 验收追踪
 
@@ -89,6 +94,9 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 | SC-8 | producer_system_designer / gameplay_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 账号绑定/认领可读性、首次承诺与持续维护选择、受限启动帮助边界，以及无法维持时的恢复/释放/重规划玩家 surface 证据；不复制数值、字段或状态机 | test_tier_required |
 | SC-9 | producer_system_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 对话、草稿、默认/override、accepted/applied/rejected/blocked 与窄屏可达性对账 | test_tier_required |
 | SC-10 | producer_system_designer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | desktop、窄屏/低高度、双语 fallback 与断连恢复中的决策锚点、权威结果和下一步对账 | test_tier_required |
+| SC-11 | producer_system_designer / agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 自治/授权、规模、转让、异议/override、责任 receipt 和正式 surface 可读性的组合证据 | test_tier_required |
+| SC-12 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/provider-learning-intelligence-and-cadence.prd.md`; `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | provider 准入/暂停、固定 cadence、训练/认证/重训历史、情报私有期/披露/公共 baseline 与 freshness 的组合证据 | test_tier_full |
+| SC-13 | producer_system_designer / game_visual_interaction_designer / viewer_engineer / gameplay_designer / qa_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/player-readable-world-stage.prd.md`; `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | primary spatial stage、可发现 command、target/receipt/selection 次级管理、语义缩放信息保留、terrain 非直接操作与当前 claim 分离证据 | test_tier_required |
 
 ## 6. Non-Goals
 

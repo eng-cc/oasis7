@@ -19,6 +19,10 @@
 
 - [`世界连续性、治理与恢复`](world-continuity-governance-and-recovery.prd.md)：权威世界不分叉、恢复后玩家结果连续、治理不可旁路、紧急处置可申诉与长期世界放行。
 - [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md)：有限区域设施如何解决可读压力，以及经治理的新工业能力如何安全进入同一持久世界。
+- [`区域章程、地点 tenure 与公共融资`](regional-charter-tenure-and-public-funding.prd.md)：空间锚定区域的成立/退化、可续期地点使用权，以及服务费和受限公共 levy 的制度边界。
+- [`受治理工业、市场结算与危机保供`](governed-industry-market-and-emergency-supply.prd.md)：基础工业规则与受治理扩展、全球发现和物理结算、OC/地方经济边界，以及有界紧急保供。
+- [`全局治理、组织连续性与宪制护栏`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md)：普通 OC 治理的有限范围、资格与控制权边界、组织存续/退出，以及普通治理不可改写的宪制保护。
+- [`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md)：相邻 frontier 的受治理扩展、非主权 pioneer priority，以及公共事实与需侦察的实时世界信息边界。
 
 ## 1. 产品承诺
 
@@ -108,6 +112,10 @@ oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组�
 - SC-8：玩家可读说明将统一持久世界模型与入口、运行环境、`world_id`、network tier 和 readiness 分层表达，不把技术分区或环境包装成不同玩家世界，也不由产品术语推导未经证据支持的公开 claim。
 - SC-9：至少一个区域设施样例以同一 facility/action/receipt identity 贯通玩家报价与确认、权威执行、持久化/replay、复制或 state sync、重连后的玩家可见结果与失败恢复；game、runtime 或 P2P 的孤立通过不得替代该端到端组合证据。
 - SC-10：至少一条可达工业生命周期贯通资源获取或 sourcing、转化或生产、能力或区域服务用途，以及维护、恢复或退役；不得依赖未解释的预置收益，且全过程保持资源守恒、权限校验、回放一致和可读的下一决策。具体 ledger、运输、排程与产品校验动作顺序由专业域拥有。
+- SC-11：代表性区域样例证明空间锚定章程经本地能力证据、邻区异议和宪制/反圈地复核成立；成熟区域的合格本地治理、退化恢复、地点 tenure 和公共融资均保持有界、可审计、可申诉，且资产/身份不会被任意抹除。
+- SC-12：代表性工业与市场样例证明基础规则与受治理扩展、许可/开放、全球发现与物理结算、OC 与地方经济边界、常态自由价格及紧急保供在同一可审计世界中成立，且不由价格干预或外部资产权利绕过世界规则。
+- SC-13：代表性全局治理与组织生命周期样例证明普通锁定 OC 治理仅处理政策、财库和 charter 运行事项，按实际控制人有界聚合且与外部 OC 转让分离；组织可配置但不越过个人/身份/退出/历史底线，解散或长期不活跃保持有序、可审计的连续性；宪制保护不被普通治理改写。
+- SC-14：代表性 frontier 样例证明有限已知世界只通过相邻的受治理探索、物流和 charter 扩展，并保持同一时间线、经济和历史；pioneer priority 有限、可转让且非主权，世界信息按公共事实与需侦察的实时信息分层并显示 freshness。
 
 SC-3、SC-9 与 SC-10 是设施/工业闭环的目标验收，描述达成时需要证明什么，不声明 `micro_depot` 或后续路线当前已可用、已合入或可对外发布。当前可用性与任何公开 claim 必须绑定同一新鲜候选的专业域证据；候选 gate、产品决策、QA 与 LiveOps 同步成立后，仍只由根 [`README.md`](../../../README.md) 的 claim envelope 对外表达。历史样本、局部通过或单域实现不能代签该结论。
 
@@ -127,6 +135,10 @@ SC-3、SC-9 与 SC-10 是设施/工业闭环的目标验收，描述达成时需
 | SC-8 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 世界模型、技术分区、运行环境与公开 claim 分层审计 | test_tier_required |
 | SC-9 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-002 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 同一设施身份跨 quote、执行、receipt、replay、sync、重连与恢复的组合证据，包含适用的 S9/S10 长跑与恢复演练 | test_tier_full |
 | SC-10 | gameplay_designer / runtime_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md` | 资源获取到工业用途及维护/退役的守恒、权限、回放和玩家下一步证据 | test_tier_required |
+| SC-11 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/regional-charter-tenure-and-public-funding.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 区域成立/退化、地点使用权、服务费/公共 levy、跨域审计与申诉的组合证据 | test_tier_full |
+| SC-12 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 工业准入、许可/开放、市场发现/物流/escrow、价格与紧急保供的组合证据 | test_tier_full |
+| SC-13 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / agent_engineer / gameplay_designer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通/宪制双轨、锁定 OC 与控制人资格、组织解散/estate、权利底线、审计和申诉的组合证据 | test_tier_full |
+| SC-14 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/frontier-expansion-and-world-information-boundaries.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 相邻 frontier、探索/物流/charter、priority、情报私有/安全/公共 baseline、实时信息授权与 freshness 的组合证据 | test_tier_full |
 
 ## 6. Non-Goals
 
