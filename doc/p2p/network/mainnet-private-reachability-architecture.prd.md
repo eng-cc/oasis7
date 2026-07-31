@@ -1,7 +1,7 @@
 # oasis7 主链级非全公网 P2P 覆盖网络架构
 
 - 对应设计文档: `doc/p2p/network/mainnet-private-reachability-architecture.design.md`
-- 对应项目管理文档: `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 2
 建档日期: 2026-04-01
@@ -70,8 +70,8 @@
   - AC-7: 本专题必须明确写出主链适配器边界，至少覆盖 `mesh gossip`、`committee direct`、`tree broadcast` 与 `blob availability` 四类数据面模式。
   - AC-8: 本专题必须明确写出 anti-eclipse / anti-spam 基线，包括 discovery-source 多样性、ASN/subnet/operator 多样性、relay budget 与 path quarantine。
   - AC-9: 本专题必须明确写出 key boundary：transport/session key、node identity key、consensus signer、governance signer 彼此分离；relay、browser 和 public control plane 不得持有长期 signer 真值。
-  - AC-10: 对应 `project.md` 必须把实现拆成 identity、transport、reachability、role policy、traffic lanes、shared-network validation 等 workstreams，而不是只停留在概念描述。
-  - AC-11: `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/README.md` 必须接入本专题，形成模块级追踪链。
+  - AC-10: 对应 GitHub Issue / GitHub Project 必须把实现拆成 identity、transport、reachability、role policy、traffic lanes、shared-network validation 等 workstreams，而不是只停留在概念描述。
+  - AC-11: `doc/p2p/prd.md`、GitHub Issue / GitHub Project、`doc/p2p/prd.index.md` 与 `doc/p2p/README.md` 必须接入本专题，形成模块级追踪链。
   - AC-12: 本专题必须明确用户层默认只暴露 `2~3` 个简单模式，且默认行为是全自动检测与推荐，不要求普通用户手动理解 `deployment_mode/node_role`。
   - AC-13: 本专题必须明确高风险职责边界：系统可以全自动给出默认值，但当结果会让节点承担 `public entry / relay / sentry` 等外部暴露职责时，必须有显式确认或等价的风险同意机制。
   - AC-14: 本专题必须补齐 `peer reachability contract normalization` 的字段语义、输入/输出边界和非目标：不引入 iroh 依赖、不替换 libp2p `Multiaddr`、不把 relay/DNS/Pkarr 默认带入 oasis7。
@@ -93,7 +93,7 @@
 - Architecture Overview: 目标态采用五层框架。第一层是 `user mode abstraction`，给普通用户暴露 `自动加入 / 私有安全 / 公网入口` 这类简化模式，并把自动探测结果映射到底层正式语义；第二层是 `identity/discovery`，用带 TTL 的签名 peer record 把节点身份从瞬时地址中解耦；第三层是 `reachability/transport`，统一 direct、hole-punched 与 relay 路径，并对 QUIC/TCP/Noise/mux 做抽象；第四层是 `traffic lanes`，把 consensus gossip、header/block sync、state/blob transfer、control/heartbeat 分离；第五层是 `chain adapters`，让不同公共主链风格的数据面挂到同一底层 P2P core 上，而不是各自重造 discoverability 和 NAT 穿透。
 - Integration Points:
   - `doc/p2p/prd.md`
-  - `doc/p2p/project.md`
+  - GitHub Issue / GitHub Project
   - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
   - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`

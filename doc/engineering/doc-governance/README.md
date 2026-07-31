@@ -12,7 +12,7 @@
 ## 按治理问题分流
 | 问题 | Canonical 入口 | 说明 |
 | --- | --- | --- |
-| 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/project/manual/runbook 边界 |
+| 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/manual/runbook 边界，并将任务追踪定向到 GitHub Issue/Project |
 | 根入口或模块 README 过长、重复维护共享规则 | `doc-structure-standard.design.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
 | 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `../governance/README.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
 | `world-simulator` / Viewer 首读分流或主题簇维护 | `../../world-simulator/viewer/README.md` | 已收口的热点路径；当前 landing page 承接分流与维护触发器 |
@@ -22,7 +22,7 @@
 
 ## 维护规则
 - 本页只做专题导航和抽象分流，不承载完整治理规则正文。
-- 就文档树共享治理规则而言，上游 `doc/README.md` 与 `doc/engineering/README.md` 只链接本页；其他模块或专题导航按各自职责保留。具体规则、专题正文与执行状态必须从本页继续下钻，避免上游入口各自固定某个专题文件。
+- 就文档树共享治理规则而言，上游 `doc/README.md` 与 `doc/engineering/README.md` 只链接本页；其他模块或专题导航按各自职责保留。具体规则与专题正文必须从本页继续下钻；可变执行状态和证据直接归入 GitHub Issue/Project，避免上游入口各自固定某个专题文件。
 - 新增 doc-governance 专题时，同批更新 `doc/engineering/prd.index.md`，并在本页补一行“按治理问题分流”。
 - 一次性路径治理完成且目标 landing page 已承接首读分流与维护触发器后，退役该专题三件套，并在 `doc/engineering/prd.index.md` 的历史审计留痕记录替代入口；不要保留已经过期的缺口描述或 follow-up 排期。
 - 历史证据、旧审读轮次和任务过程仍保留在 GitHub task issue evidence comments、Git history 与 git history；不要为减重而批量改写历史文件。

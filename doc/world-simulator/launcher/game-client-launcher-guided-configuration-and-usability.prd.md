@@ -3,7 +3,7 @@
 > 本文是 launcher 的语言/配置清晰度、事实性状态反馈和响应式自引导可用性的当前需求 authority。它吸收四组 2026-03 日期化专题中仍可由当前实现支持的表现层合同；活跃入口已迁移至本三件套，历史 source triplet 删除后仅通过 Git 与 GitHub task issue evidence 追溯。
 
 - 对应设计: `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.design.md`
-- 对应项目: `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
+- 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

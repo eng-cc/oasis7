@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 scripts 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/scripts/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 `doc/scripts/prd.md` 的任务映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/scripts/prd.md`
-- 项目管理入口: `doc/scripts/project.md`
+- 项目管理入口: `doc/scripts/prd.md`
 - 文件级索引: `doc/scripts/prd.index.md`
 - 追踪主键: `PRD-SCRIPTS-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -132,7 +132,7 @@
   - AC-12: 新增 `scripts/new-task-worktree.sh`，默认根据 `<module> <task>` 生成稳定分支名与 worktree 路径，并执行 `git worktree add`。
   - AC-13: `scripts/new-task-worktree.sh` 默认在源 worktree 脏时阻断，并给出显式 override；对已存在路径、已被其他 worktree 占用的分支和非法空 slug 提供清晰失败语义。
   - AC-14: `scripts/new-task-worktree.sh --json` 必须输出机器可读摘要，至少包含 `branch`、`worktree_path`、`module`、`task`、`base_ref` 与 `mode`。
-  - AC-15: `scripts/new-task-worktree.sh --help` 必须列出 `--init-docs` 与 `--with-harness`；前者输出 `doc/<module>/prd.md` 与 `doc/<module>/project.md` 的存在性摘要，后者在新 worktree 中后台预热 `./scripts/worktree-harness.sh up` 并继承 formal gameplay 的 active LLM preflight；启用 PM bootstrap 时输出对应 GitHub task issue evidence comments 入口与 mapping 记录。
+  - AC-15: `scripts/new-task-worktree.sh --help` 必须列出 `--init-docs` 与 `--with-harness`；前者输出 `doc/<module>/prd.md` 与 GitHub task issue evidence comments 的存在性摘要，后者在新 worktree 中后台预热 `./scripts/worktree-harness.sh up` 并继承 formal gameplay 的 active LLM preflight；启用 PM bootstrap 时输出对应 GitHub task issue evidence comments 入口与 mapping 记录。
   - AC-16: `scripts/new-task-worktree.sh --json --init-docs` 必须输出机器可读 `doc_checks`；加 `--with-harness` 时，stdout 仍保持单个 JSON 对象，并附带 `harness` 摘要字段。
   - AC-17: 新增 `scripts/prepare-task-pr.sh`，默认以当前 task branch 为 source、以 `origin/main`（若存在）或本地 `main` 为对齐基线，执行“source clean 检查 -> base 对齐检查 -> 输出或执行 GitHub PR create 命令 -> 输出 PR 合入后的本地同步/cleanup 命令”；PR 创建后默认继续 normal required-check/review watch-fix-merge，只有明确 manual packaging/release CI purpose 才停在人工 gate。
   - AC-18: `scripts/prepare-task-pr.sh --help` 必须明确列出 `--base`、`--remote`、`--create`、`--draft` 与 `--json`；`--json` 至少输出 `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands`、`local_required_validation.scope` / `local_required_validation.reason_summary` / `local_required_validation.recommended_required_command` 与 `pre_pr_local_role_review.status` / `pre_pr_local_role_review.execution_log_path`（GitHub-backed task 下为 issue URL）/ `pre_pr_local_role_review.missing_markers`。

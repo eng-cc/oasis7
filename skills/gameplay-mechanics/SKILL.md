@@ -56,7 +56,7 @@ Do not use this skill when:
 ## Oasis7-Specific Surfaces
 
 - `.agents/roles/gameplay_designer.md`
-- `doc/game/project.md`
+- GitHub Project task status and issue evidence comments
 - gameplay/runtime tests or playtest evidence for changed mechanics
 
 ## Known Failure Modes

@@ -1,7 +1,7 @@
 # WASM SDK 兼容与 Wire 契约
 
 - 对应设计文档：`doc/world-runtime/wasm/wasm-sdk.design.md`
-- 对应项目文档：`doc/world-runtime/wasm/wasm-sdk.project.md`
+- 稳定证据入口：`doc/world-runtime/wasm/evidence.md`
 - 专业权威：`wasm_platform_engineer`
 
 ## 1. 目标
@@ -34,20 +34,17 @@
 - builtin 模块迁移需证明不再保留重复 wire 定义，并通过代表性 sync/check 与 required-tier 编译。
 - SDK 变更必须明确向后兼容或提供迁移路径。
 
-## 5. 里程碑
-
-- M1：核对 no_std、生命周期/导出 ABI、wire schema 与当前错误语义。
-- M2：建立稳定 SDK PRD/design/project 并归入当前实现与验证 evidence。
-- M3：删除六个已吸收源文件并修复活动入口。
-- M4：治理、陈旧引用、SDK tests 与 frozen-head review 通过。
-
-## 6. 风险与非声明
+## 5. 风险与非声明
 
 - `std` feature 或 serde feature 组合可能重新引入隐式宿主依赖。
 - 批量复用共享 wire 类型可能暴露历史字段差异，必须逐项校验，不能仅依靠文本替换。
 - 本文不宣称所有第三方模块、所有 target 或发布候选已验证。
 
-## 7. Validation & Decision Record
+## 6. Validation & Decision Record
+
+SDK ABI、wire 使用和 wasm32 兼容的稳定验证入口见
+[`evidence.md`](evidence.md)。任务批次、当前状态和已完成工作历史由 GitHub
+task issue / Project 与 Git history 承接。
 
 | PRD-ID | 测试层级 | 验证方法 | 回归范围 |
 | --- | --- | --- | --- |

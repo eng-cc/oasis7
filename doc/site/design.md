@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/site/prd.md`
-- 对应项目管理文档: `doc/site/project.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 - 对应文件级索引: `doc/site/prd.index.md`
 
 ## 1. 设计定位
@@ -12,7 +12,7 @@
 ## 2. 阅读顺序
 1. `doc/site/prd.md`
 2. `doc/site/design.md`
-3. `doc/site/project.md`
+3. `doc/site/prd.md`
 4. `doc/site/prd.index.md`
 5. 下钻 `github-pages/`、`manual/` 等专题目录
 
@@ -63,7 +63,7 @@
 
 ## 关键接口 / 入口
 - 需求入口：`doc/site/prd.md`
-- 执行入口：`doc/site/project.md`
+- 执行入口：`doc/site/prd.md`
 - 索引入口：`doc/site/prd.index.md`
 
 ## 设计演进计划

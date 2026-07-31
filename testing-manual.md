@@ -888,7 +888,7 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
 ```bash
 rg -n "自动加入|私有安全|公网入口|deployment_mode|node_role|AutoNAT|高风险职责|显式确认" \
   doc/p2p/network/mainnet-private-reachability-architecture.prd.md \
-  doc/p2p/network/mainnet-private-reachability-architecture.project.md \
+  doc/p2p/network/mainnet-private-reachability-architecture.prd.md \
   testing-manual.md
 ./scripts/doc-governance-check.sh
 git diff --check
@@ -992,10 +992,10 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - operator/runtime network-tier 是 `local_devnet -> public_testnet -> mainnet`，不作为玩家世界模型。
   - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 six-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
 - Canonical docs:
-  - Current network-tier source of truth: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
+  - Current network-tier source of truth: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`
-  - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-network-rehearsal-release-train-minimum-2026-03-24.project.md`
-  - Benchmark background: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
+  - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
+  - Benchmark background: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - Canonical commands:
 ```bash
 ./scripts/network-tier-manifest.sh validate \
@@ -1126,10 +1126,10 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `crates/oasis7_distfs/**` | S0 + S4（distfs） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | 存储复制 / challenge / 修复逻辑改动优先补 S9 |
 | `doc/**`（非 `doc/devlog/**`） | S0（含 `./scripts/doc-governance-check.sh`） | 命中模块的抽样 required 证据核验 | 若文档改变发布 / 测试口径，追加对应模块的最小必跑集 |
 | `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + `bash -n scripts/plan-rust-required-scope.sh` + planner 样例 + S1 + （full）`./scripts/llm-baseline-fixture-smoke.sh` | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10；docs-only / `.pm` / 无关元数据 PR 必须验证 planner 可输出 `scope=minimal` 且保留 stable `required-gate` 上下文 |
-| `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_node/src/network_bridge.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_net/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path doc/testing/project.md` + `./scripts/plan-rust-required-scope.sh --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上先规划 `minimal / targeted / full`，再决定 viewer/runtime 哪些重型组件实际执行；`oasis7_node/oasis7_net` 改动需命中 support-crate required shard，而不是因未分类路径退回 full | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
+| `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_node/src/network_bridge.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_net/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path doc/testing/prd.md` + `./scripts/plan-rust-required-scope.sh --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上先规划 `minimal / targeted / full`，再决定 viewer/runtime 哪些重型组件实际执行；`oasis7_node/oasis7_net` 改动需命中 support-crate required shard，而不是因未分类路径退回 full | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
 | `scripts/release-gate.sh` / `.github/workflows/release-packages.yml` | `./scripts/ci-tests.sh full` + `sync-m1/m4/m5 --check` + Web strict + S9 + S10 | `./scripts/release-gate.sh --quick` / `--dry-run` | 任何发布 gate 逻辑变更均不允许跳过 S9/S10 |
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |
-| `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --changed-path doc/testing/project.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
+| `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --changed-path doc/testing/prd.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
 | `scripts/run-viewer-web.sh` | S0 + S6 | S5 + S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |
 | `scripts/p2p-longrun-soak.sh` / `doc/testing/longrun/p2p-longrun-soak-and-chaos*` | S0 + S9 smoke（含 summary/timeline 校验） | S9 endurance（含 chaos） | 任何阈值/summary 字段变更必须补 endurance |
 | `scripts/s10-five-node-game-soak.sh` / `doc/testing/longrun/s10-five-node-real-game-soak*` | S0 + S10 smoke（含 summary/timeline 校验） | S10 默认长窗（30min+） | 任何门禁字段 / 结算 / mint 改动都需补长窗 |

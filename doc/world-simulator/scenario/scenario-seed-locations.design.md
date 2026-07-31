@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景种子化地点生成（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/scenario-seed-locations.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/scenario-seed-locations.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义场景种子化地点生成设计，让地点数量、命名和布局由 seed 驱动并保持稳定可复现。

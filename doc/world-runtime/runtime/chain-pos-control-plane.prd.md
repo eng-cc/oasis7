@@ -3,7 +3,7 @@
 审计轮次: 1
 
 - 对应设计文档：`doc/world-runtime/runtime/chain-pos-control-plane.design.md`
-- 对应项目管理文档：`doc/world-runtime/runtime/chain-pos-control-plane.project.md`
+- 当前任务状态与实现过程：GitHub task issue evidence 与 Git history；本文保留现行 runtime 合同。
 
 ## 目标
 

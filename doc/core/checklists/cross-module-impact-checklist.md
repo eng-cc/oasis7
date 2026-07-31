@@ -10,7 +10,7 @@
 
 ## 输入
 - 变更对应 PRD-ID 列表。
-- 关联模块 `prd.md` / `project.md` 与任务状态。
+- 关联模块 `prd.md` / GitHub task issue evidence comments 与任务状态。
 - 对应测试证据与发布说明（命令、日志、产物路径）。
 
 ## 使用规则

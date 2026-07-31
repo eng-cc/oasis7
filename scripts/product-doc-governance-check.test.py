@@ -89,6 +89,15 @@ def main() -> None:
         shutil.rmtree(root)
 
     scenario(
+        "retired-project-ledger",
+        lambda root: (
+            root.joinpath("doc/product/world-infrastructure/reintroduced.project.md").write_text(
+                "# forbidden ledger\n", encoding="utf-8"
+            )
+        ),
+    )
+
+    scenario(
         "entry-contract",
         lambda root: replace(
             root / "doc/product/README.md",

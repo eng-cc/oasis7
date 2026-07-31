@@ -1,6 +1,6 @@
 # Agent 直连执行 Lane（provider: player_parity / headless_agent）（2026-03-16）
 
-- 对应项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - 关联专题:
   - `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
   - `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
@@ -22,7 +22,7 @@
 
 ## 接口 / 数据
 - PRD 主文档: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`
-- 项目管理文档: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - 关联 parity 专题: `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
 - 关联 software-safe 专题: `doc/world-simulator/viewer/viewer-web-entry-compatibility.prd.md`
 - supporting contract: `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`
@@ -132,7 +132,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - M1: 定义双轨模式 PRD、project、追踪字段与口径边界。
+- M1: 定义双轨模式 PRD、追踪字段与口径边界。
   - M2: 落地 observation/action contract 与 mode metadata，优先跑通 `headless_agent` required smoke。
   - M3: 接入 `player_parity` 受约束观察，对照 `headless_agent` 与 builtin/Local Provider parity 结果。
 - Technical Risks:

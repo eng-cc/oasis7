@@ -16,7 +16,7 @@
 
 - `doc/testing/README.md`：testing 模块首读与子域选择；涉及 testing governance 时只路由到本页。
 - `doc/testing/prd.index.md`：文件级精确检索和三件套可达性；本页不复制其完整长表。
-- `doc/testing/prd.md` / `project.md`：模块测试门禁基线与当前执行状态；本页不承载模块状态。
+- `doc/testing/prd.md` / GitHub task issue evidence comments：模块测试门禁基线与当前执行状态；本页不承载模块状态。
 - `testing-manual.md` 与 `doc/testing/manual/*.manual.md`：operator 操作步骤；本页只把需要操作的读者导向对应 manual，不重述步骤。
 
 ## 维护规则

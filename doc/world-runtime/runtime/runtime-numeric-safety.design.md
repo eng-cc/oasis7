@@ -1,7 +1,7 @@
 # Runtime 数值安全与原子状态转移设计
 
 - 对应需求文档：`doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
-- 对应项目文档：`doc/world-runtime/runtime/runtime-numeric-safety.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计原则
 

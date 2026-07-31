@@ -1,9 +1,13 @@
 # oasis7 Runtime：WASM 执行器接入（设计分册）设计
 
 - 对应需求文档: `doc/world-runtime/wasm/wasm-executor.prd.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-executor.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 ## 1. 设计定位
+
+任务拆解、当前阶段和发布候选状态由 GitHub task issue / Project 承接；本设计
+只定义稳定的执行器契约。可复用的实现和回归入口见
+[`evidence.md`](evidence.md)。
 定义 WASM 执行器接入设计，统一执行入口、宿主交互、资源限制与错误回传。
 
 ## 2. 设计结构

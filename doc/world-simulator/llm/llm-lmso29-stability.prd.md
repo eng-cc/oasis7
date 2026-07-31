@@ -1,7 +1,7 @@
 # oasis7 Simulator：LMSO29 可用性与稳定性收敛（设计文档）
 
 - 对应设计文档: `doc/world-simulator/llm/llm-lmso29-stability.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-lmso29-stability.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 审计轮次: 5
 
@@ -67,4 +67,8 @@
 - 在保持 `llm_errors=0` 的前提下，逐步回收 `llm_input_chars_max` 与 `module_call` 波动。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+
+- 本文保留 prompt-budget、协议兼容和稳定性约束；历史任务状态、运行
+  产物与执行证据由 GitHub task evidence 和 Git history 管理。
+- 扩大上下文预算只是一项受测的稳定性调整，不证明模型/provider 切换、
+  长时成本、无漂移行为或 release readiness。

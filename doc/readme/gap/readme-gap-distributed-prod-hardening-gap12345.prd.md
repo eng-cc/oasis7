@@ -1,7 +1,7 @@
 # README 分布式计算与存储生产级收口（Gap 1/2/3/4/5）设计文档
 
 - 对应设计文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md`
-- 对应项目管理文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 审计轮次: 4
 
@@ -9,7 +9,7 @@
 - 本文件为 readme/gap 主文档。
 - 其余 gap 专题文档为增量子文档。
 
-- 对应标准执行入口: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md`
+- 对应标准执行入口: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`
 
 ## 目标
 - 收口 Gap 1：将 `oasis7_node` 的 PoS 主循环关键算法与阈值判定下沉到 `oasis7_consensus`，避免双轨共识语义漂移。

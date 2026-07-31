@@ -2,7 +2,7 @@
 
 - 对应操作手册: `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 对应设计文档: `doc/testing/manual/web-ui-playwright-closure-manual.design.md`
-- 对应项目管理文档: `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 9
 
@@ -14,7 +14,7 @@
   - SC-2: 验收口径强制 `open ... --headed`，并默认附带 `--use-angle=gl,--ignore-gpu-blocklist`；若仍命中 `SwiftShader/software rendering` 继续阻断。
   - SC-3: 至少输出 `snapshot + console + screenshot + state` 证据。
   - SC-4: 当前 repo-owned Web 回归脚本可直接复用手册约束。
-  - SC-5: 文档迁移后统一 `.prd.md/.project.md` 命名并通过治理检查。
+  - SC-5: 文档迁移后统一 `.prd.md plus GitHub task issue evidence` 命名并通过治理检查。
   - SC-6: `oasis7_web_launcher` 的产品动作路径默认走 GUI Agent，不再把 canvas 直点或纯 agent-browser 动作作为首选执行链路。
   - SC-7: 当 Viewer 进入 `renderMode=viewer` 且 auth bootstrap 可用时，QA 可通过专用脚本稳定复验 prompt apply/rollback、chat ack 与消息流采样，并将 `agent_spoke` 缺失分级为可追溯失败签名；`renderMode=software_safe` 仅作为 compat alias 复核。
   - SC-8: 当 runtime 以 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 启动时，Viewer Web 闭环应能稳定看到标准 `AgentSpoke` 事件，并将其汇入统一消息流。

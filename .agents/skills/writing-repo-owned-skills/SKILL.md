@@ -26,7 +26,7 @@ Do not use this skill for:
 
 Local skills must strengthen oasis7 repo truth, not create a parallel workflow.
 
-If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a handoff template, or a script check, put it there instead of creating a new skill.
+If the content would be better owned by `AGENTS.md`, a PRD/design/evidence document, a handoff template, GitHub-backed task truth, or a script check, put it there instead of creating a new skill.
 
 ## Authoring Workflow
 

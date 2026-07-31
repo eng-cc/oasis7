@@ -3,7 +3,7 @@
 审计轮次: 1
 
 - 上游规格：`doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
-- 上游项目：`doc/world-runtime/runtime/chain-pos-control-plane.project.md`
+- 当前任务状态与实现过程：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计目标
 

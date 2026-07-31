@@ -1,7 +1,7 @@
 # P2P 移动轻客户端权威状态设计
 
 - 对应需求文档: `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md`
-- 对应项目管理文档: `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 分层与数据流
 

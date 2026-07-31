@@ -11,14 +11,14 @@
 
 ## 范围
 - 覆盖 world-simulator 当前模块目标、能力主线、模式 taxonomy、跨模块接口、测试口径、风险与 active requirement baseline。
-- 覆盖 PRD-ID 到 `doc/world-simulator/project.md`、`doc/world-simulator/prd.index.md` 与专题 PRD 的追踪关系。
+- 覆盖 PRD-ID 到 GitHub task、`doc/world-simulator/prd.index.md` 与专题 PRD 的追踪关系。
 - 不覆盖实现代码逐行说明、历史过程记录、完整专题目录、逐任务执行证据或 round review logs。
 
 ## 文档边界
 
 本文件是 world-simulator 的 active canonical PRD：保留当前模块目标、范围、跨模块接口、active requirement baseline 与验收总口径。
 
-本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 `doc/world-simulator/project.md`；历史证据进入 topic project、GitHub task issue evidence comments 与 archive-only review logs。
+本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 GitHub task issue / Project；历史证据进入 Git history、GitHub task issue evidence comments 与 archive-only review logs。
 
 ### Intent 批次与派生观测边界
 
@@ -32,13 +32,13 @@
 - PRD 主入口: `doc/world-simulator/prd.md`
 - 文档 landing: `doc/world-simulator/README.md`
 - 设计总览: `doc/world-simulator/design.md`
-- 标准执行入口: `doc/world-simulator/project.md`
+- 当前任务入口: 对应 GitHub task issue / Project
 - 文件级索引与完整专题配对: `doc/world-simulator/prd.index.md`
 - 根级旧跳转入口: root world-simulator PRD/project legacy redirect shells 已删除
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
 - 跨模块模式 taxonomy: `doc/product/player-entry-distribution/prd.md`
-- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；Pages、Release 资产、静态镜像与下载门禁的专业合同: `doc/site/prd.md` 与 `doc/site/project.md`
+- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；Pages、Release 资产、静态镜像与下载门禁的专业合同: `doc/site/prd.md` 与 `doc/site/prd.md`
 - UI 视觉短期样本池: `doc/ui_review_result/README.md`
 - 常用 active supporting docs:
   - `doc/world-simulator/viewer/README.md`
@@ -112,7 +112,7 @@
 - 文档治理与引用可达：`./scripts/doc-governance-check.sh`
 - `.pm` task truth：`./scripts/pm/lint.sh`
 - Markdown / whitespace sanity：`git diff --check`
-- 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md doc/world-simulator/project.md`
+- 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md`
 - 行为变更、runtime/Viewer/WASM/launcher 语义变更不由本 PRD 瘦身任务放行；需按对应专题 PRD 的验证矩阵和 owner role 复核。
 
 ## Risks & Roadmap
@@ -126,4 +126,4 @@
 - DEC-WS-002: 主 PRD 保持模块级总览和验收总口径，专题细节下沉到 `doc/world-simulator/**` 专题文档与 `prd.index.md`。
 - DEC-WS-012/014: Viewer live 迁移采用 runtime 驱动、协议兼容适配和 runtime-only 收敛，避免长期 simulator fallback 双轨。
 - DEC-WS-024: 暂停新的 3D 可视化推进，把当前交互主路径聚焦到 `viewer` Web、launcher/runtime interaction 和 gameplay closure。
-- 历史 decision log 与逐任务 traceability 由 `doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md`、专题 project 与 GitHub task issue evidence comments 保持可追溯。
+- 历史 decision log 与逐任务 traceability 由 `doc/world-simulator/prd.index.md`、Git history 与 GitHub task issue evidence comments 保持可追溯。

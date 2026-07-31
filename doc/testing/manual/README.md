@@ -21,7 +21,7 @@
 ## 规格与追溯
 
 - 已完成的系统测试手册工程化专题三件套已被 `testing-manual.md`、testing 根 PRD 与证据入口吸收并删除；`PRD-TESTING-MANUAL-001..003`、TMAN/DEC 历史映射保留在 `../prd.md`，实现过程从 Git history 与 GitHub task evidence 追溯。
-- `web-ui-agent-browser-closure-manual.prd.md` 与 `.project.md` 分别保留 Web UI 闭环的需求 / 执行真值；对应 `*.manual.md` 承担实际步骤。
+- `web-ui-agent-browser-closure-manual.prd.md` 与 `GitHub task issue evidence comments` 分别保留 Web UI 闭环的需求 / 执行真值；对应 `*.manual.md` 承担实际步骤。
 - `web-ui-playwright-closure-manual.design.md` 是该手册系列的 historical/shared design companion；真实操作从 `web-ui-playwright-closure-manual.manual.md` 进入。它仍受索引与审计留痕引用，不能当作无引用腐旧文件删除。
 
 ## 维护边界

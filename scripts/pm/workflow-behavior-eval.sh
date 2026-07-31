@@ -83,12 +83,12 @@ run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/
 "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/fallback-evidence.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
-"$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
+bash "$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-transition.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-profile.test.sh" >/dev/null
-"$ROOT_DIR/scripts/pm/closeout-tmpdir-portability.test.sh" >/dev/null
+bash "$ROOT_DIR/scripts/pm/closeout-tmpdir-portability.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-lifecycle-trust.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-workflow-driver.test.py" >/dev/null
@@ -137,11 +137,10 @@ for marker in \
   '## Post-PR / Pre-Merge Gates' \
   'git diff --check <Comparison Ref>...<Source Head>' \
   'evidence-only commit' \
-  'partial remote state recovers via refresh -> audit -> retry' \
-  'post-PR checks/comments/mergeability remain separate gates'; do
+  'Partial remote state recovers via refresh -> audit -> retry' \
+  'Post-PR checks/comments/mergeability remain separate gates'; do
   if ! rg -F "$marker" \
-    "$ROOT_DIR/.agents/skills/finishing-a-development-branch/SKILL.md" \
-    "$ROOT_DIR/doc/engineering/project.md" >/dev/null; then
+    "$ROOT_DIR/.agents/skills/finishing-a-development-branch/SKILL.md" >/dev/null; then
     echo "workflow-behavior-eval: missing finishing gate marker: $marker" >&2
     exit 1
   fi
@@ -444,14 +443,6 @@ checks = [
         ],
     ),
     (
-        root / "doc/engineering/project.md",
-        [
-            "下方 `default-subagent-model` 是历史完成记录，不再代表当前 runtime 口径",
-            "该配置已由 capability-aware runtime policy 取代",
-            "当前仓库不固定根 TPM 或 subagent 模型",
-        ],
-    ),
-    (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
             "Pre-PR local role review is required after the draft candidate has same-head CI evidence and before promotion",
@@ -511,7 +502,7 @@ checks = [
         [
             "plan-gap review",
             "GitHub task issue evidence comments",
-            "Do not create a second planning system outside",
+            "Keep mutable task planning only in GitHub-backed task truth",
         ],
     ),
     (
@@ -551,7 +542,7 @@ checks = [
         [
             "## Oasis7 Workflow Binding",
             "not a second project workflow",
-            "Architecture documents may supplement `prd.md`, `project.md`, and handoff truth",
+            "Architecture documents may supplement durable PRD/design and handoff truth",
         ],
     ),
 ]
@@ -715,7 +706,7 @@ scenarios = [
         "required_markers": [
             "task-scoped `working_memory`",
             "Execution evidence is recorded in GitHub task issue evidence comments.",
-            "Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments",
+            "Historical project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments",
             "but they do not replace them for task execution truth.",
             "remain repo-local unless a later source-of-truth",
         ],
@@ -775,9 +766,9 @@ scenarios = [
         "expected_route": "repo-owned-workflow-router -> executing-project-tasks",
         "surface": ".agents/skills/executing-project-tasks/SKILL.md",
         "required_markers": [
-            "the task already has written scope in `prd.md`, `project.md`, a handoff, or GitHub-backed task truth",
+            "the task already has written scope in a PRD/design, a handoff, or GitHub-backed task truth",
             "Run a brief plan-gap review before editing",
-            "Do not create a second planning system outside `prd.md` / `project.md` / GitHub-backed task truth.",
+            "Keep mutable task planning only in GitHub-backed task truth",
         ],
     },
     {
@@ -797,10 +788,10 @@ scenarios = [
         "required_markers": [
             "a branch is about to create a PR",
             "Use after implementation freeze and before the canonical Pre-PR Ready gate.",
-            "Record the canonical packet in the GitHub task issue and validate its frozen-head, role-complete ledger and artifacts with the repository helper.",
+            "Record the canonical packet with `record-pre-pr-review.sh --review-plan <plan>` in the GitHub task issue.",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
-            "recorded in GitHub task issue evidence comments",
+            "Record plan/batch paths and digests in GitHub task issue evidence comments.",
         ],
     },
     {
@@ -926,7 +917,7 @@ scenarios = [
         "surface": ".agents/skills/writing-repo-owned-skills/SKILL.md",
         "required_markers": [
             "Local skills must strengthen oasis7 repo truth, not create a parallel workflow.",
-            "If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a handoff template, or a script check",
+            "If the content would be better owned by `AGENTS.md`, a PRD/design/evidence document, a handoff template, GitHub-backed task truth, or a script check",
             "If the skill introduces or documents a helper-driven workflow, also run at least one representative command or check tied to that workflow.",
         ],
     },

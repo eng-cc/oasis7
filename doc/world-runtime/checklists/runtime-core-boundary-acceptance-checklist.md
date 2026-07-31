@@ -45,5 +45,5 @@
 ## 五、最小审查清单
 - 是否三大边界（确定性 / WASM / 治理）均已填写状态与证据路径。
 - 是否所有 `fail` / `blocked` 项都写明原因。
-- 是否已把结果回写 `doc/world-runtime/project.md` 与对应 GitHub task issue evidence comments。
+- 是否已把验收结果、风险与下一步回写对应 GitHub task issue evidence comments，并同步现行 PRD/design（如技术合同变化）。
 - 是否已标明哪些项仅完成 `test_tier_required`，哪些需后续 `test_tier_full`。

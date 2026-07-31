@@ -1,7 +1,7 @@
 # `oasis7_viewer_live` 决策模式设计
 
 > 对应需求: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md`
-> 对应执行台账: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md`
+> 对应执行台账: GitHub Issue / GitHub Project
 
 ## 结构
 

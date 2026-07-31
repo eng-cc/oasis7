@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Round Scope: `limited playable technical preview`
-- Dependency: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
+- Dependency: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - Rule: reward review is contribution-based, not invite-only-gated, and not `play-to-earn`
 
 ## 1. What Counts

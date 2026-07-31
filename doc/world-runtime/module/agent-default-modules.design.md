@@ -1,7 +1,7 @@
 # Agent 默认模块设计
 
 - 对应需求文档: `doc/world-runtime/module/agent-default-modules.prd.md`
-- 对应项目管理文档: `doc/world-runtime/module/agent-default-modules.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义 Agent 出厂默认模块的安装方式、模块角色划分、生命周期与治理挂接方式。
@@ -25,4 +25,4 @@
 
 ## 5. 设计演进计划
 - 先完成设计补齐与互链回写。
-- 再按项目文档任务拆解推进实现与验证。
+- 再按对应 GitHub task 的任务拆解推进实现与验证。

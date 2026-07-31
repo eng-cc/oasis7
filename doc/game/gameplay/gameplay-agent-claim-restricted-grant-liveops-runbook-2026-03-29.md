@@ -8,7 +8,7 @@
 - Document Type: `How-to / Runbook`
 - Scope: `TASK-GAME-050` / `TASK-GAMEPLAY-AGC-012`
 - Related PRD: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
-- Related Project: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
+- Related gameplay authority: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`; mutable execution history is in the GitHub task issue evidence.
 - Runtime Dependencies:
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_policy_contract.rs`

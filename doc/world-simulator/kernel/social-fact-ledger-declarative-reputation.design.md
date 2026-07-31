@@ -1,7 +1,7 @@
 # 社会事实账本与声明式关系层设计
 
 - 对应需求文档: `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md`
-- 对应项目管理文档: `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义面向生产级社会系统的最小语义内核：以内核事实账本记录可验证事实，以声明式关系边承载信任/合作/黑名单/声誉等多制度关系，并保持可回放、可审计、可治理。

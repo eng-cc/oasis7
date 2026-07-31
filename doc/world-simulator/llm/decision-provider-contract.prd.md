@@ -1,7 +1,7 @@
 # LLM Agent Decision Provider 标准层 + Local Provider 外部适配可行性（2026-03-12）
 
 - 对应设计文档: `doc/world-simulator/llm/decision-provider-contract.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/decision-provider-contract.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 审计轮次: 1
 

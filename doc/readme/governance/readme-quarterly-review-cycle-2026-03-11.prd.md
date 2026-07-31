@@ -12,7 +12,7 @@
 - Success Criteria:
   - SC-1: 季度审查节奏明确 `谁/何时/检查什么/如何回写`。
   - SC-2: 至少包含季度审查模板与修复记录模板。
-  - SC-3: `doc/readme/project.md` 可以据此关闭 `TASK-README-004`。
+  - SC-3: `doc/readme/prd.md` 可以据此关闭 `TASK-README-004`。
   - SC-4: 后续 readme 模块可按该节奏持续执行，而不再临时约定。
 
 ## 2. User Experience & Functionality
@@ -42,7 +42,7 @@
   - AC-1: 新专题明确季度节奏、触发条件与角色分工。
   - AC-2: 至少产出一份季度审查模板与一份修复记录模板。
   - AC-3: 模板内置人工巡检项并引用 `scripts/readme-link-check.sh`。
-  - AC-4: `doc/readme/project.md` 回写完成态与下一任务状态。
+  - AC-4: `doc/readme/prd.md` 回写完成态与下一任务状态。
 - Non-Goals:
   - 不在本轮执行真实季度审查。
   - 不引入新的自动化服务。

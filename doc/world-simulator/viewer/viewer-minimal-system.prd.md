@@ -1,7 +1,7 @@
 # oasis7: Minimal System Run (Viewer Demo)
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-minimal-system.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-minimal-system.project.md`
+- 历史 demo 实施与验证记录：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -58,4 +58,4 @@
 - Users may expect live data; this is offline replay only.
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史 demo 实施与验证记录由 GitHub task issue evidence 维护。

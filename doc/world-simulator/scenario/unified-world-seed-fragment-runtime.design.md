@@ -1,7 +1,7 @@
 # oasis7 Simulator：统一大世界种子与 Fragment Runtime 复用（设计文档）
 
 - 对应需求文档: `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 本专题把“统一大世界”定义为一个 chain-authoritative、seed-derived world。所有环境只允许从同一个世界种子派生 chunk、fragment、资源预算和 starter spawn；正式资源事实必须由链上 genesis/commit 承载或引用。runtime live、viewer、provider bridge 与 testnet 节点是同一链上世界事实的消费者和提交者，不再各自发明地点和资源。

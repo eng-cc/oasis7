@@ -1,7 +1,7 @@
 # oasis7：Web UI Playwright 闭环测试手册（2026-02-28）设计
 
 - 历史/共享设计 companion: `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
-- 历史/共享项目追溯: `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`
+- 历史任务追溯: GitHub task issue evidence comments 与 git history
 - 当前 Playwright 实跑系列入口: `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 
 ## 1. 设计定位

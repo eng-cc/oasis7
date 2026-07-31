@@ -43,5 +43,5 @@
 ## 五、最小审查清单
 - 是否三大维度均已填写状态与证据路径。
 - 是否所有 `fail` / `blocked` 项都写明原因。
-- 是否已回写 `doc/headless-runtime/project.md` 与对应 GitHub task issue evidence comments。
+- 是否已回写 `doc/headless-runtime/prd.md` 与对应 GitHub task issue evidence comments。
 - 是否已标明哪些检查仅完成 `test_tier_required`，哪些需后续 `test_tier_full`。

@@ -1,7 +1,7 @@
 # 游戏客户端启动器控制面与机器接口
 
 - 对应设计文档: `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.design.md`
-- 对应项目管理文档: `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.project.md`
+- 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标与权威边界
 

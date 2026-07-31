@@ -1,7 +1,7 @@
 # oasis7: Game World State Sync and Commit Closure Test Plan
 
 - 对应设计文档: `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md`
-- 对应项目管理文档: `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 1
 

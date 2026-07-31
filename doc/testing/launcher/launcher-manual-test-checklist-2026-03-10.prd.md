@@ -12,7 +12,7 @@
   - SC-2: 每个测试项都具有可执行步骤、预期结果、证据要求与优先级。
   - SC-3: 人工测试结论可直接映射到 `pass/conditional/fail/blocked` 发布结论，细粒度执行项可映射到 `pass_with_data / pass_empty_expected / fail_wrong_data / fail_not_found_unexpected / blocked_env`。
   - SC-4: 文档与 `testing-manual.md`、现有 launcher 专题保持互链，执行入口清晰。
-  - SC-5: 本专题文档纳入 `doc/testing/project.md` 与 `doc/testing/prd.index.md`，满足可追溯性。
+  - SC-5: 本专题文档纳入 `doc/testing/prd.index.md`，并由 GitHub task issue evidence comments 提供可变追溯性。
 
 ## 2. User Experience & Functionality
 - User Personas:

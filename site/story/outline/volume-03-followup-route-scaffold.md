@@ -169,5 +169,5 @@
 ### Repo Truth Writeback
 
 - `prd.md`: 不需要。
-- `project.md`: 不需要。
+- GitHub task issue evidence comments: 不需要。
 - handoff / `.pm`: 已写入 `.pm/tasks/task_5c02287b562249b0b7947313822392bc.execution.md`；本文件作为 story scaffold truth。

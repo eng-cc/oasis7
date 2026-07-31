@@ -1,7 +1,7 @@
 # 社会系统生产级方案：事实账本 + 声明式关系层（设计文档）
 
 - 对应设计文档: `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md`
-- 对应项目管理文档: `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 5
 
@@ -158,4 +158,4 @@
 - 体量风险：新增事件与状态增多，需持续关注单文件长度约束。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。

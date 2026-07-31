@@ -48,7 +48,7 @@ Residual risk remains explicit: the governed-bootstrap manifest still records `s
 
 | Area | Current posture | Evidence | Verdict |
 | --- | --- | --- | --- |
-| World-state substrate framing | P2P is no longer treated as the whole milestone; current target is the chain-backed large-world state substrate. | `doc/p2p/project.md`, `testing-manual.md` S9A | `stronger_than_transport_only` |
+| World-state substrate framing | P2P is no longer treated as the whole milestone; current target is the chain-backed large-world state substrate. | GitHub Issue / GitHub Project, `testing-manual.md` S9A | `stronger_than_transport_only` |
 | Head proof artifact | `WorldHeadProofV1` binds committed head / execution context / optional checkpoint closure. | `crates/oasis7_proto`, chain proof template | `present` |
 | External verifier | Independent binary + operator wrappers validate sampled proof contract/hash/world/height/observed head, contiguous proof-window continuity, bounded state/resource/receipt proof contract evidence, and bounded validator-set finality/fork-misbehavior evidence. | `crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs`, `scripts/network-tier-external-verifier-light-client-lite.sh`, `scripts/network-tier-light-client-continuity-window.sh`, `scripts/network-tier-validator-finality-proof.sh` | `present_continuous_light_client_lite_plus_bounded_state_receipt_finality` |
 | Readiness gate integration | Proof lanes are validated but optional and non-promotional. | `scripts/network-tier-public-testnet-readiness.sh`, readiness lane templates | `present_non_promotional` |

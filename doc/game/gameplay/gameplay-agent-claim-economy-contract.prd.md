@@ -1,7 +1,7 @@
 # Gameplay Agent 认领经济合同
 
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 8
 
@@ -147,7 +147,7 @@
   - main token 账本继续作为唯一价值来源；claim 机制允许 `slot-1` 消费 `restricted starter claim balance + liquid main token` 的 canonical 组合，但转账面与公开资产面只消费 `liquid main token`，不旁路 signed action / audit 链路。
 - Integration Points:
   - `doc/game/prd.md`
-  - `doc/game/project.md`
+  - 对应 GitHub task issue evidence
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`

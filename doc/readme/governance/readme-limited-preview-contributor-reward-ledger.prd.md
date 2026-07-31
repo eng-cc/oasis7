@@ -76,7 +76,7 @@
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.prd.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
-  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
   - `scripts/readme-reward-pr-intake-import.py`
   - `scripts/readme-reward-pr-intake-round-scan.py`
 - Edge Cases & Error Handling:

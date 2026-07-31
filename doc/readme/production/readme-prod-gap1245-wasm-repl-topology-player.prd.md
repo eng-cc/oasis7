@@ -1,11 +1,11 @@
 # README 生产级缺口收口（二次）：默认 WASM 执行 + Replication RR + 分布式 Triad + 玩家节点身份（设计文档）
 
 - 对应设计文档: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md`
-- 对应项目管理文档: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 审计轮次: 4
 
-- 对应标准执行入口: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md`
+- 对应标准执行入口: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md`
 
 ## 目标
 - 收口缺口 1：默认构建启用真实 WASM 执行路径（`wasmtime`），避免默认环境下模块执行退化为 `SandboxUnavailable`。
@@ -70,7 +70,7 @@
 - `NodePosConfig` 新增 validator 到 player 的绑定映射，要求 validator 与玩家一一绑定，禁止同玩家重复占位。
 
 ## 里程碑
-- M1：T0 文档冻结（设计文档 + 项目管理文档）。
+- M1：T0 文档冻结（设计文档 + GitHub Issue/Project task truth）。
 - M2：T1 默认 WASM 执行开启并通过 required-tier 相关测试。
 - M3：T2 replication request/handler 实现与测试通过。
 - M4：T3 分布式 triad 拓扑实现与 CLI/启动测试通过。

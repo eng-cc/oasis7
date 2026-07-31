@@ -3,7 +3,6 @@
 ## 文档身份
 
 - 配对产品 PRD：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](player-readable-world-stage.prd.md)
-- 产品迁移追踪：[`doc/product/agents-world-simulation/player-readable-world-stage.project.md`](player-readable-world-stage.project.md)
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

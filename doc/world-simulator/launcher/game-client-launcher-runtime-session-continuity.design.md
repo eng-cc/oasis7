@@ -3,7 +3,7 @@
 审计轮次: 5
 
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
-> 对应项目: `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.project.md`
+> 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 结构
 

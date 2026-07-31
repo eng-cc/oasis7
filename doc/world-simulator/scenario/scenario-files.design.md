@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景文件化（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/scenario-files.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/scenario-files.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义场景文件化设计，把内置 `WorldScenario` 迁移为 JSON 场景文件并作为单一权威来源。

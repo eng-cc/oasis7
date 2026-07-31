@@ -58,7 +58,7 @@ Do not use this skill when:
 
 - `.agents/roles/game_visual_interaction_designer.md`
 - `.agents/roles/gameplay_designer.md`
-- `doc/game/project.md`
+- GitHub Project task status and issue evidence comments
 - visual/playtest evidence for level-flow changes
 
 ## Known Failure Modes

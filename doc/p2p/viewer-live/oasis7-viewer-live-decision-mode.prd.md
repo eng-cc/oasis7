@@ -3,7 +3,7 @@
 > 本文是 `oasis7_viewer_live` LLM 默认值与 `--no-llm` observer/debug 边界的当前专业 authority。它收敛两组 2026-02 源三件套；历史变更仅从 Git 与 GitHub task evidence 追溯。
 
 - 对应设计: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md`
-- 对应项目: `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md`
+- 对应项目: GitHub Issue / GitHub Project
 
 ## 目标
 

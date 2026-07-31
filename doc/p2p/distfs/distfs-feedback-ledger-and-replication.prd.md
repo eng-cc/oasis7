@@ -1,7 +1,7 @@
 # DistFS 反馈账本与复制
 
 - 对应设计文档: `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md`
-- 对应项目管理文档: `doc/p2p/distfs/distfs-feedback-ledger-and-replication.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 目标
 
@@ -43,4 +43,4 @@
 
 - 回归至少覆盖：签名/expiry/nonce、append/tombstone 和公开读取、内容 hash、重复 announce 幂等、缺 replication 或 lane 权限拒绝启动、默认 network 在 start 前挂载、effective-no-bootstrap 才允许本地 fallback、显式 topology 无 peer 时 fail closed、每 tick 上限/队列饱和，以及单条失败不阻断 tick。
 - 当前实现入口：`crates/oasis7_distfs/src/{feedback.rs,feedback/replication.rs,feedback_p2p.rs}` 与 `crates/oasis7_node/src/{feedback_runtime.rs,node_runtime_core.rs,lib.rs,types.rs}`。
-- 具体历史完成范围、测试入口和 provenance 见配套 project；当前修改应同时评估 `oasis7_distfs` 与 `oasis7_node` 的受影响回归，不能把模块回归当成发布判定。
+- 具体历史完成范围、测试入口和 provenance 见GitHub task issue evidence；当前修改应同时评估 `oasis7_distfs` 与 `oasis7_node` 的受影响回归，不能把模块回归当成发布判定。

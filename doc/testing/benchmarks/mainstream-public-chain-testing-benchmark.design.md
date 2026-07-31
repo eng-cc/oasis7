@@ -1,14 +1,14 @@
 # oasis7 主流公链测试体系对标与缺口矩阵（设计文档）
 
 - 对应需求文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-- 对应项目管理文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 - 原始基准日期: `2026-03-24`
 
 审计轮次: 2
 
 > Authority boundary: this design preserves benchmark background and historical
 > observations only. Current network-tier status and blockers live in
-> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`.
 > Historical update (2026-07-03): the external verifier /
 > light-client-lite operator path gained bounded sampled world-head verification.
 > That historical closure did not establish full light-client security,

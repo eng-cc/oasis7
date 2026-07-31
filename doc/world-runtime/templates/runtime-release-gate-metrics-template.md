@@ -53,4 +53,4 @@
 - 是否填写所有关键指标的状态与证据路径。
 - 是否绑定边界清单与回归模板。
 - `conditional-go` / `no-go` / `blocked` 是否具备直接证据支撑。
-- 是否已把结论同步回写 `doc/world-runtime/project.md`、`doc/testing/project.md` 与 `doc/core/templates/stage-closure-go-no-go-template.md` 的评审记录。
+- 是否已把结论同步回写对应 GitHub task issue evidence、`doc/core/templates/stage-closure-go-no-go-template.md` 的评审记录，以及受影响的现行 PRD/design。

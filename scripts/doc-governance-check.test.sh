@@ -44,24 +44,18 @@ raise SystemExit(0)
 PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
 
-cat >"$FIXTURE/doc/testing.project.md" <<'DOC'
-## 任务拆解
-## 依赖
-## 状态
-doc/testing/prd.md
-DOC
 cat >"$FIXTURE/doc/testing/prd.md" <<'DOC'
 ## 目标
 ## 范围
 ## 接口 / 数据
 ## 里程碑
 ## 风险
-doc/testing.project.md
 DOC
 for number in $(seq 1 80); do
   printf 'fixture document %s\n' "$number" >"$FIXTURE/doc/many/doc-$number.md"
 done
-printf '%s\n' 'doc/testing.project.md' >"$FIXTURE/doc/.governance/doc-root-md-allowlist.txt"
+printf '%s\n' 'doc/README.md' >"$FIXTURE/doc/.governance/doc-root-md-allowlist.txt"
+printf '%s\n' 'fixture documentation landing page' >"$FIXTURE/doc/README.md"
 {
   printf '%s\n' 'doc/testing/prd.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort
@@ -129,5 +123,45 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   cat "$TMPDIR/check.err" >&2
   exit 1
 fi
+
+mkdir -p "$FIXTURE/doc/testing/nested"
+printf '%s\n' '# forbidden ledger' >"$FIXTURE/doc/testing/nested/reintroduced.project.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/ledger.out" 2>"$TMPDIR/ledger.err"; then
+  echo "doc-governance-check.test: reintroduced project ledger unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'project.md / *.project.md ledgers are retired' "$TMPDIR/ledger.out"
+rm -f "$FIXTURE/doc/testing/nested/reintroduced.project.md"
+
+printf '%s\n' 'Active task status: doc/testing/nested/reintroduced.project.md' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/reference.out" 2>"$TMPDIR/reference.err"; then
+  echo "doc-governance-check.test: active project-ledger reference unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/reference.out"
+printf '%s\n' 'Current authority: same-name project document.' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/semantic-reference.out" 2>"$TMPDIR/semantic-reference.err"; then
+  echo "doc-governance-check.test: semantic project-ledger reference unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/semantic-reference.out"
+printf '%s\n' '- Corresponding GitHub Issue/Project task truth: `doc/testing/prd.md`' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/false-task-truth-link.out" 2>"$TMPDIR/false-task-truth-link.err"; then
+  echo "doc-governance-check.test: local markdown falsely labelled as GitHub task truth unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/false-task-truth-link.out"
 
 echo "doc-governance-check.test: OK"

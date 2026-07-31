@@ -1,7 +1,7 @@
 # DistFS 分布式韧性
 
 - 对应设计文档: `doc/p2p/distfs/distfs-distributed-resilience.design.md`
-- 对应项目管理文档: `doc/p2p/distfs/distfs-distributed-resilience.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 目标
 
@@ -53,4 +53,4 @@ DistFS 在异构、波动的 provider 集合中保持可验证的数据可用性
 
 - 重点回归覆盖：旧 `ProviderRecord` 兼容、排序/候选上限、无 provider 与 provider 耗尽失败、最小副本与单 provider 全覆盖拒绝、repair/rebalance 计划、成功发布与失败不发布、首轮/未到期/非法轮询，以及 NodeRuntime 缺依赖跳过和轮询错误不阻断 tick。
 - 实现入口：`crates/oasis7_net/src/{client,provider_selection,provider_distribution,replica_maintenance}.rs` 与 `crates/oasis7_node/src/{lib,replica_maintenance_support,node_runtime_core}.rs`。
-- 历史完成项与证据索引见配套 project 文档；历史 review/audit 引用保留为 provenance，不构成当前入口或额外 readiness 声明。
+- 历史完成项与证据索引见GitHub task issue evidence；历史 review/audit 引用保留为 provenance，不构成当前入口或额外 readiness 声明。

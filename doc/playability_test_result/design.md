@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/playability_test_result/prd.md`
-- 对应项目管理文档: `doc/playability_test_result/project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 - 对应文件级索引: `doc/playability_test_result/prd.index.md`
 
 ## 1. 设计定位
@@ -12,8 +12,7 @@
 ## 2. 阅读顺序
 1. `doc/playability_test_result/prd.md`
 2. `doc/playability_test_result/design.md`
-3. `doc/playability_test_result/project.md`
-4. `doc/playability_test_result/prd.index.md`
+3. `doc/playability_test_result/prd.index.md`
 5. 下钻卡片、手册与专题结果文档
 
 ## 3. 设计结构
@@ -39,7 +38,7 @@
 
 ## 关键接口 / 入口
 - 需求入口：`doc/playability_test_result/prd.md`
-- 执行入口：`doc/playability_test_result/project.md`
+- 可变执行状态：GitHub task issue evidence comments
 - 索引入口：`doc/playability_test_result/prd.index.md`
 
 ## 设计演进计划

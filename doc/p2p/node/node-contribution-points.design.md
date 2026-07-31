@@ -1,7 +1,7 @@
 # oasis7 Runtime：节点贡献积分激励设计
 
 - 对应需求文档: `doc/p2p/node/node-contribution-points.prd.md`
-- 对应项目管理文档: `doc/p2p/node/node-contribution-points.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义节点贡献积分激励主模型，统一贡献事件、积分累计、结算入口与奖励约束。

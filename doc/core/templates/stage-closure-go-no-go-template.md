@@ -85,4 +85,4 @@
 - `P1` 未完成项是否具备风险、缓解、owner 与复审时间。
 - `conditional-go` / `no-go` / `blocked` 是否具备直接证据支持。
 - 是否存在未登记的例外或口头豁免。
-- 是否已回写 `doc/core/project.md`、对应模块 `project.md` 与对应 GitHub task issue evidence comments。
+- 是否已回写 `doc/core/prd.md`、对应模块 GitHub task issue evidence comments 与对应 GitHub task issue evidence comments。

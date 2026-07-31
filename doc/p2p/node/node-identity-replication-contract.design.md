@@ -1,7 +1,7 @@
 # Node identity and replication contract design
 
 - PRD: `doc/p2p/node/node-identity-replication-contract.prd.md`
-- Project record: `doc/p2p/node/node-identity-replication-contract.project.md`
+- Project record: GitHub Issue / GitHub Project
 
 ## Design position
 

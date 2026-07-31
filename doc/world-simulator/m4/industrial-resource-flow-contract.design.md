@@ -1,7 +1,7 @@
 # M4 工业资源流转合同设计
 
 - 对应需求文档: `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`
-- 对应项目管理文档: `doc/world-simulator/m4/industrial-resource-flow-contract.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 

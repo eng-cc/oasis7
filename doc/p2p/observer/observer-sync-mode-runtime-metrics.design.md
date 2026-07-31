@@ -1,7 +1,7 @@
 # oasis7 Runtime：Observer 同步源运行态统计设计
 
 - 对应需求文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md`
-- 对应项目管理文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义 Observer 同步源运行态统计设计，把同步源选择、追平进度与回退状态纳入统一运行时指标。

@@ -1,7 +1,7 @@
 # Viewer 控制面：回放与 Live 分离设计
 
 > 对应需求: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`
-> 对应执行台账: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md`
+> 历史实施、验证与 task 状态：GitHub task issue evidence。
 
 ## 结构
 

@@ -1,7 +1,7 @@
 # oasis7 主链 Token 创世分配审计清单
 
 - 对应设计文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.design.md`
-- 对应项目管理文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 状态: `active`；首次真实控制主体冻结前仍须执行独立的正式审计。
 
@@ -48,7 +48,7 @@
     - 将 `custody account` 误写成已初始化 treasury bucket
     - 使用 `play-to-earn`、`login reward`、`time played = token` 叙事
   - AC-3: checklist 模板可以直接填入 `TIGR-1` 参数表并给出 `pass/block` verdict。
-  - AC-4: 专题必须与 `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md` 互链。
+  - AC-4: 专题必须与 `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md` 互链。
 - Non-Goals:
   - 本专题不决定最终总供应量绝对值。
   - 不取代法律/税务/证券意见。
@@ -62,7 +62,7 @@
 - Architecture Overview: 该 checklist 作为 QA 层 required-tier 审计入口，读取 `p2p token` 侧的创世参数表草案，按固定字段输出 `pass/block` verdict，并沉淀到 testing 证据体系中。
 - Integration Points:
   - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
-  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
+  - `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
   - `crates/oasis7/src/runtime/main_token.rs`
   - `crates/oasis7/src/runtime/world/event_processing.rs`
   - `doc/testing/evidence/token-genesis-allocation-audit-template.md`

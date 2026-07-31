@@ -1,7 +1,7 @@
 # oasis7 Viewer：Web Chat 面板锁重入与回车发送闭环修复（设计文档）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md`
+- 历史实施、Web 闭环证据与 task 状态：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -48,4 +48,4 @@
   - 缓解：仅作用于 `epaint` 包，保持业务 crate 调试行为不变。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 当前 Web 稳定性与 Chat 发送合同由本文和配对设计维护；历史闭环证据与 task 状态由 GitHub task issue evidence 追溯。

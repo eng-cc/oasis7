@@ -1,7 +1,7 @@
 # README P1 缺口收口：分布式网络主路径生产化
 
 - 对应设计文档: `doc/p2p/network/readme-p1-network-production-hardening.design.md`
-- 对应项目管理文档: `doc/p2p/network/readme-p1-network-production-hardening.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary
@@ -37,7 +37,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
-  - `doc/p2p/network/readme-p1-network-production-hardening.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。

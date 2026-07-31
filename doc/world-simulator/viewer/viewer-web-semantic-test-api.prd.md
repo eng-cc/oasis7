@@ -1,7 +1,7 @@
 # Viewer Web 语义化测试 API（Phase 9 发行验收支撑）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-web-semantic-test-api.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-semantic-test-api.project.md`
+- 历史 API 实施与验证记录：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -134,7 +134,7 @@ The following scope, command queue, state snapshot, roadmap, and decision-log re
 - 下列段落记录已完成的 Bevy/EGUI round-1 至 round-4 迁移，仅作历史追溯；其中的 `viewer_automation`、命令队列、camera、panel/module、timeline DSL 和 `sendControl.seek` 不定义当前 SolidJS API。
 
 #### Risks & Roadmap
-- WTA-0：设计/项目管理文档建档。
+- WTA-0：设计/GitHub Issue/Project task truth建档。
 - WTA-1：`viewer_automation` 支持运行时步骤入队。
 - WTA-2：`web_test_api`（wasm）桥接层实现与 `window.__AW_TEST__` 注入。
 - WTA-3：`app_bootstrap` 接入命令消费与状态发布系统。
@@ -183,4 +183,4 @@ The following scope, command queue, state snapshot, roadmap, and decision-log re
   - round-2 继续优先覆盖“UI 状态切换语义”（top/locale/layout），暂不进入聊天输入文本等高自由度 payload 场景。
   - round-3 采用“结构化参数 + `%xx` 文本解码”承载 chat/prompt 文本输入，保持 `runSteps` 单入口而不新增 `sendChat/applyPrompt` 等方法。
   - round-4 采用“runSteps 承载 timeline 视图语义 + sendControl 承载 seek 控制语义”的双层方案，兼容回放与 live 模式差异（live 下 seek 明确无效回执）。
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史 API 实施与验证记录由 GitHub task issue evidence 维护；当前合同以本文的“当前实现合同”为准。

@@ -1,14 +1,14 @@
 # Site 使用手册静态化（CN/EN）设计文档
 
 - 对应设计文档: `doc/site/manual/site-manual-static-docs.design.md`
-- 对应项目管理文档: `doc/site/manual/site-manual-static-docs.project.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 审计轮次: 5
 
 ## ROUND-002 主从口径
 - 本文件为 manual 主文档；已完成的 Viewer 手册搬迁增量已回填到产品模式、canonical Viewer 手册和本专题镜像治理中，不再保留独立日期型子文档。
 
-- 对应标准执行入口: `doc/site/manual/site-manual-static-docs.project.md`
+- 对应标准执行入口: `doc/site/manual/site-manual-static-docs.prd.md`
 
 ## 目标
 - 在 `site/doc/cn` 与 `site/doc/en` 下建立可直接发布到 GitHub Pages 的手册站框架。
@@ -43,7 +43,7 @@
 
 ## 里程碑
 - M1：文档与任务拆解
-  - 新增本设计文档与项目管理文档。
+  - 新增本设计文档与GitHub Issue/Project task truth。
 - M2：文档框架上线
   - 完成 `site/doc/cn|en` 目录页与导航基础能力。
 - M3：手册内容整理
