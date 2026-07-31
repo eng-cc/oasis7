@@ -58,6 +58,8 @@ fn logistics_transfer_quote_is_read_only_deterministic_and_matches_transit_autho
     assert_eq!(world.snapshot(), state_before);
     assert_eq!(world.journal(), &journal_before);
     assert!(quote.conditional);
+    assert!(quote.submission_feasible);
+    assert_eq!(quote.max_transferable_amount, 100);
     assert_eq!(quote.sent_amount, 50);
     assert_eq!(quote.loss_bps, 20);
     assert_eq!(quote.expected_loss_amount, 10);
@@ -206,6 +208,21 @@ fn logistics_transfer_quote_makes_capacity_and_amount_recovery_recommendations_c
     );
     assert!(!capacity_quote.recommendation.is_empty());
     assert!(amount_quote.conditional);
-    assert!(amount_quote.sent_amount > amount_quote.source_amount_before);
-    assert!(!amount_quote.recommendation.is_empty());
+    assert!(!amount_quote.submission_feasible);
+    assert_eq!(amount_quote.max_transferable_amount, 60);
+    assert_eq!(amount_quote.sent_amount, 0);
+    assert_eq!(amount_quote.expected_loss_amount, 0);
+    assert_eq!(amount_quote.expected_received_amount, 0);
+    assert_eq!(
+        amount_quote.source_amount_after,
+        amount_quote.source_amount_before
+    );
+    assert_eq!(
+        amount_quote.destination_expected_amount_after,
+        amount_quote.destination_amount_before
+    );
+    assert_eq!(
+        amount_quote.recommendation,
+        "reduce_amount_or_source_materials"
+    );
 }

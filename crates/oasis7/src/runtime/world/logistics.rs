@@ -30,6 +30,11 @@ pub struct LogisticsTransferQuote {
     pub to_ledger: MaterialLedgerId,
     pub kind: String,
     pub requested_amount: i64,
+    /// Whether the transfer can be submitted against the currently observed state.
+    /// Submission still revalidates before it reserves materials or capacity.
+    pub submission_feasible: bool,
+    /// The source-ledger amount currently available for this material.
+    pub max_transferable_amount: i64,
     pub sent_amount: i64,
     pub distance_km: i64,
     pub loss_bps: i64,
@@ -152,6 +157,7 @@ impl World {
 
         let source_amount_before = self.ledger_material_balance(from_ledger, kind);
         let destination_amount_before = self.ledger_material_balance(to_ledger, kind);
+        let max_transferable_amount = source_amount_before.max(0);
         let (effective_priority, priority_reason) = match requested_priority {
             Some(priority) => (priority, "explicit_priority".to_string()),
             None => (
@@ -168,6 +174,13 @@ impl World {
         let expected_received_amount = amount.saturating_sub(expected_loss_amount);
         let ticks_until_arrival = material_transit_ticks(distance_km);
         let inflight_before = self.state.pending_material_transits.len();
+        let submission_feasible = source_amount_before >= amount
+            && (distance_km == 0 || inflight_before < MATERIAL_TRANSFER_MAX_INFLIGHT);
+        let (sent_amount, expected_loss_amount, expected_received_amount) = if submission_feasible {
+            (amount, expected_loss_amount, expected_received_amount)
+        } else {
+            (0, 0, 0)
+        };
         let recommendation = if source_amount_before < amount {
             "reduce_amount_or_source_materials"
         } else if distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {
@@ -184,13 +197,15 @@ impl World {
             to_ledger: to_ledger.clone(),
             kind: kind.to_string(),
             requested_amount: amount,
-            sent_amount: amount,
+            submission_feasible,
+            max_transferable_amount,
+            sent_amount,
             distance_km,
             loss_bps,
             expected_loss_amount,
             expected_received_amount,
             source_amount_before,
-            source_amount_after: source_amount_before.saturating_sub(amount),
+            source_amount_after: source_amount_before.saturating_sub(sent_amount),
             destination_amount_before,
             destination_expected_amount_after: destination_amount_before
                 .saturating_add(expected_received_amount),
