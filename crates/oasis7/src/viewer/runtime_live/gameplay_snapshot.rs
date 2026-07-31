@@ -9,12 +9,14 @@ use crate::simulator::persist::{
     ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
-
 #[path = "gameplay_snapshot_fallback.rs"]
 mod fallback;
+#[path = "gameplay_snapshot_fine_grain.rs"]
+mod fine_grain;
 #[path = "gameplay_snapshot_intent.rs"]
 mod intent;
-
+#[path = "gameplay_snapshot_sync.rs"]
+mod sync;
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
 pub(super) use super::gameplay_snapshot_helpers::apply_runtime_snapshot_empty_entities_blocker;
@@ -28,38 +30,17 @@ use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
 };
+use fine_grain::{
+    is_rejected_unknown_gameplay_action, player_gameplay_fine_grain_action_translation,
+    player_gameplay_player_facing_feedback,
+};
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
-
+use sync::first_session_runtime_sync_blocker;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
     pub kind: PlayerGameplayCausalityKind,
     pub detail: String,
 }
-fn first_session_runtime_sync_blocker(
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<(String, String, String)> {
-    let feedback = recent_feedback?;
-    if feedback.action != "chain_sync" {
-        return None;
-    }
-    if !matches!(feedback.stage.as_str(), "blocked" | "completed_no_progress") {
-        return None;
-    }
-    let detail = feedback.reason.clone().unwrap_or_else(|| {
-        "committed runtime sync did not expose a usable world snapshot".to_string()
-    });
-    let kind = if detail.contains("execution world is not ready") {
-        "execution_world_not_ready".to_string()
-    } else {
-        "runtime_sync_unavailable".to_string()
-    };
-    let hint = feedback.hint.clone().unwrap_or_else(|| {
-        "repair the runtime sync path, then refresh gameplay to confirm the committed world is available"
-            .to_string()
-    });
-    Some((kind, detail, hint))
-}
-
 pub(super) fn player_gameplay_causality_from_runtime_events(
     new_events: &[RuntimeWorldEvent],
 ) -> Option<PlayerGameplayCausalitySignal> {
@@ -327,30 +308,40 @@ fn finalize_player_gameplay_snapshot(
                 .to_string();
         gameplay.branch_hint = None;
     }
+    let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
+    let player_facing_feedback_ref = player_facing_feedback.as_ref();
+    let rejected_unknown_gameplay_action =
+        recent_feedback.is_some_and(is_rejected_unknown_gameplay_action);
     gameplay.execution_state =
-        derive_player_gameplay_execution_state(gameplay.stage_status, recent_feedback);
+        derive_player_gameplay_execution_state(gameplay.stage_status, player_facing_feedback_ref);
     let (causality_kind, causality_detail) =
-        derive_player_gameplay_causality(&gameplay, recent_feedback, causality_signal);
+        derive_player_gameplay_causality(&gameplay, player_facing_feedback_ref, causality_signal);
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
-    let status_reason = player_gameplay_status_reason(&gameplay, recent_feedback);
-    gameplay.accepted_intent_id = recent_feedback
+    let status_reason = player_gameplay_status_reason(&gameplay, player_facing_feedback_ref);
+    gameplay.accepted_intent_id = (!rejected_unknown_gameplay_action)
+        .then_some(player_facing_feedback_ref)
+        .flatten()
         .map(|feedback| feedback.action.clone())
         .filter(|value| !value.is_empty());
-    gameplay.intent_summary = recent_feedback.and_then(player_gameplay_intent_summary);
-    gameplay.intent_scope = recent_feedback.and_then(|feedback| {
+    gameplay.intent_summary = player_facing_feedback_ref.and_then(player_gameplay_intent_summary);
+    gameplay.intent_scope = player_facing_feedback_ref.and_then(|feedback| {
         player_gameplay_intent_scope(feedback.action.as_str()).map(str::to_string)
     });
-    gameplay.intent_target = recent_feedback.and_then(|feedback| feedback.target_agent_id.clone());
+    gameplay.intent_target =
+        player_facing_feedback_ref.and_then(|feedback| feedback.target_agent_id.clone());
     gameplay.status_reason = status_reason.clone();
-    gameplay.last_world_change = player_gameplay_last_world_change(&gameplay, recent_feedback);
+    gameplay.last_world_change =
+        player_gameplay_last_world_change(&gameplay, player_facing_feedback_ref);
     gameplay.resume_anchor = Some(format!("{} ({})", gameplay.goal_title, gameplay.goal_id));
     gameplay.primary_blocker = player_gameplay_primary_blocker(&gameplay, status_reason.as_ref());
     gameplay.response_window_class =
-        player_gameplay_response_window_class(&gameplay, recent_feedback);
-    gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, recent_feedback);
-    gameplay.escalation_hint = player_gameplay_escalation_hint(&gameplay, recent_feedback);
-    gameplay.wait_resolution_quote = player_gameplay_wait_resolution_quote(recent_feedback);
+        player_gameplay_response_window_class(&gameplay, player_facing_feedback_ref);
+    gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, player_facing_feedback_ref);
+    gameplay.escalation_hint =
+        player_gameplay_escalation_hint(&gameplay, player_facing_feedback_ref);
+    gameplay.wait_resolution_quote =
+        player_gameplay_wait_resolution_quote(player_facing_feedback_ref);
     let fallback_action =
         player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
@@ -374,6 +365,9 @@ fn finalize_player_gameplay_snapshot(
         .map(str::to_string);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     apply_small_player_lane_truth(&mut gameplay);
+    gameplay.fine_grain_action_translation =
+        player_gameplay_fine_grain_action_translation(&gameplay, recent_feedback);
+    gameplay.recent_feedback = player_facing_feedback;
     gameplay
 }
 
@@ -481,6 +475,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
     let primary_factory = primary_factory_for_player_gameplay(state);
@@ -598,6 +593,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 pivot_available: None,
                 validation_unlock_preview: None,
                 recovery_options: Vec::new(),
+                fine_grain_action_translation: None,
             });
         }
     }
@@ -669,6 +665,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -752,6 +749,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -837,6 +835,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
             IndustryStage::ScaleOut => {
@@ -897,6 +896,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
             IndustryStage::Governance => {
@@ -957,6 +957,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
         }
@@ -1017,6 +1018,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1075,6 +1077,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1133,6 +1136,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1190,5 +1194,6 @@ pub(super) fn build_player_gameplay_snapshot(
         pivot_available: None,
         validation_unlock_preview: None,
         recovery_options: Vec::new(),
+        fine_grain_action_translation: None,
     })
 }

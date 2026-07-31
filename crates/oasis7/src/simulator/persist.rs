@@ -122,6 +122,23 @@ pub struct PlayerGameplayRecoveryOption {
     pub recommendation_reason: String,
 }
 
+/// An advisory translation for a requested physical action that the current
+/// runtime does not expose as a canonical world action.
+///
+/// This is presentation/persistence data only. It does not enqueue, validate,
+/// or execute `canonical_replacement_action`; callers must continue through
+/// the existing canonical action path to do so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayFineGrainActionTranslation {
+    pub requested_granularity: String,
+    pub why_fine_action_deferred: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_replacement_action: Option<String>,
+    pub closest_playable_goal: String,
+    pub player_next_step_hint: String,
+    pub replacement_value_class: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerGameplayRecentFeedback {
     pub action: String,
@@ -356,6 +373,8 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default)]
     pub recovery_options: Vec<PlayerGameplayRecoveryOption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fine_grain_action_translation: Option<PlayerGameplayFineGrainActionTranslation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_major_power_sponsorship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repair_available: Option<bool>,
@@ -483,6 +502,8 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default)]
     recovery_options: Vec<PlayerGameplayRecoveryOption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    fine_grain_action_translation: Option<PlayerGameplayFineGrainActionTranslation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     requires_major_power_sponsorship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     repair_available: Option<bool>,
@@ -584,6 +605,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
                 .or_else(|| Some("unverified".to_string())),
             recovery_path_detail: legacy.recovery_path_detail,
             recovery_options: legacy.recovery_options,
+            fine_grain_action_translation: legacy.fine_grain_action_translation,
             requires_major_power_sponsorship: legacy
                 .requires_major_power_sponsorship
                 .or_else(|| Some("unverified".to_string())),
