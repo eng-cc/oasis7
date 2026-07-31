@@ -1,7 +1,7 @@
 # README 分布式计算与存储生产级收口（Gap 1/2/3/4/5）设计文档
 
 - 对应需求文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`
-- 对应GitHub Issue/Project task truth: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 ## 1. 设计定位
 定义 README 中分布式计算与存储生产级收口设计，统一 Gap1~5 对外口径与主链路边界。

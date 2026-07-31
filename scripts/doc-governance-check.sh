@@ -342,7 +342,7 @@ done < <(
     ! -path 'doc/engineering/workflow/source-of-truth.md' \
     | sort
 )
-if project_reference_hits=$(regex_match_with_line_numbers '(^|[^A-Za-z0-9_])([A-Za-z0-9_./*-]+)?(\.project|/project)\.md([^A-Za-z0-9_]|$)|同名[ `]*(project|项目)|配套[ `]*project( 文档)?|项目管理文档|same[- ]name[ `]*project' "${active_governance_docs[@]}"); then
+if project_reference_hits=$(regex_match_with_line_numbers '(^|[^A-Za-z0-9_])([A-Za-z0-9_./*-]+)?(\.project|/project)\.md([^A-Za-z0-9_]|$)|同名[ `]*(project|项目)|配套[ `]*project( 文档)?|项目管理文档|same[- ]name[ `]*project|GitHub Issue/Project task truth[:：].*`[^`]+\.md`' "${active_governance_docs[@]}"); then
   echo "doc-governance-check: retired project ledger reference hits:"
   echo "$project_reference_hits"
   fail "active documentation references retired project ledgers or legacy project-management documents"

@@ -154,5 +154,14 @@ if (
   exit 1
 fi
 grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/semantic-reference.out"
+printf '%s\n' '- Corresponding GitHub Issue/Project task truth: `doc/testing/prd.md`' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/false-task-truth-link.out" 2>"$TMPDIR/false-task-truth-link.err"; then
+  echo "doc-governance-check.test: local markdown falsely labelled as GitHub task truth unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/false-task-truth-link.out"
 
 echo "doc-governance-check.test: OK"

@@ -1,7 +1,7 @@
 # README 生产级缺口收口（二次）：默认 WASM 执行 + Replication RR + 分布式 Triad + 玩家节点身份（设计文档）
 
 - 对应设计文档: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md`
-- 对应GitHub Issue/Project task truth: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 审计轮次: 4
 

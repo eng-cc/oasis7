@@ -1,7 +1,7 @@
 # Site 使用手册静态化（CN/EN）设计文档
 
 - 对应需求文档: `doc/site/manual/site-manual-static-docs.prd.md`
-- 对应GitHub Issue/Project task truth: `doc/site/manual/site-manual-static-docs.prd.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 ## 1. 设计定位
 定义站点手册专题设计，统一静态文档站、CN/EN 手册迁移与长期维护约定。

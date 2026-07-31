@@ -1,6 +1,6 @@
 # Pre-commit 与显式本地修复
 
-- 对应GitHub Issue/Project task truth: `doc/scripts/precommit/pre-commit.prd.md`
+- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
 
 审计轮次: 4
 
