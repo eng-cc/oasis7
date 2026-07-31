@@ -37,7 +37,24 @@ git -C "$TASK_WORKTREE" push -q origin "HEAD:main"
 # Terminal Project state can make the completed task absent from a refreshed
 # default-worktree cache, while its canonical task worktree retains identity.
 mkdir -p "$REPO/.pm/github-project-sync" "$TASK_WORKTREE/.pm/github-project-sync"
-printf '%s\n' '{"version":1,"tasks":{}}' >"$REPO/.pm/github-project-sync/tasks.json"
+python3 - "$REPO/.pm/github-project-sync/tasks.json" "$TASK_UID" "$REPO" <<'PY'
+import json, sys
+
+path, uid, default_worktree = sys.argv[1:]
+poisoned = {
+    "task_uid": uid,
+    "status": "done",
+    "repository": "fixture/repo",
+    "default_branch": "main",
+    "canonical_worktree": default_worktree,
+    "task_branch": "main",
+    "pr_number": 7,
+    "pr_url": "https://example.invalid/pull/7",
+}
+with open(path, "w", encoding="utf-8") as stream:
+    json.dump({"version": 1, "tasks": {uid: poisoned}}, stream)
+    stream.write("\n")
+PY
 python3 - "$TASK_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" "$TASK_WORKTREE" "$TASK_BRANCH" <<'PY'
 import json, sys
 

@@ -871,15 +871,30 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
-    # A supplied hint may only identify a worktree in this repository family;
-    # it never chooses the refreshed canonical worktree.  Validate it first so
-    # a foreign repository still fails closed, then persist the command root.
-    authoritative_repository_identity(
-        args.root.resolve(), args.repo, str(live.get("worktree_hint") or args.root.resolve())
-    )
-    repository_identity = authoritative_repository_identity(
-        args.root.resolve(), args.repo, str(args.root.resolve())
-    )
+    # The command root is execution context, not task identity.  Terminal
+    # refreshes intentionally run from the default worktree, so rebinding the
+    # task to that root would destroy the canonical task-worktree/branch pair.
+    # Resolve registered identity from task truth instead and fail closed when
+    # live and cached task identities disagree.
+    root = args.root.resolve()
+    identity_candidates: list[dict[str, str]] = []
+    for hint in (
+        str(existing.get("canonical_worktree") or ""),
+        str(live.get("worktree_hint") or ""),
+    ):
+        if not hint or not pathlib.Path(hint).expanduser().exists():
+            continue
+        candidate = authoritative_repository_identity(root, args.repo, hint)
+        if not any(
+            item["canonical_worktree"] == candidate["canonical_worktree"]
+            for item in identity_candidates
+        ):
+            identity_candidates.append(candidate)
+    if len(identity_candidates) > 1:
+        die("refresh-task: cached and live canonical worktree identities disagree")
+    if not identity_candidates:
+        die("refresh-task: no registered canonical task worktree identity is available")
+    repository_identity = identity_candidates[0]
     live["worktree_hint"] = repository_identity["canonical_worktree"]
     recovered: dict[str, Any] = {}
     item_id = str(existing.get("project_item_id") or "")
