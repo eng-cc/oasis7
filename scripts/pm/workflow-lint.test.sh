@@ -11,14 +11,8 @@ cleanup() {
 trap cleanup EXIT
 
 TASK_UID="task_11111111111111111111111111111111"
-mkdir -p "$TMPDIR/scripts" "$TMPDIR/.pm/tasks" "$TMPDIR/doc/engineering"
+mkdir -p "$TMPDIR/scripts" "$TMPDIR/.pm/tasks"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
-
-cat > "$TMPDIR/doc/engineering/project.md" <<EOF
-# Engineering Project Fixture
-
-- [x] workflow-lint-pr-evidence-fixture [test_tier_required]: exercise post-pr evidence chain. Trace: #123 ($TASK_UID)
-EOF
 
 cat > "$TMPDIR/.pm/tasks/$TASK_UID.yaml" <<EOF
 task_uid: $TASK_UID
@@ -30,8 +24,7 @@ status: done
 priority: P2
 source_signal: null
 source_refs: []
-doc_refs:
-  - doc/engineering/project.md
+doc_refs: []
 related_prd: []
 acceptance: []
 handoff_to: []

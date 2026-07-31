@@ -9,7 +9,7 @@ description: Use when planning a new game architecture, major game feature, refa
 
 In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
 
-Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace GitHub-backed task truth.
+Architecture documents may supplement durable PRD/design and handoff truth, but they do not replace GitHub-backed task truth.
 
 ## When to Use
 
@@ -28,7 +28,7 @@ Do not use this skill when:
 
 1. Bind the work to the existing GitHub-backed task/worktree and record the route before producing architecture docs.
 2. Use this `SKILL.md` as the entrypoint; read `references/full-guidance.md` for document templates, phase details, paradigm tables, and examples.
-3. Write architecture outputs as supplements to `prd.md`, `project.md`, and GitHub-backed task truth, never as a replacement for them.
+3. Write architecture outputs as supplements to durable PRD/design and GitHub-backed task truth, never as a replacement for them.
 4. Always record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments.
 5. Before code changes, hand implementation back to TPM; Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`.
 

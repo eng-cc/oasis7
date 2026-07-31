@@ -1,7 +1,7 @@
 # oasis7 Runtime：WASM 可观测性与耗时指标
 
 - 对应设计文档: `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 审计轮次: 1
 
@@ -79,7 +79,7 @@
   - `crates/oasis7/src/bin/oasis7_chain_runtime/status_payload.rs`
   - `crates/oasis7/src/bin/oasis7_chain_runtime/storage_metrics.rs`
   - `doc/world-runtime/templates/runtime-release-gate-metrics-template.md`
-  - `doc/world-runtime/project.md`
+  - 对应 GitHub task issue / Project（当前任务、候选和验收过程）
   - `tools/wasm_module_observe`
   - `scripts/oasis7-wasm-module-observe.sh`
   - `crates/oasis7_builtin_wasm_modules/_templates/module_observe.json`
@@ -113,6 +113,11 @@
   - 风险-4: 若 metrics 锁或 snapshot 刷新失败影响主执行路径，会把“性能观测”反向变成 runtime 可用性风险。
 
 ## 6. Validation & Decision Record
+
+观测 schema、summary/runner 和边界回归的稳定证据入口见
+[`evidence.md`](evidence.md)。计时样本、候选判断、任务状态及实时阻塞不写入
+PRD，统一由 GitHub task issue / Project 与 Git history 追溯。
+
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |

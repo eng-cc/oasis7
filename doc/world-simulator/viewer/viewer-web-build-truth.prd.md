@@ -1,7 +1,7 @@
 # Viewer Web Build Truth and Legacy Core Split
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-web-build-truth.design.md`
-- 未完成的 facade 拆分债务见 `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`。
+- 未完成的 facade 拆分债务见 `viewer-frontend-structure-standard.prd.md#当前已登记的结构债务`；具体 task 状态由 GitHub task issue evidence 维护。
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md`

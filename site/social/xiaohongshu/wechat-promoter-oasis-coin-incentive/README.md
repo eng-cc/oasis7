@@ -9,7 +9,7 @@
 - `wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - `wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md`
 - `wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md`
-- `wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md`
+- GitHub task issue evidence comments
 
 ## Source / Editable Assets
 - None in this package.

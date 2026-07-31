@@ -1,7 +1,7 @@
 # README P1 缺口收口：分布式网络主路径生产化设计
 
 - 对应需求文档: `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
-- 对应项目管理文档: `doc/p2p/network/readme-p1-network-production-hardening.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义分布式网络 P1 主路径生产化方案：把请求层升级为 libp2p 多 peer 轮换重试，并把共识消息切到 libp2p pubsub 主链路。

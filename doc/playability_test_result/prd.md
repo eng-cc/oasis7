@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 playability_test_result 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/playability_test_result/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 GitHub task issue evidence comments 的任务映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/playability_test_result/prd.md`
-- 项目管理入口: `doc/playability_test_result/project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 - 文件级索引: `doc/playability_test_result/prd.index.md`
 - 追踪主键: `PRD-PLAYABILITY_TEST_RESULT-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -68,7 +68,7 @@
 | 工业引导卡组 | 首个制成品、停机恢复、首座工厂单元、失败签名、证据路径 | 按场景卡选择手动回归链路 | `planned -> executed -> closed/blocked` | 影响首产出/停机/建厂体验时优先执行 | `qa_engineer` 维护，`producer_system_designer` 联审口径 |
 - Acceptance Criteria:
   - AC-1: PRD 明确卡片字段、评分口径、问题分级标准。
-  - AC-2: project 文档定义采集、汇总、复盘三类任务。
+- AC-2: PRD、模板与 evidence bundle 定义采集、汇总、复盘三类可重复任务。
   - AC-3: 与 `doc/playability_test_result/game-test.prd.md`、`testing-manual.md` 口径一致。
   - AC-4: 历史卡片可按版本进行检索与对比。
   - AC-5: 前期工业引导的 `首个制成品 / 停机恢复 / 首座工厂单元` 具备可重复执行的专题卡组与 required-tier 手动回归链路。

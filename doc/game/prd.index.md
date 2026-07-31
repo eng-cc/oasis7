@@ -8,21 +8,20 @@
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
 - 模块设计总览：`doc/game/design.md`
-- 模块标准执行入口：`doc/game/project.md`
 - gameplay 子域入口：`doc/game/gameplay/README.md`
 - 核心玩法骨架专题：`doc/game/gameplay/gameplay-top-level-design.prd.md`（活跃基线与路由先看 `doc/game/prd.md`）
 
 ## 首读分流
-- 想先回答 game 模块当前目标态、阶段判断与完成定义：先读 `doc/game/prd.md`
-- 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
+- 想先回答 game 模块当前目标态与完成定义：先读 `doc/game/prd.md`
+- 想先回答当前还在推进什么、阻断在哪里、下一步做什么：查看对应 GitHub Project task 与 issue evidence comments。
 - 想先进入 gameplay 热点子域，而不是直接面对完整 gameplay 文档长表：先读 `doc/game/gameplay/README.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/prd.md` 确认活跃基线与路由，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
-- 想先看首局与持续游玩的产品承诺：先读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；exact gameplay 合同读 `doc/game/gameplay/gameplay-top-level-design.prd.md`，当前 verdict 读 `doc/game/project.md`
+- 想先看首局与持续游玩的产品承诺：先读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；exact gameplay 合同读 `doc/game/gameplay/gameplay-top-level-design.prd.md`，当前 verdict 由同候选 GitHub task evidence 与 `doc/testing/evidence/` 确认。
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 gameplay 顶层合同
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
-- 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态看 `doc/game/project.md` 与对应 round execution record
+- 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态由 GitHub task truth 与对应 evidence 确认。
 - 想继续按文件名、专题或补充材料下钻：使用下方热点子域导航与补充入口；当前文件库存统一以 `./scripts/doc-inventory-report.sh` 为准，本页不维护容易漂移的数量快照
 
 ## 热点子域导航
@@ -35,7 +34,7 @@
 ## 活跃补充文档
 - `doc/game/gameplay/README.md`：`gameplay/` 热点子域 landing page，适合先做簇级分流，再决定进入玩法骨架、留存、agency、preview/beta gate 或 economy/claim 专题。
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架的专题入口；活跃基线与路由先看 `doc/game/prd.md`。
-- `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`：首局、后引导、首次持续能力与失败恢复的产品承诺；专业玩法合同见 `doc/game/gameplay/gameplay-top-level-design.prd.md`，执行状态见 `doc/game/project.md`。
+- `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`：首局、后引导、首次持续能力与失败恢复的产品承诺；专业玩法合同见 `doc/game/gameplay/gameplay-top-level-design.prd.md`，执行状态由对应 GitHub task evidence 与 `doc/testing/evidence/` 确认。
 - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
 - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力的产品主入口。
 - `doc/product/world-rules-core-gameplay/prd.md` 与 `doc/game/gameplay/gameplay-top-level-design.prd.md`：分别承载物理尺度/间接控制的产品承诺，以及玩法侧动作粒度与表现层夸张边界。
@@ -50,23 +49,23 @@
 - 完整活跃专题清单与补充入口继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/game/gameplay/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的活跃专题三件套。
+- 纳入规则：纳入 `doc/game/gameplay/*.prd.md` 与同名 `*.design.md` 的稳定专题对；可变执行状态只存于 GitHub Project task truth。
 - 活跃补充：仍被模块 PRD / 项目态直接引用、且承担当前阶段判断或执行入口职责的 runbook / handoff / evidence，可在“活跃补充文档”或补充入口表中定向列出。
 - 排除规则：补充材料继续保留检索能力，但除非重新成为默认首读入口，否则不进入首屏长表。
-- 按需进入：当 README 与 `project.md` 已经能完成首读分流时，本页只承担精确检索与补充路由职责。
+- 按需进入：当 README 已经完成首读分流时，本页只承担精确检索与补充路由职责。
 
 ## 完整活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md` |
-| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md` |
-| `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
-| `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md` |
+| `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` |
+| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` |
+| `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` |
+| `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` |
 
 ## 历史 closure / provenance 入口
 | 历史 closure 专题 | 当前追溯入口 |
 | --- | --- |
-| lifecycle rules、war/governance/crisis/meta、module-driven production 历史 closure（正文已退役） | 玩家合同与生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包`、`doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`、战争/政治数值基线及 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`；历史审读见 Git history 与 Git history。 |
+| lifecycle rules、war/governance/crisis/meta、module-driven production 历史 closure（正文已退役） | 玩家合同与生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md`、战争/政治数值基线及 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`；历史审读见 Git history 与 GitHub task issue evidence。 |
 | `gameplay-release-gap-closure-2026-02-21` | 正文已退役；历史内容从 Git history、core review logs 与 GitHub task issue evidence comments 追溯。 |
 | gameplay release-production、runtime-governance 与 base-runtime/WASM split closure | 正文已吸收到 gameplay top-level、world-runtime/WASM 专业权威；历史过程从 Git history 与 GitHub task evidence 追溯。 |
 
@@ -80,6 +79,6 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 文档配对规则：`*.prd.md` 与同名 `*.design.md`；任务状态、计划和历史 trace 由 GitHub task truth 承载。
 - authority 口径：`doc/game/prd.md` 是活跃基线与路由根入口；`doc/game/gameplay/gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` 的专题细节，其他 topic 在各自声明范围内拥有细节。历史 ROUND-002 主从表述不构成现行优先级。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入下一轮路径级治理。

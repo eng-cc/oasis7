@@ -50,7 +50,7 @@
   - `readme-link-check-automation-2026-03-11.{prd,design,project}.md`
   - `readme-root-status-alignment-2026-03-11.{prd,design,project}.md`
 - 当前承接:
-  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `../project.md` 承接。
+  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `GitHub task issue evidence comments` 承接。
   - 根 README 公开状态真值是根 `../../../README.md`；公开状态复核从白皮书总览、季度复核与 release communication surfaces 进入。
 - 追溯边界:
   - 如需查看 2026-03-11 一次性专题原文，使用 git history 与 GitHub task issue evidence comments；不要在当前入口中恢复这些旧专题作为活跃文档。

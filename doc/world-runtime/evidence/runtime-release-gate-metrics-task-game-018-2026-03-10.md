@@ -21,7 +21,7 @@
 | 治理状态机 / 拒绝路径 | propose/shadow/approve/apply 与拒绝原因完整 | `required` | `pass` | `env -u RUSTC_WRAPPER cargo test -p oasis7 longrun_operability_release_gate_blocks_stage_and_economy_pressure -- --nocapture` | 覆盖 stage / rollback drill / economy gate 的阻断原因。 |
 | 安全失败签名 | 越权、缺审计、receipt 断裂等失败签名为 0 | `required` | `pass` | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` / `doc/world-runtime/templates/runtime-security-numeric-regression-template.md` | 本轮定向回归未见新增安全失败签名。 |
 | 数值语义失败签名 | 数值漂移、边界值异常、恢复后不一致等失败签名为 0 | `required` | `pass` | `env -u RUSTC_WRAPPER cargo test -p oasis7 snapshot_retention_policy_prunes_old_entries -- --nocapture` | 保留/裁剪后语义保持一致，本轮无异常信号。 |
-| storage / GC / replay summary | profile、GC 结果、恢复摘要满足当前候选要求 | `required` | `pass` | `env -u RUSTC_WRAPPER cargo test -p oasis7 storage_footprint_fixture_baseline_covers_2500_ticks -- --nocapture` / `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md` / `.tmp/s10_longrun_t2/20260308-113318/summary.md` | T7.1 基线已覆盖 2500 ticks；现有 S10 摘要仅为 dry-run，不作为阻断失败。 |
+| storage / GC / replay summary | profile、GC 结果、恢复摘要满足当前候选要求 | `required` | `pass` | `env -u RUSTC_WRAPPER cargo test -p oasis7 storage_footprint_fixture_baseline_covers_2500_ticks -- --nocapture` / `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md` / `.tmp/s10_longrun_t2/20260308-113318/summary.md` | T7.1 基线已覆盖 2500 ticks；现有 S10 摘要仅为 dry-run，不作为阻断失败。 |
 
 ## 风险与例外
 | 风险 ID | 描述 | 是否阻断 | 缓解措施 | 负责人 | 复审时间 |
@@ -33,4 +33,4 @@
 - 通过项：回放恢复、snapshot retention、storage footprint baseline、WASM/hash/registry、治理阻断路径均有本轮或可追溯证据。
 - 阻断项：无 task 级 P0 阻断。
 - 条件放行项：更大范围 footprint/GC/soak 联合验证仍在 `TASK-WORLD_RUNTIME-033` 后续切片中推进。
-- 历史处置：本记录曾作为 runtime P0 从 `blocked` 转为 `ready` 的依据；Git history 只保留当时裁决，不接受状态回写，当前状态以 GitHub task issue evidence 和现行 runtime project 为准。
+- 历史处置：本记录曾作为 runtime P0 从 `blocked` 转为 `ready` 的依据；Git history 只保留当时裁决，不接受状态回写，当前状态以 GitHub task issue evidence 和现行 runtime PRD/design 为准。

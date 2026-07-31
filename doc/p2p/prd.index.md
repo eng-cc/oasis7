@@ -7,11 +7,11 @@
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
 - 模块设计总览：`doc/p2p/design.md`
-- 模块标准执行入口：`doc/p2p/project.md`
+- 模块标准执行入口：GitHub Issue / GitHub Project
 
 ## 首读分流
 - 想先回答模块在做什么、主链和 DistFS 的统一边界是什么：先读 `doc/p2p/prd.md`
-- 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
+- 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：查看 GitHub Issue / GitHub Project。
 - 想先回答 P2P、DistFS、共识、执行与 observer 如何作为“链上大世界状态底座”单模块自闭环测试：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`
@@ -51,17 +51,17 @@
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义
-- `active`：当前执行真值仍以 `doc/p2p/project.md` 和具体专题 `*.project.md` 的状态段为准。
+- `active`：当前执行真值以 GitHub Issue / GitHub Project 为准；仓库文档不维护任务状态段。
 - `canonical`：模块规格、设计总览、热点子域入口、当前补充阅读面和专题主文档；这些文档可长期保留在默认可达路径中。
 - `completed`：已完成但仍需按文件名可达的专题三件套；保留在下方检索清单，不自动进入默认首读面。
 - `historical` / `evidence-snapshot`：历史审计清单、旧轮次证据、release 补充材料与 legacy runbook；只作为追溯证据或兼容入口，不作为当前执行状态或可删除依据。
 
 ## 覆盖规则（ROUND-005 统一）
-- 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
+- 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 及其同名 `*.design.md`；任务映射保留在 GitHub。
 - 当前补充阅读面：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“当前补充阅读面”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如 `*.release.md` 补充材料）。
-- 历史入口：根目录历史入口文件（`p2p.prd.md` / `p2p.project.md`）仅保留兼容跳转语义，不作为主索引分母。
-- 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
+- 历史入口：根目录历史入口文件（`p2p.prd.md`）仅保留兼容跳转语义，不作为主索引分母。
+- 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` 主入口；任务追溯转到 GitHub。
 
 ## 折叠阅读层（主从/增量组）
 | 子域 | 默认先读 | 折叠的增量/追溯入口 |
@@ -73,33 +73,33 @@
 | `viewer-live/` decision mode | `doc/p2p/viewer-live/README.md` -> `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | 两组 2026-02 源三件套已语义回填并退役；历史变更从 Git 与 GitHub task evidence 追溯 |
 
 ## 完整专题检索清单（按文件名精确检索）
-| 专题 PRD | 专题设计文档 | 专题项目文档 |
+| 专题 PRD | 专题设计文档 | 任务追溯 |
 | --- | --- | --- |
-| `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md` |
-| `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md` | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md` | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.project.md` |
-| `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md` |
-| `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md` |
-| `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md` |
-| `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.project.md` |
-| `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.project.md` |
-| `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.project.md` |
-| `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | `doc/p2p/distfs/distfs-distributed-resilience.design.md` | `doc/p2p/distfs/distfs-distributed-resilience.project.md` |
-| `doc/p2p/distfs/distfs-production-hardening.prd.md` | `doc/p2p/distfs/distfs-production-hardening.design.md` | `doc/p2p/distfs/distfs-production-hardening.project.md` |
-| `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md` |
-| `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | `doc/p2p/network/mainnet-private-reachability-architecture.project.md` |
-| `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
-| `doc/p2p/node/node-contribution-points.prd.md` | `doc/p2p/node/node-contribution-points.design.md` | `doc/p2p/node/node-contribution-points.project.md` |
-| `doc/p2p/node/node-identity-replication-contract.prd.md` | `doc/p2p/node/node-identity-replication-contract.design.md` | `doc/p2p/node/node-identity-replication-contract.project.md` |
-| `doc/p2p/node/node-redeemable-power-asset.prd.md` | `doc/p2p/node/node-redeemable-power-asset.design.md` | `doc/p2p/node/node-redeemable-power-asset.project.md` |
-| `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | `doc/world-runtime/runtime/chain-pos-control-plane.project.md` |
-| `doc/p2p/node/node-triad-operations-observability.prd.md` | `doc/p2p/node/node-triad-operations-observability.design.md` | `doc/p2p/node/node-triad-operations-observability.project.md` |
-| `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md` |
-| `doc/p2p/observer/observer-sync-source-mode.prd.md` | `doc/p2p/observer/observer-sync-source-mode.design.md` | `doc/p2p/observer/observer-sync-source-mode.project.md` |
-| `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.design.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.project.md` |
-| `doc/p2p/token/mainchain-token-ideal-transaction.prd.md` | `doc/p2p/token/mainchain-token-ideal-transaction.design.md` | `doc/p2p/token/mainchain-token-ideal-transaction.project.md` |
-| `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md` | `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md` | `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md` |
-| `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md` |
-| `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.project.md` |
+| `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md` | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | GitHub Issue / GitHub Project |
+| `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | `doc/p2p/distfs/distfs-distributed-resilience.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/distfs/distfs-production-hardening.prd.md` | `doc/p2p/distfs/distfs-production-hardening.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/network/p2p-mobile-light-client-authoritative-state.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/network/mainnet-private-reachability-architecture.prd.md` | `doc/p2p/network/mainnet-private-reachability-architecture.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/node/node-contribution-points.prd.md` | `doc/p2p/node/node-contribution-points.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/node/node-identity-replication-contract.prd.md` | `doc/p2p/node/node-identity-replication-contract.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/node/node-redeemable-power-asset.prd.md` | `doc/p2p/node/node-redeemable-power-asset.design.md` | GitHub Issue / GitHub Project |
+| `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` | `doc/world-runtime/runtime/chain-pos-control-plane.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/node/node-triad-operations-observability.prd.md` | `doc/p2p/node/node-triad-operations-observability.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/observer/observer-sync-source-mode.prd.md` | `doc/p2p/observer/observer-sync-source-mode.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md` | `doc/p2p/token/mainchain-token-allocation-mechanism.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/token/mainchain-token-ideal-transaction.prd.md` | `doc/p2p/token/mainchain-token-ideal-transaction.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md` | `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md` | `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md` | GitHub Issue / GitHub Project |
+| `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.prd.md` | `doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md` | GitHub Issue / GitHub Project |
 
 ## 发布说明文档（release，补充材料）
 | 发布说明 | 对应专题 |
@@ -108,20 +108,20 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- `*.release.md` 为发布补充材料，不参与 PRD 任务配对规则。
+- 文档配对规则：`*.prd.md` 与同名 `*.design.md`；可变任务历史和状态由 GitHub Issue / GitHub Project 承担。
+- `*.release.md` 为发布补充材料，不参与 PRD/design 配对规则。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24` 另有执行 companion：`doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有执行 companion：`doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md`。
-- Observer source 专业权威：DHT 增量专题（`PRD-P2P-MIG-109-001`）已合并进 `observer-sync-source-mode.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
-- Ideal transaction 专业权威：2026-06-08 理想交易升级三件套已合并进 `mainchain-token-ideal-transaction.{prd,design,project}.md`；`PRD-P2P-ITX-001/002/003` 由继任 project 任务行承接，历史过程只从 Git 与 GitHub task evidence 追溯。
-- Observer metrics 专业权威：统计桥接（`PRD-P2P-MIG-106-001`）与策略可观测性（`PRD-P2P-MIG-107-001`）已合并进 `observer-sync-mode-runtime-metrics.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除。
-- NodePoints 专业权威：runtime closure（`PRD-P2P-MIG-090-001`）与 multi-node closure test（`PRD-P2P-MIG-089-001`）的有效语义已合并进 `doc/p2p/node/node-contribution-points.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除；历史过程只从 Git history 与 GitHub task evidence 追溯。
+- Observer source 专业权威：DHT 增量专题（`PRD-P2P-MIG-109-001`）已合并进 `observer-sync-source-mode.{prd,design}.md`，原 ID 由继任专题 PRD-ID 保留，任务历史写入 GitHub，源文件已删除。
+- Ideal transaction 专业权威：2026-06-08 理想交易升级三件套已合并进 `mainchain-token-ideal-transaction.{prd,design}.md`；`PRD-P2P-ITX-001/002/003` 由继任专题 PRD-ID 保留，任务历史写入 GitHub，历史过程只从 Git 与 GitHub task evidence 追溯。
+- Observer metrics 专业权威：统计桥接（`PRD-P2P-MIG-106-001`）与策略可观测性（`PRD-P2P-MIG-107-001`）已合并进 `observer-sync-mode-runtime-metrics.{prd,design}.md`，原 ID 由继任专题 PRD-ID 保留，任务历史写入 GitHub，源文件已删除。
+- NodePoints 专业权威：runtime closure（`PRD-P2P-MIG-090-001`）与 multi-node closure test（`PRD-P2P-MIG-089-001`）的有效语义已合并进 `doc/p2p/node/node-contribution-points.{prd,design}.md`，原 ID 映射由继任专题 PRD-ID 保留，任务历史写入 GitHub，源文件已删除；历史过程只从 Git history 与 GitHub task evidence 追溯。
 - Node reward 专业权威：storage pool（`PRD-P2P-MIG-102-001`）与 uptime reward（`PRD-P2P-MIG-103-001`）已合并进 `node-contribution-points.*`；native settlement 由 Token allocation authority 承接；builtin materialization 由 WASM deterministic-build pipeline 承接。旧 reward leader/failover 完成态无当前实现，按根 PRD 负向边界退役。15 个源文件已删除，历史过程只从 Git 与 GitHub task evidence 追溯。
-- Node network 专业权威：net stack unification（`PRD-P2P-MIG-105-001`）与 wasm32/libp2p compile guard（`PRD-P2P-MIG-104-001`）的有效语义已合并进 `doc/p2p/network/readme-p1-network-production-hardening.{prd,design,project}.md`，原 ID 映射由继任 project 任务行承接，源文件已删除。
-- Redeemable power asset 专业权威：审计加固（`PRD-P2P-MIG-096-001`）与签名治理（`PRD-P2P-MIG-097-001`）已合并进 `node-redeemable-power-asset.{prd,design,project}.md`，原 ID 由继任 project 任务行承接，源文件已删除；历史 AHA release companion 保留并重定向到当前权威。
+- Node network 专业权威：net stack unification（`PRD-P2P-MIG-105-001`）与 wasm32/libp2p compile guard（`PRD-P2P-MIG-104-001`）的有效语义已合并进 `doc/p2p/network/readme-p1-network-production-hardening.{prd,design}.md`，原 ID 映射由继任专题 PRD-ID 保留，任务历史写入 GitHub，源文件已删除。
+- Redeemable power asset 专业权威：审计加固（`PRD-P2P-MIG-096-001`）与签名治理（`PRD-P2P-MIG-097-001`）已合并进 `node-redeemable-power-asset.{prd,design}.md`，原 ID 由继任专题 PRD-ID 保留，任务历史写入 GitHub，源文件已删除；历史 AHA release companion 保留并重定向到当前权威。
 - DistFS distributed resilience：`distfs-distributed-resilience` 是异构 provider 兼容/选择、无单机完整依赖、分布覆盖、自愈控制/轮询与 NodeRuntime 接线的唯一主入口。NodeRuntime 接线仍受“依赖齐备才运行、缺依赖跳过、单轮失败不阻断 tick”约束，不能被误述为全局自治恢复或 readiness 结论。
 - DistFS production hardening：`distfs-production-hardening` 是 Phase 1-9 的唯一当前专业权威；历史 phase 文件名只保留为 audit/review provenance 和 Git history，后续删除必须保留该身份而不得改写为重复的当前路径。
 - DistFS feedback ledger and replication：`distfs-feedback-ledger-and-replication` 是公开 feedback 的 append-only 账本、签名/nonce、announce/fetch 复制和 NodeRuntime 有界接线的唯一当前专业 authority。三个 2026-03 feedback 源三件套已删除；其追溯仅保留在 Git 与 `.pm` task evidence，且不构成 current entry、consensus/finality 或 readiness 依据。
-- DistFS 基础接口与 builtin artifact：早期 builtin storage/API、标准 FileStore、runtime path-index、observer/bootstrap 与 net runtime-bridge 六组完成态三件套已语义合并并删除。FileStore/current blob 回收由 `distfs-production-hardening` 承接；builtin artifact hydrate/hash/loader 由 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.*` 承接；dormant path-index 与空 `runtime_bridge` compatibility feature 的负向边界由 `doc/p2p/{prd,design,project}.md` 承接。历史过程只从 Git 与 GitHub task evidence 追溯。
+- DistFS 基础接口与 builtin artifact：早期 builtin storage/API、标准 FileStore、runtime path-index、observer/bootstrap 与 net runtime-bridge 六组完成态三件套已语义合并并删除。FileStore/current blob 回收由 `distfs-production-hardening` 承接；builtin artifact hydrate/hash/loader 由 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.*` 承接；dormant path-index 与空 `runtime_bridge` compatibility feature 的负向边界由 `doc/p2p/{prd,design}.md` 承接。历史过程只从 Git 与 GitHub task evidence 追溯。

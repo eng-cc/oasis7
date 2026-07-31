@@ -1,7 +1,7 @@
 # Gameplay 间接控制 agency 合同 PRD
 
 - 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 - 产品层长期承诺: [`doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md)；本文继续拥有保证项字段、状态与失败签名，以及 gameplay、runtime、Viewer/API、Agent 和 QA 的专业合同与任务证据。
 
 审计轮次: 1
@@ -118,10 +118,9 @@
   - QA 负责把这些 guarantees 固化为验证矩阵，并在 trust/capability 样本中独立记录哪一条 guarantee 失效。
 - Integration Points:
   - `doc/game/prd.md`
-  - `doc/game/project.md`
+  - 对应 GitHub task issue evidence
   - `doc/game/prd.index.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
-  - `doc/game/gameplay/gameplay-top-level-design.project.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
   - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`

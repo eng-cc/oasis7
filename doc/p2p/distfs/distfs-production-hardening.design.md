@@ -1,7 +1,7 @@
 # DistFS 生产化硬化设计
 
 - 对应需求文档：`doc/p2p/distfs/distfs-production-hardening.prd.md`
-- 对应项目记录：`doc/p2p/distfs/distfs-production-hardening.project.md`
+- 对应项目记录：GitHub Issue / GitHub Project
 
 ## 设计定位
 

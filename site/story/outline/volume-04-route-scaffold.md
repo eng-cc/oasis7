@@ -173,5 +173,5 @@
 ### Repo Truth Writeback
 
 - `prd.md`: 不需要。
-- `project.md`: 需要更新当前任务与状态。
+- GitHub task issue evidence comments: 需要更新当前任务与状态。
 - handoff / `.pm`: 已写入 `.pm/tasks/task_89a34f7f4edd400da91a41aee42b280d.execution.md`；本文件作为 fourth-volume route scaffold truth。

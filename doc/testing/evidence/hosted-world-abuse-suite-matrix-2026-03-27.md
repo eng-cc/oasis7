@@ -6,7 +6,7 @@
 - Owner Role: `qa_engineer`
 - Review Role: `producer_system_designer`
 - Scope: `TASK-P2P-041-E abuse suite closure for replay / expiry / revocation / operator-public URL confusion / admission limit / capability bypass`
-- Topic authority: `doc/p2p/prd.md`; operator procedure: `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`; historical `TASK-P2P-041` provenance remains in `doc/p2p/project.md` and Git history.
+- Topic authority: `doc/p2p/prd.md`; operator procedure: `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`; historical `TASK-P2P-041` provenance remains in `GitHub Issue / GitHub Project` and Git history.
 
 ## 目标
 - 把 hosted world 玩家访问与会话鉴权专题中 `TASK-P2P-041-E` 的 six-case abuse coverage 收敛成一份可引用矩阵。

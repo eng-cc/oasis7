@@ -1,7 +1,7 @@
 # Node identity and replication contract
 
 - Design: `doc/p2p/node/node-identity-replication-contract.design.md`
-- Project record: `doc/p2p/node/node-identity-replication-contract.project.md`
+- Project record: GitHub Issue / GitHub Project
 
 ## 目标与权威边界
 

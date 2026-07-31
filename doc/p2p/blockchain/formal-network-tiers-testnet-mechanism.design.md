@@ -1,7 +1,7 @@
 # oasis7 正式网络分层与 testnet 机制（设计文档）
 
 - 对应需求文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
-- 对应项目管理文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 1
 ## 设计目标

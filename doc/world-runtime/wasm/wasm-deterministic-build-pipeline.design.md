@@ -1,12 +1,16 @@
 # oasis7 Runtime：WASM Docker 确定性构建与工件治理管线设计
 
 - 对应需求文档: `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 审计轮次: 3
 
 ## 1. 设计定位
 本设计把 oasis7 的 WASM 发布级构建从“宿主机护栏 + keyed hash 对账”升级为“Docker canonical builder”。设计目标不是否定现有脚本和 build suite，而是把它们放进同一个 pinned 容器镜像里，让宿主平台不再参与发布 hash 的生成。
+
+实施任务、候选状态和 CI run 历史不在本文维护；它们由 GitHub task issue /
+Project 和 Git history 追溯。可长期复用的验证入口收敛在
+[`evidence.md`](evidence.md)。
 
 ## 2. 现状盘点
 

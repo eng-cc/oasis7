@@ -29,7 +29,7 @@
   - 反馈必须区分 `已接受 / 执行中 / 已产出 / 停机或阻塞`
   - 停机必须给出最小原因分类
   - 玩家需要知道“产线是否在推进、哪里停机、下一步该修什么”
-- `doc/game/gameplay/gameplay-top-level-design.project.md` 的 T4 已记录 runtime / viewer / QA 三侧闭环完成：
+- GitHub task evidence 已记录 runtime / viewer / QA 三侧闭环完成：
   - runtime 负责生产完成、停机、恢复状态与审计事件
   - viewer 负责主界面显式反馈
   - QA 负责 required-tier 卡组

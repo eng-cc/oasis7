@@ -3,7 +3,7 @@
 > 本文是启动器反馈能力的当前需求 authority。它收敛入口、窗口化、分布式提交与 Web parity 的已实现合同；三个 2026-03 源三件套及其配对文档已删除，审计追溯仅保留在 Git 与 `.pm` task evidence。
 
 - 对应设计: `doc/world-simulator/launcher/game-client-launcher-feedback.design.md`
-- 对应项目: `doc/world-simulator/launcher/game-client-launcher-feedback.project.md`
+- 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

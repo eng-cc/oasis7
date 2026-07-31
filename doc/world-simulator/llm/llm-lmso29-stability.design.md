@@ -1,7 +1,7 @@
 # oasis7 Simulator：LMSO29 可用性与稳定性收敛（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/llm/llm-lmso29-stability.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-lmso29-stability.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 ## 1. 设计定位
 定义 LMSO29 可用性与稳定性收敛设计，聚焦模型可达性、错误恢复与质量波动控制。

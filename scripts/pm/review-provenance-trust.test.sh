@@ -40,14 +40,18 @@ p=json.loads(open(sys.argv[1],encoding='utf-8').read()); p.pop('dispatch_receipt
 open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p)+'\n')
 PY
 
-(cd "$REPO" && SCRIPT_DIR="$REPO/scripts/pm" ./scripts/pm/record-pre-pr-review.sh \
+if ! (cd "$REPO" && SCRIPT_DIR="$REPO/scripts/pm" ./scripts/pm/record-pre-pr-review.sh \
   --task-uid "$TASK_UID" --roles "$ROLE" \
   --issue 1 --repo eng-cc/oasis7 \
   --review-evidence "$ROLE: no_findings" \
   --review-verdicts "$ROLE scope/spec compliance=approved; role quality/risk=approved" \
   --finding-disposition-evidence fixture --verification fixture --residual-risk fixture \
   --slice-ledger "$HUMAN_LEDGER_REL" --reviewed-paths README.md --source-head "$HEAD_SHA" \
-  --allow-dirty --print-only) >"$TMPDIR/out" 2>"$TMPDIR/err"
+  --comparison-ref main \
+  --allow-dirty --print-only) >"$TMPDIR/out" 2>"$TMPDIR/err"; then
+  cat "$TMPDIR/err" >&2
+  exit 1
+fi
 grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/out" >/dev/null
 
 python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \

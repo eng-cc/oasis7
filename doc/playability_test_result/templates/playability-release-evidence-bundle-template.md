@@ -76,4 +76,4 @@
 - 是否至少列出 1 条 `player leverage` 代表性样本，而不是只给 world delta / world activity。
 - 是否列出所有高优问题及其当前状态。
 - `pass/fail/blocked` 是否被卡片、Issue、截图 / 录屏 / console 路径直接支撑。
-- 是否已回写 `doc/playability_test_result/project.md`、`doc/testing/project.md` 与对应 GitHub task issue evidence comments。
+- 是否已把可变结论回写对应 GitHub task issue evidence comments，并把稳定字段回写本模块 PRD、testing manual 或 evidence 文档。

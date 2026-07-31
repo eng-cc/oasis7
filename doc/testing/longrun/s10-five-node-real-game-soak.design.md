@@ -1,7 +1,7 @@
 # oasis7：S10 五节点真实游戏数据在线长跑套件设计
 
 - 对应需求文档: `doc/testing/longrun/s10-five-node-real-game-soak.prd.md`
-- 对应项目管理文档: `doc/testing/longrun/s10-five-node-real-game-soak.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 ## 1. 设计定位
 定义 S10 五节点真实游戏数据在线长跑套件，统一五节点编排、真实游戏数据流、结算/资产指标、存储/共识健康采样与发布门禁证据。

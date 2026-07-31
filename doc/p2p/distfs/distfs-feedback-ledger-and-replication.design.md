@@ -1,7 +1,7 @@
 # DistFS 反馈账本与复制设计
 
 - 对应需求文档: `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md`
-- 对应项目管理文档: `doc/p2p/distfs/distfs-feedback-ledger-and-replication.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 设计定位
 

@@ -1,7 +1,7 @@
 # 游戏可玩性设计总纲 v0.1  
 
 - 对应设计文档: `doc/game/gameplay/gameplay-top-level-design.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-top-level-design.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 4
 
@@ -281,7 +281,7 @@
 
 ### 2.7.1 PRD-GAME-012 稳定 early-retention 合同
 
-产品承诺统一见 [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)。本节拥有不随短期任务日期变化的 gameplay 专业合同；当前 verdict、task trace 与复跑边界统一见 [`doc/game/project.md`](../project.md) 和 `doc/testing/evidence/`。
+产品承诺统一见 [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)。本节拥有不随短期任务日期变化的 gameplay 专业合同；当前 verdict、task trace 与复跑边界统一由对应 GitHub task evidence 和 `doc/testing/evidence/` 确认。
 
 #### Gate 与 verdict 隔离
 
@@ -458,7 +458,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - 暂不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
 - 暂不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
 
-early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，专业玩法合同见本文件 2.7.1，当前 verdict 见 `doc/game/project.md` 与 `doc/testing/evidence/`。
+early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，专业玩法合同见本文件 2.7.1，当前 verdict 由同候选 GitHub task evidence 与 `doc/testing/evidence/` 确认。
 
 ## 2.11 纯 API 客户端等价
 

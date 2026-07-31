@@ -1,7 +1,7 @@
 # Local Provider 与内置 Agent 体验等价（parity）验收方案（2026-03-12）
 
 - 对应设计文档: `doc/world-simulator/llm/provider-agent-experience-parity.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 审计轮次: 2
 

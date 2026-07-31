@@ -1,7 +1,7 @@
 # 客户端启动器区块链浏览器设计（当前 authority）
 
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.prd.md`
-> 对应执行台账: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.project.md`
+> 历史迁移、验收与 task 状态：GitHub task issue evidence。
 
 ## 表现结构
 

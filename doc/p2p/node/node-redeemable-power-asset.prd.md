@@ -1,7 +1,7 @@
 # oasis7 Runtime：可兑现节点资产与电力兑换闭环
 
 - 对应设计文档: `doc/p2p/node/node-redeemable-power-asset.design.md`
-- 对应项目管理文档: `doc/p2p/node/node-redeemable-power-asset.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 专业权威口径
@@ -46,7 +46,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/node/node-redeemable-power-asset.prd.md`
-  - `doc/p2p/node/node-redeemable-power-asset.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
@@ -159,7 +159,7 @@ DomainEvent::PowerRedeemRejected {
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - **RPA-M0**：设计文档与项目管理文档。
+  - **RPA-M0**：设计文档与GitHub Issue/Project task truth。
   - **RPA-M1**：资产账本 + 配置 + 快照持久化。
   - **RPA-M2**：Node Points 结算上链铸造接线。
   - **RPA-M3**：`RedeemPower` 动作与事件闭环。

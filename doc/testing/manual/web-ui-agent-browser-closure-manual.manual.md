@@ -5,7 +5,7 @@
 ## 文档定位
 - 本文件是 Web UI `agent-browser` 闭环的 canonical `*.manual.md` 操作手册。
 - 需求边界、成功标准与决策记录仍以 `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` 为准。
-- 项目任务与历史执行状态仍以 `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md` 为准。
+- 任务与历史执行状态以 GitHub task issue evidence comments 为准。
 
 ## 适用范围
 - 适用于 `oasis7_viewer_live` + `software_safe` Viewer Web 页面闭环。

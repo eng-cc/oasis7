@@ -1,7 +1,7 @@
 # Local Provider 双轨模式 Observation / Action Contract 冻结（2026-03-16）
 
 - 关联 PRD: `PRD-WORLD_SIMULATOR-040`
-- 关联项目: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - owner: `agent_engineer`
 - 联审: `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 执行任务: `TASK-WORLD_SIMULATOR-149`

@@ -3,7 +3,7 @@
 > 本文是回放/Live 控制 profile 与 live 无 seek 语义的当前专业 authority。它收敛两个 2026-02 源三件套；历史变更仅从 Git 与 GitHub task evidence 追溯。
 
 - 对应设计: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md`
-- 对应项目: `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.project.md`
+- 历史实施、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

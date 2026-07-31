@@ -61,7 +61,7 @@
 - ignored raw artifacts 仍保留在以下路径，供需要 drill-down 的人复查:
   - `output/provider_parity/provider_parity_20260407_112652/...`
   - `output/provider_parity/provider_parity_20260407_112747/...`
-- reviewer 若只看 git diff，也应能仅凭本文与 `doc/world-simulator/llm/provider-agent-dual-mode.project.md` 的 durable disposition 理解当前正式口径
+- reviewer 若只看 git diff，也应能仅凭本文与 `doc/world-simulator/llm/provider-agent-dual-mode.prd.md`、`doc/world-simulator/llm/provider-agent-dual-mode-contract.md` 的 durable disposition 理解当前正式口径
 
 ## 当前产品表达约束
 - runtime live / software-safe 必须把两类信息分开展示:

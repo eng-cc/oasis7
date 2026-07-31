@@ -2,11 +2,11 @@
 
 产品层归属：`p2p` 是“大世界基础设施”的分布式状态专业域权威，不形成并列产品入口。产品总导航见 `doc/product/README.md`，组合承诺见 `doc/product/world-infrastructure/prd.md`。
 
-审计轮次: 13
+审计轮次: 14
 
 ## 从这里开始
 - 想先理解 P2P / 主链 / DistFS / 节点奖励的总边界：`doc/p2p/prd.md`
-- 想看当前活跃任务、阻断与最新完成项：`doc/p2p/project.md`
+- 想看当前活跃任务、阻断与最新完成项：GitHub Issue / GitHub Project。
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
 - 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md`、`doc/p2p/observer/README.md`、`doc/p2p/distributed/README.md` 或 `doc/p2p/viewer-live/README.md`，再进入具体专题。
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`。
@@ -21,13 +21,13 @@
 ## 入口
 - PRD: `doc/p2p/prd.md`
 - 设计总览: `doc/p2p/design.md`
-- 标准执行入口: `doc/p2p/project.md`
+- 标准执行入口: GitHub Issue / GitHub Project
 - 文件级索引: `doc/p2p/prd.index.md`
 
 ## 入口分工
 - `README.md` 只承担 landing page 职责：帮助读者先选“总边界 / 当前执行 / 高频入口 / 精确索引”中的正确入口，不重复长表索引内容。
 - `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted player access 的统一边界。
-- `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted access 相关任务的推进状态。
+- GitHub Issue / GitHub Project 是唯一的执行台账与历史证据入口；PRD、design、runbook 和 evidence 只保留稳定的专业合同与可复现操作证据。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
 - `distfs/README.md`、`observer/README.md`、`token/README.md`、`distributed/README.md` 与 `viewer-live/README.md` 是专题簇的折叠入口，适合先确认主题边界，再按 delta 或历史变更追溯。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
@@ -35,7 +35,7 @@
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
-- 高频当前入口保留在 `prd.md`、`project.md`、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
+- 高频当前入口保留在 `prd.md`、GitHub Issue / GitHub Project、`node/README.md`、上述少量主题真值专题与 `prd.index.md`。
 - 执行细节、runbook、release 补充材料与历史背景，改为从 `prd.index.md` 的定向检索入口进入。
 
 ## 模块职责
@@ -76,4 +76,4 @@
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
-- 模块行为、默认参数或跨模块分布式口径变化时，优先更新 `doc/p2p/prd.md` / `doc/p2p/project.md`；高频入口变化时，再同步回写本目录“从这里开始”、`doc/p2p/prd.index.md` 与相关热点子域入口（例如 `doc/p2p/node/README.md`）。
+- 模块行为、默认参数或跨模块分布式口径变化时，更新 `doc/p2p/prd.md` 和相关专题 design/runbook/evidence；任务状态、执行日志和可变历史只写入 GitHub Issue / GitHub Project。高频入口变化时，再同步回写本目录“从这里开始”、`doc/p2p/prd.index.md` 与相关热点子域入口（例如 `doc/p2p/node/README.md`）。

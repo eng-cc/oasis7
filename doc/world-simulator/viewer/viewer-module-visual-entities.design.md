@@ -1,7 +1,7 @@
 # Viewer 模块可视实体通用机制设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-module-visual-entities.project.md`
+- 历史模块渲染实施与验证记录：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义“模块驱动的新事物”统一可视实体机制：让 runtime/simulator 只发布通用 `ModuleVisualEntity` 数据，viewer 负责统一渲染与详情呈现，避免每种模块能力都扩一套专用实体分支。

@@ -1,7 +1,7 @@
 # Gameplay 区域基础设施 micro_depot 合同设计
 
 - 对应需求文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 - 对应任务证据: GitHub issue / task `task_3c55fc4c17ea44aa850adf7a6a4463f4`；退役前 `.pm/tasks/*` execution log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯
 - 关联玩法真值:
   - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`

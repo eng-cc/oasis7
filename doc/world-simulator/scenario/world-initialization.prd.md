@@ -1,7 +1,7 @@
 # oasis7 Simulator：世界初始化（设计分册）
 
 - 对应设计文档: `doc/world-simulator/scenario/world-initialization.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/world-initialization.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 5
 
@@ -150,4 +150,4 @@
 - 初始化不写入事件日志，可能影响“完整事件回放”场景。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。

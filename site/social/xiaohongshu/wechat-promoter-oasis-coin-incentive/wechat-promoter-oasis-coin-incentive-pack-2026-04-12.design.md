@@ -1,7 +1,7 @@
 # oasis7 Xiaohongshu Blogger and WeChat Official Account Oasis Coin Incentive Pack（2026-04-12）设计
 
 - 对应需求文档: `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md`
-- 对应项目管理文档: `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md`
+- 对应GitHub Issue/Project task truth: GitHub task issue evidence comments
 
 ## 1. 设计定位
 把“宣传方也是生态参与者和受益者”收口成一份只面向“小红书博主 + 微信公众号”的绿洲币激励操作包，避免泛化媒体对象导致执行过宽、举证过散、风控过弱。

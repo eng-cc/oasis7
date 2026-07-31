@@ -1,9 +1,13 @@
 # WASM SDK 兼容与 Wire 设计
 
 - 对应需求文档：`doc/world-runtime/wasm/wasm-sdk.prd.md`
-- 对应项目文档：`doc/world-runtime/wasm/wasm-sdk.project.md`
+- 稳定证据入口：`doc/world-runtime/wasm/evidence.md`
 
 ## 1. 设计原则
+
+本页只定义 SDK 的稳定 wire/ABI 契约；实施任务、状态和历史验收由 GitHub
+task issue / Project 与 Git history 追溯。可重复执行的验证入口见
+[`evidence.md`](evidence.md)。
 
 - 核心 SDK 默认 `no_std`，宿主便利能力通过显式 feature 隔离。
 - wire schema 只有一个 owner；模块代码复用类型并只实现领域逻辑。

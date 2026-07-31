@@ -260,7 +260,7 @@ Module PRD
 ## 11.8 反流水账（PRD vs Project vs Devlog）
 
 * [ ] PRD 仅描述目标态规格（Why/What/Done），不写任务拆解或进度叙述。
-* [ ] `*.project.md` 仅描述任务与执行（How/When/Who），不重写需求规格。
+* [ ] GitHub task issue evidence comments 仅描述任务与执行（How/When/Who），不重写需求规格。
 * [ ] `doc/devlog/YYYY-MM-DD.md` 仅记录当日过程（时刻、完成内容、遗留事项），不定义需求。
 * [ ] `Critical User Flows` 描述系统/用户/操作者行为与状态变化，不描述“改文档流程”。
 * [ ] `Acceptance Criteria` 描述可复现验证结果（行为/不变量/指标/测试），不是文件清单。

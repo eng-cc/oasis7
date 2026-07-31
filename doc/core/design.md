@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/core/prd.md`
-- 对应项目管理文档: `doc/core/project.md`
+- 可变项目管理真值: GitHub task issue evidence comments
 - 对应文件级索引: `doc/core/prd.index.md`
 
 ## 1. 设计定位
@@ -17,16 +17,16 @@
 ## 2. 阅读顺序
 1. `doc/core/prd.md`：项目目标、模块地图、关键链路与治理基线。
 2. `doc/core/design.md`：跨模块设计结构、入口分工、主链路导航。
-3. `doc/core/project.md`：任务、依赖、状态与治理轮次。
+3. GitHub task issue evidence comments：任务、依赖、状态与治理轮次。
 4. `doc/core/prd.index.md`：核心专题索引与后续扩展入口。
-5. 下钻到目标模块：`doc/<module>/README.md`、`prd.md`、`design.md`、`project.md`。
+5. 下钻到目标模块：`doc/<module>/README.md`、`prd.md` 与 `design.md`；任务状态从对应 GitHub task issue evidence comments 读取。
 
 ## 3. 设计结构
 ### 3.1 分层角色
 - `doc/README.md`：仓库文档总导航。
 - `doc/core/prd.md`：项目级 Why / What / Done。
 - `doc/core/design.md`：项目级 How / Structure / Contract。
-- `doc/core/project.md`：项目级 How / When / Who。
+- GitHub task issue evidence comments：项目级可变 How / When / Who。
 - `doc/<module>/*`：模块内具体设计与专题落地。
 
 ### 3.2 core 的设计边界
@@ -36,21 +36,20 @@
 
 ### 3.3 跨模块主链路
 - 设计链路：`core -> <module>/prd.md -> <module>/design.md -> <topic>.design.md`
-- 执行链路：`core -> <module>/project.md -> <topic>.project.md`
+- 执行链路：`GitHub Project task -> GitHub task issue evidence comments -> 专业 PRD/design/evidence`
 - 治理链路：`engineering/doc-structure-standard -> core ROUND 台账 -> 模块/专题改造`
 
 ## 4. 集成点
 - `doc/README.md`
 - `doc/core/prd.md`
-- `doc/core/project.md`
 - `doc/core/prd.index.md`
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
-- 各模块入口：`doc/<module>/README.md`、`doc/<module>/prd.md`、`doc/<module>/design.md`、`doc/<module>/project.md`
+- 各模块入口：`doc/<module>/README.md`、`doc/<module>/prd.md`、`doc/<module>/design.md`
 
 ## 5. ROUND-006 入口职责
-- ROUND-006 下，`core` 负责维护全量治理台账与批次推进骨架。
+- ROUND 审计历史由 Git history 和 GitHub task issue evidence comments 追溯；`core` 不维护可变任务台账。
 - 文档结构治理的裁定依据来自 `doc/engineering/doc-governance/doc-structure-standard.prd.md`。
-- 任何模块入口补齐、专题三件套治理和索引回写，都必须在 core 台账中可追踪。
+- 任何模块入口补齐、专题文档治理和索引回写，都必须在 GitHub task issue evidence 中可追踪。
 
 ## 设计目标
 - 提供 `core` 模块的总体设计入口。
@@ -61,7 +60,7 @@
 
 ## 关键接口 / 入口
 - 需求入口：`doc/core/prd.md`
-- 执行入口：`doc/core/project.md`
+- 执行入口：GitHub task issue evidence comments
 - 索引入口：`doc/core/prd.index.md`
 
 ## 设计演进计划

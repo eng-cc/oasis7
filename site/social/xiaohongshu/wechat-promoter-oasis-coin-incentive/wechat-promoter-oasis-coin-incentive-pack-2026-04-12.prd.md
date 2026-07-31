@@ -1,7 +1,7 @@
 # oasis7 Xiaohongshu Blogger and WeChat Official Account Oasis Coin Incentive Pack（2026-04-12）
 
 - 对应设计文档: `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md`
-- 对应项目管理文档: `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md`
+- 对应GitHub Issue/Project task truth: GitHub task issue evidence comments
 
 审计轮次: 2
 

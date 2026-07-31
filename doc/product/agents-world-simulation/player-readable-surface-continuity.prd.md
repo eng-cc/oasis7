@@ -5,7 +5,6 @@
 - 所属产品模块：智能体与世界模拟
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 配对产品设计：[`doc/product/agents-world-simulation/player-readable-surface-continuity.design.md`](player-readable-surface-continuity.design.md)
-- 产品迁移追踪：[`doc/product/agents-world-simulation/player-readable-surface-continuity.project.md`](player-readable-surface-continuity.project.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-simulator PRD`](../../world-simulator/prd.md)、[`Web 语义测试 API`](../../world-simulator/viewer/viewer-web-semantic-test-api.prd.md)
@@ -64,7 +63,7 @@
 
 ## 8. 里程碑
 
-1. 建立稳定 PRD、design 与迁移 project。
+1. 维持稳定且可从模块入口到达的 PRD 与 design。
 2. 吸收并删除历史 panel、declutter、fullscreen、i18n、Web usability 与 step acknowledgement 碎片文档。
 3. 当前 Viewer/runtime/testing authority 持续提供实现和验证证据。
 

@@ -1,7 +1,7 @@
 # oasis7: 测试覆盖与 CI 扩展设计
 
 - 对应需求文档: `doc/testing/ci/ci-test-coverage.prd.md`
-- 对应项目管理文档: `doc/testing/ci/ci-test-coverage.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 ## 1. 设计定位
 定义 CI 与测试门禁专题设计，统一流水线分层、门禁策略、产物校验与失败保护。

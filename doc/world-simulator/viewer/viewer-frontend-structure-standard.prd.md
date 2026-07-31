@@ -1,7 +1,7 @@
 # Viewer Frontend Structure Standard
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`
+- 结构债务 task 与验证记录：GitHub task issue evidence。
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-web-build-truth.prd.md`
   - `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`
@@ -78,6 +78,12 @@ A touched Viewer frontend file should be split or receive an explicit exemption 
 - A PR touches both canonical and compat artifacts but cannot explain canonical -> compat direction.
 
 Existing files above the soft threshold are not automatically blockers for unrelated changes. If touched for behavior work, the PR must either shrink the file, extract a coherent boundary, or record a debt exemption in the task evidence with owner, reason, and next trigger.
+
+### 当前已登记的结构债务
+
+- `legacy_core.js` 仍包含 control、semantic-command、DOM-rendering 与 bootstrap assembly；后续切片应优先抽出一个 coherent boundary，保留 facade、记录前后行数并运行 scoped UI/build/feedback checks。
+- `viewer.html`、`gameplay_attraction_scenario.js`、`main.jsx`、`main.test.jsx`、`pixel_world_host.jsx` 与 `viewer_feedback_module.js` 的现有阈值豁免由 `test:frontend-structure` 的 owner-tagged registry 守护；新增体量或失效豁免必须在 GitHub task evidence 说明 owner、原因和下一触发点。
+- `software_safe.js` 仍是 `viewer.js` 的生成 compat alias，`software_safe.html` 必须保持 `viewer.html` 的 byte-for-byte compat copy；两者不能承接修复或债务绕行。
 
 ## 可接受拆分模式
 

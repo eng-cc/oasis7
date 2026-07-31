@@ -1,7 +1,7 @@
 # Viewer Frontend Structure Standard Design
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.project.md`
+- 结构债务 task 与验证记录：GitHub task issue evidence。
 
 审计轮次: 1
 

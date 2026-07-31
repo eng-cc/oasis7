@@ -1,7 +1,7 @@
 # oasis7 Simulator：统一大世界种子与 Fragment Runtime 复用（需求文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/unified-world-seed-fragment-runtime.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留 chain-authoritative seed、resource manifest、delta 与 replay 合同。
 
 ## 1. Executive Summary
 - 统一大世界、local testnet、public testnet 与 runtime live 必须共享同一套 `world_seed -> chunk -> fragment -> resource budget` 生成语义。

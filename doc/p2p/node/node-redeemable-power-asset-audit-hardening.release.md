@@ -4,7 +4,7 @@
 ## 发布范围
 - 设计/项目文档：
   - 当前权威：`doc/p2p/node/node-redeemable-power-asset.prd.md`
-  - 当前追踪：`doc/p2p/node/node-redeemable-power-asset.project.md`
+  - 当前追踪：GitHub Issue / GitHub Project
   - 本文件仅保留历史 AHA 发布 provenance，不是现行 operator runbook。
 - 代码主线：
   - `crates/oasis7/src/runtime/reward_asset.rs`

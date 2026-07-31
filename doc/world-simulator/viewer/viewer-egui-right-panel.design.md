@@ -1,7 +1,7 @@
 # Viewer 右侧 EGUI SidePanel 迁移设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-egui-right-panel.project.md`
+- 历史迁移与验证：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 Viewer 右侧 2D UI 向 `bevy_egui::SidePanel` 的迁移方案：统一右侧固定面板承载现有控制、摘要、诊断、事件和时间轴区域，同时保证 3D 视口交互边界与中英文能力不退化。

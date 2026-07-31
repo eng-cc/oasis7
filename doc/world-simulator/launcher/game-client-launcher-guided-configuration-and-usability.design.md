@@ -1,7 +1,7 @@
 # 客户端启动器引导配置与可用性设计（当前 authority）
 
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.prd.md`
-> 对应执行台账: `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.project.md`
+> 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 表现结构
 

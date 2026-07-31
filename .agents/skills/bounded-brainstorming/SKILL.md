@@ -19,14 +19,14 @@ Use this skill when:
 Do not use this skill when:
 
 - the user already gave a concrete implementation task and the scope is clear enough to start
-- the task already has chosen direction in `prd.md`, `project.md`, handoff, or GitHub-backed task truth
+- the task already has chosen direction in a PRD/design, handoff, or GitHub-backed task truth
 - you are using brainstorming only as a way to delay implementation
 
 ## Required Rules
 
 1. This is an optional pre-implementation layer, not a universal gate.
 2. Do not force per-section approval, mandatory spec drafting, or transition into a second planning system.
-3. Keep the output anchored to repo truth: chosen direction must flow back into `prd.md`, `project.md`, a handoff, or GitHub task issue evidence when it affects scope.
+3. Keep the output anchored to repo truth: durable professional direction flows into PRD/design; mutable scope and execution planning flow into GitHub task issue evidence.
 4. Prefer 2-3 concrete approaches with tradeoffs and one clear recommendation.
 5. Only use a visual companion when the problem is inherently visual; do not turn browser mockups into default ceremony.
 6. If scope is too large, split it into smaller, executable slices before implementation starts.
@@ -50,7 +50,7 @@ Do not use this skill when:
 6. If the problem is visual, decide whether to use `agent-browser`, `gpt-image-2` when explicitly requested/authorized, or another repo-owned visual step to compare layouts, IA, states, or Image2 target images against real native/browser screenshots.
 7. Write the chosen direction back into repo truth before implementation:
    - `prd.md` if scope/behavior/boundary changed
-   - `project.md` if execution path or affected surfaces changed
+   - GitHub task issue evidence if execution path or affected surfaces changed
    - handoff if another role/subagent will execute it
    - GitHub task issue evidence comments if the decision matters to current task truth
 
@@ -86,7 +86,7 @@ BOUNDED BRAINSTORMING COMPLETE
 
 ## Repo Truth Writeback
 - `prd.md`:
-- `project.md`:
+- GitHub task issue evidence:
 - handoff / GitHub task issue evidence:
 ```
 

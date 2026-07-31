@@ -5,16 +5,16 @@
 ## 目标
 - 作为项目级总 PRD，提供 oasis7 的全局设计全貌入口。
 - 统一跨模块边界、关键链路、术语口径与验收基线。
-- 确保各模块改动可追溯到 PRD-ID、任务和测试证据。
+- 确保各模块改动可追溯到 PRD-ID、GitHub task issue evidence 与测试证据。
 
 ## 范围
 - 覆盖全项目模块地图、端到端链路、关键分册导航与治理基线。
-- 覆盖 PRD-ID 到 `doc/core/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 GitHub task issue evidence 的任务映射。
 - 不覆盖各模块实现细节正文（由模块 PRD 与专题分册承载）。
 
 ## 接口 / 数据
 - 项目级 PRD 入口: `doc/core/prd.md`
-- 项目管理入口: `doc/core/project.md`
+- 可变项目管理真值: GitHub task issue evidence comments
 - 文件级索引: `doc/core/prd.index.md`
 - 追踪主键: `PRD-CORE-xxx`
 - 模块入口总览: `doc/README.md`
@@ -78,7 +78,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD 与 project 文档 | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
+| 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD/design 与 GitHub task evidence | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
 | 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并回写模块 project | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
@@ -90,20 +90,20 @@
   - AC-1: core PRD 包含模块职责矩阵。
   - AC-2: core PRD 包含至少 4 条关键端到端链路描述。
   - AC-3: core PRD 给出关键分册导航并可从 `doc/README.md` 到达。
-  - AC-4: core project 文档任务与 PRD-CORE-ID 可映射。
+  - AC-4: GitHub task issue evidence 中的任务与 PRD-CORE-ID 可映射。
   - AC-5: 文档级 `审计轮次` 仅可对应已落档的正式 ROUND 台账；在 `ROUND-NNN` 正式启动文件落档前，不得保留脱离台账的 `审计轮次 > NNN` 标记。
   - AC-6: core PRD 明确列出当前阶段 `P0/P1/P2` 收口项、对应 owner、输入、输出、验收标准与阻断条件。
   - AC-7: `P0` 至少覆盖玩法微循环、runtime 验收、testing 证据、playability 反馈四条闭环，并明确它们是发布前必要条件。
   - AC-8: `P1` 至少覆盖 core 一致性审查、headless-runtime 长稳门禁、自动化稳定性收口，并定义角色交付边界。
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
-  - AC-10: `PRD-CORE-004` 可映射到 `doc/core/project.md` 中的任务与 `test_tier_required` 验证方法。
+  - AC-10: `PRD-CORE-004` 可映射到 GitHub task issue evidence 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
 - Non-Goals:
   - 不在 core PRD 中替代模块详细技术分册。
   - 不在 core PRD 中维护逐版本实现变更流水（该信息在 devlog）。
-  - 不在本 PRD 中重写各模块的实现细节或替代其 `project.md` 执行计划。
+  - 不在本 PRD 中重写各模块的实现细节或替代 GitHub task truth 中的执行计划。
   - 不把 launcher / explorer 体验新增功能作为当前阶段的主发布驱动。
 
 ## 3. AI System Requirements (If Applicable)
@@ -117,7 +117,7 @@
 ### 当前阶段收口优先级（Stage Closure Backlog）
 | 优先级 | 目标 | 主要 owner | 输入 | 输出 | 完成定义 |
 | --- | --- | --- | --- | --- | --- |
-| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、`doc/game/project.md` 的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应 game project/evidence | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline/project 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
+| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、GitHub task truth 中的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应专业 evidence 与 GitHub task truth | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline 与 GitHub task truth 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
 | P0 | 补齐 runtime 核心边界验收 | `runtime_engineer`（联审：`producer_system_designer`） | 确定性 / WASM / 治理边界、当前 runtime 测试与限制说明 | 验收清单、阻断条件、例外口径 | 每条关键边界都有测试映射，并能直接用于发布评审 |
 | P0 | 建立 testing 触发矩阵与发布证据包 | `qa_engineer`（联审：`producer_system_designer`） | `testing-manual.md`、各模块 `test_tier_required/full`、现有脚本与证据产物 | S0~S10 触发矩阵、证据包模板、放行摘要格式 | 任一任务都能反推必跑测试，PRD-ID / 任务 / 测试结果可串联 |
 | P0 | 补齐 playability 反馈闭环 V1 | `qa_engineer`（联审：`producer_system_designer`） | 现有 playability 输出、截图/视频、玩法目标 | 反馈卡字段、评分口径、高优问题追踪模板 | 每条体验问题都有固定记录格式，且可进入发布讨论 |
@@ -180,12 +180,7 @@
   - `AGENTS.md`
   - `doc/README.md`
   - `testing-manual.md`
-  - 各模块 `doc/<module>/prd.md` 与 `doc/<module>/project.md`
-  - `doc/game/project.md`
-  - `doc/world-runtime/project.md`
-  - `doc/testing/project.md`
-  - `doc/playability_test_result/project.md`
-  - `doc/headless-runtime/project.md`
+  - 各模块 `doc/<module>/prd.md`、design/evidence 与 README / `prd.index.md`
   - GitHub task issue evidence comments
   - pre-PR local role review evidence packet
 - Edge Cases & Error Handling:
@@ -196,7 +191,7 @@
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
   - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
   - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按当前 `.pm` task owner、正式专题文档与 pre-PR role review evidence 裁定，并回写 core / project。
-  - project 缺承接：若 P0 项在 PRD 已定义但对应模块 `project.md` 未承接，状态只能记为 `candidate`，不得进入发布结论。
+  - GitHub task truth 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
   - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
 - Non-Functional Requirements:
@@ -227,7 +222,7 @@
   - 风险-3: 若局部修订直接上调 `审计轮次` 而未建立正式 ROUND 台账，字段会失去可比性，并破坏 reviewed-files / progress-log 对账。
   - 风险-4: 若继续把 launcher / explorer 体验扩展排在玩法与发布治理前，项目会强化“能展示”而非“能稳定发布”的错配。
   - 风险-5: 若 runtime / testing / playability 的证据标准不同步，发布评审会退化为口头判断。
-  - 风险-6: 若当前排序与下一步未同步到 `doc/core/project.md` 和 GitHub task truth，团队会重新回到平均发力与隐式尾注推进。
+- 风险-6: 若当前排序与下一步未同步到 GitHub task truth，团队会重新回到平均发力与隐式尾注推进。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

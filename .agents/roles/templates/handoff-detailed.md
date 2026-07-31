@@ -88,7 +88,7 @@
 - [ ] 若任务存在方向/范围不确定性，bounded brainstorming 的方案对比与推荐方向已写清
 - [ ] behavior-first RED plan 已执行，或 skip 原因已写清
 - [ ] write scope / return contract / integration order 已被遵守
-- [ ] 对应 `prd.md` / `project.md` 已回写
+- [ ] 对应 PRD/design/evidence 与 GitHub task issue evidence 已回写
 - [ ] 对应 GitHub task issue evidence comment 已记录
 - [ ] required/full 测试证据已补齐
 

@@ -48,7 +48,7 @@ Options:
 Examples:
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap --init-docs
-  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role tpm --pm-title "atomic task worktree bootstrap" --pm-source-ref doc/engineering/project.md
+  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role tpm --pm-title "atomic task worktree bootstrap" --pm-source-ref doc/engineering/prd.md
   ./scripts/new-task-worktree.sh viewer hud-redesign --base main
   ./scripts/new-task-worktree.sh p2p hosted-flow --json --path ../worktrees/oasis7-codex-p2p-hosted-flow
   ./scripts/new-task-worktree.sh viewer hud-redesign --with-harness
@@ -455,9 +455,7 @@ DOC_PRD_EXISTS=0
 DOC_PROJECT_EXISTS=0
 if [[ "$INIT_DOCS" == "1" ]]; then
   DOC_PRD_PATH="$TARGET_PATH/doc/$MODULE_SLUG/prd.md"
-  DOC_PROJECT_PATH="$TARGET_PATH/doc/$MODULE_SLUG/project.md"
   [[ -f "$DOC_PRD_PATH" ]] && DOC_PRD_EXISTS=1
-  [[ -f "$DOC_PROJECT_PATH" ]] && DOC_PROJECT_EXISTS=1
 fi
 
 HARNESS_STATE_FILE=""
@@ -593,7 +591,6 @@ payload = {
 if sys.argv[19] == "1":
     payload["doc_checks"] = {
         "prd": {"path": sys.argv[20], "exists": sys.argv[21] == "1"},
-        "project": {"path": sys.argv[22], "exists": sys.argv[23] == "1"},
     }
 if sys.argv[24] == "1":
     payload["harness"] = {
@@ -712,14 +709,8 @@ if [[ "$INIT_DOCS" == "1" ]]; then
     printf '  mkdir -p %s\n' "doc/$MODULE_SLUG"
     printf '  # create %s\n' "${DOC_PRD_PATH#$TARGET_PATH/}"
   fi
-  if [[ "$DOC_PROJECT_EXISTS" == "1" ]]; then
-    printf '  sed -n '\''1,160p'\'' %s\n' "${DOC_PROJECT_PATH#$TARGET_PATH/}"
-  else
-    printf '  # create %s\n' "${DOC_PROJECT_PATH#$TARGET_PATH/}"
-  fi
 else
   printf '  sed -n '\''1,160p'\'' %s\n' "doc/$MODULE_SLUG/prd.md"
-  printf '  sed -n '\''1,160p'\'' %s\n' "doc/$MODULE_SLUG/project.md"
 fi
 if [[ "$WITH_HARNESS" == "1" ]]; then
   printf '  ./scripts/worktree-harness.sh status --json\n'

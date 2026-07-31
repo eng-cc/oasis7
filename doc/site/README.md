@@ -6,15 +6,15 @@
 - 想先看公开 docs hub 入口与对外阅读路径：`site/doc/cn/index.html` / `site/doc/en/index.html`
 - 想直接拿公开 `oasis7` skill 链接：`site/skills/oasis7.md`
 - 想先理解站点模块边界、同步原则与验收口径：`doc/site/prd.md`
-- 想先看当前站点任务、同步状态与最近完成项：`doc/site/project.md`
+- 想先看当前站点任务、同步状态与最近完成项：`doc/site/prd.md`
 - 想直接按文件名定位某个 github-pages / manual 专题：`doc/site/prd.index.md`
 - 想先确认静态手册镜像如何挂到仓库权威文档：`doc/site/manual/README.md`
-- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/prd.md` 与 `doc/site/project.md`
+- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/prd.md` 与 `doc/site/prd.md`
 
 ## 入口
 - PRD: `doc/site/prd.md`
 - 设计总览: `doc/site/design.md`
-- 标准执行入口: `doc/site/project.md`
+- 标准执行入口: `doc/site/prd.md`
 - 文件级索引: `doc/site/prd.index.md`
 
 ## 入口分工
@@ -27,7 +27,7 @@
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再把 `github-pages/` 与 `manual/` 的专题长名单直接平铺在首屏。
-- 默认活跃入口保留在 `doc/site/prd.md`、`doc/site/project.md`、`doc/site/prd.index.md` 与少量仍承担当前公开状态判断职责的正式专题。
+- 默认活跃入口保留在 `doc/site/prd.md`、`doc/site/prd.md`、`doc/site/prd.index.md` 与少量仍承担当前公开状态判断职责的正式专题。
 - 公开 HTML 镜像、补充手册页面和历史专题继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径按需进入。
 
 ## 模块职责
@@ -41,7 +41,7 @@
 - `github-pages/` 当前补充设计：公开首页的页面级层级、首屏内容与后果链节奏；当前合同仍以模块 root authority 为准。
 - `github-pages/` 已退役删除旧专题：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
 - `manual/` 路由入口与正式专题三件套：静态文档站与 Viewer 手册镜像策略。
-- 模块根入口：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
+- 模块根入口：`README.md`、`prd.md`、GitHub task issue evidence comments、`design.md`、`prd.index.md`。
 - 公开 HTML 入口（仓库外显层）：`site/index.html`、`site/en/index.html`、`site/doc/{cn,en}/index.html`、`site/doc/{cn,en}/viewer-manual.html`。
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 
@@ -51,4 +51,4 @@
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
-- 站点信息架构、公开状态口径或镜像入口变化时，优先更新 `doc/site/prd.md` / `doc/site/project.md`；新增默认首读入口或专题后，再同步回写 `doc/site/prd.index.md` 与本页“从这里开始”。
+- 站点信息架构、公开状态口径或镜像入口变化时，优先更新 `doc/site/prd.md` / `doc/site/prd.md`；新增默认首读入口或专题后，再同步回写 `doc/site/prd.index.md` 与本页“从这里开始”。

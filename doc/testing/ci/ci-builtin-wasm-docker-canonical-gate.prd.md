@@ -1,7 +1,7 @@
 # oasis7: Builtin Wasm Docker Canonical Gate
 
 - 对应设计文档: `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md`
-- 对应项目管理文档: `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 2
 

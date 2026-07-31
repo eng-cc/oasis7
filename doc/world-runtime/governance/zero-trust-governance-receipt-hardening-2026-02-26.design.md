@@ -1,7 +1,7 @@
 # 零信任多节点治理与签名加固设计（2026-02-26）
 
 - 对应需求文档: `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md`
-- 对应项目管理文档: `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义 runtime 在不可信多节点环境下的工件验签、治理最终性绑定、收据签名升级与执行错误可观测性设计。

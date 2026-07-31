@@ -14,7 +14,7 @@
 | landing | `doc/scripts/README.md` | 按读者意图选择权威入口 |
 | requirements | `doc/scripts/prd.md` | 定义模块边界、能力需求和验收标准 |
 | architecture | `doc/scripts/design.md` | 解释模块结构与文档分层 |
-| execution record | `doc/scripts/project.md` | 记录 PRD-ID、任务和验证证据映射 |
+| execution record | GitHub task issue evidence comments | 记录 Task UID、任务和验证证据映射 |
 | inventory | `doc/scripts/prd.index.md` | 提供专题三件套的精确文件索引 |
 | topic truth | `precommit/`、`wasm/` | 仅在需要独立专业权威时承载当前规范；通用治理语义归入模块稳定文档 |
 
@@ -31,7 +31,7 @@
 ## 阅读顺序
 
 1. 从 `doc/scripts/README.md` 按目标选择入口。
-2. 需要模块契约时读 `doc/scripts/prd.md`；需要当前任务证据时读 `doc/scripts/project.md`。
+2. 需要模块契约时读 `doc/scripts/prd.md`；需要当前任务证据时读 GitHub task issue evidence comments。
 3. 需要通用治理规则时读模块 PRD/design；只有 pre-commit、WASM 等仍独立维护的专业专题才进入专题文档。
 4. 已知独立专题文件名时使用 `doc/scripts/prd.index.md` 精确定位。
 

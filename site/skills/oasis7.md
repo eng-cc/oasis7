@@ -336,8 +336,8 @@ Use these files as the source of truth:
 - runtime workspace installer: `scripts/setup-provider-oasis7-runtime.sh`
 - parity harness: `scripts/provider-parity-p0.sh`
 - runtime workspace policy: `tools/provider/oasis7_provider_workspace/AGENTS.md`
-- module tracker: `doc/world-simulator/project.md`
-- dual-mode project/verdict: `doc/world-simulator/llm/provider-agent-dual-mode.project.md`
+- module tracker: GitHub task issue evidence comments
+- dual-mode contract/verdict: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` and `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`
 - parity rollout verdict: `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`
 
 ## Output Expectations

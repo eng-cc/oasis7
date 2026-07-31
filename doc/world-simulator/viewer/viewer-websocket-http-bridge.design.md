@@ -1,7 +1,7 @@
 # Viewer WebSocket/HTTP Bridge 设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md`
+- 历史 bridge 实施与验证记录：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 Web Viewer 通过 WebSocket bridge 接入 live server 的协议、桥接生命周期与错误恢复策略。
@@ -23,4 +23,4 @@
 
 ## 5. 设计演进计划
 - 先完成 Design 补齐与互链回写。
-- 再沿项目管理文档推进实现与验证。
+- 后续实现与验证以新建 GitHub-backed task、当前代码和本合同为准。

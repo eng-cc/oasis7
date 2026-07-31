@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景文件化（设计文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/scenario-files.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/scenario-files.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 5
 
@@ -63,7 +63,7 @@
 - `oasis7_init_demo --scenario-file` 走运行时加载路径，便于调试自定义场景文件。
 
 ## 5. Risks & Roadmap
-- **F1**：输出场景文件设计与项目管理文档。
+- **F1**：输出场景文件设计文档。
 - **F2**：完成场景文件迁移与加载逻辑，更新测试与文档。
 
 ### Technical Risks
@@ -111,4 +111,4 @@
 - 场景矩阵应随测试变更同步更新，避免“文档保留但测试漂移”。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。

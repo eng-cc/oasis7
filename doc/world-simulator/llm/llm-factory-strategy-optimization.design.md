@@ -1,7 +1,7 @@
 # LLM 工厂闭环策略稳定性优化（llm_bootstrap）设计
 
 - 对应需求文档: `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-factory-strategy-optimization.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 ## 1. 设计定位
 定义 llm_bootstrap 工厂闭环策略稳定性优化设计，让工厂策略生成、评估与纠偏形成稳定闭环。

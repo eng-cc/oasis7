@@ -1,11 +1,11 @@
 # 游戏发布前的测试手册(你不能改这个文档)
 
 - 对应设计文档: `doc/playability_test_result/game-test.design.md`
-- 对应项目管理文档: `doc/playability_test_result/game-test.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 5
 
-- 对应标准执行入口: `doc/playability_test_result/game-test.project.md`
+- 执行证据与任务状态: GitHub task issue evidence comments
 
 ## 可玩性测试
 你就是游戏玩家，不能读其他的文档或代码（`agent-browser` 操作方法文档除外），直接通过 `agent-browser` 来实际玩游戏，并填写 `playability_test_card`，同时需要在测试过程中给 `agent-browser` 录屏，方便后续检查

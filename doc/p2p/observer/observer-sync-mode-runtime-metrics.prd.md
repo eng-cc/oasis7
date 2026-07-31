@@ -1,7 +1,7 @@
 # oasis7 Runtime：Observer 同步源运行态统计
 
 - 对应设计文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md`
-- 对应项目管理文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 专业权威口径
@@ -43,7 +43,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md`
-  - `doc/p2p/observer/observer-sync-mode-runtime-metrics.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
@@ -91,7 +91,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - OSRM-1：设计文档与项目管理文档落地。
+  - OSRM-1：设计文档与GitHub Issue/Project task truth落地。
   - OSRM-2：实现运行态统计结构与导出接口。
   - OSRM-3：补齐单元测试并完成 `oasis7_net` 回归。
   - OSRM-4：回写状态文档与 devlog 收口。

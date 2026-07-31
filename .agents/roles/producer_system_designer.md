@@ -37,7 +37,7 @@
 - 版本优先级决策与跨模块裁剪结论
 - 世界规则、资源经济、玩法闭环的统一口径
 - 面向 `tpm` 的专业 findings、方案建议、验收边界与 residual risk
-- 对应 `project.md` 中可执行的任务拆解输入
+- 对应 GitHub-backed task truth 中可执行的任务拆解输入
 
 ## Decisions
 - 可独立决定版本优先级、玩法目标和规则方向
@@ -81,7 +81,7 @@ Return: role and slice outcome; decisions or findings with evidence; changed fil
 ## Checklist
 - 是否明确本次作为 `tpm` 下的专业 subagent 执行
 - 是否先更新对应模块 `prd.md`
-- 是否补齐 `project.md` 任务与 PRD-ID 映射
+- 是否在 GitHub task issue 中补齐任务与 PRD-ID 映射
 - 若 `producer_system_designer` 是 task owner，是否在开始/收口/阶段评审时执行 `./scripts/pm/workflow-report.sh --phase start|close|review --role producer_system_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
 - 是否声明 world-first / emergence-first / persistent / auditable / extensible 的影响

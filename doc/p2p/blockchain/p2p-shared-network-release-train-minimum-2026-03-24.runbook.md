@@ -7,7 +7,7 @@
 
 > Current canonical source: use this runbook only for legacy shared-network /
 > release-train operations. Current network-tier truth lives in
-> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
+> GitHub Issue / GitHub Project.
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -168,7 +168,7 @@
 - 每个窗口至少回写一次：
   - GitHub task issue evidence comments
   - 对应 track 的 QA gate `summary.json/md`
-  - 当前 topic 的 `project.md`
+  - 当前 topic 的 GitHub Issue / GitHub Project
 - 若出现 `freeze` / `rollback` / claim 风险，还必须补：
   - incident 文档
   - owner follow-up

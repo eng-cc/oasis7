@@ -16,7 +16,7 @@
 
 ## 阅读与维护边界
 
-- 每组 `*.prd.md`、`*.design.md`、`*.project.md` 分别保存规格、设计和执行证据；本页只承担首次分流，不复制其参数、命令或状态台账。
-- 当前 P2P 模块总边界与活跃执行状态分别回到 `doc/p2p/prd.md` 与 `doc/p2p/project.md`；按精确文件名追溯使用 `doc/p2p/prd.index.md`。
-- 历史 release 仍可能有模块、测试或审计互链，不能仅因日期较早或已完成而删除。理想交易的 2026-06-08 源三件套已由 `mainchain-token-ideal-transaction.{prd,design,project}.md` 吸收；历史过程从 Git 与 GitHub task evidence 追溯，不构成当前 authority。
+- 每组 `*.prd.md`、`*.design.md`、GitHub Issue / GitHub Project 分别保存规格、设计和执行证据；本页只承担首次分流，不复制其参数、命令或状态台账。
+- 当前 P2P 模块总边界与活跃执行状态分别回到 `doc/p2p/prd.md` 与 GitHub Issue / GitHub Project；按精确文件名追溯使用 `doc/p2p/prd.index.md`。
+- 历史 release 仍可能有模块、测试或审计互链，不能仅因日期较早或已完成而删除。理想交易的 2026-06-08 源三件套已由 `mainchain-token-ideal-transaction.{prd,design}.md` 吸收；历史过程从 Git 与 GitHub task evidence 追溯，不构成当前 authority。
 - 新增 Token 专题时，先更新本页的分流/边界，再保留 `doc/p2p/prd.index.md` 的精确 triplet 行；共享目录规则以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

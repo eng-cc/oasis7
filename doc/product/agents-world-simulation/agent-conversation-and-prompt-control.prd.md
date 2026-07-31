@@ -5,7 +5,6 @@
 - 所属产品模块：智能体与世界模拟
 - 上位产品 PRD：[`doc/product/agents-world-simulation/prd.md`](prd.md)
 - 配对产品设计：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md`](agent-conversation-and-prompt-control.design.md)
-- 产品迁移追踪：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.project.md`](agent-conversation-and-prompt-control.project.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)
@@ -99,4 +98,4 @@
 - 不规定右侧面板、折叠区、按钮文案、组件层级或具体布局常量。
 - 不定义 `AgentChat`、`PromptControl`、profile 字段、patch、鉴权或持久化实现。
 - 不承诺当前所有入口都支持预设编辑、Prompt apply、preview、rollback 或跨会话保存。
-- 不保存历史任务状态、截图 verdict、测试命令或已退役 surface 的能力说明。
+- 不保存历史任务状态、截图 verdict、测试命令或已退役 surface 的能力说明；这类可变追溯只进入 GitHub task issue evidence。

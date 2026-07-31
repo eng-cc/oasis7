@@ -8,14 +8,14 @@
 
 ## 范围
 - 覆盖 `scripts/run-launcher-stack.sh --bundle-dir`、`scripts/run-producer-playtest.sh`、`scripts/run-game-test-ab.sh` 在启动器 bundle-first 场景中的职责划分。
-- 覆盖 `testing-manual.md`、启动器人工测试清单、`doc/testing/launcher/README.md`、`doc/testing/project.md` 与 `doc/testing/prd.index.md` 的回写要求；已完成的专题执行拆解回到 GitHub task evidence 与 Git 历史追溯。
+- 覆盖 `testing-manual.md`、启动器人工测试清单、`doc/testing/launcher/README.md` 与 `doc/testing/prd.index.md` 的回写要求；可变任务状态回到 GitHub task evidence 与 Git 历史追溯。
 - 不覆盖 `oasis7_game_launcher` / `oasis7_web_launcher` 的业务功能扩展，也不新增独立第四条自动化链路。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`
 - 目录入口: `doc/testing/launcher/README.md`
 - 模块主 PRD: `doc/testing/prd.md`
-- 模块主项目: `doc/testing/project.md`
+- 模块任务状态: GitHub task issue evidence comments
 - 文件级索引: `doc/testing/prd.index.md`
 - 操作手册: `testing-manual.md`
 - 关联清单: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`
@@ -67,7 +67,7 @@
   - `scripts/run-launcher-stack.sh` 增加 bundle 入口并保留源码 fallback。
   - `scripts/run-producer-playtest.sh` 提供制作人一键入口。
   - `scripts/run-game-test-ab.sh`、`testing-manual.md`、启动器人工测试清单同步 bundle-first 与 `2 + 1` 试玩入口口径。
-  - `doc/testing/project.md`、`doc/testing/prd.index.md`、`doc/testing/README.md`、`doc/devlog/README.md` 回写追溯。
+  - `doc/testing/prd.index.md`、`doc/testing/README.md`、`doc/devlog/README.md` 与 GitHub task evidence 回写追溯。
 - Out of Scope:
   - 不移除 `run-launcher-stack.sh` 源码模式。
   - 不改造 `oasis7_game_launcher` / `oasis7_web_launcher` 参数协议。

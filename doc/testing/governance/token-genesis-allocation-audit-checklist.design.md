@@ -1,7 +1,7 @@
 # oasis7 主链 Token 创世分配审计清单设计
 
 - 对应需求文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md`
-- 对应项目管理文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 ## 1. 设计定位
 提供一份 `qa_engineer` 侧的创世配置门禁设计，让 Token mint 前至少经过一轮结构化 QA 审计，而不是只靠 producer/runtime 自审。
@@ -13,7 +13,7 @@
 - 回流层：把结论回写到 `testing` 与 `p2p token` 项目追踪。
 
 ## 3. 关键接口 / 入口
-- `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
+- `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md`
 - `doc/testing/evidence/token-genesis-allocation-audit-template.md`
 - `crates/oasis7/src/runtime/main_token.rs`
 

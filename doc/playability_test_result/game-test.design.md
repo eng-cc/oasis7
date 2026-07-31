@@ -1,7 +1,7 @@
 # 游戏发布前测试（game-test）设计
 
 - 对应需求文档: `doc/playability_test_result/game-test.prd.md`
-- 对应项目管理文档: `doc/playability_test_result/game-test.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 ## 1. 设计定位
 定义发布前真实玩家闭环测试设计，统一启动脚本、Playwright 进入方式、卡片填写与证据沉淀路径。

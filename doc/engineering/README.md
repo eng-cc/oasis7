@@ -3,12 +3,12 @@
 ## 入口
 - PRD: `doc/engineering/prd.md`
 - 设计总览: `doc/engineering/design.md`
-- 标准执行入口: `doc/engineering/project.md`
+- 标准执行入口: `doc/engineering/prd.md`
 - 文件级索引: `doc/engineering/prd.index.md`
 
 ## 从这里开始
 - 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
-- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/project.md`
+- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/prd.md`
 - 想按专题进入具体治理文档：`doc/engineering/prd.index.md`
 
 ## 模块职责
@@ -25,4 +25,4 @@
 
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。
-- 共享规则与专题长表统一回收到 `doc/engineering/prd.index.md` 与各专题 `*.project.md`，本页只保留 landing 所需分流。
+- 共享规则与专题长表统一回收到 `doc/engineering/prd.index.md` 与各专题 GitHub task issue evidence comments，本页只保留 landing 所需分流。

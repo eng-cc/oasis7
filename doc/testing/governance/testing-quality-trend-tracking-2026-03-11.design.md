@@ -1,7 +1,7 @@
 # oasis7: 测试质量趋势跟踪（2026-03-11）设计
 
 - 对应需求文档: `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md`
-- 对应项目管理文档: `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 4
 
@@ -15,7 +15,7 @@
 
 ## 3. 关键接口 / 入口
 - 专题 PRD：`doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md`
-- 专题 Project：`doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md`
+- 专题任务状态与历史：GitHub task issue evidence comments
 - baseline 报告：`doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
 
 ## 4. 约束与边界

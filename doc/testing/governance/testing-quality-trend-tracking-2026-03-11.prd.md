@@ -1,7 +1,7 @@
 # oasis7: 测试质量趋势跟踪（2026-03-11）
 
 - 对应设计文档: `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md`
-- 对应项目管理文档: `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 4
 
@@ -9,7 +9,7 @@
 - Problem Statement: `TASK-TESTING-002/003` 已经定义了“该跑什么、证据怎么存”，但 testing 模块仍缺一个长期趋势入口来回答“质量是在变好还是变差”。如果没有趋势维度，发布评审只能看单次结果，无法识别首次通过率下滑、缺陷在阶段内后移或修复速度变慢。
 - Proposed Solution: 建立 testing 质量趋势专题，统一定义 `首次通过率`、`阶段内逃逸率`、`修复时长` 的口径、采集源、红黄绿阈值与基线记录方式，并沉淀首份 baseline。
 - Success Criteria:
-  - SC-1: `TASK-TESTING-004` 具备唯一权威文档入口，可追溯到 `doc/testing/project.md`。
+  - SC-1: `TASK-TESTING-004` 具备唯一稳定文档入口，并可追溯到 GitHub task issue evidence comments。
   - SC-2: 三项指标均有明确公式、数据源、统计窗口与红黄绿阈值。
   - SC-3: 首份 baseline 至少覆盖 3 个近期 testing 证据样本，并给出可审计结论。
   - SC-4: 趋势记录可被 `qa_engineer` 周期性续写，不依赖口头解释。
@@ -28,7 +28,7 @@
   - PRD-TESTING-TREND-002: As a `producer_system_designer`, I want a baseline report with traffic-light thresholds, so that I can judge whether current stage quality is improving.
   - PRD-TESTING-TREND-003: As a 模块 owner, I want each trend sample linked back to evidence docs, so that I can reproduce why a metric went red.
 - Critical User Flows:
-  1. `任务收口 -> 读取 evidence / project / GitHub task issue evidence comments -> 归档为一个 trend sample`
+  1. `任务收口 -> 读取 evidence / GitHub task issue evidence comments -> 归档为一个 trend sample`
   2. `计算首次通过率 / 阶段内逃逸率 / 修复时长 -> 输出红黄绿状态 -> 回写 baseline`
   3. `阶段评审读取 baseline -> 追溯异常样本 -> 决定是否加测或阻断`
 - Functional Specification Matrix:
@@ -42,8 +42,8 @@
 - Acceptance Criteria:
   - AC-1: 新专题文档明确三项指标定义、阈值与采集源。
   - AC-2: `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md` 给出首份 baseline，至少 3 个样本。
-  - AC-3: 每个样本都能回溯到已有 evidence / project 文档、GitHub task issue evidence comments 或 git history。
-  - AC-4: `doc/testing/project.md` 将 `TASK-TESTING-004` 标记完成并指向专题文档。
+- AC-3: 每个样本都能回溯到已有 evidence 文档、GitHub task issue evidence comments 或 git history。
+- AC-4: `TASK-TESTING-004` 的完成状态与专题链接记录在 GitHub task issue evidence comments。
 - Non-Goals:
   - 不在本轮实现自动采集脚本或可视化面板。
   - 不把“阶段内逃逸率”直接等同于线上生产逃逸率。
@@ -60,7 +60,6 @@
   - `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`
   - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
   - GitHub task issue evidence comments and git history for retired launcher usability samples
-  - `doc/testing/project.md`
 - Edge Cases & Error Handling:
   - 样本只有最终结论、缺失首次结论：标记 `incomplete_sample`，不得纳入首次通过率分子。
   - 问题在同日发现并修复：修复时长记 `0d`，但仍计入逃逸率。

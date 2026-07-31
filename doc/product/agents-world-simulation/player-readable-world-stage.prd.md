@@ -5,7 +5,6 @@
 - 所属产品模块：智能体与世界模拟
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 配对产品设计：[`doc/product/agents-world-simulation/player-readable-world-stage.design.md`](player-readable-world-stage.design.md)
-- 产品迁移追踪：[`doc/product/agents-world-simulation/player-readable-world-stage.project.md`](player-readable-world-stage.project.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`语义定位`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md)、[`Fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md)、[`玩家因果优先的渲染闭环`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)
@@ -78,7 +77,7 @@
 
 ## 8. 里程碑
 
-1. 产品 PRD、design 与迁移 project 形成稳定专题。
+1. 产品 PRD 与 design 形成可从模块入口进入的稳定专题。
 2. 历史 Bevy/EGUI 可读性语义归位并删除重复源文件。
 3. 当前 Viewer/视觉 authority 持续提供 surface 与验证证据。
 

@@ -10,8 +10,7 @@ usage() {
 Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>] [--allow-unbound] [--phase current|pr-ready|post-pr]
 
 Static consistency checks for the current task:
-- GitHub Project mapping binds the current worktree/task
-- project.md task item Trace points to GitHub issue + task_uid
+- GitHub Issue task UID and Project mapping bind the current worktree/task
 - GitHub task issue evidence comments include claim/review/closeout records
 - post-PR evidence chain is task-local
 USAGE
@@ -250,11 +249,6 @@ def check(cond, bad):
     if not cond: errors.append(bad)
 
 
-def file_contains_pattern(path: pathlib.Path, pattern: re.Pattern[str]) -> bool:
-    with path.open("r", encoding="utf-8") as handle:
-        return any(pattern.search(line) for line in handle)
-
-
 def file_contains_text(path: pathlib.Path, needle: str) -> bool:
     with path.open("r", encoding="utf-8") as handle:
         return any(needle in line for line in handle)
@@ -407,30 +401,6 @@ if github_backed:
     for hit in list(task.get("evidence_comments") or [])[:5]:
         print(f"- evidence: {hit}")
     raise SystemExit(0)
-
-project_docs: list[pathlib.Path] = []
-for key in ("doc_refs", "source_refs"):
-    raw = task.get(key)
-    if isinstance(raw, list):
-        for item in raw:
-            rel = str(item or "")
-            if rel.endswith("/project.md"):
-                project_docs.append(root / rel)
-if not project_docs:
-    if (root / "project.md").is_file():
-        project_docs = [root / "project.md"]
-if phase in {"pr-ready", "post-pr"}:
-    check(bool(project_docs), "project.md unresolved from task doc_refs/source_refs; fix: add module project.md to task doc_refs")
-if phase in {"pr-ready", "post-pr"} and project_docs:
-    new_trace_re = re.compile(rf"Trace: ((#[0-9]+)|(https://github\.com/eng-cc/oasis7/issues/[0-9]+)) \({re.escape(uid)}\)")
-    trace_found = False
-    for p in project_docs:
-        if not p.is_file():
-            continue
-        if file_contains_pattern(p, new_trace_re):
-            trace_found = True
-            break
-    check(trace_found, f"project task item lacks Trace for {uid}; fix: add 'Trace: #<issue> ({uid})' in module project.md")
 
 elog = root / str(task.get("execution_log_path") or "")
 check(elog.is_file(), f"execution log missing: {elog.relative_to(root) if str(task.get('execution_log_path') or '') else '(none)'}; fix: run workflow-report --phase start or update execution_log_path")

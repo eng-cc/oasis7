@@ -1,7 +1,7 @@
 # oasis7 主链理想交易合同
 
 - 对应设计文档: `doc/p2p/token/mainchain-token-ideal-transaction.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-ideal-transaction.project.md`
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. Executive Summary
 

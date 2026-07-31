@@ -23,4 +23,4 @@
 ## 最小审查清单
 - 是否在 testing 证据包中引用 headless-runtime 证据路径。
 - 是否将 lifecycle / auth / longrun 的 `fail/blocked` 同步到发布结论。
-- 是否在 `doc/headless-runtime/project.md` 与 `doc/testing/project.md` 中保持一致口径。
+- 是否在 `doc/headless-runtime/prd.md` 与 `doc/testing/prd.md` 中保持一致口径。

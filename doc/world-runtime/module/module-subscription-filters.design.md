@@ -1,7 +1,7 @@
 # oasis7 Runtime：模块订阅过滤器（设计分册）设计
 
 - 对应需求文档: `doc/world-runtime/module/module-subscription-filters.prd.md`
-- 对应项目管理文档: `doc/world-runtime/module/module-subscription-filters.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义模块订阅过滤器设计，统一事件/动作路由前的过滤表达、匹配语义与拒收边界。
