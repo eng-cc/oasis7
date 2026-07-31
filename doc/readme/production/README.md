@@ -17,5 +17,5 @@
 ## 收敛规则
 
 - 不在此页平铺每份三件套或素材文件；文件级精确清单只维护在 `doc/readme/prd.index.md`。
-- 新 production 专题先更新模块 `prd.md` / `project.md`，再在索引中标记其活跃或历史压缩状态；本页只维护分流与边界。
+- 新 production 专题先更新模块 `prd.md` / GitHub task issue evidence comments，再在索引中标记其活跃或历史压缩状态；本页只维护分流与边界。
 - 做迁移治理时，应逐项把仍有效语义合并到现行权威、修复引用并删除已被完整吸收的源文件；只有仍承担独立专业操作或未闭环状态时才保留，并写明 authority reason。

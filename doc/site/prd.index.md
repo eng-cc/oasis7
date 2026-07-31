@@ -44,11 +44,11 @@
 - 公开 HTML 页面、同步脚本和镜像页继续保留可检索性，但默认不与专题三件套同屏平铺成长名单。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/site/{github-pages,manual}/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的当前默认活跃专题三件套。
+- 纳入规则：纳入 `doc/site/{github-pages,manual}/*.prd.md` 与同名 `*.design.md` / GitHub task issue evidence comments 的当前默认活跃专题三件套。
 - 活跃补充：仍承担当前公开边界判断职责的高频专题，可在“活跃补充文档”区定向列出，但不再替代完整清单。
 - 历史压缩：已完成、无下一步、由模块 project 或后续主专题覆盖当前真值的专题，可先从默认活跃清单降级；当当前入口、task evidence 与 git history 足以追溯时，继续删除旧专题文件并转入“已退役删除的旧专题”。
 - 排除规则：`site/**` 下的公开 HTML 页面、同步脚本与镜像产物不并入专题三件套长表，只在补充入口中定向说明。
-- 按需进入：当 `README.md` 与 `project.md` 已能完成首读分流时，本页只承担精确检索与补充路由职责。
+- 按需进入：当 `README.md` 与 GitHub task issue evidence comments 已能完成首读分流时，本页只承担精确检索与补充路由职责。
 
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
@@ -85,7 +85,7 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
 - ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档；已完成的 Viewer 手册搬迁增量已回填并退役，默认阅读先经 `doc/site/manual/README.md` 分流。
 - 当前 github-pages authority 由 `doc/site/prd.md`、`doc/site/design.md` 与 `doc/site/prd.md` 承担；专题只保留仍有当前增量语义的文档。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入后续路径级治理。

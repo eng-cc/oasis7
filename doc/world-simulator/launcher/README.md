@@ -3,7 +3,7 @@
 更新时间: 2026-07-24
 
 ## 从这里开始
-- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/project.md` 确认 Pages、Release 资产、专业实现和 blocker
+- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/GitHub task issue evidence comments` 确认 Pages、Release 资产、专业实现和 blocker
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md`、本页专题和对应操作手册；活跃任务状态读 GitHub task issue evidence
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读本页相关 PRD/design/manual，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
@@ -29,7 +29,7 @@
 ## 首读主题簇
 
 ### 1. 发布、分发与整体可用性
-- 首读入口: `../../product/player-entry-distribution/prd.md`（玩家体验）；`../prd.md`、`../../site/prd.md` 与 `../../site/project.md`（Pages、Release 资产和专业实现）
+- 首读入口: `../../product/player-entry-distribution/prd.md`（玩家体验）；`../prd.md`、`../../site/prd.md` 与 `../../site/GitHub task issue evidence comments`（Pages、Release 资产和专业实现）
 - 适合问题:
   - launcher 是否已经能给更广泛用户使用
   - release/distribution 的当前阻断和验收边界是什么

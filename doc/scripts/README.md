@@ -29,7 +29,7 @@
 
 ## 文档树约束
 
-- 模块根目录只保留 `README.md`、`prd.md`、`design.md`、`project.md` 和 `prd.index.md`。
+- 模块根目录只保留 `README.md`、`prd.md`、`design.md`、GitHub task issue evidence comments 和 `prd.index.md`。
 - 新专题按 `governance/`、`precommit/`、`wasm/` 或既有匹配主题目录落位；不要在模块根目录新增专题文件。
 - 新增、移动或退役仍需独立维护的专题时，同步更新对应专题 README 与 `doc/scripts/prd.index.md`。
-- 历史完成记录留在 `project.md` 或 evidence 文档；已被当前规范吸收的一次性交接说明不再作为 live 导航入口。
+- 历史完成记录留在 GitHub task issue evidence comments 或 evidence 文档；已被当前规范吸收的一次性交接说明不再作为 live 导航入口。

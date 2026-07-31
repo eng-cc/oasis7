@@ -15,5 +15,5 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
 - 当前活跃专题补充：`doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`（前期工业引导 QA 卡组）。

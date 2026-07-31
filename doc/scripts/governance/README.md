@@ -8,11 +8,11 @@
 | --- | --- |
 | 模块能力、稳定入口、fallback、worktree 与收口承诺 | `../prd.md` |
 | 参数权威边界、harness 隔离和 readiness/smoke 语义 | `../design.md` |
-| 已完成任务与历史验证证据 | `../project.md` |
+| 已完成任务与历史验证证据 | `GitHub task issue evidence comments` |
 | 工程任务生命周期、PR 门禁和终态清理 | `../../engineering/workflow/source-of-truth.md` |
 | 当前 CLI 参数与机器可读输出 | 脚本 `--help` 与对应测试 |
 
-历史 dated triplet 的持续语义已回填到上述稳定权威，源文件已删除；需要追溯时使用 Git history、GitHub task issue evidence 和 `../project.md` 的 TASK-SCRIPTS 记录。
+历史 dated triplet 的持续语义已回填到上述稳定权威，源文件已删除；需要追溯时使用 Git history、GitHub task issue evidence 和 `GitHub task issue evidence comments` 的 TASK-SCRIPTS 记录。
 
 ## 兼容边界
 

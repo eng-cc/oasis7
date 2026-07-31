@@ -31,7 +31,7 @@
 ## 填写约束
 - `命令` 需与 `测试层级` 一致，不可出现“层级写 required，命令却是 lint”的情况。
 - `证据路径` 不可留空；如证据在 CI，需落盘到仓库路径后再引用。
-- `结论 = fail/blocked` 时，必须在对应 `project.md` 记录整改项（负责人 + 截止时间）或延期备注。
+- `结论 = fail/blocked` 时，必须在对应 GitHub task issue evidence comments 记录整改项（负责人 + 截止时间）或延期备注。
 
 ## 最小审查清单
 - 是否覆盖所有相关 `PRD-ID`。

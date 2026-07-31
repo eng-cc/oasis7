@@ -1,6 +1,6 @@
 # headless-runtime 旧 `nonviewer` 专题追溯
 
-两组历史命名 `nonviewer-*` hardening 三件套已在完成语义回填后退役。当前鉴权、防重放、长稳内存边界和冷归档合同以父目录的 `doc/headless-runtime/prd.md`、`design.md` 与 `project.md` 为准；实现细节继续由对应代码、测试及 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md` 承载。
+两组历史命名 `nonviewer-*` hardening 三件套已在完成语义回填后退役。当前鉴权、防重放、长稳内存边界和冷归档合同以父目录的 `doc/headless-runtime/prd.md`、`design.md` 与 GitHub task issue evidence comments 为准；实现细节继续由对应代码、测试及 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md` 承载。
 
 ## 从这里开始
 

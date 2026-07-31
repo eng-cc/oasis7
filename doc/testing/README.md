@@ -29,7 +29,7 @@
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
-- 高频 active 入口保留在 `prd.md`、`project.md`、`testing-manual.md`、`manual/*.manual.md`、`evidence/README.md` 与 `prd.index.md`。
+- 高频 active 入口保留在 `prd.md`、GitHub task issue evidence comments、`testing-manual.md`、`manual/*.manual.md`、`evidence/README.md` 与 `prd.index.md`。
 - evidence、templates 与历史 blocker/closure 留痕继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径进入。
 
 ## 模块职责

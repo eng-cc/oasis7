@@ -19,7 +19,7 @@
 ## 入口分工
 - `README.md` 只承担 landing page 职责：告诉读者先去哪个权威入口，不重复长表索引内容。
 - `prd.md` 是模块权威规格入口，适合先理解 README 对外口径、缺口治理与运营内容边界。
-- `project.md` 是执行台账，适合确认当前活跃专题、收口状态与最新完成项。
+- GitHub task issue evidence comments 是执行台账，适合确认当前活跃专题、收口状态与最新完成项。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按子域或文件名继续下钻，不是新读者的首读入口。
 - `governance/README.md` 是当前最高密度热点子域 `governance/` 的 canonical 入口，适合先按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流，再进入具体专题。
 - `gap/README.md` 是 README gap 收口资料的本地入口；先区分总收口主文档、具体增量与历史追溯，避免把任一完成态 leaf 当成当前模块口径。
@@ -28,7 +28,7 @@
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列 canonical、material 与近期专题的长名单。
-- 高频 active 入口保留在 `prd.md`、`project.md`、`prd.index.md` 与当前仍在执行的 runbook 文档。
+- 高频 active 入口保留在 `prd.md`、GitHub task issue evidence comments、`prd.index.md` 与当前仍在执行的 runbook 文档。
 - 审计留痕、历史背景、素材包与执行记录继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径进入。
 
 ## 模块职责
@@ -46,7 +46,7 @@
 - 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；进入 `governance/`、`gap/` 或 `production/` 时，优先先读各自的 `README.md` 再继续下钻；需要素材包、执行记录或历史专题时，再按具体子域进入。
 
 ## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
+- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、GitHub task issue evidence comments、`prd.index.md`。
 - 其余专题文档按主题下沉到 `gap/`、`production/`、`governance/`。
 
 ## 共享约定

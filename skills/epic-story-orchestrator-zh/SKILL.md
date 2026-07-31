@@ -82,7 +82,7 @@ Use this skill when:
 Do not use this skill when:
 
 - the user only wants a short blurb, slogan, marketing copy, or one-paragraph synopsis
-- the request is really a product/design spec better owned by `prd.md`, `project.md`, or `game-architect`
+- the request is really a product/design spec better owned by `prd.md`, GitHub task issue evidence comments, or `game-architect`
 - the task is only polishing an existing Chinese paragraph and does not need story structure or writeback
 - the output should remain temporary and must not become repo truth
 

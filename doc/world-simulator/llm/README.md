@@ -45,4 +45,4 @@ and Project for the active task.
 
 Use the linked PRD/design/contract for durable technical or product claims.
 Use GitHub task evidence for the mutable work history that previously appeared
-in `*.project.md` records.
+in GitHub task issue evidence comments records.

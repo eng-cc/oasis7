@@ -5,7 +5,7 @@
 ## 从这里开始
 
 - 想确认静态 docs hub、CN/EN 镜像和发布同步边界：读 `site-manual-static-docs.prd.md`。
-- 想核对该专题的已完成状态、内容基线与后续同步责任：读 `site-manual-static-docs.project.md`。
+- 想核对该专题的已完成状态、内容基线与后续同步责任：读 GitHub task issue evidence comments。
 - 需要追溯 Viewer 手册的当前能力与历史退役边界：读 `doc/world-simulator/viewer/viewer-manual.manual.md`；任务过程从 GitHub task issue evidence comments 与 git history 追溯。
 - 需要当前中文 canonical 手册：读 `doc/world-simulator/viewer/viewer-manual.manual.md`；公开只读镜像位于 `site/doc/cn|en/viewer-manual.html`。
 

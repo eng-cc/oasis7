@@ -54,7 +54,7 @@
 
 ## 5. ROUND-006 入口职责
 - `engineering` 负责提供 ROUND-006 的规则定义与裁定标准。
-- 模块/专题是否需要 `design.md`、是否存在职责混写，均以本模块规范专题为准；任务追踪不再创建 `*.project.md`。
+- 模块/专题是否需要 `design.md`、是否存在职责混写，均以本模块规范专题为准；任务追踪不再创建 GitHub task issue evidence comments。
 - 若 ROUND-006 执行中发现规范空白，应先回写本模块规范文档，再继续治理。
 
 ## 设计目标

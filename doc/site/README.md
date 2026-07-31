@@ -41,7 +41,7 @@
 - `github-pages/` 当前补充设计：公开首页的页面级层级、首屏内容与后果链节奏；当前合同仍以模块 root authority 为准。
 - `github-pages/` 已退役删除旧专题：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
 - `manual/` 路由入口与正式专题三件套：静态文档站与 Viewer 手册镜像策略。
-- 模块根入口：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
+- 模块根入口：`README.md`、`prd.md`、GitHub task issue evidence comments、`design.md`、`prd.index.md`。
 - 公开 HTML 入口（仓库外显层）：`site/index.html`、`site/en/index.html`、`site/doc/{cn,en}/index.html`、`site/doc/{cn,en}/viewer-manual.html`。
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 

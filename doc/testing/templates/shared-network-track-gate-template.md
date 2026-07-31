@@ -52,4 +52,4 @@ lane_id<TAB>owner<TAB>status<TAB>evidence_path<TAB>note
 - 是否所有 evidence path 都可达。
 - 是否 track 对应 required lanes 已全部填写。
 - 是否 `pass/partial/block` 与证据内容一致。
-- 是否已回写 `doc/p2p/blockchain/*project.md`、`testing-manual.md` 与对应 GitHub task issue evidence comments。
+- 是否已回写 `doc/p2p/blockchain/GitHub task issue evidence comments`、`testing-manual.md` 与对应 GitHub task issue evidence comments。

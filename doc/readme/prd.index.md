@@ -59,7 +59,7 @@
 - `execution_log`：某轮真实执行记录，仅用于复盘与追溯。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
+- 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与同名 GitHub task issue evidence comments。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 `runbook`、`material`、`execution_log` supporting doc，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 历史压缩：已完成、无下一步、且当前治理入口已由脚本/模块 project/后续复核专题覆盖的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
 - 排除规则：不纳入 `doc/devlog/**` 与其他非 PRD 配对文档。
@@ -70,7 +70,7 @@
 | --- | --- | --- |
 | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md` | `doc/readme/governance/readme-remediation-log-template-2026-03-11.md` |
-| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
+| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | GitHub task issue evidence comments |
 | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` |
 
 ## 当前活跃 PRD-only 治理专题
@@ -124,7 +124,7 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
