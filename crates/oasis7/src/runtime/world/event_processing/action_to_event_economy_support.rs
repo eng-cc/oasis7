@@ -368,16 +368,3 @@ pub(super) fn resolve_recipe_bottleneck_tags(
     }
     infer_bottleneck_tags(consume)
 }
-
-pub(super) fn material_transit_loss_bps_for_kind(world: &World, kind: &str) -> i64 {
-    let base = MATERIAL_TRANSFER_LOSS_PER_KM_BPS.max(0);
-    let factor = world
-        .material_profile(kind)
-        .map(|profile| match profile.transport_loss_class {
-            crate::runtime::MaterialTransportLossClass::Low => 1_i64,
-            crate::runtime::MaterialTransportLossClass::Medium => 2_i64,
-            crate::runtime::MaterialTransportLossClass::High => 4_i64,
-        })
-        .unwrap_or(1);
-    base.saturating_mul(factor)
-}

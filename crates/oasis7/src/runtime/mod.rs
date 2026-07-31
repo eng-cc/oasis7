@@ -262,7 +262,7 @@ pub use state::{
 pub use world::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState,
-    CommittedAuthoritativeRecoveryGeneration, M1ScenarioBootstrapConfig,
+    CommittedAuthoritativeRecoveryGeneration, LogisticsTransferQuote, M1ScenarioBootstrapConfig,
     MarketQuoteDecisionPreview, MarketQuoteSupplyDelta, ModuleTickRoutingDeterministicSnapshot,
     ModuleTickRoutingDurationBuckets, ModuleTickRoutingMetricsSnapshot, ProductValidationQuote,
     ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,

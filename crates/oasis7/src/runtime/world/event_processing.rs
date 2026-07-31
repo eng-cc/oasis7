@@ -2,16 +2,15 @@ use super::super::{
     Action, ActionEnvelope, ActionId, CausedBy, CrisisStatus, DomainEvent, EconomicContractStatus,
     EpochSettlementReport, GovernanceEvent, GovernanceProposalStatus, MainTokenConfig,
     MainTokenFeeKind, MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
-    MainTokenNodePointsBridgeDistribution, MaterialLedgerId, MaterialStack,
-    MaterialTransitPriority, NodeRewardMintRecord, NodeSettlement, ProposalId, ProposalStatus,
-    RejectReason, WorldError, WorldEvent, WorldEventBody, WorldEventId, WorldTime,
-    main_token_bucket_unlocked_amount, util::hash_json,
+    MainTokenNodePointsBridgeDistribution, MaterialLedgerId, MaterialStack, NodeRewardMintRecord,
+    NodeSettlement, ProposalId, ProposalStatus, RejectReason, WorldError, WorldEvent,
+    WorldEventBody, WorldEventId, WorldTime, main_token_bucket_unlocked_amount, util::hash_json,
 };
 use super::World;
 use super::body::{evaluate_expand_body_interface, validate_body_kernel_view};
 use super::logistics::{
-    MATERIAL_TRANSFER_LOSS_PER_KM_BPS, MATERIAL_TRANSFER_MAX_DISTANCE_KM,
-    MATERIAL_TRANSFER_MAX_INFLIGHT, MATERIAL_TRANSFER_SPEED_KM_PER_TICK,
+    MATERIAL_TRANSFER_MAX_DISTANCE_KM, MATERIAL_TRANSFER_MAX_INFLIGHT,
+    material_transit_loss_bps_for_kind, material_transit_priority_for_kind, material_transit_ticks,
 };
 use crate::geometry::space_distance_cm;
 use crate::runtime::main_token::{

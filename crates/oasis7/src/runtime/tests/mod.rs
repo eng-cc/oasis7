@@ -84,6 +84,7 @@ mod gameplay_protocol;
 mod governance;
 mod governance_validator_admission;
 mod governance_vote_quote;
+mod logistics_transfer_quote;
 mod main_token;
 mod main_token_economy_audit;
 mod market_quote_decision_preview;
