@@ -1,7 +1,7 @@
 # oasis7 Runtime：共识代码统一收敛到 oasis7_consensus
 
 - 对应设计文档: `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary

@@ -1,7 +1,7 @@
 # oasis7 Runtime：节点贡献积分激励
 
 - 对应设计文档: `doc/p2p/node/node-contribution-points.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 专业权威口径
@@ -171,7 +171,7 @@ EpochSettlementReport {
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - NCP-1：设计文档 + 项目管理文档。
+  - NCP-1：设计文档 + GitHub Issue/Project task truth。
   - NCP-2：节点积分引擎核心实现（计算/存储/在线/惩罚 + 台账）。
   - NCP-3：测试与导出接线（test_tier_required 口径）。
   - NCP-4：文档状态回写与 devlog 收口。

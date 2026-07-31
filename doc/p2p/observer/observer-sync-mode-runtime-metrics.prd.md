@@ -1,7 +1,7 @@
 # oasis7 Runtime：Observer 同步源运行态统计
 
 - 对应设计文档: `doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 专业权威口径
@@ -91,7 +91,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - OSRM-1：设计文档与项目管理文档落地。
+  - OSRM-1：设计文档与GitHub Issue/Project task truth落地。
   - OSRM-2：实现运行态统计结构与导出接口。
   - OSRM-3：补齐单元测试并完成 `oasis7_net` 回归。
   - OSRM-4：回写状态文档与 devlog 收口。

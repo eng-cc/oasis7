@@ -1,7 +1,7 @@
 # P2P 移动轻客户端权威状态
 
 - 对应设计文档: `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 目标与 authority
 
@@ -40,5 +40,5 @@
 ## 验证责任
 
 - 协议与 runtime 变更至少验证 intent 签名/nonce/幂等、批次根绑定、finality 单调、challenge/resolve 分支、reorg 回退、快照校验及 session revoke/rotate。
-- 实现、测试命令与历史完成范围以配套 project、GitHub task evidence 和对应 runtime/viewer/QA 证据为准；文档合同本身不替代这些证据。
+- 实现、测试命令与历史完成范围以GitHub task issue evidence、GitHub task evidence 和对应 runtime/viewer/QA 证据为准；文档合同本身不替代这些证据。
 - 涉及实际网络、恢复演练或发布判断时，必须分别取得 runtime、blockchain ops 与 QA 的当前证据；不得以重启替代配置、实现或部署根因修复。

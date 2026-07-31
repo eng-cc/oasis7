@@ -71,7 +71,7 @@
 
 ## 5. Risks & Roadmap
 
-- **M1**：设计文档与项目管理文档。
+- **M1**：设计文档与GitHub Issue/Project task truth。
 - **M2**：simulator 数据结构、action/event、初始化与回放链路打通。
 - **M3**：viewer 通用渲染 + 基础详情展示。
 - **M4**：测试回归、文档状态回写、任务日志与提交。

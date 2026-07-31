@@ -1,7 +1,7 @@
 # oasis7 主链 Token 创世分配与早期贡献奖励口径
 
 - 对应设计文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 3
 ## 1. Executive Summary

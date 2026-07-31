@@ -144,6 +144,15 @@ if (
   echo "doc-governance-check.test: active project-ledger reference unexpectedly passed" >&2
   exit 1
 fi
-grep -Fq 'active documentation references retired project.md / *.project.md ledgers' "$TMPDIR/reference.out"
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/reference.out"
+printf '%s\n' 'Current authority: same-name project document.' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/semantic-reference.out" 2>"$TMPDIR/semantic-reference.err"; then
+  echo "doc-governance-check.test: semantic project-ledger reference unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/semantic-reference.out"
 
 echo "doc-governance-check.test: OK"

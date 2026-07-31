@@ -1,7 +1,7 @@
 # README P1 缺口收口：分布式网络主路径生产化
 
 - 对应设计文档: `doc/p2p/network/readme-p1-network-production-hardening.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary

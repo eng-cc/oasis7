@@ -1,7 +1,7 @@
 # oasis7 Runtime：Observer 同步源策略化设计
 
 - 对应需求文档: `doc/p2p/observer/observer-sync-source-mode.prd.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 保留 Observer 同步源策略化的历史设计意图和当前负向边界。相关 source 当前未由 `oasis7_net` facade 暴露，本设计不把路径索引或 DHT 组合回退描述成 active runtime 能力。

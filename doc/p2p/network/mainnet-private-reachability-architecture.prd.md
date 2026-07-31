@@ -1,7 +1,7 @@
 # oasis7 主链级非全公网 P2P 覆盖网络架构
 
 - 对应设计文档: `doc/p2p/network/mainnet-private-reachability-architecture.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 2
 建档日期: 2026-04-01

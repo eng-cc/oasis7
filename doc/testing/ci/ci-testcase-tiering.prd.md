@@ -78,7 +78,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP (T1): 设计与项目管理文档落地。
+  - MVP (T1): 设计与GitHub Issue/Project task truth落地。
   - v1.1 (T2): 脚本改造到 case 级 required 筛选并移除硬编码清单。
   - v2.0 (T3/T4): 回归验证、文档回写、巡检与规则同步。
 - Technical Risks:

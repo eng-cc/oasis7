@@ -134,7 +134,7 @@ The following scope, command queue, state snapshot, roadmap, and decision-log re
 - 下列段落记录已完成的 Bevy/EGUI round-1 至 round-4 迁移，仅作历史追溯；其中的 `viewer_automation`、命令队列、camera、panel/module、timeline DSL 和 `sendControl.seek` 不定义当前 SolidJS API。
 
 #### Risks & Roadmap
-- WTA-0：设计/项目管理文档建档。
+- WTA-0：设计/GitHub Issue/Project task truth建档。
 - WTA-1：`viewer_automation` 支持运行时步骤入队。
 - WTA-2：`web_test_api`（wasm）桥接层实现与 `window.__AW_TEST__` 注入。
 - WTA-3：`app_bootstrap` 接入命令消费与状态发布系统。

@@ -2,7 +2,7 @@
 
 - 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
 - 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 1
 

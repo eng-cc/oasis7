@@ -1,7 +1,7 @@
 # oasis7 主链 Token 分配与发行机制（已实现）
 
 - 对应设计文档: `doc/p2p/token/mainchain-token-allocation-mechanism.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary

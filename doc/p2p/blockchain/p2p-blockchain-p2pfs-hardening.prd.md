@@ -3,7 +3,7 @@
 > 历史整合说明：本专题整合 2026-02-16 至 2026-02-17 的 `blockchain-p2pfs-hardening-phase2` 至 `phase8`。它是这些已完成阶段的专业权威与追溯入口；阶段完成记录不构成当前 mainnet、生产恢复或 release readiness 结论。
 
 - 对应设计文档：`doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md`
-- 对应项目管理文档：GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth：GitHub Issue / GitHub Project
 
 ## 1. 目标
 

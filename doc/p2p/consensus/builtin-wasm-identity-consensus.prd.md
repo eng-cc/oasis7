@@ -1,7 +1,7 @@
 # P2P Builtin Wasm 身份共识与跨平台构建方案
 
 - 对应设计文档: `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary
@@ -75,7 +75,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - M1：设计文档、项目管理文档落地。
+  - M1：设计文档、GitHub Issue/Project task truth落地。
   - M2：`sync-m1` 主脚本扩展 identity manifest 生成与校验，并对 `m4/m5` 复用。
   - M3：runtime 接入 identity manifest，替换 bootstrap 占位 identity 逻辑。
   - M4：测试补齐与 required 回归通过。

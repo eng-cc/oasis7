@@ -1,7 +1,7 @@
 # Builtin Wasm 身份共识设计
 
 - 对应需求文档: `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义 builtin wasm 工件在身份、签名、共识材料与治理绑定上的一致性设计。

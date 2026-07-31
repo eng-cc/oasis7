@@ -1,7 +1,7 @@
 # Site 使用手册静态化（CN/EN）设计文档
 
 - 对应设计文档: `doc/site/manual/site-manual-static-docs.design.md`
-- 对应项目管理文档: `doc/site/manual/site-manual-static-docs.prd.md`
+- 对应GitHub Issue/Project task truth: `doc/site/manual/site-manual-static-docs.prd.md`
 
 审计轮次: 5
 
@@ -43,7 +43,7 @@
 
 ## 里程碑
 - M1：文档与任务拆解
-  - 新增本设计文档与项目管理文档。
+  - 新增本设计文档与GitHub Issue/Project task truth。
 - M2：文档框架上线
   - 完成 `site/doc/cn|en` 目录页与导航基础能力。
 - M3：手册内容整理

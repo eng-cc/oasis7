@@ -61,7 +61,7 @@ NodePointsRuntimeCollector::force_settle() -> Option<EpochSettlementReport>
 - `effective_storage_bytes` 取 epoch 内观测最大值。
 
 ## 里程碑
-- NCPR-1：设计文档 + 项目管理文档。
+- NCPR-1：设计文档 + GitHub Issue/Project task truth。
 - NCPR-2：运行时采样器与存储测算实现。
 - NCPR-3：多节点运行时闭环集成测试。
 - NCPR-4：回归、文档与 devlog 收口。

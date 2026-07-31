@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/site/prd.md`
-- 对应项目管理文档: `doc/site/prd.md`
+- 对应GitHub Issue/Project task truth: `doc/site/prd.md`
 - 对应文件级索引: `doc/site/prd.index.md`
 
 ## 1. 设计定位

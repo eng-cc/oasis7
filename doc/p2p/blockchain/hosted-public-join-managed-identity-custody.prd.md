@@ -1,7 +1,7 @@
 # oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录
 
 - 对应设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
-- 对应项目管理文档: GitHub Issue / GitHub Project
+- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 1
 建档日期: 2026-05-18
@@ -17,7 +17,7 @@
 ## 接口 / 数据
 - 主文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
 - 设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
-- 项目管理文档: GitHub Issue / GitHub Project
+- GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 - 关键主键: `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref`
 
 ## 里程碑

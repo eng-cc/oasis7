@@ -8,7 +8,7 @@
 ## ROUND-002 物理合并
 - 本文件为主文档（当前权威入口）。
 - `immersion-phase8~10` 内容已物理合并入本文件，对应阶段文档已合并并从仓库移除（不再保留 archive 目录）。
-- `immersion-phase2~7` 旧阶段三件套已在后续文档治理中退役删除；其完成态只作为历史阶段证据保留在 core review logs、git history 与 GitHub task issue evidence comments，当前 release / 体验收口入口统一读本文件与同名 project。
+- `immersion-phase2~7` 旧阶段三件套已在后续文档治理中退役删除；其完成态只作为历史阶段证据保留在 core review logs、git history 与 GitHub task issue evidence comments，当前 release / 体验收口入口统一读本文件与GitHub task issue evidence。
 
 ## 1. Executive Summary
 - 将 `oasis7_viewer` 默认体验从“调试工具”切换为“可发行游戏前端”。
@@ -57,7 +57,7 @@
 - 不依赖用户阅读手册即可发现“如何打开面板”和“如何聚焦对象”。
 
 ## 5. Risks & Roadmap
-- [x] M1：文档与任务拆解完成（设计文档 + 项目管理文档）。
+- [x] M1：文档与任务拆解完成（设计文档 + GitHub Issue/Project task truth）。
 - [x] M2：体验模式框架落地（资源、环境变量、默认策略切换）。
 - [x] M3：Player 模式默认降噪落地（默认隐藏面板 + 轻量默认模块）。
 - [x] M4：入口可发现性与基础提示完成（面板入口提示、模式提示）。
