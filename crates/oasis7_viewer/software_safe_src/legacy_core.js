@@ -11,6 +11,7 @@ import { createProductValidationQuoteIntegration } from "./product_validation_qu
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
 import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
+import { createViewerQuoteProtocolFacade } from "./viewer_quote_protocol_facade.js";
 import { buildViewerEntityLists, renderViewerEntityList, resourceSummary } from "./viewer_entity_list_renderer.js";
 import {
   DEFAULT_WS_ADDR,
@@ -181,6 +182,7 @@ const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurv
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -1355,7 +1357,7 @@ function addRecentEvent(event) {
 }
 
 function handleSnapshot(snapshot) {
-  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote(); warDeclarationQuote.invalidateWarDeclarationQuote(); state.marketQuoteDecision = null; state.marketQuoteDecisionRequest = { status: "idle", error: null };
+  clearInitialSnapshotRetryTimer(); quoteProtocolFacade.invalidateSnapshotBoundQuotes();
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
@@ -3087,7 +3089,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error) || warDeclarationQuote.handleWarDeclarationQuoteError(error) || marketQuoteDecision.handleMarketQuoteDecisionError(error)) {
+  if (quoteProtocolFacade.handleQuoteGameplayActionError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3445,7 +3447,7 @@ function handleAuthoritativeRecoveryError(error) {
 }
 
 function handleViewerMessage(message) {
-  if (message?.type === "market_quote_decision_preflight") { marketQuoteDecision.handleMarketQuoteDecision(message.quote); return; }
+  if (quoteProtocolFacade.handleQuoteViewerMessage(message)) return;
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
@@ -3504,17 +3506,6 @@ function handleViewerMessage(message) {
     case "gameplay_action_error":
       handleGameplayActionError(message.error);
       break;
-    case "refine_quote_preflight":
-      handleRefineQuotePreflight(message.quote);
-      break;
-    case "product_validation_quote_preflight":
-      productValidationQuote.handleProductValidationQuote(message.quote);
-      break;
-    case "power_survival_quote_preflight":
-      powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
-      break;
-    case "war_declaration_quote_preflight":
-      warDeclarationQuote.handleWarDeclarationQuote(message.quote); break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
       break;

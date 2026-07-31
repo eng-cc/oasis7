@@ -83,9 +83,104 @@ fn war_declaration_quote_reports_minimum_winning_intensity_from_the_active_settl
 
     // Core score: red members 2 * 10 + intensity, blue members 3 * 10. A tie wins.
     assert_eq!(quote.minimum_winning_intensity, Some(10));
-    assert_eq!(quote.recommended_war_action, "recruit");
-    assert_eq!(quote.alternative_action, "recruit");
-    assert!(quote.why_this_war_is_worth_or_risky.contains("minimum"));
+    assert!(!quote.mobilization_affordable);
+    assert_eq!(quote.recommended_war_action, "gather_resources");
+    assert_eq!(quote.alternative_action, "gather_resources");
+    assert!(
+        quote
+            .why_this_war_is_worth_or_risky
+            .contains("mobilization")
+    );
+}
+
+#[test]
+fn war_declaration_quote_blocks_a_recommended_declaration_until_mobilization_is_affordable() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+
+    let quote = world
+        .war_declaration_quote("a", "alliance.red", "alliance.blue", 10)
+        .expect("quote exposes the affordability blocker");
+
+    assert_eq!(quote.mobilization_electricity_required, 52);
+    assert_eq!(quote.mobilization_electricity_current, 0);
+    assert_eq!(quote.mobilization_electricity_after, -52);
+    assert_eq!(quote.mobilization_data_required, 38);
+    assert_eq!(quote.mobilization_data_current, 0);
+    assert_eq!(quote.mobilization_data_after, -38);
+    assert!(!quote.mobilization_affordable);
+    assert_eq!(quote.recommended_war_action, "gather_resources");
+    assert!(
+        quote
+            .why_this_war_is_worth_or_risky
+            .contains("mobilization")
+    );
+}
+
+#[test]
+fn war_declaration_quote_allows_an_exactly_affordable_winning_declaration() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+    world
+        .set_agent_resource_balance("a", ResourceKind::Electricity, 52)
+        .expect("seed exact electricity cost");
+    world
+        .set_agent_resource_balance("a", ResourceKind::Data, 38)
+        .expect("seed exact data cost");
+
+    let quote = world
+        .war_declaration_quote("a", "alliance.red", "alliance.blue", 10)
+        .expect("quote accepts exact affordability");
+
+    assert!(quote.mobilization_affordable);
+    assert_eq!(quote.mobilization_electricity_after, 0);
+    assert_eq!(quote.mobilization_data_after, 0);
+    assert_eq!(quote.recommended_war_action, "declare_war");
+}
+
+#[test]
+fn war_declaration_quote_fails_closed_when_the_m5_war_reducer_is_active() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+    world
+        .install_m5_gameplay_bootstrap_modules("bootstrap")
+        .expect("install M5 war reducer");
+
+    assert_eq!(
+        world.war_declaration_quote("a", "alliance.red", "alliance.blue", 3),
+        Err("war_declaration_quote_missing")
+    );
+}
+
+#[test]
+fn war_declaration_quote_waits_for_a_related_queued_declaration() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+    seed_declaration_resources(&mut world);
+    world.submit_action(Action::DeclareWar {
+        initiator_agent_id: "a".to_string(),
+        war_id: "war.quote.pending".to_string(),
+        aggressor_alliance_id: "alliance.red".to_string(),
+        defender_alliance_id: "alliance.blue".to_string(),
+        objective: "hold belt".to_string(),
+        intensity: 3,
+    });
+
+    let quote = world
+        .war_declaration_quote("a", "alliance.red", "alliance.blue", 3)
+        .expect("queued action remains an advisory blocker");
+
+    assert_eq!(quote.conflict_status, "pending_conflict");
+    assert_eq!(quote.recommended_war_action, "wait");
+    assert!(
+        quote
+            .why_this_war_is_worth_or_risky
+            .contains("queued DeclareWar")
+    );
 }
 
 #[test]
