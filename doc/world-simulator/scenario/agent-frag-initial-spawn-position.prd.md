@@ -1,7 +1,7 @@
 # oasis7 Simulator：Agent Frag 初始站位优化（设计文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 5
 
@@ -45,7 +45,7 @@
 - Edge case: 若首局推荐采集目标但缺少材质预期或第一工业目标关联，标记为 `starter_frag_hint_missing`；该问题属于玩家侧引导可读性，不改变出生或采矿规则。
 
 ## 5. Risks & Roadmap
-- FSP1：设计文档与项目管理文档落地。
+- FSP1：设计文档落地。
 - FSP2：初始化逻辑改造（frag 优先 + 站位偏移）。
 - FSP3：测试回归、文档收口与开发日志更新。
 
@@ -56,5 +56,5 @@
 - 若只优化出生距离而不解释材质预期，开局采集会从“选择第一份原料路线”退化为“点击最近碎片”。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。
 - DEC-FSP-001: frag 优先出生是路径缩短与可见性优化，不等于自动完成玩家理解；首局推荐 frag 必须解释材质预期和第一工业目标关联。

@@ -6,11 +6,11 @@
 
 ## 目标
 - 建立 world-runtime 模块设计主文档，统一需求边界、技术方案与验收标准。
-- 确保 world-runtime 模块后续改动可追溯到 PRD-ID、任务和测试。
+- 确保 world-runtime 模块后续改动可追溯到 PRD-ID、GitHub task、测试和 Git history。
 
 ## 范围
 - 覆盖 world-runtime 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/world-runtime/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 GitHub task 与测试证据的可追溯映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ### 工业 Profile 与阶段执行语义
@@ -36,7 +36,7 @@
 
 ## 接口 / 数据
 - PRD 主入口: `doc/world-runtime/prd.md`
-- 项目管理入口: `doc/world-runtime/project.md`
+- 当前任务状态与阻断: 对应 GitHub task issue / Project
 - 历史根入口: root world-runtime project legacy redirect shell 已删除，不作为当前执行入口。
 - 文件级索引: `doc/world-runtime/prd.index.md`
 - 追踪主键: `PRD-WORLD_RUNTIME-xxx`
@@ -76,7 +76,7 @@
   - SC-13: WASM 构建、同步、CI summary 与 builder image 的 operator env key 必须统一使用 `OASIS7_WASM_*`；repo-owned 脚本、容器镜像与 build suite 不得再接受任何旧品牌前缀作为有效运行入口。
   - SC-14: builtin wasm materializer、release manifest fallback 与 DistFS root override 的 runtime env key 必须统一使用 `OASIS7_BUILTIN_WASM_*`；运行时取件/抓取/回退链路不得再接受任何旧品牌前缀作为有效运行入口。
   - SC-15: `compile_module_artifact_from_source` 及其 source package 限额/超时控制必须统一使用 `OASIS7_MODULE_SOURCE_*`；dev/test source compile 路径、simulator/runtime 回归与沙箱环境隔离断言不得再接受任何旧品牌前缀作为有效运行入口。
-  - SC-16: `doc/world-runtime/project.md` 等模块主入口中的当前 cargo 回归命令、crate 路径与产物文件清单必须统一使用 `oasis7*` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试语义中。
+- SC-16: runtime 文档中的当前 cargo 回归命令、crate 路径与产物文件清单必须统一使用 `oasis7*` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试语义中。
   - SC-17: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须显式暴露节点网络流量观测快照，至少区分 `udp_gossip` 与 `libp2p_replication` 两条链路，并标明统计范围是否包含 transport/control-plane 开销。
   - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回“缺少 handler / 不支持该协议”签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避；业务语义层的 `ErrUnsupported` 不计入该退避条件，以避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
   - SC-19: `libp2p_net` peer discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 请求必须对同一 peer 保持短时协议级冷却，压制 DHT/routing/rendezvous/connection-established 事件造成的高频重复取件，同时保留单次 cached-peer-record 请求链里的多 proxy fallback。
@@ -160,7 +160,7 @@
 | chain-linked gameplay 提交 | `GameplayActionRequest`、auth proof、nonce、consensus `action_id`、`committed_height` | viewer action 通过 `/v1/chain/gameplay/submit` 入链，提交成功只返回 consensus action id，不直接改本地 viewer state | `requested -> submitted -> committed_visible/rejected` | viewer 只在 committed execution state 产生新 logical time/event 后更新快照 | 需要 viewer auth proof 且 chain runtime 必须拒绝 nonce replay |
 - Acceptance Criteria:
   - AC-1: world-runtime PRD 覆盖内核、WASM、治理、安全四条主线。
-  - AC-2: world-runtime project 文档任务映射 PRD-ID 并维护状态。
+  - AC-2: GitHub task 将 PRD-ID、任务状态与验收证据关联；专业文档只维护现行技术合同。
   - AC-3: 与 `doc/world-runtime/runtime/runtime-integration.md`、`doc/world-runtime/wasm/wasm-interface.md` 等分册一致。
   - AC-4: 关键行为变更同步更新测试方案与执行记录。
   - AC-5: 内置 WASM 工件 `sha256` 清单与 identity manifest 保持一致，CI 不得出现 hash token 漂移。
@@ -174,7 +174,7 @@
   - AC-13: `runtime/builtin_wasm_materializer`、`runtime/m{1,4,5}_builtin_wasm_artifact`、`runtime/world/release_manifest` 及对应测试必须只读取 `OASIS7_BUILTIN_WASM_DISTFS_ROOT`、`OASIS7_BUILTIN_WASM_FETCHER`、`OASIS7_BUILTIN_WASM_FETCH_URLS`、`OASIS7_BUILTIN_WASM_COMPILER`、`OASIS7_BUILTIN_WASM_FETCH_TIMEOUT_MS`；builtin wasm 取件、抓取、编译 fallback 与 release manifest 生产策略故障签名必须证明旧品牌前缀已失效。
   - AC-14: `runtime/module_source_compiler` 与 `runtime/simulator` 对应回归必须只读取 `OASIS7_MODULE_SOURCE_COMPILER`、`OASIS7_MODULE_SOURCE_MAX_FILES`、`OASIS7_MODULE_SOURCE_MAX_FILE_BYTES`、`OASIS7_MODULE_SOURCE_MAX_TOTAL_BYTES`、`OASIS7_MODULE_SOURCE_COMPILE_TIMEOUT_MS`；source compile 成功、旧 alias 已移除与 sandbox env 隔离断言必须覆盖当前前缀。
   - AC-15: `/v1/chain/status` 必须输出 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组快照；其中 UDP gossip 至少提供按消息种类聚合的入/出站 datagram 与 payload bytes，libp2p replication 至少提供 gossip/request/response 的入/出站 payload counters、按 topic/protocol 聚合明细，以及 `scope`/排除项说明。
-  - AC-16: `doc/world-runtime/project.md` 中当前 `cargo test -p` 命令、crate 路径与产物清单必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试输入中。
+  - AC-16: runtime 文档中的当前 `cargo test -p` 命令、crate 路径与产物清单必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试输入中。
   - AC-17: `World::new()` / `RuntimeWorld::new()` 所服务的生产或默认运行入口不得依赖额外 `enable_production_release_policy()` 调用才能满足 hardened policy；若某入口必须放宽，必须以显式 dev/test 配置进入并留下验证证据。
   - AC-18: `state.apply_domain_event*`、preflight preview 与恢复链路中不得因“prechecked / must be handled”类假设触发 panic；同类异常必须落为可断言的 `WorldError`，并有损坏事件回归样本覆盖。
   - AC-19: `action_to_event_*`、`apply_domain_event_*`、`state.rs` 与其他 runtime 热路径 Rust 文件不得超过 1200 行；拆分后需保留现有 determinism / replay / persistence 回归覆盖，不得以降低测试强度换取拆分完成。

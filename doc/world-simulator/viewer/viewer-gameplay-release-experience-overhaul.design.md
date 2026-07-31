@@ -1,7 +1,7 @@
 # Viewer 发行体验总改造设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md`
+- 历史阶段实施与验收记录：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 Viewer 从调试工具向可发行游戏前端切换的总体方案：以 Player/Director 双模式为主轴，重排默认面板、目标提示和反馈层，让世界画面与玩家目标成为默认焦点。

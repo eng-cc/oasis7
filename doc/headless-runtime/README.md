@@ -10,12 +10,12 @@
 ## 入口
 - PRD: `doc/headless-runtime/prd.md`
 - 设计总览: `doc/headless-runtime/design.md`
-- 标准执行入口: `doc/headless-runtime/project.md`
+- 标准执行入口: `doc/headless-runtime/prd.md`
 - 文件级索引: `doc/headless-runtime/prd.index.md`
 
 ## 从这里开始
 - 想先确认 headless-runtime 当前职责、生命周期边界与发布接口：先读 `doc/headless-runtime/prd.md`。
-- 想看这个模块还有没有活跃执行项、最近一次收口了什么：先读 `doc/headless-runtime/project.md`。
+- 想看这个模块还有没有活跃执行项、最近一次收口了什么：先读 `doc/headless-runtime/prd.md`。
 - 想理解旧 `nonviewer` 命名及已退役专题的追溯边界：先读上面的“说明”，再读 `doc/headless-runtime/nonviewer/README.md`。
 - 想查生命周期 / 鉴权一致性自检入口：先读 `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`。
 - 想查长稳归档、事故追溯或 release gate 对接模板：进入 `doc/headless-runtime/templates/`。
@@ -33,7 +33,7 @@
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
 - 其余专题文档按主题下沉到 `nonviewer/`、`checklists/`、`templates/`。
-- 2026-03-11 模块状态 closure / handoff root 文档已退役删除；当前状态与下一任务入口以 `doc/headless-runtime/project.md` 为准。
+- 2026-03-11 模块状态 closure / handoff root 文档已退役删除；当前状态与下一任务入口以 `doc/headless-runtime/prd.md` 为准。
 
 ## 维护约定
 - 无界面运行链路行为变更，优先回写 `prd.md` 与 `project.md`。

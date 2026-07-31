@@ -135,8 +135,9 @@ EOF
 # Git for Windows emits C:/... worktree porcelain while Python path resolution
 # preserves a caller/task-truth C:\\... spelling. Both spellings identify the
 # same worktree and must be accepted before terminal cleanup proceeds.
-WINDOWS_WORKTREE="$(cygpath -w "$WORKTREE")"
-python3 - "$MAPPING" "$TASK_UID" "$WINDOWS_WORKTREE" "$BRANCH" <<'PY'
+if command -v cygpath >/dev/null 2>&1; then
+  WINDOWS_WORKTREE="$(cygpath -w "$WORKTREE")"
+  python3 - "$MAPPING" "$TASK_UID" "$WINDOWS_WORKTREE" "$BRANCH" <<'PY'
 import json,sys
 path, uid, worktree, branch = sys.argv[1:]
 json.dump({"version": 1, "tasks": {uid: {
@@ -145,15 +146,16 @@ json.dump({"version": 1, "tasks": {uid: {
     "canonical_worktree": worktree, "task_branch": branch, "default_branch": "main",
 }}}, open(path, "w", encoding="utf-8"))
 PY
-if ! TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
-  --repo-root "$REPO" --worktree "$WINDOWS_WORKTREE" --branch "$BRANCH" \
-  --main-ref main --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
-  --main-sync-receipt "$MAIN_SYNC_RECEIPT" \
-  --dry-run >"$TMPDIR/windows-path.out" 2>"$TMPDIR/windows-path.err"; then
-  cat "$TMPDIR/windows-path.err" >&2
-  exit 1
+  if ! TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
+    --repo-root "$REPO" --worktree "$WINDOWS_WORKTREE" --branch "$BRANCH" \
+    --main-ref main --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+    --main-sync-receipt "$MAIN_SYNC_RECEIPT" \
+    --dry-run >"$TMPDIR/windows-path.out" 2>"$TMPDIR/windows-path.err"; then
+    cat "$TMPDIR/windows-path.err" >&2
+    exit 1
+  fi
+  grep -F "worktree remove" "$TMPDIR/windows-path.out" >/dev/null
 fi
-grep -F "worktree remove" "$TMPDIR/windows-path.out" >/dev/null
 
 printf 'dirty\n' >"$WORKTREE/untracked.txt"
 if TEST_HEAD_OID="$REVIEWED_HEAD" PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \

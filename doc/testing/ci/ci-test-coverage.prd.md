@@ -1,7 +1,7 @@
 # oasis7: 测试覆盖与 CI 扩展
 
 - 对应设计文档: `doc/testing/ci/ci-test-coverage.design.md`
-- 对应项目管理文档: `doc/testing/ci/ci-test-coverage.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 4
 

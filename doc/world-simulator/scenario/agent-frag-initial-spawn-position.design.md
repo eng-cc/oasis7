@@ -1,7 +1,7 @@
 # oasis7 Simulator：Agent Frag 初始站位优化（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义 Agent Frag 初始站位优化设计，统一新生 Agent 在碎片场景中的出生位置选择、避让规则与可重复性。

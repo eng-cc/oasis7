@@ -1,7 +1,7 @@
 # oasis7 Runtime：可兑现节点资产与电力兑换闭环设计
 
 - 对应需求文档: `doc/p2p/node/node-redeemable-power-asset.prd.md`
-- 对应项目管理文档: `doc/p2p/node/node-redeemable-power-asset.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义可兑现节点资产与电力兑换主闭环，统一节点资产记录、兑换条件、结算入口与兑现边界。

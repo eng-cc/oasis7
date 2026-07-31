@@ -6,7 +6,7 @@
 - Owner Role: `qa_engineer`
 - Review Role: `producer_system_designer`
 - Scope: `TASK-GAME-051` / `TASK-GAMEPLAY-AGC-013` for `PRD-GAME-011`
-- Topic: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
+- Topic: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
 - Upstream Runtime Closure: `TASK-GAME-049`
 - Upstream LiveOps Closure: `TASK-GAME-050`
 

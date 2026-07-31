@@ -1,7 +1,7 @@
 # Viewer Chat Web IME EGUI 输入桥接设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.project.md`
+- 历史实施与 task 状态：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 wasm Viewer 中 DOM IME 组合事件到 `egui::Event` 的桥接路径，通过隐藏 HTML input 与桥接资源补齐 `bevy_egui` 在 Web 中文输入上的能力缺口。

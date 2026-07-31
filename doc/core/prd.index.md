@@ -7,12 +7,12 @@
 ## 入口
 - 模块 PRD：`doc/core/prd.md`
 - 模块设计总览：`doc/core/design.md`
-- 模块标准执行入口：`doc/core/project.md`
+- 可变执行真值：GitHub task issue evidence comments
 
 ## 首读分流
 - 想先回答 core 模块在管什么、哪些口径是全局唯一真值：先读 `doc/core/prd.md`
-- 想先回答当前在推进什么、最近完成了什么、下一步是什么：先读 `doc/core/project.md`
-- 想确认跨模块优先级规则：读 `doc/core/prd.md`；想确认当前执行任务与下一步：读 `doc/core/project.md`
+- 想先回答当前在推进什么、最近完成了什么、下一步是什么：进入对应 GitHub task issue evidence comments。
+- 想确认跨模块优先级规则：读 `doc/core/prd.md`；想确认当前执行任务与下一步：进入对应 GitHub task issue evidence comments。
 - 想直接进入玩家访问模式 / execution lane 的产品契约：先读 `doc/product/player-entry-distribution/prd.md`
 - 想直接进入统一持久大世界默认产品模型与术语契约：先读 `doc/product/world-infrastructure/prd.md`
 - 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需读 Git history
@@ -26,7 +26,7 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| core 根入口 | 动态 | 项目级总览、设计、执行台账与索引；产品契约从 `doc/product/` 对应模块文档树进入 |
+| core 根入口 | 动态 | 项目级总览、设计与索引；可变执行台账在 GitHub task issue evidence comments，产品契约从 `doc/product/` 对应模块文档树进入 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
 
@@ -41,14 +41,14 @@
 - 完整专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/core/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的活跃专题三件套；已迁入产品层的主题从 `doc/product/README.md` 进入。
+- 纳入规则：纳入 `doc/core/*.prd.md` 与同名 `*.design.md` 的活跃专题；已迁入产品层的主题从 `doc/product/README.md` 进入。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 cross-module 入口，可在“活跃补充文档”区定向列出，但不并入 review / template / checklist 清单。
 - 排除规则：不纳入 Git history、`doc/core/templates/**`、`doc/core/checklists/**` 与 `doc/devlog/**` 的非三件套材料。
 - 按需进入：ROUND 审查、go/no-go 留痕、采证板、模板与 checklist 继续保留可检索性；除非重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 
 ## 完整活跃专题清单
 
-core 根目录当前无独立活跃专题三件套。跨模块治理规则进入 `doc/core/prd.md`，当前任务进入 `doc/core/project.md`，产品承诺进入 `doc/product/` 稳定文档树。
+core 根目录当前无独立活跃专题三件套。跨模块治理规则进入 `doc/core/prd.md`，当前任务进入 GitHub task issue evidence comments，产品承诺进入 `doc/product/` 稳定文档树。
 
 ## 审计 / 模板 / 清单补充入口
 | 文档路径 | 类型 | 用途 |
@@ -60,7 +60,7 @@ core 根目录当前无独立活跃专题三件套。跨模块治理规则进入
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 文档配对规则：`*.prd.md` 与同名 `*.design.md`；可变任务状态和执行历史只在 GitHub task issue evidence comments。
 - 玩家访问模式与统一持久大世界术语已收口到产品层对应模块 PRD；已完成的一次性 docs hub 同步专题和 2026-03 release-candidate 根目录三件套不再作为活跃专题入口。
 - 2026-03 core 根目录 release-candidate 三件套与一次性 producer/QA/LiveOps handoff 文件已全量退役删除；当前追溯以 Git history、GitHub task issue evidence comments 与 pre-PR local role review evidence 为准，其中 TASK-CORE-005 ROUND 收口从 Git history 进入。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。

@@ -1,7 +1,7 @@
 # Viewer 右侧 2D UI 迁移到 bevy_egui（SidePanel）设计
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-egui-right-panel.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-egui-right-panel.project.md`
+- 历史迁移、截图与 task 状态：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -64,4 +64,4 @@
   - 缓解：使用 EGUI 可折叠分组与滚动区域，避免固定高度截断。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- EGUI 遗留 surface 的实现历史、截图和 task 状态由 GitHub task issue evidence 追溯；它们不定义当前 SolidJS 主入口。

@@ -7,7 +7,7 @@
 ## 入口
 - 模块 PRD：`doc/headless-runtime/prd.md`
 - 模块设计总览：`doc/headless-runtime/design.md`
-- 模块标准执行入口：`doc/headless-runtime/project.md`
+- 模块标准执行入口：`doc/headless-runtime/prd.md`
 
 当前没有独立的活跃专题三件套。鉴权、防重放、长稳运行与冷归档合同已收敛到模块根 `prd.md` / `design.md` / `project.md`；检查与事故记录继续使用 `checklists/`、`templates/`。
 

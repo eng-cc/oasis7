@@ -1,7 +1,7 @@
 # oasis7 三节点运维观测合同
 
 - 对应设计文档: `doc/p2p/node/node-triad-operations-observability.design.md`
-- 对应项目管理文档: `doc/p2p/node/node-triad-operations-observability.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 权威边界
 

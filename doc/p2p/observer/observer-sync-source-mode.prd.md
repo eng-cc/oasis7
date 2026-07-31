@@ -1,7 +1,7 @@
 # oasis7 Runtime：Observer 同步源策略化
 
 - 对应设计文档: `doc/p2p/observer/observer-sync-source-mode.design.md`
-- 对应项目管理文档: `doc/p2p/observer/observer-sync-source-mode.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 5
 
@@ -45,7 +45,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/observer/observer-sync-source-mode.prd.md`
-  - `doc/p2p/observer/observer-sync-source-mode.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。

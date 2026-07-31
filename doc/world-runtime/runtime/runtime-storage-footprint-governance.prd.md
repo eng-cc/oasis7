@@ -1,7 +1,7 @@
 # oasis7 Runtime：执行桥接与运行态存储体积治理
 
 - 对应设计文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md`
-- 对应项目管理文档: `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留 replay、checkpoint、GC、恢复和验证合同。
 
 审计轮次: 4
 

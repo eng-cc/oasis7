@@ -1,7 +1,7 @@
 # oasis7 Runtime：Agent 默认模块体系（Body/Power/Sense/Move/Memory/Storage）
 
 - 对应设计文档: `doc/world-runtime/module/agent-default-modules.design.md`
-- 对应项目管理文档: `doc/world-runtime/module/agent-default-modules.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 4
 

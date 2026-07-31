@@ -1,7 +1,7 @@
 # Gameplay 区域基础设施 micro_depot 合同 PRD
 
 - 对应设计文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 1
 
@@ -21,7 +21,7 @@
 
 - PRD 主入口: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 设计细节: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md`
-- 项目执行: `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.project.md`
+- 当前执行: 对应 GitHub Project task 与 issue evidence comments
 - 根 baseline: `doc/game/prd.md` / `PRD-GAME-016`
 - 关键 runtime 数据: `RegionalInfrastructure`, `MicroDepotEvalInput`, `MicroDepotProposal`, `MicroDepotServiceApplied`
 - 关键 player-facing 数据: install quote, upkeep state, service radius, before/after preview, blocker, receipt, module evidence
@@ -36,7 +36,7 @@
 - M3: Viewer / pure API / agent surfaces expose quote, receipt, module evidence and next useful action.
 - M4: QA smoke proves one repair/logistics action becomes cheaper, faster or less risky because of depot, while remaining blocker is visible.
 
-M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段变化或公开 claim。任何当前状态只能由 `doc/game/project.md` 的活跃执行/阻断、同一候选的新鲜专业证据与根 `README.md` 的统一 claim envelope 共同确认；本 topic PRD 及历史或局部样本不能代签。
+M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段变化或公开 claim。任何当前状态只能由 GitHub Project task truth、同一候选的新鲜专业证据与根 `README.md` 的统一 claim envelope 共同确认；本 topic PRD 及历史或局部样本不能代签。
 
 ## 风险
 

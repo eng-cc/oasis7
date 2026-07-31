@@ -1,7 +1,7 @@
 # 游戏可玩性设计总纲 v0.1设计
 
 - 对应需求文档: `doc/game/gameplay/gameplay-top-level-design.prd.md`
-- 对应项目管理文档: `doc/game/gameplay/gameplay-top-level-design.project.md`
+- 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 ## 1. 设计定位
 定义 Gameplay 专题设计，统一玩法循环、运行时/治理边界、玩家反馈与发布验收口径。

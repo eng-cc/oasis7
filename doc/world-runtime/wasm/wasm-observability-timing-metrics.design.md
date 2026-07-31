@@ -1,12 +1,16 @@
 # oasis7 Runtime：WASM 可观测性与耗时指标设计
 
 - 对应需求文档: `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 审计轮次: 1
 
 ## 1. 设计定位
 本设计把 WASM 体系里“只能靠 ignored perf probe 和临时日志回答”的性能问题，收敛为正式 runtime 观测面。目标不是替代本地 benchmark，而是提供一条长期可复用的 `build -> executor -> router -> status -> summary` 证据链，让 release candidate、CI incident 与节点侧热点都用同一套字段归因。
+
+实时样本、release candidate 结论和任务推进状态不属于本设计；它们由 GitHub
+task issue / Project 维护。稳定 schema、边界和验证入口由本文、PRD 与
+[`evidence.md`](evidence.md)共同承接。
 
 ## 2. 现状盘点
 

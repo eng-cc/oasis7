@@ -3,7 +3,7 @@
 > 历史整合说明：本专题整合 `distfs-production-hardening-phase1` 至 `phase9`（PRD-P2P-MIG-067..075）的已完成阶段。它是这些阶段的稳定专业权威与追溯入口；历史完成不构成部署、恢复、公开网络或 release readiness 结论。
 
 - 对应设计文档：`doc/p2p/distfs/distfs-production-hardening.design.md`
-- 对应项目记录：`doc/p2p/distfs/distfs-production-hardening.project.md`
+- 对应项目记录：GitHub Issue / GitHub Project
 - 分布式 provider 选择、复制维护与 NodeRuntime 最佳努力轮询的现行合同：`doc/p2p/distfs/distfs-distributed-resilience.prd.md`
 - 模块/真实环境 claim boundary：`testing-manual.md#s9a链上大世界状态底座自闭环`
 
@@ -66,7 +66,7 @@
 ## 已吸收的早期基础合同
 
 - `PRD-P2P-MIG-080` 的标准 FileStore I/O 已由“本地索引完整性”段按当前实现承接；旧文件的无 blob 回收说法已纠正。
-- `PRD-P2P-MIG-059/060` 的 builtin WASM artifact hash/hydrate/loader 合同已迁入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.{prd,design,project}.md`。反馈账本的作者签名、append-only、tombstone、审计与限流继续由 `distfs-feedback-ledger-and-replication` 拥有，不属于 builtin artifact 权限。
+- `PRD-P2P-MIG-059/060` 的 builtin WASM artifact hash/hydrate/loader 合同已迁入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.{prd,design}.md`。反馈账本的作者签名、append-only、tombstone、审计与限流继续由 `distfs-feedback-ledger-and-replication` 拥有，不属于 builtin artifact 权限。
 - 历史 source triplet 的任务完成态只从 Git history 与 GitHub task evidence 追溯，不是当前 readiness 证据。
 
 ## 风险、运维、证据与非 readiness

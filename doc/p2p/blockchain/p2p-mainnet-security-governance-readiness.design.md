@@ -1,7 +1,7 @@
 # 主网安全、治理与创世就绪度设计
 
 - 对应需求文档：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
-- 对应项目管理文档：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.project.md`
+- 对应项目管理文档：GitHub Issue / GitHub Project
 
 ## 设计原则
 

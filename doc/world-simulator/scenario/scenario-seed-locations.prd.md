@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景种子化地点生成（设计文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/scenario-seed-locations.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/scenario-seed-locations.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 5
 
@@ -81,4 +81,4 @@
 - 若后续需要精细布局，可能需要再引入“受限随机 + 局部手工锚点”混合方案。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。

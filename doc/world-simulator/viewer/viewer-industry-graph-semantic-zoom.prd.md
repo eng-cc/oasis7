@@ -66,4 +66,4 @@
 - 文本兼容风险：旧文案字段迁移到图谱后可能影响既有断言，需要同步更新测试。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史实施与验证记录由 GitHub task issue evidence 维护，保持原文约束语义不变。

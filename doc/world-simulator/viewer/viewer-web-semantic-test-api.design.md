@@ -1,7 +1,7 @@
 # Viewer Web 语义测试 API 设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-web-semantic-test-api.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-semantic-test-api.project.md`
+- 历史 API 实施与验证记录：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 Web Viewer 面向自动化的语义测试 API、观测字段与步进控制边界。
@@ -29,4 +29,4 @@
 
 ## 5. 设计演进计划
 - 先完成 Design 补齐与互链回写。
-- 再沿项目管理文档推进实现与验证。
+- 后续实现与验证以新建 GitHub-backed task、当前代码和本合同为准。

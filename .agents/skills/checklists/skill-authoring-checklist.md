@@ -3,7 +3,7 @@
 ## Scope Fit
 
 - [ ] 这是 repo-owned / 明确场景专属能力，而不是一次性 task 复盘
-- [ ] 这份内容更适合做 skill，而不是写进 `AGENTS.md`、模块 `prd.md` / `project.md`、handoff 或脚本校验
+- [ ] 这份内容更适合做 skill，而不是写进 `AGENTS.md`、模块 PRD/design/evidence、GitHub-backed task truth、handoff 或脚本校验
 
 ## Frontmatter
 

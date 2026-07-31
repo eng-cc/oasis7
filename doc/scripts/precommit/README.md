@@ -19,7 +19,7 @@ This page is the first-read router for `doc/scripts/precommit/`; it does not dup
 | How do I repair a formatting or explicit-validation failure? | `pre-commit.prd.md` plus `scripts/fix-precommit.sh` |
 | What does each CI tier cover? | `doc/testing/ci/ci-tiered-execution.prd.md` plus `scripts/ci-tests.sh` |
 | What was completed for this topic? | `pre-commit.project.md` |
-| Where is scripts-module scope or current task status? | `doc/scripts/prd.md` and `doc/scripts/project.md` |
+| Where is scripts-module scope or current task status? | `doc/scripts/prd.md` and `doc/scripts/prd.md` |
 
 ## Maintenance
 

@@ -1,7 +1,7 @@
 # Viewer Minimal System Demo 设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-minimal-system.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-minimal-system.project.md`
+- 历史 demo 实施与验证记录：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义最小化 Viewer Demo 数据生成方案：通过一个确定性 CLI 生成 `snapshot.json` + `journal.json`，让新用户可以低摩擦完成“生成数据 -> 启动 server -> 打开 UI”的闭环。

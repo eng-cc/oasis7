@@ -1,7 +1,7 @@
 # oasis7 Runtime：零信任多节点治理与签名加固（2026-02-26）
 
 - 对应设计文档: `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md`
-- 对应项目管理文档: `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留治理、签名与原子 apply 合同。
 
 审计轮次: 4
 

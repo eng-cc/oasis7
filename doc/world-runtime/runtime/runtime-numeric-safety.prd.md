@@ -1,7 +1,7 @@
 # Runtime 数值安全与原子状态转移契约
 
 - 对应设计文档：`doc/world-runtime/runtime/runtime-numeric-safety.design.md`
-- 对应项目文档：`doc/world-runtime/runtime/runtime-numeric-safety.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留稳定数值契约及实现锚点。
 - 专业权威：`runtime_engineer`
 - 吸收范围：已完成的 numeric-correctness phase 1–15 与 infinite-sequence rollover 专题。
 
@@ -48,12 +48,12 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 - 涉及 durable write 的路径必须验证失败前未写入或写入事务整体回滚。
 - 涉及 replay/recovery 的路径必须验证拒绝结果可观测，且不会生成新的 committed history。
 - rollover 必须验证边界分配、snapshot roundtrip 与缺失 era 字段的 legacy load；它只消除溢出失效，纯 `u64` ID 在不同 era 极端远期仍可能复用，不能表述为全链路复合 ID 唯一性。
-- 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design/project 以及相关测试。
+- 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design、相关测试与 GitHub task evidence。
 
 ## 5. 里程碑
 
 - M1：phase 1–12 的永久语义与当前代码/测试 evidence 完成核对。
-- M2：稳定 PRD/design/project 三件套建立并接管专业权威。
+- M2：稳定 PRD/design 文档建立并接管专业权威。
 - M3：phase 1–12 的 36 个阶段源文件、活动索引和历史入口分两批完成原子迁移。
 - M4：文档治理、陈旧引用、定向测试和 frozen-head review 通过。
 

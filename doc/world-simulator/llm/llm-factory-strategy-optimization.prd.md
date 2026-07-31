@@ -1,7 +1,7 @@
 # LLM 工厂闭环策略稳定性优化（llm_bootstrap）
 
 - 对应设计文档: `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-factory-strategy-optimization.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 审计轮次: 5
 
@@ -228,4 +228,8 @@
 - 可观测性噪声风险：回执过多可能污染 prompt；通过仅在“决策类型发生变化”时回灌降低噪声。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+
+- 本文记录可复核的策略/协议约束和验证方法；历史执行任务、状态与
+  原始运行记录由对应 GitHub task evidence 与 Git history 追溯。
+- 离线 mock 回归和单次在线抽样分别证明其明确覆盖的行为，不能彼此
+  替代，也不能单独证明跨 provider 稳定性、成本边界或默认启用资格。

@@ -1,8 +1,8 @@
 # 文档分工与组织规范正文（2026-03-09）
 
 - 对应需求文档: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
-- 对应项目管理文档（当前仓库文件）: `doc/engineering/doc-governance/doc-structure-standard.project.md`
-- 规范目标命名: `<topic>.project.md`
+- 历史执行记录: `doc/engineering/doc-governance/doc-structure-standard.prd.md`（只读历史）
+- 当前任务追踪: GitHub Issue（`Task UID` + evidence comments）与关联 GitHub Project item
 
 ## 1. 规范定位
 本规范是仓库 `doc/` 文档树的顶层组织约定，用于回答两个问题：
@@ -27,14 +27,14 @@
 推荐职责后缀如下：
 - `*.prd.md`：Why / What / Done
 - `*.design.md`：How / Structure / Contract
-- `*.project.md`：How / When / Who
+- `*.project.md`：历史执行记录；不再用于新增任务、状态或证据
 - `*.manual.md`：How to use / verify
 - `*.runbook.md`：How to operate / release / recover
 - `README.md`：目录导航
 - `prd.index.md`：专题 PRD 索引
 
 ### 2.3 同对象优先同目录
-同一个对象的 PRD、Design、Project、Runbook、Manual 优先放在同一目录中，避免读者跨仓库跳转。
+同一个对象的 PRD、Design、Runbook、Manual 优先放在同一目录中，避免读者跨仓库跳转；可变任务记录直接留在 GitHub Issue/Project。
 
 ### 2.4 同专题优先同名
 同一专题的核心文档优先采用同一个 basename：

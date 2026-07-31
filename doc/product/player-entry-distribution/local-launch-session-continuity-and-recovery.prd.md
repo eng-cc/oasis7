@@ -5,7 +5,6 @@
 - 所属产品模块：玩家入口与发行
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 配对产品设计：[`local-launch-session-continuity-and-recovery.design.md`](local-launch-session-continuity-and-recovery.design.md)
-- 产品迁移追踪：[`local-launch-session-continuity-and-recovery.project.md`](local-launch-session-continuity-and-recovery.project.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 公开状态权威：[`README.md`](../../../README.md)
@@ -13,7 +12,7 @@
 
 本文承载受支持本地 Launcher 路径的会话连续性与恢复产品承诺。它补充[访问模式与发行就绪](access-modes-and-release-readiness.prd.md)，不创建第三种玩家访问模式，也不定义启动器、链运行时、持久化或 Web/WASM 的实现合同。
 
-配对文档的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md` 和 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.project.md`。
+配对产品设计的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md`。
 
 ## 1. 目标
 
@@ -79,7 +78,7 @@
 
 ## 7. 里程碑
 
-1. 形成稳定 PRD、design 与迁移 project，并由模块入口可达。
+1. 形成稳定 PRD 与 design，并由模块入口可达。
 2. 六组历史 Launcher 专题的产品语义归位，专业实现合同回填 current authority。
 3. 仅在专业后继和活跃引用修复后删除历史源文件。
 

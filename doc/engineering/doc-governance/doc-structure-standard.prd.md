@@ -1,17 +1,16 @@
 # 仓库文档分工与组织规范（2026-03-09）
 
 - 对应设计文档: `doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 对应项目管理文档: `doc/engineering/doc-governance/doc-structure-standard.project.md`
+- 历史执行记录: `doc/engineering/doc-governance/doc-structure-standard.prd.md`（只读历史）
 
 审计轮次: 4
 
-- 对应标准执行入口: `doc/engineering/doc-governance/doc-structure-standard.project.md`
-- 规范目标命名: `<topic>.project.md`
+- 当前执行入口: GitHub Issue（`Task UID` + evidence comments）与关联 GitHub Project item
 - 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
 
 ## 目标
 - 为仓库后续新增文档建立统一、可判定、可扩展的组织规范，解决“详细设计写在哪里、同类文档如何命名、专题目录如何收口”的问题。
-- 冻结“目录按对象（模块/专题/分册）、文件按职责（PRD/Design/Project/Runbook/Manual）”的顶层规则，避免后续文档持续分叉。
+- 冻结“目录按对象（模块/专题/分册）、文件按职责（PRD/Design/Runbook/Manual）”的顶层规则，并将可变任务记录统一到 GitHub Issue/Project。
 - 将详细设计文档从“命名随意、分散在 architecture/interface/manual 中”收敛为可发现、可引用、可复用的正式角色。
 
 ## 范围
@@ -27,7 +26,7 @@
 - 标准载体：
   - 需求与边界：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
   - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
-  - 执行状态（当前仓库文件）：`doc/engineering/doc-governance/doc-structure-standard.project.md`
+  - 执行状态（当前仓库文件）：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
   - 规范目标命名：`<topic>.project.md`
 
 ## 里程碑

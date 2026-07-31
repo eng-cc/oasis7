@@ -37,25 +37,25 @@
 - 产品正文不得与其他目录重复或混写；下方矩阵仅作为工程与治理模块导航，不是产品文档的替代入口。
 
 ## 工程模块入口矩阵
-| 模块 | PRD 主文档 | 设计主文档 | 项目管理文档 | 设计关注点 |
-| --- | --- | --- | --- | --- |
-| core | `doc/core/prd.md` | `doc/core/design.md` | `doc/core/project.md` | 项目全局总览与跨模块治理基线 |
-| engineering | `doc/engineering/prd.md` | `doc/engineering/design.md` | `doc/engineering/project.md` | 工程规范、质量门禁、文件治理 |
-| game | `doc/game/prd.md` | `doc/game/design.md` | `doc/game/project.md` | 玩法循环、规则层、发行可玩性 |
-| headless-runtime | `doc/headless-runtime/prd.md` | `doc/headless-runtime/design.md` | `doc/headless-runtime/project.md` | 无界面运行链路与生产稳定性 |
-| p2p | `doc/p2p/prd.md` | `doc/p2p/design.md` | `doc/p2p/project.md` | 网络、共识、分布式存储 |
-| playability_test_result | `doc/playability_test_result/prd.md` | `doc/playability_test_result/design.md` | `doc/playability_test_result/project.md` | 可玩性测试数据与收口闭环 |
-| readme | `doc/readme/prd.md` | `doc/readme/design.md` | `doc/readme/project.md` | 对外口径与文档入口一致性 |
-| scripts | `doc/scripts/prd.md` | `doc/scripts/design.md` | `doc/scripts/project.md` | 自动化脚本能力与维护规范 |
-| site | `doc/site/prd.md` | `doc/site/design.md` | `doc/site/project.md` | 站点体验、内容发布、SEO |
-| testing | `doc/testing/prd.md` | `doc/testing/design.md` | `doc/testing/project.md` | 分层测试体系与发布门禁 |
-| world-runtime | `doc/world-runtime/prd.md` | `doc/world-runtime/design.md` | `doc/world-runtime/project.md` | 运行时内核、WASM、治理与审计 |
-| world-simulator | `doc/world-simulator/prd.md` | `doc/world-simulator/design.md` | `doc/world-simulator/project.md` | 世界模拟、Viewer、LLM 与场景系统 |
+| 模块 | PRD 主文档 | 设计主文档 | 设计关注点 |
+| --- | --- | --- | --- |
+| core | `doc/core/prd.md` | `doc/core/design.md` | 项目全局总览与跨模块治理基线 |
+| engineering | `doc/engineering/prd.md` | `doc/engineering/design.md` | 工程规范、质量门禁、文件治理 |
+| game | `doc/game/prd.md` | `doc/game/design.md` | 玩法循环、规则层、发行可玩性 |
+| headless-runtime | `doc/headless-runtime/prd.md` | `doc/headless-runtime/design.md` | 无界面运行链路与生产稳定性 |
+| p2p | `doc/p2p/prd.md` | `doc/p2p/design.md` | 网络、共识、分布式存储 |
+| playability_test_result | `doc/playability_test_result/prd.md` | `doc/playability_test_result/design.md` | 可玩性测试数据与收口闭环 |
+| readme | `doc/readme/prd.md` | `doc/readme/design.md` | 对外口径与文档入口一致性 |
+| scripts | `doc/scripts/prd.md` | `doc/scripts/design.md` | 自动化脚本能力与维护规范 |
+| site | `doc/site/prd.md` | `doc/site/design.md` | 站点体验、内容发布、SEO |
+| testing | `doc/testing/prd.md` | `doc/testing/design.md` | 分层测试体系与发布门禁 |
+| world-runtime | `doc/world-runtime/prd.md` | `doc/world-runtime/design.md` | 运行时内核、WASM、治理与审计 |
+| world-simulator | `doc/world-simulator/prd.md` | `doc/world-simulator/design.md` | 世界模拟、Viewer、LLM 与场景系统 |
 
 ## 目录结构说明
 - `doc/<module>/prd.md`：模块设计主文档（唯一 PRD 入口）。
 - `doc/<module>/design.md`：模块总体设计入口（结构、分层、主链路，ROUND-006 逐步补齐）。
-- `doc/<module>/project.md`：模块任务拆解与执行状态。
+- GitHub Issue + Project：模块任务拆解、owner、状态、阻断与执行证据的唯一管理入口。
 - `doc/<module>/prd.index.md`：模块文件级 PRD 索引（活跃专题文档可达入口）。
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。

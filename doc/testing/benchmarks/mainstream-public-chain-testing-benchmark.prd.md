@@ -1,7 +1,7 @@
 # oasis7 主流公链测试体系对标与缺口矩阵
 
 - 对应设计文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md`
-- 对应项目管理文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 - 原始基准日期: `2026-03-24`
 
 审计轮次: 1
@@ -10,7 +10,7 @@
 > background and preserves the original 2026-03-24 benchmark history only. It
 > must not maintain current `shared_devnet`, `public_testnet`, `mainnet`, or
 > release status. Current network-tier truth lives in
-> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`.
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`.
 
 ## 1. Executive Summary
 - Problem Statement: oasis7 近几轮已经补齐签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已经开始做真实 governance registry import/audit/runbook，但团队仍缺一份“主流公链到底怎样分层测试、oasis7 当前已经覆盖到哪一层、还缺什么才能把 preview 做成更像主流链的工程体系”的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
@@ -72,7 +72,7 @@
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
-  - `doc/p2p/project.md`
+  - `GitHub Issue / GitHub Project`
 - Edge Cases & Error Handling:
   - 若引用“主流公链多客户端一致性测试”，必须同时说明 oasis7 当前是单实现栈，因此等价要求应落在 `独立 replay/verifier`、`跨 world/节点副本一致性` 与 `共享网络升级演练`，而不是伪造不存在的第二客户端。
   - 若 oasis7 某层已有命令，但没有固定成 release gate、没有周期执行、没有证据模板，则该层最多只能记为 `partial`。

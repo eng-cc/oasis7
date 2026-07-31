@@ -4,7 +4,7 @@
 
 ## 从这里开始
 - 想先回答 README 模块在管什么、哪些内容属于正式对外口径：`doc/readme/prd.md`
-- 想看当前执行任务、最新完成项与后续活跃动作：`doc/readme/project.md`
+- 想看当前执行任务、最新完成项与后续活跃动作：`doc/readme/prd.md`
 - 想按子域或文件名继续下钻，而不是从长名单里逐条找：`doc/readme/prd.index.md`
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：`doc/readme/governance/README.md`
 - 想先理解 README 与实现/流程缺口的主从关系，再按具体能力下钻：`doc/readme/gap/README.md`
@@ -13,7 +13,7 @@
 ## 入口
 - PRD: `doc/readme/prd.md`
 - 设计总览: `doc/readme/design.md`
-- 标准执行入口: `doc/readme/project.md`
+- 标准执行入口: `doc/readme/prd.md`
 - 文件级索引: `doc/readme/prd.index.md`
 
 ## 入口分工
@@ -51,4 +51,4 @@
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
-- 对外口径、运营路径或 README 状态同步规则变化时，优先更新 `doc/readme/prd.md` 与 `doc/readme/project.md`；高频入口变化时，再同步回写 `doc/readme/prd.index.md` 与相关子域入口（例如 `doc/readme/governance/README.md`、`doc/readme/production/README.md`）。
+- 对外口径、运营路径或 README 状态同步规则变化时，优先更新 `doc/readme/prd.md` 与 `doc/readme/prd.md`；高频入口变化时，再同步回写 `doc/readme/prd.index.md` 与相关子域入口（例如 `doc/readme/governance/README.md`、`doc/readme/production/README.md`）。

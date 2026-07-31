@@ -1,7 +1,7 @@
 # oasis7 Runtime：WASM Docker 确定性构建与工件治理管线
 
 - 对应设计文档: `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 审计轮次: 3
 
@@ -143,6 +143,12 @@
   - 风险-5（2026-03-18 记录，2026-03-31 已收口）: runtime 生产入口的“默认 hardened release policy”证据闭环已补齐；`release_default` chain runtime、viewer runtime_live bootstrap、governance_registry_import、reward runtime worker 与 execution_bridge load 路径均已默认绑定 hardened policy。后续风险转为新增 production-facing 入口时的回归防护，而非 WDBP-3 P0 阻塞。
 
 ## 6. Validation & Decision Record
+
+构建、identity、release-evidence 和节点 acceptance 的长期可复核入口见
+[`evidence.md`](evidence.md)。候选状态、任务拆解、CI run 的即时结果和
+阻塞项只由对应 GitHub task issue / Project 与 Git history 承接；它们不是本
+PRD 的版本化状态字段。
+
 - Test Plan & Traceability:
 
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |

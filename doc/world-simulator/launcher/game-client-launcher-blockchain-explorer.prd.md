@@ -3,7 +3,7 @@
 > 本文是启动器区块链浏览器的当前需求 authority。它收敛五组 2026-03/04 专题中已经实现或记录的只读查询、七个业务视图与状态呈现合同；本轮已完成语义回填和活跃引用修复，日期化源三件套随之退役删除，追溯使用 Git 与 GitHub task issue evidence。
 
 - 对应设计: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.design.md`
-- 对应项目: `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer.project.md`
+- 历史迁移、验收与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

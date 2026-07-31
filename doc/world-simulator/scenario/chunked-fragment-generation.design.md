@@ -1,7 +1,7 @@
 # oasis7 Simulator：分块世界生成与碎片元素/化合物池（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/chunked-fragment-generation.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/chunked-fragment-generation.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义分块世界生成与碎片元素/化合物池设计，让碎片世界生成具备分块组织、资源池配置与可复现行为。

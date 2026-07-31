@@ -1,7 +1,7 @@
 # Viewer WebSocket/HTTP Bridge 设计文档
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-websocket-http-bridge.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md`
+- 历史 bridge 实施与验证记录：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -63,4 +63,4 @@
   - 缓解：手册给出固定推荐端口组合与一键命令。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 当前 bridge 传输、断连清理和可见错误合同由本文及配对设计维护；历史实施与 Web 闭环证据由 GitHub task issue evidence 追溯。

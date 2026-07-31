@@ -1,7 +1,7 @@
 # oasis7 Runtime：节点贡献积分激励
 
 - 对应设计文档: `doc/p2p/node/node-contribution-points.design.md`
-- 对应项目管理文档: `doc/p2p/node/node-contribution-points.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 专业权威口径
@@ -50,7 +50,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/node/node-contribution-points.prd.md`
-  - `doc/p2p/node/node-contribution-points.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。

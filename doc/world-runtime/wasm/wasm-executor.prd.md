@@ -1,7 +1,7 @@
 # oasis7 Runtime：WASM 执行器接入（设计分册）
 
 - 对应设计文档: `doc/world-runtime/wasm/wasm-executor.design.md`
-- 对应项目管理文档: `doc/world-runtime/wasm/wasm-executor.project.md`
+- 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
 审计轮次: 4
 
@@ -141,6 +141,11 @@
 - ABI 变更导致兼容性破坏（需版本化接口）。
 
 ## 6. Validation & Decision Record
+
+执行器 ABI、资源限制、工件完整性和损坏恢复的稳定验证面见
+[`evidence.md`](evidence.md)。任务状态、实现批次和候选级结论由 GitHub
+task issue / Project 与 Git history 追溯，不能由本文代替。
+
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |

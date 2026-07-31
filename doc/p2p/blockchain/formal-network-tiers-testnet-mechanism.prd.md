@@ -1,7 +1,7 @@
 # oasis7 正式网络分层与 testnet 机制
 
 - 对应设计文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 2
 建档日期: 2026-05-14
@@ -47,7 +47,7 @@
 | `mainnet` policy | `visibility=public`、`value_semantics=production`、`faucet_mode=none`、`reset_policy=frozen`、`validator_admission=governance_registry_only` | 宣告正式价值网络 | `planned -> gated -> live` | 只有 `MAINNET-1~4`、frozen genesis、no-reset commitment 全部具备时才允许 | `producer_system_designer` 审批，`qa_engineer` 阻断 |
 | Claims gate | `allowed_claims/denied_claims/required_gates` | 根据 tier 决定允许哪些公开口径 | `draft -> enforced` | legacy `shared_devnet` 与 `public_testnet` 默认 deny `mainnet-grade live network` | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
-  - AC-1: 本专题必须落地 PRD / design / project，并接入 `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `testing-manual.md`。
+  - AC-1: 本专题必须落地 PRD / design；任务追溯写入 GitHub，并接入 `doc/p2p/prd.md`、GitHub Issue / GitHub Project、`doc/p2p/prd.index.md` 与 `testing-manual.md`。
   - AC-2: 本专题必须明确 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime network-tier 模型，且明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不是目标 test 环境，也不是玩家世界模型。
   - AC-3: `public_testnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`explorer_ref`、`faucet_ref`、`reset_policy`、`validator_admission`、`allowed_claims` 与 `denied_claims`。
   - AC-4: `mainnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`reset_policy=frozen`、`faucet_mode=none`、`validator_admission=governance_registry_only`，并把 `MAINNET-1~4` 写入 required gates。

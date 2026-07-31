@@ -1,7 +1,7 @@
 # oasis7 hosted_public_join 托管身份 / 托管密钥与邮箱登录
 
 - 对应设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 1
 建档日期: 2026-05-18
@@ -17,11 +17,11 @@
 ## 接口 / 数据
 - 主文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`
 - 设计文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md`
-- 项目管理文档: `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.project.md`
+- 项目管理文档: GitHub Issue / GitHub Project
 - 关键主键: `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref`
 
 ## 里程碑
-- M1 (2026-05-18): 专题 PRD / design / project 建档，冻结 hosted account、邮箱登录、device session、托管签名与自托管升级边界。
+- M1 (2026-05-18): 专题 PRD / design；任务追溯写入 GitHub 建档，冻结 hosted account、邮箱登录、device session、托管签名与自托管升级边界。
 - M2: 落地 hosted account 与 device session，清退浏览器 `localStorage privateKey` preview debt。
 - M3: 落地 custody sign API、step-up auth 与 external wallet bind / transfer-out。
 
@@ -40,7 +40,7 @@
   - SC-4: 高风险动作必须支持 `managed custody sign` lane，并由 step-up auth、风险策略和审计日志共同放行；`main_token_transfer` 不得再停留在“blocked，但没有目标方案”的状态。
   - SC-5: 玩家默认不需要保存或输入原始公私钥；如需自托管，必须走显式的 `bind external wallet` 或 `transfer-out to self-custody` 流程，而不是把托管私钥直接回流到浏览器。
   - SC-6: 本专题必须与 `PRD-P2P-023 hosted player access session auth` 和 `PRD-P2P-017 signer custody` 形成清晰边界：只覆盖 hosted player identity/custody，不覆盖 node、validator、governance signer 的生产托管。
-  - SC-7: `doc/p2p/prd.md`、`doc/p2p/project.md` 与本专题三件套完成映射，后续实现任务可直接挂到统一真值。
+  - SC-7: `doc/p2p/prd.md`、GitHub Issue / GitHub Project 与本专题三件套完成映射，后续实现任务可直接挂到统一真值。
   - SC-8: hosted account 中心化服务必须冻结至少 `dev/staging/production` 三层环境边界；登录投递、账户存储、强鉴权 signer、风控阈值、对外 claims 与验证命令不得跨层混用。
 
 ## 2. User Experience & Functionality
@@ -88,7 +88,7 @@
   - AC-6: 专题必须定义至少一个不回传托管私钥的 self-custody 升级路径。
   - AC-7: 本专题必须显式定义 `identity plane / custody plane / public player plane / private control plane` 的边界。
   - AC-8: 本专题必须包含 recovery、revocation、device loss、rate limit、duplicate account bind、step-up failure 的处理规则。
-  - AC-9: 本专题必须在 `doc/p2p/prd.md`、`doc/p2p/project.md` 和 `doc/p2p/prd.index.md` 建立映射。
+  - AC-9: 本专题必须在 `doc/p2p/prd.md`、GitHub Issue / GitHub Project 和 `doc/p2p/prd.index.md` 建立映射。
   - AC-10: 本专题必须保持当前对外阶段口径仍为 `limited playable technical preview`；文档不得把该方案误写成“已经实现”。
 
 ## 3. Technical Requirements

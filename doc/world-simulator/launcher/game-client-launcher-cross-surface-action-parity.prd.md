@@ -3,7 +3,7 @@
 本文承载 native 与 Web Launcher 在配置、设置、反馈与转账等受控动作上的当前专业边界。它不替代 runtime 的业务规则、WASM 平台契约、发行判断或历史任务证据。
 
 - 对应设计: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md`
-- 对应项目: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.project.md`
+- 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

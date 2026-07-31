@@ -3,12 +3,12 @@
 ## 入口
 - PRD: `doc/engineering/prd.md`
 - 设计总览: `doc/engineering/design.md`
-- 标准执行入口: `doc/engineering/project.md`
+- 标准执行入口: `doc/engineering/prd.md`
 - 文件级索引: `doc/engineering/prd.index.md`
 
 ## 从这里开始
 - 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
-- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/project.md`
+- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/prd.md`
 - 想按专题进入具体治理文档：`doc/engineering/prd.index.md`
 
 ## 模块职责

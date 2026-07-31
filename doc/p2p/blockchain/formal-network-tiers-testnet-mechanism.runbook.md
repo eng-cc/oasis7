@@ -2,7 +2,7 @@
 
 - 对应需求文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
 - 对应设计文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md`
-- 对应项目管理文档: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 1
 
@@ -174,7 +174,7 @@
 - 若节点曾通过手工 checkpoint/data copy 恢复，必须先隔离该状态，并重新走自动恢复或从当前 deployment truth 从零重建；否则不得作为 live-candidate、hosted-login 或 local test environment evidence。
 
 辅助检查：
-- `rg -n "public_testnet|ready_for_live_candidate|specified_skeleton_only" testing-manual.md doc/p2p/prd.md doc/p2p/project.md`
+- `rg -n "public_testnet|ready_for_live_candidate|specified_skeleton_only" testing-manual.md doc/p2p/prd.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
@@ -248,7 +248,7 @@
 ## 9. 回写要求
 每次正式推进 live candidate checklist，至少回写：
 - GitHub task issue evidence comments
-- `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.project.md`
+- GitHub Issue / GitHub Project task evidence
 - `testing-manual.md`（若 canonical 命令或 claim boundary 变化）
 - lane evidence 文档与 TSV
 

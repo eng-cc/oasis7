@@ -1,7 +1,7 @@
 # 客户端启动器跨表面受控动作设计
 
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md`
-> 对应项目: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.project.md`
+> 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 设计分层
 

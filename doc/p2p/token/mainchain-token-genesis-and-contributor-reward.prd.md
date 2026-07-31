@@ -1,7 +1,7 @@
 # oasis7 主链 Token 创世分配与早期贡献奖励口径
 
 - 对应设计文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-genesis-and-contributor-reward.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 3
 ## 1. Executive Summary
@@ -79,7 +79,7 @@
   - AC-10: `TIGR-4` 必须冻结当前执行路径为“`early_contributor_reward_reserve` 在 limited preview 期间保持 `protocol:early-contributor-reward` 多签治理执行，不并入 `ecosystem_pool`”；只有在真实奖励轮次、审计台账与治理成熟度都跑出来后，才允许另开专题重审是否合并。
   - AC-11: `TIGR-5` 必须输出正式执行清单，至少包含 `recipient_slot_id/controller_slot_id/signer_policy/runtime_target/allocated_amount_rule/freeze_status` 六类字段，并明确当前哪些 slot 仍待真实地址绑定。
   - AC-12: 创世金额换算必须固定为 runtime 真值：先按 `floor(initial_supply * ratio_bps / 10000)` 计算每个 bucket 的 `allocated_amount`，再按 `ratio_bps` 降序、`bucket_id` 升序分配 remainder；执行清单不得使用与 runtime 不一致的手工舍入规则。
-  - AC-13: `TIGR-9` 必须把 `10,000,000,000 OC` 口径下的 7 个 bucket 绝对分配额、首年外部释放绝对边界，以及“当前 rounding remainder = 0”的执行说明同步回写到专题 PRD / design / project 与 formal freeze sheet。
+  - AC-13: `TIGR-9` 必须把 `10,000,000,000 OC` 口径下的 7 个 bucket 绝对分配额、首年外部释放绝对边界，以及“当前 rounding remainder = 0”的执行说明同步回写到专题 PRD / design；任务追溯写入 GitHub 与 formal freeze sheet。
   - AC-14: token 相关活跃文档、运营口径、模块入口与 runtime/account 派生实现必须统一把当前链上代币称为“绿洲币 / Oasis Coin”，并以 `OC` / `oc:pk:` 作为当前 symbol/account 真值；`AWT` / `awt:pk:` 仅允许保留在历史语境或兼容说明中。
 - Non-Goals:
   - 本专题不决定 `max_supply`、长期通胀终值、二级市场价格目标或 FDV 叙事；当前仅冻结创世 `initial_supply = 10,000,000,000 OC` 与对应 low-float 治理边界。

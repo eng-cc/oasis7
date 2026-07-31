@@ -1,7 +1,7 @@
 # oasis7 Simulator：WASM 模块驱动新事物的通用可视实体机制
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-module-visual-entities.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-module-visual-entities.project.md`
+- 历史模块渲染实施与验证记录：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -85,4 +85,4 @@
 - **语义漂移**：若模块把业务状态直接塞入标签文本，可能导致可视化不可检索；后续可考虑结构化扩展字段。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史模块渲染实施与验证记录由 GitHub task issue evidence 维护。

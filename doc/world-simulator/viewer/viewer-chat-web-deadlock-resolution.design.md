@@ -1,7 +1,7 @@
 # Viewer Chat Web 锁重入修复设计
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md`
+- 历史实施与 Web 闭环证据：GitHub task issue evidence。
 
 ## 1. 设计定位
 定义 Web Viewer 在 Chat 面板中的锁重入与回车发送闭环修复方案，消除 `parking_lot` panic，并保证 wasm 模式下“输入消息 -> 发送给 Agent”链路稳定可用。

@@ -17,8 +17,8 @@
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)
   - task truth: GitHub task issue + GitHub Project item/status + `.pm/github-project-sync/tasks.json` mapping record + canonical worktree/branch/base ref + PR link/status if present
   - user intent: request summary + current TODO + non-goals + done/verification expectations
-  - scoped repo context: relevant `prd.md` / `project.md` / handoff + changed paths + current diff/evidence summary + constraints
-    - gameplay-sensitive slices must explicitly include `doc/game/prd.md`, `doc/game/project.md`, `doc/game/gameplay/README.md`, relevant topic PRD/project docs, and fresh playability/QA evidence expectations or an explicit non-applicability reason
+  - scoped repo context: relevant PRD/design/evidence / handoff + changed paths + current diff/evidence summary + constraints
+    - gameplay-sensitive slices must explicitly include `doc/game/prd.md`, `doc/game/gameplay/README.md`, relevant topic PRD/design docs, GitHub task issue evidence, and fresh playability/QA evidence expectations or an explicit non-applicability reason
   - collaboration boundary: sibling slices + write-scope conflicts + integration order + allowed commands + return contract + formal sink
 - write scope:
 - return contract:
@@ -43,7 +43,7 @@
 - context delivery mode: minimal HEAD-bound task packet
 - task packet identity: `<task_uid>` + `<canonical_worktree>` + `<base_ref>` + `<head_sha>` + `<producer/time>`
 - role activation: `message-assigned; adapter inactive on this surface`
-- mandatory context checklist: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
+- mandatory context checklist: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + relevant topic PRD/design, `doc/world-simulator/**`, and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`

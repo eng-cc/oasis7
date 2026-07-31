@@ -1,7 +1,7 @@
 # oasis7 主网安全、治理与创世就绪度
 
 - 对应设计文档：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md`
-- 对应项目管理文档：`doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.project.md`
+- 对应项目管理文档：GitHub Issue / GitHub Project
 
 ## 目标与权威边界
 

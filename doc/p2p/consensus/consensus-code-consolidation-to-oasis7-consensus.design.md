@@ -1,7 +1,7 @@
 # 共识代码收敛到 oasis7_consensus 设计
 
 - 对应需求文档: `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md`
-- 对应项目管理文档: `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 定义共识相关实现向 `oasis7_consensus` 统一收敛的方案，减少重复代码、跨 crate 漂移和一致性维护成本。

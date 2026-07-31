@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 testing 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/testing/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 GitHub task issue evidence comments 的任务映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/testing/prd.md`
-- 项目管理入口: `doc/testing/project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 - 文件级索引: `doc/testing/prd.index.md`
 - 追踪主键: `PRD-TESTING-xxx`
 - 测试与发布参考: `testing-manual.md`

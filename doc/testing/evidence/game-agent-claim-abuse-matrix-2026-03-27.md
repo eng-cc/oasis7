@@ -6,7 +6,7 @@
 - Owner Role: `qa_engineer`
 - Review Role: `producer_system_designer`
 - Scope: `TASK-GAMEPLAY-AGC-004` for `PRD-GAME-011`
-- Topic: `doc/game/gameplay/gameplay-agent-claim-economy-contract.project.md`
+- Topic: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
 
 ## 目标
 - 把 agent claim 专题里需要 QA 守门的 abuse / accounting coverage 收敛成一份可引用矩阵。

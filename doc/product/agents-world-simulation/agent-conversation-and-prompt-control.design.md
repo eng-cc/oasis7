@@ -3,7 +3,6 @@
 ## 文档身份
 
 - 配对产品 PRD：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)
-- 产品迁移追踪：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.project.md`](agent-conversation-and-prompt-control.project.md)
 - 上位产品 PRD：[`doc/product/agents-world-simulation/prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

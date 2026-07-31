@@ -1,7 +1,7 @@
 # oasis7 Simulator：分块世界生成与碎片元素/化合物池（设计文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/chunked-fragment-generation.design.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/chunked-fragment-generation.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history; 本文与 design 保留 chunk、资源预算与 replay 合同。
 
 审计轮次: 5
 
@@ -303,7 +303,7 @@
 13. **开采扣减阶段**：开采只减少 `remaining`，不重算 `total`。
 
 ## 5. Risks & Roadmap
-- **CG1**：完成分块生成与元素/化合物池设计文档、项目管理文档。
+- **CG1**：完成分块生成与元素/化合物池设计文档。
 - **CG2**：实现 chunk 索引与按探索触发生成（最小可用闭环）。
 - **CG3**：实现碎片块状物理模型（体积/密度/质量）与化合物组成。
 - **CG4**：实现资源预算一次性写入与开采扣减守恒。
@@ -323,4 +323,4 @@
 - ChunkGenerated 事件体积随 chunk 密度上升而增大，需结合快照频率控制日志膨胀。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。

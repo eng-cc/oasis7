@@ -1,6 +1,6 @@
 # `world-simulator/scenario` 文档入口
 
-本目录收敛世界初始化、场景文件、seed/location 与 asteroid-fragment 生成专题。首次阅读先按要回答的问题选择一个专题；不要把已完成的命名迁移或专项基线误读成当前世界运行态，当前执行状态仍以 `../project.md` 和 GitHub task evidence 为准。
+本目录收敛世界初始化、场景文件、seed/location 与 asteroid-fragment 生成专题。首次阅读先按要回答的问题选择一个专题；不要把已完成的命名迁移或专项基线误读成当前世界运行态，当前执行状态以 GitHub task evidence 为准。
 
 ## 从这里开始
 
@@ -14,7 +14,7 @@
 
 ## 阅读与维护边界
 
-- 每个专题的 `*.prd.md`、`*.design.md`、`*.project.md` 分别保存规格、设计与执行证据；本页只负责簇级首读分流，不复制其参数、测试或完成状态。
-- 模块范围、当前执行状态和精确文件检索分别回到 `../prd.md`、`../project.md` 和 `../prd.index.md`。
+- 每个专题的 `*.prd.md`、`*.design.md` 分别保存规格和设计；执行证据、任务状态与阻断由 GitHub task issue / Project 保存。本页只负责簇级首读分流，不复制其参数、测试或完成状态。
+- 模块范围、当前执行状态和精确文件检索分别回到 `../prd.md`、GitHub task issue / Project 和 `../prd.index.md`。
 - 现存专题只有在没有明确现行替代物或仍承担专业合同、测试/运维证据时保留；已完成且可由稳定权威完整承接的碎片，应在语义合并和活跃引用清零后删除。
-- 新增或退休 scenario 专题时：更新本页的首读分流与边界、保留 `../prd.index.md` 的精确 triplet 行；共享目录规则以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
+- 新增或退休 scenario 专题时：更新本页的首读分流与边界、保留 `../prd.index.md` 的精确 PRD/design 行；共享目录规则以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

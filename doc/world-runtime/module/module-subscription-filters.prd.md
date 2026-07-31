@@ -1,7 +1,7 @@
 # oasis7 Runtime：模块订阅过滤器（设计分册）
 
 - 对应设计文档: `doc/world-runtime/module/module-subscription-filters.design.md`
-- 对应项目管理文档: `doc/world-runtime/module/module-subscription-filters.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 4
 

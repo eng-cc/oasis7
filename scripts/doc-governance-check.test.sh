@@ -44,24 +44,18 @@ raise SystemExit(0)
 PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
 
-cat >"$FIXTURE/doc/testing.project.md" <<'DOC'
-## 任务拆解
-## 依赖
-## 状态
-doc/testing/prd.md
-DOC
 cat >"$FIXTURE/doc/testing/prd.md" <<'DOC'
 ## 目标
 ## 范围
 ## 接口 / 数据
 ## 里程碑
 ## 风险
-doc/testing.project.md
 DOC
 for number in $(seq 1 80); do
   printf 'fixture document %s\n' "$number" >"$FIXTURE/doc/many/doc-$number.md"
 done
-printf '%s\n' 'doc/testing.project.md' >"$FIXTURE/doc/.governance/doc-root-md-allowlist.txt"
+printf '%s\n' 'doc/README.md' >"$FIXTURE/doc/.governance/doc-root-md-allowlist.txt"
+printf '%s\n' 'fixture documentation landing page' >"$FIXTURE/doc/README.md"
 {
   printf '%s\n' 'doc/testing/prd.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort

@@ -1,7 +1,7 @@
 # oasis7 Simulator：Viewer Chat Web IME EGUI 输入桥接（设计文档）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.project.md`
+- 历史实施、浏览器复测与未完成 task 状态：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -49,4 +49,4 @@
 - 事件重复注入风险需通过状态位与去重策略控制。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- wasm IME 的当前合同由本文和配对设计维护；历史实施、浏览器复测与 task 状态由 GitHub task issue evidence 追溯。

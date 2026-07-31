@@ -7,7 +7,7 @@
   - `qa_engineer`
 - 关联专题:
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
-  - `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
+  - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
 - 当前结论:
   - `partial`
 

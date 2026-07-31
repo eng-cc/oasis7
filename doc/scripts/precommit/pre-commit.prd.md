@@ -1,6 +1,6 @@
 # Pre-commit 与显式本地修复
 
-- 对应项目管理文档: `doc/scripts/precommit/pre-commit.project.md`
+- 对应项目管理文档: `doc/scripts/precommit/pre-commit.prd.md`
 
 审计轮次: 4
 

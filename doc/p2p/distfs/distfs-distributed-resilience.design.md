@@ -1,7 +1,7 @@
 # DistFS 分布式韧性设计
 
 - 对应需求文档: `doc/p2p/distfs/distfs-distributed-resilience.prd.md`
-- 对应项目管理文档: `doc/p2p/distfs/distfs-distributed-resilience.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
 

@@ -1,7 +1,7 @@
 # oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案
 
 - 对应设计文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.design.md`
-- 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 2
 

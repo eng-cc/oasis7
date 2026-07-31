@@ -1,7 +1,7 @@
 # Viewer 发行体验改造（游戏化优先）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md`
+- 历史阶段实施与验收记录：GitHub task issue evidence。
 
 审计轮次: 5
 
@@ -159,7 +159,7 @@
   - “世界优先 + 可随时指挥 Agent”的布局目标在 phase8 达成。
 
 #### 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史阶段实施与验收记录由 GitHub task issue evidence 维护，本文只保留当前体验合同。
 
 ### Phase 9：指挥链路前置与顶层减噪
 
@@ -232,7 +232,7 @@
   - 隐藏态任务 HUD 已提供“直接指挥 Agent”入口，玩家可一键进入 Chat 指挥路径。
 
 #### 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史阶段实施与验收记录由 GitHub task issue evidence 维护，本文只保留当前体验合同。
 
 ### Phase 10：新手流程闭环与认知减负
 
@@ -303,7 +303,7 @@
     - `output/playwright/viewer/phase10/step4-hidden-no-top-card.png`
 
 #### 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史阶段实施与验收记录由 GitHub task issue evidence 维护，本文只保留当前体验合同。
 
 ## 6. Validation & Decision Record
-- 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- 追溯: 历史阶段实施与验收记录由 GitHub task issue evidence 维护，本文只保留当前体验合同。

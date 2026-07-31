@@ -286,7 +286,7 @@ surface for oasis7 tasks. Local files under `.pm/github-project-sync/` are
 generated mirrors/caches for scripts and audits, not a parallel task queue or
 per-PR truth artifact.
 
-- GitHub Issue is the task collaboration envelope.
+- GitHub Issue is the sole task record and evidence envelope: its body binds the `Task UID`, and its evidence comments carry plan, execution, review, and closeout traceability directly. A `project.md` or `*.project.md` file is not a task record, task-row mirror, or required traceability surface.
 - GitHub Project item fields are authoritative for active queue/status views:
   module grouping, priority, PM status, workflow phase, blocked/ready/PR-watch
   cockpit views, and task-to-issue/project-item mapping.
@@ -310,6 +310,7 @@ per-PR truth artifact.
   cached title or acceptance drift instead of making stale cache content look
   current.
 - Execution evidence is recorded in GitHub task issue evidence comments.
+- PRDs define product or domain intent, design documents define technical contracts, and test/operations artifacts retain their professional evidence authority. They may link to the GitHub Issue when useful, but must not copy mutable task status, task rows, or evidence ledgers.
 - role memory, task-scoped `working_memory`, signals, stage/gate state, and
   this workflow source-of-truth remain repo-local unless a later source-of-truth
   update explicitly migrates them.
@@ -550,12 +551,12 @@ executor is limited by the [unattended invariants](#appendix-a-target-supervisor
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
   - task truth: current GitHub issue, GitHub Project item/status, `.pm/github-project-sync/tasks.json` mapping record, canonical worktree, branch, base ref, and PR link/status when present
   - user intent and acceptance target: original request summary, current work item, explicit non-goals, and done/verification expectations
-  - scoped repo context: relevant `prd.md`, `project.md`, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
+  - scoped repo context: relevant `prd.md`, design, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
   - collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink
 - `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit the role card only when the slice contract records the exemption reason and the exact files to inspect; it still runs after task/worktree bootstrap and records its sink in GitHub task issue evidence comments.
 - TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
-- Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments, but they do not replace them for task execution truth.
+- Historical project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments, but they do not replace them for task execution truth.
 - Codex-native specialist role adapters live under `.codex/agents/*.toml` and are registered by `[agents.<role>]` entries in `.codex/config.toml`. The matching `.agents/roles/<role>.md` remains the governance source of truth; an adapter is a concise operational projection for routing, non-goals, write/escalation rules, and the return contract. `repository_health_engineer` owns repository config/adapter projection and validation-contract audit, while `tpm` retains live role selection, dispatch, coordination, and integration. `agent_engineer` owns only the model/provider behavior used by in-world Agents, not repository Codex config or subagent dispatch. `tpm` remains the root coordinator and must not be registered as a selectable specialist role. Adapter text must not broaden the role card, create a second task/worktree/PR truth, or bypass the GitHub task issue evidence sink.
 - The model and reasoning values in a specialist adapter are intended configuration, not an observation. Static TOML validation, deterministic projection checks, registry strict-loading, or the presence of those values does not prove named-role activation, model availability, or the actual dispatched runtime. TPM and reviewers must never report an adapter pin as the observed actual model/reasoning without runtime evidence from the active dispatch surface.
 - Every specialist role card owns a structured `Codex Adapter Projection` with schema version, registry description, domain contract, operational constraints, and return contract. The adapter and registry description are deterministic renderings of those role-card fields; opaque paired hashes are not a semantic contract. The validator must compare the full rendered output, so replacing an adapter body and merely updating a digest cannot pass.

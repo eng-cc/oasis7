@@ -3,7 +3,7 @@
 审计轮次: 4
 
 - 上游 PRD: `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
-- 上游项目管理: `doc/world-runtime/runtime/runtime-storage-footprint-governance.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 - 适用范围: `oasis7_viewer_live` / `oasis7_chain_runtime` 默认运行链路下的 execution bridge、execution world sidecar、node-distfs 复制热数据与 footprint metrics。
 
 ## 1. 设计目标

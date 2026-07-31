@@ -1,7 +1,7 @@
 # oasis7 Simulator：世界初始化（设计分册）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/world-initialization.prd.md`
-- 对应项目管理文档: `doc/world-simulator/scenario/world-initialization.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义世界初始化设计分册，统一场景、默认实体、设施与启动状态在初始化阶段的装配顺序。

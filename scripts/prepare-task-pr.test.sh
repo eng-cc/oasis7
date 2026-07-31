@@ -10,7 +10,9 @@ REAL_GIT="$(command -v git)"
 TMPDIR="$(mktemp -d)"
 FIXTURE_ROOT="$TMPDIR/repo"
 mkdir -p "$FIXTURE_ROOT"
-(cd "$SOURCE_ROOT" && git ls-files -co --exclude-standard -z | tar --null -T - -cf -) | tar -xf - -C "$FIXTURE_ROOT"
+(cd "$SOURCE_ROOT" && git ls-files -co --exclude-standard -z \
+  | perl -0ne 'chomp; print "$_\0" if -e $_ || -l $_' \
+  | tar --null -T - -cf -) | tar -xf - -C "$FIXTURE_ROOT"
 "$REAL_GIT" -C "$FIXTURE_ROOT" init -q -b main
 "$REAL_GIT" -C "$FIXTURE_ROOT" config user.email test@example.com
 "$REAL_GIT" -C "$FIXTURE_ROOT" config user.name Test

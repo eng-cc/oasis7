@@ -7,14 +7,14 @@
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
 - 模块设计总览：`doc/readme/design.md`
-- 模块标准执行入口：`doc/readme/project.md`
+- 模块标准执行入口：`doc/readme/prd.md`
 - 当前热点子域入口：`doc/readme/governance/README.md`
 - README gap 收口资料入口：`doc/readme/gap/README.md`
 - production 证据与素材入口：`doc/readme/production/README.md`
 
 ## 首读分流
 - 想先回答 README 模块在管什么、哪些内容属于正式对外口径：先读 `doc/readme/prd.md`
-- 想先回答当前在推进什么、哪些治理或运营专题仍是 active：先读 `doc/readme/project.md`
+- 想先回答当前在推进什么、哪些治理或运营专题仍是 active：先读 `doc/readme/prd.md`
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication 模板 / Moltbook / limited preview 贡献奖励 / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想先区分 README gap 的总收口、具体增量与历史追溯：先读 `doc/readme/gap/README.md`
 - 想追溯 production 收口证据或判断 dated production 素材是否仍可删除：先读 `doc/readme/production/README.md`
@@ -68,10 +68,10 @@
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` |
+| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md` | `doc/readme/governance/readme-remediation-log-template-2026-03-11.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
-| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` |
+| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` |
 
 ## 当前活跃 PRD-only 治理专题
 
@@ -88,7 +88,7 @@
 | 专题 | 当前承接 | 删除理由 |
 | --- | --- | --- |
 | README production P0/P1、LLM P1/P2、LLM/DistFS/consensus 三组 closure triplet | `doc/product/` 四模块产品树；`doc/world-simulator/llm/`、`doc/world-runtime/`、`doc/p2p/`、`doc/world-simulator/viewer/` 专业权威；Git history / GitHub task evidence | 三组文件只包装已完成的实现任务和接口细节，不再拥有产品或专业语义；节点、拓扑与共识门控仍归 P2P/runtime 而非 viewer |
-| README consistency checklist dated source set | 根 `README.md`；`scripts/readme-link-check.sh`；`doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md`；`doc/readme/project.md` | 一次性人工 checklist 已被可执行链接检查、季度复核和模块台账吸收；不再保留重复 dated 三件套与 supporting copy |
+| README consistency checklist dated source set | 根 `README.md`；`scripts/readme-link-check.sh`；`doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md`；`doc/readme/prd.md` | 一次性人工 checklist 已被可执行链接检查、季度复核和模块台账吸收；不再保留重复 dated 三件套与 supporting copy |
 | 2026-03-11 release communication / announcement 四组 dated triplet | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-release-communication-template.md`；`doc/readme/governance/readme-release-announcement-template.md` | 长期产品合同已进入产品树，操作模板去日期稳定化；历史 candidate brief / draft、模板设计过程和任务状态只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03 Moltbook promotion/post/runbook 三组 dated triplet 与 promotion plan | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-moltbook-liveops-runbook.md`；`doc/readme/governance/readme-moltbook-post-pack.md` | 渠道产品边界进入产品树，稳定策略合并到无日期 runbook，素材库去日期；历史平台快照、固定排期和任务包装只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03-22 closed-beta candidate runbook triplet 与 Round 1 execution log | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`；Round 1 发布、渠道 fallback、信号和关闭证据从 Git history 与 GitHub issue `eng-cc/oasis7#48` 追溯 | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露的可复用沟通语义收敛到 limited preview invite pack。Round 1 已于 2026-07-28 关闭且无待处理 follow-up，不再保留失效监控指令作为活跃 execution 入口 |
@@ -128,5 +128,5 @@
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
-- 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/project.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 GitHub task issue evidence comments 追溯。
+- 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/prd.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 GitHub task issue evidence comments 追溯。
 - 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前 Moltbook 追溯以 promotion plan、post drafts、liveops runbook 的 canonical PRD/project/runbook 与 `.pm` evidence 为准。

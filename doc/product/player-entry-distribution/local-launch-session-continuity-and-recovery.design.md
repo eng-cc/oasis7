@@ -3,7 +3,6 @@
 ## 文档身份
 
 - 配对产品 PRD：[`local-launch-session-continuity-and-recovery.prd.md`](local-launch-session-continuity-and-recovery.prd.md)
-- 产品迁移追踪：[`local-launch-session-continuity-and-recovery.project.md`](local-launch-session-continuity-and-recovery.project.md)
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

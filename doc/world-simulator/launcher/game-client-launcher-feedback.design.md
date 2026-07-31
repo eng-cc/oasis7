@@ -1,7 +1,7 @@
 # 客户端启动器反馈设计（当前 authority）
 
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-feedback.prd.md`
-> 对应执行台账: `doc/world-simulator/launcher/game-client-launcher-feedback.project.md`
+> 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 结构
 

@@ -33,7 +33,7 @@ Do not treat this skill as a universal gate for:
 - pure refactors with no behavior change
 - tasks whose only verification surface is manual, flaky, or not yet repo-owned
 
-When you skip RED phase in oasis7, record the skip reason in `project.md`, handoff, or GitHub task issue evidence comments.
+When you skip RED phase in oasis7, record the skip reason in GitHub task issue evidence comments or an applicable handoff.
 
 ## When To Use
 

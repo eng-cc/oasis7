@@ -1,7 +1,7 @@
 # 三节点运维观测合同设计
 
 - 对应需求文档: `doc/p2p/node/node-triad-operations-observability.prd.md`
-- 对应项目管理文档: `doc/p2p/node/node-triad-operations-observability.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 设计定位
 

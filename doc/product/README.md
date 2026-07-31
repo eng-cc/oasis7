@@ -24,4 +24,4 @@
 - 智能体与世界模拟 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 - 玩家入口与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 
-专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务、状态与过程证据由各专业模块的 project.md 和 GitHub task issue evidence 承载。
+专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务、状态与过程证据只由 GitHub task issue evidence 承载。

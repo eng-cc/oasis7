@@ -5,7 +5,7 @@
 > 本文是 Launcher 托管 chain runtime、本地 execution-world 输出、受控恢复与 Web/WASM 会话连续性的当前专业 authority。它不定义玩家入口承诺、世界规则、共识算法、WASM ABI、LLM 凭据存储格式或发布 readiness。
 
 - 对应设计文档: `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md`
-- 对应项目管理文档: `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.project.md`
+- 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
 ## 目标
 

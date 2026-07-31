@@ -1,7 +1,7 @@
 # P2P Builtin Wasm 身份共识与跨平台构建方案
 
 - 对应设计文档: `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md`
-- 对应项目管理文档: `doc/p2p/consensus/builtin-wasm-identity-consensus.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 审计轮次: 5
 ## 1. Executive Summary
@@ -39,7 +39,7 @@
 - Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
 - Integration Points:
   - `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md`
-  - `doc/p2p/consensus/builtin-wasm-identity-consensus.project.md`
+  - GitHub Issue / GitHub Project
   - `testing-manual.md`
 - Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
 - Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。

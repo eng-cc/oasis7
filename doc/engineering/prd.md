@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 engineering 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/engineering/project.md` 的任务映射。
+- 覆盖 PRD-ID 到 `doc/engineering/prd.md` 的任务映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/engineering/prd.md`
-- 项目管理入口: `doc/engineering/project.md`
+- 项目管理入口: `doc/engineering/prd.md`
 - 文件级索引: `doc/engineering/prd.index.md`
 - 追踪主键: `PRD-ENGINEERING-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -224,9 +224,9 @@
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
   - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 Git history logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
-  - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
+  - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/prd.md` 与 `doc/world-simulator/prd.md`）
   - historical self-evolution file-based PM background: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`; current task truth / evidence rules live in `doc/engineering/workflow/source-of-truth.md`
-  - current self-evolution, memory, reflection and external-workflow boundaries: `doc/engineering/workflow/source-of-truth.md`; pending scope is retained in `doc/engineering/project.md`, and default-vs-library skill reachability is in `.agents/skills/README.md`
+  - current self-evolution, memory, reflection and external-workflow boundaries: `doc/engineering/workflow/source-of-truth.md`; pending scope is retained in `doc/engineering/prd.md`, and default-vs-library skill reachability is in `.agents/skills/README.md`
   - current document organization and consumption-layer rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost follow-up routing: `doc/engineering/governance/README.md`
   - historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
   - historical `world-simulator-viewer-path-governance` triplet（后续已删除；当前 `world-simulator/viewer` 首读分流与维护边界由 `doc/world-simulator/viewer/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）

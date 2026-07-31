@@ -3,7 +3,7 @@
 审计轮次: 7
 
 - 对应需求文档: `doc/p2p/prd.md`
-- 对应项目管理文档: `doc/p2p/project.md`
+- 对应任务管理: GitHub Issue / GitHub Project
 - 对应文件级索引: `doc/p2p/prd.index.md`
 
 ## 1. 设计定位
@@ -12,7 +12,7 @@
 ## 2. 阅读顺序
 1. `doc/p2p/prd.md`
 2. `doc/p2p/design.md`
-3. `doc/p2p/project.md`
+3. GitHub Issue / GitHub Project（任务状态与历史）
 4. `doc/p2p/prd.index.md`
 5. 需要验证模块级闭环时进入 `testing-manual.md#s9a链上大世界状态底座自闭环`
 6. 下钻 `blockchain/`、`consensus/`、`distfs/`、`network/`、`node/` 等专题目录
@@ -54,7 +54,7 @@
 
 ## 关键接口 / 入口
 - 需求入口：`doc/p2p/prd.md`
-- 执行入口：`doc/p2p/project.md`
+- 执行入口：GitHub Issue / GitHub Project
 - 索引入口：`doc/p2p/prd.index.md`
 
 ## 设计演进计划

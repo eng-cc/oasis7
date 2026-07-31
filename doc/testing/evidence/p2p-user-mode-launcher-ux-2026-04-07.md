@@ -6,7 +6,7 @@
 - 关联专题: `P2PARCH-9`
 - 关联文档:
   - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
-  - `doc/p2p/network/mainnet-private-reachability-architecture.project.md`
+  - `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
   - `testing-manual.md`
 - 责任角色: `viewer_engineer`
 - 当前结论: `pass`

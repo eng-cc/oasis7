@@ -1,7 +1,7 @@
 # oasis7 Runtime：线上模块发布合法性闭环补齐（2026-03-08）设计
 
 - 对应需求文档: `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
-- 对应项目管理文档: `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 ## 1. 设计定位
 定义线上模块发布合法性闭环方案，让模块发布前置到可审计的合法性校验、治理约束与发布门禁。

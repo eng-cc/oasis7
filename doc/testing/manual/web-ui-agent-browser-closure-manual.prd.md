@@ -2,7 +2,7 @@
 
 - 对应操作手册: `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 对应设计文档: `doc/testing/manual/web-ui-playwright-closure-manual.design.md`
-- 对应项目管理文档: `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`
+- 可变任务状态与历史: GitHub task issue evidence comments
 
 审计轮次: 9
 

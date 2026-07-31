@@ -1,7 +1,7 @@
 # P2P 移动轻客户端权威状态
 
 - 对应设计文档: `doc/p2p/network/p2p-mobile-light-client-authoritative-state.design.md`
-- 对应项目管理文档: `doc/p2p/network/p2p-mobile-light-client-authoritative-state.project.md`
+- 对应项目管理文档: GitHub Issue / GitHub Project
 
 ## 目标与 authority
 

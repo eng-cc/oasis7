@@ -1,7 +1,7 @@
 # oasis7 Runtime：线上模块发布合法性闭环补齐（2026-03-08）
 
 - 对应设计文档: `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md`
-- 对应项目管理文档: `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md`
+- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
 审计轮次: 1
 

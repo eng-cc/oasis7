@@ -1,7 +1,7 @@
 # Local Provider 与内置 Agent 体验等价（parity）验收方案（2026-03-12）设计
 
 - 对应需求文档: `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/provider-agent-experience-parity.project.md`
+- 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
 ## 1. 设计定位
 定义 `Local Provider` provider 与内置 agent 的体验等价验收框架，使“是否可默认启用/是否可扩大覆盖范围”由标准化 parity 结果驱动，而不是由单次 PoC 或主观印象驱动。

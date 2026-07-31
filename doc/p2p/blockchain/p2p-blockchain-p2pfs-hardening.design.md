@@ -1,7 +1,7 @@
 # P2P / 区块链签名策略与可恢复性硬化设计
 
 - 对应需求文档：`doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md`
-- 对应项目管理文档：`doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.project.md`
+- 对应项目管理文档：GitHub Issue / GitHub Project
 
 ## 设计定位
 
