@@ -16,6 +16,10 @@
 
 玩家进入正式世界表面后，应先读懂当前目标、相关 Agent 与地点或路线、关键阻塞、可采取的下一步，以及已接受行动造成的可理解世界反馈。环境、地形与世界活动提供必要背景，但不能压过玩家行动和因果。
 
+长期方向是把空间化的活世界舞台作为默认 primary decision surface：它采用 2D top-down / orthographic 的像素工业指挥棋盘语法，首先帮助玩家理解世界、目标、相关行动者/路线、阻塞与下一步。目标、command、receipt 与 selection 的情境管理保持相邻且可展开的次级层，不能与舞台争夺首读，也不能把命令路径藏到不可发现。
+
+该方向不是当前已交付的 2D、top-down、orthographic 或 semantic zoom claim。历史 2D overview/zoom 已退役，当前 Viewer surface 和验证证据仍由专业 authority 单独裁定；本分册不以历史实现、设计方向或截图替代当前 readiness。
+
 没有已接受的玩家行动或可归因的权威世界变化时，产品必须明确这一事实；世界仍在活动、画面信息丰富、renderer 正常或调试数据可见，都不能被表达成玩家已经取得进展。
 
 ## 2. 首读层级与下一步
@@ -23,6 +27,7 @@
 - 首读层优先呈现当前目的、相关行动者或路线、关键 blocker 和下一决策，而不是默认展示技术状态、原始数据或环境计数。
 - 玩家能够把结果与当前目标联系起来，并找到继续、纠正、中断或恢复的下一步。
 - 世界背景需要支持理解场景和关系，但不得以信息密度或视觉权重掩盖 Agent、目标、阻塞与玩家可施加的影响。
+- 舞台是默认 primary decision surface；目标、command、receipt 与 selection 的情境管理可在相邻区域或按需展开，但保持次级，不得在首读层取代世界关系。玩家始终可以从舞台或其紧邻上下文发现受支持 command 的进入路径。
 - 产品层只约束玩家能够读懂什么；具体布局、文案结构、交互控件、渲染层次与可访问性实现继续由 Viewer 与视觉交互专业权威拥有。
 - 玩家能够辨认当前相关对象及其选中或聚焦状态；没有相关 Agent、地点或路线时，surface 必须诚实表达为空或不可用，不能通过默认选中制造虚假目标。
 - 世界背景可以为降低噪声而简化，但相关对象、其关系或父级上下文、选中或聚焦状态与可用性仍须可辨认；视觉强调不会产生新的交互资格。
@@ -33,8 +38,9 @@
 - 专业表面可以为稳定表达关系使用派生或抽象位置，但必须区分权威世界位置与仅用于呈现的关系位置；后者不得被包装成精确坐标、权威资源地点或可执行世界事实。
 - 派生呈现不会产生新的控制权、目标权或世界规则。玩家动作仍通过受控入口提交，并由同一权威运行时接受、拒绝或产生替代结果。
 - 地形、材料或环境结构可以作为世界上下文，但其详细度不得自动赋予 hover、selection、采集、建造或其他交互能力。
+- 长期 2D top-down / orthographic 像素工业指挥棋盘的空间语法用于解释关系、工业活动和指挥上下文；terrain 或 fragment blocks 只提供语境，绝不暗示玩家可直接 edit、harvest、build 或绕过受控 command 路径。
 - 地图、关系线、方向标记、halo 或其他视觉辅助只用于解释已受支持的关系与效果，不会生成控制权、所有权、因果事实、精确位置或可执行能力。
-- overview 与 detail 可以采用不同的信息密度或表现尺度，但都必须保留当前目的、相关或已选对象、关键 blocker 与下一决策；这不构成对 2D 地图、自动缩放或专用概览控件的承诺。
+- 长期语义缩放在不同密度/尺度下优先保留当前目标、相关行动者或路线、关键 blocker 与下一步；它应先折叠次级 labels 和非关键细节，而非无差别缩小整个决策面到不可读。该方向不承诺当前存在 2D 地图、自动缩放、专用 overview 控件或已交付 semantic zoom。
 
 ## 4. 玩家因果与诊断边界
 
@@ -51,6 +57,8 @@
 - RW-3：受支持意图被接受并产生世界结果后，玩家能够区分自己的可归因后果与环境或 Agent 自主活动，并找到继续、纠正、中断或恢复路径。
 - RW-4：玩家目的、行动与反馈保持首要；诊断信息可按需访问，但不会成为默认首屏层级或整体成功的代签证据。
 - RW-5：代表性端到端场景可追踪到 gameplay、runtime、Agent、Viewer 与 QA 的当前证据；单张截图、mock、fallback 或局部渲染通过不能单独成立产品结论。
+- RW-6：长期空间舞台样例保持世界、目标、相关行动者/路线、blocker 与下一步的 primary read；相邻 target/command/receipt/selection 管理可展开但不隐藏受支持的 command path，也不替代舞台成为默认决策面。
+- RW-7：长期密度变化样例证明 semantic zoom 先退次级 labels/细节，持续保留目标、相关行动者或路线、blocker 和下一步；terrain/blocks 只解释语境，不表达直接 edit/harvest/build affordance。
 
 ### 5.1 验收权威与证据边界
 
@@ -58,6 +66,7 @@
 | --- | --- | --- | --- | --- |
 | 首读层级与空间关系来源诚实 | viewer_engineer / game_visual_interaction_designer / qa_engineer | `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md`; `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md`; `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md` | 正式玩家表面中的目标、关系、阻塞与下一步可读性，以及权威位置和派生呈现的区分；不复制 DTO、阈值或 renderer 合同 | test_tier_required |
 | 可归因玩家因果与恢复路径 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 以已接受意图、权威世界结果、主要因果和下一决策或恢复路径组成端到端证据；环境活动不能代签玩家影响 | test_tier_full |
+| 长期舞台优先、语义缩放与非直接编辑边界 | game_visual_interaction_designer / viewer_engineer / gameplay_designer / qa_engineer | `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`; `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`; `doc/testing/prd.md` | 目标/行动者/路线/blocker/下一步在密度变化下的保留、次级 label 收敛、command path 可发现性与 terrain 非 affordance 的未来验证；不代签当前 2D/zoom readiness | test_tier_required |
 
 ## 6. 范围
 
@@ -83,6 +92,6 @@
 
 - 不定义 `commercial_surface`、`fragment_terrain`、`position_source` 或其他 DTO 字段。
 - 不冻结派生位置算法、hash/clamp 规则、screen-space LOD、renderer 层级、DOM/WASM/WebGPU 合同、颜色、资产或性能指标。
-- 不承诺生产线、吞吐、队列、瓶颈、action preview、设施流、里程碑动画、直接地图操作、2D overview 或自动缩放已经存在。
+- 不承诺生产线、吞吐、队列、瓶颈、action preview、设施流、里程碑动画、直接地图操作、2D overview、top-down/orthographic board 或 semantic zoom 已经存在；历史 2D overview/zoom 退役不能被反向引用为当前能力。
 - 不产生新的玩法控制权、世界规则、资源事实、发布等级或可玩性 claim。
 - 2026-05-28 的 player-leverage / production-readability brainstorm 仅是未来输入，不是本分册的当前产品权威。

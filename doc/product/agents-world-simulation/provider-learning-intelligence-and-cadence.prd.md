@@ -1,0 +1,76 @@
+# Provider、学习认证与情报连续性
+
+## 文档身份
+
+- 所属产品模块：智能体与世界模拟
+- 上位产品 PRD：[`prd.md`](prd.md)
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+
+本文是长期产品分册，定义 provider 选择、准入与固定权威节奏，及 Agent 学习/认证和情报连续性的产品边界。它不定义模型、profile 字段、评测方法或阈值、训练算法、模块 ABI、情报分类技术、action slot 实现、当前 provider 支持矩阵或 readiness verdict。
+
+## 1. 产品目标
+
+玩家可以在获认证且适用的 provider profile 间作出可读选择，但 provider 质量或商业条件不能改写权威世界的节奏、规则或行动容量。Agent 通过可审计的经验、训练、认证和受治理模块形成有来源的能力历史；需要重训时承担真实成本并保留历史。情报在合理私有、必要安全披露和最终公共基线之间平衡，且始终说明新鲜度和不确定性。
+
+这些是长期产品方向，不表示当前 Local Provider parity、社交事实处理或任何 provider 已覆盖认证、试点、训练、情报或公开基线能力。当前支持、默认、范围与结论继续由专业 authority 和根 `README.md` 的 claim envelope 决定。
+
+## 2. 范围与玩家边界
+
+### 2.1 认证 provider 与固定权威 cadence
+
+- 玩家只能从适用于其场景和权限的认证 provider profile 中选择；选择影响 Agent 如何提出意图和可读体验，不改变世界规则、行动权限、资源成本、结算、治理权或因果责任。
+- 认证遵循证据优先路径：技术可用性、场景 parity 与安全证据先成立，才可进入受限试点；试点以明确 tier、范围和可审计结果运行，并可在风险、失效或证据变化时暂停或撤销。一次演示、模型声明或局部成功不能直接成为广泛准入。
+- 所有 provider 都在同一固定权威 cadence 与 action slots 内提出意图。更快模型、更多调用、付费档位或后台代理不得换取额外世界回合、优先排序、绕过冲突窗口或更高的权威行动频率。
+
+### 2.2 可审计学习、认证和重训
+
+- Agent 的经验、训练、认证和经治理许可的模块必须保留可审计来源、适用范围、有效状态和后续变化；它们不是不可解释的黑箱 power，也不会因模型切换或组织偏好抹去历史。
+- 训练/认证只在适用世界资源、授权、证据与治理边界内形成能力；受治理模块不因上传、购买或外部声称自动取得权威使用资格。
+- 重训、替换或降级可用于纠错与适应，但应承担与其影响相称的世界内成本、时间、资格或机会成本，并保留此前训练、认证、撤销与重训的审计历史。重训不能成为洗去失败、责任、风险记录或受限模块来源的快捷方式。
+
+### 2.3 情报的私有期、安全披露与公共基线
+
+- 新获得的情报可在有界私有期内服务发现、竞争或研究；私有期不构成永久信息主权，也不允许持有人隐瞒足以造成即时系统性伤害的必要安全事实。
+- 涉及可验证的公共安全、重大风险或受影响者基本恢复能力的最低事实必须按适用授权披露；在私有期、保护期或争议处理结束后，能够公开的知识应形成可访问的公共 baseline。受保护个人资料、敏感漏洞细节、他人私有合同或安全绕过方法不因“公共”而被无界公开。
+- Agent 和玩家使用的情报必须表达来源、适用范围、新鲜度和不确定性；过期、冲突或不完整情报应触发刷新、降级、纠正或重排，而不能静默驱动长期、高风险或不可逆行动。
+
+## 3. 权威与冲突处理
+
+| 产品层拥有 | 专业与执行权威 |
+| --- | --- |
+| provider 准入结果语义、固定 cadence 公平、学习/重训历史和情报私有/安全/公共基线的组合边界 | `doc/world-simulator/prd.md` 拥有 provider、Agent、Local Provider parity、社交事实与玩家 surface 的专业合同；`doc/world-runtime/prd.md` 拥有权威时序、资格、receipt 与执行；`doc/testing/prd.md` 拥有测试与当前 verdict |
+
+本分册不扩大 Local Provider parity、社交事实 adjudication 或产业专题的当前专业真值，也不定义认证算法、训练内容、情报保密级别、时长、披露字段、模块实现或执行节拍。缺少同一候选的专业证据时，以较窄的 blocked、limited 或未承诺边界为准。
+
+## 4. 路线图
+
+1. 可选且有界：让认证 provider 的选择服从证据、试点/分层和暂停/撤销，而非默认授权。
+2. 同一世界节奏：使所有 provider 在固定权威 cadence 和 action slots 下竞争与协作。
+3. 可追溯学习：把经验、训练、认证、模块和重训接入同一可审计历史。
+4. 有效情报：在有限私有、最小安全披露、最终公共 baseline 与 freshness 之间维持可解释平衡。
+
+## 5. Done：成功标准与验收
+
+- PL-1：provider 样例证明认证以技术/parity/安全证据为前置，并经历有范围的试点/分层、暂停或撤销；未经证据的模型、一次成功或付费档位不会自动获得世界权威。
+- PL-2：不同 provider profile 的样例在同一固定 cadence 和 action slots 下获得一致的权威行动机会；provider 性能、调用量或付费便利不增加世界权力。
+- PL-3：训练、认证、受治理模块、撤销和重训样例可追溯来源、适用范围、成本和历史；重训不会洗去责任、失败或 provenance。
+- PL-4：情报样例区分有界私有期、必要安全披露、可公开的最终 baseline 与不应公开的敏感内容，并在决策时显示 freshness/uncertainty 与刷新或纠正路径。
+- PL-5：所有说明将长期目标与当前 Local Provider parity、社交事实或产业专业真值分开；没有新鲜专业证据时不宣称 provider、学习或情报能力已实现或已就绪。
+
+### 5.1 验收追踪
+
+| 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| PL-1 / PL-2 | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | provider 证据/试点/范围/撤销、固定 cadence/action slots 与非权力负例 | test_tier_full |
+| PL-3 | producer_system_designer / agent_engineer / wasm_platform_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 训练/认证/模块/重训的 provenance、成本、撤销和历史连续性证据 | test_tier_full |
+| PL-4 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 私有/安全披露/公共 baseline、freshness/uncertainty 和刷新/纠正组合证据 | test_tier_required |
+| PL-5 | producer_system_designer / agent_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Local Provider/social-fact/industry 现状与长期专题 claim 分离审计 | test_tier_required |
+
+## 6. Non-Goals
+
+- 不选择或实现 provider、profile、模型、评测、训练、认证、模块、情报分类、cadence/action slots 或玩家 UI。
+- 不为 provider、付费服务、训练、模块或情报授予额外世界权力、治理权或行动频率。
+- 不把当前 Local Provider parity、社交事实或产业专业合同扩写为本专题能力已实现。
+- 不声明任何当前 preview、发布、provider 可用性或 readiness。

@@ -42,6 +42,7 @@
 - 紧急机制用于限制故障扩散，不得成为绕过治理、永久改写历史或取消申诉的旁路。
 - 恢复或复核结果必须持久化并可重放；重复证据或请求不能重复生效。
 - 安全与反滥用策略的算法、阈值和运营处置由 P2P、runtime、gameplay 与运维专业权威共同拥有，产品层只约束可解释、公平和可恢复结果。
+- 系统性危机的 containment 只可保护连续性、限制扩散并维持基本权利；恢复应通过同一世界内可审计的玩家/Agent/组织项目推进，不得 reset 世界、选择性抹去已确认因果或以临时偏袒性 bailout 取代公开规则。
 
 ## 6. 长期经济与发行健康
 
@@ -57,6 +58,7 @@
 - CR-3：治理变化只能通过授权、可审计流程生效；提前、越权或证据不足的应用失败且无部分副作用。
 - CR-4：紧急处置、惩罚与申诉形成权限、证据、执行、恢复/复核的持久闭环，重复请求不产生重复效果。
 - CR-5：长期世界放行将权威执行、共识复制、恢复、经济审计与 QA 证据绑定同一候选；单节点或局部 green 不得代签。
+- CR-6：系统性危机样例证明 containment、恢复项目、审计和申诉在同一世界历史中运行；不存在 reset、历史重写或选择性 bailout。
 
 ### 7.1 验收追踪
 
@@ -67,6 +69,7 @@
 | CR-3 | gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 授权治理流程、越权/提前应用拒绝、回放一致与多节点最终性证据 | test_tier_full |
 | CR-4 | runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 紧急权限、惩罚/申诉、重复拒绝与持久恢复状态机证据 | test_tier_full |
 | CR-5 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-006 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-P2P-002 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 同候选 gameplay 经济规则、runtime、P2P 与恢复证据的完整 release gate，必须同时包含 test_tier_full、S8、S9 和 S10 | test_tier_full |
+| CR-6 | producer_system_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | containment、恢复项目、审计/申诉、同一世界连续性与无 reset/bailout 负例 | test_tier_full |
 
 ## 8. Non-Goals
 
