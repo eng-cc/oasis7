@@ -233,6 +233,16 @@ pub struct PlayerAgentClaimOwnedSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerFirstChatUnlockPreviewSnapshot {
+    pub chat_purpose: String,
+    pub immediate_playable_help: String,
+    pub first_question_or_action_hint: String,
+    pub resource_boundary: String,
+    pub defer_effect: String,
+    pub recommended_unlock_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAgentClaimSnapshot {
     pub claimer_agent_id: String,
     pub current_epoch: u64,
@@ -248,6 +258,8 @@ pub struct PlayerAgentClaimSnapshot {
     pub slot_1_eligible_claim_balance: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_claim_quote: Option<PlayerAgentClaimQuoteSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_chat_unlock_preview: Option<PlayerFirstChatUnlockPreviewSnapshot>,
     #[serde(default)]
     pub owned_claims: Vec<PlayerAgentClaimOwnedSnapshot>,
 }

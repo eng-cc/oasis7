@@ -5,6 +5,7 @@ use crate::runtime::{
 };
 use crate::simulator::persist::{
     PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot, PlayerAgentClaimSnapshot,
+    PlayerFirstChatUnlockPreviewSnapshot,
 };
 
 pub(super) fn build_player_agent_claim_snapshot(
@@ -182,6 +183,19 @@ pub(super) fn build_player_agent_claim_snapshot(
         .filter(|quote| quote.slot_index == 1)
         .map(|quote| quote.auto_restricted_starter_claim_amount)
         .unwrap_or(0);
+    let first_chat_unlock_preview = (liquid_main_token_balance == 0
+        && !state.starter_oc_claims.contains_key(primary_agent_id))
+    .then(|| PlayerFirstChatUnlockPreviewSnapshot {
+        chat_purpose: "Start a first conversation with your claimed Agent.".to_string(),
+        immediate_playable_help: "Ask what the Agent can do next for the current gameplay goal."
+            .to_string(),
+        first_question_or_action_hint: "Ask: What should we do first?".to_string(),
+        resource_boundary: "Starter OC unlocks first chat and initial liquid OC; it is separate from slot-1 claim and upkeep funding."
+            .to_string(),
+        defer_effect: "Deferring keeps the completed claim and its upkeep responsibility, but first chat stays locked while liquid OC is zero and no starter OC claim exists."
+            .to_string(),
+        recommended_unlock_action: crate::viewer::ACTION_CLAIM_STARTER_OC.to_string(),
+    });
 
     Some(PlayerAgentClaimSnapshot {
         claimer_agent_id: primary_agent_id.to_string(),
@@ -196,6 +210,7 @@ pub(super) fn build_player_agent_claim_snapshot(
             .saturating_add(restricted_starter_claim_balance)
             .saturating_add(slot_1_auto_restricted_starter_claim_amount),
         next_claim_quote,
+        first_chat_unlock_preview,
         owned_claims: owned_claims
             .iter()
             .map(|claim| owned_claim_to_snapshot(state, claim, current_epoch, epoch_length_ticks))
