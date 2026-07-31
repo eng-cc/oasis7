@@ -3,17 +3,6 @@ use super::*;
 #[path = "action_to_event_core_main_token.rs"]
 mod action_to_event_core_main_token;
 
-const MATERIAL_TRANSIT_URGENT_KEYWORDS: &[&str] = &[
-    "survival",
-    "lifeline",
-    "critical",
-    "repair",
-    "maintenance",
-    "oxygen",
-    "water",
-    "emergency",
-];
-
 impl World {
     fn ensure_restricted_starter_claim_admin(&self, issuer_account_id: &str) -> Result<(), String> {
         let registry = self
@@ -625,9 +614,7 @@ impl World {
                     }));
                 }
 
-                let transit_ticks = ((*distance_km + MATERIAL_TRANSFER_SPEED_KM_PER_TICK - 1)
-                    / MATERIAL_TRANSFER_SPEED_KM_PER_TICK)
-                    .max(1) as u64;
+                let transit_ticks = material_transit_ticks(*distance_km);
                 let ready_at = self.state.time.saturating_add(transit_ticks);
                 Ok(WorldEventBody::Domain(
                     DomainEvent::MaterialTransitStarted {
@@ -647,36 +634,4 @@ impl World {
             _ => unreachable!("action_to_event_core received unsupported action variant"),
         }
     }
-}
-
-fn material_transit_priority_for_kind(world: &World, kind: &str) -> MaterialTransitPriority {
-    if let Some(profile) = world.material_profile(kind) {
-        return match profile.default_priority {
-            crate::runtime::MaterialDefaultPriority::Urgent => MaterialTransitPriority::Urgent,
-            crate::runtime::MaterialDefaultPriority::Standard => MaterialTransitPriority::Standard,
-        };
-    }
-
-    let normalized = kind.to_ascii_lowercase();
-    if MATERIAL_TRANSIT_URGENT_KEYWORDS
-        .iter()
-        .any(|keyword| normalized.contains(keyword))
-    {
-        MaterialTransitPriority::Urgent
-    } else {
-        MaterialTransitPriority::Standard
-    }
-}
-
-fn material_transit_loss_bps_for_kind(world: &World, kind: &str) -> i64 {
-    let base = MATERIAL_TRANSFER_LOSS_PER_KM_BPS.max(0);
-    let factor = world
-        .material_profile(kind)
-        .map(|profile| match profile.transport_loss_class {
-            crate::runtime::MaterialTransportLossClass::Low => 1_i64,
-            crate::runtime::MaterialTransportLossClass::Medium => 2_i64,
-            crate::runtime::MaterialTransportLossClass::High => 4_i64,
-        })
-        .unwrap_or(1);
-    base.saturating_mul(factor)
 }

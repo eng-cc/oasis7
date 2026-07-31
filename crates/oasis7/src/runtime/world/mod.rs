@@ -17,6 +17,7 @@ mod governance;
 mod governance_identity_penalty;
 mod governance_quote;
 mod logistics;
+pub use logistics::LogisticsTransferQuote;
 mod market_quote_decision_preview;
 pub use market_quote_decision_preview::{MarketQuoteDecisionPreview, MarketQuoteSupplyDelta};
 mod main_token_economy_audit;

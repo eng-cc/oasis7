@@ -506,14 +506,14 @@ mod tests {
     };
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     fn temp_dir(prefix: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("duration")
-            .as_nanos();
-        std::env::temp_dir().join(format!("oasis7-governance-audit-{prefix}-{unique}"))
+        let sequence = TEMP_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("oasis7-governance-audit-{prefix}-{pid}-{sequence}"))
     }
 
     fn rollback_registry(on_call_key: &str, governance_key: &str) -> RollbackAuthorityRegistry {
