@@ -741,13 +741,12 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
   - latest failure signatures:
     - `sentry_loss_proxy_longrun`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
     - `mixed_topology_release_proxy`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
-- 当前 real-env 基线（2026-04-08 latest）：
-  - latest real-env summary: `.tmp/p2p_real_env_triad/20260408-120134/summary.json`
-  - latest real-env evidence: `doc/testing/evidence/p2p-real-env-triad-reconfirm-2026-04-08.md`
+- 历史 real-env 基线（2026-04-08 incident chain terminal state；不是 current readiness authority）：
+  - credentialed reconfirmation snapshot: `.tmp/p2p_real_env_triad/20260408-120134/summary.json`
+  - historical provenance: `doc/testing/evidence/p2p-real-env-triad-incident-provenance-2026-07-31.md`
   - `claim_status=blocked`
   - latest real-env failure signatures:
-    - `sequencer_committed_height_zero`
-    - `sequencer_execution_stale_height`
+    - `sequencer_committed_height_zero` / `sequencer_execution_stale_height` were the reconfirmation signatures; the absorbed chain's terminal residual was `fetch-commit` source readiness and peer/head reconvergence.
 - 建议命令（required）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh --tier required
