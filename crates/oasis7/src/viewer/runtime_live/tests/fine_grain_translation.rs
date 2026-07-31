@@ -7,11 +7,13 @@ fn snapshot_after_fine_grain_request(
     server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
         action: format!("gameplay_action:{action_id}"),
         stage: "rejected".to_string(),
-        effect: format!("unsupported gameplay action {action_id}"),
-        intent_summary: None,
+        effect: format!("unknown gameplay action `{action_id}` was rejected"),
+        intent_summary: Some(format!("submit unsupported action `{action_id}`")),
         target_agent_id: None,
-        reason: Some("unknown_gameplay_action".to_string()),
-        hint: None,
+        reason: Some(format!("unknown_gameplay_action: `{action_id}`")),
+        hint: Some(format!(
+            "correct unsupported action `{action_id}` before retrying"
+        )),
         delta_logical_time: 0,
         delta_event_seq: 0,
     });
@@ -73,6 +75,11 @@ fn compat_snapshot_does_not_translate_typos_case_variants_or_empty_action_ids() 
     for action_id in ["mine_resorce", "Mine_Resource", ""] {
         let gameplay = snapshot_after_fine_grain_request(&mut server, action_id);
         let raw_marker = format!("gameplay_action:{action_id}");
+        let raw_id = if action_id.is_empty() {
+            raw_marker.as_str()
+        } else {
+            action_id
+        };
         assert!(
             gameplay.fine_grain_action_translation.is_none(),
             "{action_id:?} must not receive a heuristic fine-grain translation"
@@ -98,6 +105,29 @@ fn compat_snapshot_does_not_translate_typos_case_variants_or_empty_action_ids() 
                 .is_some_and(|feedback| feedback.action.contains(raw_marker.as_str())),
             "{action_id:?} must not leak through recent_feedback.action"
         );
+        for value in [
+            gameplay.status_reason.as_deref(),
+            gameplay.causality_detail.as_deref(),
+            gameplay.blocker_kind.as_deref(),
+            gameplay.blocker_detail.as_deref(),
+            gameplay
+                .recent_feedback
+                .as_ref()
+                .map(|feedback| feedback.effect.as_str()),
+            gameplay
+                .recent_feedback
+                .as_ref()
+                .and_then(|feedback| feedback.reason.as_deref()),
+            gameplay
+                .recent_feedback
+                .as_ref()
+                .and_then(|feedback| feedback.hint.as_deref()),
+        ] {
+            assert!(
+                !value.is_some_and(|value| value.contains(raw_id)),
+                "{action_id:?} must not leak through player-facing snapshot feedback"
+            );
+        }
     }
 }
 

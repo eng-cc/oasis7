@@ -103,6 +103,9 @@ pub(super) fn player_gameplay_player_facing_feedback(
     if is_rejected_unknown_gameplay_action(&feedback) {
         feedback.action = "unsupported_gameplay_action".to_string();
         feedback.intent_summary = Some("An unsupported gameplay action was rejected.".to_string());
+        feedback.effect = "The requested gameplay action is not available.".to_string();
+        feedback.reason = Some("unsupported_gameplay_action".to_string());
+        feedback.hint = Some("Choose a published gameplay action before retrying.".to_string());
     }
     Some(feedback)
 }

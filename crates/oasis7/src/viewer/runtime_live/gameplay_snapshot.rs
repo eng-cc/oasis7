@@ -9,7 +9,6 @@ use crate::simulator::persist::{
     ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
-
 #[path = "gameplay_snapshot_fallback.rs"]
 mod fallback;
 #[path = "gameplay_snapshot_fine_grain.rs"]
@@ -18,7 +17,6 @@ mod fine_grain;
 mod intent;
 #[path = "gameplay_snapshot_sync.rs"]
 mod sync;
-
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
 pub(super) use super::gameplay_snapshot_helpers::apply_runtime_snapshot_empty_entities_blocker;
@@ -38,7 +36,6 @@ use fine_grain::{
 };
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
 use sync::first_session_runtime_sync_blocker;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
     pub kind: PlayerGameplayCausalityKind,
@@ -311,34 +308,40 @@ fn finalize_player_gameplay_snapshot(
                 .to_string();
         gameplay.branch_hint = None;
     }
+    let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
+    let player_facing_feedback_ref = player_facing_feedback.as_ref();
+    let rejected_unknown_gameplay_action =
+        recent_feedback.is_some_and(is_rejected_unknown_gameplay_action);
     gameplay.execution_state =
-        derive_player_gameplay_execution_state(gameplay.stage_status, recent_feedback);
+        derive_player_gameplay_execution_state(gameplay.stage_status, player_facing_feedback_ref);
     let (causality_kind, causality_detail) =
-        derive_player_gameplay_causality(&gameplay, recent_feedback, causality_signal);
+        derive_player_gameplay_causality(&gameplay, player_facing_feedback_ref, causality_signal);
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
-    let status_reason = player_gameplay_status_reason(&gameplay, recent_feedback);
-    let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
-    gameplay.accepted_intent_id = recent_feedback
-        .filter(|feedback| !is_rejected_unknown_gameplay_action(feedback))
+    let status_reason = player_gameplay_status_reason(&gameplay, player_facing_feedback_ref);
+    gameplay.accepted_intent_id = (!rejected_unknown_gameplay_action)
+        .then_some(player_facing_feedback_ref)
+        .flatten()
         .map(|feedback| feedback.action.clone())
         .filter(|value| !value.is_empty());
-    gameplay.intent_summary = player_facing_feedback
-        .as_ref()
-        .and_then(player_gameplay_intent_summary);
-    gameplay.intent_scope = recent_feedback.and_then(|feedback| {
+    gameplay.intent_summary = player_facing_feedback_ref.and_then(player_gameplay_intent_summary);
+    gameplay.intent_scope = player_facing_feedback_ref.and_then(|feedback| {
         player_gameplay_intent_scope(feedback.action.as_str()).map(str::to_string)
     });
-    gameplay.intent_target = recent_feedback.and_then(|feedback| feedback.target_agent_id.clone());
+    gameplay.intent_target =
+        player_facing_feedback_ref.and_then(|feedback| feedback.target_agent_id.clone());
     gameplay.status_reason = status_reason.clone();
-    gameplay.last_world_change = player_gameplay_last_world_change(&gameplay, recent_feedback);
+    gameplay.last_world_change =
+        player_gameplay_last_world_change(&gameplay, player_facing_feedback_ref);
     gameplay.resume_anchor = Some(format!("{} ({})", gameplay.goal_title, gameplay.goal_id));
     gameplay.primary_blocker = player_gameplay_primary_blocker(&gameplay, status_reason.as_ref());
     gameplay.response_window_class =
-        player_gameplay_response_window_class(&gameplay, recent_feedback);
-    gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, recent_feedback);
-    gameplay.escalation_hint = player_gameplay_escalation_hint(&gameplay, recent_feedback);
-    gameplay.wait_resolution_quote = player_gameplay_wait_resolution_quote(recent_feedback);
+        player_gameplay_response_window_class(&gameplay, player_facing_feedback_ref);
+    gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, player_facing_feedback_ref);
+    gameplay.escalation_hint =
+        player_gameplay_escalation_hint(&gameplay, player_facing_feedback_ref);
+    gameplay.wait_resolution_quote =
+        player_gameplay_wait_resolution_quote(player_facing_feedback_ref);
     let fallback_action =
         player_gameplay_fallback_action(&gameplay, gameplay.response_window_class.as_deref());
     gameplay.fallback_action_id = fallback_action.as_ref().map(|(id, _)| id.clone());
