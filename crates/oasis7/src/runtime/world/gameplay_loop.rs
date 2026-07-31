@@ -541,7 +541,7 @@ impl World {
         Ok(())
     }
 
-    fn alliance_reputation_total(&self, alliance_id: &str) -> i64 {
+    pub(super) fn alliance_reputation_total(&self, alliance_id: &str) -> i64 {
         self.state
             .alliances
             .get(alliance_id)

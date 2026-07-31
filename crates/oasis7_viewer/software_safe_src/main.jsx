@@ -5,8 +5,8 @@ import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx";
-import { MarketQuoteDecisionGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
-import { installMarketQuoteDecisionVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installWaitResolutionQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
+import { MarketQuoteDecisionGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
+import { installMarketQuoteDecisionVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { fallbackTradeoffVisualFixture } from "./viewer_fallback_tradeoff_fixture.js";
@@ -2779,6 +2779,7 @@ function WorldSummaryPanel() {
               />
               <RefineQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <PowerSurvivalQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
+              <WarDeclarationQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <MarketQuoteDecisionGameplayPanel core={core} locale={locale()} tr={tr} />
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
@@ -4326,6 +4327,7 @@ function installViewerVisualFixture() {
   installPowerSurvivalQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installMarketQuoteDecisionVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installWaitResolutionQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installWarDeclarationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();

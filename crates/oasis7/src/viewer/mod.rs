@@ -29,7 +29,8 @@ pub use auth::{
     sign_hosted_prompt_control_strong_auth_grant, sign_market_quote_decision_auth_proof,
     sign_power_survival_quote_auth_proof, sign_product_validation_quote_auth_proof,
     sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
-    sign_refine_quote_auth_proof, sign_session_register_auth_proof, verify_agent_chat_auth_proof,
+    sign_refine_quote_auth_proof, sign_session_register_auth_proof,
+    sign_war_declaration_quote_auth_proof, verify_agent_chat_auth_proof,
     verify_collect_data_auth_proof, verify_declare_social_edge_quote_auth_proof,
     verify_fragment_refill_preview_auth_proof, verify_gameplay_action_auth_proof,
     verify_hosted_prompt_control_apply_strong_auth_grant,
@@ -37,7 +38,7 @@ pub use auth::{
     verify_market_quote_decision_auth_proof, verify_power_survival_quote_auth_proof,
     verify_product_validation_quote_auth_proof, verify_prompt_control_apply_auth_proof,
     verify_prompt_control_rollback_auth_proof, verify_refine_quote_auth_proof,
-    verify_session_register_auth_proof,
+    verify_session_register_auth_proof, verify_war_declaration_quote_auth_proof,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use demo::{ViewerDemoError, ViewerDemoSummary, generate_viewer_demo};
@@ -79,7 +80,7 @@ pub use protocol::{
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
     PromptControlRollbackRequest, RefineQuotePreflight, RefineQuoteRequest,
     VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerRequest, ViewerResponse,
-    ViewerStream,
+    ViewerStream, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
 pub use rollback_audit_evidence::{
     RollbackStrictAuditEvidenceInput, build_unsigned_strict_audit_evidence,

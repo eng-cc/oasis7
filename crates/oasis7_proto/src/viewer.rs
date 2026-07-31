@@ -17,6 +17,9 @@ mod market_quote_decision;
 pub use market_quote_decision::*;
 mod social_quote;
 pub use social_quote::*;
+/// Signed, advisory preflight for the existing DeclareWar action.
+mod war_declaration_quote;
+pub use war_declaration_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
@@ -97,6 +100,9 @@ pub enum ViewerRequest {
     },
     QuoteDeclareSocialEdge {
         request: DeclareSocialEdgeQuoteRequest,
+    },
+    QuoteDeclareWar {
+        request: WarDeclarationQuoteRequest,
     },
     PreviewFragmentReplenishment {
         request: FragmentRefillRequest,
@@ -639,6 +645,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     DeclareSocialEdgeQuotePreflight {
         quote: DeclareSocialEdgeQuotePreflight,
+    },
+    WarDeclarationQuotePreflight {
+        quote: WarDeclarationQuotePreflight,
     },
     FragmentRefillPreviewPreflight {
         quote: FragmentRefillResponse,

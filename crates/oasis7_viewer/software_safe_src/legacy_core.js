@@ -9,12 +9,9 @@ import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
+import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
-import {
-  buildViewerEntityLists,
-  renderViewerEntityList,
-  resourceSummary,
-} from "./viewer_entity_list_renderer.js";
+import { buildViewerEntityLists, renderViewerEntityList, resourceSummary } from "./viewer_entity_list_renderer.js";
 import {
   DEFAULT_WS_ADDR,
   HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE,
@@ -181,6 +178,7 @@ const productValidationQuote = createProductValidationQuoteIntegration(() => ({ 
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
+const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
 function normalizeU64Display(value) {
@@ -1357,7 +1355,7 @@ function addRecentEvent(event) {
 }
 
 function handleSnapshot(snapshot) {
-  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote(); state.marketQuoteDecision = null; state.marketQuoteDecisionRequest = { status: "idle", error: null };
+  clearInitialSnapshotRetryTimer(); powerSurvivalQuote.invalidatePowerSurvivalQuote(); warDeclarationQuote.invalidateWarDeclarationQuote(); state.marketQuoteDecision = null; state.marketQuoteDecisionRequest = { status: "idle", error: null };
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
@@ -3089,7 +3087,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
-  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error) || marketQuoteDecision.handleMarketQuoteDecisionError(error)) {
+  if (handleRefineQuoteError(error) || productValidationQuote.handleProductValidationQuoteError(error) || powerSurvivalQuote.handlePowerSurvivalQuoteError(error) || warDeclarationQuote.handleWarDeclarationQuoteError(error) || marketQuoteDecision.handleMarketQuoteDecisionError(error)) {
     return;
   }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
@@ -3515,6 +3513,8 @@ function handleViewerMessage(message) {
     case "power_survival_quote_preflight":
       powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
       break;
+    case "war_declaration_quote_preflight":
+      warDeclarationQuote.handleWarDeclarationQuote(message.quote); break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
       break;
@@ -4261,7 +4261,7 @@ function installTestApi() {
     sendGameplayAction,
     requestRefineQuote,
     requestProductValidationQuote,
-    requestPowerSurvivalQuote,
+    requestPowerSurvivalQuote, requestWarDeclarationQuote,
     requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
@@ -4275,7 +4275,7 @@ function installTestApi() {
     injectSnapshot,
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
-    injectPowerSurvivalQuoteForTest,
+    injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4391,7 +4391,7 @@ export {
   injectSnapshot,
   injectRefineQuotePreflightForTest,
   injectProductValidationQuoteForTest,
-  injectPowerSurvivalQuoteForTest,
+  injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4420,7 +4420,7 @@ export {
   sendGameplayAction,
   requestRefineQuote,
   requestProductValidationQuote,
-  requestPowerSurvivalQuote,
+  requestPowerSurvivalQuote, requestWarDeclarationQuote,
   requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,

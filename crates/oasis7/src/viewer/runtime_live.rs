@@ -73,6 +73,8 @@ mod social_quote;
 mod support;
 #[cfg(test)]
 mod tests;
+#[path = "runtime_live/war_declaration_quote.rs"]
+mod war_declaration_quote;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
@@ -804,6 +806,9 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
             ViewerRequest::QuoteDeclareSocialEdge { request } => {
                 self.quote_declare_social_edge(request, writer)?
+            }
+            ViewerRequest::QuoteDeclareWar { request } => {
+                self.quote_declare_war(request, writer)?
             }
             ViewerRequest::PreviewFragmentReplenishment { request } => {
                 self.preview_refill(request, writer)?
