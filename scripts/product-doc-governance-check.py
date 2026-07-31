@@ -125,6 +125,13 @@ def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
 
 def check(root: Path) -> list[str]:
     errors: list[str] = []
+    retired_ledgers = sorted(
+        path.relative_to(root).as_posix()
+        for path in root.joinpath("doc/product").glob("**/*.project.md")
+        if path.is_file()
+    )
+    for retired_ledger in retired_ledgers:
+        fail(errors, "retired-project-ledger", retired_ledger)
     for path in sorted(root.joinpath("doc").glob("**/*.md")):
         relative_path = path.relative_to(root).as_posix()
         if (
@@ -264,7 +271,7 @@ def check(root: Path) -> list[str]:
                 "topic-module-backlink",
                 f"{topic} must link its owning module PRD {module_root}",
             )
-        for suffix in (".design.md", ".project.md"):
+        for suffix in (".design.md",):
             paired_path = topic_path.with_name(topic_path.name.removesuffix(".prd.md") + suffix)
             if paired_path.is_file() and topic not in paired_path.read_text(encoding="utf-8"):
                 fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must reference {topic}")
@@ -278,13 +285,13 @@ def check(root: Path) -> list[str]:
 
     paired_files = [
         path
-        for suffix in ("*.design.md", "*.project.md")
+        for suffix in ("*.design.md",)
         for path in (root / "doc/product").glob(f"**/{suffix}")
         if path.is_file()
     ]
     for paired_path in paired_files:
         topic_path = paired_path.with_name(
-            paired_path.name.removesuffix(".design.md").removesuffix(".project.md") + ".prd.md"
+            paired_path.name.removesuffix(".design.md") + ".prd.md"
         )
         topic = topic_path.relative_to(root).as_posix()
         if topic not in declared_topics:

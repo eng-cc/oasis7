@@ -124,4 +124,26 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   exit 1
 fi
 
+mkdir -p "$FIXTURE/doc/testing/nested"
+printf '%s\n' '# forbidden ledger' >"$FIXTURE/doc/testing/nested/reintroduced.project.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/ledger.out" 2>"$TMPDIR/ledger.err"; then
+  echo "doc-governance-check.test: reintroduced project ledger unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'project.md / *.project.md ledgers are retired' "$TMPDIR/ledger.out"
+rm -f "$FIXTURE/doc/testing/nested/reintroduced.project.md"
+
+printf '%s\n' 'Active task status: doc/testing/nested/reintroduced.project.md' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/reference.out" 2>"$TMPDIR/reference.err"; then
+  echo "doc-governance-check.test: active project-ledger reference unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project.md / *.project.md ledgers' "$TMPDIR/reference.out"
+
 echo "doc-governance-check.test: OK"

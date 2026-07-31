@@ -15,7 +15,9 @@ usage() {
 Usage: ./scripts/doc-governance-check.sh
 
 Checks:
-  1. Non-archive/non-devlog markdown files must not contain absolute /Users/... or /home/... paths.
+  1. Repository-owned documentation must not reintroduce project.md / *.project.md
+     ledgers or active references to them.
+  2. Non-archive/non-devlog markdown files must not contain absolute /Users/... or /home/... paths.
   2. Non-archive/non-devlog markdown files must be <= 1000 lines.
   3. Root-level markdown files under doc/ must match the tracked allowlist.
   4. Root-level markdown files under each module (doc/<module>/*.md) must match
@@ -315,6 +317,36 @@ all_doc_files=()
 while IFS= read -r file; do
   all_doc_files+=("$file")
 done < <(find doc -type f -name '*.md' ! -path 'doc/devlog/*' ! -path '*/archive/*' | sort)
+
+# 0) project-ledger retirement is permanent
+project_ledger_paths=()
+while IFS= read -r file; do
+  project_ledger_paths+=("$file")
+done < <(
+  find doc site tools skills .agents -type f \
+    \( -name 'project.md' -o -name '*.project.md' \) \
+    ! -path '*/third_party/*' ! -path '*/target/*' ! -path '*/node_modules/*' \
+    | sort
+)
+if [[ ${#project_ledger_paths[@]} -gt 0 ]]; then
+  printf 'doc-governance-check: retired project ledger paths:\n%s\n' "${project_ledger_paths[*]}"
+  fail "project.md / *.project.md ledgers are retired; use GitHub Issue/Project task truth"
+fi
+
+active_governance_docs=()
+while IFS= read -r file; do
+  active_governance_docs+=("$file")
+done < <(
+  find doc site skills .agents -type f -name '*.md' \
+    ! -path 'doc/devlog/*' ! -path '*/archive/*' ! -path '*/evidence/*' \
+    ! -path 'doc/engineering/workflow/source-of-truth.md' \
+    | sort
+)
+if project_reference_hits=$(regex_match_with_line_numbers '(^|[^A-Za-z0-9_])([A-Za-z0-9_./*-]+)?(\.project|/project)\.md([^A-Za-z0-9_]|$)' "${active_governance_docs[@]}"); then
+  echo "doc-governance-check: retired project ledger reference hits:"
+  echo "$project_reference_hits"
+  fail "active documentation references retired project.md / *.project.md ledgers"
+fi
 
 devlog_files=()
 while IFS= read -r file; do
