@@ -56,6 +56,7 @@ mod chunking;
 mod conservation;
 mod consistency;
 mod decision_provider;
+mod fine_grain_persistence;
 mod fragment_physics;
 mod fragment_replenishment_quote;
 mod init;

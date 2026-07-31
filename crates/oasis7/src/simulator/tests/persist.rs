@@ -489,7 +489,9 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
 
 #[test]
 fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
-    let mut snapshot = WorldKernel::new().snapshot();
+    let kernel = WorldKernel::new();
+    let journal_before_translation_roundtrip = kernel.journal_snapshot();
+    let mut snapshot = kernel.snapshot();
     snapshot.player_gameplay = Some(PlayerGameplaySnapshot {
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Blocked,
@@ -529,7 +531,13 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         required_next_decision_action_id: None,
         required_next_decision_class: None,
         resume_next_step: Some("Replenish upstream materials and advance again.".to_string()),
-        available_actions: Vec::new(),
+        available_actions: vec![PlayerGameplayAction {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            label: "Build the first smelter".to_string(),
+            protocol_action: "build_factory".to_string(),
+            target_agent_id: None,
+            disabled_reason: None,
+        }],
         recent_feedback: Some(PlayerGameplayRecentFeedback {
             action: "step".to_string(),
             stage: "completed_no_progress".to_string(),
@@ -576,11 +584,18 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         pivot_available: None,
         validation_unlock_preview: None,
         recovery_options: Vec::new(),
+        fine_grain_action_translation: None,
     });
 
     let mut value: serde_json::Value =
         serde_json::from_str(&snapshot.to_json().expect("snapshot to json"))
             .expect("parse snapshot json");
+    fine_grain_persistence::assert_fine_grain_translation_roundtrip(
+        &value,
+        &kernel,
+        &journal_before_translation_roundtrip,
+    );
+
     let gameplay_object = value
         .get_mut("player_gameplay")
         .and_then(|gameplay| gameplay.as_object_mut())
@@ -592,6 +607,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     gameplay_object.remove("required_next_decision_action_id");
     gameplay_object.remove("required_next_decision_class");
     gameplay_object.remove("recovery_options");
+    gameplay_object.remove("fine_grain_action_translation");
 
     let migrated = WorldSnapshot::from_json(
         &serde_json::to_string(&value).expect("serialize migrated snapshot"),
@@ -629,26 +645,9 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     assert!(gameplay.required_next_decision_action_id.is_none());
     assert!(gameplay.required_next_decision_class.is_none());
     assert!(gameplay.recovery_options.is_empty());
-    let facility = gameplay
-        .micro_depot_facilities
-        .first()
-        .expect("canonical player gameplay snapshot exposes the micro-depot facility");
-    assert_eq!(facility.facility_id, "depot-public-snapshot");
-    assert_eq!(facility.available_units_by_kind.get("data"), Some(&5));
-    assert_eq!(facility.module_id, "regional.micro_depot");
-    assert_eq!(facility.module_version, "0.2.0");
-    assert_eq!(
-        facility.wasm_hash, "sha256:micro-depot-public-evidence",
-        "canonical player gameplay snapshot preserves module evidence"
-    );
-    assert_eq!(
-        facility.last_receipt_id.as_deref(),
-        Some("receipt-micro-depot-public")
-    );
-    assert_eq!(
-        facility.last_proposal_hash.as_deref(),
-        Some("sha256:proposal-public")
-    );
+    fine_grain_persistence::assert_legacy_omits_fine_grain_translation(&migrated);
+
+    fine_grain_persistence::assert_legacy_micro_depot_evidence(gameplay);
 }
 
 #[test]

@@ -12,8 +12,12 @@ use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
 #[path = "gameplay_snapshot_fallback.rs"]
 mod fallback;
+#[path = "gameplay_snapshot_fine_grain.rs"]
+mod fine_grain;
 #[path = "gameplay_snapshot_intent.rs"]
 mod intent;
+#[path = "gameplay_snapshot_sync.rs"]
+mod sync;
 
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
 pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
@@ -28,38 +32,15 @@ use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
 };
+use fine_grain::player_gameplay_fine_grain_action_translation;
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
+use sync::first_session_runtime_sync_blocker;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
     pub kind: PlayerGameplayCausalityKind,
     pub detail: String,
 }
-fn first_session_runtime_sync_blocker(
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<(String, String, String)> {
-    let feedback = recent_feedback?;
-    if feedback.action != "chain_sync" {
-        return None;
-    }
-    if !matches!(feedback.stage.as_str(), "blocked" | "completed_no_progress") {
-        return None;
-    }
-    let detail = feedback.reason.clone().unwrap_or_else(|| {
-        "committed runtime sync did not expose a usable world snapshot".to_string()
-    });
-    let kind = if detail.contains("execution world is not ready") {
-        "execution_world_not_ready".to_string()
-    } else {
-        "runtime_sync_unavailable".to_string()
-    };
-    let hint = feedback.hint.clone().unwrap_or_else(|| {
-        "repair the runtime sync path, then refresh gameplay to confirm the committed world is available"
-            .to_string()
-    });
-    Some((kind, detail, hint))
-}
-
 pub(super) fn player_gameplay_causality_from_runtime_events(
     new_events: &[RuntimeWorldEvent],
 ) -> Option<PlayerGameplayCausalitySignal> {
@@ -374,6 +355,8 @@ fn finalize_player_gameplay_snapshot(
         .map(str::to_string);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     apply_small_player_lane_truth(&mut gameplay);
+    gameplay.fine_grain_action_translation =
+        player_gameplay_fine_grain_action_translation(&gameplay, recent_feedback);
     gameplay
 }
 
@@ -481,6 +464,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
     let primary_factory = primary_factory_for_player_gameplay(state);
@@ -598,6 +582,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 pivot_available: None,
                 validation_unlock_preview: None,
                 recovery_options: Vec::new(),
+                fine_grain_action_translation: None,
             });
         }
     }
@@ -669,6 +654,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -752,6 +738,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -837,6 +824,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
             IndustryStage::ScaleOut => {
@@ -897,6 +885,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
             IndustryStage::Governance => {
@@ -957,6 +946,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     pivot_available: None,
                     validation_unlock_preview: None,
                     recovery_options: Vec::new(),
+                    fine_grain_action_translation: None,
                 });
             }
         }
@@ -1017,6 +1007,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1075,6 +1066,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1133,6 +1125,7 @@ pub(super) fn build_player_gameplay_snapshot(
             pivot_available: None,
             validation_unlock_preview: None,
             recovery_options: Vec::new(),
+            fine_grain_action_translation: None,
         });
     }
 
@@ -1190,5 +1183,6 @@ pub(super) fn build_player_gameplay_snapshot(
         pivot_available: None,
         validation_unlock_preview: None,
         recovery_options: Vec::new(),
+        fine_grain_action_translation: None,
     })
 }

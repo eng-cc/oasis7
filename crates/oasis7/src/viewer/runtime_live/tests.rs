@@ -21,6 +21,7 @@ mod chain_sync;
 pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_runway;
+mod fine_grain_translation;
 mod industrial_progression;
 mod prompt_control;
 mod provider_settings;
