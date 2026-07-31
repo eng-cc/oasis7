@@ -11566,13 +11566,14 @@ const mobilization = (required, current, after, locale, tr2) => `${tr2(locale, "
 function WarDeclarationQuoteCard(props) {
   const q = () => props.quote || {};
   const view = () => buildWarDeclarationQuoteDisplayModel(q(), props.locale, props.tr);
+  const conflictWindow = () => q().conflict_status === "active_conflict" ? `${view().conflictStatus} · ${props.tr(props.locale, "可于", "Retry at")} ${display(q().conflict_window_blocked_until)} ${props.tr(props.locale, "步", "ticks")}` : view().conflictStatus;
   return (() => {
     var _el$4 = _tmpl$2$2(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$7.nextSibling, _el$9 = _el$5.nextSibling, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling, _el$10 = _el$1.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$13.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling;
     insert(_el$6, () => props.tr(props.locale, "提交前估价", "Before You Commit"));
     insert(_el$7, () => props.tr(props.locale, "战争结果预估", "War Outcome Quote"));
     insert(_el$8, () => props.tr(props.locale, "这是已签名的只读预估；不会宣战、预留资源、推进时间或创建战争。", "This is a signed read-only quote. It does not declare war, reserve resources, advance time, or create a conflict."));
     insert(_el$0, () => `${props.tr(props.locale, "状态", "Status")}: ${view().settlementPath} · ${view().affordability}`);
-    insert(_el$1, () => `${props.tr(props.locale, "冲突窗口", "Conflict window")}: ${view().conflictStatus} · ${props.tr(props.locale, "可于", "Retry at")} ${display(q().conflict_window_blocked_until)} ${props.tr(props.locale, "步", "ticks")}`);
+    insert(_el$1, () => `${props.tr(props.locale, "冲突窗口", "Conflict window")}: ${conflictWindow()}`);
     insert(_el$10, createComponent(Metric, {
       get label() {
         return props.tr(props.locale, "双方联盟", "Alliances");

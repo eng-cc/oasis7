@@ -13,12 +13,15 @@ describe("WarDeclarationQuote", () => {
     expect(card).toHaveAttribute("data-quote-fingerprint", "fingerprint-12");
     expect(within(card).getByText("War Outcome Quote")).toBeInTheDocument();
     expect(within(card).getByTestId("war-declaration-blocker")).toHaveTextContent(/active conflict is not settled/i);
+    expect(within(card).getByTestId("war-declaration-blocker")).toHaveTextContent(/retry at 40 ticks/i);
     expect(within(card).getByTestId("war-declaration-submit-disabled")).toBeDisabled();
     expect(within(card).getByTestId("war-declaration-mobilization-electricity")).toHaveTextContent(/required 24/i);
   });
   it("maps stable protocol codes to Chinese player copy", () => {
     render(() => <WarDeclarationQuoteCard quote={{ ...quote, conflict_status: "pending_conflict", recommended_war_action: "gather_resources", mobilization_affordable: false }} locale="zh" tr={tr} />);
     expect(screen.getByTestId("war-declaration-blocker")).toHaveTextContent("已有宣战正在等待处理");
+    expect(screen.getByTestId("war-declaration-blocker")).not.toHaveTextContent("可于");
+    expect(screen.getByTestId("war-declaration-blocker")).not.toHaveTextContent("40");
     expect(screen.getByTestId("war-declaration-recommendation")).toHaveTextContent("先收集动员资源");
     expect(screen.queryByText("pending_conflict")).not.toBeInTheDocument();
   });

@@ -179,14 +179,26 @@ impl World {
         // Submit-time admission rejects while *any* related war is active. The
         // advertised wait boundary is therefore the latest actual core
         // lifecycle due tick among those wars, not merely the first map entry.
-        let conflict_window_blocked_until = active_wars
-            .iter()
-            .map(|war| {
-                war.declared_at
-                    .saturating_add(war.max_duration_ticks.max(1))
-            })
-            .max()
-            .unwrap_or_else(|| self.state.time.saturating_add(war_duration_ticks));
+        // A queued declaration has not passed admission and may be rejected, so
+        // its only protocol-compatible boundary is the current tick: callers
+        // must refresh after the queue is processed rather than receive a
+        // fictional deadline derived from either declaration's intensity.
+        let conflict_window_blocked_until = if active_wars.is_empty() {
+            if pending_conflicts.is_empty() {
+                self.state.time.saturating_add(war_duration_ticks)
+            } else {
+                self.state.time
+            }
+        } else {
+            active_wars
+                .iter()
+                .map(|war| {
+                    war.declared_at
+                        .saturating_add(war.max_duration_ticks.max(1))
+                })
+                .max()
+                .expect("non-empty active war collection has a latest due tick")
+        };
         let active_blocker = (!active_wars.is_empty()).then(|| {
             let active_ids = active_wars
                 .iter()

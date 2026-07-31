@@ -176,11 +176,57 @@ fn war_declaration_quote_waits_for_a_related_queued_declaration() {
 
     assert_eq!(quote.conflict_status, "pending_conflict");
     assert_eq!(quote.recommended_war_action, "wait");
+    assert_eq!(quote.conflict_window_blocked_until, world.state().time);
     assert!(
         quote
             .why_this_war_is_worth_or_risky
             .contains("queued DeclareWar")
     );
+}
+
+#[test]
+fn war_declaration_quote_does_not_promise_a_retry_tick_for_an_invalid_queued_declaration() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+    world.submit_action(Action::DeclareWar {
+        initiator_agent_id: "a".to_string(),
+        war_id: "war.quote.pending.invalid".to_string(),
+        aggressor_alliance_id: "alliance.red".to_string(),
+        defender_alliance_id: "alliance.blue".to_string(),
+        objective: String::new(),
+        intensity: 1,
+    });
+
+    let quote = world
+        .war_declaration_quote("a", "alliance.red", "alliance.blue", 10)
+        .expect("queued declaration is an advisory blocker before admission");
+
+    assert_eq!(quote.conflict_status, "pending_conflict");
+    assert_eq!(quote.conflict_window_blocked_until, world.state().time);
+}
+
+#[test]
+fn war_declaration_quote_does_not_use_a_queued_declaration_intensity_as_a_retry_promise() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b", "c", "d", "e"]);
+    form_war_alliances(&mut world);
+    seed_declaration_resources(&mut world);
+    world.submit_action(Action::DeclareWar {
+        initiator_agent_id: "a".to_string(),
+        war_id: "war.quote.pending.low-intensity".to_string(),
+        aggressor_alliance_id: "alliance.red".to_string(),
+        defender_alliance_id: "alliance.blue".to_string(),
+        objective: "hold belt".to_string(),
+        intensity: 1,
+    });
+
+    let quote = world
+        .war_declaration_quote("a", "alliance.red", "alliance.blue", 10)
+        .expect("queued declaration is an advisory blocker before admission");
+
+    assert_eq!(quote.conflict_status, "pending_conflict");
+    assert_eq!(quote.conflict_window_blocked_until, world.state().time);
 }
 
 #[test]
@@ -214,5 +260,16 @@ fn war_declaration_quote_keeps_an_active_conflict_blocker_and_wait_alternative_v
     );
     assert_eq!(quote.alternative_action, "wait");
     assert_eq!(quote.recommended_war_action, "wait");
+    let active_war = world
+        .state()
+        .wars
+        .get("war.quote.active")
+        .expect("declared war is active");
+    assert_eq!(
+        quote.conflict_window_blocked_until,
+        active_war
+            .declared_at
+            .saturating_add(active_war.max_duration_ticks.max(1))
+    );
     assert!(quote.why_this_war_is_worth_or_risky.contains("active"));
 }
