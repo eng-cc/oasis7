@@ -4,7 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
+pub(super) const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
 
 fn read_probe_request(stream: &mut TcpStream) -> Vec<u8> {
     let started_at = Instant::now();
@@ -67,7 +67,7 @@ fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
     (format!("http://{bind}"), serve)
 }
 
-fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
+pub(super) fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
     server
         .llm_sidecar
         .bind_agent_player(

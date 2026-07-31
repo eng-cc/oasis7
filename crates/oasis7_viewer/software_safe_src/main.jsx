@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
+import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx";
@@ -1489,6 +1490,7 @@ function StarterOcRequiredGate() {
   const progressionAction = () => gameplayProgressionAction(gameplay());
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action) => action.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
+  const firstChatUnlockPreview = () => core.state.snapshot?.player_gameplay?.agent_claim?.first_chat_unlock_preview || null;
   const chatAction = () => firstAgentChatAction(gameplay());
   const confirmationAction = () => {
     const refreshAction = snapshotRefreshAction();
@@ -1701,27 +1703,20 @@ function StarterOcRequiredGate() {
                 </div>
               )}
             >
-              <StarterOcOnboardingPanel gameplay={gameplay()} locale={locale()} hideActionButton={true} />
+              <Show
+                when={firstChatUnlockPreview()}
+                fallback={<StarterOcOnboardingPanel gameplay={gameplay()} locale={locale()} hideActionButton={true} />}
+              >
+                {(preview) => <FirstChatUnlockPreview preview={preview()} locale={locale()} tr={tr} />}
+              </Show>
             </Show>
-            <div class="feedback-detail">
+            <Show when={!firstChatUnlockPreview()}><div class="feedback-detail">
               {creditConfirmed()
-                ? tr(
-                  locale(),
-                  "OC 会作为第一次 LLM/Agent chat 的启动预算；用它向 Agent 发第一条指令，推动产线恢复。",
-                  "OC is the starter budget for the first LLM/Agent chat. Use it to send the first command and move production forward.",
-                )
+                ? tr(locale(), "OC 会作为第一次 LLM/Agent chat 的启动预算；用它向 Agent 发第一条指令，推动产线恢复。", "OC is the starter budget for the first LLM/Agent chat. Use it to send the first command and move production forward.")
                 : pendingCredit()
-                ? tr(
-                  locale(),
-                  "不用空等：系统会自动推进确认。若本地世界暂时没有回执，下面的按钮可以手动补一次确认。",
-                  "No need to idle: confirmation runs automatically. If the local world has not responded yet, the button below can retry one confirmation.",
-                )
-                : tr(
-                  locale(),
-                  "这是进入 Agent 聊天和早期玩法动作前必须完成的一步。领取后会进入入账确认。",
-                  "This step is required before Agent chat and early gameplay actions. Claiming it moves you to credit confirmation.",
-                )}
-            </div>
+                ? tr(locale(), "不用空等：系统会自动推进确认。若本地世界暂时没有回执，下面的按钮可以手动补一次确认。", "No need to idle: confirmation runs automatically. If the local world has not responded yet, the button below can retry one confirmation.")
+                : tr(locale(), "这是进入 Agent 聊天和早期玩法动作前必须完成的一步。领取后会进入入账确认。", "This step is required before Agent chat and early gameplay actions. Claiming it moves you to credit confirmation.")}
+            </div></Show>
             <div class="toolbar">
               <Show when={primaryAction()}>
                 {(nextAction) => (
