@@ -875,7 +875,7 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
-  - 2026-04-08 latest real-env triad reconfirm 已证明 same-window 三节点样本可重复采集，而且本机 observer 已不再是主 blocker；当前真实 residual 已收敛到 ECS sequencer 的 `execution driver received stale height`。在把带该修复的 runtime 二进制重新部署到远端前，这条 lane 仍不能升级为 `pass`。
+  - 2026-04-08 historical real-env triad incident chain 已证明当时可重复采集 same-window 三节点样本，而且本机 observer 不再是主 blocker；`execution driver received stale height` 是链中间阶段签名，后续 rollout 后的终态 residual 是 `fetch-commit` source readiness、peer/head reconvergence 与 storage restart retry ordering。这组历史证据不能升级当前 lane 为 `pass`；任何当前判断都必须重新采集 same-window evidence。
   - complete observability monitor 只解决当前 triad 的 repo-owned 资源/状态/流量/WASM 统一监控，不等价于已经补齐 Prometheus/OTel/长期告警平台。
   - reachability/path observability 只能消费 `/v1/chain/status.observability` 的 bounded projection；字段缺失时应输出 `not_reported` 或等价状态，不允许 report helper 自行重建 peer path truth。
   - `relay_reserved`、`proxy` case pass、或 control-plane byte split 都不能单独支撑 `public reachable` / physical NAT / public_testnet readiness claim；这类 claim 必须回到 matrix taxonomy、same-window evidence 与 producer/QA pass-uplift decision。
