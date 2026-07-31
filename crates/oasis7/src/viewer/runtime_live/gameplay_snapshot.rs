@@ -32,7 +32,10 @@ use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
 };
-use fine_grain::player_gameplay_fine_grain_action_translation;
+use fine_grain::{
+    is_rejected_unknown_gameplay_action, player_gameplay_fine_grain_action_translation,
+    player_gameplay_player_facing_feedback,
+};
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
 use sync::first_session_runtime_sync_blocker;
 
@@ -315,10 +318,14 @@ fn finalize_player_gameplay_snapshot(
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
     let status_reason = player_gameplay_status_reason(&gameplay, recent_feedback);
+    let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
     gameplay.accepted_intent_id = recent_feedback
+        .filter(|feedback| !is_rejected_unknown_gameplay_action(feedback))
         .map(|feedback| feedback.action.clone())
         .filter(|value| !value.is_empty());
-    gameplay.intent_summary = recent_feedback.and_then(player_gameplay_intent_summary);
+    gameplay.intent_summary = player_facing_feedback
+        .as_ref()
+        .and_then(player_gameplay_intent_summary);
     gameplay.intent_scope = recent_feedback.and_then(|feedback| {
         player_gameplay_intent_scope(feedback.action.as_str()).map(str::to_string)
     });
@@ -357,6 +364,7 @@ fn finalize_player_gameplay_snapshot(
     apply_small_player_lane_truth(&mut gameplay);
     gameplay.fine_grain_action_translation =
         player_gameplay_fine_grain_action_translation(&gameplay, recent_feedback);
+    gameplay.recent_feedback = player_facing_feedback;
     gameplay
 }
 

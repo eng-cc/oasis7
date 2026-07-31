@@ -8,11 +8,7 @@ pub(super) fn player_gameplay_fine_grain_action_translation(
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
 ) -> Option<PlayerGameplayFineGrainActionTranslation> {
     let feedback = recent_feedback?;
-    if feedback.stage != "rejected"
-        || !feedback.reason.as_deref().is_some_and(|reason| {
-            reason == "unknown_gameplay_action" || reason.starts_with("unknown_gameplay_action:")
-        })
-    {
+    if !is_rejected_unknown_gameplay_action(feedback) {
         return None;
     }
     let action_id = feedback.action.strip_prefix("gameplay_action:")?;
@@ -91,4 +87,22 @@ pub(super) fn player_gameplay_fine_grain_action_translation(
     };
 
     Some(translation)
+}
+
+pub(super) fn is_rejected_unknown_gameplay_action(feedback: &PlayerGameplayRecentFeedback) -> bool {
+    feedback.stage == "rejected"
+        && feedback.reason.as_deref().is_some_and(|reason| {
+            reason == "unknown_gameplay_action" || reason.starts_with("unknown_gameplay_action:")
+        })
+}
+
+pub(super) fn player_gameplay_player_facing_feedback(
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<PlayerGameplayRecentFeedback> {
+    let mut feedback = recent_feedback?.clone();
+    if is_rejected_unknown_gameplay_action(&feedback) {
+        feedback.action = "unsupported_gameplay_action".to_string();
+        feedback.intent_summary = Some("An unsupported gameplay action was rejected.".to_string());
+    }
+    Some(feedback)
 }

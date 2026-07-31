@@ -72,9 +72,31 @@ fn compat_snapshot_does_not_translate_typos_case_variants_or_empty_action_ids() 
 
     for action_id in ["mine_resorce", "Mine_Resource", ""] {
         let gameplay = snapshot_after_fine_grain_request(&mut server, action_id);
+        let raw_marker = format!("gameplay_action:{action_id}");
         assert!(
             gameplay.fine_grain_action_translation.is_none(),
             "{action_id:?} must not receive a heuristic fine-grain translation"
+        );
+        assert!(
+            !gameplay
+                .accepted_intent_id
+                .as_deref()
+                .is_some_and(|value| value.contains(raw_marker.as_str())),
+            "{action_id:?} must not leak through accepted_intent_id"
+        );
+        assert!(
+            !gameplay
+                .intent_summary
+                .as_deref()
+                .is_some_and(|value| value.contains(raw_marker.as_str())),
+            "{action_id:?} must not leak through intent_summary"
+        );
+        assert!(
+            !gameplay
+                .recent_feedback
+                .as_ref()
+                .is_some_and(|feedback| feedback.action.contains(raw_marker.as_str())),
+            "{action_id:?} must not leak through recent_feedback.action"
         );
     }
 }
