@@ -30,6 +30,7 @@ mod snapshot_micro_depot;
 mod snapshot_progress;
 mod snapshot_progress_empty_world;
 mod snapshot_reprioritize;
+mod social_quote;
 #[path = "tests_support.rs"]
 mod tests_support;
 mod wait_resolution_quote;

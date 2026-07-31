@@ -644,6 +644,20 @@ impl ViewerLiveSession {
                     },
                 )?;
             }
+            ViewerRequest::QuoteDeclareSocialEdge { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message: "quote_declare_social_edge is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("quote_declare_social_edge".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::PreviewFragmentReplenishment { request: _ } => {
                 send_response(
                     writer,
