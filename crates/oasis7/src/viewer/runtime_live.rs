@@ -68,6 +68,8 @@ mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
 mod session_policy;
+#[path = "runtime_live/social_quote.rs"]
+mod social_quote;
 mod support;
 #[cfg(test)]
 mod tests;
@@ -800,6 +802,9 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
+            ViewerRequest::QuoteDeclareSocialEdge { request } => {
+                self.quote_declare_social_edge(request, writer)?
+            }
             ViewerRequest::PreviewFragmentReplenishment { request } => {
                 self.preview_refill(request, writer)?
             }

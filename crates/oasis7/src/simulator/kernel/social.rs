@@ -138,6 +138,72 @@ impl WorldKernel {
         })
     }
 
+    pub fn quote_declare_social_edge(
+        &self,
+        declarer: &ResourceOwner,
+        schema_id: &str,
+        relation_kind: &str,
+        from: &ResourceOwner,
+        to: &ResourceOwner,
+        weight_bps: i64,
+        backing_fact_ids: &[u64],
+        ttl_ticks: Option<u64>,
+    ) -> Result<SocialFactImpactQuote, RejectReason> {
+        self.ensure_owner_exists(declarer)?;
+        self.ensure_owner_exists(from)?;
+        self.ensure_owner_exists(to)?;
+
+        let schema_id = schema_id.trim();
+        let relation_kind = relation_kind.trim();
+        if schema_id.is_empty() {
+            return social_rule_denied("social edge schema_id cannot be empty");
+        }
+        if relation_kind.is_empty() {
+            return social_rule_denied("social edge relation_kind cannot be empty");
+        }
+        if !(-10_000..=10_000).contains(&weight_bps) {
+            return Err(RejectReason::InvalidAmount { amount: weight_bps });
+        }
+        if backing_fact_ids.is_empty() {
+            return social_rule_denied("social edge backing_fact_ids cannot be empty");
+        }
+        for fact_id in backing_fact_ids {
+            let Some(fact) = self.model.social_facts.get(fact_id) else {
+                return social_rule_denied(format!("social backing fact missing: {fact_id}"));
+            };
+            if !fact.supports_backing() {
+                return social_rule_denied(format!(
+                    "social backing fact inactive: {fact_id} state={:?}",
+                    fact.lifecycle
+                ));
+            }
+        }
+        if ttl_ticks.is_some_and(|ticks| ticks == 0) {
+            return Err(RejectReason::InvalidAmount { amount: 0 });
+        }
+
+        Ok(SocialFactImpactQuote {
+            actor_id: social_owner_quote_id(declarer),
+            action_kind: "declare_social_edge".to_string(),
+            schema_id: schema_id.to_string(),
+            subject_id: Some(social_owner_quote_id(from)),
+            object_id: Some(social_owner_quote_id(to)),
+            claim_summary: summarize_social_text(relation_kind),
+            confidence_ppm: None,
+            stake_at_risk: 0,
+            ttl_ticks,
+            affected_relationships: social_affected_relationships(schema_id, from, Some(to)),
+            affected_social_surfaces: social_edge_affected_surfaces(schema_id),
+            cooperation_opportunity_delta: "positive".to_string(),
+            blacklist_or_dispute_risk: "backing_fact_dependent".to_string(),
+            governance_or_claim_relevance: "relationship_declaration".to_string(),
+            recommended_social_action: "declare_edge".to_string(),
+            why_this_action_matters: format!(
+                "Declaring this {relation_kind} relationship makes its evidence-backed cooperation signal available to social and governance decisions."
+            ),
+        })
+    }
+
     pub(super) fn apply_publish_social_fact(
         &mut self,
         actor: ResourceOwner,
@@ -901,6 +967,16 @@ fn social_affected_surfaces(schema_id: &str) -> Vec<String> {
     }
     if lower.contains("blacklist") {
         surfaces.push("blacklist".to_string());
+    }
+    surfaces
+}
+
+fn social_edge_affected_surfaces(schema_id: &str) -> Vec<String> {
+    let mut surfaces = social_affected_surfaces(schema_id);
+    for surface in ["reputation", "relationship"] {
+        if !surfaces.iter().any(|existing| existing == surface) {
+            surfaces.push(surface.to_string());
+        }
     }
     surfaces
 }

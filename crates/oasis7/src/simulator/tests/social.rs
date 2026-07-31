@@ -162,6 +162,114 @@ fn social_fact_impact_quote_previews_challenge_without_mutating_journal() {
 }
 
 #[test]
+fn social_fact_impact_quote_previews_declare_edge() {
+    let mut kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.relation.v1".to_string(),
+        subject: agent_owner("agent-a"),
+        object: Some(agent_owner("agent-b")),
+        claim: "agent-a and agent-b have cooperative history".to_string(),
+        confidence_ppm: 750_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let published = kernel.step().expect("publish backing fact");
+    let fact_id = match published.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    let journal_len_before_quote = kernel.journal().len();
+    let social_edges_before_quote = kernel.model().social_edges.clone();
+    let quote = kernel
+        .quote_declare_social_edge(
+            &agent_owner("agent-a"),
+            "social.relation.v1",
+            "trust",
+            &agent_owner("agent-a"),
+            &agent_owner("agent-b"),
+            2_000,
+            &[fact_id],
+            Some(12),
+        )
+        .expect("declare edge quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(kernel.model().social_edges, social_edges_before_quote);
+    assert_eq!(quote.actor_id, "agent-a");
+    assert_eq!(quote.action_kind, "declare_social_edge");
+    assert_eq!(quote.schema_id, "social.relation.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some("agent-a"));
+    assert_eq!(quote.object_id.as_deref(), Some("agent-b"));
+    assert_eq!(quote.claim_summary, "trust");
+    assert_eq!(quote.confidence_ppm, None);
+    assert_eq!(quote.stake_at_risk, 0);
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"schema:social.relation.v1".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"reputation".to_string())
+    );
+    assert_eq!(quote.cooperation_opportunity_delta, "positive");
+    assert_eq!(quote.blacklist_or_dispute_risk, "backing_fact_dependent");
+    assert_eq!(
+        quote.governance_or_claim_relevance,
+        "relationship_declaration"
+    );
+    assert_eq!(quote.recommended_social_action, "declare_edge");
+    assert!(quote.why_this_action_matters.contains("trust"));
+
+    for (weight_bps, backing_fact_ids, ttl_ticks, expected_reason) in [
+        (
+            2_000,
+            vec![fact_id + 1],
+            Some(12),
+            "social backing fact missing",
+        ),
+        (10_001, vec![fact_id], Some(12), "invalid amount"),
+        (2_000, vec![fact_id], Some(0), "invalid amount"),
+    ] {
+        let journal_len_before_rejection = kernel.journal().len();
+        let social_edges_before_rejection = kernel.model().social_edges.clone();
+        let reason = kernel
+            .quote_declare_social_edge(
+                &agent_owner("agent-a"),
+                "social.relation.v1",
+                "trust",
+                &agent_owner("agent-a"),
+                &agent_owner("agent-b"),
+                weight_bps,
+                &backing_fact_ids,
+                ttl_ticks,
+            )
+            .expect_err("quote should reject with the same validation as execution");
+
+        assert_eq!(kernel.journal().len(), journal_len_before_rejection);
+        assert_eq!(kernel.model().social_edges, social_edges_before_rejection);
+        match (expected_reason, reason) {
+            ("social backing fact missing", RejectReason::RuleDenied { notes }) => assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("social backing fact missing")),
+                "missing backing fact rejection note: {notes:?}"
+            ),
+            ("invalid amount", RejectReason::InvalidAmount { amount }) => {
+                assert_eq!(amount, if weight_bps == 10_001 { 10_001 } else { 0 });
+            }
+            (_, other) => panic!("unexpected reject reason: {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn social_fact_impact_quote_rejects_location_electricity_stake_like_execution() {
     let mut kernel = setup_social_kernel();
     let actor = ResourceOwner::Location {

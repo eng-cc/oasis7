@@ -15,6 +15,8 @@ mod fragment_refill_preview;
 pub use fragment_refill_preview::*;
 mod market_quote_decision;
 pub use market_quote_decision::*;
+mod social_quote;
+pub use social_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
@@ -92,6 +94,9 @@ pub enum ViewerRequest {
     },
     QuotePowerSurvival {
         request: PowerSurvivalQuoteRequest,
+    },
+    QuoteDeclareSocialEdge {
+        request: DeclareSocialEdgeQuoteRequest,
     },
     PreviewFragmentReplenishment {
         request: FragmentRefillRequest,
@@ -631,6 +636,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     PowerSurvivalQuotePreflight {
         quote: PowerSurvivalQuotePreflight,
+    },
+    DeclareSocialEdgeQuotePreflight {
+        quote: DeclareSocialEdgeQuotePreflight,
     },
     FragmentRefillPreviewPreflight {
         quote: FragmentRefillResponse,
