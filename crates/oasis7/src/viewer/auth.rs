@@ -24,6 +24,10 @@ mod power_survival_quote;
 pub use power_survival_quote::{
     sign_power_survival_quote_auth_proof, verify_power_survival_quote_auth_proof,
 };
+mod war_declaration_quote;
+pub use war_declaration_quote::{
+    sign_war_declaration_quote_auth_proof, verify_war_declaration_quote_auth_proof,
+};
 mod declare_social_edge_quote;
 pub use declare_social_edge_quote::{
     sign_declare_social_edge_quote_auth_proof, verify_declare_social_edge_quote_auth_proof,

@@ -265,7 +265,8 @@ pub use world::{
     CommittedAuthoritativeRecoveryGeneration, LogisticsTransferQuote, M1ScenarioBootstrapConfig,
     MarketQuoteDecisionPreview, MarketQuoteSupplyDelta, ModuleTickRoutingDeterministicSnapshot,
     ModuleTickRoutingDurationBuckets, ModuleTickRoutingMetricsSnapshot, ProductValidationQuote,
-    ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
+    ReleaseSecurityPolicy, WarDeclarationQuote, World, WorldRuntimeBackpressureStats,
+    WorldRuntimeMemoryLimits,
 };
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 

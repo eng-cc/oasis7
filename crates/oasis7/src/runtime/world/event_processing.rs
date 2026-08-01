@@ -84,7 +84,7 @@ impl World {
         })
     }
 
-    fn war_mobilization_costs(intensity: u32) -> (i64, i64) {
+    pub(super) fn war_mobilization_costs(intensity: u32) -> (i64, i64) {
         let intensity = i64::from(intensity.max(1));
         let electricity = WAR_DECLARE_BASE_ELECTRICITY_COST
             .saturating_add(intensity.saturating_mul(WAR_DECLARE_ELECTRICITY_COST_PER_INTENSITY));

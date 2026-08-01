@@ -32,6 +32,7 @@ pub use proto::{
     RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
     RollbackSourceEventRef, RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl,
     ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
 
 pub type ViewerResponse =
