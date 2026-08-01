@@ -31,7 +31,7 @@ else
 fi
 
 FIXTURE="$TMPDIR/repo"
-mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/doc/.governance" "$FIXTURE/doc/testing" "$FIXTURE/doc/many" "$FIXTURE/doc/devlog" "$FIXTURE/.agents/roles/templates" "$TMPDIR/bin"
+mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/doc/.governance" "$FIXTURE/doc/testing" "$FIXTURE/doc/many" "$FIXTURE/doc/devlog" "$FIXTURE/.agents/roles/templates" "$FIXTURE/.agents/roles" "$TMPDIR/bin"
 if [[ ! -x "$REAL_PYTHON" ]] || ! "$REAL_PYTHON" -c 'import ast; print("ready")' | grep -Fxq ready; then
   echo "doc-governance-check.test: OASIS7_TEST_PYTHON or PATH discovery must provide a functional Python interpreter" >&2
   exit 1
@@ -56,10 +56,30 @@ for number in $(seq 1 80); do
 done
 printf '%s\n' 'doc/README.md' >"$FIXTURE/doc/.governance/doc-root-md-allowlist.txt"
 printf '%s\n' 'fixture documentation landing page' >"$FIXTURE/doc/README.md"
+printf '%s\n' 'fixture many-doc landing page' >"$FIXTURE/doc/many/README.md"
+printf '%s\n' 'fixture retired archive landing page' >"$FIXTURE/doc/devlog/README.md"
+printf '%s\n' '# testing fixture landing page' >"$FIXTURE/doc/testing/README.md"
 {
-  printf '%s\n' 'doc/testing/prd.md'
+  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort
 } >"$FIXTURE/doc/.governance/module-root-md-allowlist.txt"
+cat >"$FIXTURE/doc/.governance/top-level-directory-registry.json" <<'JSON'
+{
+  "version": 1,
+  "directories": [
+    {"name": "devlog", "type": "retired_archive", "owner": "repository_health_engineer", "entry": "doc/devlog/README.md", "reason": "fixture archive", "exception": {"entry_conditions": "history", "review_trigger": "change", "exit_conditions": "retire"}},
+    {"name": "many", "type": "professional_domain", "owner": "repository_health_engineer", "entry": "doc/many/README.md", "reason": "fixture corpus", "exception": null},
+    {"name": "testing", "type": "professional_domain", "owner": "repository_health_engineer", "entry": "doc/testing/README.md", "reason": "fixture tests", "exception": null}
+  ]
+}
+JSON
+cat >"$FIXTURE/doc/README.md" <<'DOC'
+fixture documentation landing page
+doc/devlog/README.md
+doc/many/README.md
+doc/testing/README.md
+DOC
+printf '%s\n' '# repository health role' >"$FIXTURE/.agents/roles/repository_health_engineer.md"
 
 cat >"$TMPDIR/bin/rg" <<'SH'
 #!/usr/bin/env bash
@@ -124,6 +144,84 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   exit 1
 fi
 
+REGISTRY_BASE="$TMPDIR/top-level-directory-registry.json"
+cp "$FIXTURE/doc/.governance/top-level-directory-registry.json" "$REGISTRY_BASE"
+reset_registry() {
+  cp "$REGISTRY_BASE" "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+}
+
+sed -i.bak 's/"reason": "fixture tests", //' "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+rm -f "$FIXTURE/doc/.governance/top-level-directory-registry.json.bak"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-required-field.out" 2>"$TMPDIR/registry-required-field.err"; then
+  echo "doc-governance-check.test: registry missing required field unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'missing fields: reason' "$TMPDIR/registry-required-field.out"
+reset_registry
+
+sed -i.bak 's/"owner": "repository_health_engineer"/"owner": "unknown_owner"/' "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+rm -f "$FIXTURE/doc/.governance/top-level-directory-registry.json.bak"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-owner.out" 2>"$TMPDIR/registry-owner.err"; then
+  echo "doc-governance-check.test: registry unknown owner unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'has unknown owner' "$TMPDIR/registry-owner.out"
+reset_registry
+
+sed -i.bak 's#doc/many/README.md#doc/many/missing.md#' "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+rm -f "$FIXTURE/doc/.governance/top-level-directory-registry.json.bak"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-entry.out" 2>"$TMPDIR/registry-entry.err"; then
+  echo "doc-governance-check.test: registry missing entry unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'many has missing entry' "$TMPDIR/registry-entry.out"
+reset_registry
+
+sed -i.bak '/doc\/many\/README.md/d' "$FIXTURE/doc/README.md"
+rm -f "$FIXTURE/doc/README.md.bak"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-navigation.out" 2>"$TMPDIR/registry-navigation.err"; then
+  echo "doc-governance-check.test: registry navigation omission unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'many directory is absent from doc/README.md navigation' "$TMPDIR/registry-navigation.out"
+printf '%s\n' 'doc/many/README.md' >>"$FIXTURE/doc/README.md"
+
+sed -i.bak 's/"review_trigger": "change", //' "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+rm -f "$FIXTURE/doc/.governance/top-level-directory-registry.json.bak"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-lifecycle.out" 2>"$TMPDIR/registry-lifecycle.err"; then
+  echo "doc-governance-check.test: registry missing lifecycle field unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'devlog exception missing review_trigger' "$TMPDIR/registry-lifecycle.out"
+reset_registry
+
+mkdir -p "$FIXTURE/doc/unregistered"
+printf '%s\n' 'unregistered fixture directory' >"$FIXTURE/doc/unregistered/README.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry.out" 2>"$TMPDIR/registry.err"; then
+  echo "doc-governance-check.test: unregistered top-level directory unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'top-level directory registry contract failed' "$TMPDIR/registry.out"
+rm -rf "$FIXTURE/doc/unregistered"
+
 mkdir -p "$FIXTURE/doc/testing/nested"
 printf '%s\n' '# forbidden ledger' >"$FIXTURE/doc/testing/nested/reintroduced.project.md"
 if (
@@ -154,6 +252,15 @@ if (
   exit 1
 fi
 grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/semantic-reference.out"
+printf '%s\n' 'Current authority: same-named design and project.' >"$FIXTURE/doc/testing/nested/active-reference.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/stale-wording.out" 2>"$TMPDIR/stale-wording.err"; then
+  echo "doc-governance-check.test: stale project-ledger wording unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/stale-wording.out"
 printf '%s\n' '- Corresponding GitHub Issue/Project task truth: `doc/testing/prd.md`' >"$FIXTURE/doc/testing/nested/active-reference.md"
 if (
   cd "$FIXTURE"

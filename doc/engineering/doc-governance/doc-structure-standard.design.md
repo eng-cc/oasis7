@@ -27,7 +27,7 @@
 推荐职责后缀如下：
 - `*.prd.md`：Why / What / Done
 - `*.design.md`：How / Structure / Contract
-- GitHub Issue（任务与证据）：历史执行记录；不再用于新增任务、状态或证据
+- GitHub Issue / GitHub Project-backed task truth：任务、状态与过程证据的唯一可变载体；仓库不再创建本地 project ledger
 - `*.manual.md`：How to use / verify
 - `*.runbook.md`：How to operate / release / recover
 - `README.md`：目录导航
@@ -60,7 +60,7 @@ doc/<module>/
 - `prd.md`：模块目标、范围、验收与边界。
 - `design.md`：模块总体技术设计与阅读入口。
 - GitHub Issue（任务与证据）：模块级任务拆解、依赖、状态。
-- `prd.index.md`：模块内专题 PRD / project 可达索引。
+- `prd.index.md`：模块内专题 PRD 与 GitHub task truth 可达索引。
 
 ### 3.1 模块级阅读顺序
 固定阅读顺序为：
@@ -155,7 +155,19 @@ doc/product/<module>/
 每个产品成功标准必须在追踪表中唯一映射到专业 owner、专业域 PRD-ID、权威文档、验证证据和测试层级。
 产品入口、产品 PRD 与专业域权威文档必须双向可达。
 
-### 3.5 Legacy Redirect 的职责边界
+### 3.5 一级物理目录 registry 与例外
+
+`doc/` 的物理目录树与 `doc/product/` 的四模块逻辑产品树是两层 taxonomy：专业域、治理域、测试/证据域和受控例外目录不会成为第五个产品模块。
+
+`doc/.governance/top-level-directory-registry.json` 是一级物理目录的机器可读结构登记。每个 live `doc/` 一级目录必须登记 `name`、`type`、`owner`、`entry` 和 `reason`；`entry` 必须在 `doc/README.md` 的人工阅读导航中可达。registry 负责结构真值和可验证性，README 负责读者路径，不从 registry 自动生成完整文件系统清单。
+
+例外目录还必须登记非空的 `entry_conditions`、`review_trigger` 与 `exit_conditions`。历史摘要与短周期证据池只可按其例外条件存在，不得默认为长期模块或运行态真值。新增、删除或重新分类一级目录时，必须同步更新 registry、根 README 和相关 landing page，并运行文档治理检查。
+
+### 3.6 证据生命周期
+
+证据目录不能以“已有 README”为理由无限增长。`qa_engineer` 拥有证据有效性、保留与删除语义；`repository_health_engineer` 拥有密度、导航和阈值治理。count、age 或 duplication 达到子域 README 定义的触发器时，必须发起聚合、归档或删除复核；复核不等于自动删除，也不能改变发布或领域正确性的 owner。
+
+### 3.7 Legacy Redirect 的职责边界
 root-level legacy redirect 只承担兼容跳转职责。
 
 推荐最小结构：

@@ -107,3 +107,5 @@
 - 新增 `evidence/` 文件后，若改变了默认首读路径，应同步更新本页。
 - 本页只维护簇级入口，不维护完整文件清单。
 - 若未来 `evidence/` 内部继续分裂出更高密度簇，再另开簇内治理专题，而不是把本页扩写成长表。
+- `qa_engineer` 决定每份证据的有效性、保留与删除语义；`repository_health_engineer` 负责密度、导航和阈值治理。
+- lifecycle review trigger：Markdown 文件数达到 80、任何 active evidence 超过 180 天仍被默认首读引用、或同一 claim 的三份以上 evidence 未明确 current/historical 边界时，发起聚合、归档或删除复核。触发器不授权批量删除，也不替代 release 或领域 owner 的结论。
