@@ -600,6 +600,12 @@ impl WorldState {
                     .ok_or_else(|| WorldError::ResourceBalanceInvalid {
                         reason: format!("economic contract not found: {contract_id}"),
                     })?;
+                if contract.fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "service contracts unavailable: collateral/evidence/remedy not implemented"
+                            .to_string(),
+                    });
+                }
                 match contract.status {
                     EconomicContractStatus::Open | EconomicContractStatus::Accepted => {
                         contract.status = EconomicContractStatus::Expired;

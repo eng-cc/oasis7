@@ -139,6 +139,50 @@ fn economic_contract_persisted_service_cannot_be_settled_by_atomic_event() {
     assert_eq!(state.reputation_scores.get("counterparty"), Some(&-4));
 }
 
+#[test]
+fn economic_contract_persisted_service_cannot_be_expired_by_atomic_lifecycle() {
+    let mut contract = sample_contract("creator", "counterparty");
+    contract.fulfillment_kind = EconomicContractFulfillmentKind::Service;
+    let mut state = WorldState::default();
+    state.reputation_scores.insert("creator".to_string(), 11);
+    state
+        .reputation_scores
+        .insert("counterparty".to_string(), -4);
+    state
+        .economic_contracts
+        .insert("contract.guard".to_string(), contract);
+
+    let err = state
+        .apply_domain_event(
+            &DomainEvent::EconomicContractExpired {
+                contract_id: "contract.guard".to_string(),
+                creator_agent_id: "creator".to_string(),
+                counterparty_agent_id: "counterparty".to_string(),
+                creator_reputation_delta: -6,
+                counterparty_reputation_delta: -3,
+            },
+            51,
+        )
+        .expect_err("persisted Service contracts must be quarantined from expiry");
+
+    assert_eq!(
+        err,
+        WorldError::ResourceBalanceInvalid {
+            reason: "service contracts unavailable: collateral/evidence/remedy not implemented"
+                .to_string(),
+        }
+    );
+    let contract = state
+        .economic_contracts
+        .get("contract.guard")
+        .expect("service contract retained");
+    assert_eq!(contract.status, EconomicContractStatus::Accepted);
+    assert_eq!(contract.settled_at, None);
+    assert_eq!(contract.settlement_success, None);
+    assert_eq!(state.reputation_scores.get("creator"), Some(&11));
+    assert_eq!(state.reputation_scores.get("counterparty"), Some(&-4));
+}
+
 fn sample_claim(target_agent_id: &str, claimer_agent_id: &str) -> AgentClaimState {
     AgentClaimState {
         target_agent_id: target_agent_id.to_string(),
