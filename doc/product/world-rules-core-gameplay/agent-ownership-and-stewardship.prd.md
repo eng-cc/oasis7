@@ -33,7 +33,7 @@
 - 哪些可读条件会导致主动结束、进入风险状态或被回收，从而保留什么、失去什么；玩家必须能看见补足、恢复、重新选择或安全结束的下一步。
 - 当前最好的替代决策：比较其他候选、等待一个可理解的条件，或先解决资金/世界 blocker；当没有安全替代时也必须明确说明，不能把立即确认伪装为唯一无代价选择。
 
-受限的首个认领资助只帮助符合条件的玩家承担这次 `slot-1` 的非零 claim/upkeep 承诺，且不能转成自由财富、设施/材料库存、liquid starter OC 或持续补贴。它与完成 Agent 已存在后、为首次对话授予 liquid starter OC 的独立首聊解锁不同：后者不支付或延长 claim/upkeep，也不将认领变成免费或设施补贴。具体 bucket、资格、余额、回收计算和对话 gate 由专业域维护；跨模块来源与 sink 边界见 [大世界基础设施资源 provenance](../world-infrastructure/prd.md#26-跨模块资源-provenance-边界)。
+受限的首个认领资助只帮助符合条件的玩家承担这次 `slot-1` 的非零 claim/upkeep 承诺，且不能转成自由财富、设施/材料库存、liquid starter OC 或持续补贴。它与完成 Agent 已存在后、为首次对话授予 liquid starter OC 的独立首聊解锁不同：后者不支付或延长 claim/upkeep，也不将认领变成免费或设施补贴。具体 bucket、资格、余额、回收计算和对话 gate 由专业域维护；跨模块来源与 sink 边界见[资源模型与跨模块 provenance](prd.md#resource-model-and-cross-module-provenance)。
 
 ## 3. 权威边界
 

@@ -9,7 +9,7 @@
 | 产品模块 | 唯一入口 | 产品职责 |
 | --- | --- | --- |
 | 世界规则与核心玩法 | [`doc/product/world-rules-core-gameplay/prd.md`](world-rules-core-gameplay/prd.md) | 定义玩家目标、核心循环、成长、资源压力与世界规则体验。 |
-| 大世界基础设施 | [`doc/product/world-infrastructure/prd.md`](world-infrastructure/prd.md) | 统一玩家可建设区域设施与持久、可审计、可扩展的大世界状态底座。 |
+| 大世界基础设施 | [`doc/product/world-infrastructure/prd.md`](world-infrastructure/prd.md) | 区块链/分布式系统与确定性世界运行时底座：最终性、权威状态、复制、存储、网络、恢复和版本化执行边界。 |
 | 智能体与世界模拟 | [`doc/product/agents-world-simulation/prd.md`](agents-world-simulation/prd.md) | 把场景、Agent/LLM 决策、世界状态与可交互模拟体验连接起来。 |
 | 玩家入口与发行 | [`doc/product/player-entry-distribution/prd.md`](player-entry-distribution/prd.md) | 统一玩家如何了解、进入、安装和验证当前有证据支持的技术预览及其公开边界。 |
 
@@ -20,7 +20,7 @@
 如果需要从产品承诺继续下钻到规则、实现契约或验证证据，按下表进入专业域权威：
 
 - 世界规则与核心玩法 → [`doc/game/prd.md`](../game/prd.md)
-- 大世界基础设施 → [`doc/game/prd.md`](../game/prd.md)、[`doc/world-runtime/prd.md`](../world-runtime/prd.md)、[`doc/p2p/prd.md`](../p2p/prd.md)
+- 大世界基础设施 → [`doc/p2p/prd.md`](../p2p/prd.md)、[`doc/world-runtime/prd.md`](../world-runtime/prd.md)、[`doc/testing/prd.md`](../testing/prd.md)
 - 智能体与世界模拟 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 - 玩家入口与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 

@@ -1,12 +1,17 @@
-# 全局治理、组织连续性与宪制护栏
+# 全局治理、组织连续性与宪制护栏（待迁移）
 
 ## 文档身份
 
 - 所属产品模块：大世界基础设施
 - 上位产品 PRD：[`prd.md`](prd.md)
-- 生命周期：`active`
+- 生命周期：`superseded`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+
+## 迁移状态
+
+本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+
 
 本文是长期产品分册，定义普通全局治理的有限产品范围、组织连续性和不可由普通治理改写的宪制保护。它不定义阈值、锁定/解锁时长、身份技术、控制人计算、链上或智能合约结构、runtime 状态机、签名/custody 实现、当前候选 verdict 或发行就绪。
 

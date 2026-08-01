@@ -1,6 +1,6 @@
 # world-runtime PRD
 
-> 专业域 authority：本文件拥有世界执行、确定性、WASM、事件、receipt 与 replay 契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供执行层证据，并为 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 的权威行动与审计后果提供专业合同，但不是并列产品入口。
+> 专业域 authority：本文件拥有世界基础设施上层的确定性执行、WASM、事件、receipt、checkpoint 与 replay 契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供执行层证据，并向 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 及 gameplay、Agent 与 Viewer 等消费者提供已提交世界状态的技术合同。它不拥有产品规则、共识/网络部署或玩家交互承诺。
 
 审计轮次: 7
 
@@ -13,7 +13,23 @@
 - 覆盖 PRD-ID 到 GitHub task 与测试证据的可追溯映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
-### 工业 Profile 与阶段执行语义
+### 世界基础设施执行目标与当前差距
+
+- **模块身份（目标）**：`world-runtime` 是区块链/分布式世界基础设施的上层确定性执行层。下层的 validator registry、BFT finality、P2P、DistFS 与状态同步由 `doc/p2p/` 拥有；本层把已排序、已验证的动作确定性地转化为事件、状态根、receipt、checkpoint 与可重放历史。工业设施、市场、gameplay module 与 Agent 行为是本层的消费者或执行负载，不定义本模块身份。
+- **稳定边界（目标）**：共识到执行必须是独立、版本化的协议，而不是对进程内 Rust 类型或私有存储的依赖。每个请求至少绑定 `world_id`、协议/运行时 manifest version、parent committed height/hash、确定排序的 action envelope 与 `action_root`；每个结果至少绑定 execution block/hash、`state_root`、receipt/journal references 和结构化拒绝或 fault。当前可先由 in-process adapter 承载；未来 IPC adapter 必须通过同一份 conformance/replay fixture，进程拆分不是协议生效前提。
+- **复制执行（目标）**：proposer 只提出候选。每个 active validator 从同一已提交 parent state 重新执行同一 action sequence，并且只在自己的 `action_root`、execution hash、`state_root` 与候选一致时投票；任何不一致、缺 artifact、超限或不可解释 fault 都不得被签名、提交或以本地修补越过。最终性证书和 BFT round/vote 语义由 p2p authority 定义，本层负责可复现执行结果及其持久化绑定。
+- **升级与发布（目标）**：普通确定性 runtime 升级由治理最终确认的 content-addressed runtime manifest/version 在 committed height 激活；节点 release 仅预置兼容实现，不是激活权威。改变 consensus、该协议或不兼容 host ABI 的升级属于 coordinated foundational protocol upgrade/fork，必须另有迁移证明。发布分类固定为四条 lane：rolling node software、governance-activated runtime manifest、independent client application、coordinated foundational protocol upgrade/fork。
+- **部署与降级（目标）**：game 与基础设施持续通过同一版本化协议协作。ordinary player 为 game + light companion，operator 为 full infrastructure node，dev/local 为 game + embedded/full local node。普通 player/light companion 在 finality 不可用时只能显示最后一个已验证状态，并可保留尚未产生世界效果的 signed pending intent；不得本地推进权威世界。dev/local 必须使用独立 `world_id`，不得把离线历史合并回 global world。
+
+| 主题 | 当前能力事实 | 目标差距 |
+| --- | --- | --- |
+| 共识执行绑定 | 已有 ordered action/root、`NodeExecutionCommitContext/Result`、execution record 与 committed replay 的局部绑定。 | 尚未将独立版本化协议和 in-process/IPC adapter conformance 固化为实现合同。 |
+| 复制执行与 finality | 当前是 stake-weighted proposal/attestation threshold prototype；正常默认不自动替所有 validator 生成 vote。 | 尚未提供每个 validator 重执行后的 signed >2/3-stake commit certificate、prevote/precommit round、lock、timeout/view-change 或可验证 partition recovery。 |
+| runtime 升级 | 模块 registry/manifest/artifact hash、兼容检查与 atomic apply/replay 已有基础合同。 | 尚未把 runtime manifest 的 governed activation height、validator prefetch/readiness、cancellation/rollback 和 release-lane classifier 收敛为端到端合同。 |
+| 消费者与不可用状态 | chain-linked consumers 已要求 committed-only visibility，replay/restore 不一致会阻断。 | 尚未完成 light companion proof verification、pending-intent durable queue、stale/unavailable projection，或 local/global `world_id` 隔离的完整实现与验证。 |
+| 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 immutable identity manifest -> finalized checkpoint certificate -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
+
+### Consumer compatibility: industrial profile and stage execution
 
 - `MaterialProfileV1`、`ProductProfileV1`、`RecipeProfileV1` 与 `FactoryProfileV1` 是 ABI 类型；对应目录随 `WorldState` 持久化，治理变更通过可回放事件生效。字段结构以 `oasis7_wasm_abi` 为准，不在产品文档复制代码清单。
 - 物流优先级按“动作显式值 > material profile 默认值 > 兼容关键词推断”解析；运输损耗、排产门槛、preferred factory 与瓶颈标签由当前 runtime 规则执行，并把决定结果冻结进事件或 job 状态以维持回放确定性。
@@ -21,7 +37,7 @@
 - 非空 bottleneck profile 优先于推断值；缺失或空配置走兼容推断。产品战略角色与瓶颈压力共同影响排队优先级，准确映射和 fallback 以 runtime 代码与定向测试为执行真值。
 - 上述执行能力不证明玩家侧 `product_validation_quote` / `validation_unlock_preview` 已实现；玩家用途、能力解锁、阶段后果、下一步与门槛恢复路径由 gameplay 权威定义并保持独立验收。
 
-### Gameplay 生命周期协议边界
+### Consumer compatibility: gameplay lifecycle protocol boundary
 
 - Gameplay 生命周期沿用 `validated Action -> DomainEvent -> WorldState` 的 runtime 权威链；动作校验与路由以 `crates/oasis7/src/runtime/world/event_processing.rs` 为准，事件与持久状态以 `crates/oasis7/src/runtime/events.rs` 及 state apply 路径为准。
 - 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；存在激活的 Gameplay tick module 时先校验并应用其 directive，只有没有激活 Gameplay tick module 时才整体使用 native fallback，激活模块后不会因某类 directive 缺失而逐项回退。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。

@@ -69,7 +69,8 @@
 - 首读入口:
   - `gameplay-agent-claim-economy-contract.prd.md`
   - `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
-  - `../../product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
+  - `../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md`
+  - `../../product/world-infrastructure/deterministic-world-execution.prd.md`
 - 适合问题:
   - agent claim 的 token cost、bond、upkeep、reclaim 如何组织
   - restricted grant 如何发放、撤销、过期和 incident 处理

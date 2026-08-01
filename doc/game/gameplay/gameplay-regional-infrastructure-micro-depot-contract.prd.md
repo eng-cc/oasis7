@@ -26,7 +26,7 @@
 - 关键 runtime 数据: `RegionalInfrastructure`, `MicroDepotEvalInput`, `MicroDepotProposal`, `MicroDepotServiceApplied`
 - 关键 player-facing 数据: install quote, upkeep state, service radius, before/after preview, blocker, receipt, module evidence
 
-资源 provenance 边界：设施/材料 inventory 与 records 只在本专题授权的生命周期和 receipt 中使用，不自动成为 `Electricity`、`Data`、restricted slot-1 claim/upkeep support 或 liquid starter OC；它们也不得形成持续或无成本设施补给。跨模块来源与 sink 类别见 [`doc/product/world-infrastructure/prd.md`](../../product/world-infrastructure/prd.md#26-跨模块资源-provenance-边界)，本专题继续拥有具体 lifecycle、费用与实现合同。
+资源 provenance 边界：设施/材料 inventory 与 records 只在本专题授权的生命周期和 receipt 中使用，不自动成为 `Electricity`、`Data`、restricted slot-1 claim/upkeep support 或 liquid starter OC；它们也不得形成持续或无成本设施补给。跨模块来源与 sink 类别见 [`doc/product/world-rules-core-gameplay/prd.md`](../../product/world-rules-core-gameplay/prd.md#resource-model-and-cross-module-provenance)，本专题继续拥有具体 lifecycle、费用与实现合同。
 
 ## 里程碑
 

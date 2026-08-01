@@ -116,6 +116,22 @@ def main() -> None:
         ),
     )
     scenario(
+        "topic-lifecycle",
+        lambda root: replace(
+            root / "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
+            "- 生命周期：`active`",
+            "- 生命周期：`superseded`",
+        ),
+    )
+    scenario(
+        "topic-lifecycle",
+        lambda root: replace(
+            root / "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md",
+            "- 生命周期：`retired`",
+            "- 生命周期：`active`",
+        ),
+    )
+    scenario(
         "entry-contract",
         lambda root: replace(
             root / "doc/product/README.md",
@@ -188,8 +204,8 @@ def main() -> None:
         "traceability-prd-resolution",
         lambda root: replace(
             root / "doc/product/world-infrastructure/prd.md",
-            "PRD-GAME-016",
-            "PRD-GAME-999",
+            "PRD-P2P-001",
+            "PRD-P2P-999",
         ),
     )
     scenario(

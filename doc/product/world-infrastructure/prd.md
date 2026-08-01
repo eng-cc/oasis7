@@ -9,141 +9,83 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-07-19`
+- Last reviewed：`2026-08-01`
 - 后继文档：`无`
-- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“大世界基础设施”的并列产品总入口。
 
-### 活跃产品专题
-
-- [`世界连续性、治理与恢复`](world-continuity-governance-and-recovery.prd.md)：权威世界不分叉、恢复后玩家结果连续、治理不可旁路、紧急处置可申诉与长期世界放行。
-- [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md)：有限区域设施如何解决可读压力，以及经治理的新工业能力如何安全进入同一持久世界。
-- [`区域章程、地点 tenure 与公共融资`](regional-charter-tenure-and-public-funding.prd.md)：空间锚定区域的成立/退化、可续期地点使用权，以及服务费和受限公共 levy 的制度边界。
-- [`受治理工业、市场结算与危机保供`](governed-industry-market-and-emergency-supply.prd.md)：基础工业规则与受治理扩展、全球发现和物理结算、OC/地方经济边界，以及有界紧急保供。
-- [`全局治理、组织连续性与宪制护栏`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md)：普通 OC 治理的有限范围、资格与控制权边界、组织存续/退出，以及普通治理不可改写的宪制保护。
-- [`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md)：相邻 frontier 的受治理扩展、非主权 pioneer priority，以及公共事实与需侦察的实时世界信息边界。
-
 ## 1. 产品承诺
 
-oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识与分布式存储等能力，但这些能力分散在多个专业域，读者无法从一个入口回答：玩家能建设什么、设施怎样持续影响区域、世界状态怎样持久且可审计，以及整个底座何时算产品闭环。
+大世界基础设施是 oasis7 的区块链/分布式系统与确定性世界运行时基础。它提供一个可验证的权威世界历史：共识最终性决定何时提交，网络和存储复制并提供 hash-bound 状态材料，确定性执行把已排序输入转成世界状态，恢复重建同一历史而非第二个世界。
 
-大世界基础设施的产品承诺是：玩家可在统一持久大世界中建设有限作用域、成本可解释、结果可审计的区域设施；这些设施由确定性运行时执行，由分布式状态底座保存与同步，并能在不破坏世界一致性和治理边界的前提下持续扩展。
+它是下层 provider，而不是设施、市场、区域、frontier、组织治理或玩家循环的产品入口。世界规则与核心玩法、智能体与世界模拟、玩家入口与发行在此基础上组合各自产品语义；它们都不能借由本模块的技术能力直接扩张为权威写入权。
 
-工业成长中的关键承诺必须让玩家在提交前读懂成本、约束、预期效果以及下一步或恢复动作；执行结果必须确定、可审计，`ProductValidated` 还必须呈现与玩家相关的能力、用途和成长后果。区域专业化应形成可选择的协作与取舍压力，而不是对所有玩家征收同一种必付税。具体字段、平衡、ABI、profile、event 与 receipt schema 继续由 `game`、runtime 和 WASM 专业权威维护。
+## 2. 范围
 
-## 2. 范围与玩家边界
+本模块只覆盖区块链/分布式底层和其上的确定性世界执行。它不拥有上层的游戏规则、Agent 行为或玩家入口，但这些消费者必须遵循其最终性、版本与 committed-state 边界。
 
-### 2.1 三层范围
+### 活跃产品专题
 
-| 层级 | 产品责任 | 专业域权威 |
-| --- | --- | --- |
-| 区域设施层 | 设施发现、报价、commission、服务、维护、升级与回收；玩家收益、成本、作用域和反滥用边界可读 | `doc/game/prd.md` 及设施专题 PRD |
-| 世界执行层 | 权威校验、确定性状态迁移、WASM/module 执行、事件、receipt、snapshot/replay 与治理 | `doc/world-runtime/prd.md` |
-| 分布式状态层 | 网络、共识、最终性、DistFS、复制、gap/state sync、恢复与节点可观测性 | `doc/p2p/prd.md` |
+- [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md)：共识最终性、单一 canonical history、复制/状态同步、存储角色、网络暴露、bootstrap 与灾难恢复。
+- [`确定性世界执行`](deterministic-world-execution.prd.md)：共识之上的版本化确定性执行、验证者重执行、消费者协议、升级 lane 与 finality 缺失时的 fail-closed 语义。
 
-### 2.2 设施生命周期
+### 非权威迁移索引
 
-`发现 -> 报价 -> 建设/commission -> 运营/提供服务 -> 维护 -> 升级/迁移 -> 回收/退役`
+- [`世界连续性与恢复（历史引用）`](world-continuity-governance-and-recovery.prd.md)：已退休的旧路径，保留仅为存量专业链接；不构成 active authority 或验收。
+- [`区域能力与扩展（待迁移）`](governed-regional-capabilities-and-extensions.prd.md)、[`区域 charter/tenure（待迁移）`](regional-charter-tenure-and-public-funding.prd.md)、[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md)、[`普通治理（待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 与 [`frontier（待迁移）`](frontier-expansion-and-world-information-boundaries.prd.md) 都是 `superseded` 迁移债务：各页迁移头记录接收 owner 与删除条件，内容仍可供接收模块 owner 迁移，但这些路径不再构成本模块产品 authority、路线图、active topic 或验收。
 
-每一步都必须具备明确前置条件、资源变化、权限边界、结构化失败和可追溯 receipt。当前首个正式冻结的设施专题 PRD 基线是 [`micro_depot`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)；它验证区域专业化，不代表自由建造、任意 WASM 上传或全局治理授权。
-
-### 2.3 产品原则
-
-- world-first：设施改变统一世界中的真实状态，不制造第二套旁路世界。
-- emergence-first：底座提供有限、可组合的规则能力，不预写全部结果。
-- persistent：设施状态、成本和影响可恢复、可同步、可延续。
-- auditable：报价、执行、失败、资源扣减和治理动作均有可复核证据。
-- extensible：新增设施复用版本化 schema、module/WASM gate 与迁移规则，不绕过权威运行时。
-
-### 2.4 统一世界模型与术语边界
-
-oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组织、工业与治理都发生在同一持久、可审计的世界叙事中。`viewer` / `pure_api` 是进入同一世界的玩家入口，不是不同世界类型；local / test / production environment 只说明运行阶段，也不是不同玩家世界；`world_id` 与 network tier 是专业技术分区，不是玩家可选择的世界品牌。
-
-统一世界模型本身不证明特定拓扑、容量、可用性、public launch、mainnet 或其他 readiness。当前公开状态与 claim envelope 仍由根 [`README.md`](../../../README.md) 拥有；玩家规则、权威执行和分布式状态证明分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护，测试只作为这些 claim 的验证机制，不产生新的产品世界。
-
-### 2.5 资源模型与模块扩展边界
-
-当前已验证的通用资源类型为 `Electricity` 与 `Data`。世界中的材料、产物和记录可由具体 runtime 领域模型或经治理的模块表达；它们不会因此扩展通用资源类型，也不会自动获得统一的结算、转移、所有权或公开可用性承诺。
-
-所有资源与领域记录仍须遵守权威校验、权限、审计、metering 和治理边界。具体成本、经济数值、数据结构、ABI、manifest、capability 与玩家可读规则继续由对应 gameplay、runtime 和 WASM 专业合同及证据定义，本产品层不把实现现状冻结为永久资源目录。
-
-### 2.6 跨模块资源 provenance 边界
-
-本表只统一来源、可用 sink 类别与不可跨越的边界；不定义数值、汇率、runtime 字段或实现状态。任何条目都必须由相应专业域的权威状态和 receipt 证明，不能由产品层文字产生余额、可用性或公开 claim。
-
-| 资源 / 记录 | 允许的来源与 sink 类别 | 不可转移 / 转换边界 | 反补贴边界 | 专业 owner / 合同 |
-| --- | --- | --- | --- | --- |
-| `Electricity` / `Data` | 通用资源可按权威规则用于已授权的世界操作、工业/服务消耗与经批准的设施 commission、service 或 upkeep sink。 | 不因材料、产品、设施记录或任何 starter 支持而自动转换、铸造、转移所有权或扩大可用范围。 | 不构成持续赠与；设施不得把它们重写为无成本或无限供给。 | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) |
-| restricted slot-1 claim/upkeep support | 仅可在符合资格时支持首个非零 Agent claim 及其声明的 upkeep 承诺。 | 不可变为自由余额、玩家间转移、liquid starter OC、设施库存或材料。 | 不是免费认领，也不提供持续 claim/upkeep 或设施补贴。 | [`Agent ownership and stewardship`](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)、[`agent claim economy contract`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md) |
-| liquid starter OC | 仅在 Agent 已存在后承担首次对话解锁这一受限用途。 | 不支付或延长 claim/upkeep，不能转为 restricted support、设施库存、材料或通用资源。 | 不形成持续对话、认领或设施补贴。 | [`Agent ownership and stewardship`](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)、[`agent claim economy contract`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md) |
-| facility / material inventory and records | 仅在授权设施/材料生命周期内记录 commission、服务、维护、回收和可审计 receipt；允许的 sink 由对应专题声明。 | 不是通用资源类型，不能自动转换为 `Electricity`、`Data`、claim support 或 liquid starter OC，也不自动获得转移/结算权。 | 设施库存/记录不能成为持续或无成本设施补给；补充、重置或新设施来源必须由专业合同另行授权。 | [`micro_depot contract`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) |
-
-本矩阵不改变任何专业域的现有生命周期或当前 availability；发生来源、sink 或转换冲突时，按表中专业 owner 合同与 fresh evidence 处理，并由根 `README.md` 保持公开 claim envelope。
+此前的区域设施、市场/工业、charter、frontier 与普通治理分册已从本模块退休：它们是上层 gameplay/world-rule 产品语义，不能再作为基础设施的 taxonomy 或验收门槛。对应专业域与其他产品模块继续拥有其规则、实现合同和现状证据；本次退休不宣称这些能力已迁移、实现或公开可用。
 
 ## 3. 权威与冲突处理
 
-产品层拥有区域设施、世界执行与分布式状态组成的端到端承诺；`doc/game/prd.md`、`doc/world-runtime/prd.md` 与 `doc/p2p/prd.md` 分别拥有其玩家规则、执行合同与分布式状态证明。冲突时不得由产品层静默改写专业合同，必须由产品 owner 与相应专业 owner 形成显式跨域决策。
+| 层次 | 本模块产品承诺 | 专业域权威 |
+| --- | --- | --- |
+| 分布式底层 | 验证者集合、最终性、唯一顺序、复制、可用性、存储与恢复共同守住一个权威 `world_id` 历史 | `doc/p2p/prd.md` 拥有共识、网络、节点、存储与运维技术合同 |
+| 确定性执行 | 已最终化输入经版本化规则产生唯一世界结果；执行与共识具有独立语义边界 | `doc/world-runtime/prd.md` 拥有状态机、执行、升级、receipt 与 replay 技术合同 |
+| 消费者 | gameplay、Agent 与入口以稳定协议提交 intent、观察 committed state 或验证证明 | `doc/game/prd.md`、`doc/world-simulator/prd.md`、入口/Viewer authority 拥有各自产品行为与体验 |
+| 证据 | 目标能力只在同一候选的跨域专业证据成立时才可表达当前状态 | `doc/testing/prd.md` 与根 `README.md` 分别拥有验证和公开 claim envelope |
 
-### 3.1 玩家边界与经济约束
-
-玩家可以发现合格地点、比较建设与维护成本、commission 被允许的设施、消费其服务、查看区域影响与 receipt，并在规则允许时升级或回收。
-
-玩家不能自由写入权威状态、上传任意未治理模块、绕过 claim/资源/upkeep、通过设施取得默认全局治理权，或把本地/测试环境包装成多个玩家世界。
-
-每类设施必须说明安装成本、持续成本或耗尽边界、收益对象、作用半径、容量/吞吐、break-even 或低使用率风险、回收结果与反套利约束。数值平衡仍由对应 gameplay 专题和实现版本管理，本 PRD 不冻结新的经济数值。
+产品层不定义共识实现、签名算法、消息/存储 schema、runtime ABI、游戏规则、Agent 行为、UI、经济参数或操作 runbook。冲突时以更窄的安全和权威边界为准，并由 P2P 或 runtime 专业 owner 显式裁决。
 
 ## 4. 路线图
 
-1. 单设施闭环：以 `micro_depot` 证明 quote、commission、有限库存/吞吐、服务、失败、reclaim 与 replay 一致。
-2. 设施组合：在相同 authority 与 receipt 模型下扩展物流、维修、审计等有限作用域设施。
-3. 区域网络：支持多设施依赖、区域专业化与可读的资源/维护压力，不把设施变成默认必点税。
-4. 治理扩展：通过显式 module upgrade、migration 和治理审批演进能力，不破坏历史重放与世界最终性。
+1. 用持久、可复验的 commit certificate 取代当前 stake-threshold prototype，并补全 round、锁定、验证者转换和分区恢复。
+2. 建立 hash-bound state availability、按角色的存储/serving、bootstrap/recovery 信任链和 restore drills。
+3. 把 deterministic execution 与共识隔离为可版本化语义合同，完成 certificate-gated execution、升级与 replay 证明。
+4. 以同一协议支持 game/Agent/入口的并发消费，逐步扩展 proof-serving 与 light companion，同时保持 finality 缺失 fail closed。
+
+### 基础不变量
+
+- 单一世界：global canonical order 与 `world_id` 不因区域、环境、节点或缓存而分叉；local development 世界使用独立身份且永不并入。
+- 最终性先于效果：未获得可验证 finality certificate 的 intent 不产生权威世界结果；基础设施不可用时 progression fail closed。
+- 可重建性：恢复仅接受 manifest、certificate、hash-bound snapshot、canonical replay 和 verified state root 组成的信任链。
+- 可替换实现：oasis7 保有协议语义；可选择性采用成熟库，但依赖被版本化合同隔离。
+- 消费者边界：game、Agent 和入口与基础设施并发运行，却不能直接写 canonical state 或把 pending 伪装成 committed。
 
 ## 5. Done：成功标准与验收
 
-- SC-1：从 `doc/product/README.md` 只能进入一个“大世界基础设施”产品 PRD。
-- SC-2：产品 PRD 能同时回答区域设施、世界执行和分布式状态三层的职责与 authority。
-- SC-3：至少一个设施具备从报价到退役的可达闭环，玩家可见成本、限制、收益和 receipt。
-- SC-4：同一确认动作在 replay 后得到一致状态；失败不产生部分扣费、幽灵设施或未审计副作用。
-- SC-5：设施状态可经 snapshot/replication/state sync 恢复，且 transport green 不能替代世界状态闭环证明。
-- SC-6：新增设施必须映射到专业域 PRD-ID、`test_tier_required`，并在涉及多节点、迁移或长期一致性时补 `test_tier_full`。
-- SC-7：工业成长的关键提交点在确认前可读成本、约束、效果与下一步或恢复动作；执行证据确定且可审计，产品校验结果能说明玩家能力、用途与成长后果，区域专业化不退化为普遍税负。
-- SC-8：玩家可读说明将统一持久世界模型与入口、运行环境、`world_id`、network tier 和 readiness 分层表达，不把技术分区或环境包装成不同玩家世界，也不由产品术语推导未经证据支持的公开 claim。
-- SC-9：至少一个区域设施样例以同一 facility/action/receipt identity 贯通玩家报价与确认、权威执行、持久化/replay、复制或 state sync、重连后的玩家可见结果与失败恢复；game、runtime 或 P2P 的孤立通过不得替代该端到端组合证据。
-- SC-10：至少一条可达工业生命周期贯通资源获取或 sourcing、转化或生产、能力或区域服务用途，以及维护、恢复或退役；不得依赖未解释的预置收益，且全过程保持资源守恒、权限校验、回放一致和可读的下一决策。具体 ledger、运输、排程与产品校验动作顺序由专业域拥有。
-- SC-11：代表性区域样例证明空间锚定章程经本地能力证据、邻区异议和宪制/反圈地复核成立；成熟区域的合格本地治理、退化恢复、地点 tenure 和公共融资均保持有界、可审计、可申诉，且资产/身份不会被任意抹除。
-- SC-12：代表性工业与市场样例证明基础规则与受治理扩展、许可/开放、全球发现与物理结算、OC 与地方经济边界、常态自由价格及紧急保供在同一可审计世界中成立，且不由价格干预或外部资产权利绕过世界规则。
-- SC-13：代表性全局治理与组织生命周期样例证明普通锁定 OC 治理仅处理政策、财库和 charter 运行事项，按实际控制人有界聚合且与外部 OC 转让分离；组织可配置但不越过个人/身份/退出/历史底线，解散或长期不活跃保持有序、可审计的连续性；宪制保护不被普通治理改写。
-- SC-14：代表性 frontier 样例证明有限已知世界只通过相邻的受治理探索、物流和 charter 扩展，并保持同一时间线、经济和历史；pioneer priority 有限、可转让且非主权，世界信息按公共事实与需侦察的实时信息分层并显示 freshness。
-
-SC-3、SC-9 与 SC-10 是设施/工业闭环的目标验收，描述达成时需要证明什么，不声明 `micro_depot` 或后续路线当前已可用、已合入或可对外发布。当前可用性与任何公开 claim 必须绑定同一新鲜候选的专业域证据；候选 gate、产品决策、QA 与 LiveOps 同步成立后，仍只由根 [`README.md`](../../../README.md) 的 claim envelope 对外表达。历史样本、局部通过或单域实现不能代签该结论。
-
-验收证据由下层专业域提供：设施体验与经济走 `game`；确定性、WASM、receipt 和 replay 走 `world-runtime`；共识、复制、恢复与多节点一致性走 `p2p`。产品层只汇总是否形成端到端闭环，不复制各域测试步骤。
+- SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。
+- SC-2：验证者、full/state-sync、archive、light companion 与公开服务在各自角色内复制、提供和验证状态；任何非权威服务不取得最终性或写入权。
+- SC-3：bootstrap、snapshot、replay、state sync、pruning 和灾难恢复证明同一历史/状态根可重建；任一证明缺失或不匹配时停止 serving/voting。
+- SC-4：全部活动验证者在 attestation 前重执行相同版本化执行；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
+- SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时保持可解释的 pending/failure 边界。
 
 ### 5.1 验收追踪
 
-| 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
-| --- | --- | --- | --- | --- | --- |
-| SC-1 | producer_system_designer | PRD-GAME-001 | `doc/game/prd.md` | 产品入口唯一性检查 | test_tier_required |
-| SC-2 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 权威映射与反向链接检查 | test_tier_required |
-| SC-3 | gameplay_designer | PRD-GAME-016 | `doc/game/prd.md` | 设施报价到退役玩法闭环证据 | test_tier_required |
-| SC-4 | runtime_engineer | PRD-WORLD_RUNTIME-001 | `doc/world-runtime/prd.md` | receipt、失败原子性与 replay 回归 | test_tier_required |
-| SC-5 | blockchain_ops_engineer | PRD-P2P-002 | `doc/p2p/prd.md` | snapshot、replication、state-sync 多节点恢复证据 | test_tier_full |
-| SC-6 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到 required/full 证据的发布门禁 | test_tier_required |
-| SC-7 | gameplay_designer | PRD-GAME-002 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md` | 工业提交前可读性、确定性结果、产品校验后果与区域专业化取舍证据 | test_tier_required |
-| SC-8 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 世界模型、技术分区、运行环境与公开 claim 分层审计 | test_tier_required |
-| SC-9 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-002 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 同一设施身份跨 quote、执行、receipt、replay、sync、重连与恢复的组合证据，包含适用的 S9/S10 长跑与恢复演练 | test_tier_full |
-| SC-10 | gameplay_designer / runtime_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md` | 资源获取到工业用途及维护/退役的守恒、权限、回放和玩家下一步证据 | test_tier_required |
-| SC-11 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/regional-charter-tenure-and-public-funding.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 区域成立/退化、地点使用权、服务费/公共 levy、跨域审计与申诉的组合证据 | test_tier_full |
-| SC-12 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 工业准入、许可/开放、市场发现/物流/escrow、价格与紧急保供的组合证据 | test_tier_full |
-| SC-13 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / agent_engineer / gameplay_designer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通/宪制双轨、锁定 OC 与控制人资格、组织解散/estate、权利底线、审计和申诉的组合证据 | test_tier_full |
-| SC-14 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-infrastructure/frontier-expansion-and-world-information-boundaries.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 相邻 frontier、探索/物流/charter、priority、情报私有/安全/公共 baseline、实时信息授权与 freshness 的组合证据 | test_tier_full |
+| 成功标准 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| SC-1 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-001 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | certificate、验证者转换、分区/Byzantine 与权限负例 | test_tier_full |
+| SC-2 | blockchain_ops_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/testing/prd.md` | 复制、存储角色、proof-serving 与非权威权限负例 | test_tier_full |
+| SC-3 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | bootstrap、checkpoint、snapshot、replay、root verification 与 restore drill | test_tier_full |
+| SC-4 | runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | deterministic re-execution、upgrade activation、replay 与 mixed-version 拒绝 | test_tier_full |
+| SC-5 | runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | committed/pending protocol boundary、proof verification 与 finality-outage 负例 | test_tier_required |
 
 ## 6. Non-Goals
 
-- 不合并或重命名 `game`、`world-runtime`、`p2p` 等工程模块。
-- 不把 `micro_depot` 改写成完整设施体系，也不改变其阶段、数值、gate 或 claim envelope。
-- 不新增自由建造、任意 WASM 上传、默认全局治理权或无成本持久设施。
-- 不在本文定义 runtime、WASM、共识、网络或存储实现细节。
+这是目标架构，不是当前可用性或发行声明。当前代码仍须由 P2P/runtime/QA 同一候选证据评估；根 `README.md` 独占公开 claim envelope。
+
+- 不把当前 stake-threshold prototype 误报为完整 BFT certificate、分区恢复、permissionless 服务可用性或主网。
+- 不以本模块定义区域设施、工业/市场、charter、frontier、普通治理、资源平衡、Agent 行为或玩家体验。
+- 不把运维拓扑、软件部署、SLA、费用/奖励数值或第三方库选择写成产品已交付事实。
 - 不批量改写历史文档，不制造兼容 redirect 壳，不改变当前公开状态或发布声明。
