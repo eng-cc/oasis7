@@ -109,10 +109,14 @@ def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
     return targets
 
 
-def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
-    """Return topic PRDs declared by the module's dedicated active-topic section."""
+def topic_targets_for_section(
+    root: Path, module_path: Path, text: str, heading: str
+) -> set[str]:
+    """Return topic PRDs declared by one dedicated module inventory section."""
     section = re.search(
-        r"^### 活跃产品专题\s*$([\s\S]*?)(?=^#{1,3}\s|\Z)", text, re.MULTILINE
+        rf"^### {re.escape(heading)}\s*$([\s\S]*?)(?=^#{{1,3}}\s|\Z)",
+        text,
+        re.MULTILINE,
     )
     if not section:
         return set()
@@ -121,6 +125,14 @@ def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
         for target in markdown_targets(root, module_path, section.group(1))
         if target.endswith(".prd.md") and target != module_path.relative_to(root).as_posix()
     }
+
+
+def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
+    return topic_targets_for_section(root, module_path, text, "活跃产品专题")
+
+
+def migration_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
+    return topic_targets_for_section(root, module_path, text, "非权威迁移索引")
 
 
 def check(root: Path) -> list[str]:
@@ -166,6 +178,7 @@ def check(root: Path) -> list[str]:
         if path.is_file()
     }
     declared_topics: set[str] = set()
+    declared_migration_topics: set[str] = set()
 
     seen_ids: set[str] = set()
     for module in MODULES:
@@ -223,7 +236,19 @@ def check(root: Path) -> list[str]:
             topic_path = root / topic
             if topic_path.parent != path.parent:
                 fail(errors, "topic-module-boundary", f"{module.path}: {topic}")
+            if metadata(topic_path.read_text(encoding="utf-8"), "生命周期") != "active":
+                fail(errors, "topic-lifecycle", f"active topic must declare active lifecycle: {topic}")
             declared_topics.add(topic)
+
+        migration_topics = migration_topic_targets(root, path, text)
+        for topic in migration_topics:
+            topic_path = root / topic
+            if topic_path.parent != path.parent:
+                fail(errors, "topic-module-boundary", f"{module.path}: {topic}")
+            lifecycle = metadata(topic_path.read_text(encoding="utf-8"), "生命周期")
+            if lifecycle not in {"superseded", "retired"}:
+                fail(errors, "topic-lifecycle", f"migration topic must be superseded or retired: {topic}")
+            declared_migration_topics.add(topic)
 
         success_ids = re.findall(r"^- (SC-\d+)：", text, re.MULTILINE)
         trace_rows = re.findall(r"^\|\s*(SC-\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|$", text, re.MULTILINE)
@@ -245,7 +270,9 @@ def check(root: Path) -> list[str]:
             if not evidence.strip() or tier.strip() not in {"test_tier_required", "test_tier_full"}:
                 fail(errors, "traceability-evidence-tier", f"{module.path}: {sc_id}")
 
-    expected_inventory = expected_paths | declared_topics
+    if declared_topics & declared_migration_topics:
+        fail(errors, "topic-duplicate-declaration", "a topic cannot be both active and migration-only")
+    expected_inventory = expected_paths | declared_topics | declared_migration_topics
     if actual_paths != expected_inventory:
         fail(
             errors,

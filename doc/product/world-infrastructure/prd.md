@@ -29,8 +29,11 @@
 
 - [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md)：共识最终性、单一 canonical history、复制/状态同步、存储角色、网络暴露、bootstrap 与灾难恢复。
 - [`确定性世界执行`](deterministic-world-execution.prd.md)：共识之上的版本化确定性执行、验证者重执行、消费者协议、升级 lane 与 finality 缺失时的 fail-closed 语义。
+
+### 非权威迁移索引
+
 - [`世界连续性与恢复（历史引用）`](world-continuity-governance-and-recovery.prd.md)：已退休的旧路径，保留仅为存量专业链接；不构成 active authority 或验收。
-- [`区域能力与扩展（待迁移）`](governed-regional-capabilities-and-extensions.prd.md)、[`区域 charter/tenure（待迁移）`](regional-charter-tenure-and-public-funding.prd.md)、[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md)、[`普通治理（待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 与 [`frontier（待迁移）`](frontier-expansion-and-world-information-boundaries.prd.md) 都是 `superseded` 迁移债务：内容仍可供接收模块 owner 迁移，不再构成本模块产品 authority、路线图或验收。
+- [`区域能力与扩展（待迁移）`](governed-regional-capabilities-and-extensions.prd.md)、[`区域 charter/tenure（待迁移）`](regional-charter-tenure-and-public-funding.prd.md)、[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md)、[`普通治理（待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 与 [`frontier（待迁移）`](frontier-expansion-and-world-information-boundaries.prd.md) 都是 `superseded` 迁移债务：各页迁移头记录接收 owner 与删除条件，内容仍可供接收模块 owner 迁移，但这些路径不再构成本模块产品 authority、路线图、active topic 或验收。
 
 此前的区域设施、市场/工业、charter、frontier 与普通治理分册已从本模块退休：它们是上层 gameplay/world-rule 产品语义，不能再作为基础设施的 taxonomy 或验收门槛。对应专业域与其他产品模块继续拥有其规则、实现合同和现状证据；本次退休不宣称这些能力已迁移、实现或公开可用。
 
