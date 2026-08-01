@@ -1,5 +1,6 @@
 use oasis7::runtime::{
     Action as RuntimeAction, CrisisStatus, DomainEvent as RuntimeDomainEvent,
+    EconomicContractFulfillmentKind,
     RejectReason as RuntimeRejectReason, World as RuntimeWorld,
     WorldEventBody as RuntimeWorldEventBody,
 };
@@ -130,6 +131,7 @@ fn simulator_gameplay_action_to_runtime(action: &SimulatorAction) -> Option<Runt
             creator_agent_id: creator_agent_id.clone(),
             contract_id: contract_id.clone(),
             counterparty_agent_id: counterparty_agent_id.clone(),
+            fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
             settlement_kind: *settlement_kind,
             settlement_amount: *settlement_amount,
             reputation_stake: *reputation_stake,
@@ -395,6 +397,7 @@ impl RuntimeGameplayBridge {
                 creator_agent_id: proposer.clone(),
                 contract_id: Self::CIVIC_HOTSPOT_CONTRACT_ID.to_string(),
                 counterparty_agent_id: counterparty.clone(),
+                fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
                 settlement_kind: ResourceKind::Data,
                 settlement_amount: 10,
                 reputation_stake: 3,
@@ -475,6 +478,18 @@ impl RuntimeGameplayBridge {
             world,
             next_simulator_event_id: kernel.journal().len() as u64 + 1,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_agent_resource_balance(
+        &mut self,
+        agent_id: &str,
+        kind: ResourceKind,
+        amount: i64,
+    ) -> Result<(), String> {
+        self.world
+            .set_agent_resource_balance(agent_id, kind, amount)
+            .map_err(|error| format!("seed runtime bridge resource balance failed: {error:?}"))
     }
 
     pub(crate) fn apply_preset(

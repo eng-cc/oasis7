@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
-use super::gameplay_state::WarParticipantOutcome;
+use super::gameplay_state::{EconomicContractFulfillmentKind, WarParticipantOutcome};
 use super::governance::GovernanceFinalityCertificate;
 use super::main_token::{
     MainTokenConfig, MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
@@ -561,6 +561,8 @@ pub enum Action {
         creator_agent_id: String,
         contract_id: String,
         counterparty_agent_id: String,
+        #[serde(default)]
+        fulfillment_kind: EconomicContractFulfillmentKind,
         settlement_kind: ResourceKind,
         settlement_amount: i64,
         reputation_stake: i64,

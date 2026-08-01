@@ -118,11 +118,12 @@ pub use gameplay::{
     ActiveGameplayModule, GAMEPLAY_BASELINE_KINDS, GameplayKindCoverage, GameplayModeReadiness,
 };
 pub use gameplay_state::{
-    AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
-    EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
-    GovernanceIdentityProfileState, GovernanceIdentityStatus, GovernanceProposalState,
-    GovernanceProposalStatus, GovernanceVoteBallotState, GovernanceVoteState,
-    GovernanceVoteWeightSnapshotState, MetaProgressState, WarParticipantOutcome, WarState,
+    AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractFulfillmentKind,
+    EconomicContractState, EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT,
+    GameplayPolicyState, GovernanceIdentityProfileState, GovernanceIdentityStatus,
+    GovernanceProposalState, GovernanceProposalStatus, GovernanceVoteBallotState,
+    GovernanceVoteState, GovernanceVoteWeightSnapshotState, MetaProgressState,
+    WarParticipantOutcome, WarState,
 };
 pub use modules::{
     EconomyModuleKind, FactoryBuildDecision, FactoryBuildRequest, FactoryModuleApi,

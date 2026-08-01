@@ -269,7 +269,7 @@ impl PromptAssembler {
 {{"decision":"grant_meta_progress","operator_agent_id":"<self|agent:<id>>","target_agent_id":"<self|agent:<id>>","track":"<track>","points":<i64 !=0>,"achievement_id":"<optional_text>"}}
 {{"decision":"open_economic_contract","creator_agent_id":"<self|agent:<id>>","contract_id":"<contract_id>","counterparty_agent_id":"<self|agent:<id>>","settlement_kind":"<electricity|data>","settlement_amount":<i64 >=1>,"reputation_stake":<i64 >=1>,"expires_at":<u64 >=1>,"description":"<text>"}}
 {{"decision":"accept_economic_contract","accepter_agent_id":"<self|agent:<id>>","contract_id":"<contract_id>"}}
-{{"decision":"settle_economic_contract","operator_agent_id":"<self|agent:<id>>","contract_id":"<contract_id>","success":<bool>,"notes":"<text>"}}
+{{"decision":"settle_economic_contract","operator_agent_id":"<self|agent:<id>>","contract_id":"<contract_id>","success":true,"notes":"<text>"}}
 {{"decision":"execute_until","action":{{<decision_json>}},"until":{{"event":"<event_name>"}},"max_ticks":<u64>}}
 - 任意决策 args 可选附带：`"message_to_user":"<string>"`
 - 推荐 move 模板: {{"decision":"execute_until","action":{{"decision":"move_agent","to":"<location_id>"}},"until":{{"event_any_of":["arrive_target","action_rejected","new_visible_agent","new_visible_location"]}},"max_ticks":<u64 1..=8>}}
@@ -304,6 +304,7 @@ impl PromptAssembler {
 - adjudicate_social_fact.adjudication 仅允许 confirm/retract
 - declare_social_edge.weight_bps 必须在 -10000..=10000
 - gameplay/economic 决策字段必须遵守 schema 中的枚举与数值约束（尤其 proposal options、vote weight、meta points、contract settlement_kind/amount）
+- settle_economic_contract.success 当前必须为 true
 - move_agent.to 不能是当前所在位置（若 observation 中该 location 的 distance_cm=0，则不要选择该 location）
 - factory_kind 当前支持：factory.smelter.mk1、factory.assembler.mk1、factory.power.radiation.mk1（留空将被拒绝）
 - recipe_id 当前支持：recipe.smelter.iron_ingot / recipe.smelter.copper_wire / recipe.smelter.polymer_resin / recipe.smelter.alloy_plate / recipe.assembler.gear / recipe.assembler.control_chip / recipe.assembler.motor_mk1 / recipe.assembler.logistics_drone / recipe.assembler.sensor_pack / recipe.assembler.module_rack / recipe.assembler.factory_core

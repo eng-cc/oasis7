@@ -963,7 +963,7 @@ fn compiled_engine_fingerprint(engine: &wasmtime::Engine, config: &WasmExecutorC
     engine.precompile_compatibility_hash().hash(&mut hasher);
     let precompile_key = hasher.finish();
     format!(
-        "wasmtime-cf-v2-key{:016x}-{}-{}-fuel{}-mem{}-out{}-call{}",
+        "wasmtime-cf-v3-key{:016x}-{}-{}-fuel{}-mem{}-out{}-call{}",
         precompile_key,
         std::env::consts::ARCH,
         std::env::consts::OS,

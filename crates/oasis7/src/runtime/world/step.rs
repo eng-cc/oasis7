@@ -7,6 +7,7 @@ use super::super::{
 };
 use super::World;
 use super::economy::EconomyActionResolution;
+use crate::runtime::EconomicContractFulfillmentKind;
 use crate::runtime::RuntimeCommittedTickContext;
 use crate::simulator::ResourceKind;
 
@@ -21,6 +22,15 @@ struct FactoryProductionFollowupContext {
 
 impl World {
     fn should_emit_action_accepted(action: &Action) -> bool {
+        if matches!(
+            action,
+            Action::OpenEconomicContract {
+                fulfillment_kind: EconomicContractFulfillmentKind::Service,
+                ..
+            } | Action::SettleEconomicContract { success: false, .. }
+        ) {
+            return false;
+        }
         matches!(
             action,
             Action::FormAlliance { .. }

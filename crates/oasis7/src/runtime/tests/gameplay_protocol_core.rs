@@ -276,6 +276,7 @@ fn gameplay_action_accepted_event_survives_save_and_load() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.ack.persist".to_string(),
         counterparty_agent_id: "a".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 1,
         reputation_stake: 1,

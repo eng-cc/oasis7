@@ -800,6 +800,7 @@ fn runtime_simulator_action_mapping_equivalence_covers_core_gameplay_and_economy
             creator_agent_id: "agent-1".to_string(),
             contract_id: "contract.alpha".to_string(),
             counterparty_agent_id: "agent-2".to_string(),
+            fulfillment_kind: crate::runtime::EconomicContractFulfillmentKind::AtomicExchange,
             settlement_kind: ResourceKind::Data,
             settlement_amount: 5,
             reputation_stake: 7,

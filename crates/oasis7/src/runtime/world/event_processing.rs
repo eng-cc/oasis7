@@ -52,6 +52,7 @@ pub(super) mod action_to_event_economy;
 mod action_to_event_gameplay;
 mod action_to_event_gameplay_meta;
 mod action_to_event_policy_contract;
+mod action_to_event_policy_contract_rejection;
 mod main_token;
 
 impl World {

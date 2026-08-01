@@ -197,6 +197,7 @@ pub(in crate::viewer::runtime_live) fn simulator_action_to_runtime(
             creator_agent_id: creator_agent_id.clone(),
             contract_id: contract_id.clone(),
             counterparty_agent_id: counterparty_agent_id.clone(),
+            fulfillment_kind: crate::runtime::EconomicContractFulfillmentKind::AtomicExchange,
             settlement_kind: *settlement_kind,
             settlement_amount: *settlement_amount,
             reputation_stake: *reputation_stake,

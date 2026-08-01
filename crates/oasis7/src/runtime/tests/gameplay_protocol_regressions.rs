@@ -31,6 +31,7 @@ fn economic_contract_settlement_overflow_keeps_state_atomic() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.atomic.overflow".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 1,
         reputation_stake: 5,
@@ -100,6 +101,108 @@ fn economic_contract_settlement_overflow_keeps_state_atomic() {
 }
 
 #[test]
+fn economic_contract_service_open_is_denied_without_state_effect() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b"]);
+    let action = Action::OpenEconomicContract {
+        creator_agent_id: "a".to_string(),
+        contract_id: "contract.service.unavailable".to_string(),
+        counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
+        settlement_kind: ResourceKind::Electricity,
+        settlement_amount: 10,
+        reputation_stake: 1,
+        expires_at: world.state().time.saturating_add(10),
+        description: "unsupported ongoing maintenance".to_string(),
+    };
+    let mut value = serde_json::to_value(action).expect("serialize contract action");
+    value["data"]["fulfillment_kind"] = serde_json::json!("service");
+    let service_action: Action = serde_json::from_value(value).expect("deserialize service action");
+    let events_before = world.journal().len();
+
+    world.submit_action(service_action);
+    world
+        .step()
+        .expect("service opening should be rejected as a world event");
+
+    assert_latest_rule_denied_contains(
+        &world,
+        "service contracts unavailable: collateral/evidence/remedy not implemented",
+    );
+    assert!(
+        !world
+            .state()
+            .economic_contracts
+            .contains_key("contract.service.unavailable"),
+        "denied service opening must not persist a contract"
+    );
+    assert_eq!(world.journal().len(), events_before.saturating_add(1));
+}
+
+#[test]
+fn economic_contract_atomic_failure_is_denied_without_settlement_effect() {
+    let mut world = World::new();
+    register_agents(&mut world, &["a", "b"]);
+    world
+        .set_agent_resource_balance("a", ResourceKind::Electricity, 20)
+        .expect("seed creator electricity");
+
+    world.submit_action(Action::OpenEconomicContract {
+        creator_agent_id: "a".to_string(),
+        contract_id: "contract.atomic.failure".to_string(),
+        counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
+        settlement_kind: ResourceKind::Electricity,
+        settlement_amount: 10,
+        reputation_stake: 3,
+        expires_at: world.state().time.saturating_add(10),
+        description: "atomic exchange cannot be breach-settled".to_string(),
+    });
+    world.step().expect("open atomic contract");
+    world.submit_action(Action::AcceptEconomicContract {
+        accepter_agent_id: "b".to_string(),
+        contract_id: "contract.atomic.failure".to_string(),
+    });
+    world.step().expect("accept atomic contract");
+    let events_before = world.journal().len();
+
+    world.submit_action(Action::SettleEconomicContract {
+        operator_agent_id: "a".to_string(),
+        contract_id: "contract.atomic.failure".to_string(),
+        success: false,
+        notes: "reported breach".to_string(),
+    });
+    world
+        .step()
+        .expect("failed atomic settlement should be rejected as a world event");
+
+    assert_latest_rule_denied_contains(&world, "atomic exchange settlement requires success=true");
+    let contract = world
+        .state()
+        .economic_contracts
+        .get("contract.atomic.failure")
+        .expect("accepted atomic contract remains available");
+    assert_eq!(contract.status, EconomicContractStatus::Accepted);
+    assert_eq!(contract.settlement_success, None);
+    assert_eq!(contract.settled_at, None);
+    assert_eq!(world.state().reputation_scores.get("a"), None);
+    assert_eq!(world.state().reputation_scores.get("b"), None);
+    assert_eq!(
+        world
+            .agent_resource_balance("a", ResourceKind::Electricity)
+            .expect("creator electricity"),
+        20
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("b", ResourceKind::Electricity)
+            .expect("counterparty electricity"),
+        0
+    );
+    assert_eq!(world.journal().len(), events_before.saturating_add(1));
+}
+
+#[test]
 fn economic_contract_success_reputation_reward_respects_stake_and_cap() {
     let mut world = World::new();
     register_agents(&mut world, &["a", "b", "c"]);
@@ -134,6 +237,7 @@ fn economic_contract_success_reputation_reward_respects_stake_and_cap() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.stake.bound".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 200,
         reputation_stake: 5,
@@ -159,6 +263,7 @@ fn economic_contract_success_reputation_reward_respects_stake_and_cap() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.cap.bound".to_string(),
         counterparty_agent_id: "c".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 500,
         reputation_stake: 80,
@@ -206,6 +311,7 @@ fn economic_contract_pair_cooldown_rejects_repeated_success_settlement() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.cooldown.1".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 20,
         reputation_stake: 5,
@@ -232,6 +338,7 @@ fn economic_contract_pair_cooldown_rejects_repeated_success_settlement() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.cooldown.2".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 20,
         reputation_stake: 5,
@@ -296,6 +403,7 @@ fn economic_contract_reputation_window_cap_decays_reward_to_zero_then_recovers()
             creator_agent_id: "a".to_string(),
             contract_id: contract_id.to_string(),
             counterparty_agent_id: counterparty_agent_id.to_string(),
+            fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
             settlement_kind: ResourceKind::Electricity,
             settlement_amount: 200,
             reputation_stake: 20,
@@ -374,6 +482,7 @@ fn economic_contract_respects_policy_quota_and_block_list() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.ok".to_string(),
         counterparty_agent_id: "c".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 10,
         reputation_stake: 4,
@@ -386,6 +495,7 @@ fn economic_contract_respects_policy_quota_and_block_list() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.quota".to_string(),
         counterparty_agent_id: "c".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 10,
         reputation_stake: 4,
@@ -399,6 +509,7 @@ fn economic_contract_respects_policy_quota_and_block_list() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.blocked".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 10,
         reputation_stake: 4,
@@ -419,6 +530,7 @@ fn economic_contract_expires_and_penalizes_reputation() {
         creator_agent_id: "a".to_string(),
         contract_id: "contract.expire".to_string(),
         counterparty_agent_id: "b".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Electricity,
         settlement_amount: 5,
         reputation_stake: 6,

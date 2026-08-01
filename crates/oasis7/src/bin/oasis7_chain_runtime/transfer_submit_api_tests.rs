@@ -19,8 +19,8 @@ use oasis7::consensus_action_payload::{
     sign_main_token_runtime_action_auth,
 };
 use oasis7::runtime::{
-    Action, EconomicContractState, EconomicContractStatus, MainTokenAccountBalance,
-    MainTokenConfig, MainTokenSupplyState, World, WorldState,
+    Action, EconomicContractFulfillmentKind, EconomicContractState, EconomicContractStatus,
+    MainTokenAccountBalance, MainTokenConfig, MainTokenSupplyState, World, WorldState,
     main_token_account_id_from_node_public_key,
 };
 use oasis7::simulator::ResourceKind;
@@ -262,6 +262,7 @@ fn seed_world_for_explorer_p1(temp_dir: &Path) {
             contract_id: "contract:alpha".to_string(),
             creator_agent_id: "player:alice".to_string(),
             counterparty_agent_id: "player:bob".to_string(),
+            fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
             settlement_kind: ResourceKind::Electricity,
             settlement_amount: 88,
             reputation_stake: 5,

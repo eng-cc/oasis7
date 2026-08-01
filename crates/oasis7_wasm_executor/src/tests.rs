@@ -640,6 +640,15 @@ fn wasm_executor_disk_cache_persists_serialized_compiled_artifact() {
     let cache_file = executor
         .compiled_disk_cache_path_for_test(wasm_hash.as_str())
         .expect("cache path");
+    let cache_namespace = cache_file
+        .parent()
+        .and_then(|path| path.file_name())
+        .and_then(|name| name.to_str())
+        .expect("cache namespace");
+    assert!(
+        cache_namespace.starts_with("wasmtime-cf-v3-key"),
+        "compiled cache namespace must invalidate Wasmtime 43 artifacts: {cache_namespace}"
+    );
     let cached_bytes = fs::read(&cache_file).expect("read serialized cache");
     assert_ne!(cached_bytes, wasm);
     assert!(

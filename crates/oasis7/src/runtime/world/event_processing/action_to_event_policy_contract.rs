@@ -1,4 +1,6 @@
+use super::action_to_event_policy_contract_rejection::economic_contract_rule_denied;
 use super::*;
+use crate::runtime::EconomicContractFulfillmentKind;
 use std::collections::BTreeMap;
 
 use crate::runtime::{GovernanceValidatorAdmissionRecord, GovernanceValidatorAdmissionStatus};
@@ -793,12 +795,19 @@ impl World {
                 creator_agent_id,
                 contract_id,
                 counterparty_agent_id,
+                fulfillment_kind,
                 settlement_kind,
                 settlement_amount,
                 reputation_stake,
                 expires_at,
                 description,
             } => {
+                if *fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Ok(economic_contract_rule_denied(
+                        action_id,
+                        "service contracts unavailable: collateral/evidence/remedy not implemented",
+                    ));
+                }
                 if !self.state.agents.contains_key(creator_agent_id) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
@@ -825,12 +834,10 @@ impl World {
                 }
                 let contract_id = contract_id.trim();
                 if contract_id.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    return Ok(economic_contract_rule_denied(
                         action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["contract_id cannot be empty".to_string()],
-                        },
-                    }));
+                        "contract_id cannot be empty",
+                    ));
                 }
                 if self.state.economic_contracts.contains_key(contract_id) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -873,14 +880,10 @@ impl World {
                 }
                 let description = description.trim();
                 if description.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    return Ok(economic_contract_rule_denied(
                         action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![
-                                "economic contract description cannot be empty".to_string(),
-                            ],
-                        },
-                    }));
+                        "economic contract description cannot be empty",
+                    ));
                 }
                 if self
                     .state
@@ -926,6 +929,7 @@ impl World {
                         creator_agent_id: creator_agent_id.clone(),
                         contract_id: contract_id.to_string(),
                         counterparty_agent_id: counterparty_agent_id.clone(),
+                        fulfillment_kind: *fulfillment_kind,
                         settlement_kind: *settlement_kind,
                         settlement_amount: *settlement_amount,
                         reputation_stake: *reputation_stake,
@@ -948,12 +952,10 @@ impl World {
                 }
                 let contract_id = contract_id.trim();
                 if contract_id.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    return Ok(economic_contract_rule_denied(
                         action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["contract_id cannot be empty".to_string()],
-                        },
-                    }));
+                        "contract_id cannot be empty",
+                    ));
                 }
                 let Some(contract) = self.state.economic_contracts.get(contract_id) else {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -1016,12 +1018,10 @@ impl World {
                 }
                 let contract_id = contract_id.trim();
                 if contract_id.is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    return Ok(economic_contract_rule_denied(
                         action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["contract_id cannot be empty".to_string()],
-                        },
-                    }));
+                        "contract_id cannot be empty",
+                    ));
                 }
                 let Some(contract) = self.state.economic_contracts.get(contract_id) else {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -1041,6 +1041,18 @@ impl World {
                             )],
                         },
                     }));
+                }
+                if contract.fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Ok(economic_contract_rule_denied(
+                        action_id,
+                        "service contracts unavailable: collateral/evidence/remedy not implemented",
+                    ));
+                }
+                if !success {
+                    return Ok(economic_contract_rule_denied(
+                        action_id,
+                        "atomic exchange settlement requires success=true",
+                    ));
                 }
                 if contract.creator_agent_id != *operator_agent_id
                     && contract.counterparty_agent_id != *operator_agent_id
@@ -1163,7 +1175,7 @@ impl World {
                         counterparty_reward,
                     )
                 } else {
-                    (0, 0, -contract.reputation_stake, 0)
+                    unreachable!("atomic exchanges require success=true before settlement")
                 };
 
                 Ok(WorldEventBody::Domain(

@@ -263,12 +263,28 @@ impl Default for EconomicContractStatus {
     }
 }
 
+/// Settlement semantics for a persisted economic contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EconomicContractFulfillmentKind {
+    AtomicExchange,
+    Service,
+}
+
+impl Default for EconomicContractFulfillmentKind {
+    fn default() -> Self {
+        Self::AtomicExchange
+    }
+}
+
 /// Persisted economic contract state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EconomicContractState {
     pub contract_id: String,
     pub creator_agent_id: String,
     pub counterparty_agent_id: String,
+    #[serde(default)]
+    pub fulfillment_kind: EconomicContractFulfillmentKind,
     pub settlement_kind: ResourceKind,
     pub settlement_amount: i64,
     pub reputation_stake: i64,

@@ -5,8 +5,9 @@ use serde::Deserialize;
 use std::cmp::Ordering;
 
 use super::super::{
-    CrisisStatus, DomainEvent, EconomicContractStatus, GovernanceProposalStatus, ModuleRole,
-    WarParticipantOutcome, WorldError, WorldEvent, WorldEventBody,
+    CrisisStatus, DomainEvent, EconomicContractFulfillmentKind, EconomicContractStatus,
+    GovernanceProposalStatus, ModuleRole, WarParticipantOutcome, WorldError, WorldEvent,
+    WorldEventBody,
 };
 use super::World;
 use crate::simulator::ResourceKind;
@@ -306,7 +307,8 @@ impl World {
                 matches!(
                     contract.status,
                     EconomicContractStatus::Open | EconomicContractStatus::Accepted
-                ) && contract.expires_at <= now
+                ) && contract.fulfillment_kind == EconomicContractFulfillmentKind::AtomicExchange
+                    && contract.expires_at <= now
             })
             .map(|contract| {
                 (
@@ -673,8 +675,8 @@ impl World {
 mod tests {
     use super::*;
     use crate::runtime::{
-        ModuleAbiContract, ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry,
-        ModuleRole,
+        EconomicContractState, ModuleAbiContract, ModuleKind, ModuleLimits, ModuleManifest,
+        ModuleRecord, ModuleRegistry, ModuleRole,
     };
     use serde_json::json;
 
@@ -720,6 +722,53 @@ mod tests {
             kind: kind.to_string(),
             payload: json!({"directives": []}),
         }
+    }
+
+    #[test]
+    fn persisted_service_contract_is_quarantined_from_expiry_lifecycle() {
+        let mut world = World::new();
+        world.state.time = 10;
+        world
+            .state
+            .reputation_scores
+            .insert("creator".to_string(), 7);
+        world.state.economic_contracts.insert(
+            "contract.service".to_string(),
+            EconomicContractState {
+                contract_id: "contract.service".to_string(),
+                creator_agent_id: "creator".to_string(),
+                counterparty_agent_id: "counterparty".to_string(),
+                fulfillment_kind: EconomicContractFulfillmentKind::Service,
+                settlement_kind: ResourceKind::Data,
+                settlement_amount: 5,
+                reputation_stake: 4,
+                expires_at: 9,
+                description: "persisted unsupported service".to_string(),
+                status: EconomicContractStatus::Accepted,
+                accepted_at: Some(2),
+                settled_at: None,
+                settlement_success: None,
+                transfer_amount: 0,
+                tax_amount: 0,
+                settlement_notes: None,
+            },
+        );
+        let journal_len = world.journal.events.len();
+        let mut emitted = Vec::new();
+
+        world
+            .process_economic_contract_lifecycle(&mut emitted)
+            .expect("quarantine service contract");
+
+        let contract = world
+            .state
+            .economic_contracts
+            .get("contract.service")
+            .expect("service contract retained");
+        assert_eq!(contract.status, EconomicContractStatus::Accepted);
+        assert_eq!(world.state.reputation_scores.get("creator"), Some(&7));
+        assert!(emitted.is_empty());
+        assert_eq!(world.journal.events.len(), journal_len);
     }
 
     #[test]
