@@ -64,6 +64,14 @@
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
 - `doc/**/archive/` 不作为默认文档结构；历史专题仅在模块目录内保留并在索引中标注。少量 manifest-backed evidence asset archive（例如退役视觉证据图片）只作追溯证据，不作为当前 release / viewer / gameplay 首读入口。
 
+## 顶层目录分类与例外
+
+`doc/.governance/top-level-directory-registry.json` 是所有一级物理目录的机器可读登记；本页保留按读者目标维护的人工导航，而不是生成完整目录转储。`product` 只含四个逻辑产品模块，不是工程模块矩阵的第五类。
+
+- 历史摘要例外：`doc/devlog/README.md`；不作为运行态任务或证据真值。
+- 短周期视觉评审例外：`doc/ui_review_result/README.md`；只在存在可评分样本的轮次使用，长期结论回写到 `world-simulator`、`playability_test_result` 或 GitHub task truth。
+- 所有其他一级专业/治理/测试目录及其 owner、入口与存在理由见 registry；新增、删除或重分类目录时必须同步更新 registry、本页和 landing page。
+
 ## 共享规则
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 GitHub task issue evidence comments，最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。

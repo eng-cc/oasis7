@@ -4,15 +4,15 @@
 - 模块 PRD：`doc/engineering/prd.md`
 - 模块设计总览：`doc/engineering/design.md`
 - 模块标准执行入口：`doc/engineering/prd.md`
-- 文档治理专题入口：`doc/engineering/doc-governance/README.md`
+- 文档治理专题入口：`doc/engineering/doc-governance/README.md`（规范正文与 maintainer manual）
 - Rust 体量治理专题入口：`doc/engineering/rust-governance/README.md`
 
 ## 索引边界
 - 本页只负责工程专题的文件级精确检索与三件套可达性；文档树问题从 `doc/engineering/doc-governance/README.md` 开始，Rust 体量与结构切片问题从 `doc/engineering/rust-governance/README.md` 开始。
 
-| 专题 PRD | 专题设计文档 | 专题项目文档 |
+| 专题 PRD | 专题设计文档 | 任务与证据入口 |
 | --- | --- | --- |
-| `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md` | `doc/engineering/doc-governance/doc-structure-standard.prd.md` |
+| `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md`；`documentation-governance.manual.md`（how-to） | GitHub task issue evidence comments |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
 | Historical document-governance triplets | Current organization and consumption rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost routing: `doc/engineering/governance/README.md` | Historical decision/rollout evidence: Git history and GitHub task issue evidence comments |
 | Historical self-evolution / memory / borrowing / skill-surface triplets | Current task/evidence rules: `doc/engineering/workflow/source-of-truth.md`; retained pending scope: `doc/engineering/prd.md`; default-vs-library skill reachability: `.agents/skills/README.md` | Historical decision and rollout evidence: Git history and GitHub task issue evidence comments |

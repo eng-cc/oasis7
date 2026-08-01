@@ -28,6 +28,8 @@ Checks:
      .agents/roles/*.md.
   7. The thin product overlay must contain exactly four product-owned PRDs with
       stable metadata, lifecycle, authority backlinks, and acceptance traceability.
+  8. Every live top-level doc directory must be registered with a valid entrypoint,
+     root-navigation coverage, and lifecycle fields for controlled exceptions.
 USAGE
 }
 
@@ -48,6 +50,7 @@ readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
 )
 readonly DOC_ROOT_MD_ALLOWLIST_FILE="doc/.governance/doc-root-md-allowlist.txt"
 readonly MODULE_ROOT_MD_ALLOWLIST_FILE="doc/.governance/module-root-md-allowlist.txt"
+readonly TOP_LEVEL_DIRECTORY_REGISTRY="doc/.governance/top-level-directory-registry.json"
 
 CANONICAL_ROLE_NAMES=()
 while IFS= read -r role_name; do
@@ -228,6 +231,7 @@ exempt_docs = {
     for line in exempt_path.read_text(encoding="utf-8").splitlines()
     if line.strip()
 }
+
 reference_re = re.compile(r"doc/[A-Za-z0-9_./-]+\.md")
 skip_markers = ("*", "?", "[", "]", "{", "}", "YYYY-MM-DD")
 
@@ -246,6 +250,77 @@ PY
   rm -f "$exempt_tmp"
   rm -f "$doc_list_tmp"
   return "$status"
+}
+
+check_top_level_directory_registry() {
+  "$PYTHON_BIN" - "$TOP_LEVEL_DIRECTORY_REGISTRY" "doc/README.md" <<'PY'
+from __future__ import annotations
+import json
+from pathlib import Path
+import sys
+
+registry_path = Path(sys.argv[1])
+root_readme = Path(sys.argv[2])
+required_fields = ("name", "type", "owner", "entry", "reason", "exception")
+exception_types = {"retired_archive", "ephemeral_evidence_pool"}
+allowed_types = {"professional_domain", "evidence_domain", "product_overlay", *exception_types}
+if not registry_path.is_file():
+    raise SystemExit(f"top-level-directory-registry: missing registry: {registry_path}")
+if not root_readme.is_file():
+    raise SystemExit(f"top-level-directory-registry: missing root navigation: {root_readme}")
+try:
+    payload = json.loads(registry_path.read_text(encoding="utf-8"))
+except json.JSONDecodeError as error:
+    raise SystemExit(f"top-level-directory-registry: invalid JSON: {error}")
+if payload.get("version") != 1 or not isinstance(payload.get("directories"), list):
+    raise SystemExit("top-level-directory-registry: expected version 1 and directories list")
+actual = {path.name for path in Path("doc").iterdir() if path.is_dir() and not path.name.startswith(".")}
+entries = payload["directories"]
+registered, errors = [], []
+owners = {path.stem for path in Path(".agents/roles").glob("*.md")}
+root_navigation = root_readme.read_text(encoding="utf-8")
+for index, entry in enumerate(entries):
+    prefix = f"top-level-directory-registry: directories[{index}]"
+    if not isinstance(entry, dict):
+        errors.append(f"{prefix} must be an object")
+        continue
+    missing = [field for field in required_fields if field not in entry or entry[field] in (None, "")]
+    if missing and not (missing == ["exception"] and entry.get("type") not in exception_types):
+        errors.append(f"{prefix} missing fields: {', '.join(missing)}")
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        errors.append(f"{prefix} has invalid name")
+        continue
+    registered.append(name)
+    if entry.get("type") not in allowed_types:
+        errors.append(f"{prefix} {name} has invalid type: {entry.get('type')!r}")
+    if entry.get("owner") not in owners:
+        errors.append(f"{prefix} {name} has unknown owner: {entry.get('owner')!r}")
+    path = entry.get("entry")
+    if not isinstance(path, str) or not Path(path).is_file():
+        errors.append(f"{prefix} {name} has missing entry: {path!r}")
+    elif f"doc/{name}/" not in root_navigation:
+        errors.append(f"{prefix} {name} directory is absent from doc/README.md navigation")
+    if entry.get("type") in exception_types:
+        lifecycle = entry.get("exception")
+        if not isinstance(lifecycle, dict):
+            errors.append(f"{prefix} {name} exception lifecycle must be an object")
+        else:
+            for field in ("entry_conditions", "review_trigger", "exit_conditions"):
+                if not isinstance(lifecycle.get(field), str) or not lifecycle[field].strip():
+                    errors.append(f"{prefix} {name} exception missing {field}")
+    elif entry.get("exception") is not None:
+        errors.append(f"{prefix} {name} non-exception must use null exception")
+if len(registered) != len(set(registered)):
+    errors.append("top-level-directory-registry: duplicate directory registration")
+if set(registered) != actual:
+    errors.append(f"top-level-directory-registry: directory set mismatch: expected {sorted(actual)!r}, got {sorted(set(registered))!r}")
+product_overlays = sum(entry.get("type") == "product_overlay" for entry in entries if isinstance(entry, dict))
+if ("product" in actual and product_overlays != 1) or ("product" not in actual and product_overlays != 0):
+    errors.append("top-level-directory-registry: product directory must have exactly one product_overlay")
+if errors:
+    raise SystemExit("\n".join(errors))
+PY
 }
 
 is_canonical_role_name() {
@@ -342,7 +417,7 @@ done < <(
     ! -path 'doc/engineering/workflow/source-of-truth.md' \
     | sort
 )
-if project_reference_hits=$(regex_match_with_line_numbers '(^|[^A-Za-z0-9_])([A-Za-z0-9_./*-]+)?(\.project|/project)\.md([^A-Za-z0-9_]|$)|同名[ `]*(project|项目)|配套[ `]*project( 文档)?|项目管理文档|same[- ]name[ `]*project|GitHub Issue/Project task truth[:：].*`[^`]+\.md`' "${active_governance_docs[@]}"); then
+if project_reference_hits=$(regex_match_with_line_numbers '(^|[^A-Za-z0-9_])([A-Za-z0-9_./*-]+)?(\.project|/project)\.md([^A-Za-z0-9_]|$)|同名[ `]*(project|项目)|配套[ `]*project( 文档)?|项目管理文档|same[- ]name[ `]*project|same[- ]named[[:space:]]+design[[:space:]]+and[[:space:]]+project|GitHub Issue/Project task truth[:：].*`[^`]+\.md`' "${active_governance_docs[@]}"); then
   echo "doc-governance-check: retired project ledger reference hits:"
   echo "$project_reference_hits"
   fail "active documentation references retired project ledgers or legacy project-management documents"
@@ -360,6 +435,11 @@ done < <(find .agents/roles/templates -type f -name '*.md' | sort)
 
 if [[ ${#all_doc_files[@]} -eq 0 ]]; then
   fail "no markdown files found under doc/"
+fi
+
+if ! registry_errors=$(check_top_level_directory_registry 2>&1); then
+  echo "$registry_errors"
+  fail "top-level directory registry contract failed"
 fi
 
 # 1) absolute path check
