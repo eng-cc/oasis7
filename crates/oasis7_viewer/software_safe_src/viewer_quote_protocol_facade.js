@@ -39,10 +39,11 @@ export function createViewerQuoteProtocolFacade({
 
   function invalidateSnapshotBoundQuotes() {
     powerSurvivalQuote.invalidatePowerSurvivalQuote();
+    warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();
     state.marketQuoteDecision = null;
     state.marketQuoteDecisionRequest = { status: "idle", error: null };
-    // A war quote retains its signed request identity across snapshots. Its
-    // quoted tick/input comparison drives the visible stale state instead.
+    // In-flight signed requests retain their correlation; completed quotes do
+    // not survive a fresh authoritative snapshot, even at the same tick.
   }
 
   return { handleQuoteGameplayActionError, handleQuoteViewerMessage, invalidateSnapshotBoundQuotes };

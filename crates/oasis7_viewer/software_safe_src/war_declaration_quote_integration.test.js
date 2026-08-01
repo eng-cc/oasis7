@@ -26,4 +26,14 @@ describe("war declaration quote integration", () => {
     expect(integration.handleWarDeclarationQuote({ actor_alliance_id: "alliance.red", target_alliance_id: "alliance.blue", intensity: 3 })).toBe(true);
     expect(state.warDeclarationQuoteRequest).toEqual({ status: "received", error: null });
   });
+
+  it("invalidates received quotes but preserves an in-flight signed request on an authoritative snapshot", () => {
+    const received = { warDeclarationQuoteRequest: { status: "received", error: null }, warDeclarationQuote: { quoted_at_tick: 12 } };
+    expect(createIntegration(received).invalidateWarDeclarationQuoteForAuthoritativeSnapshot()).toBe(true);
+    expect(received).toMatchObject({ warDeclarationQuote: null, warDeclarationQuoteRequest: { status: "idle" } });
+
+    const pending = { warDeclarationQuoteRequest: { status: "pending", requestKey: "alliance.red|alliance.blue|3" }, warDeclarationQuote: null };
+    expect(createIntegration(pending).invalidateWarDeclarationQuoteForAuthoritativeSnapshot()).toBe(false);
+    expect(pending.warDeclarationQuoteRequest.status).toBe("pending");
+  });
 });

@@ -7,6 +7,7 @@ function integration() {
     handlePowerSurvivalQuote: vi.fn(), handlePowerSurvivalQuoteError: vi.fn(() => false),
     handleProductValidationQuote: vi.fn(), handleProductValidationQuoteError: vi.fn(() => false),
     handleWarDeclarationQuote: vi.fn(), handleWarDeclarationQuoteError: vi.fn(() => false),
+    invalidateWarDeclarationQuoteForAuthoritativeSnapshot: vi.fn(),
     invalidatePowerSurvivalQuote: vi.fn(),
   };
 }
@@ -44,5 +45,22 @@ describe("viewer quote protocol facade", () => {
 
     expect(facade.handleQuoteViewerMessage({ type: "war_declaration_quote_preflight", quote })).toBe(true);
     expect(warDeclarationQuote.handleWarDeclarationQuote).toHaveBeenCalledWith(quote);
+  });
+
+  it("invalidates a received quote when an authoritative snapshot changes at the same tick", () => {
+    const state = {
+      warDeclarationQuote: { quoted_at_tick: 12, state_fingerprint: "before" },
+      warDeclarationQuoteRequest: { status: "received", error: null },
+    };
+    const warDeclarationQuote = integration();
+    const facade = createViewerQuoteProtocolFacade({
+      handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
+      marketQuoteDecision: integration(), powerSurvivalQuote: integration(), productValidationQuote: integration(), state,
+      warDeclarationQuote,
+    });
+
+    facade.invalidateSnapshotBoundQuotes();
+
+    expect(warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot).toHaveBeenCalledOnce();
   });
 });

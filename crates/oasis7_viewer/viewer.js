@@ -3597,6 +3597,12 @@ function createWarDeclarationQuoteIntegration({ buildAuthEnvelope: buildAuthEnve
     state2.warDeclarationQuoteRequest = { status: "error", error: String(error?.code || error?.message || "war quote failed") };
     return true;
   }
+  function invalidateWarDeclarationQuoteForAuthoritativeSnapshot() {
+    if (state2.warDeclarationQuoteRequest?.status === "pending") return false;
+    state2.warDeclarationQuote = null;
+    state2.warDeclarationQuoteRequest = { status: "idle", error: null };
+    return true;
+  }
   function invalidateWarDeclarationQuote() {
     state2.warDeclarationQuote = null;
     state2.warDeclarationQuoteRequest = { status: "idle", error: null };
@@ -3606,7 +3612,7 @@ function createWarDeclarationQuoteIntegration({ buildAuthEnvelope: buildAuthEnve
     state2.warDeclarationQuoteRequest = { status: "received", error: null };
     return clone2(quote2);
   }
-  return { requestWarDeclarationQuote: requestWarDeclarationQuote2, handleWarDeclarationQuote, handleWarDeclarationQuoteError, invalidateWarDeclarationQuote, injectWarDeclarationQuoteForTest: injectWarDeclarationQuoteForTest2 };
+  return { requestWarDeclarationQuote: requestWarDeclarationQuote2, handleWarDeclarationQuote, handleWarDeclarationQuoteError, invalidateWarDeclarationQuoteForAuthoritativeSnapshot, invalidateWarDeclarationQuote, injectWarDeclarationQuoteForTest: injectWarDeclarationQuoteForTest2 };
 }
 function createMarketQuoteDecisionIntegration({ buildAuthEnvelope: buildAuthEnvelope2, clone: clone2, ensureHostedPlayerAuthAvailable: ensureHostedPlayerAuthAvailable2, ensureRegisteredPlayerSession: ensureRegisteredPlayerSession2, getSocket, nextAuthNonce: nextAuthNonce2, sendJson: sendJson2, signAuthPayload: signAuthPayload2, state: state2 }) {
   async function requestMarketQuoteDecision2(consume) {
@@ -3685,6 +3691,7 @@ function createViewerQuoteProtocolFacade({
   }
   function invalidateSnapshotBoundQuotes() {
     powerSurvivalQuote2.invalidatePowerSurvivalQuote();
+    warDeclarationQuote2.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();
     state2.marketQuoteDecision = null;
     state2.marketQuoteDecisionRequest = { status: "idle", error: null };
   }

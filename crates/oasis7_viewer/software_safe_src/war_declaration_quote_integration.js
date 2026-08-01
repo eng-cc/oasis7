@@ -9,7 +9,8 @@ export function createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone,
   }
   function handleWarDeclarationQuote(quote) { const pending = state.warDeclarationQuoteRequest; if (!quote || typeof quote !== "object" || pending?.status !== "pending" || pending.requestKey !== requestKey(String(quote.actor_alliance_id || "").trim(), String(quote.target_alliance_id || "").trim(), Number(quote.intensity))) return false; state.warDeclarationQuote = clone(quote); state.warDeclarationQuoteRequest = { status: "received", error: null }; return true; }
   function handleWarDeclarationQuoteError(error) { if (String(error?.action_id || "") !== "quote_declare_war" || state.warDeclarationQuoteRequest?.status !== "pending") return false; state.warDeclarationQuoteRequest = { status: "error", error: String(error?.code || error?.message || "war quote failed") }; return true; }
+  function invalidateWarDeclarationQuoteForAuthoritativeSnapshot() { if (state.warDeclarationQuoteRequest?.status === "pending") return false; state.warDeclarationQuote = null; state.warDeclarationQuoteRequest = { status: "idle", error: null }; return true; }
   function invalidateWarDeclarationQuote() { state.warDeclarationQuote = null; state.warDeclarationQuoteRequest = { status: "idle", error: null }; }
   function injectWarDeclarationQuoteForTest(quote) { state.warDeclarationQuote = clone(quote); state.warDeclarationQuoteRequest = { status: "received", error: null }; return clone(quote); }
-  return { requestWarDeclarationQuote, handleWarDeclarationQuote, handleWarDeclarationQuoteError, invalidateWarDeclarationQuote, injectWarDeclarationQuoteForTest };
+  return { requestWarDeclarationQuote, handleWarDeclarationQuote, handleWarDeclarationQuoteError, invalidateWarDeclarationQuoteForAuthoritativeSnapshot, invalidateWarDeclarationQuote, injectWarDeclarationQuoteForTest };
 }
