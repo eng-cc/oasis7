@@ -2,7 +2,7 @@
 
 > 专业域 authority：本文件拥有网络、共识、DistFS、复制、同步、恢复与节点可观测性契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供分布式状态层证据，并为 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 的权限与治理边界提供专业合同，但不是并列产品入口。
 
-审计轮次: 14
+审计轮次: 15
 
 ## 目标
 - 建立 p2p 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -44,6 +44,16 @@
 - `oasis7_net` 的 `runtime_bridge` feature 当前是空的兼容 feature；历史 compile-closure 文档不代表 runtime bridge 逻辑仍由该 crate 暴露。当前执行/证明 bridge 以现行 runtime、proof 与 S9A authority 为准。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
 - 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套已退役，完成记录从 Git 与 GitHub task evidence 追溯。
+
+### 世界基础设施终态合同（目标，非当前能力声明）
+
+- **唯一世界与权威边界。** 目标系统只有一个 `world_id`、一条全局 canonical committed history 和一个确定性 world runtime；区域只可作为逻辑/运营分区，不能成为独立权威链。game、agent、viewer 和 light companion 与基础设施同时运行：前者提交 signed intent、消费已提交状态或证明，不能以本地模拟、RPC 可达性或暂存 intent 改写权威历史。finality 不可用时，权威推进 fail-closed；pending intent 可以保留并重试，但在重新排序、执行和最终确认前没有世界效果。local/dev 必须使用不同 `world_id`，不得把本地历史并回全局世界。
+- **验证者治理与拓扑。** 终态 validator/finality signer 由 world-state 中的治理 registry 按 `genesis -> apply -> approved_candidate -> probation_ready -> active -> rotate/revoke` 管理；registry 的生效 epoch、stake、身份与 signer binding 是投票权唯一真值。允许公开申请，但 activation 不是 permissionless。当前三节点等权 validator triad 是可观测的运营基线，不是去中心化或 BFT readiness 结论；在传统 `n >= 3f + 1`、Byzantine stake 小于三分之一假设下，等权 triad 不能宣称容忍一个 Byzantine validator，四个等权 active validator 才是 conventional `f=1` 边界。
+- **首个确定性 BFT 目标。** oasis7 自主实现首个 Tendermint/CometBFT-style 的高度/round 状态机：slot 只负责 proposer/pacing，独立 round 在 timeout 后推进；流程为 `Propose -> Prevote -> Precommit -> verified >2/3 active stake commit certificate`。每张 certificate 必须绑定 `world_id`、height、round、phase、block/action/execution roots、validator-set snapshot/hash 以及去重的签名投票证明；只有验证证书后才能更新 committed height、执行、复制、checkpoint 或向 light client 宣告 final。锁定/解锁、anti-double-sign、timeout/new-round、validator-set transition、partition/heal 与重启恢复均是该目标的一部分。HotStuff chained QC、Gasper/GRANDPA 的 head/finality 分层和 Solana PoH/Tower pipeline 不属于首个 skeleton。
+- **当前原型与目标的缺口。** 当前实现仍是 stake-weighted proposer/attestation threshold prototype：它没有持久或可验证的 quorum certificate、round/view-change/timeout、fork/partition 恢复证明，也不会在 replication replay 时重新验证 QC。`auto_attest_all_validators` 仅为显式 test/dev 辅助，绝不能作为生产多节点 quorum 或 finality 证据。上述 BFT、治理 registry 的终态 admission、slashing/reward settlement 和 public-chain readiness 全部是 target；本 PRD 不得将其写成 current implementation 或发布结论。
+- **网络与服务节点。** validators 保持 protected/private；public exposure 由 sentry/relay、full/state-sync/archive、RPC/proof gateway 等 permissionless service roles 承担。服务节点可自由运行，proof、hash 和 receipt 而非 operator identity 决定其输出是否可信；其失陷不得获得 consensus authority。libp2p 仍是网络底座，目标只借鉴主流 BFT 架构，不引入第二套 transport 或替换现有网络真值。
+- **链、DistFS 与恢复。** consensus 链承载全局顺序、validator transition、certificate、checkpoint/header 和 execution/state root；DistFS 承载 blob、snapshot、journal/proof 等 hash-addressed bulk data，不能替代 quorum finality。full-node bootstrap/recovery 的目标信任链固定为：immutable tier/genesis manifest -> verified finalized checkpoint/header and validator transition -> hash-bound snapshot -> canonical committed-log replay -> verified state root -> serve/vote。任何 world identity、certificate/signature、continuity、hash、replay 或 root mismatch 都必须阻断，不得以任意 peer/latest backup、重启或覆盖恢复权威状态。
+- **分层存储与激励边界。** validators 保留投票和恢复所需的 authority-critical window；full/state-sync nodes 保留较长热历史并服务 verified snapshots/blobs；archives 保留完整 canonical audit history；light companions 只保留 finalized headers、validator transitions 与按需 proofs。prune 前必须证明 checkpoint/replay 可重建、hash/root 可验证且冗余 archive 可用。终态协议为治理准入 validators 提供 slashable stake 与有界 issuance/fee rewards，并只对客观可证明的共识故障结算；permissionless storage/relay/RPC services 以可验证 usage/availability receipts 获得可选 market fee 或 governed grant，不取得投票权，也不承受 blanket availability slashing。计量、签名证明、stake lock、fault evidence 与 deterministic settlement hook 属基础设施机制；费率、奖励池、补贴/授予预算和资格参数属于经济治理，非本 PRD 的已实施经济政策。
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。

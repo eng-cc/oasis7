@@ -149,7 +149,8 @@
   - `doc/game/prd.md`
   - 对应 GitHub task issue evidence
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
-  - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
+  - `doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md`
+  - `doc/product/world-infrastructure/deterministic-world-execution.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `testing-manual.md`

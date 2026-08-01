@@ -188,8 +188,8 @@ def main() -> None:
         "traceability-prd-resolution",
         lambda root: replace(
             root / "doc/product/world-infrastructure/prd.md",
-            "PRD-GAME-016",
-            "PRD-GAME-999",
+            "PRD-P2P-001",
+            "PRD-P2P-999",
         ),
     )
     scenario(

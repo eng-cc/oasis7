@@ -7,7 +7,7 @@
 
 ## 1. 目标
 
-Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化或部分写入产生不可重放、不可恢复或节点间不一致的结果。玩家侧连续性与恢复承诺由 `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md` 承载；本文只定义专业数值语义。
+Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化或部分写入产生不可重放、不可恢复或节点间不一致的结果。确定性执行承诺由 `doc/product/world-infrastructure/deterministic-world-execution.prd.md` 承载，分布式连续性与恢复承诺由 `doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md` 承载；本文只定义专业数值语义。
 
 ## 2. 范围
 

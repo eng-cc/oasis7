@@ -1,12 +1,17 @@
-# 区域章程、地点 tenure 与公共融资
+# 区域章程、地点 tenure 与公共融资（待迁移）
 
 ## 文档身份
 
 - 所属产品模块：大世界基础设施
 - 上位产品 PRD：[prd.md](prd.md)
-- 生命周期：`active`
+- 生命周期：`superseded`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+
+## 迁移状态
+
+本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+
 
 本文定义空间锚定区域如何取得、维持或失去 charter，地点如何作为可续期的经营建设权，以及区域公共服务如何正当地筹资。它不定义地理算法、投票或 OC 公式、bond 数值、费用/补偿计算、runtime 状态机、界面或宪制修订程序。
 

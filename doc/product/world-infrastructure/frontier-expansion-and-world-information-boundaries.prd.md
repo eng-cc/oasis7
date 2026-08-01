@@ -1,12 +1,17 @@
-# Frontier 扩展与世界信息边界
+# Frontier 扩展与世界信息边界（待迁移）
 
 ## 文档身份
 
 - 所属产品模块：大世界基础设施
 - 上位产品 PRD：[`prd.md`](prd.md)
-- 生命周期：`active`
+- 生命周期：`superseded`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+
+## 迁移状态
+
+本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+
 
 本文是长期产品分册，定义有限已知世界的 frontier 扩展、pioneer priority 和世界信息可见性的产品边界。它不定义地图生成、相邻判定、物流算法、charter 字段、priority 时长/价格、情报访问控制、数据格式、侦察 UI、runtime 状态机或当前 readiness。
 

@@ -9,7 +9,7 @@
 - 想确认 Moltbook 渠道边界与公开 claim：先读发行沟通产品分册；持续运营使用 `readme-moltbook-liveops-runbook.md`，帖文与回复素材使用 `readme-moltbook-post-pack.md`
 - 想确认 limited playable technical preview 中“参与或贡献不自动形成权益”的产品边界：先读 [`参与和认可边界`](../../product/player-entry-distribution/participation-and-recognition-boundaries.prd.md)；如需贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan，再读 `readme-limited-preview-contributor-reward-pack.prd.md` 或 `readme-limited-preview-contributor-reward-ledger.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
-- 想确认当前通用资源与领域/模块记录的边界：先读根 `../../../README.md` 与大世界基础设施产品 PRD 的[资源模型分册](../../product/world-infrastructure/prd.md#25-资源模型与模块扩展边界)；世界规则直接进入[世界规则与核心玩法产品 PRD](../../product/world-rules-core-gameplay/prd.md)
+- 想确认当前通用资源与领域/模块记录的边界：先读根 `../../../README.md` 与世界规则产品 PRD 的[资源模型与跨模块 provenance](../../product/world-rules-core-gameplay/prd.md#resource-model-and-cross-module-provenance)；区块链、分布式状态和确定性执行边界进入[大世界基础设施产品 PRD](../../product/world-infrastructure/prd.md)
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -115,7 +115,7 @@
 - 首读入口:
   - `../../../README.md`
   - `readme-project-overview-whitepaper-2026-04-25.md`
-  - `../../product/world-infrastructure/prd.md#25-资源模型与模块扩展边界`
+  - `../../product/world-rules-core-gameplay/prd.md#resource-model-and-cross-module-provenance`
   - `../../product/world-rules-core-gameplay/prd.md`
 - 适合问题:
   - README 对外定位与世界规则入口的关系怎么理解
@@ -129,7 +129,7 @@
 
 ### 已删除资源模型口径修订专题
 - 已删除：`readme-resource-model-layering.{prd,design,project}.md`
-- 当前承接：根 `../../../README.md` 维护当前公开技术摘要，大世界基础设施产品 PRD 维护长期资源模型与模块扩展边界；gameplay、runtime 与 WASM 专业合同维护具体规则和证据。
+- 当前承接：根 `../../../README.md` 维护当前公开技术摘要，世界规则与核心玩法产品 PRD 维护长期资源模型与跨模块 provenance；gameplay、runtime 与 WASM 专业合同维护具体规则和证据。
 - 追溯边界：该三件套只记录一次已完成的 README 口径修订与 2026-03-03 命名迁移，当前无测试、runbook 或代码依赖；历史任务从 Git history 与 GitHub task evidence 追溯。
 
 ## 定向检索边界
