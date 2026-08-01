@@ -684,6 +684,9 @@ fn runtime_bridge_continues_governance_from_tracked_baseline_fixture() {
                 .any(|item| item.as_str() == achievement_id)
         })
         .unwrap_or(false);
+    runtime_bridge
+        .seed_agent_resource_balance(proposer.as_str(), ResourceKind::Electricity, 10)
+        .expect("seed proposer electricity for atomic exchange settlement");
 
     let open_proposal = runtime_bridge
         .execute(
@@ -743,7 +746,7 @@ fn runtime_bridge_continues_governance_from_tracked_baseline_fixture() {
                 creator_agent_id: proposer.clone(),
                 contract_id: contract_id.to_string(),
                 counterparty_agent_id: contract_counterparty.clone(),
-                settlement_kind: ResourceKind::Data,
+                settlement_kind: ResourceKind::Electricity,
                 settlement_amount: 10,
                 reputation_stake: 3,
                 expires_at: tick.saturating_add(20),
@@ -780,8 +783,8 @@ fn runtime_bridge_continues_governance_from_tracked_baseline_fixture() {
             Action::SettleEconomicContract {
                 operator_agent_id: proposer.clone(),
                 contract_id: contract_id.to_string(),
-                success: false,
-                notes: "offline smoke settlement".to_string(),
+                success: true,
+                notes: "atomic exchange smoke settlement".to_string(),
             },
         )
         .expect("runtime bridge settle economic contract");
@@ -843,12 +846,12 @@ fn runtime_bridge_continues_governance_from_tracked_baseline_fixture() {
         .get(contract_id)
         .expect("economic contract state should exist");
     assert_eq!(contract.status, EconomicContractStatus::Settled);
-    assert_eq!(contract.settlement_success, Some(false));
-    assert_eq!(contract.transfer_amount, 0);
+    assert_eq!(contract.settlement_success, Some(true));
+    assert_eq!(contract.transfer_amount, 10);
     assert_eq!(contract.tax_amount, 0);
     assert_eq!(
         contract.settlement_notes.as_deref(),
-        Some("offline smoke settlement")
+        Some("atomic exchange smoke settlement")
     );
     assert!(contract.accepted_at.is_some());
     assert!(contract.settled_at.is_some());

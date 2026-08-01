@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::EconomicContractFulfillmentKind;
 use std::collections::BTreeMap;
 
 use crate::runtime::{GovernanceValidatorAdmissionRecord, GovernanceValidatorAdmissionStatus};
@@ -793,12 +794,24 @@ impl World {
                 creator_agent_id,
                 contract_id,
                 counterparty_agent_id,
+                fulfillment_kind,
                 settlement_kind,
                 settlement_amount,
                 reputation_stake,
                 expires_at,
                 description,
             } => {
+                if *fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "service contracts unavailable: collateral/evidence/remedy not implemented"
+                                    .to_string(),
+                            ],
+                        },
+                    }));
+                }
                 if !self.state.agents.contains_key(creator_agent_id) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
@@ -926,6 +939,7 @@ impl World {
                         creator_agent_id: creator_agent_id.clone(),
                         contract_id: contract_id.to_string(),
                         counterparty_agent_id: counterparty_agent_id.clone(),
+                        fulfillment_kind: *fulfillment_kind,
                         settlement_kind: *settlement_kind,
                         settlement_amount: *settlement_amount,
                         reputation_stake: *reputation_stake,
@@ -1039,6 +1053,27 @@ impl World {
                                 "economic contract status is not accepted: {}",
                                 contract_id
                             )],
+                        },
+                    }));
+                }
+                if contract.fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "service contracts unavailable: collateral/evidence/remedy not implemented"
+                                    .to_string(),
+                            ],
+                        },
+                    }));
+                }
+                if !success {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "atomic exchange settlement requires success=true".to_string(),
+                            ],
                         },
                     }));
                 }
@@ -1163,7 +1198,7 @@ impl World {
                         counterparty_reward,
                     )
                 } else {
-                    (0, 0, -contract.reputation_stake, 0)
+                    unreachable!("atomic exchanges require success=true before settlement")
                 };
 
                 Ok(WorldEventBody::Domain(

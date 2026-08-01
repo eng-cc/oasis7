@@ -12,6 +12,7 @@ fn sample_contract(creator_agent_id: &str, counterparty_agent_id: &str) -> Econo
         contract_id: "contract.guard".to_string(),
         creator_agent_id: creator_agent_id.to_string(),
         counterparty_agent_id: counterparty_agent_id.to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 10,
         reputation_stake: 1,
@@ -25,6 +26,117 @@ fn sample_contract(creator_agent_id: &str, counterparty_agent_id: &str) -> Econo
         tax_amount: 0,
         settlement_notes: None,
     }
+}
+
+#[test]
+fn economic_contract_legacy_persistence_defaults_to_atomic_exchange() {
+    let mut legacy = serde_json::to_value(sample_contract("creator", "counterparty"))
+        .expect("serialize legacy economic contract");
+    legacy
+        .as_object_mut()
+        .expect("legacy economic contract serializes as an object")
+        .remove("fulfillment_kind");
+    let decoded: EconomicContractState =
+        serde_json::from_value(legacy).expect("deserialize legacy economic contract");
+    let persisted = serde_json::to_value(decoded).expect("serialize migrated economic contract");
+
+    assert_eq!(
+        persisted["fulfillment_kind"],
+        serde_json::json!("atomic_exchange")
+    );
+}
+
+#[test]
+fn economic_contract_persisted_service_cannot_be_settled_by_atomic_event() {
+    let mut service = serde_json::to_value(sample_contract("creator", "counterparty"))
+        .expect("serialize service fixture");
+    service["fulfillment_kind"] = serde_json::json!("service");
+    let service: EconomicContractState =
+        serde_json::from_value(service).expect("deserialize persisted service fixture");
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert("creator".to_string(), test_agent_cell("creator"));
+    state
+        .agents
+        .insert("counterparty".to_string(), test_agent_cell("counterparty"));
+    state
+        .agents
+        .get_mut("creator")
+        .expect("creator agent")
+        .state
+        .resources
+        .set(ResourceKind::Data, 17)
+        .expect("seed creator data");
+    state
+        .agents
+        .get_mut("counterparty")
+        .expect("counterparty agent")
+        .state
+        .resources
+        .set(ResourceKind::Data, 23)
+        .expect("seed counterparty data");
+    state.reputation_scores.insert("creator".to_string(), 11);
+    state
+        .reputation_scores
+        .insert("counterparty".to_string(), -4);
+    state
+        .economic_contracts
+        .insert("contract.guard".to_string(), service);
+
+    let err = state
+        .apply_domain_event(
+            &DomainEvent::EconomicContractSettled {
+                operator_agent_id: "creator".to_string(),
+                contract_id: "contract.guard".to_string(),
+                success: false,
+                transfer_amount: 0,
+                tax_amount: 0,
+                notes: "unsupported service breach".to_string(),
+                creator_reputation_delta: 0,
+                counterparty_reputation_delta: 0,
+            },
+            8,
+        )
+        .expect_err("persisted Service contracts must be rejected by atomic settlement");
+
+    assert_eq!(
+        err,
+        WorldError::ResourceBalanceInvalid {
+            reason: "service contracts unavailable: collateral/evidence/remedy not implemented"
+                .to_string(),
+        }
+    );
+    let contract = state
+        .economic_contracts
+        .get("contract.guard")
+        .expect("service contract retained");
+    assert_eq!(contract.status, EconomicContractStatus::Accepted);
+    assert_eq!(contract.settlement_success, None);
+    assert_eq!(contract.settled_at, None);
+    assert_eq!(
+        state
+            .agents
+            .get("creator")
+            .expect("creator agent")
+            .state
+            .resources
+            .get(ResourceKind::Data),
+        17
+    );
+    assert_eq!(
+        state
+            .agents
+            .get("counterparty")
+            .expect("counterparty agent")
+            .state
+            .resources
+            .get(ResourceKind::Data),
+        23
+    );
+    assert_eq!(state.reputation_scores.get("creator"), Some(&11));
+    assert_eq!(state.reputation_scores.get("counterparty"), Some(&-4));
 }
 
 fn sample_claim(target_agent_id: &str, claimer_agent_id: &str) -> AgentClaimState {

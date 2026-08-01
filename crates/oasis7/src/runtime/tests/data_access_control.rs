@@ -1,6 +1,7 @@
 use super::pos;
 use crate::runtime::{
-    Action, DomainEvent, EconomicContractStatus, RejectReason, World, WorldEventBody,
+    Action, DomainEvent, EconomicContractFulfillmentKind, EconomicContractStatus, RejectReason,
+    World, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
 use ed25519_dalek::SigningKey;
@@ -377,6 +378,7 @@ fn economic_contract_data_settlement_requires_access_grant() {
         creator_agent_id: "owner".to_string(),
         contract_id: "contract.data.access".to_string(),
         counterparty_agent_id: "buyer".to_string(),
+        fulfillment_kind: EconomicContractFulfillmentKind::AtomicExchange,
         settlement_kind: ResourceKind::Data,
         settlement_amount: 20,
         reputation_stake: 4,

@@ -7,6 +7,7 @@ use super::super::main_token::{
     RestrictedStarterClaimGrantStatus, RestrictedStarterClaimRefundSink,
 };
 use super::*;
+use crate::runtime::EconomicContractFulfillmentKind;
 
 #[path = "apply_domain_event_gameplay_claims.rs"]
 mod claims;
@@ -211,6 +212,7 @@ impl WorldState {
                 creator_agent_id,
                 contract_id,
                 counterparty_agent_id,
+                fulfillment_kind,
                 settlement_kind,
                 settlement_amount,
                 reputation_stake,
@@ -233,6 +235,7 @@ impl WorldState {
                         contract_id: contract_id.clone(),
                         creator_agent_id: creator_agent_id.clone(),
                         counterparty_agent_id: counterparty_agent_id.clone(),
+                        fulfillment_kind: *fulfillment_kind,
                         settlement_kind: *settlement_kind,
                         settlement_amount: *settlement_amount,
                         reputation_stake: *reputation_stake,
@@ -297,7 +300,13 @@ impl WorldState {
                 creator_reputation_delta,
                 counterparty_reputation_delta,
             } => {
-                let (creator_agent_id, counterparty_agent_id, settlement_kind, status) = {
+                let (
+                    creator_agent_id,
+                    counterparty_agent_id,
+                    fulfillment_kind,
+                    settlement_kind,
+                    status,
+                ) = {
                     let contract = self.economic_contracts.get(contract_id).ok_or_else(|| {
                         WorldError::ResourceBalanceInvalid {
                             reason: format!("economic contract not found: {contract_id}"),
@@ -306,6 +315,7 @@ impl WorldState {
                     (
                         contract.creator_agent_id.clone(),
                         contract.counterparty_agent_id.clone(),
+                        contract.fulfillment_kind,
                         contract.settlement_kind,
                         contract.status,
                     )
@@ -323,7 +333,17 @@ impl WorldState {
                         agent_id: operator_agent_id.clone(),
                     });
                 }
-
+                if fulfillment_kind == EconomicContractFulfillmentKind::Service {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "service contracts unavailable: collateral/evidence/remedy not implemented"
+                            .to_string(),
+                    });
+                }
+                if !success {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "atomic exchange settlement requires success=true".to_string(),
+                    });
+                }
                 // Precompute all mutable outcomes first so settlement writes are atomic.
                 let mut settlement_apply: Option<(i64, i64, i64)> = None;
                 if *success {

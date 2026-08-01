@@ -614,6 +614,8 @@ pub enum DomainEvent {
         creator_agent_id: String,
         contract_id: String,
         counterparty_agent_id: String,
+        #[serde(default)]
+        fulfillment_kind: EconomicContractFulfillmentKind,
         settlement_kind: ResourceKind,
         settlement_amount: i64,
         reputation_stake: i64,
