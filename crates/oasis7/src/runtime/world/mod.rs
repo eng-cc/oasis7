@@ -16,6 +16,8 @@ mod gameplay_loop;
 mod governance;
 mod governance_identity_penalty;
 mod governance_quote;
+mod war_declaration_quote;
+pub use war_declaration_quote::WarDeclarationQuote;
 mod logistics;
 pub use logistics::LogisticsTransferQuote;
 mod market_quote_decision_preview;

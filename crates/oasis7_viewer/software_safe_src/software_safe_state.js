@@ -46,6 +46,8 @@ export function createSoftwareSafeState() {
     powerSurvivalQuoteRequest: { status: "idle", error: null },
     marketQuoteDecision: null,
     marketQuoteDecisionRequest: { status: "idle", error: null },
+    warDeclarationQuote: null,
+    warDeclarationQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {
       actionKey: null,
       label: null,
