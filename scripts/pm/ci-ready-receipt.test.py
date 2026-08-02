@@ -10,7 +10,7 @@ UID="task_12345678901234567890123456789012"
 
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
 def plan():
-  p={"scope":"targeted","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; return p
+  p={"scope":"targeted","selected_capabilities":"pixel_world_bridge;viewer_js_required","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; p["run_pixel_world_bridge_lib_tests"]="true"; p["run_pixel_world_bridge_wasm_check"]="true"; return p
 def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
 def null_summary_run(run_id=12345):
   r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
@@ -41,6 +41,17 @@ class ReceiptTest(unittest.TestCase):
     self.assertIn("run_rust_baseline",receipt,
                   "issued receipt omits the run_rust_baseline boolean")
     self.assertIs(receipt["run_rust_baseline"],True)
+    self.assertEqual(["pixel_world_bridge","viewer_js_required"],receipt["planner"]["selected_capabilities"])
+    self.assertIs(receipt["planner"]["run_pixel_world_bridge_lib_tests"],True)
+    self.assertIs(receipt["planner"]["run_pixel_world_bridge_wasm_check"],True)
+  def test_invalid_or_missing_capability_selection_fails_closed(self):
+    for selected in (None,"viewer_js_required;pixel_world_bridge","viewer-js"):
+      raw=plan()
+      if selected is None: raw.pop("selected_capabilities")
+      else: raw["selected_capabilities"]=selected
+      with self.subTest(selected=selected):
+        with self.assertRaisesRegex(SystemExit,"selected_capabilities|incomplete"):
+          M.canonical_planner(raw)
   def test_ready_pr_requires_explicit_recovery_mode(self):
     ready=pr(); ready["draft"]=False
     with self.api(r=ready):

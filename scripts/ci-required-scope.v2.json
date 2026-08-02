@@ -1,0 +1,23 @@
+{
+  "schema": "oasis7-ci-required-scope/v2",
+  "capabilities": ["oasis7_required", "consensus", "distfs", "node", "net", "viewer_js_required", "viewer_performance_report", "pixel_world_bridge", "launcher_web", "workspace_support"],
+  "rules": [
+    {"match": ["doc/**", ".agents/**", ".pm/**", "AGENTS.md", "*.md"], "minimal": true, "reason": "governance_doc"},
+    {"match": ["crates/oasis7/**"], "capabilities": ["oasis7_required", "launcher_web"], "reason": "runtime"},
+    {"match": ["crates/oasis7_consensus/**"], "capabilities": ["consensus"], "reason": "consensus"},
+    {"match": ["crates/oasis7_distfs/**"], "capabilities": ["distfs"], "reason": "distfs"},
+    {"match": ["crates/oasis7_node/**"], "capabilities": ["node"], "reason": "node"},
+    {"match": ["crates/oasis7_net/**"], "capabilities": ["net"], "reason": "net"},
+    {"match": ["crates/oasis7_viewer/**"], "capabilities": ["viewer_js_required"], "reason": "viewer_js_required"},
+    {"match": ["crates/oasis7_viewer/scripts/viewer-performance-probe.mjs", "crates/oasis7_viewer/software_safe_src/performance_metrics.js", "crates/oasis7_viewer/software_safe_src/performance_metrics.test.js", "crates/oasis7_viewer/package.json", "scripts/viewer-performance-probe.sh"], "capabilities": ["viewer_performance_report"], "reason": "viewer_performance_report"},
+    {"match": ["crates/pixel_world_bridge/**"], "capabilities": ["pixel_world_bridge"], "reason": "pixel_world_bridge"},
+    {"match": ["crates/oasis7_client_launcher/**", "crates/oasis7_launcher_ui/**", "crates/oasis7_proto/**"], "capabilities": ["launcher_web"], "reason": "launcher"},
+    {"match": ["crates/oasis7_proto/**"], "capabilities": ["launcher_web"], "reason": "launcher_proto"},
+    {"match": ["crates/oasis7_wasm_abi/**"], "capabilities": ["workspace_support", "launcher_web"], "reason": "wasm_abi_support"},
+    {"match": ["crates/oasis7_wasm_abi/**"], "capabilities": ["launcher_web"], "reason": "launcher_wasm_abi"},
+    {"match": ["crates/oasis7_wasm_build/**", "crates/oasis7_builtin_wasm_modules/**", "crates/oasis7_wasm_sdk/**", "crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "capabilities": ["workspace_support"], "reason": "wasm_support"},
+    {"match": ["crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "capabilities": ["workspace_support", "oasis7_required"], "reason": "runtime_wasm_support"},
+    {"match": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".github/workflows/rust.yml", "scripts/ci-tests.sh", "scripts/plan-rust-required-scope.sh", "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json"], "full": true, "reason": "shared_required_gate"}
+  ],
+  "unmatched": "full"
+}

@@ -86,7 +86,7 @@ assert_key_equals "$rename_delete_output" scope targeted
 assert_key_equals "$rename_delete_output" run_oasis7_node_tests true
 assert_key_equals "$rename_delete_output" run_oasis7_net_tests true
 
-config_output="$(plan_for_path scripts/ci-required-scope.v1.json)"
+config_output="$(plan_for_path scripts/ci-required-scope.v2.json)"
 assert_key_equals "$config_output" scope full
 assert_key_equals "$config_output" run_rust_baseline true
 assert_key_equals "$config_output" needs_rust_toolchain true
@@ -162,9 +162,35 @@ viewer_output="$(plan_for_path crates/oasis7_viewer/src/lib.rs)"
 assert_key_equals "$viewer_output" scope targeted
 assert_key_equals "$viewer_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_output" run_viewer_wasm_check true
-assert_key_equals "$viewer_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_output" run_viewer_perf_smoke false
+assert_key_equals "$viewer_output" selected_capabilities viewer_js_required
 assert_key_equals "$viewer_output" needs_system_deps true
-assert_reason_contains "$viewer_output" "viewer:crates/oasis7_viewer/src/lib.rs"
+assert_reason_contains "$viewer_output" "viewer_js_required:crates/oasis7_viewer/src/lib.rs"
+
+viewer_perf_output="$(plan_for_path crates/oasis7_viewer/software_safe_src/performance_metrics.js)"
+assert_key_equals "$viewer_perf_output" scope targeted
+assert_key_equals "$viewer_perf_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_perf_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_perf_output" selected_capabilities 'viewer_js_required;viewer_performance_report'
+assert_reason_contains "$viewer_perf_output" "viewer_js_required:crates/oasis7_viewer/software_safe_src/performance_metrics.js"
+assert_reason_contains "$viewer_perf_output" "viewer_performance_report:crates/oasis7_viewer/software_safe_src/performance_metrics.js"
+
+viewer_perf_probe_output="$(plan_for_path scripts/viewer-performance-probe.sh)"
+assert_key_equals "$viewer_perf_probe_output" scope targeted
+assert_key_equals "$viewer_perf_probe_output" run_viewer_contract_tests false
+assert_key_equals "$viewer_perf_probe_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_perf_probe_output" needs_node true
+assert_key_equals "$viewer_perf_probe_output" selected_capabilities viewer_performance_report
+assert_reason_contains "$viewer_perf_probe_output" "viewer_performance_report:scripts/viewer-performance-probe.sh"
+
+pixel_world_bridge_output="$(plan_for_path crates/pixel_world_bridge/src/render.rs)"
+assert_key_equals "$pixel_world_bridge_output" scope targeted
+assert_key_equals "$pixel_world_bridge_output" run_pixel_world_bridge_lib_tests true
+assert_key_equals "$pixel_world_bridge_output" run_pixel_world_bridge_wasm_check true
+assert_key_equals "$pixel_world_bridge_output" run_oasis7_workspace_support_crate_tests false
+assert_key_equals "$pixel_world_bridge_output" needs_wasm_target true
+assert_key_equals "$pixel_world_bridge_output" selected_capabilities pixel_world_bridge
+assert_reason_contains "$pixel_world_bridge_output" "pixel_world_bridge:crates/pixel_world_bridge/src/render.rs"
 
 shared_required_output="$(plan_for_path .github/workflows/rust.yml)"
 assert_key_equals "$shared_required_output" scope full

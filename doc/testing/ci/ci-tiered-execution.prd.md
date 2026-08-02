@@ -11,12 +11,15 @@
 - 其它文档（含 `doc/scripts/precommit/pre-commit.prd.md`）仅引用本口径，不再重复定义分层规则。
 
 ## 1. Executive Summary
-- Problem Statement: 本地 `pre-commit` 与 PR 门禁若共用同一套较重测试，会显著拉长提交反馈周期并影响开发迭代效率。
-- Proposed Solution: 保留 `commit` / `required` / `full` 显式命令分级，但普通 `git commit` 不调用任何验证；PR/CI required gate 保持单一稳定 check context，并由 frozen-head Pre-PR Ready 提供本地 lifecycle proof。
+- Problem Statement: CI 必须先以最小充分覆盖拦截改动引入的缺陷；若普通 PR 与发布/高风险回归共用 full，会拉长反馈，但仅以速度剪裁又会漏掉应当阻断的影响面。
+- Proposed Solution: 保留 `commit` / `required` / `full` 显式命令分级。普通 `git commit` 不调用验证；普通 PR 使用 impact-scoped `required-gate` 作为 premerge 最小阻断集，缺陷拦截优先、速度优化其次；`full` 只用于发布、高风险、历史/信号升级与定时回归。性能在被选择的 surface 必须采集，但在稳定可复现的环境特定样本、阈值、原始复现与 waiver 生命周期建立前保持 report/watch。
 - Success Criteria:
-  - SC-1: `scripts/ci-tests.sh` 支持 `commit` / `required` / `full` 分级参数并统一入口。
+  - SC-1: `scripts/ci-tests.sh` 支持显式 `commit` / `required` / `full` 分级参数并统一入口；省略 tier 必须 fail-fast，不得隐式进入 `full`。
   - SC-2: `pre-commit` 静默成功且不执行验证，普通提交不被本地检查阻塞。
-  - SC-3: GitHub Actions 实现 push/PR 跑 stable-context `required-gate`，并在 job 内先规划 changed-path scope；schedule 继续跑 full。
+  - SC-3: GitHub Actions 对普通 push/PR 跑 stable-context、impact-scoped `required-gate`，作为 premerge 最小 blocking set；planner 先按 changed-path 选取充分覆盖，缺陷拦截优先于速度。
+  - SC-3B: `full` 不是普通 PR 默认；只用于 release、高风险、历史缺陷升级、信号触发或 schedule 回归。
+  - SC-3D: PR 的人工 full 升级必须通过 `workflow_dispatch/full_escalation` 绑定 task UID、PR、exact head、枚举 reason 与同仓库 issue-comment evidence URL，并产出 trusted CI receipt；评论内容不作为自动授权输入。
+  - SC-3C: 被选择的性能 surface 必须采集环境、原始复现与样本；采集缺失、损坏或互相矛盾时阻断，只有完整有效样本的阈值 miss 在环境特定、稳定可复现的采样阈值及 waiver 生命周期就绪前作 report/watch。
   - SC-3A: `required-gate` 在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 变更时，必须按需安装 `trunk` 并执行 launcher Web build。
   - SC-4: 分级策略在脚本、workflow、文档三端口径一致。
   - SC-5: docs-only / `.pm` / 纯元数据 PR 不再实际执行 viewer/runtime/support 重型测试，但仍保留 `required-gate` check context。
@@ -24,13 +27,13 @@
 ## 2. User Experience & Functionality
 - User Personas:
   - 开发者：希望提交前获得更快反馈。
-  - CI 维护者：希望门禁策略清晰且不漂移。
+  - CI 维护者：希望门禁策略以缺陷拦截为先、清晰且不漂移。
   - 发布负责人：希望 full 回归仍覆盖主干风险。
 - User Scenarios & Frequency:
   - 本地提交：不执行验证。
-  - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard 或 viewer Rust 长跑时，手动执行 `required`。
-  - PR 门禁：每次 push/PR 先规划 required scope，再执行命中的 required 组件。
-  - 每日回归：schedule 执行 full。
+  - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard、`pixel_world_bridge` Rust/wasm 目标检查或 Viewer Web required 合同时，手动执行 `required`。
+  - PR 门禁：每次普通 push/PR 先规划 impact-scoped required scope，再执行命中的 premerge 最小阻断组件。
+  - full 回归：仅由 release/high-risk、历史/信号升级、手动授权或 schedule 触发；每日 schedule 是默认持续入口。
 - User Stories:
   - PRD-TESTING-CI-TIERED-001: As a 开发者, I want ordinary commits to run no validation, so that CI and frozen-head readiness remain the authoritative gates.
   - PRD-TESTING-CI-TIERED-002: As a CI 维护者, I want one unified test entrypoint with tier flags, so that policy drift is reduced.
@@ -42,10 +45,11 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 分级入口脚本 | `commit` / `required` / `full` 参数 | 调用 `scripts/ci-tests.sh` | `idle -> running -> passed/failed` | commit 优先速度，required 负责较重核心门禁，full 负责低频高覆盖 | CI/开发者可触发 |
+| 分级入口脚本 | `commit` / `required` / `full` 参数 | 调用 `scripts/ci-tests.sh` | `idle -> running -> passed/failed` | required 是 impact-scoped premerge 最小阻断集，先拦截缺陷再优化速度；full 只作升级/低频高覆盖 | CI/开发者可触发 |
 | pre-commit 接线 | 兼容行为 | `pre-commit.sh` 静默成功且不调用检查 | `hooked -> no-op -> success` | 普通提交零验证 | legacy hook 可调用 |
-| workflow 分流 | 触发器类型、执行等级 | push/PR 跑 required，schedule 跑 full | `triggered -> running -> archived` | 时间敏感路径优先 required | 维护者可调整触发策略 |
-| required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件，必要时安装 `trunk` 并补 launcher Web build | `planned -> pruned -> executed` | docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须回退 full；launcher/shared runtime 路径命中时追加 launcher Web build | workflow 自动执行；本地显式 `required` 不受影响 |
+| workflow 分流 | 触发器类型、执行等级 | 普通 push/PR 跑 impact-scoped required；release/high-risk/history/signal 升级与 schedule 跑 full | `triggered -> running -> archived` | 先满足缺陷拦截，再优化速度 | 维护者可调整触发策略 |
+| required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件，必要时安装 `trunk` 并补 launcher Web build | `planned -> pruned -> executed` | planner 的 `scope=full` 是 required tier 内 fail-closed 覆盖扩张，不等于选择 `full` tier；docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须扩张覆盖 | workflow 自动执行；本地显式 `required` 不受影响 |
+| performance evidence | selected surface、environment、raw reproduction、sample、threshold、waiver | 选中的性能 surface 采集 evidence；阈值成熟前 report/watch | `selected -> collected -> watch -> thresholded/waived` | 环境特定稳定复现的采样阈值、原始复现与有时限 waiver 才可升级 blocking | QA/CI 维护者保留 evidence |
 - Acceptance Criteria:
   - AC-1: `scripts/ci-tests.sh` 分级参数行为明确并可复现。
   - AC-2: `scripts/pre-commit.sh` 不执行格式化、编译、测试、lint 或治理检查。
@@ -53,6 +57,9 @@
   - AC-4: 文档与任务日志回写完整。
   - AC-5: `.github/workflows/rust.yml` 的 `required-gate` 在 push/PR 上先执行 changed-path planner；docs-only / `.pm` / 无关元数据改动只跑 governance/fmt，且 `required-gate` check context 名称保持不变。
   - AC-6: `required-gate` 对 launcher/shared runtime 命中路径必须输出 `run_launcher_web_build=true` / `needs_trunk=true`，并仅在该分支向 `scripts/ci-tests.sh required` 透传 `OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true`。
+  - AC-7: 文档明确 ordinary PR 的 required 是 impact-scoped premerge 最小 blocking set，`full` 仅在 release/high-risk/history/signal/schedule 升级；planner 的 `scope=full` 不得误写为 ordinary PR 选择 full tier。
+  - AC-8: 选中的性能 surface 记录环境、原始复现与样本；缺失、损坏或互相矛盾的 evidence 阻断；完整样本在没有稳定可复现的环境特定采样阈值和有时限 waiver 生命周期时保持 report/watch。
+  - AC-9: full escalation preflight 对缺失/非法输入或 actual head 与 expected head 不一致 fail-closed；通过 preflight 后无论 full 成败都上传绑定 run/head/conclusion 的 `oasis7-full-escalation-receipt-v1`，且 full 失败保持 job failure。
 - Non-Goals:
   - 不做 case-level / flaky-aware 的动态测试选择，也不把本地显式 `./scripts/ci-tests.sh required` 改成 changed-path 按需运行。
   - 不做缓存、并行矩阵、runner 基础设施优化。
@@ -63,7 +70,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 普通 commit 与验证解耦；显式 tier 命令、frozen-head Pre-PR Ready、CI required gate 与定时 full 回归继续使用统一测试入口。
+- Architecture Overview: 普通 commit 与验证解耦；impact-scoped required 是 ordinary-PR 的 premerge 最小 blocking set，full 是 release/high-risk/history/signal/schedule 升级；frozen-head Pre-PR Ready、CI required gate 与定时 full 回归继续使用统一测试入口。
 - Integration Points:
   - `scripts/ci-tests.sh`
   - `scripts/pre-commit.sh`
@@ -72,16 +79,17 @@
   - `doc/testing/ci/ci-test-coverage.prd.md`
 - Edge Cases & Error Handling:
   - commit 覆盖过窄：可能把 runtime/simulator 回归延后到显式 required 或 CI required gate 暴露，需结合缺陷复盘补齐。
-  - commit 误挂重型 viewer Rust 校验：会重新拉长默认提交耗时，需把 `oasis7_viewer` 全量单测与 wasm32 编译检查限制在显式 `required` / CI required gate。
-  - required 覆盖过窄：可能延后发现问题，需结合每日 full 和缺陷复盘补齐。
-  - required planner 漏判：若 diff base 不可解析、命中共享 CI / gate 脚本输入、或落入未分类代码路径，必须回退 full，不能静默少跑。
+  - commit 误挂目标特定 Viewer/Bevy 校验：会重新拉长默认提交耗时，需把 `pixel_world_bridge` lib tests、wasm32 编译检查与 Viewer Web required 合同限制在显式 `required` / CI required gate。
+  - required 覆盖过窄：可能延后发现问题，先以缺陷复盘扩大 required mapping；每日 full 是补充，不得成为普通 PR 漏检的常规替代。
+  - required planner 漏判：若 diff base 不可解析、命中共享 CI / gate 脚本输入、或落入未分类代码路径，必须在 required tier 内 fail-closed 扩张覆盖，不能静默少跑；这不等于 ordinary PR 选择 full tier。
   - launcher Web 漏判：若 `oasis7_client_launcher` 或 launcher shared runtime 变更未命中 planner，编译错误会推迟到 release `build-web-dist` 才暴露；因此 launcher 相关路径必须显式映射到 `run_launcher_web_build`。
   - docs-only / `.pm` 元数据 PR：允许 `required-gate` 退化为 governance/fmt-only，但 check context 仍必须存在，避免分支保护漂移。
-  - full 仅定时执行：发现延迟增加，需保留手动触发路径。
+  - full 仅定时执行：发现延迟增加，需保留 release/high-risk/history/signal 的升级与手动触发路径。
+  - 性能阈值不稳定：选中的 surface 仍必须收集环境、原始复现与样本；未满足环境特定稳定复现、采样阈值和有时限 waiver 生命周期前只 report/watch，不能伪造 blocking 阈值。
   - 旧命令调用习惯：不带参数调用时需定义默认行为避免误解。
   - 策略漂移：脚本与 workflow 不一致时，以统一入口脚本为基线回收。
 - Non-Functional Requirements:
-  - NFR-TIERED-1: 本地提交门禁时延显著下降且无关键漏检。
+  - NFR-TIERED-1: required 首先充分拦截已知影响面缺陷；在不降低该充分度的前提下才优化反馈时延。
   - NFR-TIERED-2: full 回归覆盖范围不低于迁移前。
   - NFR-TIERED-3: 分级策略变更具备可追溯证据。
 - Security & Privacy: 不涉及新数据采集，仅为执行策略调整。
@@ -106,11 +114,12 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-TIERED-001 | `commit` / `required` / `full` 分级执行 | 每次全量执行 | 分级更符合反馈效率目标。 |
+| DEC-TIERED-001 | `commit` / `required` / `full` 分级执行 | 每次全量执行 | required 先服务缺陷拦截，分级仅在最小充分覆盖后优化反馈效率。 |
 | DEC-TIERED-002 | pre-commit 静默 no-op；`commit` tier 仅显式调用 | pre-commit 自动执行 `commit` / `required` / `full` | 普通提交与验证解耦，CI required 与 frozen-head readiness 保持 authoritative。 |
 | DEC-TIERED-003 | schedule 承担 full 回归 | 取消 full | 无法保证主干深度质量。 |
 | DEC-TIERED-004 | `required-gate` 保持单一 check context，但在 CI job 内按 changed paths 剪裁重型组件 | 把 docs-only / 元数据 PR 继续送进全量 required，或把 `required-gate` 拆成新 check 名称 | 前者无法改善平均时长，后者会引入分支保护漂移与 required context 迁移成本。 |
 | DEC-TIERED-005 | launcher Web build 继续保持 CI planner 按需触发，不把本地显式 `required` 改成默认 `trunk build` | 无条件把 launcher `trunk build` 加进所有 `required` 执行 | 用户要求“按需跑”，且本地显式 `required` 仍需保持固定重门禁语义，不把 release-only Web 成本扩散到所有场景。 |
+| DEC-TIERED-006 | ordinary PR 默认 impact-scoped required；full 仅 release/high-risk/history/signal/schedule 升级；selected performance 先 collect/report/watch | ordinary PR 默认 full，或未成熟性能阈值直接 blocking | 先拦截缺陷；性能数据没有稳定环境特定复现、采样阈值与 waiver 生命周期前不能提供可信 blocking 判定。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标（降低提交耗时 + 保留主干覆盖 + 统一入口）” -> 第 1 章与第 2 章 AC。

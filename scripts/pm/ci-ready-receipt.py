@@ -7,16 +7,20 @@ FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "u
 PLAN_MARKER="oasis7-required-plan-v1"
 PLAN_ARTIFACT=PLAN_MARKER
 PLAN_MEMBER=f"{PLAN_MARKER}.json"
-RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_launcher_web_build","run_oasis7_workspace_support_crate_tests","run_rust_baseline")
+RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_pixel_world_bridge_lib_tests","run_pixel_world_bridge_wasm_check","run_launcher_web_build","run_oasis7_workspace_support_crate_tests","run_rust_baseline")
 
 def canonical_planner(raw):
-    required=("scope","reason_summary","changed_path_count","planner_config_sha256",*RUN_FIELDS)
+    required=("scope","selected_capabilities","reason_summary","changed_path_count","planner_config_sha256",*RUN_FIELDS)
     if any(k not in raw for k in required): raise SystemExit("ci-ready-receipt: uncertain incomplete planner metadata")
     if any(str(raw[k]).lower() not in ("true","false") for k in RUN_FIELDS): raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata")
     try: changed=int(raw["changed_path_count"])
     except Exception: raise SystemExit("ci-ready-receipt: uncertain invalid changed_path_count")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}",str(raw["planner_config_sha256"])): raise SystemExit("ci-ready-receipt: uncertain invalid planner config digest")
-    plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed,"planner_config_sha256":str(raw["planner_config_sha256"])}
+    selected=str(raw["selected_capabilities"])
+    capabilities=selected.split(";") if selected else []
+    if capabilities != sorted(set(capabilities)) or any(not re.fullmatch(r"[a-z0-9_]+", item) for item in capabilities):
+        raise SystemExit("ci-ready-receipt: uncertain invalid selected_capabilities")
+    plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"selected_capabilities":capabilities,"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed,"planner_config_sha256":str(raw["planner_config_sha256"])}
     plan.update({k:str(raw[k]).lower()=="true" for k in RUN_FIELDS})
     return plan
 
