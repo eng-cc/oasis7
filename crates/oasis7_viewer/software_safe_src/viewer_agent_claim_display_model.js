@@ -3,8 +3,35 @@ export function createViewerAgentClaimDisplayModel({ state, tr }) {
     return String(value || "").trim();
   }
 
+  function slot1ClaimChoiceQuote(agentClaim) {
+    const quote = agentClaim?.next_claim_quote || agentClaim?.nextClaimQuote || {};
+    return quote?.slot_1_claim_choice_quote || quote?.slot1ClaimChoiceQuote || null;
+  }
+
+  function publishedClaimChoiceCandidates(snapshot, agentClaim) {
+    const choiceQuote = slot1ClaimChoiceQuote(agentClaim);
+    const publishedCandidates = Array.isArray(choiceQuote?.candidates) ? choiceQuote.candidates : [];
+    const agents = snapshot?.model?.agents || {};
+    return publishedCandidates
+      .map((candidate) => {
+        const id = normalizedId(candidate?.agent_id || candidate?.agentId || candidate?.id);
+        if (!id) return null;
+        return {
+          ...candidate,
+          id,
+          name: candidate?.name || agents[id]?.name || id,
+          isClaimer: id === normalizedId(agentClaim?.claimer_agent_id || agentClaim?.claimerAgentId),
+        };
+      })
+      .filter(Boolean);
+  }
+
   function buildAgentClaimTargets(snapshot, agentClaim) {
     const agents = snapshot?.model?.agents || {};
+    const publishedCandidates = publishedClaimChoiceCandidates(snapshot, agentClaim);
+    if (publishedCandidates.length > 0) {
+      return publishedCandidates;
+    }
     const ownedTargets = new Set(
       Array.isArray(agentClaim?.owned_claims)
         ? agentClaim.owned_claims.map((claim) => String(claim?.target_agent_id || "").trim()).filter(Boolean)
@@ -105,5 +132,5 @@ export function createViewerAgentClaimDisplayModel({ state, tr }) {
     return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
   }
 
-  return { agentBindingForId, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction, buildAgentClaimTargets, describeAgentSessionStatus, hasAgentClaimSessionBoundary, hasExecutableAgentClaim, normalizedId };
+  return { agentBindingForId, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction, buildAgentClaimTargets, describeAgentSessionStatus, hasAgentClaimSessionBoundary, hasExecutableAgentClaim, normalizedId, publishedClaimChoiceCandidates, slot1ClaimChoiceQuote };
 }

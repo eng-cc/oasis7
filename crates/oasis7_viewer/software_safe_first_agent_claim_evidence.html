@@ -70,11 +70,28 @@
               restricted_starter_claim_balance: 0,
               auto_restricted_starter_claim_amount: 325,
               eligible_claim_balance: 325,
+              eligible_balance_after: 0,
+              upkeep_runway_epochs: 0,
               release_cooldown_epochs: 3,
               grace_epochs: 2,
               idle_warning_epochs: 7,
               forced_idle_reclaim_epochs: 10,
               forced_reclaim_penalty_bps: 2000,
+              slot_1_claim_choice_quote: {
+                status: "candidate_facts_only",
+                candidates: [{
+                  agent_id: "agent-choice-target",
+                  location_x_cm: 120,
+                  location_y_cm: -40,
+                  location_z_cm: 5,
+                  body_kind: "industrial_worker",
+                  frame_kind: "light_frame",
+                  installed_module_ids: ["drill", "scanner"]
+                }],
+                fallback_reason: "candidate_rationale_missing",
+                claim_choice_class: "wait_or_fund_first",
+                recommended_claim_action: "wait_or_fund_first"
+              },
               blocked_reason: null
             },
             owned_claims: []

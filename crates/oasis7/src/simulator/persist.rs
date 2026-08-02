@@ -213,6 +213,8 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     pub low_runway_warning: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_claim_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot_1_claim_choice_quote: Option<PlayerAgentClaimChoiceQuoteSnapshot>,
     pub release_cooldown_epochs: u64,
     pub grace_epochs: u64,
     pub idle_warning_epochs: u64,
@@ -220,6 +222,33 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     pub forced_reclaim_penalty_bps: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+}
+
+/// A deterministic, read-only candidate fact projection for the first Agent
+/// claim. It deliberately contains no ranking, suitability, or claim result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerAgentClaimChoiceCandidateSnapshot {
+    pub agent_id: String,
+    pub location_x_cm: i64,
+    pub location_y_cm: i64,
+    pub location_z_cm: i64,
+    pub body_kind: String,
+    pub frame_kind: String,
+    #[serde(default)]
+    pub installed_module_ids: Vec<String>,
+}
+
+/// The optional slot-1 candidate package, kept separate from the executable
+/// claim quote so that unsupported rationale remains explicit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerAgentClaimChoiceQuoteSnapshot {
+    pub status: String,
+    #[serde(default)]
+    pub candidates: Vec<PlayerAgentClaimChoiceCandidateSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    pub claim_choice_class: String,
+    pub recommended_claim_action: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
