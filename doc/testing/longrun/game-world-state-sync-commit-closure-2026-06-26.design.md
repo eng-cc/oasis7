@@ -54,7 +54,9 @@
 - `doc/testing/templates/state-sync-closure-evidence-packet-template.md`
 - `scripts/p2p-mixed-topology-matrix.sh`
 - `scripts/p2p-longrun-soak.sh`
-- `scripts/p2p-export-state-sync-bundle.sh`
+- `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`（runtime signed V2 checkpoint recovery contract）
+- `crates/oasis7_node/src/replication_checkpoint.rs`（checkpoint descriptor、签名 replication message 与 blob closure authority）
+- `crates/oasis7_node/src/node_engine_replication_checkpoint.rs`（network head/checkpoint identity binding 与 provider publication）
 - `scripts/p2p-verify-state-sync-closure.sh`
 - `scripts/s10-five-node-game-soak.sh`
 - `scripts/s10-five-node-game-soak-summary.test.sh`
@@ -66,4 +68,4 @@
 - 单次 short soak 可发现明显阻断，但不能替代 release endurance。
 - API/viewer projection 只证明状态可见性，不证明玩法好玩或真实玩家意愿。
 - state-sync closure report 只能证明 blob 引用闭包；observer 自动追高仍需单独证据。
-- 手工复制数据目录、checkpoint 或 seed 只能作为 break-glass/recovery 线索，不能作为 live-candidate readiness 证据。
+- 手工复制数据目录、checkpoint 或 seed 被禁止作为 recovery 或 live-candidate readiness 输入；它们只能作为隔离的故障现场证据，不能继续接入正式 world state。
