@@ -1,6 +1,11 @@
 export function createFragmentRefillPreviewStateModule({ clone, state }) {
   function handleFragmentRefillPreview(quote) {
     if (!quote || typeof quote !== "object" || state.fragmentRefillPreviewRequest?.status !== "pending") return false;
+    const chunk = quote.chunk;
+    if (!chunk || typeof chunk !== "object") return false;
+    const coordinates = [chunk.x, chunk.y, chunk.z];
+    if (!coordinates.every((coordinate) => typeof coordinate === "number" && Number.isSafeInteger(coordinate))) return false;
+    if (`${coordinates[0]}:${coordinates[1]}:${coordinates[2]}` !== state.fragmentRefillPreviewRequest.requestKey) return false;
     state.fragmentRefillPreview = clone(quote);
     state.fragmentRefillPreviewRequest = { status: "received", error: null };
     return true;
