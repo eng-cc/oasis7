@@ -110,20 +110,23 @@ function readSignal() {
     }
   }
   if (Listener) {
-    const sSlot = this.observers ? this.observers.length : 0;
-    if (!Listener.sources) {
-      Listener.sources = [this];
-      Listener.sourceSlots = [sSlot];
-    } else {
-      Listener.sources.push(this);
-      Listener.sourceSlots.push(sSlot);
-    }
-    if (!this.observers) {
-      this.observers = [Listener];
-      this.observerSlots = [Listener.sources.length - 1];
-    } else {
-      this.observers.push(Listener);
-      this.observerSlots.push(Listener.sources.length - 1);
+    const observers = this.observers;
+    if (!observers || observers[observers.length - 1] !== Listener) {
+      const sSlot = observers ? observers.length : 0;
+      if (!Listener.sources) {
+        Listener.sources = [this];
+        Listener.sourceSlots = [sSlot];
+      } else {
+        Listener.sources.push(this);
+        Listener.sourceSlots.push(sSlot);
+      }
+      if (!observers) {
+        this.observers = [Listener];
+        this.observerSlots = [Listener.sources.length - 1];
+      } else {
+        observers.push(Listener);
+        this.observerSlots.push(Listener.sources.length - 1);
+      }
     }
   }
   return this.value;
@@ -3623,6 +3626,11 @@ function createFragmentRefillPreviewRequestModule({
 function createFragmentRefillPreviewStateModule({ clone: clone2, state: state2 }) {
   function handleFragmentRefillPreview(quote2) {
     if (!quote2 || typeof quote2 !== "object" || state2.fragmentRefillPreviewRequest?.status !== "pending") return false;
+    const chunk = quote2.chunk;
+    if (!chunk || typeof chunk !== "object") return false;
+    const coordinates = [chunk.x, chunk.y, chunk.z];
+    if (!coordinates.every((coordinate) => typeof coordinate === "number" && Number.isSafeInteger(coordinate))) return false;
+    if (`${coordinates[0]}:${coordinates[1]}:${coordinates[2]}` !== state2.fragmentRefillPreviewRequest.requestKey) return false;
     state2.fragmentRefillPreview = clone2(quote2);
     state2.fragmentRefillPreviewRequest = { status: "received", error: null };
     return true;
@@ -3898,6 +3906,9 @@ function ownKeys(target) {
   return Reflect.ownKeys(target);
 }
 function setProperty(state2, property, value, deleting = false) {
+  if (property === "__proto__") {
+    return;
+  }
   if (!deleting && state2[property] === value) return;
   const prev = state2[property], len = state2.length;
   if (value === void 0) {
@@ -3939,7 +3950,7 @@ const proxyTraps = {
     if (!tracked) {
       const desc = Object.getOwnPropertyDescriptor(target, property);
       const isFunction = typeof value === "function";
-      if (getListener() && (!isFunction || target.hasOwnProperty(property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
+      if (getListener() && (!isFunction || Object.prototype.hasOwnProperty.call(target, property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
       else if (value != null && isFunction && value === Array.prototype[property]) {
         return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
       }
