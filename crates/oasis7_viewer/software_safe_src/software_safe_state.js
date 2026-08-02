@@ -44,6 +44,8 @@ export function createSoftwareSafeState() {
     productValidationQuoteRequest: { status: "idle", error: null },
     powerSurvivalQuote: null,
     powerSurvivalQuoteRequest: { status: "idle", error: null },
+    fragmentRefillPreview: null,
+    fragmentRefillPreviewRequest: { status: "idle", error: null },
     marketQuoteDecision: null,
     marketQuoteDecisionRequest: { status: "idle", error: null },
     warDeclarationQuote: null,

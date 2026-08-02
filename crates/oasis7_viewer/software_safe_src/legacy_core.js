@@ -9,6 +9,7 @@ import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
+import { createFragmentRefillPreviewIntegration } from "./fragment_refill_preview_integration.js";
 import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
 import { createViewerQuoteProtocolFacade } from "./viewer_quote_protocol_facade.js";
@@ -179,10 +180,12 @@ const productValidationQuote = createProductValidationQuoteIntegration(() => ({ 
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
+const fragmentRefillPreview = createFragmentRefillPreviewIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }));
+const { requestFragmentRefillPreview } = fragmentRefillPreview;
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-const quoteProtocolFacade = createViewerQuoteProtocolFacade({ handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -4252,7 +4255,7 @@ function installTestApi() {
     sendGameplayAction,
     requestRefineQuote,
     requestProductValidationQuote,
-    requestPowerSurvivalQuote, requestWarDeclarationQuote,
+    requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
     requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
@@ -4411,7 +4414,7 @@ export {
   sendGameplayAction,
   requestRefineQuote,
   requestProductValidationQuote,
-  requestPowerSurvivalQuote, requestWarDeclarationQuote,
+  requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
   requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,

@@ -1,4 +1,5 @@
 export function createViewerQuoteProtocolFacade({
+  fragmentRefillPreview,
   handleRefineQuoteError,
   handleRefineQuotePreflight,
   marketQuoteDecision,
@@ -11,6 +12,7 @@ export function createViewerQuoteProtocolFacade({
     return handleRefineQuoteError(error)
       || productValidationQuote.handleProductValidationQuoteError(error)
       || powerSurvivalQuote.handlePowerSurvivalQuoteError(error)
+      || fragmentRefillPreview.handleFragmentRefillPreviewError(error)
       || warDeclarationQuote.handleWarDeclarationQuoteError(error)
       || marketQuoteDecision.handleMarketQuoteDecisionError(error);
   }
@@ -32,6 +34,9 @@ export function createViewerQuoteProtocolFacade({
       case "war_declaration_quote_preflight":
         warDeclarationQuote.handleWarDeclarationQuote(message.quote);
         return true;
+      case "fragment_refill_preview_preflight":
+        fragmentRefillPreview.handleFragmentRefillPreview(message.quote);
+        return true;
       default:
         return false;
     }
@@ -39,6 +44,7 @@ export function createViewerQuoteProtocolFacade({
 
   function invalidateSnapshotBoundQuotes() {
     powerSurvivalQuote.invalidatePowerSurvivalQuote();
+    fragmentRefillPreview.invalidateFragmentRefillPreview();
     warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();
     state.marketQuoteDecision = null;
     state.marketQuoteDecisionRequest = { status: "idle", error: null };

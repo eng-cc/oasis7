@@ -1,5 +1,6 @@
 import { ProductValidationQuotePanel } from "./product_validation_quote_card.jsx";
 import { PowerSurvivalQuotePanel } from "./power_survival_quote_card.jsx";
+import { FragmentRefillPreviewPanel } from "./fragment_refill_preview_card.jsx";
 import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
 import { MarketQuoteDecisionPanel } from "./market_quote_decision_card.jsx";
 import { WarDeclarationQuotePanel } from "./war_declaration_quote_card.jsx";
@@ -32,6 +33,10 @@ export function PowerSurvivalQuoteGameplayPanel(props) {
     locale={props.locale}
     tr={props.tr}
   />;
+}
+
+export function FragmentRefillPreviewGameplayPanel(props) {
+  return <FragmentRefillPreviewPanel quote={props.core.state.fragmentRefillPreview} requestState={props.core.state.fragmentRefillPreviewRequest} requestFragmentRefillPreview={props.core.requestFragmentRefillPreview} locale={props.locale} tr={props.tr} />;
 }
 
 export function MarketQuoteDecisionGameplayPanel(props) { return <MarketQuoteDecisionPanel quote={props.core.state.marketQuoteDecision} requestState={props.core.state.marketQuoteDecisionRequest} requestMarketQuoteDecision={props.core.requestMarketQuoteDecision} locale={props.locale} tr={props.tr} />; }
