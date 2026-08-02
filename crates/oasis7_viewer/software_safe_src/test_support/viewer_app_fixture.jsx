@@ -56,6 +56,7 @@ export function slot1CandidateClaimSnapshot() {
           restricted_starter_claim_balance: 0,
           auto_restricted_starter_claim_amount: 325,
           eligible_claim_balance: 325,
+          upkeep_runway_epochs: 0,
           release_cooldown_epochs: 2,
           grace_epochs: 4,
           idle_warning_epochs: 8,
@@ -83,8 +84,8 @@ export function slot1CandidateClaimSnapshot() {
   });
 }
 
-export async function renderViewerApp(snapshot, authOverrides = {}) {
-  window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en");
+export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en") {
+  window.history.replaceState({}, "", `/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=${locale}`);
   window.localStorage.clear();
   document.body.innerHTML = "";
   const core = await import("../legacy_core.js");
@@ -92,7 +93,7 @@ export async function renderViewerApp(snapshot, authOverrides = {}) {
   const appRoot = document.createElement("div");
   document.body.appendChild(appRoot);
   core.initializeSoftwareSafeCore();
-  core.setViewerLocale("en");
+  core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
   core.state.auth = {
     ...core.state.auth,

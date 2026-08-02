@@ -1834,7 +1834,7 @@ function AgentClaimSessionBoundaryCard(props) {
         <Badge>{`claimer=${agentClaim()?.claimer_agent_id || "-"}`}</Badge>
         <Badge>{`owned=${agentClaim()?.owned_claim_count ?? 0}/${agentClaim()?.claim_cap ?? "-"}`}</Badge>
       </div>
-      <AgentClaimChoiceCard publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
+      <AgentClaimChoiceCard locale={locale} tr={tr} quote={() => agentClaim()?.next_claim_quote || agentClaim()?.nextClaimQuote} publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
     </CalloutCard>
   );
 }
@@ -1883,7 +1883,7 @@ function AgentClaimPanel(props) {
         <Badge>{`eligible=${quote()?.eligible_claim_balance ?? agentClaim()?.slot_1_eligible_claim_balance ?? "-"}`}</Badge>
         <Badge>{`upfront=${quote()?.total_upfront_amount ?? "-"}`}</Badge>
       </div>
-      <AgentClaimChoiceCard publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
+      <AgentClaimChoiceCard locale={locale} tr={tr} quote={quote} publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
       <div class="control-grid">
         <div class="field">
           <label for="agent-claim-target">
