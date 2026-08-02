@@ -68,6 +68,39 @@ fn signed_declare_social_edge_quote_request(
     request
 }
 
+fn signed_publish_social_fact_quote_request(
+    agent_id: &str,
+    evidence_event_id: u64,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::PublishSocialFactQuoteRequest {
+    let mut request = crate::viewer::PublishSocialFactQuoteRequest {
+        schema_id: "social.reputation.v1".to_string(),
+        subject_agent_id: agent_id.to_string(),
+        object_agent_id: Some(agent_id.to_string()),
+        claim: "agent fulfilled the evidence-backed delivery".to_string(),
+        confidence_ppm: 875_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: Some(12),
+        stake: None,
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_publish_social_fact_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign publish social fact quote auth"),
+    );
+    request
+}
+
 #[test]
 fn runtime_declare_social_edge_quote_requires_auth_proof() {
     let _guard = lock_test_llm_env();
@@ -160,6 +193,125 @@ fn runtime_declare_social_edge_quote_is_signed_deterministic_non_mutating_and_pl
             .handle_declare_social_edge_quote(request)
             .expect("repeat signed declare social edge quote"),
         quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_publish_social_fact_quote_is_signed_deterministic_non_mutating_and_player_readable() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let evidence_event_id = server
+        .world
+        .journal()
+        .events
+        .first()
+        .expect("seed runtime evidence event")
+        .id;
+    let (public_key, private_key) = test_signer(96);
+    register_runtime_session(
+        &mut server,
+        "player-publish-social-fact-quote",
+        Some(agent_id.as_str()),
+        2896,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let request = signed_publish_social_fact_quote_request(
+        agent_id.as_str(),
+        evidence_event_id,
+        "player-publish-social-fact-quote",
+        2897,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let quote = server
+        .handle_publish_social_fact_quote(request.clone())
+        .expect("signed publish social fact quote");
+    assert_eq!(quote.actor_id, agent_id);
+    assert_eq!(quote.action_kind, "publish_fact");
+    assert_eq!(quote.schema_id, request.schema_id);
+    assert_eq!(quote.subject_id.as_deref(), Some(agent_id.as_str()));
+    assert_eq!(quote.object_id.as_deref(), Some(agent_id.as_str()));
+    assert!(quote.claim_summary.contains("evidence-backed delivery"));
+    assert_eq!(quote.confidence_ppm, Some(875_000));
+    assert_eq!(quote.stake_at_risk, 0);
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"reputation".to_string())
+    );
+    assert_eq!(quote.cooperation_opportunity_delta, "positive");
+    assert_eq!(quote.blacklist_or_dispute_risk, "challengeable_claim");
+    assert_eq!(quote.governance_or_claim_relevance, "evidence_backed_claim");
+    assert_eq!(quote.recommended_social_action, "publish_fact");
+    assert!(quote.why_this_action_matters.contains(agent_id.as_str()));
+    assert_eq!(
+        server
+            .handle_publish_social_fact_quote(request)
+            .expect("repeat signed publish social fact quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_publish_social_fact_quote_rejects_missing_runtime_evidence_without_mutation() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(97);
+    register_runtime_session(
+        &mut server,
+        "player-publish-social-fact-missing-evidence",
+        Some(agent_id.as_str()),
+        2898,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let err = server
+        .handle_publish_social_fact_quote(signed_publish_social_fact_quote_request(
+            agent_id.as_str(),
+            999_999,
+            "player-publish-social-fact-missing-evidence",
+            2899,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("missing runtime evidence must reject publish social fact quote");
+
+    assert_eq!(err.code, "publish_social_fact_quote_rejected");
+    assert_eq!(err.action_id.as_deref(), Some("quote_publish_social_fact"));
+    assert!(
+        err.message
+            .contains("social evidence event missing: 999999")
     );
     assert_eq!(server.world.state(), &state_before);
 }

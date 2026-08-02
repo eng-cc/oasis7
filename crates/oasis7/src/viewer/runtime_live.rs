@@ -807,6 +807,9 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::QuoteDeclareSocialEdge { request } => {
                 self.quote_declare_social_edge(request, writer)?
             }
+            ViewerRequest::QuotePublishSocialFact { request } => {
+                self.quote_publish_social_fact(request, writer)?
+            }
             ViewerRequest::QuoteDeclareWar { request } => {
                 self.quote_declare_war(request, writer)?
             }

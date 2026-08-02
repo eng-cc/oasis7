@@ -101,6 +101,9 @@ pub enum ViewerRequest {
     QuoteDeclareSocialEdge {
         request: DeclareSocialEdgeQuoteRequest,
     },
+    QuotePublishSocialFact {
+        request: PublishSocialFactQuoteRequest,
+    },
     QuoteDeclareWar {
         request: WarDeclarationQuoteRequest,
     },
@@ -645,6 +648,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     DeclareSocialEdgeQuotePreflight {
         quote: DeclareSocialEdgeQuotePreflight,
+    },
+    PublishSocialFactQuotePreflight {
+        quote: PublishSocialFactQuotePreflight,
     },
     WarDeclarationQuotePreflight {
         quote: WarDeclarationQuotePreflight,
