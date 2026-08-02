@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-tier="${1:-full}"
+tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
@@ -16,9 +16,14 @@ Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support]
   full-core     Run doc/fmt plus the heaviest `oasis7 --tests` full-tier shard.
   full-support  Run the remaining support crates/viewer shard plus `oasis7 --lib --bins`.
 
-Default: full
+Default: none (explicit tier required)
 USAGE
 }
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 2
+fi
 
 if [[ $# -gt 1 ]]; then
   usage
@@ -185,13 +190,16 @@ run_oasis7_viewer_software_safe_build() {
   run ./scripts/build-viewer-software-safe.sh
 }
 
+run_pixel_world_bridge_lib_tests() {
+  run_cargo test -p pixel_world_bridge --lib
+}
+
+run_pixel_world_bridge_wasm_check() {
+  run_cargo check -p pixel_world_bridge --target wasm32-unknown-unknown
+}
+
 run_oasis7_viewer_performance_smoke_report_only() {
-  local status=0
-  run ./scripts/viewer-performance-probe.sh --profile smoke || status=$?
-  if [[ "$status" -ne 0 ]]; then
-    echo "warning: viewer performance smoke failed (report-only)"
-    return 0
-  fi
+  run ./scripts/viewer-performance-report-only.sh
 }
 
 run_hosted_account_local_smoke() {
@@ -214,6 +222,10 @@ run_required_gate_checks() {
   run bash ./scripts/check-script-executable-bits.sh
   run bash ./scripts/cargo-dev-windows-toolchain.test.sh
   run bash ./scripts/doc-governance-check.test.sh
+  run bash ./scripts/testing-manual-active-contract.test.sh
+  run bash ./scripts/ci-tests-argument-contract.test.sh
+  run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
+  run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
@@ -274,6 +286,8 @@ case "$tier" in
     run_required_component "oasis7_net libp2p tests" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_libp2p_tests
     run_required_component "viewer software-safe contract" "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_oasis7_viewer_software_safe_feedback_contract_tests
     run_required_component "viewer software-safe build" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" "disabled_by_scope_planner" run_oasis7_viewer_software_safe_build
+    run_required_component "pixel world bridge lib tests" "${OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS:-}" "disabled_by_scope_planner" run_pixel_world_bridge_lib_tests
+    run_required_component "pixel world bridge wasm check" "${OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK:-}" "disabled_by_scope_planner" run_pixel_world_bridge_wasm_check
     run_required_component "viewer performance smoke (report-only)" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" "report_only_scope_not_selected" run_oasis7_viewer_performance_smoke_report_only
     run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" "not_in_local_required_baseline_or_scope_disabled" run_hosted_account_local_smoke
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_client_launcher_web_build

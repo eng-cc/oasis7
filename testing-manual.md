@@ -45,11 +45,17 @@
   - Viewer live 服务：`crates/oasis7/src/bin/oasis7_viewer_live.rs`（内置 `#[cfg(test)]`）
   - 端到端集成：`crates/oasis7/tests/*.rs`
 
-### Viewer 客户端（Bevy/egui + wasm）
-- crate：`crates/oasis7_viewer`
+### Pixel World Bridge（Bevy + wasm）
+- crate：`crates/pixel_world_bridge`
 - 覆盖：
-  - UI/相机/事件联动等单测散布在 `src/*.rs` 与 `src/tests_*.rs`
-  - 快照基线：`crates/oasis7_viewer/tests/snapshots/*.png`
+  - Bevy world projection、相机/选中态与渲染逻辑测试散布在 `src/*_tests.rs`
+  - 确定性 raster 基线由 `scripts/viewer-pixel-world-bevy-pixel-regression.sh` 采集
+  - `wasm32-unknown-unknown` 编译检查覆盖 WebGL2 bridge 的目标特定构建入口
+
+### Viewer Web 前端（JS/HTML + wasm bundle）
+- package：`crates/oasis7_viewer`
+- 覆盖：
+  - source 结构、feedback contract 与 SolidJS 组件测试由 package scripts 提供
   - Web 启动入口：`oasis7_game_launcher`（内置静态服务，`run-viewer-web.sh` 仅保留为兼容/排障工具）
   - Web 闭环采样：agent-browser CLI（详见 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`）
 
@@ -99,11 +105,18 @@
   - `cargo test -p oasis7_net --features libp2p --lib`
   - `./scripts/llm-baseline-fixture-smoke.sh`
   - `cargo test -p oasis7 --features wasmtime --lib --bins`
+
+`./scripts/ci-tests.sh` 不设默认 tier；省略参数会打印 usage 并失败，避免误把升级专用的 `full` 当成本地默认。
+
 - 入口 B：`.github/workflows/rust.yml`（required-gate）
   - planner 先执行：`./scripts/plan-rust-required-scope.sh --event-name <push|pull_request> --base-ref <base> --head-ref <head>`
   - `CI_VERBOSE=1 ./scripts/ci-tests.sh required`
   - 本地显式 `./scripts/ci-tests.sh required` 仍保持基础 required 语义；只有 CI `required-gate` 与 `prepare-task-pr.sh` 推荐命令会根据 planner 输出注入选择性组件环境变量，并在命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时额外拉起 support-crate shard
-  - 当 planner 命中 `crates/oasis7_viewer/**` 时，`required-gate` 现在还会追加一条 `viewer-performance-probe.sh --profile smoke` 的 report-only scoped smoke；当前阶段用于收集 summary 和阈值噪音，不作为 blocking failure
+  - 当 planner 选择 `crates/oasis7_viewer/**` 性能 surface 时，`required-gate` 必须通过 `viewer-performance-report-only.sh` 采集环境、web-dist 原始复现、样本 summary/markdown 与截图并上传 artifact；采集缺失、损坏或 summary/probe 状态矛盾必须阻断，只有完整有效样本的阈值 miss 在稳定可复现的环境特定采样阈值和有时限 waiver 生命周期建立前保持 report/watch
+- 入口 B2：`.github/workflows/rust.yml`（人工 full escalation）
+  - 先在绑定 task issue 写明升级理由与 frozen PR head，再以 `workflow_dispatch` 选择 `run_mode=full_escalation`，填写 `task_uid`、`pr_number`、`expected_head`、`escalation_reason`（`release|high_risk|history_defect|signal`）和同仓库 `evidence_url`；评论/标签本身不自动授权 CI
+  - preflight 必须确认当前 checkout 与 `expected_head` 完全一致；成功后执行显式 `./scripts/ci-tests.sh full`，并始终上传 `oasis7-full-escalation-receipt-v1`；失败 receipt 只证明运行与失败，不得作为通过证据
+  - schedule `full-regression` 是非 PR 定时回归，不能替代 PR exact-head escalation receipt
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
@@ -117,11 +130,12 @@
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。
 - `m4/m5` builtin wasm hash 校验（`scripts/ci-tests.sh` 已移除 `sync-m4/m5 --check`）。
 - runtime builtin wasm bootstrap / default-module / body-action 闭环（已从 required 下放到 `test_tier_full`）。
-- Viewer headed / GPU 真环境性能当前仍不是 blocking required gate；现阶段 only report-only scoped smoke 已接入 `required-gate`
+- Viewer headed / GPU 真环境性能在被选择时必须采集，但在稳定可复现的环境特定采样阈值、原始复现与有时限 waiver 生命周期建立前仍是 report/watch，不是 blocking required gate。
 
 结论：
 - `commit` 是默认本地提交基线，目标是尽快暴露格式/治理/viewer-support 回归，但不承担 `oasis7 --tests` required shard；
-- `required/full` 是“核心链路测试层”的主入口（基础 required 含 `oasis7 + consensus + distfs + viewer`；GitHub `required-gate` 可按 planner 额外注入 `node + net/libp2p` support shard；full 仍固定覆盖全部 support shard 与长链路补充）；
+- ordinary PR 的 `required-gate` 是 impact-scoped premerge 最小 blocking set：先拦截改动影响面的缺陷，再在不降低充分度的前提下优化速度；基础 required 含 `oasis7 + consensus + distfs + viewer`，GitHub 可按 planner 追加 `node + net/libp2p` support shard；
+- `full` 不是 ordinary PR 默认，只用于 release、高风险、历史缺陷升级、信号触发或 schedule 回归；planner 的 `scope=full` 仅表示 required tier 内 fail-closed 覆盖扩张，不等于选择 full tier；
 - `required-gate` 已补充 changed-path scope planner；
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
@@ -130,10 +144,12 @@
 
 先按改动影响面选择最小测试集，再按风险升级；不要把 `required`、`full` 或 release gate 当作“无脑全跑”的替代品。每次结论至少写清：本次影响面、已跑最小测试集、证据路径、未覆盖/残余风险。
 
-1. 文档、治理、脚本元数据：默认 S0；若改动测试/发布口径，再追加对应脚本的 syntax/dry-run 或 planner 样例，不因文档改动直接升级到 full。
+CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 最小 blocking set，缺陷拦截优先、速度优化其次；`full` 只因 release、高风险、历史缺陷升级、信号触发或 schedule 运行。任何被选择的性能 surface 都必须采集环境、原始复现与样本；稳定可复现的环境特定采样阈值及有时限 waiver 生命周期成熟前，结论仅为 report/watch。
+
+1. 文档、治理、脚本元数据：默认 S0；docs-only 同时执行命中的 contract / planner 样例。若改动测试/发布口径，再追加对应脚本的 syntax/dry-run 或 planner 样例，不因文档改动直接升级到 full。
 2. runtime / simulator / world-model：先跑命中的定向 S3；落地前补 S1；只有跨模块、持久化、规则/历史回归风险无法由定向测试覆盖时才升 S2。
    - runtime timing、`RuntimePerfSnapshot`、LLM latency split、health/bottleneck 或 report consumer 变更，先读 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md` 的 Runtime/LLM 行；`llm-longrun-stress.sh` 输出属于 S8 诊断/长跑证据，不是默认 PR latency gate。
-3. Viewer / Web / 可见 UI：先跑 deterministic contract、component test 或 wasm/build 前置；触达可见表面时追加 S6 截图与模型视觉评审。
+3. Viewer / Web / 可见 UI：先跑 deterministic contract 或 component test；触达 `crates/oasis7_viewer/**`、viewer wasm/build 链路或目标特定编译时，把 S5 作为 scoped required。触达可见表面时追加 S6 截图与模型视觉评审。
 4. node / net / consensus / distfs：先跑命中的 S4 子系统测试；涉及在线拓扑、恢复、公开网络或存储/共识 claim 时追加 S9/S10。
 5. builtin wasm / module release / hash：先跑对应 scope planner 与 module-set evidence；发布或跨 runner claim 才进入 release evidence 对账。
 6. playability / player continue claim：自动化只能证明“没坏/可回归”；`L4A`、`L4B`、`L5` 按 claim 强度升级，不得互相替代。
@@ -142,7 +158,7 @@
 ## 分层模型（针对当前仓库）
 
 ### L0 静态与工件一致性层
-- 目标：尽早拦截格式漂移、内置 wasm 工件漂移、构建目标缺失。
+- 目标：尽早拦截格式漂移、内置 wasm 工件漂移与基础脚本/文档契约问题；不承担目标特定编译。
 - 性质：最快、最确定。
 
 ### L1 核心逻辑确定性层（oasis7 主体）
@@ -196,8 +212,8 @@
 ./scripts/cargo-dev-lib.test.sh
 ./scripts/check-rust-file-size.sh
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
-env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
 ```
+- S0 是适用于任何改动的快速静态基线：不运行 Viewer/Bevy、wasm 或任何其他 target-specific 编译；这类验证必须按改动面进入 scoped required（例如 S5）。
 - 本地日常迭代若只是为了更快得到开发反馈，默认把同类命令替换为 `./scripts/cargo-dev.sh check/test/run/build ...`；新 task worktree 的 ignored `target` symlink 只是降低误用直接 cargo 时的重复存储，不改变正式验收入口。但进入正式 required/full 验收、尤其是 deterministic wasm/release 相关链路时，仍以本手册列出的原始 cargo 命令为准。
 - 本地脚本内的开发态 build/test/run 应通过 `scripts/cargo-dev-lib.sh` 复用 shared target；正式验收脚本、release workflow、deterministic wasm、module release acceptance、hash/receipt evidence 仍不得被该 helper 隐式改写。
 - `./scripts/check-rust-file-size.sh` 现同时校验超限基线、`touch-and-shrink` 和 `split_part/include!` 结构切片基线，不再只是“有没有新 >1200 文件”。
@@ -223,7 +239,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 边界：
   - 普通 `pre-commit` 是静默 no-op；这一层仅由操作者显式运行，不是自动提交门禁。
   - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`。
-  - 这一层也不包含 `cargo test -p oasis7_viewer` 与 `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`；若改动触达 runtime / simulator 主链，或需要补跑 viewer Rust 长跑，显式执行 S1。
+  - 这一层也不包含 `cargo test -p pixel_world_bridge --lib` 与 `cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`；若改动命中 Viewer/Bevy 或 pixel-world wasm/build 链路，显式执行 S5。
 
 ### S1：核心 required 套件（L1）
 ```bash
@@ -239,8 +255,8 @@ explicit diagnostic command.
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
   - release 关键脚本执行位前置校验，避免只在 `release-gate-web` / `package-native` runner 上才暴露 `Permission denied`
-  - `oasis7_viewer` 全量单测 + wasm 编译检查
-  - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 或 viewer Rust 长跑的改动
+  - full support-crate shard 覆盖 `pixel_world_bridge` lib tests；目标特定 wasm/build 检查仍按 S5 scoped required 触发
+  - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 的改动
 
 ### S2：核心 full 套件（L1 + L2）
 ```bash
@@ -380,17 +396,20 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_net --features runtime_bridge --lib
   - `--block-remove-signer-id` 可重复使用；当 block manifest 让 `finality signer_count < threshold` 时，默认预期是 `import_policy_reject`
   - 若对 finality slot 复用原 `signer_id`，真实导入会命中 `GovernancePolicyInvalid`，因为 finality signer 绑定到现有 node identity
 
-### S5：Viewer crate 单测与 wasm 编译套件（L4A 前置）
+### S5：Pixel World Bridge（Bevy）单测与 wasm 编译套件（L4A 前置）
 ```bash
-env -u RUSTC_WRAPPER cargo test -p oasis7_viewer
-env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
+env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib
+env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-unknown
 ```
 - 说明：
-  - `oasis7_viewer` 内已有大量 UI/相机/交互逻辑测试；
-  - 这是 UI 闭环前的稳定性筛网；
-  - 该套件已并入 `S1/S2` 的默认 gate。
+  - `pixel_world_bridge` 是当前 Bevy/WebGL2 pixel-world 目标；`oasis7_viewer` 是其 JS/HTML bundle 消费方，不是 Rust Viewer/Bevy crate；
+  - 这是 Viewer/Bevy 或 pixel-world wasm build 改动的 scoped required 稳定性筛网，并且是 UI 闭环前的稳定性前置；
+  - raster、真实浏览器与性能证据不由本套件替代，按 S6 的 JS-browser / JS-full 升级。
 
 ### S6：Web UI 闭环 smoke 套件（L4A）
+- JS-required（结构/反馈/Vitest/freshness/build）：触达 `crates/oasis7_viewer/**` 的 source、生成物边界或 bundle 时，执行 `npm --prefix crates/oasis7_viewer run test:frontend-structure`、`npm --prefix crates/oasis7_viewer run test:feedback-contract`、`npm --prefix crates/oasis7_viewer run test:ui`、`./scripts/agent-browser-viewer-dist-freshness-test.sh` 与 `./scripts/build-viewer-software-safe.sh`。
+- JS-browser（真实浏览器）：WASM bundle ready 后，以真实 browser 验证关键交互、console、desktop 与 narrow viewport；任何 player-visible 改动必须通过此层，不能只以 JS-required 替代。
+- JS-full（release/risk-triggered）：跨模式、恢复路径、长运行与性能验证；发布或风险触发时执行，包含适用的 raster/browser/performance 证据。
 - S6 详细执行步骤、agent-browser 命令、发布门禁与补充约定已拆分到：
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`（Playwright 实跑系列入口，管理真实本地栈 + 真实 UI 操作流程矩阵）
@@ -511,7 +530,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_full oasis7_init_
 ```
 - 配套文档：`doc/world-simulator/scenario/scenario-files.prd.md` 的“场景测试覆盖矩阵”。
 
-### S6.5：Chain Runtime Storage Profile / Gate 核验（L4/L5 补充）
+### S6.5：Chain Runtime Storage Profile / Gate 技术核验
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime node_runtime_execution_driver_uses_storage_profile_checkpoint_interval -- --nocapture
 ./scripts/oasis7-runtime-storage-gate.sh --status-json <status.json> --expected-profile release_default --min-checkpoint-count 1 --max-orphan-blob-count 0 --require-no-degraded
@@ -528,7 +547,7 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
     - `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md`
     - `doc/world-runtime/evidence/runtime-launcher-profile-consistency-2026-03-11.md`
 
-### S8：长稳与压力套件（L5）
+### S8：长稳与压力技术套件
 - Viewer 当前 Web 性能 probe（当前活跃入口）：
 ```bash
 ./scripts/viewer-performance-probe.sh --profile smoke
@@ -570,7 +589,7 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
   - `scripts/ci-tests.sh full` 已接入 `./scripts/llm-baseline-fixture-smoke.sh`；
   - 压测结果需保留 CSV/summary/log 产物。
 
-### S9：P2P/存储/共识在线长跑套件（L5）
+### S9：P2P/存储/共识在线长跑技术套件
 - 当前状态（2026-02-28）：`scripts/p2p-longrun-soak.sh` 已恢复为可执行脚本，底座为多进程 `oasis7_chain_runtime`。
 - 时间语义说明：PoS 出块/提案节拍由 `--pos-slot-duration-ms` 与 `--pos-ticks-per-slot` 锚定；`--node-tick-ms` 仅表示 worker 轮询/回退间隔。
 - 建议命令（smoke）：
@@ -755,16 +774,16 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-follow-up-window-2026-03-24.md \
-  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-short-window-pass-2026-03-24.md \
+  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
+  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md \
   --dry-run
 ```
 - 建议命令（full 执行）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-follow-up-window-2026-03-24.md \
-  --shared-window-evidence-ref doc/testing/evidence/network-rehearsal-public-testnet-rehearsal-short-window-pass-2026-03-24.md
+  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
+  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md
 ```
 - 建议命令（real env triad snapshot）：
 ```bash
@@ -950,7 +969,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `enforce_longrun_operability_release_gate` 对首个违规项返回阻断错误（包含 `gate + reason`）。
   - 报告中的 `economy_report.alerts` 会同步升级为发布阻断违规项。
 
-### S10：五节点真实游戏数据在线长跑套件（L5）
+### S10：五节点真实游戏数据在线长跑技术套件
 - 当前状态（2026-02-28）：`scripts/s10-five-node-game-soak.sh` 已恢复为可执行脚本，底座为五进程 `oasis7_chain_runtime`。
 - DistFS probe 边界：reward worker 在空 blob set 时可幂等写入非敏感 seed，为 `distfs_total_checks` 提供采样前提；seed 成功不是 pass。当前窗口仍无样本时必须保留 `insufficient_data`，最终结论由完整 S10 metric gate 决定。
 - 时间语义说明：S10 与 S9 口径一致，`slot_duration_ms/ticks_per_slot` 决定 PoS 逻辑时间，`node_tick_ms` 仅作轮询/回退间隔。
@@ -1012,7 +1031,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 若缺少节点同步证据或 hosted-login 接入面仍指向 local execution world，只能记为 local hosted-public-join / hosted-login smoke，不得支撑 `public_testnet` unified-world 测试 claim。
 - Boundary:
   - `testing-manual.md` is an execution index only; do not duplicate current network-tier verdicts here.
-  - `public_testnet_rehearsal` history may explain benchmark L5 evidence, but current public readiness belongs to formal `public_testnet` readiness docs.
+  - `public_testnet_rehearsal` history may explain historical technical benchmark context, but is not L5 evidence; current public readiness belongs to formal `public_testnet` readiness docs.
 
 ### S11：去中心化模块发布运行与告警（world-runtime）
 - 适用范围：线上模块发布（`proposal -> attestation -> apply`）与 builtin 在线清单加载故障分诊。
@@ -1100,12 +1119,12 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 
 | 套件 | 主要覆盖面 | 默认触发条件 | 最小证据 |
 |---|---|---|---|
-| S0 | 基础门禁 / 文档 / shell / 格式 / 快速健康检查 | 任何代码、脚本、文档、工作流改动 | 命令日志 + 通过/失败结论 |
-| S1 | 核心 required | `oasis7` 主链路代码改动 | required 测试日志 |
-| S2 | 核心 full | 发布前、协议/规则高风险改动、required 无法充分覆盖时 | full 测试日志 |
+| S0 | 通用静态基线 / 文档 / shell / 格式 / 快速健康检查（不含 target-specific 编译） | 任何代码、脚本、文档、工作流改动 | 命令日志 + 通过/失败结论 |
+| S1 | 核心 required | ordinary PR 的 `oasis7` 主链路 impact-scoped premerge 最小 blocking set | required 测试日志 |
+| S2 | 核心 full | release、高风险、历史缺陷升级、信号触发或 schedule；不是 ordinary PR 默认 | full 测试日志 |
 | S3 | 应用主链定向 | runtime / simulator / viewer live / web bridge 定向改动 | 定向 cargo test 日志 |
 | S4 | 分布式子系统 | node / net / consensus / distfs / P2P 链路改动 | 子系统测试日志 |
-| S5 | viewer crate / wasm 编译 | `crates/oasis7_viewer/**` 或 viewer wasm 构建链路改动 | viewer 单测 + wasm 编译日志 |
+| S5 | Pixel World Bridge（Bevy）lib / wasm 编译 | Viewer/Bevy、`crates/pixel_world_bridge/**` 或 pixel-world wasm/build 链路改动 | `pixel_world_bridge` lib 测试 + wasm 编译日志 |
 | S6 | Web UI 闭环 smoke | Viewer / launcher / Web 控制台 / 交互链路改动；真实玩家输入流程或真实 provider 回归优先补 Playwright 实跑用例；任何可视化相关代码、样式、资源或可见输出改动还必须叠加截图模型视觉评审 | 截图、console、语义结果；Playwright summary/state；visual review card |
 | S7 | 场景矩阵回归 | scenario / gameplay 初始化 / 场景 ID 与稳定性改动 | 场景测试日志 |
 | S8 | 长稳与压力 | 性能、内存、恢复、资源压力或 soak 相关改动 | stress/soak 目录与 summary |
@@ -1119,18 +1138,19 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `crates/oasis7/src/runtime/**` | S0 + S1 | S2 + S3 + S7 | 若涉及确定性 / 治理 / 持久化，追加 S8；若触达在线状态复制，追加 S9 |
 | `crates/oasis7/src/simulator/**` | S0 + S1 | S2 + S3 + S7 + S8 | 若触达 UI 表达或交互入口，追加 S6 |
 | `crates/oasis7/src/viewer/**` 或 `src/bin/oasis7_viewer_live.rs` | S0 + S1 + S6 | S2 + S3 + S5 | 若改动 viewer 协议或 wasm 构建链路，S5 变为必跑 |
-| `crates/oasis7_viewer/**` | S0 + S5 + S6 | S2 + S8 | 若改动只影响静态资源 / 样式，可抽样 S1；若影响 bridge，追加 S3 |
+| `crates/pixel_world_bridge/**` | S0 + S5 + S6 | S2 + S8 | raster/browser/performance 证据按 S6 JS-browser / JS-full 风险升级 |
+| `crates/oasis7_viewer/**` | S0 + S5 + S6（JS-required；可见输出还需 JS-browser） | S2 + S8（JS-full） | 若改动只影响静态资源 / 样式，可抽样 S1；若影响 bridge，追加 S3 |
 | `crates/oasis7_node/**` | S0 + S4（node） + S9/S10（按改动面至少一条） | S2 + S3 + S8 + 另一条在线长跑（S9 或 S10） | 共识推进 / 节点编排改动优先加 S10；网络 / 复制改动优先加 S9 |
 | `crates/oasis7_net/**` | S0 + S4（net） + S9/S10（按改动面至少一条） | S2 + runtime_bridge 变体 + S8 + 另一条在线长跑（S9 或 S10） | 若仅桥接层改动，可用 S3 + S9 smoke；若影响真实联机，补 S10 |
 | `crates/oasis7_consensus/**` | S0 + S4（consensus） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | epoch / attest / finality 逻辑改动优先补 S10 |
 | `crates/oasis7_distfs/**` | S0 + S4（distfs） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | 存储复制 / challenge / 修复逻辑改动优先补 S9 |
 | `doc/**`（非 `doc/devlog/**`） | S0（含 `./scripts/doc-governance-check.sh`） | 命中模块的抽样 required 证据核验 | 若文档改变发布 / 测试口径，追加对应模块的最小必跑集 |
 | `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + `bash -n scripts/plan-rust-required-scope.sh` + planner 样例 + S1 + （full）`./scripts/llm-baseline-fixture-smoke.sh` | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10；docs-only / `.pm` / 无关元数据 PR 必须验证 planner 可输出 `scope=minimal` 且保留 stable `required-gate` 上下文 |
-| `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_node/src/network_bridge.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_net/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path doc/testing/prd.md` + `./scripts/plan-rust-required-scope.sh --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上先规划 `minimal / targeted / full`，再决定 viewer/runtime 哪些重型组件实际执行；`oasis7_node/oasis7_net` 改动需命中 support-crate required shard，而不是因未分类路径退回 full | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
+| `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/pixel_world_bridge/src/render.rs` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7_node/src/network_bridge.rs` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7_net/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path doc/testing/prd.md` + `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上由 `scripts/ci-required-scope.v2.json` 把 changed paths 映射为可审计的 `selected_capabilities`，再执行对应 required 组件；一般 Viewer 改动选 JS-required，性能输入才追加 report/watch probe，Pixel World/Bevy 改动独立选择 bridge lib + wasm32 检查 | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
 | `scripts/release-gate.sh` / `.github/workflows/release-packages.yml` | `./scripts/ci-tests.sh full` + `sync-m1/m4/m5 --check` + Web strict + S9 + S10 | `./scripts/release-gate.sh --quick` / `--dry-run` | 任何发布 gate 逻辑变更均不允许跳过 S9/S10 |
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |
-| `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --changed-path doc/testing/prd.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
-| `scripts/run-viewer-web.sh` | S0 + S6 | S5 + S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |
+| `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --event-name pull_request --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --event-name pull_request --changed-path doc/testing/prd.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
+| `scripts/run-viewer-web.sh` | S0 + S5 + S6 | S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |
 | `scripts/p2p-longrun-soak.sh` / `doc/testing/longrun/p2p-longrun-soak-and-chaos*` | S0 + S9 smoke（含 summary/timeline 校验） | S9 endurance（含 chaos） | 任何阈值/summary 字段变更必须补 endurance |
 | `scripts/s10-five-node-game-soak.sh` / `doc/testing/longrun/s10-five-node-real-game-soak*` | S0 + S10 smoke（含 summary/timeline 校验） | S10 默认长窗（30min+） | 任何门禁字段 / 结算 / mint 改动都需补长窗 |
 
@@ -1209,16 +1229,16 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 3. L2 失败：优先检查协议兼容、连接时序、桥接参数。
 4. L3 失败：优先检查分布式状态恢复、签名校验、网络行为。
 5. L4 失败：先判定是否环境问题（端口、launcher 进程、wasm 初始化），再判定 UI 回归。
-6. L5 失败：判定是否性能退化、资源泄漏、长时状态累计问题。
+6. L5 失败：只针对真实人类或受控外部玩家样本，先核验样本、环境、继续游玩意愿与反馈采集；性能、资源泄漏和长时状态累计问题回到对应技术套件（S8/S9/S10）分诊。
 
 ## TODO（待收口）
 - [x] TODO-1：修正 S7 场景矩阵回归命令的覆盖口径。
   - 处理结果（2026-03-05）：S7 的 `oasis7_init_demo_runs_` 已切换到 `test_tier_full` 执行档位。
   - 验收记录：`env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_full oasis7_init_demo_runs_ -- --nocapture` 命中多场景用例（非 1 条）。
 
-- [x] TODO-2：修复 S5 `oasis7_viewer` 测试编译阻塞。
-  - 处理结果（2026-02-21）：`oasis7_viewer` 测试集已恢复可编译可执行，并已纳入 `scripts/ci-tests.sh` 的 `required/full` 默认 gate。
-  - 验收记录：`env -u RUSTC_WRAPPER cargo test -p oasis7_viewer` 通过。
+- [x] TODO-2：修复 S5 Pixel World Bridge（Bevy）测试编译阻塞。
+  - 处理结果（2026-02-21）：当前 `pixel_world_bridge` lib 测试已恢复可编译可执行，并纳入 `scripts/ci-tests.sh` 的 full support-crate shard。
+  - 验收记录：`env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge --lib` 通过。
 
 ## 风险
 - 风险 1：把 `required/full` 当作整应用全覆盖。
