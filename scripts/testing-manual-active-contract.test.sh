@@ -90,7 +90,7 @@ done
 
 if grep -Eq 'cargo (check|test|build) -p oasis7_viewer' "$MANUAL"; then
   echo "testing-manual must not name oasis7_viewer as the Rust Viewer/Bevy target:" >&2
-  rg -n 'cargo (check|test|build) -p oasis7_viewer' "$MANUAL" >&2
+  grep -En 'cargo (check|test|build) -p oasis7_viewer' "$MANUAL" >&2
   failed=1
 fi
 
@@ -99,7 +99,7 @@ s9b_references="$(
     /^### S9B：/ { active = 1; next }
     active && /^### / { exit }
     active { print }
-  ' "$MANUAL" | rg -o 'doc/[A-Za-z0-9_./-]+\.md' | sort -u
+  ' "$MANUAL" | grep -Eo 'doc/[A-Za-z0-9_./-]+\.md' | sort -u
 )"
 
 missing_s9b_references=()
@@ -129,7 +129,7 @@ if ! grep -Fq '真实人类或受控外部玩家' <<<"$l5_section"; then
   failed=1
 fi
 
-technical_l5_titles="$(rg -n '^### S(6\\.5|8|9|10)：.*L5' "$MANUAL" || true)"
+technical_l5_titles="$(grep -En '^### S(6\.5|8|9|10)：.*L5' "$MANUAL" || true)"
 if [[ -n "$technical_l5_titles" ]]; then
   echo "testing-manual technical suites must not carry L5 labels:" >&2
   printf '%s\n' "$technical_l5_titles" >&2
