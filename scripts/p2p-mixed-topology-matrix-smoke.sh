@@ -42,8 +42,8 @@ jq -e '
 
 run ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md \
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md \
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md \
   --dedicated-lab-evidence-ref doc/testing/evidence/dedicated-mixed-topology-lab-placeholder.md \
   --pass-uplift-decision-ref DEC-P2P-MIXED-DRYRUN \
   --dry-run \

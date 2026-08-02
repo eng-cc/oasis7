@@ -774,16 +774,16 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md \
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md \
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md \
   --dry-run
 ```
 - 建议命令（full 执行）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh \
   --tier full \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-mixed-topology-2026-05-23.md \
-  --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-05-23.md
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md \
+  --shared-window-evidence-ref doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md
 ```
 - 建议命令（real env triad snapshot）：
 ```bash
