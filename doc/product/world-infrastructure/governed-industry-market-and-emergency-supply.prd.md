@@ -10,7 +10,7 @@
 
 ## 迁移状态
 
-本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留尚未完全吸收的工业扩展、结算资产、市场地理产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。常态市场与紧急保供语义已迁入 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md)；其余接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)。owner 必须完成剩余语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文定义基础工业规则与玩家/Agent 创造的受治理能力如何共同扩展世界，市场如何在全球发现和物理结算之间保持一致，以及常态价格和紧急保供的制度边界。它不定义配方、价格、税费、版税、汇率、订单簿、物流、escrow、危机阈值或任何 runtime/UI 实现。
