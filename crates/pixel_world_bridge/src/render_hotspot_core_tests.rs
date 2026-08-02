@@ -4,6 +4,7 @@ use crate::render::hotspot_core::{
     HOTSPOT_CORE_MIN_SIZE_PX, HOTSPOT_CORE_SIZE_SCALE, PixelWorldHotspotCoreHighlightVisual,
     PixelWorldHotspotCoreShadowVisual,
 };
+use crate::render::hotspot_cues::{HotspotCuePart, PixelWorldHotspotCueVisual};
 use std::time::Duration;
 
 const HOTSPOT_CORE_HIGHLIGHT_COLOR: Color = Color::srgba_u8(248, 250, 252, 230);
@@ -17,13 +18,15 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         hotspot_core_decoration_entities::<PixelWorldHotspotCoreHighlightVisual>(&mut app);
     let first_shadow_entities =
         hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app);
+    let first_cue_entities = hotspot_cue_entities(&mut app);
 
-    assert_eq!(first.hotspots.len(), 2);
-    assert_eq!(first.hotspot_cores.len(), 2);
-    assert_eq!(first.hotspot_entity_cache_size, 2);
-    assert_eq!(first.hotspot_core_entity_count, 2);
-    assert_eq!(first_highlight_entities.len(), 2);
-    assert_eq!(first_shadow_entities.len(), 2);
+    assert_eq!(first.hotspots.len(), 3);
+    assert_eq!(first.hotspot_cores.len(), 3);
+    assert_eq!(first.hotspot_entity_cache_size, 3);
+    assert_eq!(first.hotspot_core_entity_count, 3);
+    assert_eq!(first_highlight_entities.len(), 3);
+    assert_eq!(first_shadow_entities.len(), 3);
+    assert_eq!(first_cue_entities.len(), 4);
     assert_eq!(
         first.hit_regions, 2,
         "hotspot cores must not add hit regions"
@@ -55,7 +58,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     app.update();
     assert_eq!(
         visual_probe_summary(&mut app).hotspot_core_entity_count,
-        2,
+        3,
         "a consecutive visible reconcile must reuse each hotspot core"
     );
     assert_eq!(
@@ -67,6 +70,11 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app),
         first_shadow_entities,
         "a consecutive visible reconcile must reuse each hotspot core shadow"
+    );
+    assert_eq!(
+        hotspot_cue_entities(&mut app),
+        first_cue_entities,
+        "a consecutive visible reconcile must reuse each hotspot outline cue"
     );
     let initial_blocker_core_size = first
         .hotspot_cores
@@ -98,6 +106,11 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         first_shadow_entities,
         "pulse updates must reuse each hotspot core shadow"
     );
+    assert_eq!(
+        hotspot_cue_entities(&mut app),
+        first_cue_entities,
+        "pulse updates must reuse each hotspot outline cue"
+    );
 
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
@@ -117,6 +130,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     assert!(
         hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app).is_empty()
     );
+    assert!(hotspot_cue_entities(&mut app).is_empty());
     assert_eq!(removed.hotspot_entity_cache_size, 0);
     assert_eq!(
         removed.hit_regions, 2,
@@ -145,6 +159,81 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         )
         .is_empty()
     );
+    assert!(hotspot_cue_entities(&mut no_render_state_app).is_empty());
+}
+
+#[test]
+fn hotspot_kinds_keep_the_same_base_footprint_and_add_distinct_non_color_outline_cues() {
+    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
+    let footprints = hotspot_base_footprints(&mut app);
+    for (id, (width, height, rotation)) in footprints {
+        assert_eq!(width, height, "{id} must retain its square base footprint");
+        assert_eq!(
+            rotation,
+            (std::f32::consts::FRAC_PI_4 * 100.0).round() as i16,
+            "{id} must retain the legacy diamond base orientation"
+        );
+    }
+
+    let cues = hotspot_cue_parts(&mut app);
+    assert_eq!(
+        cues["hotspot-blocker"],
+        vec![
+            HotspotCuePart::BlockerCrossAscending,
+            HotspotCuePart::BlockerCrossDescending,
+        ],
+        "blockers need a non-color warning cross above the unchanged base"
+    );
+    assert_eq!(
+        cues["hotspot-goal"],
+        vec![
+            HotspotCuePart::GoalCornerTop,
+            HotspotCuePart::GoalCornerRight
+        ],
+        "goals need a non-color corner outline above the unchanged base"
+    );
+    assert!(
+        !cues.contains_key("hotspot-recent-event"),
+        "recent events retain the legacy diamond without an extra semantic cue"
+    );
+}
+
+fn hotspot_base_footprints(app: &mut App) -> std::collections::BTreeMap<String, (i16, i16, i16)> {
+    let world = app.world_mut();
+    let mut hotspots = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
+    hotspots
+        .iter(world)
+        .map(|(hotspot, sprite, transform)| {
+            let size = sprite.custom_size.expect("hotspot base size");
+            let (_, _, rotation) = transform.rotation.to_euler(EulerRot::XYZ);
+            let orientation = (rotation.rem_euclid(std::f32::consts::PI) * 100.0).round() as i16;
+            (
+                hotspot.id.clone(),
+                (size.x.round() as i16, size.y.round() as i16, orientation),
+            )
+        })
+        .collect()
+}
+
+fn hotspot_cue_parts(app: &mut App) -> std::collections::BTreeMap<String, Vec<HotspotCuePart>> {
+    let world = app.world_mut();
+    let mut cues = world.query::<&PixelWorldHotspotCueVisual>();
+    let mut by_id = std::collections::BTreeMap::<String, Vec<HotspotCuePart>>::new();
+    for cue in cues.iter(world) {
+        by_id.entry(cue.id.clone()).or_default().push(cue.part);
+    }
+    for parts in by_id.values_mut() {
+        parts.sort();
+    }
+    by_id
+}
+
+fn hotspot_cue_entities(app: &mut App) -> Vec<Entity> {
+    let world = app.world_mut();
+    let mut cues = world.query_filtered::<Entity, With<PixelWorldHotspotCueVisual>>();
+    let mut entities = cues.iter(world).collect::<Vec<_>>();
+    entities.sort_by_key(|entity| entity.to_bits());
+    entities
 }
 
 #[test]
