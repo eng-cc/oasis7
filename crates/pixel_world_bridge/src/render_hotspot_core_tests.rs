@@ -18,12 +18,12 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     let first_shadow_entities =
         hotspot_core_decoration_entities::<PixelWorldHotspotCoreShadowVisual>(&mut app);
 
-    assert_eq!(first.hotspots.len(), 2);
-    assert_eq!(first.hotspot_cores.len(), 2);
-    assert_eq!(first.hotspot_entity_cache_size, 2);
-    assert_eq!(first.hotspot_core_entity_count, 2);
-    assert_eq!(first_highlight_entities.len(), 2);
-    assert_eq!(first_shadow_entities.len(), 2);
+    assert_eq!(first.hotspots.len(), 3);
+    assert_eq!(first.hotspot_cores.len(), 3);
+    assert_eq!(first.hotspot_entity_cache_size, 3);
+    assert_eq!(first.hotspot_core_entity_count, 3);
+    assert_eq!(first_highlight_entities.len(), 3);
+    assert_eq!(first_shadow_entities.len(), 3);
     assert_eq!(
         first.hit_regions, 2,
         "hotspot cores must not add hit regions"
@@ -55,7 +55,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     app.update();
     assert_eq!(
         visual_probe_summary(&mut app).hotspot_core_entity_count,
-        2,
+        3,
         "a consecutive visible reconcile must reuse each hotspot core"
     );
     assert_eq!(
@@ -145,6 +145,44 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         )
         .is_empty()
     );
+}
+
+#[test]
+fn hotspot_kinds_have_distinct_non_color_base_silhouettes() {
+    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
+    let silhouettes = hotspot_base_silhouettes(&mut app);
+
+    let blocker = silhouettes["hotspot-blocker"];
+    let goal = silhouettes["hotspot-goal"];
+    let recent_event = silhouettes["hotspot-recent-event"];
+
+    assert_ne!(
+        blocker, goal,
+        "blockers and goals must remain distinguishable without color"
+    );
+    assert_ne!(
+        blocker, recent_event,
+        "blockers and recent events must remain distinguishable without color"
+    );
+    assert_ne!(
+        goal, recent_event,
+        "goals and recent events must remain distinguishable without color"
+    );
+}
+
+fn hotspot_base_silhouettes(app: &mut App) -> std::collections::BTreeMap<String, (i16, i16)> {
+    let world = app.world_mut();
+    let mut hotspots = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
+    hotspots
+        .iter(world)
+        .map(|(hotspot, sprite, transform)| {
+            let size = sprite.custom_size.expect("hotspot base size");
+            let (_, _, rotation) = transform.rotation.to_euler(EulerRot::XYZ);
+            let aspect_ratio = (size.x / size.y * 100.0).round() as i16;
+            let orientation = (rotation.rem_euclid(std::f32::consts::PI) * 100.0).round() as i16;
+            (hotspot.id.clone(), (aspect_ratio, orientation))
+        })
+        .collect()
 }
 
 #[test]

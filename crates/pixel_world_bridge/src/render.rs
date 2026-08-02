@@ -874,11 +874,20 @@ fn reconcile_hotspots(
             "goal" => Color::srgba_u8(250, 204, 21, 196),
             _ => Color::srgba(0.56, 0.84, 1.0, (0.28 + (emphasis * 0.48)) as f32),
         };
+        let (width_scale, height_scale, rotation) = match hotspot.kind.as_str() {
+            // An upright warning plate keeps blockers distinct from the two
+            // diamond-shaped attention signals without changing their anchor.
+            "blocker" => (1.0, 1.0, 0.0),
+            // Goals use a compact kite so they remain distinct from recent
+            // event diamonds even when players cannot rely on color.
+            "goal" => (1.0, 0.72, std::f32::consts::FRAC_PI_4),
+            _ => (1.0, 1.0, std::f32::consts::FRAC_PI_4),
+        };
         let mut transform = Transform::from_translation(to_bevy_translation(
             canvas_x, canvas_y, width, height, 1.5,
         ));
-        transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
-        let sprite = sprite_for_square(color, size as f32);
+        transform.rotation = Quat::from_rotation_z(rotation);
+        let sprite = sprite_for_rect(color, size as f32 * width_scale, size as f32 * height_scale);
 
         if let Some(entity) = runtime.hotspot_entities.get(&hotspot.id).copied() {
             commands.entity(entity).insert((sprite, transform));
