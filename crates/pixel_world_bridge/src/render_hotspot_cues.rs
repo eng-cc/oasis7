@@ -14,6 +14,7 @@ pub(crate) enum HotspotCuePart {
     BlockerCrossDescending,
     GoalCornerTop,
     GoalCornerRight,
+    RecentEventTick,
 }
 
 #[derive(Component)]
@@ -91,7 +92,7 @@ pub(crate) fn reconcile_hotspot_cues(
                 (HotspotCuePart::GoalCornerTop, 0.22, 0.22, 0.44, 1.0, 0.0),
                 (HotspotCuePart::GoalCornerRight, 0.22, 0.22, 1.0, 0.44, 0.0),
             ],
-            _ => &[],
+            _ => &[(HotspotCuePart::RecentEventTick, 0.0, -0.26, 0.48, 1.0, 0.0)],
         };
         for (part, offset_x, offset_y, width_scale, height_scale, rotation) in cue_specs {
             let key = (hotspot.id.clone(), *part);

@@ -67,7 +67,7 @@ pub(super) fn sample_render_state_with_hotspot_candidates() -> RenderState {
         VisualHotspot {
             id: "hotspot-recent-event".to_string(),
             label: "Recent route event".to_string(),
-            kind: "recent_event".to_string(),
+            kind: "resource_transfer".to_string(),
             pos: sample_position(1_800_000.0, 1_000_000.0),
             emphasis: Some(0.6),
             size_hint_px: Some(12.0),

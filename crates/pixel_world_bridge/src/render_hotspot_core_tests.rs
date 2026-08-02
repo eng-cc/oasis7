@@ -26,7 +26,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     assert_eq!(first.hotspot_core_entity_count, 3);
     assert_eq!(first_highlight_entities.len(), 3);
     assert_eq!(first_shadow_entities.len(), 3);
-    assert_eq!(first_cue_entities.len(), 4);
+    assert_eq!(first_cue_entities.len(), 5);
     assert_eq!(
         first.hit_regions, 2,
         "hotspot cores must not add hit regions"
@@ -114,6 +114,27 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
 
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut without_recent_event = sample_render_state_with_hotspot_candidates();
+        without_recent_event
+            .visual_hotspots
+            .retain(|hotspot| hotspot.id != "hotspot-recent-event");
+        runtime.render_state = Some(without_recent_event);
+        runtime.render_version += 1;
+    }
+    app.update();
+    let without_recent_event = visual_probe_summary(&mut app);
+    assert!(
+        !hotspot_cue_parts(&mut app).contains_key("hotspot-recent-event"),
+        "removing a recent event must despawn its non-interactive cue"
+    );
+    assert_eq!(without_recent_event.hotspots.len(), 2);
+    assert_eq!(
+        without_recent_event.hit_regions, 2,
+        "recent-event cue cleanup must not alter hit regions"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         let mut removed = sample_render_state_with_hotspot_candidates();
         removed.visual_hotspots.clear();
         runtime.render_state = Some(removed);
@@ -192,9 +213,10 @@ fn hotspot_kinds_keep_the_same_base_footprint_and_add_distinct_non_color_outline
         ],
         "goals need a non-color corner outline above the unchanged base"
     );
-    assert!(
-        !cues.contains_key("hotspot-recent-event"),
-        "recent events retain the legacy diamond without an extra semantic cue"
+    assert_eq!(
+        cues.get("hotspot-recent-event").map(Vec::len),
+        Some(1),
+        "each recent event needs exactly one neutral, non-color cue above its unchanged base"
     );
 }
 
