@@ -1,5 +1,7 @@
 # Limited Preview Contributor Reward Distribution Closure Pending（2026-04-13）
 
+Lifecycle: outstanding bounded fulfillment obligation, not historical-only evidence. The approved 100 OC + 50 OC rows remain pending until an authorized execution owner records immutable distribution references and dates and closes the source ledger. This record does not authorize a new reward round or any public launch/availability claim.
+
 ## Meta
 - Round ID: `ROUND-LTRL-2026-04-01_2026-04-13`
 - Candidate ID: `CAND-LTRL-2026-04-13-A`

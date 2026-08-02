@@ -1,5 +1,7 @@
 # oasis7 环境分层与云上服务清单
 
+Lifecycle: mixed durable contract and dated inventory snapshot. The local/test/production taxonomy and claim prohibitions remain normative; every host, service state, lane count, `ready_for_live_candidate`, endpoint, and Last Verified value is window-bound and must be freshly recaptured before any current health, readiness, availability, or release statement.
+
 审计轮次: 1
 
 ## Meta

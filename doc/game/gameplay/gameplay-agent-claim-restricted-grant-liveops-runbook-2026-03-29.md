@@ -1,5 +1,7 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
+Lifecycle: current controlled operator procedure; the date is its establishment provenance, not a grant round or evidence window. It does not promise a public reward, transferable value, general eligibility, public launch, or automatic entitlement; every execution remains subject to its current authority, funding, permission, review, expiry and revoke gates.
+
 审计轮次: 6
 
 ## Meta

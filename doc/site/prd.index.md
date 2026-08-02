@@ -7,14 +7,14 @@
 ## 入口
 - 模块 PRD：`doc/site/prd.md`
 - 模块设计总览：`doc/site/design.md`
-- 模块标准执行入口：`doc/site/prd.md`
+- 可变执行状态：GitHub task issue evidence comments
 - 当前高频 site 入口：`doc/site/prd.md`
 
 ## 首读分流
 - 想先回答 site 模块在管什么、哪些公开边界是当前真值：先读 `doc/site/prd.md`
-- 想先回答当前站点同步状态、最近完成项和是否还有未收口任务：先读 `doc/site/prd.md`
+- 想先回答当前站点同步状态、最近完成项和是否还有未收口任务：读取 GitHub task issue evidence comments
 - 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/README.md`
-- 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/prd.md`，再读 `doc/site/prd.md`
+- 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/prd.md`；执行状态再读 GitHub task issue evidence comments
 - 想先看“正式公告仍在准备中”的当前公开口径：先读 `doc/site/prd.md`、`doc/site/prd.md`，再对照 `site/index.html` 与 `site/doc/cn/index.html`
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 

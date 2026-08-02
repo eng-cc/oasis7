@@ -17,6 +17,7 @@
 | 需要执行迁移、登记一级目录/例外或处理治理检查失败 | `documentation-governance.manual.md` | maintainer how-to；只执行 Design 已定义的规则，不另行裁定规则 |
 | 根入口或模块 README 过长、重复维护共享规则 | `doc-structure-standard.design.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
 | 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `../governance/README.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
+| 需要确认全量 `doc/**` 是否出现未登记对象、内容漂移或 testing evidence 嵌套清单漂移 | [`document-corpus-inventory-check.py`](../../../scripts/document-corpus-inventory-check.py) | 全量对象快照；路由仅为候选，语义、生命周期与迁移仍由对应 owner 裁决 |
 | `world-simulator` / Viewer 首读分流或主题簇维护 | `../../world-simulator/viewer/README.md` | 已收口的热点路径；当前 landing page 承接分流与维护触发器 |
 | `p2p/node` 首读分流或主题簇维护 | `../../p2p/node/README.md` | 当前 node 子域的 canonical landing page；完整文件检索回到 `../../p2p/prd.index.md` |
 | testing evidence 与手册/门禁文档混叠 | `../../testing/evidence/README.md` | 现行 evidence 子域入口；与 testing 模块入口、文件级索引和 operator 手册分层 |

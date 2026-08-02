@@ -19,12 +19,6 @@ doc/p2p/design.md
 doc/p2p/prd.index.md
 doc/p2p/prd.md
 doc/playability_test_result/README.md
-doc/playability_test_result/card_2026_02_28_19_22_20.md
-doc/playability_test_result/card_2026_02_28_21_22_51.md
-doc/playability_test_result/card_2026_02_28_22_47_14.md
-doc/playability_test_result/card_2026_02_28_23_27_06.md
-doc/playability_test_result/card_2026_03_01_00_20_13.md
-doc/playability_test_result/card_2026_03_06_12_43_31.md
 doc/playability_test_result/card_2026_03_10_23_27_43.md
 doc/playability_test_result/card_2026_03_19_09_40_56.md
 doc/playability_test_result/card_2026_03_19_13_25_04.md

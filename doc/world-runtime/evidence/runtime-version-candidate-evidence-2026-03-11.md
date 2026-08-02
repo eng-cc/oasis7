@@ -7,14 +7,14 @@
 - Date: `2026-03-11`
 - Owner Role: `runtime_engineer`
 - Scope: `version candidate runtime footprint / GC / soak`
-- Conclusion: `ready`
+- Historical Window Conclusion: `ready`（仅限 2026-03-11 绑定输入；不是当前 candidate / release readiness）
 
 ## Slot Summary
 | Slot | Status | Evidence Path | Conclusion |
 | --- | --- | --- | --- |
-| `runtime_footprint` | `ready` | `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md` | 已有真实 `release_default` 样本与 gate 摘要，可用于版本级 footprint 槽位。 |
-| `runtime_gc` | `ready` | `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` | 已证明 sidecar orphan 为窗口态且可在后续 save/GC 后收敛。 |
-| `runtime_soak` | `ready` | `doc/world-runtime/evidence/runtime-version-candidate-soak-evidence-2026-03-11.md` | 已绑定真实 `soak_release` 长跑 summary / metrics，可作为版本级 soak 槽位正式证据。 |
+| `runtime_footprint` | `historical_ready` | `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md` | 当轮真实 `release_default` 样本与 gate 摘要填充了 footprint 槽位。 |
+| `runtime_gc` | `historical_ready` | `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` | 当轮证明 sidecar orphan 为窗口态且可在后续 save/GC 后收敛。 |
+| `runtime_soak` | `historical_ready` | `doc/world-runtime/evidence/runtime-version-candidate-soak-evidence-2026-03-11.md` | 当轮绑定真实 `soak_release` 长跑 summary / metrics。 |
 
 ## Footprint Evidence
 - 证据入口：`doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`
@@ -39,4 +39,4 @@
 
 ## Overall Interpretation
 - runtime 在版本级候选上已从“只有 task 级边界验收”提升到“footprint + GC + soak 三槽位均有真实可引用证据”。
-- 因此 runtime 联合证据的当前结论应为 `ready`。
+- 因此 runtime 联合证据在该历史窗口的结论为 `ready`；当前结论必须由新同代码、profile 与输入窗口证据重签。
