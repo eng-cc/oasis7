@@ -482,17 +482,10 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ## 11. Phase E - Optional Recovery Seed/State-Sync Bundle
 ### Goal
-正常 observer 接入不再要求预先导入 seed。自动 high-head checkpoint catch-up 失败时，先保留故障现场并 `reset-state`；只有 signed V2 checkpoint protocol 的 recovery artifact 可用于恢复。运行中 validator 的目录 raw copy 已禁用，不能作为离线加速或手工恢复来源。
+正常 observer 接入不再要求预先导入 seed。自动 high-head checkpoint catch-up 失败时，先保留故障现场并 `reset-state`；恢复唯一入口是 runtime 生成、签名可验证的 V2 checkpoint protocol artifact。运行中 validator 的目录 raw copy 已禁用，不能作为离线加速或手工恢复来源；shell 不得生成 zero-signature checkpoint，也不得把任何 shell export 标记为恢复或诊断 producer。
 
 ### Required contents when this recovery path is used
-`scripts/p2p-export-state-sync-bundle.sh` 的 snapshot-only export 只有在 snapshot、status 与 execution-records `latest` 明确绑定同一 identity 时才是 recovery-capable；否则它只能作为诊断产物，不能恢复 observer。即使 identity 已绑定，它也不是 signed V2 protocol 的完整 closure 替代品。recovery-capable export 至少要包含：
-
-1. checkpoint manifest
-2. validator-set manifest
-3. state-sync bundle manifest
-4. snapshot file / `snapshot_sha256` / `state_root`
-
-signed V2 checkpoint protocol 的完整 recovery closure 还必须覆盖：
+runtime signed V2 checkpoint protocol 必须生成完整且不可变的 recovery closure，并把 checkpoint descriptor、签名、status、execution record 与 snapshot 内容绑定为同一 identity。closure 至少覆盖：
 
 1. `world/`
 2. `execution-records/`
@@ -504,15 +497,15 @@ signed V2 checkpoint protocol 的完整 recovery closure 还必须覆盖：
    - replication head metadata
 
 ### Important rule
-不要把“最小 snapshot state-sync bundle”和“完整 seed/restore artifact”混成同一个合同。前者可以没有 journal；后者如果只复制 `world/` 与 `execution-records/`，但没有复制 restore 需要的 blob 闭包，observer 会在如下阶段失败：
+不要把最小 snapshot state-sync bundle 与完整 seed/restore artifact 混成同一个合同，更不能用 shell 生成的 checkpoint 替代 runtime signed V2 protocol。完整 closure 如果只包含 `world/` 与 `execution-records/`、却没有 restore 所需的 blob 闭包，observer 会在如下阶段失败：
 
 - `restore snapshot ref ... BlobNotFound`
 - `restore journal ref ... BlobNotFound`
 
-所以完整 recovery export 必须保证 storage closure 完整、checkpoint/status/latest identity 绑定且签名可验证；不能做“最小猜测拷贝”，也不能从运行中 validator 的活目录逐项复制。
+所以 runtime signed V2 recovery artifact 必须保证 storage closure 完整、checkpoint/status/execution record/snapshot identity 绑定且签名可验证；不能做“最小猜测拷贝”，也不能从运行中 validator 的活目录逐项复制。
 
 ### Pass criteria
-1. signed V2 checkpoint protocol 产物通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics`，并验证 snapshot/status/latest identity 与签名。
+1. runtime signed V2 checkpoint protocol 产物通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics --verify-trusted-checkpoint-signatures`，并验证 checkpoint descriptor、status、execution record、snapshot identity 与签名。
 2. 若使用完整 recovery artifact，对单个 observer 恢复后 runtime 不报 `BlobNotFound`、`authority_failure` 或 execution-driver mismatch。
 3. 若使用完整 recovery artifact，可被所有当前 observers 重复消费；raw live copy 不得作为替代。
 
@@ -757,7 +750,7 @@ cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-
 这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：
 
 1. 自动 high-head checkpoint sync 已覆盖 observer/light-node 的正常接入；execution-required 节点仍不能跳过历史执行
-2. snapshot-only export 仅在 snapshot/status/latest identity 绑定后才可作为 recovery-capable input；完整 signed V2 checkpoint recovery closure 必须作为标准 artifact 提供，不能再依赖 live raw copy
+2. runtime signed V2 checkpoint recovery closure 必须作为唯一标准 artifact 提供，并持续验证完整闭包、immutable identity binding 与签名；不得再依赖 live raw copy 或 shell-generated checkpoint
 
 所以后续必须补两类自动化：
 
@@ -772,5 +765,5 @@ cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-
 1. 当前 runtime/package hash
 2. 当前 validator signer truth
 3. 当前 validator live peer ids
-4. 自动 high-head checkpoint catch-up 状态快照；若使用 recovery path，再记录 observer seed bundle 来源与 hash
+4. 自动 high-head checkpoint catch-up 状态快照；若使用 recovery path，再记录 runtime signed V2 recovery artifact 的来源、identity 与 hash
 5. 最终 current operator inventory 全节点状态快照
