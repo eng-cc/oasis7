@@ -1,5 +1,7 @@
 # Limited Preview Contributor Reward Ledger Approved Pending Distribution（2026-04-13）
 
+Lifecycle: outstanding bounded fulfillment obligation. `approved` is not `distributed`; this ledger cannot be archived, deleted, or presented as closed while Execution Owner, Distribution Ref, Distribution Date, and closure status remain blank/pending.
+
 ## Meta
 - Round ID: `ROUND-LTRL-2026-04-01_2026-04-13`
 - Candidate ID: `CAND-LTRL-2026-04-13-A`

@@ -33,6 +33,10 @@
 | `production/` | 16 | 生产收口、阶段边界、readiness 与受台账约束的素材；先由 `production/README.md` 分流 |
 
 ## 活跃补充文档
+
+### 未结履约义务
+
+- `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md` 与 `readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md`：两笔已批准的 100 OC + 50 OC 仍为 `pending_distribution`，Execution Owner / Distribution Ref / Distribution Date 未填写。它们不是当前奖励活动或公开发布承诺，但在授权执行者完成发放或明确的治理 supersession、写入不可变引用并关闭源 ledger 前，不得归档、删除或报告为已结清。
 - `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication 模板、Moltbook、limited preview 贡献奖励、小红书与公开定位分流读者。
 - `doc/readme/gap/README.md`：`gap/` 子域 landing page，先定位跨 Gap 1–5 的主收口，再按具体增量或历史追溯下钻；不复制 leaf 规格或项目证据。
 - `doc/readme/production/README.md`：production 子域 landing page，按当前可检索专题、历史压缩三件套及仍受项目台账约束的素材分流；不会把历史收口证据误作当前执行入口。

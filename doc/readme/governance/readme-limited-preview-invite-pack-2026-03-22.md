@@ -1,5 +1,7 @@
 # Controlled Limited Preview Invite Pack（2026-03-22）
 
+Lifecycle: historical Round-1 communication material, not current invite authorization. Any new outreach requires a fresh LiveOps owner decision, current claim review, monitoring window, and channel execution truth.
+
 审计轮次: 1
 
 ## Meta

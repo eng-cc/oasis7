@@ -48,6 +48,13 @@
 - 治理事件、审计导出与收据安全：`governance/README.md`。
 - 候选级指标、soak、storage gate 与 profile consistency 采证：`evidence/`。
 
+## 日期型文档的 claim boundary
+
+- `evidence/` 下带日期的 `pass`、`ready`、`go`、`candidate` 与 soak 结论只绑定原始输入、代码和采样窗口；不得聚合为当前 runtime、storage、launcher、module legality 或 release readiness。
+- Image2/截图只随其 parent evidence 作为 supporting artifact 保留，不单独证明当前可用性、兼容性、玩法或发布状态。
+- `governance/zero-trust-governance-receipt-hardening-2026-02-26.*` 保留已完成治理决策的历史追溯，不是当前 finality、receipt trust 或 release hardening 证据。
+- `module/online-module-release-legality-closure-2026-03-08.*` 是当前目标与验收合同，不是已实现能力声明；生产发布仍须由当轮 manifest、signature、epoch/finality、proof 与 release-node 证据重签。
+
 本页不维护容易漂移的文件数量快照或子域长表。需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要当前模块库存与热点二级目录概览时，运行 `./scripts/doc-inventory-report.sh`。
 
 ## 历史根入口

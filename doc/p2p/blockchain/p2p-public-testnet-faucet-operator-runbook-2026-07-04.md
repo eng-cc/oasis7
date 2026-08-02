@@ -1,5 +1,7 @@
 # Public Testnet Guarded Faucet Operator Runbook (2026-07-04)
 
+Lifecycle: current reusable operator procedure with a dated blocked observation. Package/install/key isolation/upstream/guarded-claim/verification/recovery steps remain procedural; the 2026-07-04 HTTP 000 and `faucet_guard_ready=block` values are historical and say nothing about current endpoint health. This runbook never proves the faucet is open or the lane is ready.
+
 ## Scope
 - Task: GitHub issue #1868 / `task_17e9c8cd02014f938b29689a44cbfb89`
 - Lane: `faucet_guard_ready`

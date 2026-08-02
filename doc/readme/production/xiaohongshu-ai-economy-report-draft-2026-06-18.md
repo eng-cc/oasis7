@@ -1,5 +1,7 @@
 # 小红书内容稿：AI革命、经济繁荣与分配失衡
 
+Lifecycle: unpublished dated channel draft. It is not approved current copy and must not be published or presented as source-verified without a fresh LiveOps/claims review; the original research material is not present in the repository.
+
 ## 来源
 
 - 原始材料：外部研究材料（未入库；本机路径已移除以保持仓库文档可复现；读取与提炼边界见 GitHub task issue #800 / `task_0745838e8c6546a09faba1ce8c602e33`；历史 `.pm` evidence 已归档到 `.pm/github-project-sync/task-archive.jsonl`）

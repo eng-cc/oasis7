@@ -4,7 +4,7 @@ Status: historical/rehearsal record only. This is the single entry point for the
 
 ## Authority and boundary
 
-- Current environment and network-tier authority: `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` and `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`.
+- Current environment and network-tier authority: `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` and `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`; current mechanism and readiness operations start from `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`.
 - Current readiness and claim evidence: `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md` and `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`.
 - The retained legacy conclusion is: `shared_devnet` rehearsal reached `pass / eligible_for_promotion` on 2026-05-24, but that result does not promote, substitute for, or relax any formal `public_testnet` or `mainnet` gate.
 
@@ -48,6 +48,7 @@ digest for its three generated files (`candidate_validation.json`,
 
 ## Retained underlying record
 
+- 2026-03-30--2026-04-23 ECS triad predecessor topology and rollout snapshots: `shared-network-ecs-triad-node-inventory-2026-03-30.md`, `shared-network-ecs-triad-upgrade-2026-04-07.md`, and `shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`. They preserve time-bound node roles, service status, topology, and deployed-binary observations; they are not final-run gate inputs and cannot establish current `public_testnet` or `mainnet` readiness.
 - 2026-03-24 dry-run, promotion/hold, follow-up, and short-window records: `shared-network-shared-devnet-dry-run-2026-03-24.md`, `shared-network-shared-devnet-promotion-record-2026-03-24.md`, `shared-network-shared-devnet-incident-2026-03-24.md`, `shared-network-shared-devnet-follow-up-window-2026-03-24.md`, `shared-network-shared-devnet-follow-up-promotion-record-2026-03-24.md`, `shared-network-shared-devnet-follow-up-incident-2026-03-24.md`, `shared-network-shared-devnet-short-window-pass-2026-03-24.md`, `shared-network-shared-devnet-short-window-promotion-record-2026-03-24.md`, and `shared-network-shared-devnet-short-window-incident-2026-03-24.md`.
 - 2026-05-23 candidate, access, topology, governance, longrun, and recovery records: `shared-network-shared-devnet-live-window-gap-audit-2026-05-23.md`, `shared-network-shared-devnet-shared-access-2026-05-23.md`, `shared-network-shared-devnet-mixed-topology-2026-05-23.md`, `shared-network-shared-devnet-governance-live-drill-2026-05-23.md`, `shared-network-shared-devnet-short-window-pass-2026-05-23.md`, `shared-network-shared-devnet-rollback-contract-2026-05-23.md`, and `shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md`.
 

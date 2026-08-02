@@ -166,6 +166,14 @@ Credential files may be used by an operator as local access aids, but this runbo
 - validator ECS SSH 可写权限
 - local observer stack 可写权限
 
+### 5.4 Fresh erased-host no-start subprocedure
+
+当且仅当本轮 deployment truth 已确认需要物化一台已擦除 validator host，进入
+`doc/testing/manual/public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md`。
+该 narrow procedure 只安装包与受治理配置、生成节点身份并留下 public receipt；
+它必须保持服务 disabled/inactive，不能替代本 runbook 的 topology review、后续
+phase、rollback/recovery、readiness 或 release 判断。
+
 ## 6. Phase Overview
 执行顺序固定为：
 

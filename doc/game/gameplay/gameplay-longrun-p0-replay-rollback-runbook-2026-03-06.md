@@ -1,5 +1,7 @@
 # Gameplay Long-Run P0：Replay/Rollback 运行手册（2026-03-06）
 
+Lifecycle: current controlled recovery procedure; the date is establishment provenance. Its replay, freeze, signed receipt, player-action disposition, compensation threshold and all-clear rules are safety requirements, not evidence that recovery, rollback or release currently passes.
+
 审计轮次: 7
 
 - 产品边界：`doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`

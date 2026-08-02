@@ -1,5 +1,7 @@
 # Local Provider vs builtin P0 parity T4 结论（2026-03-17）
 
+Lifecycle: dated window evidence only. 本文保留 2026-03-17 各批次的历史结论与同日追踪；不得据此推导当前 provider parity、默认启用或发布 readiness。当前判定必须回到 `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` 并由新同批次证据重签。
+
 - owner: `qa_engineer`
 - 联审: `producer_system_designer`、`runtime_engineer`、`viewer_engineer`
 - 关联 PRD: `PRD-WORLD_SIMULATOR-038`

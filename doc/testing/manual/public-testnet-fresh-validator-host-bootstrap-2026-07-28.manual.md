@@ -1,6 +1,10 @@
 # Public Testnet Fresh Validator Host Bootstrap
 
-Task: `task_6afeb15f921a43bd971b1b2bf54222d4`
+Lifecycle: current reusable no-start subprocedure; the date is its establishment date, not an evidence window.
+
+Current operator authority: `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`. This manual applies only beneath that runbook's current deployment truth and never replaces topology review, rollout, rollback, recovery, readiness, or release decisions.
+
+Historical provenance task: `task_6afeb15f921a43bd971b1b2bf54222d4`.
 
 ## Purpose
 
@@ -9,6 +13,9 @@ verified Linux package and a governed config/world stage. This procedure does
 not start, enable, or unmask the validator. It creates the node identity with
 the packaged runtime's no-start `provision-identity` command, and emits a
 public-only receipt for later topology review.
+Revalidate the package, governed config/world stage, node identity, and current
+deployment truth on every invocation; the 2026-07-28 provenance does not make
+later inputs or hosts ready.
 
 ## Required inputs
 

@@ -1,5 +1,7 @@
 # Oasis7 Current Mainstream Public-Chain Gap Benchmark
 
+Lifecycle: historical 2026-07-03/06 benchmark snapshot. Every present-tense posture, lane count, `pass`, and `ready_for_live_candidate` statement below is window-bound research evidence, not current network health, public availability, release, or launch authority; re-sample through the formal network-tier runbook before reuse.
+
 - Task: GitHub issue #1842 / `task_16ff5f37bfb94220a6349fb4c9304bcc`
 - Date: 2026-07-03
 - Owner: `tpm` integration
