@@ -25,14 +25,15 @@ pub use proto::{
     PlayerCompensationState, PlayerCompensationStatus, PlayerRollbackDisposition,
     PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest, ProductValidationQuotePreflight,
     ProductValidationQuoteRequest, PromptControlApplyRequest, PromptControlCommand,
-    PromptControlError, PromptControlOperation, PromptControlRollbackRequest, RefineQuotePreflight,
-    RefineQuoteRequest, RollbackApprovalSignature, RollbackAttributionResolution,
-    RollbackAttributionResolutionRequest, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackCheckpointRef, RollbackCompensationTransitionRequest, RollbackIntent,
-    RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
-    RollbackSourceEventRef, RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl,
-    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
-    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
+    PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
+    PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest, PublishSocialFactQuoteStake,
+    RefineQuotePreflight, RefineQuoteRequest, RollbackApprovalSignature,
+    RollbackAttributionResolution, RollbackAttributionResolutionRequest, RollbackAuthorityRole,
+    RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackCompensationTransitionRequest,
+    RollbackIntent, RollbackOperatorAuthorization, RollbackReceiptAccessRequest,
+    RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
+    ViewerStream, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
 
 pub type ViewerResponse =

@@ -32,6 +32,10 @@ mod declare_social_edge_quote;
 pub use declare_social_edge_quote::{
     sign_declare_social_edge_quote_auth_proof, verify_declare_social_edge_quote_auth_proof,
 };
+mod publish_social_fact_quote;
+pub use publish_social_fact_quote::{
+    sign_publish_social_fact_quote_auth_proof, verify_publish_social_fact_quote_auth_proof,
+};
 mod market_quote_decision;
 pub use market_quote_decision::{
     sign_market_quote_decision_auth_proof, verify_market_quote_decision_auth_proof,

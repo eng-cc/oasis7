@@ -658,6 +658,20 @@ impl ViewerLiveSession {
                     },
                 )?;
             }
+            ViewerRequest::QuotePublishSocialFact { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message: "quote_publish_social_fact is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("quote_publish_social_fact".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::QuoteDeclareWar { request: _ } => {
                 send_response(
                     writer,
