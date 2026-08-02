@@ -23,6 +23,7 @@
 - 直接的人类聊天、口头协商、意向、草稿、点赞或未接受提议均为非绑定沟通；它们不能自动转移资产、承诺服务、改变权限或产生违约责任。
 - 只有当 Agent 在有效 owner/组织授权范围内渲染明确条款，相关主体明确接受，并经权威世界校验后，合同才绑定双方。合同 receipt 必须让当事人读懂授权来源、接受、范围、主要义务、状态和后续救济；Agent 不能以自主性把未授权沟通改写成绑定义务。
 - 可确定且可即时结算的交换使用 hard atomic 结算：要么按规则完整发生，要么不产生部分世界效果。跨时间的持续服务、维护、运输或协作可以是可违约义务，并需要与风险相称的 collateral、证据、补救、重新履行、解除或仲裁路径；不得把持续服务伪装为原子保证。
+- Agent、设施或组织的控制权转让、退休、解散或资不抵债，不会静默取消既有持续义务、制造部分结算，或把责任自动转给新 owner。在新的高风险承诺被冻结后，既有合同只能依其条款履行、终止或结清；只有相关当事人明确同意并经权威校验、留下可审计 receipt 的继受，才能由新主体承担后续义务。可识别托管资产、债权、已发生结果和责任链须在随后转让、重组、拍卖、退休或剩余分配前保持可追溯；该顺序不改变未争议的既有世界历史。
 
 ### 2.2 receipt-first 的有限争端程序
 
@@ -60,7 +61,7 @@
 ## 5. Done：成功标准与验收
 
 - CR-1：沟通与合同样例证明直接人类交流保持非绑定，只有有效授权、明确接受和权威校验后的 Agent-rendered 合同产生可审计义务。
-- CR-2：结算样例区分 hard atomic 交换与可违约持续服务；后者能说明 collateral、证据、补救、重新履行、解除或仲裁，而不产生隐藏部分结算。
+- CR-2：结算样例区分 hard atomic 交换与可违约持续服务；后者能说明 collateral、证据、补救、重新履行、解除或仲裁，而不产生隐藏部分结算。控制权转让、退休、解散或资不抵债样例会冻结新的风险承诺，并在履行、终止/结清或经明确同意的可审计继受前，不静默取消合同、自动转移责任或处置其相关托管资产。
 - CR-3：争端样例以 receipt 为首要事实，使用随机无冲突本地 panel 和有限程序性申诉；声量、财富或组织地位不能替代事实或扩大重审。
 - CR-4：声誉样例区分玩家、Agent、组织和角色/岗位的情境记录，支持到期、更新和申诉而无永久 blacklist；转让披露世界历史但不转移个人/政治 credential。
 - CR-5：R&D 样例以工作前 charter 追溯归因与适用 royalty，永久保留 Agent provenance，并只通过显式合同转让 share；现有社交事实或产业真值不被误报为已实现本专题。
@@ -69,7 +70,7 @@
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
-| CR-1 / CR-2 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 非绑定沟通、授权/接受、atomic/持续服务、collateral/evidence/remedy 的组合证据 | test_tier_full |
+| CR-1 / CR-2 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 非绑定沟通、授权/接受、atomic/持续服务、collateral/evidence/remedy，以及控制权变化时冻结新风险、履行/终止/结清或明确同意继受、托管资产/责任/receipt 连续性的组合证据 | test_tier_full |
 | CR-3 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | receipt-first、随机无冲突本地 panel、程序性申诉与范围限制证据 | test_tier_full |
 | CR-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 分主体/情境声誉、到期/更新/申诉、无永久 blacklist 和转让 credential 负例 | test_tier_required |
 | CR-5 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | R&D charter、贡献归因/royalty、永久 Agent provenance、显式 share 转让与现状 claim 分离证据 | test_tier_full |
