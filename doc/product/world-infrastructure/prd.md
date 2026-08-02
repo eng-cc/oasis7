@@ -63,13 +63,21 @@
 - 可替换实现：oasis7 保有协议语义；可选择性采用成熟库，但依赖被版本化合同隔离。
 - 消费者边界：game、Agent 和入口与基础设施并发运行，却不能直接写 canonical state 或把 pending 伪装成 committed。
 
+### Finality 缺失时的意图连续性
+
+当已签名并送出、尚待 finality 的 intent 等待最终确认，而 finality 变为不可用、陈旧或无法验证时，玩家与 Agent 可以继续观察最后一个已验证的世界状态，并保留该 intent 作为**尚无世界效果的待决请求**；这不授予资源、控制权、资格、声誉、阶段完成或任何依赖该 intent 的后续结果。提交被接收、本地排队或界面仍显示该请求，都不能被表达为执行成功或对完成时间的承诺。
+
+恢复后，待决请求必须先按当时仍有效的权限与前置条件重新进入 canonical 顺序；它可能被执行、拒绝、过期或需要替换，且只有可验证的 committed receipt 才能改变玩家/Agent 的世界结论。产品体验必须让消费者区分“仍待决且未生效”与“已无效、被拒绝或须重新规划”，并提供查看恢复状态、等待下一次可验证结果或在对应专业域允许时明确撤回/替换/重提的路径。不得静默重放失效控制、重复执行同一请求，或在恢复前后把本地推测包装成权威结果。
+
+本条只约束跨域产品承诺；pending 的持久化、去重、重试、过期、receipt 字段和具体 UI 由 runtime、P2P、Agent 与入口/Viewer 专业域分别拥有。
+
 ## 5. Done：成功标准与验收
 
 - SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。
 - SC-2：验证者、full/state-sync、archive、light companion 与公开服务在各自角色内复制、提供和验证状态；任何非权威服务不取得最终性或写入权。
 - SC-3：bootstrap、snapshot、replay、state sync、pruning 和灾难恢复证明同一历史/状态根可重建；任一证明缺失或不匹配时停止 serving/voting。
 - SC-4：全部活动验证者在 attestation 前重执行相同版本化执行；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
-- SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时保持可解释的 pending/failure 边界。
+- SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时，待决 intent 不产生下游资格或世界效果，消费者能区分仍待决与须重新规划的结果，并只在恢复后取得的 committed receipt 上更新结论。
 
 ### 5.1 验收追踪
 
@@ -79,7 +87,7 @@
 | SC-2 | blockchain_ops_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/testing/prd.md` | 复制、存储角色、proof-serving 与非权威权限负例 | test_tier_full |
 | SC-3 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | bootstrap、checkpoint、snapshot、replay、root verification 与 restore drill | test_tier_full |
 | SC-4 | runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | deterministic re-execution、upgrade activation、replay 与 mixed-version 拒绝 | test_tier_full |
-| SC-5 | runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | committed/pending protocol boundary、proof verification 与 finality-outage 负例 | test_tier_required |
+| SC-5 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 本文 `Finality 缺失时的意图连续性` 对应的 committed/pending protocol boundary、待决/无效或重规划结果的可区分性、恢复后重新校验与 receipt-gated 结果、proof verification 及 finality-outage 负例 | test_tier_required |
 
 ## 6. Non-Goals
 
