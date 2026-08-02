@@ -76,9 +76,9 @@ mod module_visual;
 mod monotonicity;
 mod native_resolution_contract;
 mod persist;
-mod player_agent_claim_snapshot;
 mod persist_journal_invariants;
 mod physics_parameters;
+mod player_agent_claim_snapshot;
 mod power;
 mod power_sale_quote;
 #[cfg(not(target_arch = "wasm32"))]

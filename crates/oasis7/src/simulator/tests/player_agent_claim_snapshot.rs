@@ -68,8 +68,7 @@ fn player_agent_claim_snapshot_roundtrips_slot_1_candidate_choice_package() {
         serde_json::json!(["drill", "scanner"])
     );
     assert_eq!(
-        serialized["next_claim_quote"]["slot_1_claim_choice_quote"]
-            ["fallback_reason"],
+        serialized["next_claim_quote"]["slot_1_claim_choice_quote"]["fallback_reason"],
         "candidate_rationale_missing"
     );
 }

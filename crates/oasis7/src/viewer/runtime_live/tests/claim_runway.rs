@@ -80,10 +80,9 @@ fn compat_snapshot_quotes_complete_epoch_runway_and_advisory_threshold() {
 
 #[test]
 fn compat_snapshot_exposes_slot_1_claim_choice_quote() {
-    let mut server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
-        WorldScenario::Minimal,
-    ))
-    .expect("runtime server");
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
     let primary_agent_id = server
         .world
         .state()
