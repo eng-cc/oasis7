@@ -26,6 +26,10 @@ mod hotspot_core;
 use hotspot_core::PixelWorldHotspotCoreVisual;
 use hotspot_core::{HotspotCoreQueries, despawn_hotspot_core_treatments, reconcile_hotspot_cores};
 
+#[path = "render_hotspot_cues.rs"]
+mod hotspot_cues;
+use hotspot_cues::{HotspotCueQueries, despawn_hotspot_cues, reconcile_hotspot_cues};
+
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
@@ -874,20 +878,11 @@ fn reconcile_hotspots(
             "goal" => Color::srgba_u8(250, 204, 21, 196),
             _ => Color::srgba(0.56, 0.84, 1.0, (0.28 + (emphasis * 0.48)) as f32),
         };
-        let (width_scale, height_scale, rotation) = match hotspot.kind.as_str() {
-            // An upright warning plate keeps blockers distinct from the two
-            // diamond-shaped attention signals without changing their anchor.
-            "blocker" => (1.0, 1.0, 0.0),
-            // Goals use a compact kite so they remain distinct from recent
-            // event diamonds even when players cannot rely on color.
-            "goal" => (1.0, 0.72, std::f32::consts::FRAC_PI_4),
-            _ => (1.0, 1.0, std::f32::consts::FRAC_PI_4),
-        };
         let mut transform = Transform::from_translation(to_bevy_translation(
             canvas_x, canvas_y, width, height, 1.5,
         ));
-        transform.rotation = Quat::from_rotation_z(rotation);
-        let sprite = sprite_for_rect(color, size as f32 * width_scale, size as f32 * height_scale);
+        transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
+        let sprite = sprite_for_square(color, size as f32);
 
         if let Some(entity) = runtime.hotspot_entities.get(&hotspot.id).copied() {
             commands.entity(entity).insert((sprite, transform));
@@ -947,6 +942,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
+    hotspot_cues: HotspotCueQueries<'w, 's>,
     hotspot_cores: HotspotCoreQueries<'w, 's>,
 }
 
@@ -977,6 +973,7 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
+        despawn_hotspot_cues(&mut commands, &queries.hotspot_cues);
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
@@ -1041,6 +1038,7 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
+        despawn_hotspot_cues(&mut commands, &queries.hotspot_cues);
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
@@ -1130,6 +1128,14 @@ pub(crate) fn render_scene(
         animation_ms,
     );
     reconcile_hotspots(&mut commands, &mut runtime, width, height, animation_ms);
+    reconcile_hotspot_cues(
+        &mut commands,
+        &runtime,
+        &queries.hotspot_cues,
+        width,
+        height,
+        animation_ms,
+    );
     reconcile_hotspot_cores(
         &mut commands,
         &runtime,
