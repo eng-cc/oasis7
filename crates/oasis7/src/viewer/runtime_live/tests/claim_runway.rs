@@ -77,3 +77,41 @@ fn compat_snapshot_quotes_complete_epoch_runway_and_advisory_threshold() {
         assert_eq!(quote.blocked_reason, None, "warning must remain advisory");
     }
 }
+
+#[test]
+fn compat_snapshot_exposes_slot_1_claim_choice_quote() {
+    let mut server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
+        WorldScenario::Minimal,
+    ))
+    .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
+
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
+    let claim = snapshot
+        .player_gameplay
+        .as_ref()
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .expect("player agent claim snapshot");
+    let quote = claim.next_claim_quote.as_ref().expect("next claim quote");
+    let choice = quote
+        .slot_1_claim_choice_quote
+        .as_ref()
+        .expect("slot-1 quote includes an optional candidate choice package");
+
+    assert_eq!(choice.status, "candidate_rationale_missing");
+    assert!(choice.candidates.is_empty());
+    assert_eq!(choice.claim_choice_class, "wait_or_fund_first");
+    assert_eq!(choice.recommended_claim_action, "wait_or_fund_first");
+    assert_eq!(
+        choice.fallback_reason.as_deref(),
+        Some("candidate_rationale_missing")
+    );
+}

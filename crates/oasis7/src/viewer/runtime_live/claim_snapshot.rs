@@ -1,9 +1,10 @@
 use crate::runtime::{
-    AgentClaimState, MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
-    RestrictedStarterClaimGrantStatus, WorldState, agent_claim_cap_for_tier, agent_claim_quote,
-    agent_claim_reputation_tier, auto_restricted_starter_claim_amount,
+    agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier,
+    auto_restricted_starter_claim_amount, AgentClaimState, RestrictedStarterClaimGrantStatus,
+    WorldState, MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
 };
 use crate::simulator::persist::{
+    PlayerAgentClaimChoiceCandidateSnapshot, PlayerAgentClaimChoiceQuoteSnapshot,
     PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot, PlayerAgentClaimSnapshot,
     PlayerFirstChatUnlockPreviewSnapshot,
 };
@@ -115,6 +116,8 @@ pub(super) fn build_player_agent_claim_snapshot(
                 }
                 .to_string()
             });
+            let slot_1_claim_choice_quote = (quote.slot_index == 1)
+                .then(|| build_slot_1_claim_choice_quote(state, primary_agent_id));
             Some(PlayerAgentClaimQuoteSnapshot {
                 slot_index: quote.slot_index,
                 reputation_tier: quote.reputation_tier,
@@ -134,6 +137,7 @@ pub(super) fn build_player_agent_claim_snapshot(
                 projected_grace_entry_epoch,
                 low_runway_warning,
                 recommended_claim_action,
+                slot_1_claim_choice_quote,
                 release_cooldown_epochs: quote.release_cooldown_epochs,
                 grace_epochs: quote.grace_epochs,
                 idle_warning_epochs: quote.idle_warning_epochs,
@@ -162,6 +166,7 @@ pub(super) fn build_player_agent_claim_snapshot(
             projected_grace_entry_epoch: None,
             low_runway_warning: false,
             recommended_claim_action: None,
+            slot_1_claim_choice_quote: None,
             release_cooldown_epochs: 0,
             grace_epochs: 0,
             idle_warning_epochs: 0,
@@ -216,6 +221,56 @@ pub(super) fn build_player_agent_claim_snapshot(
             .map(|claim| owned_claim_to_snapshot(state, claim, current_epoch, epoch_length_ticks))
             .collect(),
     })
+}
+
+fn build_slot_1_claim_choice_quote(
+    state: &WorldState,
+    primary_agent_id: &str,
+) -> PlayerAgentClaimChoiceQuoteSnapshot {
+    let candidates = state
+        .agents
+        .iter()
+        .filter(|(agent_id, _)| {
+            agent_id.as_str() != primary_agent_id && !state.agent_claims.contains_key(*agent_id)
+        })
+        .map(|(agent_id, cell)| {
+            let mut installed_module_ids = cell
+                .state
+                .body_state
+                .slots
+                .iter()
+                .filter_map(|slot| slot.installed_module.clone())
+                .collect::<Vec<_>>();
+            installed_module_ids.sort();
+
+            PlayerAgentClaimChoiceCandidateSnapshot {
+                agent_id: agent_id.clone(),
+                location_x_cm: cell.state.pos.x_cm,
+                location_y_cm: cell.state.pos.y_cm,
+                location_z_cm: cell.state.pos.z_cm,
+                body_kind: cell.state.body.kind.clone(),
+                frame_kind: cell.state.body_state.frame_kind.clone(),
+                installed_module_ids,
+            }
+        })
+        .collect::<Vec<_>>();
+    let status = if candidates.is_empty() {
+        "candidate_rationale_missing"
+    } else {
+        "candidate_facts_only"
+    };
+    // Candidate facts are not a rationale or a ranking. Until the runtime can
+    // truthfully provide one, the nested choice package must not recommend a
+    // comparison even when the legacy top-level quote remains affordable.
+    let recommended_claim_action = "wait_or_fund_first".to_string();
+
+    PlayerAgentClaimChoiceQuoteSnapshot {
+        status: status.to_string(),
+        candidates,
+        fallback_reason: Some("candidate_rationale_missing".to_string()),
+        claim_choice_class: recommended_claim_action.clone(),
+        recommended_claim_action,
+    }
 }
 
 fn owned_claim_to_snapshot(
