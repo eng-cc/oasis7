@@ -6,8 +6,10 @@ function integration() {
     handleMarketQuoteDecision: vi.fn(), handleMarketQuoteDecisionError: vi.fn(() => false),
     handlePowerSurvivalQuote: vi.fn(), handlePowerSurvivalQuoteError: vi.fn(() => false),
     handleProductValidationQuote: vi.fn(), handleProductValidationQuoteError: vi.fn(() => false),
+    handleFragmentRefillPreview: vi.fn(), handleFragmentRefillPreviewError: vi.fn(() => false),
     handleWarDeclarationQuote: vi.fn(), handleWarDeclarationQuoteError: vi.fn(() => false),
     invalidateWarDeclarationQuoteForAuthoritativeSnapshot: vi.fn(),
+    invalidateFragmentRefillPreview: vi.fn(),
     invalidatePowerSurvivalQuote: vi.fn(),
   };
 }
@@ -19,7 +21,9 @@ describe("viewer quote protocol facade", () => {
       warDeclarationQuote: { quoted_at_tick: 12 }, warDeclarationQuoteRequest: { status: "pending", requestKey: "red|blue|3" },
     };
     const powerSurvivalQuote = integration();
+    const fragmentRefillPreview = integration();
     const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview,
       handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
       marketQuoteDecision: integration(), powerSurvivalQuote, productValidationQuote: integration(), state,
       warDeclarationQuote: integration(),
@@ -28,6 +32,7 @@ describe("viewer quote protocol facade", () => {
     facade.invalidateSnapshotBoundQuotes();
 
     expect(powerSurvivalQuote.invalidatePowerSurvivalQuote).toHaveBeenCalledOnce();
+    expect(fragmentRefillPreview.invalidateFragmentRefillPreview).toHaveBeenCalledOnce();
     expect(state.marketQuoteDecision).toBeNull();
     expect(state.marketQuoteDecisionRequest).toEqual({ status: "idle", error: null });
     expect(state.warDeclarationQuoteRequest).toEqual({ status: "pending", requestKey: "red|blue|3" });
@@ -37,6 +42,7 @@ describe("viewer quote protocol facade", () => {
   it("routes war quote replies through the extracted protocol boundary", () => {
     const warDeclarationQuote = integration();
     const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview: integration(),
       handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
       marketQuoteDecision: integration(), powerSurvivalQuote: integration(), productValidationQuote: integration(),
       state: {}, warDeclarationQuote,
@@ -53,7 +59,9 @@ describe("viewer quote protocol facade", () => {
       warDeclarationQuoteRequest: { status: "received", error: null },
     };
     const warDeclarationQuote = integration();
+    const fragmentRefillPreview = integration();
     const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview,
       handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
       marketQuoteDecision: integration(), powerSurvivalQuote: integration(), productValidationQuote: integration(), state,
       warDeclarationQuote,
@@ -61,6 +69,7 @@ describe("viewer quote protocol facade", () => {
 
     facade.invalidateSnapshotBoundQuotes();
 
+    expect(fragmentRefillPreview.invalidateFragmentRefillPreview).toHaveBeenCalledOnce();
     expect(warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot).toHaveBeenCalledOnce();
   });
 });
