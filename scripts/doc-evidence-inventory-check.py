@@ -484,7 +484,7 @@ def main() -> int:
     args = parser.parse_args()
     root = args.repo_root.resolve()
     if args.print_generated:
-        print(json.dumps(generated_inventory(root), ensure_ascii=False, indent=2) + "\n")
+        print(json.dumps(generated_inventory(root), ensure_ascii=False, indent=2))
         return 0
     errors = check(root, root / "doc/testing/evidence/inventory.json")
     if errors:

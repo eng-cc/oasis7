@@ -208,7 +208,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent); parser.add_argument("--print-generated", action="store_true")
     args = parser.parse_args(); root = args.repo_root.resolve()
     if args.print_generated:
-        print(json.dumps(generated(root), ensure_ascii=False, indent=2) + "\n"); return 0
+        print(json.dumps(generated(root), ensure_ascii=False, indent=2)); return 0
     errors = check(root)
     print("document-corpus-inventory-check: " + ("OK" if not errors else "FAIL\n" + "\n".join(errors)))
     return 0 if not errors else 1
