@@ -9,6 +9,7 @@ import { FragmentRefillPreviewGameplayPanel, MarketQuoteDecisionGameplayPanel, P
 import { installMarketQuoteDecisionVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
+import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
 import { fallbackTradeoffVisualFixture } from "./viewer_fallback_tradeoff_fixture.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -21,7 +22,6 @@ const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
   viewerStateRevision();
 }
-
 function uiLocale() { return core.state.uiLocale; }
 function focusViewerAnchor(event) {
   const href = event.currentTarget.getAttribute("href"); const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
@@ -540,6 +540,8 @@ const {
   hasAgentClaimSessionBoundary,
   hasExecutableAgentClaim,
   normalizedId,
+  publishedClaimChoiceCandidates,
+  slot1ClaimChoiceQuote,
 } = createViewerAgentClaimDisplayModel({ state: core.state, tr });
 
 function normalizedFeedbackStage(stage) {
@@ -1832,6 +1834,7 @@ function AgentClaimSessionBoundaryCard(props) {
         <Badge>{`claimer=${agentClaim()?.claimer_agent_id || "-"}`}</Badge>
         <Badge>{`owned=${agentClaim()?.owned_claim_count ?? 0}/${agentClaim()?.claim_cap ?? "-"}`}</Badge>
       </div>
+      <AgentClaimChoiceCard publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
     </CalloutCard>
   );
 }
@@ -1880,6 +1883,7 @@ function AgentClaimPanel(props) {
         <Badge>{`eligible=${quote()?.eligible_claim_balance ?? agentClaim()?.slot_1_eligible_claim_balance ?? "-"}`}</Badge>
         <Badge>{`upfront=${quote()?.total_upfront_amount ?? "-"}`}</Badge>
       </div>
+      <AgentClaimChoiceCard publishedCandidates={() => publishedClaimChoiceCandidates(core.state.snapshot, agentClaim())} choiceQuote={() => slot1ClaimChoiceQuote(agentClaim())} />
       <div class="control-grid">
         <div class="field">
           <label for="agent-claim-target">
