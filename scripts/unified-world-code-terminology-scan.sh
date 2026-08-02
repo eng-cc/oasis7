@@ -92,6 +92,14 @@ allowed_snippets = {
         'active generated shared_devnet capture reference remains',
         'legacy-shared-devnet-provenance-smoke',
     ),
+    "scripts/doc-evidence-inventory-check.py": (
+        'doc/testing/evidence/shared-network-',
+        'legacy-shared-devnet-provenance-2026-07-26.md',
+    ),
+    "scripts/doc-evidence-inventory-check.test.py": (
+        'legacy-shared-devnet-provenance-2026-07-26.md',
+        'shared-network-ecs-triad-node-inventory-2026-03-30.md',
+    ),
     "scripts/shared-network-track-gate.sh": (
         "shared-network-track-gate.sh is a legacy compatibility wrapper",
     ),

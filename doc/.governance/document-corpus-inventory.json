@@ -3955,7 +3955,7 @@
     },
     {
       "path": "doc/testing/templates/README.md",
-      "content_sha256": "2df780e3d1dd34314de7b8c2883ac20096138858ebe86a81e0f1e8b0d6baaf3d",
+      "content_sha256": "0f5b463a63d4b15075b677efb61800d09aa0785dcca5f33cd7d3809f76947064",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
