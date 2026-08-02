@@ -110,6 +110,11 @@ if [[ -n "$EXECUTION_RECORDS_DIR" ]]; then
   fi
 fi
 
+state_sync_checkpoint_mismatch() {
+  echo "error: state_sync_checkpoint_mismatch: $*" >&2
+  exit 2
+}
+
 mkdir -p "$OUT_DIR"
 STATUS_CAPTURE_PATH="$OUT_DIR/status.json"
 if [[ -n "$STATUS_JSON" ]]; then
@@ -138,6 +143,33 @@ fi
 if [[ ! "$CHECKPOINT_HEIGHT" =~ ^[0-9]+$ ]]; then
   echo "error: checkpoint height must be a non-negative integer: $CHECKPOINT_HEIGHT" >&2
   exit 2
+fi
+
+# A materialized execution-record directory makes this a recovery-capable
+# export. It must therefore prove that the status head, persisted record, and
+# persisted world snapshot name the same checkpoint before any recovery
+# manifest is written. A best-effort filesystem copy made while the source is
+# running cannot establish that identity and must fail closed.
+if [[ -n "$EXECUTION_RECORDS_DIR" ]]; then
+  latest_record_path="$EXECUTION_RECORDS_DIR/latest.json"
+  snapshot_checkpoint_height=$(jq -er '.checkpoint_height // .state.checkpoint_height // empty' "$SNAPSHOT_PATH" 2>/dev/null) \
+    || state_sync_checkpoint_mismatch "snapshot missing checkpoint_height"
+  record_checkpoint_height=$(jq -er '.height // .last_applied_committed_height // empty' "$latest_record_path" 2>/dev/null) \
+    || state_sync_checkpoint_mismatch "execution record missing height"
+  record_execution_state_root=$(jq -er '.execution_state_root // .last_execution_state_root // empty' "$latest_record_path" 2>/dev/null) \
+    || state_sync_checkpoint_mismatch "execution record missing execution_state_root"
+  [[ "$snapshot_checkpoint_height" =~ ^[0-9]+$ ]] \
+    || state_sync_checkpoint_mismatch "snapshot checkpoint_height is not numeric: $snapshot_checkpoint_height"
+  [[ "$record_checkpoint_height" =~ ^[0-9]+$ ]] \
+    || state_sync_checkpoint_mismatch "execution record height is not numeric: $record_checkpoint_height"
+  [[ "$snapshot_checkpoint_height" == "$CHECKPOINT_HEIGHT" ]] \
+    || state_sync_checkpoint_mismatch "snapshot height=$snapshot_checkpoint_height status height=$CHECKPOINT_HEIGHT"
+  [[ "$record_checkpoint_height" == "$CHECKPOINT_HEIGHT" ]] \
+    || state_sync_checkpoint_mismatch "execution record height=$record_checkpoint_height status height=$CHECKPOINT_HEIGHT"
+  [[ -n "$SNAPSHOT_REF" ]] \
+    || state_sync_checkpoint_mismatch "status missing network_head.execution_state_root"
+  [[ "$record_execution_state_root" == "$SNAPSHOT_REF" ]] \
+    || state_sync_checkpoint_mismatch "execution record state root does not match status head"
 fi
 
 VALIDATOR_SET_PATH="$OUT_DIR/validator-set.json"

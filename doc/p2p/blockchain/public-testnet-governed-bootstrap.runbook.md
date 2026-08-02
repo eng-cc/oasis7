@@ -34,7 +34,7 @@
 2. libp2p bootstrap peer id 是部署真值，不是可以长期硬编码的常量。
 3. observer 超过低高度阈值后不能从 genesis 硬 replay；正常路径应由节点自动拉取受验证的高位 replication checkpoint 并补尾。
 4. 这里的自动路径是 observer/light-node 的 high-head checkpoint catch-up，不是完整 execution snapshot restore，也不替代正确的 deployment truth。
-5. verified seed/state-sync bundle 只作为自动 checkpoint catch-up 失败时的 break-glass/recovery 或离线加速路径；一旦使用，artifact 必须是闭包完整的，不能只拷 `world/` 和 `execution-records/`，遗漏 `store/blobs/`。
+5. recovery 只可消费 signed V2 checkpoint protocol 产物；该产物必须绑定同一 snapshot/status/latest identity 并携带可验证的闭包。直接从运行中的 validator 拷贝目录（包括 `seed-from-remote`、`cp`、`tar`、`rsync`）已禁用：它们不能保证 `world`、`execution-records`、`store/blobs` 与 replication/bridge metadata 属于同一提交。
 
 ## 2. Scope and Topology
 冻结的 governed bootstrap 拓扑仍是两台 validator 加两台 observer；当前 operator 部署清单在此基础上扩展为五个受管节点。部署/补更时必须以本节的当前 operator inventory 为准，不能从旧 `.tmp` bootstrap 目录推断节点数量。
@@ -116,7 +116,7 @@ Credential files may be used by an operator as local access aids, but this runbo
 4. libp2p bootstrap peer id 必须在 validator 启动后实时读取，不能沿用旧证据文件中的值。
 5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链；正常 attach 必须依赖自动 high-head checkpoint catch-up 与 tail gap sync。
 6. 自动 high-head checkpoint catch-up 只覆盖 observer/light-node 边界；execution-required 节点不能用它跳过历史执行，也不能把它当作完整 snapshot state-sync。
-7. `seed-from-remote` / state-sync 产物只用于自动 checkpoint catch-up 失败后的 recovery；产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
+7. 自动 checkpoint catch-up 失败后，observer 必须先 `reset-state`，再只消费 signed V2 checkpoint protocol 的 recovery 产物；live raw copy（包括 `seed-from-remote`）不得作为 recovery 路径。产物必须包含 execution restore 所需 blob 闭包，否则 observer 会在 restore snapshot/journal 时落入 `BlobNotFound`。
 8. 禁止把手工复制 validator 数据目录、手工拷 checkpoint、或从一台 validator 直接覆盖另一台 validator 的 `data/` 目录当作 testnet 同步/恢复流程。validator 恢复只能走两条路径：
    - 先让节点按 manifest bootstrap peers、replication fetch、peer-head exchange 自动恢复同步。
    - 自动恢复失败且根因是 deployment truth 漂移或本地状态污染时，从当前 deployment truth 从零重建 validator pair。
@@ -293,7 +293,7 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 5. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
 6. 如果 observer 从空状态或旧高度启动后报告 `consensus_peer_head_unavailable` 或 network head 暂不可用，macOS rollout 会在 120 秒启动窗口内重试；持续未就绪会触发 `readiness_timeout` rollback，但不会仅因这两个 transient 信号触发 state-sync escalation。rollback 后若仍有 `replication no connected providers`、长期不追高或再次启动仍无法取得 network head，使用 Phase E/F 的 recovery seed 路径。`execution driver peer mismatch` 仍是立即终止启动等待的 authority failure。
 7. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
-8. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state` 或先走 `scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote` / `reset-state` 的受控恢复路径。
+8. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state`，随后走自动 checkpoint catch-up 或已验证的 signed V2 checkpoint recovery。不得以 `seed-from-remote` 恢复。
 9. 如果 observer 本地 `committed_height` 高于 clean-rebuilt validator pair 的 fresh head，视为旧链状态接入新链；不要用重启作为修复结论，先修正部署/状态合同，再从 clean state 或受信 checkpoint 重建 observer。
 
 ### Platform-specific update entrypoints
@@ -482,17 +482,17 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 
 ## 11. Phase E - Optional Recovery Seed/State-Sync Bundle
 ### Goal
-正常 observer 接入不再要求预先导入 seed。只有自动 high-head checkpoint catch-up 失败、需要离线加速或需要保留故障现场后手工恢复时，才从 validator 导出 state-sync 或闭包完整的 seed artifact。
+正常 observer 接入不再要求预先导入 seed。自动 high-head checkpoint catch-up 失败时，先保留故障现场并 `reset-state`；只有 signed V2 checkpoint protocol 的 recovery artifact 可用于恢复。运行中 validator 的目录 raw copy 已禁用，不能作为离线加速或手工恢复来源。
 
 ### Required contents when this recovery path is used
-当前 `scripts/p2p-export-state-sync-bundle.sh` 支持的最小 state-sync bundle 以 trusted checkpoint + snapshot 为核心，至少要包含：
+`scripts/p2p-export-state-sync-bundle.sh` 的 snapshot-only export 只有在 snapshot、status 与 execution-records `latest` 明确绑定同一 identity 时才是 recovery-capable；否则它只能作为诊断产物，不能恢复 observer。即使 identity 已绑定，它也不是 signed V2 protocol 的完整 closure 替代品。recovery-capable export 至少要包含：
 
 1. checkpoint manifest
 2. validator-set manifest
 3. state-sync bundle manifest
 4. snapshot file / `snapshot_sha256` / `state_root`
 
-若使用完整 seed/restore 路径，observer seed artifact 还必须覆盖：
+signed V2 checkpoint protocol 的完整 recovery closure 还必须覆盖：
 
 1. `world/`
 2. `execution-records/`
@@ -509,12 +509,12 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 - `restore snapshot ref ... BlobNotFound`
 - `restore journal ref ... BlobNotFound`
 
-所以完整 seed/restore 导出必须保证 storage closure 完整，不能做“最小猜测拷贝”。
+所以完整 recovery export 必须保证 storage closure 完整、checkpoint/status/latest identity 绑定且签名可验证；不能做“最小猜测拷贝”，也不能从运行中 validator 的活目录逐项复制。
 
 ### Pass criteria
-1. snapshot state-sync bundle 通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics`
-2. 若使用完整 seed/restore artifact，对单个 observer 恢复后 runtime 不报 `BlobNotFound`
-3. 若使用完整 seed/restore artifact，可被所有当前 observers 重复消费
+1. signed V2 checkpoint protocol 产物通过 `p2p-upgrade-preflight.sh --require-state-sync-bundle --verify-state-sync-bundle-semantics`，并验证 snapshot/status/latest identity 与签名。
+2. 若使用完整 recovery artifact，对单个 observer 恢复后 runtime 不报 `BlobNotFound`、`authority_failure` 或 execution-driver mismatch。
+3. 若使用完整 recovery artifact，可被所有当前 observers 重复消费；raw live copy 不得作为替代。
 
 在 observer 启动前，完整 seed/restore artifact 必须执行闭包校验：
 
@@ -535,7 +535,7 @@ curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committe
 3. observer manifest 指向当前 deployment truth genesis/manifest
 4. observer 的 `WORLD_ID`、governed registry/manifest、manifest bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth
 5. systemd service unit 必须是当前 testnet observer unit；不得让旧 devnet/triad observer service 继续占用状态端口或被误当作 public testnet 节点
-6. observer state 可先 reset；正常路径不导入 seed bundle，启动后由 runtime 自动拉取受验证的 high-head replication checkpoint boundary，再执行 tail gap sync
+6. observer state 可先 reset；正常路径不导入 seed bundle，启动后由 runtime 自动拉取受验证的 high-head replication checkpoint boundary，再执行 tail gap sync。若该路径 fail closed，则保持 no-start，消费 signed V2 checkpoint recovery artifact；不得从运行中的 validator live directory 导入。
 7. local observer 使用的 runtime/package hash 必须对齐当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary
 8. detached local observer 启动时不要让 `start-node.sh` 自己作为长期父进程驻留；若需要后台常驻，应直接启动 `logs/last-command.sh` 里展开后的 runtime binary 命令
 
@@ -647,7 +647,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 
 1. 不改 validator 链真值
 2. 保留 observer 当前 seed/state-sync 失败现场
-3. reset 受旧链状态影响的 observer，再从 clean-rebuilt storage/sequencer state 自动 catch-up 或重新导出的 current-chain verified bundle reseed
+3. reset 受旧链状态影响的 observer，再从 clean-rebuilt storage/sequencer state 自动 catch-up 或 signed V2 current-chain recovery artifact 恢复
 4. 不得使用绑定旧链状态的 seed bundle，也不得保留旧 observer state 重新接入 clean-rebuilt validator pair
 
 ### Windows package rollback 后的人工 handoff
@@ -675,14 +675,14 @@ Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
 2. 不要在 peer id 已变的情况下继续使用旧 bootstrap peer list
 3. 不要在缺少完整 blob 闭包时宣布 state-sync 已可用
 4. 不要手工把 sequencer 的 checkpoint、execution world、execution records、storage 或 replication root 拷到 storage validator 上来“同步”。这种做法绕过了 manifest/bootstrap peer/replication 协议和 validator signer binding，不能作为 testnet 恢复路径。
-5. 不要在一次手工 copy 后继续等待它“自然变 ready”并把结果记为自动同步；必须隔离该状态，回到自动恢复或从零重建。
+5. 不要在一次手工 copy 后继续等待它“自然变 ready”并把结果记为自动同步；live raw copy 已禁用，必须隔离既有状态，回到自动恢复或 signed V2 checkpoint recovery。
 
 ### Allowed recovery choices
 当 validator pair 出现 `readiness=not_ready`、peer-head stale、state-sync fallback 或 replication transport degraded 时，operator 只能按下面顺序处理：
 
 1. **自动恢复**：保持 current deployment truth 不变，修复 manifest bootstrap peers、端口占用、runtime 进程残留、network reachability 或 provider discovery 后，让节点通过 replication/head exchange 自己追平。
 2. **从零重建**：如果自动恢复被 signer drift、runtime bundle hash drift、stale bootstrap peer id、stale peerstore 或本地链状态污染阻断，则重新生成 deployment truth，清空 validator runtime data/root，按 Phase C 重建 validator pair。
-3. **受验证的 state-sync/seed recovery**：只适用于 runbook 明确允许的 observer/light-node recovery 或经验证的 break-glass restore drill；必须有签名 checkpoint、validator-set proof、bundle manifest 和闭包校验。它不是 validator-to-validator 手工同步。
+3. **signed V2 checkpoint recovery**：只适用于 observer/light-node recovery 或经验证的 break-glass restore drill；必须有签名 checkpoint、validator-set proof、snapshot/status/latest identity binding、bundle manifest 和闭包校验。它不是 validator-to-validator 手工同步，也不允许 live raw copy。
 
 ## 15. Standard Command Checklist
 ### Preflight
@@ -757,12 +757,12 @@ cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-
 这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：
 
 1. 自动 high-head checkpoint sync 已覆盖 observer/light-node 的正常接入；execution-required 节点仍不能跳过历史执行
-2. 当前 snapshot-only state-sync bundle 已有脚本支持；完整 seed/restore artifact 的闭包导出仍未产品化成标准 artifact
+2. snapshot-only export 仅在 snapshot/status/latest identity 绑定后才可作为 recovery-capable input；完整 signed V2 checkpoint recovery closure 必须作为标准 artifact 提供，不能再依赖 live raw copy
 
 所以后续必须补两类自动化：
 
 1. 空 world observer 自动 high-head checkpoint sync 对 validator truth 的回归测试
-2. 完整 seed/restore artifact 的闭包完整性回归测试，至少覆盖 restore snapshot/journal 所需 blob 闭包
+2. signed V2 checkpoint recovery artifact 的闭包与 identity-binding 回归测试，至少覆盖 restore snapshot/journal 所需 blob 闭包和并发写入拒绝
 
 ## 17. Completion Boundary
 这份 runbook 的交付物是“标准流程”，不是单次 live 执行记录。

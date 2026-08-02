@@ -123,3 +123,60 @@ if "$ROOT_DIR/scripts/p2p-export-state-sync-bundle.sh" \
 fi
 
 grep -q 'materialized execution records' "$TMP_DIR/node-export.err"
+
+# RED regression: the export must not declare a 8435 status checkpoint while
+# packaging an execution-world snapshot from 8399. Current production code
+# accepts the mixed input because it only checks that latest.json exists.
+MIXED_WORLD_DIR="$TMP_DIR/mixed-world"
+MIXED_RECORDS_DIR="$TMP_DIR/mixed-execution-records"
+MIXED_OUT_DIR="$TMP_DIR/mixed-out"
+mkdir -p "$MIXED_WORLD_DIR" "$MIXED_RECORDS_DIR"
+cat >"$MIXED_WORLD_DIR/snapshot.json" <<'JSON'
+{
+  "checkpoint_height": 8399,
+  "state": {
+    "governance_finality_signer_registry": {
+      "slot_id": "governance.finality.v1",
+      "threshold": 2,
+      "threshold_bps": 6700,
+      "signer_bindings": {
+        "triad-testnet-sequencer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "triad-testnet-storage": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "validator_stakes": {
+        "triad-testnet-sequencer": 60,
+        "triad-testnet-storage": 40
+      }
+    }
+  },
+  "tick_consensus_records": []
+}
+JSON
+printf '[]\n' >"$MIXED_WORLD_DIR/journal.json"
+printf '{"height":8435,"execution_state_root":"state-h8435"}\n' >"$MIXED_RECORDS_DIR/latest.json"
+cat >"$TMP_DIR/mixed-status.json" <<'JSON'
+{
+  "consensus": {
+    "network_head": {
+      "height": 8435,
+      "block_hash": "block-h8435",
+      "execution_state_root": "state-h8435"
+    }
+  }
+}
+JSON
+
+if "$ROOT_DIR/scripts/p2p-export-state-sync-bundle.sh" \
+  --status-json "$TMP_DIR/mixed-status.json" \
+  --world-dir "$MIXED_WORLD_DIR" \
+  --execution-records-dir "$MIXED_RECORDS_DIR" \
+  --out-dir "$MIXED_OUT_DIR" \
+  >"$TMP_DIR/mixed-export.out" 2>"$TMP_DIR/mixed-export.err"; then
+  jq -e '.checkpoint_height == 8435' "$MIXED_OUT_DIR/state-sync-bundle.json" >/dev/null
+  jq -e '.checkpoint_height == 8399' \
+    "$MIXED_OUT_DIR/state-sync-bundle/snapshots/checkpoint-8435.json" >/dev/null
+  echo "expected export to reject mixed state-sync checkpoint identity (8399 snapshot / 8435 status and execution record)" >&2
+  exit 1
+fi
+
+grep -q 'state_sync_checkpoint_mismatch' "$TMP_DIR/mixed-export.err"

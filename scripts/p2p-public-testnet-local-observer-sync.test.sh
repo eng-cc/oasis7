@@ -20,7 +20,8 @@ if [[ "$test_case" == "all" ]]; then
     corrupt_tree_file_count \
     corrupt_tree_total_bytes \
     legacy_manifest \
-    completed_backup_reuse_fails_closed; do
+    completed_backup_reuse_fails_closed \
+    seed_from_remote_rejects_cross_surface_checkpoint_drift; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
   done
   echo "ok: local observer sync accepts sequencer/storage validator env pair"
@@ -38,7 +39,8 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "corrupt_tree_file_count" \
   && "$test_case" != "corrupt_tree_total_bytes" \
   && "$test_case" != "legacy_manifest" \
-  && "$test_case" != "completed_backup_reuse_fails_closed" ]]; then
+  && "$test_case" != "completed_backup_reuse_fails_closed" \
+  && "$test_case" != "seed_from_remote_rejects_cross_surface_checkpoint_drift" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
   exit 2
 fi
@@ -48,6 +50,149 @@ cleanup() {
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
+
+if [[ "$test_case" == "seed_from_remote_rejects_cross_surface_checkpoint_drift" ]]; then
+  local_stack="$tmp_dir/local-stack"
+  remote_stack="$tmp_dir/remote-stack"
+  fake_bin="$tmp_dir/fake-bin"
+  real_python3=$(command -v python3)
+  mkdir -p \
+    "$local_stack/world" \
+    "$local_stack/execution-records" \
+    "$local_stack/store/blobs" \
+    "$local_stack/runtime-root" \
+    "$local_stack/replication-root" \
+    "$remote_stack/data/world" \
+    "$remote_stack/data/execution-records" \
+    "$remote_stack/data/store/blobs" \
+    "$remote_stack/data/runtime-root" \
+    "$remote_stack/data/replication-root" \
+    "$fake_bin"
+
+  cat >"$tmp_dir/local.env" <<EOF
+STACK_ROOT=$local_stack
+NODE_ID=local-observer
+EXECUTION_WORLD_DIR=\$STACK_ROOT/world
+EXECUTION_RECORDS_DIR=\$STACK_ROOT/execution-records
+STORAGE_ROOT=\$STACK_ROOT/store
+RUNTIME_ROOT=\$STACK_ROOT/runtime-root
+REPLICATION_ROOT=\$STACK_ROOT/replication-root
+EOF
+  cat >"$tmp_dir/remote.env" <<EOF
+STACK_ROOT=$remote_stack
+NODE_ID=remote-storage
+EXECUTION_WORLD_DIR=\$STACK_ROOT/data/world
+EXECUTION_RECORDS_DIR=\$STACK_ROOT/data/execution-records
+STORAGE_ROOT=\$STACK_ROOT/data/store
+RUNTIME_ROOT=\$STACK_ROOT/data/runtime-root
+REPLICATION_ROOT=\$STACK_ROOT/data/replication-root
+EOF
+
+  printf '{"checkpoint_height":8399,"state":{"height":8399}}\n' >"$remote_stack/data/world/snapshot.json"
+  printf '[]\n' >"$remote_stack/data/world/journal.json"
+  printf '{"height":8399,"execution_state_root":"state-h8399"}\n' >"$remote_stack/data/execution-records/latest.json"
+  printf '{"committed_height":8399,"execution_state_root":"state-h8399"}\n' >"$remote_stack/data/replication-root/node_pos_state.json"
+  printf '{"height":8399,"execution_state_root":"state-h8399"}\n' >"$remote_stack/data/runtime-root/reward-runtime-execution-bridge-state.json"
+  printf 'seed-h8399\n' >"$remote_stack/data/store/blobs/seed.blob"
+  printf '{"checkpoint_height":100}\n' >"$local_stack/world/snapshot.json"
+  printf '{"height":100}\n' >"$local_stack/execution-records/latest.json"
+  cp "$local_stack/world/snapshot.json" "$tmp_dir/local-world-before.json"
+  cp "$local_stack/execution-records/latest.json" "$tmp_dir/local-record-before.json"
+
+  cat >"$fake_bin/sshpass" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "-e" ]] && shift
+exec "$@"
+EOF
+  cat >"$fake_bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ "${1:-}" == -* ]]; do
+  if [[ "$1" == "-o" ]]; then shift 2; else shift; fi
+done
+shift # fake remote host
+if [[ "$#" -eq 1 ]]; then
+  exec bash -c "$1"
+fi
+exec "$@"
+EOF
+  cat >"$fake_bin/scp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ "${1:-}" == -* ]]; do
+  if [[ "$1" == "-o" ]]; then shift 2; else shift; fi
+done
+remote_spec=$1
+local_path=$2
+remote_path=${remote_spec#*:}
+if [[ -d "$remote_path" ]]; then
+  cp -R "$remote_path" "$local_path"
+else
+  mkdir -p "$(dirname "$local_path")"
+  cp "$remote_path" "$local_path"
+fi
+EOF
+  cat >"$fake_bin/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-" && -n "${REMOTE_STACK_ROOT:-}" ]]; then
+  source_file=$(mktemp "${TMPDIR:-/tmp}/oasis7-observer-stage-source.XXXXXX")
+  transformed_file=$(mktemp "${TMPDIR:-/tmp}/oasis7-observer-stage-transformed.XXXXXX")
+  trap 'rm -f "$source_file" "$transformed_file"' EXIT
+  cat >"$source_file"
+  "$OASIS7_TEST_REAL_PYTHON3" - "$source_file" "$transformed_file" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+needle = '''        copy_file(
+            os.path.join(execution_world_dir, "journal.json"),
+            os.path.join(execution_world_stage, "journal.json"),
+        )
+'''
+mutation = '''        # Deterministic test hook: source advances after snapshot capture.
+        with open(os.path.join(execution_records_dir, "latest.json"), "w", encoding="utf-8") as fh:
+            json.dump({"height": 8435, "execution_state_root": "state-h8435"}, fh)
+        with open(os.path.join(replication_root, "node_pos_state.json"), "w", encoding="utf-8") as fh:
+            json.dump({"committed_height": 8435, "execution_state_root": "state-h8435"}, fh)
+        with open(bridge_state_path, "w", encoding="utf-8") as fh:
+            json.dump({"height": 8435, "execution_state_root": "state-h8435"}, fh)
+        with open(os.path.join(storage_root, "blobs", "seed.blob"), "w", encoding="utf-8") as fh:
+            fh.write("seed-h8435\\n")
+'''
+if source.count(needle) != 1:
+    raise SystemExit("test hook could not find unique post-snapshot staging point")
+pathlib.Path(sys.argv[2]).write_text(source.replace(needle, mutation + needle), encoding="utf-8")
+PY
+  exec "$OASIS7_TEST_REAL_PYTHON3" "$transformed_file"
+fi
+exec "$OASIS7_TEST_REAL_PYTHON3" "$@"
+EOF
+  chmod +x "$fake_bin/sshpass" "$fake_bin/ssh" "$fake_bin/scp" "$fake_bin/python3"
+
+  if PATH="$fake_bin:$PATH" \
+    OASIS7_TEST_REAL_PYTHON3="$real_python3" \
+    SSHPASS=fixture-password \
+    ./scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote \
+      --local-env "$tmp_dir/local.env" \
+      --remote-host fixture@remote \
+      --remote-env "$tmp_dir/remote.env" \
+      --backup-dir "$tmp_dir/backup" \
+      >"$tmp_dir/seed.stdout" 2>"$tmp_dir/seed.stderr"; then
+    jq -e '.checkpoint_height == 8399' "$local_stack/world/snapshot.json" >/dev/null
+    jq -e '.height == 8435' "$local_stack/execution-records/latest.json" >/dev/null
+    echo "expected seed-from-remote to reject state_sync_checkpoint_drift after source advances between persistence surfaces" >&2
+    exit 1
+  fi
+
+  grep -q 'state_sync_checkpoint_drift' "$tmp_dir/seed.stderr"
+  cmp -s "$tmp_dir/local-world-before.json" "$local_stack/world/snapshot.json"
+  cmp -s "$tmp_dir/local-record-before.json" "$local_stack/execution-records/latest.json"
+  test ! -e "$tmp_dir/backup"
+  echo "ok: observer seed rejects cross-surface checkpoint drift"
+  exit 0
+fi
 
 if [[ "$test_case" == "reset_owned_restore_retry_path_shim" ]]; then
   stable_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
@@ -295,10 +440,18 @@ grep -q '^NODE_GOSSIP_PEERS_CSV=39.104.204.172:6731,39.104.205.67:6732$' "$rende
 grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj,/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp$' "$rendered_env"
 grep -q '^REPLICATION_REMOTE_WRITERS_CSV=bb,cc,aa$' "$rendered_env"
 
-grep -q 'remote_optional_resolved_env_value.*REPLICATION_ROOT' scripts/p2p-public-testnet-local-observer-sync.sh
-grep -q 'remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"' scripts/p2p-public-testnet-local-observer-sync.sh
-grep -q 'REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED' scripts/p2p-public-testnet-local-observer-sync.sh
-grep -q 'execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root"' scripts/p2p-public-testnet-local-observer-sync.sh
+sync_help="$tmp_dir/observer-sync-help.txt"
+./scripts/p2p-public-testnet-local-observer-sync.sh render --help >"$sync_help"
+grep -q 'signed replication checkpoint sync' "$sync_help"
+for removed_raw_seed_helper in \
+  stage_remote_seed_tree \
+  sshpass_scp_from_remote \
+  stream_remote_tar_contents_to_local; do
+  if grep -Eq "^${removed_raw_seed_helper}\\(\\)" scripts/p2p-public-testnet-local-observer-sync.sh; then
+    echo "unsafe raw remote-seed helper remains enabled: $removed_raw_seed_helper" >&2
+    exit 1
+  fi
+done
 grep -q 'generated_world_sidecar_ref' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'world_generation_provenance_ref' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'def confined_manifest_target_ref(raw_ref, key):' scripts/p2p-public-testnet-local-observer-sync.sh
