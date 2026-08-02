@@ -69,7 +69,7 @@ grep -F 'trigger must be workflow_dispatch' "$TMP_DIR/trigger.err"
 
 WORKFLOW="$ROOT_DIR/.github/workflows/rust.yml"
 grep -Fq "if: github.event_name == 'schedule'" "$WORKFLOW"
-grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full_regression'" "$WORKFLOW"
+grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full_escalation'" "$WORKFLOW"
 for input in task_uid pr_number expected_head escalation_reason evidence_url; do
   grep -Fq "      $input:" "$WORKFLOW"
 done

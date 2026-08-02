@@ -149,7 +149,7 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 1. 文档、治理、脚本元数据：默认 S0；docs-only 同时执行命中的 contract / planner 样例。若改动测试/发布口径，再追加对应脚本的 syntax/dry-run 或 planner 样例，不因文档改动直接升级到 full。
 2. runtime / simulator / world-model：先跑命中的定向 S3；落地前补 S1；只有跨模块、持久化、规则/历史回归风险无法由定向测试覆盖时才升 S2。
    - runtime timing、`RuntimePerfSnapshot`、LLM latency split、health/bottleneck 或 report consumer 变更，先读 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md` 的 Runtime/LLM 行；`llm-longrun-stress.sh` 输出属于 S8 诊断/长跑证据，不是默认 PR latency gate。
-3. Viewer / Web / 可见 UI：先跑 deterministic contract 或 component test；触达 `crates/oasis7_viewer/**`、viewer wasm/build 链路或目标特定编译时，把 S5 作为 scoped required。触达可见表面时追加 S6 截图与模型视觉评审。
+3. Viewer / Web / 可见 UI：触达 `crates/oasis7_viewer/**` 时先跑 JS-required deterministic contract / component test；触达可见表面时追加 S6 JS-browser 截图与模型视觉评审。只有触达 `crates/pixel_world_bridge/**` 或真实 bridge Rust/wasm 构建依赖时，才把 S5 作为 scoped required。
 4. node / net / consensus / distfs：先跑命中的 S4 子系统测试；涉及在线拓扑、恢复、公开网络或存储/共识 claim 时追加 S9/S10。
 5. builtin wasm / module release / hash：先跑对应 scope planner 与 module-set evidence；发布或跨 runner claim 才进入 release evidence 对账。
 6. playability / player continue claim：自动化只能证明“没坏/可回归”；`L4A`、`L4B`、`L5` 按 claim 强度升级，不得互相替代。
@@ -239,7 +239,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
 - 边界：
   - 普通 `pre-commit` 是静默 no-op；这一层仅由操作者显式运行，不是自动提交门禁。
   - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`。
-  - 这一层也不包含 `cargo test -p pixel_world_bridge --lib` 与 `cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`；若改动命中 Viewer/Bevy 或 pixel-world wasm/build 链路，显式执行 S5。
+  - 这一层也不包含 `cargo test -p pixel_world_bridge --lib` 与 `cargo check -p pixel_world_bridge --target wasm32-unknown-unknown`；若改动命中 `pixel_world_bridge` 或真实 bridge Rust/wasm 构建链路，显式执行 S5。
 
 ### S1：核心 required 套件（L1）
 ```bash
@@ -1124,7 +1124,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | S2 | 核心 full | release、高风险、历史缺陷升级、信号触发或 schedule；不是 ordinary PR 默认 | full 测试日志 |
 | S3 | 应用主链定向 | runtime / simulator / viewer live / web bridge 定向改动 | 定向 cargo test 日志 |
 | S4 | 分布式子系统 | node / net / consensus / distfs / P2P 链路改动 | 子系统测试日志 |
-| S5 | Pixel World Bridge（Bevy）lib / wasm 编译 | Viewer/Bevy、`crates/pixel_world_bridge/**` 或 pixel-world wasm/build 链路改动 | `pixel_world_bridge` lib 测试 + wasm 编译日志 |
+| S5 | Pixel World Bridge（Bevy）lib / wasm 编译 | `crates/pixel_world_bridge/**` 或真实 bridge Rust/wasm 构建链路改动 | `pixel_world_bridge` lib 测试 + wasm 编译日志 |
 | S6 | Web UI 闭环 smoke | Viewer / launcher / Web 控制台 / 交互链路改动；真实玩家输入流程或真实 provider 回归优先补 Playwright 实跑用例；任何可视化相关代码、样式、资源或可见输出改动还必须叠加截图模型视觉评审 | 截图、console、语义结果；Playwright summary/state；visual review card |
 | S7 | 场景矩阵回归 | scenario / gameplay 初始化 / 场景 ID 与稳定性改动 | 场景测试日志 |
 | S8 | 长稳与压力 | 性能、内存、恢复、资源压力或 soak 相关改动 | stress/soak 目录与 summary |
@@ -1139,7 +1139,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `crates/oasis7/src/simulator/**` | S0 + S1 | S2 + S3 + S7 + S8 | 若触达 UI 表达或交互入口，追加 S6 |
 | `crates/oasis7/src/viewer/**` 或 `src/bin/oasis7_viewer_live.rs` | S0 + S1 + S6 | S2 + S3 + S5 | 若改动 viewer 协议或 wasm 构建链路，S5 变为必跑 |
 | `crates/pixel_world_bridge/**` | S0 + S5 + S6 | S2 + S8 | raster/browser/performance 证据按 S6 JS-browser / JS-full 风险升级 |
-| `crates/oasis7_viewer/**` | S0 + S5 + S6（JS-required；可见输出还需 JS-browser） | S2 + S8（JS-full） | 若改动只影响静态资源 / 样式，可抽样 S1；若影响 bridge，追加 S3 |
+| `crates/oasis7_viewer/**` | S0 + JS-required；可见输出追加 S6（JS-browser） | S2 + S8（JS-full） | 只有触达 `pixel_world_bridge` 或真实 bridge Rust/wasm 构建依赖时追加 S5；若影响 live bridge 协议，追加 S3 |
 | `crates/oasis7_node/**` | S0 + S4（node） + S9/S10（按改动面至少一条） | S2 + S3 + S8 + 另一条在线长跑（S9 或 S10） | 共识推进 / 节点编排改动优先加 S10；网络 / 复制改动优先加 S9 |
 | `crates/oasis7_net/**` | S0 + S4（net） + S9/S10（按改动面至少一条） | S2 + runtime_bridge 变体 + S8 + 另一条在线长跑（S9 或 S10） | 若仅桥接层改动，可用 S3 + S9 smoke；若影响真实联机，补 S10 |
 | `crates/oasis7_consensus/**` | S0 + S4（consensus） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | epoch / attest / finality 逻辑改动优先补 S10 |
@@ -1150,7 +1150,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `scripts/release-gate.sh` / `.github/workflows/release-packages.yml` | `./scripts/ci-tests.sh full` + `sync-m1/m4/m5 --check` + Web strict + S9 + S10 | `./scripts/release-gate.sh --quick` / `--dry-run` | 任何发布 gate 逻辑变更均不允许跳过 S9/S10 |
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |
 | `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --event-name pull_request --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --event-name pull_request --changed-path doc/testing/prd.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
-| `scripts/run-viewer-web.sh` | S0 + S5 + S6 | S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |
+| `scripts/run-viewer-web.sh` | S0 + JS-required + S6（JS-browser） | S8（JS-full） | 只有触达 `pixel_world_bridge` 或真实 bridge Rust/wasm 构建依赖时追加 S5；涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约时追加对应 smoke 与 bundle 验证 |
 | `scripts/p2p-longrun-soak.sh` / `doc/testing/longrun/p2p-longrun-soak-and-chaos*` | S0 + S9 smoke（含 summary/timeline 校验） | S9 endurance（含 chaos） | 任何阈值/summary 字段变更必须补 endurance |
 | `scripts/s10-five-node-game-soak.sh` / `doc/testing/longrun/s10-five-node-real-game-soak*` | S0 + S10 smoke（含 summary/timeline 校验） | S10 默认长窗（30min+） | 任何门禁字段 / 结算 / mint 改动都需补长窗 |
 

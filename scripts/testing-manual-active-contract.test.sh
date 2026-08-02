@@ -67,8 +67,13 @@ for required_manual_policy in \
   fi
 done
 
-if ! grep -Fqx '| `scripts/run-viewer-web.sh` | S0 + S5 + S6 | S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |' "$MANUAL"; then
-  echo "testing-manual viewer web runner must keep S5 as scoped required:" >&2
+if ! grep -Fqx '| `scripts/run-viewer-web.sh` | S0 + JS-required + S6（JS-browser） | S8（JS-full） | 只有触达 `pixel_world_bridge` 或真实 bridge Rust/wasm 构建依赖时追加 S5；涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约时追加对应 smoke 与 bundle 验证 |' "$MANUAL"; then
+  echo "testing-manual viewer web runner must keep JS and Pixel World tiers separated:" >&2
+  failed=1
+fi
+
+if ! grep -Fqx '| `crates/oasis7_viewer/**` | S0 + JS-required；可见输出追加 S6（JS-browser） | S2 + S8（JS-full） | 只有触达 `pixel_world_bridge` 或真实 bridge Rust/wasm 构建依赖时追加 S5；若影响 live bridge 协议，追加 S3 |' "$MANUAL"; then
+  echo "testing-manual generic Viewer paths must not require S5:" >&2
   failed=1
 fi
 
