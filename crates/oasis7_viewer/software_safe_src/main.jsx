@@ -1838,7 +1838,6 @@ function AgentClaimSessionBoundaryCard(props) {
     </CalloutCard>
   );
 }
-
 function AgentClaimPanel(props) {
   const locale = () => props.locale ?? uiLocale();
   const [selectedTargetId, setSelectedTargetId] = createSignal("");
