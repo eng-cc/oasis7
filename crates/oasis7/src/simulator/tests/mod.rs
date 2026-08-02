@@ -76,6 +76,7 @@ mod module_visual;
 mod monotonicity;
 mod native_resolution_contract;
 mod persist;
+mod player_agent_claim_snapshot;
 mod persist_journal_invariants;
 mod physics_parameters;
 mod power;
