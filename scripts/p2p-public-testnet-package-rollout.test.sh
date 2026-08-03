@@ -25,6 +25,29 @@ commit="419e119bc897efaa34750bee04c63470d1156699"
 run_id="27605906795"
 macos_package_version="0.0.0+testnet.90.419e119bc897"
 macos_run_id="27605906796"
+checkpoint_closure_receipt="$TMP_DIR/observer-checkpoint-closure-receipt.json"
+
+cat >"$checkpoint_closure_receipt" <<'EOF'
+{
+  "schema_version": "oasis7.observer_checkpoint_closure_receipt.v1",
+  "checkpoint_id": "fixture-checkpoint-v2",
+  "manifest_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "height": 4242,
+  "clean_state": true,
+  "providers": [
+    {
+      "provider_id": "storage",
+      "authorized": true,
+      "connected": true,
+      "complete": true,
+      "hash_size_binding_verified": true,
+      "missing_hashes": []
+    }
+  ]
+}
+EOF
+
+export OASIS7_CHECKPOINT_CLOSURE_RECEIPT="$checkpoint_closure_receipt"
 
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
@@ -1344,6 +1367,8 @@ python3 - \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   "$TMP_DIR/powershell-injection.ps1" <<'PY'
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -1354,6 +1379,9 @@ spec = importlib.util.spec_from_file_location("package_rollout", module_path)
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+closure_receipt = json.loads(
+    Path(os.environ["OASIS7_CHECKPOINT_CLOSURE_RECEIPT"]).read_text(encoding="utf-8")
+)
 injected = r"C:\safe'; Write-Output INJECTED; #"
 node = {
     key: injected
@@ -1386,6 +1414,7 @@ text = module.windows_script(
     "rpc-running",
     "http://127.0.0.1:6631/v1/chain/status",
     "http://127.0.0.1:6632/v1/chain/status",
+    closure_receipt,
 )
 output_path.write_text(text, encoding="utf-8")
 assignments = (
@@ -1580,6 +1609,9 @@ spec = importlib.util.spec_from_file_location("package_rollout_macos_behavior", 
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+closure_receipt = json.loads(
+    Path(os.environ["OASIS7_CHECKPOINT_CLOSURE_RECEIPT"]).read_text(encoding="utf-8")
+)
 
 # Execute the generated macOS rollback path against deterministic command mocks.
 # The active root-level bundle deliberately uses the legacy flat metadata shape;
@@ -1703,7 +1735,13 @@ PY2
         "canonical_governed_bundle_path": str(canonical),
         "config_paths": [str(config)], "persistent_state_paths": [str(path) for path in state_paths],
     }
-    generated.write_text(module.macos_script(node, "fixture", "commit", "run", hashlib.sha256(dmg.read_bytes()).hexdigest(), "http://fixture/sequencer/v1/chain/status", "http://fixture/storage/v1/chain/status").replace("/usr/libexec/PlistBuddy", "PlistBuddy"), encoding="utf-8")
+    macos_fixture_closure_receipt = {
+        **closure_receipt,
+        "checkpoint_id": "fixture",
+        "manifest_hash": "0" * 64,
+        "height": 1,
+    }
+    generated.write_text(module.macos_script(node, "fixture", "commit", "run", hashlib.sha256(dmg.read_bytes()).hexdigest(), "http://fixture/sequencer/v1/chain/status", "http://fixture/storage/v1/chain/status", macos_fixture_closure_receipt).replace("/usr/libexec/PlistBuddy", "PlistBuddy"), encoding="utf-8")
     generated.chmod(0o755)
     launch_loaded, launch_log = tmp / "loaded", tmp / "launch.log"
     bootstrap_failed, post_bootstrap_marker, post_print_failed = tmp / "bootstrap.failed", tmp / "post-bootstrap", tmp / "post-print.failed"
@@ -2267,6 +2305,7 @@ for target, domain in (
     generated = module.macos_script(
         {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64,
         "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+        closure_receipt,
     )
     assert f"LAUNCHD_TARGET={target}" in generated
     assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
@@ -2289,6 +2328,7 @@ explicit_generated = module.macos_script(
     {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": explicit_canonical},
     "version", "commit", "run", "a" * 64,
     "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+    closure_receipt,
 )
 assert f"CANONICAL_GOVERNED_BUNDLE_PATH={explicit_canonical}" in explicit_generated
 try:
@@ -2297,6 +2337,7 @@ try:
             {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": "/tmp/enriched-bundle.json"},
             "version", "commit", "run", "a" * 64,
             "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            closure_receipt,
         )
 except SystemExit:
     pass
@@ -2314,6 +2355,7 @@ for invalid_target in (
                 {**base_node, "launchd_target": invalid_target},
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2339,6 +2381,7 @@ for invalid_states in invalid_state_sets:
                 },
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2355,6 +2398,7 @@ for invalid_bundle_path in (
                 {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "governed_bundle_path": invalid_bundle_path},
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2371,6 +2415,7 @@ try:
         module.macos_script(
             launchd_overlap_node, "version", "commit", "run", "a" * 64,
             "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            closure_receipt,
         )
 except SystemExit:
     pass
@@ -4132,5 +4177,67 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   exit 1
 fi
 grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
+
+if env -u OASIS7_CHECKPOINT_CLOSURE_RECEIPT \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/observer-missing-closure-receipt-out" \
+  >"$TMP_DIR/observer-missing-closure-receipt.stdout" \
+  2>"$TMP_DIR/observer-missing-closure-receipt.stderr"; then
+  echo "expected observer rollout planning without a clean-room checkpoint closure receipt to fail" >&2
+  exit 1
+fi
+grep -q "checkpoint closure receipt" "$TMP_DIR/observer-missing-closure-receipt.stderr"
+
+invalid_checkpoint_closure_receipt="$TMP_DIR/invalid-observer-checkpoint-closure-receipt.json"
+python3 - "$checkpoint_closure_receipt" "$invalid_checkpoint_closure_receipt" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+receipt = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+receipt["clean_state"] = False
+Path(sys.argv[2]).write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+PY
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" \
+  --checkpoint-closure-receipt "$invalid_checkpoint_closure_receipt" \
+  --out-dir "$TMP_DIR/observer-invalid-closure-receipt-out" \
+  >"$TMP_DIR/observer-invalid-closure-receipt.stdout" \
+  2>"$TMP_DIR/observer-invalid-closure-receipt.stderr"; then
+  echo "expected observer rollout planning with a non-clean closure receipt to fail" >&2
+  exit 1
+fi
+grep -q "clean_state" "$TMP_DIR/observer-invalid-closure-receipt.stderr"
+
+"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" \
+  --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
+  --out-dir "$TMP_DIR/observer-closure-receipt-out" \
+  --json >"$TMP_DIR/observer-closure-receipt-plan.json"
+python3 - \
+  "$TMP_DIR/observer-closure-receipt-plan.json" \
+  "$checkpoint_closure_receipt" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+receipt = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+observer = next(node for node in plan["nodes"] if node["name"] == "linux-lan-observer")
+assert observer["checkpoint_closure_receipt"] == receipt
+wrapper = Path(observer["observer_checkpoint_gate_script"]).read_text(encoding="utf-8")
+for field, value in (
+    ("checkpoint_id", receipt["checkpoint_id"]),
+    ("manifest_hash", receipt["manifest_hash"]),
+    ("height", str(receipt["height"])),
+):
+    assert value in wrapper, f"generated observer gate does not bind {field} to receipt identity"
+assert "hash_size_binding_verified" in wrapper
+assert "missing_hashes" in wrapper
+PY
 
 echo "ok: package rollout helper validates artifacts and standardizes linux/windows/macos replacement plans"
