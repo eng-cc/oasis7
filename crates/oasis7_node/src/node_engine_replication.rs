@@ -567,12 +567,25 @@ impl PosNodeEngine {
             {
                 return Ok(false);
             }
-            let checkpoint_bundle = self.fetch_execution_checkpoint_bundle(
-                endpoint,
-                world_id,
-                replication_runtime,
-                &checkpoint_descriptor,
-            )?;
+            let probe_nonce = std::env::var("OASIS7_CHECKPOINT_PROBE_NONCE").ok();
+            if let Some(probe_nonce) = probe_nonce.as_deref() {
+                if !ReplicationRuntime::checkpoint_probe_nonce_is_valid(probe_nonce) {
+                    return Err(NodeError::Replication {
+                        reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string(),
+                    });
+                }
+            }
+            let (checkpoint_bundle, checkpoint_fetch_observations) = self
+                .fetch_execution_checkpoint_bundle(
+                    endpoint,
+                    world_id,
+                    replication_runtime,
+                    &checkpoint_descriptor,
+                    probe_nonce.is_some(),
+                )?;
+            // The closure can be large. Normal sync has no receipt consumer,
+            // so retain a second owned copy only for an explicit probe run.
+            let checkpoint_receipt_bundle = probe_nonce.as_ref().map(|_| checkpoint_bundle.clone());
             with_execution_hook(execution_hook, |hook| {
                 let Some(hook) = hook else {
                     return Ok(None);
@@ -602,6 +615,13 @@ impl PosNodeEngine {
                         ),
                     });
                 }
+                replication_runtime.persist_checkpoint_verification_receipt(
+                    world_id,
+                    probe_nonce.as_deref(),
+                    &checkpoint_descriptor,
+                    checkpoint_receipt_bundle.as_ref(),
+                    checkpoint_fetch_observations.as_slice(),
+                )?;
                 self.last_execution_height = result.execution_height;
                 self.last_execution_block_hash = Some(result.execution_block_hash);
                 self.last_execution_state_root = Some(result.execution_state_root);
@@ -642,124 +662,6 @@ impl PosNodeEngine {
             callback(self.snapshot_from_decision(&decision))?;
         }
         Ok(true)
-    }
-
-    fn fetch_execution_checkpoint_bundle(
-        &self,
-        endpoint: &ReplicationNetworkEndpoint,
-        world_id: &str,
-        replication_runtime: &ReplicationRuntime,
-        descriptor: &NodeExecutionCheckpointDescriptor,
-    ) -> Result<NodeExecutionCheckpointBundle, NodeError> {
-        self.ensure_execution_checkpoint_blob(
-            endpoint,
-            world_id,
-            replication_runtime,
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            self.ensure_execution_checkpoint_blob(
-                endpoint,
-                world_id,
-                replication_runtime,
-                blob_ref.content_hash.as_str(),
-                blob_ref.size_bytes,
-            )?;
-        }
-        replication_runtime.pin_execution_checkpoint_descriptor(descriptor)?;
-        Self::publish_execution_checkpoint_descriptor_providers(
-            endpoint,
-            world_id,
-            replication_runtime,
-            descriptor,
-        )?;
-        replication_runtime
-            .load_execution_checkpoint_bundle(descriptor)?
-            .ok_or_else(|| NodeError::Replication {
-                reason: format!(
-                    "execution checkpoint descriptor could not be materialized at height {}",
-                    descriptor.height
-                ),
-            })
-    }
-
-    fn ensure_execution_checkpoint_blob(
-        &self,
-        endpoint: &ReplicationNetworkEndpoint,
-        world_id: &str,
-        replication_runtime: &ReplicationRuntime,
-        content_hash: &str,
-        expected_size_bytes: u64,
-    ) -> Result<(), NodeError> {
-        if let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? {
-            if bytes.len() as u64 != expected_size_bytes {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "execution checkpoint local blob size mismatch hash={} expected={} actual={}",
-                        content_hash,
-                        expected_size_bytes,
-                        bytes.len()
-                    ),
-                });
-            }
-            return Ok(());
-        }
-        let request = replication_runtime.build_fetch_blob_request(content_hash)?;
-        let mut provider_lookup_failure = None;
-        let provider_lookup = match endpoint
-            .lookup_provider_ids_for_content_hash(world_id, content_hash)
-        {
-            Ok(provider_ids) => provider_ids,
-            Err(err) => {
-                provider_lookup_failure = Some(format!(
-                    "provider lookup failed for execution checkpoint blob hash={content_hash}: {err:?}"
-                ));
-                None
-            }
-        };
-        let response = request_fetch_blob_with_route_fallback(
-            endpoint,
-            world_id,
-            content_hash,
-            &request,
-            provider_lookup.as_deref().filter(|ids| !ids.is_empty()),
-        )?;
-        if !response.found {
-            if let Some(provider_lookup_failure) = provider_lookup_failure {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "execution checkpoint blob not found hash={content_hash}; {provider_lookup_failure}"
-                    ),
-                });
-            }
-            return Err(NodeError::Replication {
-                reason: format!("execution checkpoint blob not found hash={content_hash}"),
-            });
-        }
-        let blob = response.blob.ok_or_else(|| NodeError::Replication {
-            reason: format!("execution checkpoint fetch missing blob hash={content_hash}"),
-        })?;
-        if blob.len() as u64 != expected_size_bytes {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "execution checkpoint fetched blob size mismatch hash={} expected={} actual={}",
-                    content_hash,
-                    expected_size_bytes,
-                    blob.len()
-                ),
-            });
-        }
-        let actual = blake3_hex(blob.as_slice());
-        if actual != content_hash {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "execution checkpoint fetched blob hash mismatch expected={} actual={}",
-                    content_hash, actual
-                ),
-            });
-        }
-        replication_runtime.store_blob_by_hash(content_hash, blob.as_slice())
     }
 
     pub(super) fn sync_missing_replication_commits_with_progress(
@@ -807,6 +709,7 @@ impl PosNodeEngine {
         if self.replication_gap_sync_fetch_blob_rate_limited_in_cooldown(next_height, now_ms) {
             return Ok(());
         }
+        let mut missing_checkpoint_closure_reason = None;
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
@@ -835,6 +738,11 @@ impl PosNodeEngine {
                     }
                     Ok(false) => {}
                     Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                        if let Some(reason) =
+                            Self::high_replication_checkpoint_closure_missing_reason(&err)
+                        {
+                            missing_checkpoint_closure_reason = Some(reason);
+                        }
                         if self.record_high_replication_checkpoint_probe_failure(
                             next_height,
                             checkpoint_candidate,
@@ -846,6 +754,9 @@ impl PosNodeEngine {
                     }
                     Err(err) => return Err(err),
                 }
+            }
+            if let Some(reason) = missing_checkpoint_closure_reason {
+                return Err(NodeError::Replication { reason });
             }
         }
         if Self::replication_gap_sync_local_state_blocked(

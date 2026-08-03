@@ -122,9 +122,6 @@ impl ReplicationRuntime {
                 err
             ),
         })?;
-        if payload.execution_checkpoint.is_some() {
-            return Ok(message.clone());
-        }
         if payload.height != checkpoint.height {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -156,6 +153,11 @@ impl ReplicationRuntime {
             });
         }
 
+        // A storage/full-storage provider can receive an upstream commit that
+        // already carries a checkpoint descriptor while its own replication
+        // store has none of the referenced closure.  Persist the locally
+        // exported, binding-checked bundle and re-sign the refreshed message
+        // instead of returning the upstream descriptor unchanged.
         payload.execution_checkpoint = Some(self.store_execution_checkpoint_bundle(checkpoint)?);
         let payload_bytes = serde_json::to_vec(&payload).map_err(|err| NodeError::Replication {
             reason: format!("serialize augmented replication payload failed: {}", err),

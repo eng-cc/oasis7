@@ -250,6 +250,18 @@ impl NodeReplicationNetworkHandle {
         let Some(descriptor) = descriptor else {
             return Ok(());
         };
+        self.validate_checkpoint_blob_from_root(
+            root_dir,
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        for blob_ref in &descriptor.blobs {
+            self.validate_checkpoint_blob_from_root(
+                root_dir,
+                blob_ref.content_hash.as_str(),
+                blob_ref.size_bytes,
+            )?;
+        }
         self.publish_checkpoint_blob_provider_from_root(
             network_policy,
             root_dir,
@@ -277,8 +289,22 @@ impl NodeReplicationNetworkHandle {
         content_hash: &str,
         expected_size_bytes: u64,
     ) -> Result<(), NodeError> {
+        self.validate_checkpoint_blob_from_root(root_dir, content_hash, expected_size_bytes)?;
+        self.publish_local_content_provider(network_policy, world_id, content_hash)
+    }
+
+    fn validate_checkpoint_blob_from_root(
+        &self,
+        root_dir: &Path,
+        content_hash: &str,
+        expected_size_bytes: u64,
+    ) -> Result<(), NodeError> {
         let Some(bytes) = load_blob_from_root(root_dir, content_hash)? else {
-            return Ok(());
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "checkpoint provider publication closure incomplete hash={content_hash}"
+                ),
+            });
         };
         if bytes.len() as u64 != expected_size_bytes {
             return Err(NodeError::Replication {
@@ -293,7 +319,7 @@ impl NodeReplicationNetworkHandle {
                 ),
             });
         }
-        self.publish_local_content_provider(network_policy, world_id, content_hash)
+        Ok(())
     }
 
     #[allow(dead_code)]

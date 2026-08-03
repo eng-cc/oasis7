@@ -446,7 +446,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    if provider_lookup_supplied {
+    if provider_lookup_supplied && !policy.allow_connected_peer_fallback {
         if let Some(response) = last_not_found {
             return Ok(response);
         }
@@ -464,7 +464,11 @@ fn request_fetch_blob_chunk_with_route_fallback(
         });
     }
 
-    if provider_lookup_supplied && last_retryable_error.is_none() && provider_route_attempted {
+    if provider_lookup_supplied
+        && !policy.allow_connected_peer_fallback
+        && last_retryable_error.is_none()
+        && provider_route_attempted
+    {
         return Err(NodeError::Replication {
             reason: format!(
                 "blob fetch provider routes exhausted without response for world_id={} hash={}",
@@ -473,7 +477,10 @@ fn request_fetch_blob_chunk_with_route_fallback(
         });
     }
 
-    if provider_lookup_supplied && !policy.require_retryable_provider_route_before_fallback {
+    if provider_lookup_supplied
+        && !policy.allow_connected_peer_fallback
+        && !policy.require_retryable_provider_route_before_fallback
+    {
         return Err(
             last_retryable_error.unwrap_or_else(|| NodeError::Replication {
                 reason: format!(
@@ -484,10 +491,32 @@ fn request_fetch_blob_chunk_with_route_fallback(
         );
     }
 
-    let mut generic_attempts = 0usize;
-    if policy.allow_generic_route
-        && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS
+    // Provider throttling is an authoritative back-pressure signal. Do not
+    // evade it through a connected or generic route after every advertised
+    // provider has been exhausted; let the caller enter its bounded cooldown.
+    if last_retryable_error
+        .as_ref()
+        .map(|err| {
+            crate::network_bridge::replication_network_error_is_rate_limited_protocol(
+                err,
+                REPLICATION_FETCH_BLOB_PROTOCOL,
+            )
+        })
+        .unwrap_or(false)
+        && last_not_found.is_none()
     {
+        return Err(last_retryable_error.expect("rate-limited error checked above"));
+    }
+
+    let mut generic_attempts = 0usize;
+    // A generic request is the discovery fallback when provider lookup yielded no
+    // concrete route. The storage-challenge policy deliberately uses generic as
+    // its bounded fallback after a retryable provider failure. Normal checkpoint
+    // fetches instead try distinct connected peers and must not silently route
+    // back to the same incomplete advertised provider.
+    let allow_generic_route = policy.allow_generic_route
+        && (!provider_route_attempted || !policy.allow_connected_peer_fallback);
+    if allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,
@@ -535,9 +564,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    while policy.allow_generic_route
-        && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS
-    {
+    while allow_generic_route && generic_attempts < REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
         match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
             REPLICATION_FETCH_BLOB_PROTOCOL,
             request,

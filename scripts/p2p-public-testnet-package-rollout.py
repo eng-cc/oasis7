@@ -316,6 +316,33 @@ def package_provenance(platform: str, platform_dir: Path, asset: Path, info: dic
     }
 
 
+def verify_package_trust(
+    package_dir: Path, platforms: list[str]
+) -> tuple[dict[str, Path], dict[str, dict[str, str]], dict[str, Path], dict[str, list[str]]]:
+    """Verify every requested platform before any package executable can run."""
+    platform_dirs: dict[str, Path] = {}
+    platform_infos: dict[str, dict[str, str]] = {}
+    platform_assets: dict[str, Path] = {}
+    verified_files: dict[str, list[str]] = {}
+    for platform in platforms:
+        platform_dir = find_platform_dir(package_dir, platform)
+        buildinfo = platform_dir / f"{platform}-BUILDINFO"
+        sums = platform_dir / f"{platform}-SHA256SUMS"
+        if not sums.is_file():
+            die(f"missing {platform} checksum file: {sums}")
+        verified = verify_sha256sums(platform_dir, sums)
+        asset = platform_asset(platform_dir, platform)
+        require_verified_files(platform, platform_dir, buildinfo, asset, verified)
+        info = read_buildinfo(buildinfo)
+        if platform == "macos-arm64":
+            require_macos_arm64_metadata(info)
+        platform_dirs[platform] = platform_dir
+        platform_infos[platform] = info
+        platform_assets[platform] = asset
+        verified_files[platform] = verified
+    return platform_dirs, platform_infos, platform_assets, verified_files
+
+
 def load_manifest(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -350,7 +377,149 @@ def canonical_provider_status_urls(manifest: dict[str, Any]) -> tuple[str, str]:
     return providers["sequencer"], providers["storage"]
 
 
-def observer_checkpoint_gate_bash(sequencer_status_url: str, storage_status_url: str) -> str:
+def load_checkpoint_closure_receipt(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        die(f"checkpoint closure receipt must be a regular file: {path}")
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        die(f"checkpoint closure receipt is not valid JSON: {path}: {error}")
+    if not isinstance(receipt, dict):
+        die("checkpoint closure receipt must be a JSON object")
+    if receipt.get("schema_version") != "oasis7.observer_checkpoint_closure_receipt.v1":
+        die("checkpoint closure receipt has invalid schema_version")
+    checkpoint_id = receipt.get("checkpoint_id")
+    manifest_hash = receipt.get("manifest_hash")
+    height = receipt.get("height")
+    if not isinstance(checkpoint_id, str) or not checkpoint_id.strip():
+        die("checkpoint closure receipt has invalid checkpoint_id")
+    if not isinstance(manifest_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_hash):
+        die("checkpoint closure receipt has invalid manifest_hash")
+    if isinstance(height, bool) or not isinstance(height, int) or height <= 0:
+        die("checkpoint closure receipt has invalid height")
+    if receipt.get("clean_state") is not True:
+        die("checkpoint closure receipt clean_state must be true")
+    providers = receipt.get("providers")
+    if not isinstance(providers, list) or not providers:
+        die("checkpoint closure receipt providers must be a non-empty array")
+    complete_provider = False
+    seen_provider_ids: set[str] = set()
+    for provider in providers:
+        if not isinstance(provider, dict):
+            die("checkpoint closure receipt provider entries must be objects")
+        provider_id = provider.get("provider_id")
+        if not isinstance(provider_id, str) or not provider_id.strip() or provider_id in seen_provider_ids:
+            die("checkpoint closure receipt provider_id values must be unique and non-empty")
+        seen_provider_ids.add(provider_id)
+        missing_hashes = provider.get("missing_hashes")
+        if not isinstance(missing_hashes, list) or not all(
+            isinstance(value, str) for value in missing_hashes
+        ):
+            die("checkpoint closure receipt missing_hashes must be a string array")
+        if (
+            provider.get("authorized") is True
+            and provider.get("connected") is True
+            and provider.get("complete") is True
+            and provider.get("hash_size_binding_verified") is True
+            and not missing_hashes
+        ):
+            complete_provider = True
+    if not complete_provider:
+        die(
+            "checkpoint closure receipt requires at least one authorized connected complete "
+            "provider with hash_size_binding_verified=true and missing_hashes=[]"
+        )
+    return receipt
+
+
+def load_probe_result(manifest: Path, package_dir: Path, probe_out: Path) -> dict[str, Any]:
+    """Validate a receipt produced by the repository-owned clean-room probe."""
+    if probe_out.is_symlink() or not probe_out.is_file():
+        die("checkpoint closure probe did not produce its canonical receipt")
+    try:
+        result = json.loads(probe_out.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        die(f"checkpoint closure probe result is invalid JSON: {error}")
+    if not isinstance(result, dict) or result.get("schema_version") != "oasis7.observer_checkpoint_closure_probe.v1":
+        die("checkpoint closure probe result has invalid schema_version")
+    digest = result.get("canonical_digest")
+    material = dict(result)
+    material.pop("canonical_digest", None)
+    if not isinstance(digest, str) or hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest() != digest:
+        die("checkpoint closure probe canonical digest mismatch")
+    runtime = result.get("runtime_receipt")
+    if not isinstance(runtime, dict) or runtime.get("schema_version") != "oasis7.checkpoint_closure_verification_receipt.v1":
+        die("checkpoint closure probe lacks runtime receipt")
+    if isinstance(runtime.get("height"), bool) or not isinstance(runtime.get("height"), int) or runtime["height"] <= 0:
+        die("checkpoint closure probe receipt has invalid or stale checkpoint height")
+    for field in ("execution_block_hash", "execution_state_root", "manifest_hash"):
+        if not isinstance(runtime.get(field), str) or not runtime[field]:
+            die(f"checkpoint closure probe receipt lacks {field} binding")
+    observations = runtime.get("fetch_observations")
+    objects = runtime.get("objects")
+    if not isinstance(observations, list) or not observations or not isinstance(objects, list) or len(objects) != len(observations):
+        die("checkpoint closure probe has invalid closure observations")
+    for obj, observed in zip(objects, observations):
+        if not isinstance(obj, dict) or not isinstance(observed, dict) or observed.get("source") != "network_fetch" or observed.get("signed_request") is not True or observed.get("response_found") is not True or not isinstance(observed.get("connected_candidate_ids"), list) or not observed["connected_candidate_ids"] or observed.get("content_hash") != obj.get("expected_content_hash") or observed.get("observed_content_hash") != obj.get("expected_content_hash") or observed.get("observed_size_bytes") != obj.get("expected_size_bytes"):
+            die("checkpoint closure probe receipt has unbound network fetch observation")
+    bindings = result.get("input_bindings")
+    if not isinstance(bindings, dict) or bindings.get("rollout_manifest_sha256") != sha256_file(manifest):
+        die("checkpoint closure probe manifest binding mismatch")
+    observer_names = [str(node.get("name") or "") for node in load_manifest(manifest)["nodes"]
+                      if isinstance(node, dict) and str(node.get("name") or "") not in CANONICAL_PROVIDER_NAMES]
+    if bindings.get("observer_name") not in observer_names:
+        die("checkpoint closure probe observer binding mismatch")
+    if bindings.get("world_id") != runtime.get("world_id"):
+        die("checkpoint closure probe world identity mismatch")
+    buildinfo = bindings.get("buildinfo")
+    if not isinstance(buildinfo, dict) or not all(isinstance(buildinfo.get(k), str) and buildinfo[k] for k in ("commit", "package_version", "run_id")):
+        die("checkpoint closure probe BUILDINFO binding is incomplete")
+    return {
+        "checkpoint_id": runtime["execution_block_hash"],
+        "manifest_hash": runtime["manifest_hash"],
+        "height": runtime["height"],
+        "clean_state": True,
+        "providers": [
+            {
+                "provider_id": "clean-room-probe",
+                "authorized": True,
+                "connected": True,
+                "complete": True,
+                "hash_size_binding_verified": True,
+                "missing_hashes": [],
+            }
+        ],
+        "probe_canonical_digest": digest,
+        "fetch_observations": observations,
+    }
+
+
+def run_checkpoint_closure_probe(manifest: Path, package_dir: Path, out_dir: Path) -> dict[str, Any]:
+    """Obtain closure evidence only by executing the repository-owned probe.
+
+    This is intentionally not an argument: a JSON file supplied by an operator
+    has no binding to the fresh runtime invocation that fetched the closure.
+    """
+    probe_out = out_dir / "checkpoint-closure-probe.json"
+    command = [sys.executable, str(ROOT_DIR / "scripts/p2p-observer-checkpoint-closure-probe.py"),
+        "--manifest", str(manifest), "--package-dir", str(package_dir),
+        "--out", str(probe_out),
+    ]
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "probe failed"
+        die(f"checkpoint closure probe failed: {detail}")
+    return load_probe_result(manifest, package_dir, probe_out)
+
+
+def observer_checkpoint_gate_bash(
+    sequencer_status_url: str,
+    storage_status_url: str,
+    closure_receipt: dict[str, Any],
+) -> str:
+    receipt_json = json.dumps(closure_receipt, ensure_ascii=True, sort_keys=True)
     return f'''python3 - {shlex.quote(sequencer_status_url)} {shlex.quote(storage_status_url)} <<'PY'
 import json
 import re
@@ -358,6 +527,7 @@ import sys
 from urllib.request import Request, urlopen
 
 MAX_HEIGHT_DELTA = {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}
+CLOSURE_RECEIPT = json.loads({receipt_json!r})
 
 def checkpoint(name, url):
     try:
@@ -389,12 +559,17 @@ if sequencer[0] != storage[0] or sequencer[2] != storage[2]:
     raise SystemExit("provider_checkpoint_gate identity_mismatch")
 if abs(sequencer[1] - storage[1]) > MAX_HEIGHT_DELTA:
     raise SystemExit("provider_checkpoint_gate height_incompatible")
-print(f"provider_checkpoint_gate=passed checkpoint_id={{sequencer[0]}} height_delta={{abs(sequencer[1] - storage[1])}}")
+expected = (CLOSURE_RECEIPT["checkpoint_id"], CLOSURE_RECEIPT["height"], CLOSURE_RECEIPT["manifest_hash"].lower())
+if sequencer != expected or storage != expected:
+    raise SystemExit("provider_checkpoint_gate closure_receipt_identity_mismatch")
+print(f"provider_checkpoint_gate=passed checkpoint_id={{sequencer[0]}} height_delta={{abs(sequencer[1] - storage[1])}} hash_size_binding_verified=true missing_hashes=[]")
 PY'''
 
 
 def observer_checkpoint_gate_macos(
-    sequencer_status_url: str, storage_status_url: str
+    sequencer_status_url: str,
+    storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> str:
     return """provider_checkpoint_gate_macos() {
   local provider name url payload schema checkpoint_id checkpoint_id_without_whitespace height manifest_hash
@@ -451,7 +626,11 @@ def observer_checkpoint_gate_macos(
     echo "provider_checkpoint_gate height_incompatible" >&2
     return 1
   fi
-  echo "provider_checkpoint_gate=passed checkpoint_id=$sequencer_id height_delta=$(( sequencer_height - storage_height < 0 ? storage_height - sequencer_height : sequencer_height - storage_height ))"
+  if [[ "$sequencer_id" != %s || "$storage_id" != %s || "$sequencer_hash" != %s || "$storage_hash" != %s || "$sequencer_height" != %s || "$storage_height" != %s ]]; then
+    echo "provider_checkpoint_gate closure_receipt_identity_mismatch" >&2
+    return 1
+  fi
+  echo "provider_checkpoint_gate=passed checkpoint_id=$sequencer_id height_delta=$(( sequencer_height - storage_height < 0 ? storage_height - sequencer_height : sequencer_height - storage_height )) hash_size_binding_verified=true missing_hashes=[]"
 }
 
 provider_checkpoint_gate_macos
@@ -460,10 +639,20 @@ provider_checkpoint_gate_macos
         storage_status_url,
         MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
         MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
+        shlex.quote(str(closure_receipt["checkpoint_id"])),
+        shlex.quote(str(closure_receipt["checkpoint_id"])),
+        shlex.quote(str(closure_receipt["manifest_hash"]).lower()),
+        shlex.quote(str(closure_receipt["manifest_hash"]).lower()),
+        shlex.quote(str(closure_receipt["height"])),
+        shlex.quote(str(closure_receipt["height"])),
     )
 
 
-def observer_checkpoint_gate_powershell(sequencer_status_url: str, storage_status_url: str) -> str:
+def observer_checkpoint_gate_powershell(
+    sequencer_status_url: str,
+    storage_status_url: str,
+    closure_receipt: dict[str, Any],
+) -> str:
     def ps_literal(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
@@ -486,7 +675,8 @@ $sequencerCheckpoint = Get-ProviderCheckpoint -Name 'sequencer' -Url {ps_literal
 $storageCheckpoint = Get-ProviderCheckpoint -Name 'storage' -Url {ps_literal(storage_status_url)}
 if ($sequencerCheckpoint.checkpoint_id -ne $storageCheckpoint.checkpoint_id -or $sequencerCheckpoint.manifest_hash -ne $storageCheckpoint.manifest_hash) {{ throw 'provider_checkpoint_gate identity_mismatch' }}
 if ([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height) -gt {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}) {{ throw 'provider_checkpoint_gate height_incompatible' }}
-Write-Output "provider_checkpoint_gate=passed checkpoint_id=$($sequencerCheckpoint.checkpoint_id) height_delta=$([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height))"
+if ($sequencerCheckpoint.checkpoint_id -ne {ps_literal(str(closure_receipt['checkpoint_id']))} -or $storageCheckpoint.checkpoint_id -ne {ps_literal(str(closure_receipt['checkpoint_id']))} -or $sequencerCheckpoint.manifest_hash -ne {ps_literal(str(closure_receipt['manifest_hash']).lower())} -or $storageCheckpoint.manifest_hash -ne {ps_literal(str(closure_receipt['manifest_hash']).lower())} -or $sequencerCheckpoint.height -ne {int(closure_receipt['height'])} -or $storageCheckpoint.height -ne {int(closure_receipt['height'])}) {{ throw 'provider_checkpoint_gate closure_receipt_identity_mismatch' }}
+Write-Output "provider_checkpoint_gate=passed checkpoint_id=$($sequencerCheckpoint.checkpoint_id) height_delta=$([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height)) hash_size_binding_verified=true missing_hashes=[]"
 '''
 
 
@@ -573,6 +763,7 @@ def write_linux_observer_plan(
     readiness_policy: str,
     sequencer_status_url: str,
     storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> tuple[Path, list[str], list[str]]:
     name = str(node.get("name") or "linux-observer")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -603,7 +794,9 @@ def write_linux_observer_plan(
         commands = [shell_join(["bash", str(script_path)])]
     script_path.write_text(
         "#!/usr/bin/env bash\nset -euo pipefail\n\n"
-        + observer_checkpoint_gate_bash(sequencer_status_url, storage_status_url)
+        + observer_checkpoint_gate_bash(
+            sequencer_status_url, storage_status_url, closure_receipt
+        )
         + "\n\nexec "
         + shell_join(command)
         + "\n",
@@ -623,6 +816,7 @@ def windows_script(
     readiness_policy: str,
     sequencer_status_url: str,
     storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> str:
     def ps_literal(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -697,7 +891,7 @@ def windows_script(
         for path, digest in sorted(governed_hashes.items())
     )
     checkpoint_gate = observer_checkpoint_gate_powershell(
-        sequencer_status_url, storage_status_url
+        sequencer_status_url, storage_status_url, closure_receipt
     )
     return f"""$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -1658,6 +1852,7 @@ def write_windows_plan(
     readiness_policy: str,
     sequencer_status_url: str,
     storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "windows-node")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -1720,6 +1915,7 @@ def write_windows_plan(
         readiness_policy,
         sequencer_status_url,
         storage_status_url,
+        closure_receipt,
     )
     script_path.write_text(script_text, encoding="utf-8")
     # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
@@ -1865,6 +2061,7 @@ def macos_script(
     expected_dmg_sha256: str,
     sequencer_status_url: str,
     storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> str:
     name = str(node.get("name") or "macos-observer")
     node_root = macos_absolute_path(node, "node_root").rstrip("/")
@@ -1935,7 +2132,7 @@ def macos_script(
     config_entries = " ".join(q(path) for path in config_paths)
     state_entries = " ".join(q(path) for path in state_paths)
     checkpoint_gate = observer_checkpoint_gate_macos(
-        sequencer_status_url, storage_status_url
+        sequencer_status_url, storage_status_url, closure_receipt
     )
     return f'''#!/usr/bin/env bash
 set -euo pipefail
@@ -2536,6 +2733,7 @@ def write_macos_plan(
     run_id: str,
     sequencer_status_url: str,
     storage_status_url: str,
+    closure_receipt: dict[str, Any],
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "macos-observer")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -2550,6 +2748,7 @@ def write_macos_plan(
             expected_dmg_sha256,
             sequencer_status_url,
             storage_status_url,
+            closure_receipt,
         ),
         encoding="utf-8",
     )
@@ -2611,29 +2810,30 @@ def main() -> int:
     if len(names) != len(manifest["nodes"]) or not all(names) or len(set(names)) != len(names):
         die("all rollout manifest nodes must have unique non-empty names")
     observer_rollout_present = any(name not in CANONICAL_PROVIDER_NAMES for name in names)
+    # This happens before the probe starts a runtime from the downloaded Linux
+    # bundle.  A malformed package must fail before any package code executes.
+    trust_platforms = list(platforms)
+    if observer_rollout_present and "linux-x64" not in trust_platforms:
+        # The clean-room closure probe always executes the Linux bundle, even
+        # when the rollout plan mutates only a Windows or macOS observer.
+        trust_platforms.append("linux-x64")
+    platform_dirs, platform_infos, platform_assets, verified_files = verify_package_trust(
+        package_dir, sorted(trust_platforms)
+    )
+    # A multi-platform package is one release truth.  Reject divergent
+    # BUILDINFO before a trusted bundle is allowed to start the probe.
+    commit = require_same_commit(platform_infos)
     provider_status_urls = (
         canonical_provider_status_urls(manifest) if observer_rollout_present else None
     )
+    checkpoint_closure_receipt = None
+    if observer_rollout_present:
+        if os.environ.get("OASIS7_CHECKPOINT_CLOSURE_RECEIPT"):
+            die("caller-supplied checkpoint closure receipt is forbidden; the rollout executes its checkpoint closure probe")
+        checkpoint_closure_receipt = run_checkpoint_closure_probe(
+            args.manifest.resolve(), package_dir, out_dir
+        )
 
-    platform_dirs: dict[str, Path] = {}
-    platform_infos: dict[str, dict[str, str]] = {}
-    platform_assets: dict[str, Path] = {}
-    verified_files: dict[str, list[str]] = {}
-    for platform in platforms:
-        platform_dir = find_platform_dir(package_dir, platform)
-        platform_dirs[platform] = platform_dir
-        buildinfo = platform_dir / f"{platform}-BUILDINFO"
-        sums = platform_dir / f"{platform}-SHA256SUMS"
-        if not sums.is_file():
-            die(f"missing {platform} checksum file: {sums}")
-        verified_files[platform] = verify_sha256sums(platform_dir, sums)
-        platform_infos[platform] = read_buildinfo(buildinfo)
-        platform_assets[platform] = platform_asset(platform_dir, platform)
-        require_verified_files(platform, platform_dir, buildinfo, platform_assets[platform], verified_files[platform])
-        if platform == "macos-arm64":
-            require_macos_arm64_metadata(platform_infos[platform])
-
-    commit = require_same_commit(platform_infos)
     platform_provenance = {
         platform: package_provenance(
             platform,
@@ -2684,6 +2884,7 @@ def main() -> int:
                 )
             else:
                 assert provider_status_urls is not None
+                assert checkpoint_closure_receipt is not None
                 script_path, commands, command = write_linux_observer_plan(
                     out_dir,
                     node,
@@ -2693,8 +2894,10 @@ def main() -> int:
                     run_id,
                     args.readiness_policy,
                     *provider_status_urls,
+                    checkpoint_closure_receipt,
                 )
                 node_plan["observer_checkpoint_gate_script"] = str(script_path)
+                node_plan["checkpoint_closure_receipt"] = checkpoint_closure_receipt
                 node_plan["commands"].extend(commands)
             if args.apply_local and not node.get("host"):
                 applied = subprocess.run(
@@ -2712,6 +2915,7 @@ def main() -> int:
             if name in CANONICAL_PROVIDER_NAMES:
                 die("canonical providers must use Linux rollout entries")
             assert provider_status_urls is not None
+            assert checkpoint_closure_receipt is not None
             governed_files = windows_governed_files(
                 platform_dirs[platform], verified_files[platform]
             )
@@ -2725,8 +2929,10 @@ def main() -> int:
                 governed_files,
                 args.readiness_policy,
                 *provider_status_urls,
+                checkpoint_closure_receipt,
             )
             node_plan["windows_script"] = str(script_path)
+            node_plan["checkpoint_closure_receipt"] = checkpoint_closure_receipt
             node_plan["governed_bundle_path"] = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
             node_plan["governed_genesis_path"] = str(
                 node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS
@@ -2736,6 +2942,7 @@ def main() -> int:
             if name in CANONICAL_PROVIDER_NAMES:
                 die("canonical providers must use Linux rollout entries")
             if platform == "macos-arm64":
+                assert checkpoint_closure_receipt is not None
                 script_path, commands = write_macos_plan(
                     out_dir,
                     node,
@@ -2744,8 +2951,10 @@ def main() -> int:
                     commit,
                     run_id,
                     *(provider_status_urls or ()),
+                    checkpoint_closure_receipt,
                 )
                 node_plan["macos_script"] = str(script_path)
+                node_plan["checkpoint_closure_receipt"] = checkpoint_closure_receipt
                 node_plan["native_identity"] = "aarch64-apple-darwin"
                 node_plan["expected_dmg_sha256"] = sha256_file(platform_assets[platform])
                 node_plan["state_sync_escalation"] = "explicit_on_authority_failure"

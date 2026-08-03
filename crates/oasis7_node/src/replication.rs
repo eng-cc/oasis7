@@ -12,6 +12,7 @@ use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 const REPLICATION_VERSION: u8 = 1;
@@ -25,6 +26,8 @@ pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
 pub(crate) const REPLICATION_GET_HEAD_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/head/1.0.0";
+#[path = "replication/checkpoint_probe_receipt.rs"]
+mod checkpoint_probe_receipt;
 mod commit_retention;
 #[path = "replication_checkpoint.rs"]
 mod replication_checkpoint;

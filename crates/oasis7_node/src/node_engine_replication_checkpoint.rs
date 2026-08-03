@@ -83,6 +83,27 @@ impl PosNodeEngine {
             || crate::node_engine_replication_provider_route::replication_gap_sync_fetch_blob_rate_limited(err)
     }
 
+    pub(super) fn high_replication_checkpoint_closure_missing_reason(
+        err: &NodeError,
+    ) -> Option<String> {
+        let NodeError::Replication { reason } = err else {
+            return None;
+        };
+        if reason.contains("execution checkpoint blob not found hash=") {
+            return Some(reason.clone());
+        }
+        if reason.contains("gap sync height ") && reason.contains(" blob not found for hash ") {
+            let content_hash = reason
+                .rsplit_once(" hash ")
+                .map(|(_, content_hash)| content_hash)
+                .unwrap_or("unknown");
+            return Some(format!(
+                "execution checkpoint blob not found hash={content_hash}"
+            ));
+        }
+        None
+    }
+
     pub(super) fn replication_gap_sync_fetch_blob_rate_limited_in_cooldown(
         &self,
         next_height: u64,
@@ -127,11 +148,26 @@ impl PosNodeEngine {
         replication_runtime: &ReplicationRuntime,
         descriptor: &NodeExecutionCheckpointDescriptor,
     ) -> Result<(), NodeError> {
-        let publish_if_present = |content_hash: &str, expected_size_bytes: u64| {
+        let closure_refs = std::iter::once((
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        ))
+        .chain(
+            descriptor
+                .blobs
+                .iter()
+                .map(|blob_ref| (blob_ref.content_hash.as_str(), blob_ref.size_bytes)),
+        )
+        .collect::<Vec<_>>();
+        for (content_hash, expected_size_bytes) in &closure_refs {
             let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? else {
-                return Ok(());
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "checkpoint provider publication closure incomplete hash={content_hash}"
+                    ),
+                });
             };
-            if bytes.len() as u64 != expected_size_bytes {
+            if bytes.len() as u64 != *expected_size_bytes {
                 return Err(NodeError::Replication {
                     reason: format!(
                         "execution checkpoint provider publish local blob size mismatch hash={} expected={} actual={}",
@@ -141,15 +177,9 @@ impl PosNodeEngine {
                     ),
                 });
             }
+        }
+        for (content_hash, _) in closure_refs {
             endpoint.publish_local_content_provider_best_effort(world_id, content_hash);
-            Ok(())
-        };
-        publish_if_present(
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            publish_if_present(blob_ref.content_hash.as_str(), blob_ref.size_bytes)?;
         }
         Ok(())
     }

@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""Run and verify a clean-root signed checkpoint closure probe.
+
+This deliberately owns the receipt boundary: rollout callers never pass an
+operator-authored receipt.  The runtime writes its receipt only after it has
+installed a full network-fetched closure in this probe's fresh replication
+root; this helper validates that receipt and records immutable package facts.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import secrets
+import shutil
+import signal
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA = "oasis7.checkpoint_closure_verification_receipt.v1"
+RESULT_SCHEMA = "oasis7.observer_checkpoint_closure_probe.v1"
+
+
+def die(message: str) -> None:
+    raise SystemExit(f"error: checkpoint closure probe: {message}")
+
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def canonical_json(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def validate_runtime_receipt(receipt: Any, nonce: str) -> dict[str, Any]:
+    if not isinstance(receipt, dict) or receipt.get("schema_version") != SCHEMA:
+        die("runtime receipt has invalid schema_version")
+    if receipt.get("probe_nonce") != nonce:
+        die("runtime receipt nonce mismatch")
+    if not isinstance(receipt.get("world_id"), str) or not receipt["world_id"]:
+        die("runtime receipt missing world_id")
+    if not isinstance(receipt.get("height"), int) or receipt["height"] <= 0:
+        die("runtime receipt has invalid height")
+    hashes = ("execution_block_hash", "execution_state_root", "manifest_hash")
+    if any(not isinstance(receipt.get(k), str) or not receipt[k] for k in hashes):
+        die("runtime receipt missing checkpoint bindings")
+    objects = receipt.get("objects")
+    observations = receipt.get("fetch_observations")
+    if not isinstance(objects, list) or not objects or not isinstance(observations, list):
+        die("runtime receipt missing closure objects or fetch observations")
+    if len(objects) != len(observations):
+        die("runtime receipt object/observation count mismatch")
+    for index, (obj, observed) in enumerate(zip(objects, observations)):
+        if not isinstance(obj, dict) or not isinstance(observed, dict):
+            die(f"runtime receipt entry {index} is not an object")
+        expected_hash = obj.get("expected_content_hash")
+        expected_size = obj.get("expected_size_bytes")
+        if (not isinstance(expected_hash, str) or not expected_hash or
+                not isinstance(expected_size, int) or expected_size < 0):
+            die(f"runtime receipt entry {index} has invalid expected binding")
+        if (obj.get("observed_content_hash") != expected_hash or
+                obj.get("observed_size_bytes") != expected_size or
+                observed.get("source") != "network_fetch" or
+                observed.get("content_hash") != expected_hash or
+                observed.get("observed_content_hash") != expected_hash or
+                observed.get("observed_size_bytes") != expected_size or
+                observed.get("response_found") is not True or
+                observed.get("signed_request") is not True):
+            die(f"runtime receipt entry {index} fails hash/size/network/signed binding")
+        candidates = observed.get("connected_candidate_ids")
+        if not isinstance(candidates, list) or not candidates or not all(isinstance(x, str) and x for x in candidates):
+            die(f"runtime receipt entry {index} has no connected candidates")
+    return receipt
+
+
+def read_env(path: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        result[k.strip()] = v.strip().strip('"')
+    return result
+
+
+def write_env(path: Path, values: dict[str, str]) -> None:
+    path.write_text("".join(f"{k}={v}\n" for k, v in sorted(values.items())), encoding="utf-8")
+
+
+def package_runtime(package_dir: Path, app_root: Path) -> Path:
+    if package_dir.is_symlink() or not package_dir.is_dir():
+        die("package directory must be a non-symlink directory")
+    archives = list(package_dir.rglob("oasis7-linux-x64-bundle.tar.gz"))
+    if len(archives) != 1 or archives[0].is_symlink() or not archives[0].is_file():
+        die("package must contain exactly one linux runtime bundle")
+    with tarfile.open(archives[0], "r:gz") as archive:
+        destination = (app_root / "release").resolve()
+        destination.mkdir(parents=True, exist_ok=True)
+        for member in archive.getmembers():
+            target = (destination / member.name).resolve()
+            try:
+                target.relative_to(destination)
+            except ValueError:
+                die(f"package archive member escapes extraction root: {member.name}")
+            if not (member.isdir() or member.isreg()):
+                die(f"package archive contains non-regular member: {member.name}")
+        # All members have been confined and links/devices rejected before any
+        # filesystem mutation; never use extractall on untrusted packages.
+        for member in archive.getmembers():
+            target = destination / member.name
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    die(f"package archive member cannot be read: {member.name}")
+                with source, target.open("xb") as output:
+                    shutil.copyfileobj(source, output)
+    candidates = list((app_root / "release").rglob("oasis7_chain_runtime"))
+    if len(candidates) != 1 or not candidates[0].is_file():
+        die("package runtime bundle has no unique runtime executable")
+    candidates[0].chmod(candidates[0].stat().st_mode | 0o111)
+    current = app_root / "current"
+    current.symlink_to(candidates[0].parents[1])
+    return candidates[0]
+
+
+def run_probe(args: argparse.Namespace) -> dict[str, Any]:
+    if args.timeout_secs <= 0:
+        die("timeout must be greater than zero")
+    if args.manifest.is_symlink() or not args.manifest.is_file():
+        die("manifest must be a regular non-symlink file")
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    nodes = manifest.get("nodes", []) if isinstance(manifest, dict) else []
+    observer = next((n for n in nodes if isinstance(n, dict) and n.get("name") not in {"sequencer", "storage"}), None)
+    if observer is None:
+        die("manifest has no observer")
+    observer_name = observer.get("name")
+    if not isinstance(observer_name, str) or not observer_name:
+        die("observer must have a non-empty name")
+    source_root = Path(str(observer.get("node_root") or ""))
+    source_env = source_root / "config/node.env"
+    if source_env.is_symlink() or not source_env.is_file():
+        die("observer node_root must provide config/node.env for governed probe")
+    with tempfile.TemporaryDirectory(prefix="oasis7-checkpoint-probe-") as temp:
+        app_root = Path(temp) / "app"
+        shutil.copytree(source_root / "config", app_root / "config")
+        runtime = package_runtime(args.package_dir, app_root)
+        # Copy only governed startup truth; all mutable roots are fresh below.
+        for name in ("node.env", "config.json", "bootstrap-peers.txt"):
+            source = source_root / "config" / name
+            if source.is_file():
+                shutil.copy2(source, app_root / "config" / name)
+        env = read_env(source_env)
+        world_id = env.get("WORLD_ID", "")
+        if not world_id:
+            die("governed observer env has no WORLD_ID")
+        network_manifest = env.get("NETWORK_TIER_MANIFEST_PATH", "")
+        network_manifest_sha256 = None
+        if network_manifest:
+            network_path = Path(network_manifest)
+            if network_path.is_symlink() or not network_path.is_file():
+                die("network tier manifest must be a regular non-symlink file")
+            network_manifest_sha256 = sha256(network_path)
+        nonce = secrets.token_urlsafe(32)
+        env.update({
+            "APP_ROOT": str(app_root), "BIN": str(runtime), "NODE_ID": "checkpoint-closure-probe",
+            "NODE_ROLE": "observer", "STATUS_BIND": "127.0.0.1:0",
+            "NODE_GOSSIP_BIND": "127.0.0.1:0", "RUNTIME_ROOT": str(app_root / "runtime-root"),
+            "EXECUTION_WORLD_DIR": str(app_root / "world"), "EXECUTION_RECORDS_DIR": str(app_root / "execution-records"),
+            "STORAGE_ROOT": str(app_root / "storage"), "REPLICATION_ROOT": str(app_root / "replication-root"),
+        })
+        for key in ("CONFIG_PATH", "NETWORK_TIER_MANIFEST_PATH", "GENESIS_VALIDATOR_REGISTRY_PATH"):
+            value = env.get(key)
+            if value:
+                candidate = Path(value)
+                try:
+                    relative = candidate.resolve().relative_to((source_root / "config").resolve())
+                except (OSError, ValueError):
+                    continue
+                env[key] = str(app_root / "config" / relative)
+        write_env(app_root / "config/node.env", env)
+        launch_env = os.environ | env | {"APP_ROOT": str(app_root), "OASIS7_CHECKPOINT_PROBE_NONCE": nonce}
+        proc = subprocess.Popen([str(ROOT / "scripts/p2p-triad-node-start.sh")], env=launch_env)
+        try:
+            deadline = time.monotonic() + args.timeout_secs
+            receipt_path: Path | None = None
+            while time.monotonic() < deadline:
+                matches = list((app_root / "replication-root/checkpoint-verification").glob("*.json"))
+                if matches:
+                    receipt_path = max(matches, key=lambda p: p.stat().st_mtime)
+                    break
+                if proc.poll() is not None:
+                    die(f"probe runtime exited before receipt (status={proc.returncode})")
+                time.sleep(1)
+            if receipt_path is None:
+                die("timed out waiting for fresh runtime receipt")
+            receipt = validate_runtime_receipt(json.loads(receipt_path.read_text(encoding="utf-8")), nonce)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            try: proc.wait(timeout=15)
+            except subprocess.TimeoutExpired: proc.kill(); proc.wait()
+        buildinfos = list(args.package_dir.rglob("linux-x64-BUILDINFO"))
+        if len(buildinfos) != 1 or buildinfos[0].is_symlink() or not buildinfos[0].is_file():
+            die("package must contain exactly one regular linux BUILDINFO")
+        buildinfo = {k: v for line in buildinfos[0].read_text(encoding="utf-8").splitlines()
+                     if "=" in line for k, v in [line.split("=", 1)]}
+        for key in ("commit", "package_version", "run_id"):
+            if not buildinfo.get(key): die(f"BUILDINFO missing {key}")
+        result = {"schema_version": RESULT_SCHEMA, "runtime_receipt": receipt,
+                  "input_bindings": {"rollout_manifest_sha256": sha256(args.manifest),
+                    "observer_name": observer_name, "world_id": world_id,
+                    "network_tier_manifest_sha256": network_manifest_sha256,
+                    "buildinfo": {key: buildinfo[key] for key in ("commit", "package_version", "run_id")}},
+                  "package_runtime_sha256": sha256(runtime), "package_runtime_path": runtime.name,
+                  "generated_at_unix_ms": int(time.time() * 1000)}
+        result["canonical_digest"] = hashlib.sha256(canonical_json(result)).hexdigest()
+        return result
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="Execute a clean-root signed checkpoint closure probe")
+    p.add_argument("--manifest", type=Path, required=True)
+    p.add_argument("--package-dir", type=Path, required=True)
+    p.add_argument("--out", type=Path)
+    p.add_argument("--timeout-secs", type=int, default=180)
+    p.add_argument("--validate-receipt", type=Path, help="test-only validator for a runtime-produced receipt")
+    p.add_argument("--nonce", help="required with --validate-receipt")
+    args = p.parse_args()
+    if args.validate_receipt:
+        if not args.nonce: die("--validate-receipt requires --nonce")
+        receipt = validate_runtime_receipt(json.loads(args.validate_receipt.read_text()), args.nonce)
+        print(json.dumps(receipt, sort_keys=True))
+        return 0
+    if not args.out: die("--out is required when executing a probe")
+    result = run_probe(args)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_bytes(canonical_json(result) + b"\n")
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

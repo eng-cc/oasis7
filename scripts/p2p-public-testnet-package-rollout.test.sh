@@ -25,9 +25,90 @@ commit="419e119bc897efaa34750bee04c63470d1156699"
 run_id="27605906795"
 macos_package_version="0.0.0+testnet.90.419e119bc897"
 macos_run_id="27605906796"
+checkpoint_closure_receipt="$TMP_DIR/observer-checkpoint-closure-receipt.json"
+
+cat >"$checkpoint_closure_receipt" <<'EOF'
+{
+  "schema_version": "oasis7.observer_checkpoint_closure_receipt.v1",
+  "checkpoint_id": "fixture-checkpoint-v2",
+  "manifest_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "height": 4242,
+  "clean_state": true,
+  "providers": [
+    {
+      "provider_id": "storage",
+      "authorized": true,
+      "connected": true,
+      "complete": true,
+      "hash_size_binding_verified": true,
+      "missing_hashes": []
+    }
+  ]
+}
+EOF
+
+# Test-only in-process injection.  The released rollout CLI has no hook for a
+# caller-selected probe command; this driver substitutes only after importing
+# the module in this test process.
+rollout_driver="$TMP_DIR/rollout-test-driver.py"
+cat >"$rollout_driver" <<EOF
+#!/usr/bin/env python3
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+module_path = Path(os.environ.get(
+    "OASIS7_TEST_ROLLOUT_MODULE_PATH",
+    r'''$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py''',
+))
+spec = importlib.util.spec_from_file_location("rollout", module_path)
+rollout = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(rollout)
+
+def fixture_probe(manifest, package_dir, out_dir):
+    marker = os.environ.get("OASIS7_TEST_INPROCESS_PROBE_MARKER")
+    if marker:
+        Path(marker).write_text("started\n", encoding="utf-8")
+    output = out_dir / "checkpoint-closure-probe.json"
+    subprocess.run([
+        sys.executable,
+        str(module_path.parent / "p2p-observer-checkpoint-closure-probe.test.py"),
+        "--manifest", str(manifest), "--package-dir", str(package_dir), "--out", str(output),
+    ], check=True)
+    return rollout.load_probe_result(manifest, package_dir, output)
+
+rollout.run_checkpoint_closure_probe = fixture_probe
+sys.argv = [str(module_path), *sys.argv[1:]]
+raise SystemExit(rollout.main())
+EOF
+chmod +x "$rollout_driver"
+export OASIS7_TEST_CLOSURE_FIXTURE="$checkpoint_closure_receipt"
 
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
-printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
+cat >"$bundle_src/bin/oasis7_chain_runtime" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+replication_root=''
+world_id=''
+while (($#)); do
+  case "$1" in
+    --replication-root) replication_root="$2"; shift 2 ;;
+    --world-id) world_id="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$replication_root" && -n "$world_id" ]]
+mkdir -p "$replication_root/checkpoint-verification"
+cat >"$replication_root/checkpoint-verification/4242.json" <<JSON
+{"schema_version":"oasis7.checkpoint_closure_verification_receipt.v1","world_id":"$world_id","probe_nonce":"$OASIS7_CHECKPOINT_PROBE_NONCE","height":4242,"execution_block_hash":"fixture-checkpoint-v2","execution_state_root":"fixture-state-root","manifest_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","objects":[{"expected_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expected_size_bytes":7,"observed_size_bytes":7}],"fetch_observations":[{"source":"network_fetch","content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_size_bytes":7,"response_found":true,"signed_request":true,"connected_candidate_ids":["fixture-provider"]}]}
+JSON
+trap 'exit 0' TERM INT
+while :; do sleep 1; done
+EOF
 chmod +x "$bundle_src/bin/oasis7_chain_runtime"
 tar -czf "$package_dir/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
 printf 'fake windows installer\n' >"$package_dir/windows/oasis7-windows-x64.exe"
@@ -1086,7 +1167,9 @@ set +e
 OASIS7_FIXTURE_WORKSPACE_ROOT="$(cygpath -w "$ROOT_DIR")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
   OASIS7_FIXTURE_PACKAGE_VERSION="$package_version" \
-  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$rollout_driver")" \
+  OASIS7_TEST_ROLLOUT_MODULE_PATH="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_TEST_CLOSURE_FIXTURE="$(cygpath -w "$checkpoint_closure_receipt")" \
   OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
   "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$powershell_fixture_script_windows" >"$powershell_output" 2>&1
 powershell_status=$?
@@ -1334,7 +1417,7 @@ cat >"$TMP_DIR/manifest.json" <<EOF
 }
 EOF
 
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/plan-only-out" \
@@ -1344,6 +1427,8 @@ python3 - \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   "$TMP_DIR/powershell-injection.ps1" <<'PY'
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -1354,6 +1439,9 @@ spec = importlib.util.spec_from_file_location("package_rollout", module_path)
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+closure_receipt = json.loads(
+    Path(os.environ["OASIS7_TEST_CLOSURE_FIXTURE"]).read_text(encoding="utf-8")
+)
 injected = r"C:\safe'; Write-Output INJECTED; #"
 node = {
     key: injected
@@ -1386,6 +1474,7 @@ text = module.windows_script(
     "rpc-running",
     "http://127.0.0.1:6631/v1/chain/status",
     "http://127.0.0.1:6632/v1/chain/status",
+    closure_receipt,
 )
 output_path.write_text(text, encoding="utf-8")
 assignments = (
@@ -1456,7 +1545,7 @@ jq '{nodes: [
     restart: false
   }
 ]}' "$TMP_DIR/manifest.json" >"$observer_gate_manifest"
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$observer_gate_manifest" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/linux-observer-gate-out" \
@@ -1511,7 +1600,7 @@ grep -q 'BUILDINFO commit=' "$TMP_DIR/cross-commit.stderr"
 missing_remote_rollback_manifest="$TMP_DIR/missing-remote-rollback-backup-root.json"
 jq '(.nodes[] | select(.name == "windows-observer")) |= del(.rollback_backup_root)' \
   "$TMP_DIR/manifest.json" >"$missing_remote_rollback_manifest"
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+if "$rollout_driver" \
   --manifest "$missing_remote_rollback_manifest" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/missing-remote-rollback-backup-root-out" \
@@ -1580,6 +1669,9 @@ spec = importlib.util.spec_from_file_location("package_rollout_macos_behavior", 
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+closure_receipt = json.loads(
+    Path(os.environ["OASIS7_TEST_CLOSURE_FIXTURE"]).read_text(encoding="utf-8")
+)
 
 # Execute the generated macOS rollback path against deterministic command mocks.
 # The active root-level bundle deliberately uses the legacy flat metadata shape;
@@ -1703,7 +1795,13 @@ PY2
         "canonical_governed_bundle_path": str(canonical),
         "config_paths": [str(config)], "persistent_state_paths": [str(path) for path in state_paths],
     }
-    generated.write_text(module.macos_script(node, "fixture", "commit", "run", hashlib.sha256(dmg.read_bytes()).hexdigest(), "http://fixture/sequencer/v1/chain/status", "http://fixture/storage/v1/chain/status").replace("/usr/libexec/PlistBuddy", "PlistBuddy"), encoding="utf-8")
+    macos_fixture_closure_receipt = {
+        **closure_receipt,
+        "checkpoint_id": "fixture",
+        "manifest_hash": "0" * 64,
+        "height": 1,
+    }
+    generated.write_text(module.macos_script(node, "fixture", "commit", "run", hashlib.sha256(dmg.read_bytes()).hexdigest(), "http://fixture/sequencer/v1/chain/status", "http://fixture/storage/v1/chain/status", macos_fixture_closure_receipt).replace("/usr/libexec/PlistBuddy", "PlistBuddy"), encoding="utf-8")
     generated.chmod(0o755)
     launch_loaded, launch_log = tmp / "loaded", tmp / "launch.log"
     bootstrap_failed, post_bootstrap_marker, post_print_failed = tmp / "bootstrap.failed", tmp / "post-bootstrap", tmp / "post-print.failed"
@@ -2267,6 +2365,7 @@ for target, domain in (
     generated = module.macos_script(
         {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64,
         "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+        closure_receipt,
     )
     assert f"LAUNCHD_TARGET={target}" in generated
     assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
@@ -2289,6 +2388,7 @@ explicit_generated = module.macos_script(
     {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": explicit_canonical},
     "version", "commit", "run", "a" * 64,
     "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+    closure_receipt,
 )
 assert f"CANONICAL_GOVERNED_BUNDLE_PATH={explicit_canonical}" in explicit_generated
 try:
@@ -2297,6 +2397,7 @@ try:
             {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": "/tmp/enriched-bundle.json"},
             "version", "commit", "run", "a" * 64,
             "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            closure_receipt,
         )
 except SystemExit:
     pass
@@ -2314,6 +2415,7 @@ for invalid_target in (
                 {**base_node, "launchd_target": invalid_target},
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2339,6 +2441,7 @@ for invalid_states in invalid_state_sets:
                 },
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2355,6 +2458,7 @@ for invalid_bundle_path in (
                 {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "governed_bundle_path": invalid_bundle_path},
                 "version", "commit", "run", "a" * 64,
                 "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+                closure_receipt,
             )
     except SystemExit:
         pass
@@ -2371,6 +2475,7 @@ try:
         module.macos_script(
             launchd_overlap_node, "version", "commit", "run", "a" * 64,
             "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            closure_receipt,
         )
 except SystemExit:
     pass
@@ -2950,7 +3055,7 @@ PY
       | while IFS= read -r path; do shasum -a 256 "$path"; done \
       >windows-x64-SHA256SUMS
   )
-  if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  if "$rollout_driver" \
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$missing_package" \
     --out-dir "$TMP_DIR/missing-$missing_runtime_truth-out" \
@@ -3008,7 +3113,7 @@ PY
         >windows-x64-SHA256SUMS
     )
     escaped_out="$TMP_DIR/escaped-$escaped_field-$escaped_ref_kind-out"
-    if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+    if "$rollout_driver" \
       --manifest "$TMP_DIR/manifest.json" \
       --package-dir "$escaped_package" \
       --out-dir "$escaped_out" \
@@ -3048,7 +3153,7 @@ for symlink_kind in file directory; do
   fi
 
   symlink_out="$TMP_DIR/runtime-truth-$symlink_kind-symlink-out"
-  if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  if "$rollout_driver" \
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$symlink_package" \
     --out-dir "$symlink_out" \
@@ -3081,7 +3186,7 @@ for governed_name in \
   mv "$governed_path" "$governed_path.real"
   ln -s "$(basename "$governed_path").real" "$governed_path"
   symlink_out="$TMP_DIR/governed-$(basename "$governed_name")-symlink-out"
-  if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  if "$rollout_driver" \
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$symlink_package" \
     --out-dir "$symlink_out" \
@@ -3106,7 +3211,7 @@ cp -R "$package_dir" "$ancestor_package"
 mv "$ancestor_package/windows" "$ancestor_package/windows-real"
 ln -s windows-real "$ancestor_package/windows"
 ancestor_out="$TMP_DIR/governed-ancestor-symlink-out"
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$ancestor_package" \
   --out-dir "$ancestor_out" \
@@ -3125,7 +3230,7 @@ if [[ -e "$ancestor_out/windows-observer-windows-upgrade.ps1" \
   package_contract_failed=1
 fi
 
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$out_dir" \
@@ -3894,7 +3999,7 @@ then
   package_contract_failed=1
 fi
 
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/repeated-plan-out" \
@@ -3984,7 +4089,7 @@ PY
     while IFS= read -r file; do shasum -a 256 "$file"; done >windows-x64-SHA256SUMS
 )
 missing_network_metadata_out="$TMP_DIR/missing-network-manifest-metadata-out"
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$missing_network_metadata_package" \
   --out-dir "$missing_network_metadata_out" \
@@ -4045,7 +4150,7 @@ rm "$bad_package_dir/windows/windows-x64-BUILDINFO.bak"
   cd "$bad_package_dir/windows"
   shasum -a 256 oasis7-windows-x64.exe windows-x64-BUILDINFO >windows-x64-SHA256SUMS
 )
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$bad_package_dir" \
   --out-dir "$TMP_DIR/bad-out" \
@@ -4061,7 +4166,7 @@ cp -R "$package_dir" "$bad_sums_dir"
   cd "$bad_sums_dir"
   shasum -a 256 linux-x64-BUILDINFO >linux-x64-SHA256SUMS
 )
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$bad_sums_dir" \
   --out-dir "$TMP_DIR/bad-sums-out" \
@@ -4100,7 +4205,7 @@ manifest["nodes"].append(
 )
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+"$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/strict-out" \
@@ -4122,7 +4227,7 @@ next(node for node in manifest["nodes"] if node["name"] == "strict-linux-observe
 )
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/strict-missing-status-out" \
@@ -4132,5 +4237,104 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   exit 1
 fi
 grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
+
+"$rollout_driver" \
+  --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/observer-closure-probe-out" --json >"$TMP_DIR/observer-closure-probe-plan.json"
+probe_gate_script="$(python3 - "$TMP_DIR/observer-closure-probe-plan.json" <<'PY'
+import json, sys
+plan = json.load(open(sys.argv[1], encoding="utf-8"))
+print(next(node["observer_checkpoint_gate_script"] for node in plan["nodes"] if "observer_checkpoint_gate_script" in node))
+PY
+)"
+grep -q 'fixture-checkpoint-v2' "$probe_gate_script"
+
+for mode in bad-digest non-network empty-candidates hash-size stale; do
+  if OASIS7_TEST_PROBE_MODE="$mode" "$rollout_driver" \
+    --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
+    --out-dir "$TMP_DIR/observer-probe-$mode-out" >/dev/null 2>"$TMP_DIR/observer-probe-$mode.err"; then
+    echo "expected controlled probe mode $mode to fail" >&2; exit 1
+  fi
+  grep -q 'checkpoint closure probe' "$TMP_DIR/observer-probe-$mode.err"
+done
+
+# Legacy external input is rejected by argparse, and the legacy environment is
+# rejected before the harness can be consulted.
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
+  --out-dir "$TMP_DIR/legacy-arg-out" >/dev/null 2>"$TMP_DIR/legacy-arg.err"; then
+  echo "expected legacy checkpoint receipt argument to fail" >&2; exit 1
+fi
+grep -q 'unrecognized arguments' "$TMP_DIR/legacy-arg.err"
+if OASIS7_CHECKPOINT_CLOSURE_RECEIPT="$checkpoint_closure_receipt" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" --out-dir "$TMP_DIR/legacy-env-out" >/dev/null 2>"$TMP_DIR/legacy-env.err"; then
+  echo "expected legacy checkpoint receipt environment to fail" >&2; exit 1
+fi
+grep -q 'caller-supplied checkpoint closure receipt is forbidden' "$TMP_DIR/legacy-env.err"
+
+# The probe executes a Linux runtime even for a macOS-only mutation plan.  A
+# damaged Linux bundle must therefore stop before the in-process test probe is
+# reached and before any observer gate script is generated.
+non_linux_only_manifest="$TMP_DIR/non-linux-only-observer-manifest.json"
+cat >"$non_linux_only_manifest" <<'EOF'
+{"nodes":[
+  {"name":"sequencer","platform":"macos-arm64","status_url":"http://127.0.0.1:6631/v1/chain/status"},
+  {"name":"storage","platform":"macos-arm64","status_url":"http://127.0.0.1:6632/v1/chain/status"},
+  {"name":"macos-observer-only","platform":"macos-arm64","node_root":"/Applications/oasis7","status_url":"http://127.0.0.1:19083/v1/chain/status"}
+]}
+EOF
+tampered_linux_probe_package="$TMP_DIR/tampered-linux-probe-package"
+cp -R "$package_dir" "$tampered_linux_probe_package"
+printf 'tampered-before-probe\n' >>"$tampered_linux_probe_package/oasis7-linux-x64-bundle.tar.gz"
+non_linux_probe_marker="$TMP_DIR/non-linux-probe-started"
+if OASIS7_TEST_INPROCESS_PROBE_MARKER="$non_linux_probe_marker" \
+  "$rollout_driver" --manifest "$non_linux_only_manifest" \
+  --package-dir "$tampered_linux_probe_package" \
+  --out-dir "$TMP_DIR/non-linux-tampered-out" \
+  >"$TMP_DIR/non-linux-tampered.out" 2>"$TMP_DIR/non-linux-tampered.err"; then
+  echo "expected a tampered Linux probe bundle to fail a non-Linux observer plan" >&2
+  exit 1
+fi
+grep -q 'checksum mismatch' "$TMP_DIR/non-linux-tampered.err"
+test ! -e "$non_linux_probe_marker"
+test ! -e "$TMP_DIR/non-linux-tampered-out/macos-observer-only-macos-arm64-upgrade.sh"
+
+# The release CLI must not offer a caller-controlled process substitution for
+# its trust-producing probe.  This was a RED regression on the pre-fix helper.
+if rg -q 'OASIS7_TESTING|OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py"; then
+  echo "release rollout helper must not expose test probe environment overrides" >&2
+  exit 1
+fi
+# Exercise the release executable with both retired environment names set.  A
+# marker-writing replacement command must remain unreachable; the real probe
+# still supplies the generated gate.
+forbidden_override_marker="$TMP_DIR/forbidden-release-override-started"
+forbidden_override="$TMP_DIR/forbidden-release-override.sh"
+printf '#!/usr/bin/env bash\nprintf forbidden > %q\n' "$forbidden_override_marker" >"$forbidden_override"
+chmod +x "$forbidden_override"
+OASIS7_TESTING=1 OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE="$forbidden_override" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/release-cli-retired-env-out" --json \
+  >"$TMP_DIR/release-cli-retired-env.out" \
+  2>"$TMP_DIR/release-cli-retired-env.err" && {
+    echo "fixture without governed node.env unexpectedly completed the real probe" >&2
+    exit 1
+  }
+test ! -e "$forbidden_override_marker"
+grep -q 'checkpoint closure probe failed:.*node_root must provide config/node.env' \
+  "$TMP_DIR/release-cli-retired-env.err"
+python3 - "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+main_body = source[source.index("def main()") :]
+assert main_body.index("verify_package_trust(") < main_body.index(
+    "run_checkpoint_closure_probe("
+), "package trust verification must precede probe runtime execution"
+PY
 
 echo "ok: package rollout helper validates artifacts and standardizes linux/windows/macos replacement plans"

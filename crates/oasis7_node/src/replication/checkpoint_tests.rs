@@ -61,6 +61,110 @@ fn committed_decision(height: u64) -> PosDecision {
 }
 
 #[test]
+fn checkpoint_verification_receipt_is_full_closure_bound_and_atomic() {
+    let dir = temp_dir("verification-receipt");
+    let config = NodeReplicationConfig::new(&dir).expect("config");
+    let runtime = ReplicationRuntime::new(&config, "observer-a").expect("runtime");
+    let bundle = checkpoint_bundle(42, "exec-block-42", "exec-state-42", b"verified-snapshot");
+    let descriptor = runtime
+        .store_execution_checkpoint_bundle(&bundle)
+        .expect("store checkpoint closure");
+    let receipt_path = dir.join("checkpoint-verification/42.json");
+    let verified_fetch_observations = [
+        serde_json::json!({
+            "source": "network_fetch", "content_hash": descriptor.manifest_ref,
+            "observed_content_hash": descriptor.manifest_ref,
+            "observed_size_bytes": descriptor.manifest_size_bytes,
+            "response_found": true, "signed_request": true,
+            "connected_candidate_ids": ["storage-a"],
+        }),
+        serde_json::json!({
+            "source": "network_fetch", "content_hash": descriptor.blobs[0].content_hash,
+            "observed_content_hash": descriptor.blobs[0].content_hash,
+            "observed_size_bytes": descriptor.blobs[0].size_bytes,
+            "response_found": true, "signed_request": true,
+            "connected_candidate_ids": ["storage-a"],
+        }),
+    ];
+
+    runtime
+        .persist_checkpoint_verification_receipt("world-receipt", None, &descriptor, None, &[])
+        .expect("ordinary sync does not write a probe receipt");
+    assert!(
+        !receipt_path.exists(),
+        "ordinary sync must not emit a reusable probe receipt"
+    );
+
+    runtime
+        .persist_checkpoint_verification_receipt(
+            "world-receipt",
+            Some("probe-nonce-0123456789abcdef0123456789abcdef"),
+            &descriptor,
+            Some(&bundle),
+            &verified_fetch_observations,
+        )
+        .expect("publish verified receipt");
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&receipt_path).expect("receipt bytes"))
+            .expect("receipt json");
+    assert_eq!(receipt["world_id"], "world-receipt");
+    assert_eq!(
+        receipt["probe_nonce"],
+        "probe-nonce-0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(receipt["manifest_hash"], descriptor.manifest_ref);
+    assert_eq!(receipt["objects"].as_array().expect("objects").len(), 2);
+    assert_eq!(
+        receipt["objects"][0]["expected_content_hash"],
+        receipt["objects"][0]["observed_content_hash"]
+    );
+    let err = runtime
+        .persist_checkpoint_verification_receipt(
+            "world-receipt",
+            Some("second-probe-nonce-0123456789abcdef0123456789"),
+            &descriptor,
+            Some(&bundle),
+            &verified_fetch_observations,
+        )
+        .expect_err("a probe must not overwrite an existing receipt");
+    assert!(
+        matches!(err, NodeError::Replication { reason } if reason.contains("without overwrite"))
+    );
+    let unchanged: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&receipt_path).expect("receipt bytes"))
+            .expect("unchanged receipt json");
+    assert_eq!(unchanged["probe_nonce"], receipt["probe_nonce"]);
+
+    let mut mismatched = bundle.clone();
+    mismatched.blobs[0].bytes = b"tampered-snapshot".to_vec();
+    let err = runtime
+        .persist_checkpoint_verification_receipt(
+            "world-receipt",
+            Some("probe-nonce-0123456789abcdef0123456789abcdef"),
+            &descriptor,
+            Some(&mismatched),
+            &verified_fetch_observations,
+        )
+        .expect_err("tampered closure must not publish a receipt");
+    assert!(
+        matches!(err, NodeError::Replication { reason } if reason.contains("blob binding mismatch"))
+    );
+    assert!(
+        receipt_path.is_file(),
+        "a failed later attempt must not replace the verified receipt"
+    );
+    assert!(
+        !dir.join(format!(
+            "checkpoint-verification/42.{}.tmp",
+            std::process::id()
+        ))
+        .exists(),
+        "failed validation must not create a partial receipt"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn attach_execution_checkpoint_descriptor_resigns_remote_writer_legacy_message() {
     let dir_a = temp_dir("remote-writer-a");
     let dir_b = temp_dir("remote-writer-b");
