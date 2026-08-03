@@ -68,6 +68,8 @@ mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
 mod session_policy;
+#[path = "runtime_live/smelter_affordability_debug.rs"]
+mod smelter_affordability_debug;
 #[path = "runtime_live/social_quote.rs"]
 mod social_quote;
 mod support;
@@ -144,6 +146,7 @@ pub struct ViewerRuntimeLiveServer {
     runtime_action_players: BTreeMap<u64, String>,
     consumed_rollback_operator_nonces: BTreeSet<String>,
     authoritative_recovery_write_fence: Option<String>,
+    smelter_affordability_debug_agent_id: Option<String>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
     #[cfg(test)]
@@ -164,6 +167,11 @@ fn should_emit_runtime_advance_snapshot(
     session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
 }
 impl ViewerRuntimeLiveServer {
+    /// Seeds the opt-in local S6 world used to verify smelter affordability UI.
+    pub fn seed_smelter_affordability_debug_scenario(&mut self) -> Result<(), String> {
+        self.seed_smelter_affordability_debug_scenario_inner()
+    }
+
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
@@ -340,6 +348,7 @@ impl ViewerRuntimeLiveServer {
                 .map(|generation| generation.consumed_rollback_operator_nonces.clone())
                 .unwrap_or_default(),
             authoritative_recovery_write_fence: None,
+            smelter_affordability_debug_agent_id: None,
             #[cfg(test)]
             recovery_fault_injection: None,
             #[cfg(test)]

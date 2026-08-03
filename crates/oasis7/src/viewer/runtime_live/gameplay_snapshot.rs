@@ -295,6 +295,7 @@ fn finalize_player_gameplay_snapshot(
     let effective_stage_status = effective_branch_stage_status(
         gameplay.stage_status,
         gameplay.branch_recommendations.as_slice(),
+        gameplay.available_actions.as_slice(),
     );
     if effective_stage_status != gameplay.stage_status {
         gameplay.stage_status = effective_stage_status;

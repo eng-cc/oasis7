@@ -1,3 +1,30 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ScheduleRecipeReadiness {
+    pub electricity_cost: i64,
+    pub data_cost: i64,
+}
+
+/// Returns the default-config resource costs used by schedule recipe quotes.
+///
+/// This is deliberately read-only so presentation surfaces can use the same
+/// recipe pricing authority as `quote_schedule_recipe` without constructing a
+/// synthetic world or mutating a resource stock.
+pub(crate) fn default_schedule_recipe_readiness(
+    recipe_id: &str,
+    batches: i64,
+) -> Option<ScheduleRecipeReadiness> {
+    if batches <= 0 {
+        return None;
+    }
+
+    let kernel = WorldKernel::new();
+    let plan = kernel.recipe_plan(recipe_id)?;
+    Some(ScheduleRecipeReadiness {
+        electricity_cost: plan.electricity_per_batch.saturating_mul(batches),
+        data_cost: plan.hardware_per_batch.saturating_mul(batches),
+    })
+}
+
 impl WorldKernel {
     pub fn quote_schedule_recipe(
         &self,

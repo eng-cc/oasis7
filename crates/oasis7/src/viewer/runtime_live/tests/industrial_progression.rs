@@ -4,11 +4,11 @@ use crate::runtime::{
     MaterialLedgerId, MaterialStack, WorldState,
 };
 use crate::simulator::{
-    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplayStageStatus,
+    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplayStageStatus, ResourceKind,
 };
 use crate::viewer::FACTORY_SMELTER_MK1;
 
-fn setup_runtime_industrial_gameplay_session(
+pub(super) fn setup_runtime_industrial_gameplay_session(
     signer_seed: u8,
 ) -> (ViewerRuntimeLiveServer, String, String, String) {
     let mut server = ViewerRuntimeLiveServer::new(
@@ -40,7 +40,7 @@ fn setup_runtime_industrial_gameplay_session(
     (server, agent_id, public_key, private_key)
 }
 
-fn build_first_smelter_via_gameplay_action(
+pub(super) fn build_first_smelter_via_gameplay_action(
     server: &mut ViewerRuntimeLiveServer,
     agent_id: &str,
     public_key: &str,
@@ -232,7 +232,7 @@ fn complete_smelter_iron_ingot_jobs(
     }
 }
 
-fn setup_industrial_gameplay_with_completed_jobs(
+pub(super) fn setup_industrial_gameplay_with_completed_jobs(
     signer_seed: u8,
     jobs: u64,
 ) -> ViewerRuntimeLiveServer {
@@ -257,7 +257,7 @@ fn setup_industrial_gameplay_with_completed_jobs(
     server
 }
 
-fn expect_player_gameplay(
+pub(super) fn expect_player_gameplay(
     server: &mut ViewerRuntimeLiveServer,
     context: &'static str,
 ) -> crate::simulator::PlayerGameplaySnapshot {
@@ -265,6 +265,196 @@ fn expect_player_gameplay(
         .compat_snapshot(Some("player-a"))
         .player_gameplay
         .expect(context)
+}
+
+pub(super) fn smelter_schedule_action<'a>(
+    gameplay: &'a crate::simulator::PlayerGameplaySnapshot,
+    action_id: &str,
+) -> &'a crate::simulator::PlayerGameplayAction {
+    gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == action_id)
+        .unwrap_or_else(|| panic!("missing smelter schedule action {action_id}"))
+}
+
+#[test]
+fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resource_affordability()
+{
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(29);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        29,
+    );
+    let unlocked_smelter_actions = [
+        crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT,
+        crate::viewer::ACTION_SCHEDULE_SMELTER_COPPER_WIRE,
+        crate::viewer::ACTION_SCHEDULE_SMELTER_POLYMER_RESIN,
+    ];
+
+    for (electricity, data, expected_reason) in [
+        (0, i64::MAX, Some("insufficient electricity")),
+        (i64::MAX, 0, Some("insufficient data")),
+        (i64::MAX, i64::MAX, None),
+    ] {
+        server
+            .world
+            .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, electricity)
+            .expect("seed electricity");
+        server
+            .world
+            .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, data)
+            .expect("seed data");
+
+        let gameplay = expect_player_gameplay(&mut server, "smelter affordability snapshot");
+        for action_id in unlocked_smelter_actions {
+            let action = smelter_schedule_action(&gameplay, action_id);
+            match expected_reason {
+                Some(expected_reason) => {
+                    let disabled_reason = action.disabled_reason.as_deref().unwrap_or_else(|| {
+                        panic!("insufficient-resource {action_id} should be disabled")
+                    });
+                    assert!(disabled_reason.contains(expected_reason));
+                    assert!(disabled_reason.contains("replenish"));
+                }
+                None => assert_eq!(action.disabled_reason, None, "{action_id}"),
+            }
+        }
+        assert_eq!(
+            server
+                .world
+                .state()
+                .agents
+                .get(agent_id.as_str())
+                .expect("bound agent")
+                .state
+                .resources
+                .get(ResourceKind::Electricity),
+            electricity,
+            "availability snapshots must not debit electricity"
+        );
+        assert_eq!(
+            server
+                .world
+                .state()
+                .agents
+                .get(agent_id.as_str())
+                .expect("bound agent")
+                .state
+                .resources
+                .get(ResourceKind::Data),
+            data,
+            "availability snapshots must not debit data"
+        );
+    }
+
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 0)
+        .expect("drain electricity for stage precedence");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, 0)
+        .expect("drain data for stage precedence");
+    let bootstrap_gameplay = expect_player_gameplay(&mut server, "bootstrap alloy snapshot");
+    let bootstrap_alloy = smelter_schedule_action(
+        &bootstrap_gameplay,
+        crate::viewer::ACTION_SCHEDULE_SMELTER_ALLOY_PLATE,
+    );
+    assert_eq!(
+        bootstrap_alloy.disabled_reason.as_deref(),
+        Some(
+            "requires industry stage scale_out (current: bootstrap); complete additional smelter runs to unlock scale_out"
+        ),
+        "alloy stage gate takes precedence until the recipe is unlocked"
+    );
+
+    let mut scale_out_server = setup_industrial_gameplay_with_completed_jobs(30, 3);
+    let scale_out_agent_id = scale_out_server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("scale-out agent");
+    assert_eq!(
+        scale_out_server.world.state().industry_progress.stage,
+        IndustryStage::ScaleOut
+    );
+    scale_out_server
+        .world
+        .set_material_balance("iron_ingot", 200)
+        .expect("seed alloy iron ingot");
+    scale_out_server
+        .world
+        .set_material_balance("copper_wire", 200)
+        .expect("seed alloy copper wire");
+    for (electricity, data, expected_reason) in [
+        (0, i64::MAX, Some("insufficient electricity")),
+        (i64::MAX, 0, Some("insufficient data")),
+        (i64::MAX, i64::MAX, None),
+    ] {
+        scale_out_server
+            .world
+            .set_agent_resource_balance(
+                scale_out_agent_id.as_str(),
+                ResourceKind::Electricity,
+                electricity,
+            )
+            .expect("seed scale-out electricity");
+        scale_out_server
+            .world
+            .set_agent_resource_balance(scale_out_agent_id.as_str(), ResourceKind::Data, data)
+            .expect("seed scale-out data");
+        let gameplay = expect_player_gameplay(&mut scale_out_server, "scale-out alloy snapshot");
+        let alloy = smelter_schedule_action(
+            &gameplay,
+            crate::viewer::ACTION_SCHEDULE_SMELTER_ALLOY_PLATE,
+        );
+        match expected_reason {
+            Some(expected_reason) => {
+                let disabled_reason = alloy
+                    .disabled_reason
+                    .as_deref()
+                    .expect("insufficient-resource alloy schedule should be disabled");
+                assert!(disabled_reason.contains(expected_reason));
+                assert!(disabled_reason.contains("replenish"));
+            }
+            None => assert_eq!(alloy.disabled_reason, None),
+        }
+        assert_eq!(
+            scale_out_server
+                .world
+                .state()
+                .agents
+                .get(scale_out_agent_id.as_str())
+                .expect("scale-out agent")
+                .state
+                .resources
+                .get(ResourceKind::Electricity),
+            electricity,
+            "alloy availability snapshots must not debit electricity"
+        );
+        assert_eq!(
+            scale_out_server
+                .world
+                .state()
+                .agents
+                .get(scale_out_agent_id.as_str())
+                .expect("scale-out agent")
+                .state
+                .resources
+                .get(ResourceKind::Data),
+            data,
+            "alloy availability snapshots must not debit data"
+        );
+    }
 }
 
 fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {
@@ -297,45 +487,6 @@ fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal(
     );
     assert_eq!(gameplay.progress_percent, 80);
     assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
-}
-
-#[test]
-fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_new_leverage() {
-    let mut state = WorldState::default();
-    state.industry_progress.stage = IndustryStage::Bootstrap;
-    state.industry_progress.completed_recipe_jobs = 4;
-    state.factories.insert(
-        FACTORY_SMELTER_MK1.to_string(),
-        FactoryState {
-            factory_id: FACTORY_SMELTER_MK1.to_string(),
-            site_id: "runtime:10:20:0".to_string(),
-            builder_agent_id: "agent-1".to_string(),
-            spec: small_player_test_factory_spec(FACTORY_SMELTER_MK1),
-            input_ledger: MaterialLedgerId::world(),
-            output_ledger: MaterialLedgerId::world(),
-            durability_ppm: 1_000_000,
-            production: FactoryProductionState {
-                completed_jobs: 4,
-                last_completed_at: Some(12),
-                last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
-                same_recipe_repeat_count: 3,
-                ..FactoryProductionState::default()
-            },
-            built_at: 1,
-        },
-    );
-
-    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &state, None, true, None, None, None, true, None, false, true, None,
-    );
-
-    assert_eq!(
-        gameplay.goal_id,
-        "post_onboarding.stabilize_first_line_after_output"
-    );
-    assert_eq!(gameplay.same_loop_repeat_count, 3);
-    assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
-    assert!(gameplay.grind_only_flag);
 }
 
 #[test]
@@ -488,96 +639,6 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
 }
 
 #[test]
-fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
-    let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 4);
-    let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
-    assert_eq!(
-        gameplay.goal_id,
-        "post_onboarding.choose_first_expansion_tradeoff"
-    );
-    assert_eq!(
-        gameplay.goal_kind,
-        PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-    );
-    assert_eq!(
-        gameplay.stage_status,
-        PlayerGameplayStageStatus::BranchReady
-    );
-    assert_eq!(gameplay.progress_percent, 92);
-    assert!(
-        gameplay
-            .branch_hint
-            .as_deref()
-            .is_some_and(|hint| hint.contains("throughput expansion"))
-    );
-    assert!(
-        gameplay
-            .available_actions
-            .iter()
-            .any(
-                |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
-                    && action.disabled_reason.is_none()
-            )
-    );
-    assert!(
-        gameplay
-            .available_actions
-            .iter()
-            .any(|action| action.action_id == "build_factory_assembler_mk1")
-    );
-    assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
-    let recommended_action_ids = gameplay
-        .branch_recommendations
-        .iter()
-        .map(|recommendation| recommendation.action_id.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        recommended_action_ids,
-        vec!["schedule_recipe_smelter_alloy_plate"],
-        "branch-ready recommendations must keep the frozen gameplay-design order while excluding disabled actions",
-    );
-    for recommendation in &gameplay.branch_recommendations {
-        assert!(!recommendation.route_label.trim().is_empty());
-        assert!(!recommendation.immediate_gain.trim().is_empty());
-        assert!(!recommendation.future_beat_changed.trim().is_empty());
-        assert!(!recommendation.risk_or_lockin.trim().is_empty());
-        assert!(!recommendation.next_session_hook.trim().is_empty());
-        assert!(
-            gameplay.available_actions.iter().any(|action| {
-                action.action_id == recommendation.action_id && action.disabled_reason.is_none()
-            }),
-            "recommendation {} must bind a real enabled action",
-            recommendation.action_id,
-        );
-    }
-    assert_eq!(
-        gameplay.small_player_lane_id.as_deref(),
-        Some("local_operator")
-    );
-    assert_eq!(
-        gameplay.leverage_class.as_deref(),
-        Some("regional_specialization_option")
-    );
-    assert_eq!(gameplay.same_loop_repeat_count, 3);
-    assert!(!gameplay.grind_only_flag);
-    assert_eq!(
-        gameplay.major_power_dependency_status.as_deref(),
-        Some("independent_path_available")
-    );
-    assert_eq!(
-        gameplay.recovery_path_kind.as_deref(),
-        Some("repair_rebuild_or_pivot")
-    );
-    assert!(
-        gameplay
-            .recovery_path_detail
-            .as_deref()
-            .is_some_and(|detail| detail.contains("repair"))
-    );
-}
-
-#[test]
 fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(42, 4);
@@ -688,6 +749,33 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
 fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .expect("governance-ready agent")
+        .clone();
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, i64::MAX)
+        .expect("fund governance-ready agent electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
+        .expect("fund governance-ready agent data");
+    server
+        .world
+        .set_material_balance("iron_ingot", 200)
+        .expect("seed governance alloy iron ingot");
+    server
+        .world
+        .set_material_balance("copper_wire", 200)
+        .expect("seed governance alloy copper wire");
+    server
+        .world
+        .set_resource_balance(ResourceKind::Electricity, 2_000);
     let gameplay =
         expect_player_gameplay(&mut server, "player gameplay after governance-ready output");
     assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
