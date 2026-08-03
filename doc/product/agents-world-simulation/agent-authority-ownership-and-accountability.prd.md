@@ -30,6 +30,13 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 - 提前授权至少限定允许的行动/目标、预算或数量上限、风险类别、有效期间和撤销路径；超出范围、授权到期、撤销生效或世界硬边界阻断时，Agent 必须暂停、说明原因并给出升级、改道或恢复选择。
 - 授权已存在不代表必然成功：权威世界仍可因资源、权限、治理、安全或竞争条件拒绝、改道或延后行动。
 
+### 2.3 待决高后果行动与授权变更
+
+- Agent 可以为有效授权内的高后果行动准备方案或发起待决请求，但在权威世界确认结果前，这不构成资源已暴露、权利已移交、损失已发生或旧 owner 可继续控制的承诺。客户端排队、Agent 记忆、局部预留或“已送出”提示都不能绕过该边界。
+- 授权到期或撤销、控制权转让生效，或出现新的世界/安全硬边界时，尚未产生权威世界效果的待决行动必须按当时有效的授权和前置条件重新评估。它只能明确地继续、被拒绝、过期、取消，或在有权主体作出新的确认后以新请求继续；不得静默沿用失效授权、自动重放，或把旧请求伪装成新 owner 的选择。
+- 已有权威世界结果不会因后续撤销、到期或转让被改写为未发生。玩家能查看该结果所依据的授权/确认、实际生效时点和后续授权变化；撤销是面向未来的控制，不是删除历史、逃避已生效义务或追溯收回他人已取得的权利。
+- 当待决请求因授权变化而无法继续时，玩家能做的是等待可验证结果、明确取消，或在仍有相应权限时重新确认/调整目标；玩家不能通过重新连接、切换客户端、复制请求或短暂转让 Agent 来保留旧授权的优先权、预算或世界效果。具体待决状态、去重、确认、取消和 receipt 字段仍由 `world-runtime`、`world-simulator` 与 P2P 专业合同定义。
+
 ## 3. 团队规模与长期资产
 
 - 早期体验以一个可理解的主 Agent 为经营锚点；后续可以形成团队、设施角色和授权层级。
@@ -59,6 +66,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 
 - AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
 - AC-2：高后果行动缺少有效提前授权或确认、超出范围、到期或撤销后，不会静默执行；正式结果能区分授权拒绝、世界规则拒绝、资源/竞争阻塞和可用替代路径。
+- AC-8：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
 - AC-3：从一个主 Agent 扩张到团队的样例表明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
 - AC-7：额外 Agent 的样例证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，并在取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
 - AC-4：转让样例同时证明控制/经济/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
@@ -70,6 +78,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 | 产品承诺 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | AC-1 / AC-2 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 授权范围、到期/撤销、严重后果升级、世界拒绝与恢复的组合证据 | test_tier_required |
+| AC-8 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 待决与 committed 的区分、授权变化后的重新评估/取消/重确认、去重/非重放、转让边界、receipt 时点与硬边界负例 | test_tier_full |
 | AC-3 | gameplay_designer / agent_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 主 Agent 到团队的成本/维护/协调约束与小规模独立路线样例 | test_tier_required |
 | AC-7 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 工业订单、资源/产能/交付、非治理 quota 供给、维护/授权/协调与早期单 Agent 锚点组合证据 | test_tier_full |
 | AC-4 / AC-5 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 转让前后策略连续性、历史不可洗除、异议/override receipt 与硬阻断负例 | test_tier_required |
