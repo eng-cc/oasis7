@@ -48,7 +48,7 @@ cat >"$checkpoint_closure_receipt" <<'EOF'
 EOF
 
 export OASIS7_TESTING=1
-export OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE="python3 $ROOT_DIR/scripts/p2p-observer-checkpoint-closure-probe.test.py"
+export OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE="python3 scripts/p2p-observer-checkpoint-closure-probe.test.py"
 export OASIS7_TEST_CLOSURE_FIXTURE="$checkpoint_closure_receipt"
 
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
