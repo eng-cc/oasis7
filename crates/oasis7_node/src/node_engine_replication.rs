@@ -807,6 +807,7 @@ impl PosNodeEngine {
         if self.replication_gap_sync_fetch_blob_rate_limited_in_cooldown(next_height, now_ms) {
             return Ok(());
         }
+        let mut missing_checkpoint_closure_reason = None;
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
@@ -835,6 +836,11 @@ impl PosNodeEngine {
                     }
                     Ok(false) => {}
                     Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                        if let Some(reason) =
+                            Self::high_replication_checkpoint_closure_missing_reason(&err)
+                        {
+                            missing_checkpoint_closure_reason = Some(reason);
+                        }
                         if self.record_high_replication_checkpoint_probe_failure(
                             next_height,
                             checkpoint_candidate,
@@ -846,6 +852,9 @@ impl PosNodeEngine {
                     }
                     Err(err) => return Err(err),
                 }
+            }
+            if let Some(reason) = missing_checkpoint_closure_reason {
+                return Err(NodeError::Replication { reason });
             }
         }
         if Self::replication_gap_sync_local_state_blocked(

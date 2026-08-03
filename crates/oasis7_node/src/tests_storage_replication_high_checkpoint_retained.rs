@@ -158,6 +158,84 @@ fn high_replication_checkpoint_probe_continues_after_missing_checkpoint_blob() {
 }
 
 #[test]
+fn storage_rehydrates_and_resigns_existing_checkpoint_descriptor_with_local_closure() {
+    let world_id = "world-existing-checkpoint-descriptor-storage-refresh";
+    let source_dir = temp_dir("existing-checkpoint-descriptor-source");
+    let storage_dir = temp_dir("existing-checkpoint-descriptor-storage");
+    let (source_private, source_public) = deterministic_keypair_hex(254);
+    let (storage_private, storage_public) = deterministic_keypair_hex(255);
+    let source_config = NodeReplicationConfig::new(&source_dir)
+        .expect("source config")
+        .with_signing_keypair(source_private, source_public)
+        .expect("source signer");
+    let storage_config = NodeReplicationConfig::new(&storage_dir)
+        .expect("storage config")
+        .with_signing_keypair(storage_private, storage_public.clone())
+        .expect("storage signer");
+    let mut source = ReplicationRuntime::new(&source_config, "node-source").expect("source runtime");
+    let mut storage =
+        ReplicationRuntime::new(&storage_config, "node-storage").expect("storage runtime");
+    let height = 64;
+    let decision = PosDecision {
+        height,
+        slot: height,
+        epoch: 0,
+        proposer_id: "node-source".to_string(),
+        status: PosConsensusStatus::Committed,
+        block_hash: format!("block-{height}"),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let message = source
+        .build_local_commit_message(
+            "node-source",
+            world_id,
+            8_000,
+            &decision,
+            Some("exec-block-64"),
+            Some("exec-state-64"),
+        )
+        .expect("build source message")
+        .expect("source message");
+    let checkpoint = test_execution_checkpoint_bundle(height, "exec-block-64", "exec-state-64");
+    let source_descriptor_message = source
+        .attach_execution_checkpoint_descriptor_to_message("node-source", &message, &checkpoint)
+        .expect("source attaches checkpoint descriptor");
+
+    let refreshed = storage
+        .attach_execution_checkpoint_descriptor_to_message(
+            "node-storage",
+            &source_descriptor_message,
+            &checkpoint,
+        )
+        .expect("storage refreshes its local checkpoint closure");
+    let payload = crate::replication_state_reconcile::parse_replication_commit_payload(
+        refreshed.payload.as_slice(),
+    )
+    .expect("refreshed checkpoint payload");
+    let descriptor = payload
+        .execution_checkpoint
+        .expect("refreshed message retains checkpoint descriptor");
+
+    assert_eq!(refreshed.record.writer_id, storage_public);
+    assert!(refreshed.signature_hex.is_some());
+    assert!(
+        storage
+            .load_execution_checkpoint_bundle(&descriptor)
+            .expect("load storage checkpoint closure")
+            .is_some(),
+        "storage must persist the complete local checkpoint closure before serving its refreshed descriptor"
+    );
+
+    let _ = fs::remove_dir_all(&source_dir);
+    let _ = fs::remove_dir_all(&storage_dir);
+}
+
+#[test]
 fn full_storage_publishes_execution_checkpoint_blob_providers() {
     let world_id = "world-checkpoint-provider-publish";
     let dir = temp_dir("checkpoint-provider-publish");
@@ -217,6 +295,67 @@ fn full_storage_publishes_execution_checkpoint_blob_providers() {
         );
     }
 
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn checkpoint_provider_publication_rejects_partial_closure_before_advertising() {
+    let world_id = "world-checkpoint-provider-partial-closure";
+    let dir = temp_dir("checkpoint-provider-partial-closure");
+    let config = NodeConfig::new("node-storage", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_replication(signed_replication_config(dir.clone(), 246));
+    let replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-storage")
+            .expect("runtime");
+    let bundle = test_execution_checkpoint_bundle(64, "exec-block-64", "exec-state-64");
+    let descriptor = replication
+        .store_execution_checkpoint_bundle(&bundle)
+        .expect("store checkpoint");
+    let missing_hash = descriptor
+        .blobs
+        .first()
+        .expect("checkpoint blob ref")
+        .content_hash
+        .clone();
+    fs::remove_file(
+        dir.join("store")
+            .join("blobs")
+            .join(format!("{missing_hash}.blob")),
+    )
+    .expect("remove one closure blob");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "remote-provider",
+        "storage-provider",
+    ));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("storage-provider");
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+
+    let err = PosNodeEngine::publish_execution_checkpoint_descriptor_providers(
+        &endpoint,
+        world_id,
+        &replication,
+        &descriptor,
+    )
+    .expect_err("partial closure must not be advertised");
+
+    assert!(
+        err.to_string()
+            .contains("checkpoint provider publication closure incomplete hash="),
+        "partial closure error must name the missing hash: {err}",
+    );
+    assert!(
+        dht.published_records().is_empty(),
+        "publication must be all-or-nothing when any closure member is absent",
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 

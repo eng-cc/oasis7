@@ -40,21 +40,46 @@ impl NodeExecutionHook for CheckpointInstallingExecutionHook {
     }
 }
 
-#[derive(Default)]
 struct TimeoutThenCheckpointNetwork {
     messages: Mutex<BTreeMap<u64, replication::GossipReplicationMessage>>,
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     attempts: Mutex<Vec<u64>>,
     provider_attempts: Mutex<Vec<String>>,
     rate_limited_providers: Mutex<BTreeSet<String>>,
+    not_found_providers: Mutex<BTreeSet<String>>,
+    connected_peers: Mutex<Vec<String>>,
     advertised_height: u64,
+}
+
+impl Default for TimeoutThenCheckpointNetwork {
+    fn default() -> Self {
+        Self {
+            messages: Mutex::default(),
+            blobs: Mutex::default(),
+            attempts: Mutex::default(),
+            provider_attempts: Mutex::default(),
+            rate_limited_providers: Mutex::default(),
+            not_found_providers: Mutex::default(),
+            connected_peers: Mutex::new(vec!["peer-a".to_string()]),
+            advertised_height: 0,
+        }
+    }
 }
 
 #[derive(Default)]
 struct TimeoutWorldHeadDht;
 
 struct CheckpointProviderDht {
-    providers: Vec<String>,
+    providers: Mutex<Vec<String>>,
+}
+
+impl CheckpointProviderDht {
+    fn set_providers(&self, providers: &[&str]) {
+        *self.providers.lock().expect("lock checkpoint providers") = providers
+            .iter()
+            .map(|provider| (*provider).to_string())
+            .collect();
+    }
 }
 
 impl DistributedDht<WorldError> for TimeoutWorldHeadDht {
@@ -128,13 +153,13 @@ impl DistributedDht<WorldError> for CheckpointProviderDht {
         _world_id: &str,
         _content_hash: &str,
     ) -> Result<Vec<ProviderRecord>, WorldError> {
-        Ok(self
-            .providers
+        let providers = self.providers.lock().expect("lock checkpoint providers");
+        Ok(providers
             .iter()
             .enumerate()
             .map(|(index, provider_id)| ProviderRecord {
                 provider_id: provider_id.clone(),
-                last_seen_ms: i64::try_from(self.providers.len() - index)
+                last_seen_ms: i64::try_from(providers.len() - index)
                     .expect("provider index fits i64"),
                 storage_total_bytes: None,
                 storage_available_bytes: None,
@@ -240,6 +265,14 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutTh
                     .expect("lock provider attempts")
                     .push(provider_id.clone());
                 if self
+                    .not_found_providers
+                    .lock()
+                    .expect("lock not-found providers")
+                    .contains(provider_id)
+                {
+                    return self.fetch_blob_not_found_response();
+                }
+                if self
                     .rate_limited_providers
                     .lock()
                     .expect("lock rate-limited providers")
@@ -286,7 +319,10 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutTh
     }
 
     fn connected_peer_ids(&self) -> Vec<String> {
-        vec!["peer-a".to_string()]
+        self.connected_peers
+            .lock()
+            .expect("lock connected peers")
+            .clone()
     }
 
     fn register_handler(
@@ -307,6 +343,21 @@ impl TimeoutThenCheckpointNetwork {
             .iter()
             .map(|provider| (*provider).to_string())
             .collect();
+    }
+
+    fn set_not_found_providers(&self, providers: &[&str]) {
+        *self
+            .not_found_providers
+            .lock()
+            .expect("lock not-found providers") = providers
+            .iter()
+            .map(|provider| (*provider).to_string())
+            .collect();
+    }
+
+    fn set_connected_peers(&self, peers: &[&str]) {
+        *self.connected_peers.lock().expect("lock connected peers") =
+            peers.iter().map(|peer| (*peer).to_string()).collect();
     }
 
     fn provider_attempts(&self) -> Vec<String> {
@@ -337,6 +388,18 @@ impl TimeoutThenCheckpointNetwork {
         })
         .map_err(|err| WorldError::DistributedValidationFailed {
             reason: format!("encode fetch-blob response failed: {err}"),
+        })
+    }
+
+    fn fetch_blob_not_found_response(&self) -> Result<Vec<u8>, WorldError> {
+        serde_json::to_vec(&replication::FetchBlobResponse {
+            found: false,
+            range_offset_bytes: None,
+            range_complete: None,
+            blob: None,
+        })
+        .map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode fetch-blob not-found response failed: {err}"),
         })
     }
 }
@@ -393,6 +456,7 @@ struct ProviderRateLimitCheckpointFixture {
     dir_a: PathBuf,
     dir_b: PathBuf,
     network: Arc<TimeoutThenCheckpointNetwork>,
+    dht: Arc<CheckpointProviderDht>,
     endpoint: ReplicationNetworkEndpoint,
     replication: ReplicationRuntime,
     engine: PosNodeEngine,
@@ -471,6 +535,7 @@ fn provider_rate_limit_checkpoint_fixture(
         .expect("checkpoint message");
     let network = Arc::new(TimeoutThenCheckpointNetwork {
         advertised_height,
+        connected_peers: Mutex::new(vec!["peer-a".to_string()]),
         ..Default::default()
     });
     network
@@ -488,11 +553,11 @@ fn provider_rate_limit_checkpoint_fixture(
     let distributed_network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = network.clone();
-    let dht: Arc<dyn DistributedDht<WorldError> + Send + Sync> = Arc::new(CheckpointProviderDht {
-        providers: vec!["provider-a".to_string(), "provider-b".to_string()],
+    let dht = Arc::new(CheckpointProviderDht {
+        providers: Mutex::new(vec!["provider-a".to_string(), "provider-b".to_string()]),
     });
     let endpoint = ReplicationNetworkEndpoint::new(
-        &NodeReplicationNetworkHandle::new(distributed_network).with_dht(dht),
+        &NodeReplicationNetworkHandle::new(distributed_network).with_dht(dht.clone()),
         world_id,
         false,
         &config_b.network_policy,
@@ -503,6 +568,7 @@ fn provider_rate_limit_checkpoint_fixture(
         dir_a,
         dir_b,
         network,
+        dht,
         endpoint,
         replication: ReplicationRuntime::new(
             config_b.replication.as_ref().expect("repl b"),
@@ -560,6 +626,75 @@ fn high_checkpoint_rate_limited_provider_falls_through_to_next_advertised_provid
 }
 
 #[test]
+fn high_checkpoint_stale_dht_provider_falls_through_to_connected_complete_peer() {
+    let world_id = "world-gap-sync-stale-dht-provider-failover";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 249, 250);
+    fixture.dht.set_providers(&["provider-a"]);
+    fixture.network.set_not_found_providers(&["provider-a"]);
+    fixture.network.set_connected_peers(&["provider-b"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("connected provider-b must complete the verified checkpoint closure after stale provider-a returns not-found");
+
+    assert_eq!(install_hook.installed, vec![fixture.checkpoint_height]);
+    assert!(
+        fixture
+            .network
+            .provider_attempts()
+            .contains(&"provider-b".to_string()),
+        "routing must attempt connected provider-b after stale DHT provider-a: {:?}",
+        fixture.network.provider_attempts(),
+    );
+    assert_eq!(
+        fixture.engine.last_replication_gap_sync_blocked_height,
+        None
+    );
+    fixture.cleanup();
+}
+
+#[test]
+fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() {
+    let world_id = "world-gap-sync-no-complete-checkpoint-provider";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 251, 252);
+    fixture.dht.set_providers(&["provider-a"]);
+    fixture
+        .network
+        .set_not_found_providers(&["provider-a", "provider-b"]);
+    fixture.network.set_connected_peers(&["provider-b"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    let err = fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect_err(
+            "checkpoint install must fail closed when no route can serve a complete closure",
+        );
+
+    assert!(install_hook.installed.is_empty());
+    assert!(
+        err.to_string()
+            .contains("execution checkpoint blob not found hash="),
+        "failure must retain an actionable missing-closure signature: {err}",
+    );
+    fixture.cleanup();
+}
+
+#[test]
 fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_blobs() {
     let world_id = "world-gap-sync-provider-rate-limit-resume";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 248, 249);
@@ -573,7 +708,9 @@ fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_
     fixture
         .network
         .set_rate_limited_providers(&["provider-a", "provider-b"]);
-    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+    let mut install_hook = CheckpointInstallingExecutionHook {
+        installed: Vec::new(),
+    };
 
     fixture
         .engine
