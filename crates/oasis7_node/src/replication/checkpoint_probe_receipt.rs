@@ -29,7 +29,9 @@ impl ReplicationRuntime {
             });
         };
         if !Self::checkpoint_probe_nonce_is_valid(probe_nonce) {
-            return Err(NodeError::Replication { reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string() });
+            return Err(NodeError::Replication {
+                reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string(),
+            });
         }
         if world_id.trim().is_empty() {
             return Err(NodeError::Replication {
@@ -131,7 +133,12 @@ impl ReplicationRuntime {
             });
         }
         let mut objects = Vec::with_capacity(descriptor.blobs.len() + 1);
-        objects.push(serde_json::json!({"expected_content_hash": descriptor.manifest_ref.clone(), "observed_content_hash": observed_manifest_hash, "expected_size_bytes": descriptor.manifest_size_bytes, "observed_size_bytes": bundle.manifest_json.len()}));
+        objects.push(serde_json::json!({
+            "expected_content_hash": descriptor.manifest_ref.clone(),
+            "observed_content_hash": observed_manifest_hash,
+            "expected_size_bytes": descriptor.manifest_size_bytes,
+            "observed_size_bytes": bundle.manifest_json.len(),
+        }));
         for (expected, actual) in descriptor.blobs.iter().zip(bundle.blobs.iter()) {
             let observed_hash = blake3_hex(actual.bytes.as_slice());
             if actual.content_hash != expected.content_hash
@@ -149,9 +156,24 @@ impl ReplicationRuntime {
                     ),
                 });
             }
-            objects.push(serde_json::json!({"expected_content_hash": expected.content_hash.clone(), "observed_content_hash": observed_hash, "expected_size_bytes": expected.size_bytes, "observed_size_bytes": actual.bytes.len()}));
+            objects.push(serde_json::json!({
+                "expected_content_hash": expected.content_hash.clone(),
+                "observed_content_hash": observed_hash,
+                "expected_size_bytes": expected.size_bytes,
+                "observed_size_bytes": actual.bytes.len(),
+            }));
         }
-        let value = serde_json::json!({"schema_version": "oasis7.checkpoint_closure_verification_receipt.v1", "world_id": world_id, "probe_nonce": probe_nonce, "height": descriptor.height, "execution_block_hash": descriptor.execution_block_hash.clone(), "execution_state_root": descriptor.execution_state_root.clone(), "manifest_hash": descriptor.manifest_ref.clone(), "objects": objects, "fetch_observations": fetch_observations});
+        let value = serde_json::json!({
+            "schema_version": "oasis7.checkpoint_closure_verification_receipt.v1",
+            "world_id": world_id,
+            "probe_nonce": probe_nonce,
+            "height": descriptor.height,
+            "execution_block_hash": descriptor.execution_block_hash.clone(),
+            "execution_state_root": descriptor.execution_state_root.clone(),
+            "manifest_hash": descriptor.manifest_ref.clone(),
+            "objects": objects,
+            "fetch_observations": fetch_observations,
+        });
         let receipt_dir = self.config.root_dir.join("checkpoint-verification");
         std::fs::create_dir_all(&receipt_dir).map_err(|err| NodeError::Replication {
             reason: format!("create checkpoint verification receipt directory: {err}"),

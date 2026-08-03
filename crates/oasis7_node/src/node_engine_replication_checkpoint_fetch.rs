@@ -73,7 +73,16 @@ impl PosNodeEngine {
                     ),
                 });
             }
-            return Ok(collect_fetch_observations.then(|| serde_json::json!({"content_hash": content_hash, "source": "local_cache", "expected_size_bytes": expected_size_bytes, "observed_size_bytes": bytes.len(), "response_found": true, "observed_content_hash": blake3_hex(bytes.as_slice())})));
+            return Ok(collect_fetch_observations.then(|| {
+                serde_json::json!({
+                    "content_hash": content_hash,
+                    "source": "local_cache",
+                    "expected_size_bytes": expected_size_bytes,
+                    "observed_size_bytes": bytes.len(),
+                    "response_found": true,
+                    "observed_content_hash": blake3_hex(bytes.as_slice()),
+                })
+            }));
         }
         let request = replication_runtime.build_fetch_blob_request(content_hash)?;
         let mut provider_lookup_failure = None;
@@ -144,8 +153,17 @@ impl PosNodeEngine {
             .filter(|candidate| connected_peer_ids.binary_search(candidate).is_ok())
             .cloned()
             .collect();
-        Ok(Some(
-            serde_json::json!({"content_hash": content_hash, "source": "network_fetch", "provider_candidates": provider_candidates, "connected_peer_ids": connected_peer_ids, "connected_candidate_ids": connected_candidates, "signed_request": request.requester_signature_hex.is_some(), "response_found": true, "expected_size_bytes": expected_size_bytes, "observed_size_bytes": blob.len(), "observed_content_hash": actual}),
-        ))
+        Ok(Some(serde_json::json!({
+            "content_hash": content_hash,
+            "source": "network_fetch",
+            "provider_candidates": provider_candidates,
+            "connected_peer_ids": connected_peer_ids,
+            "connected_candidate_ids": connected_candidates,
+            "signed_request": request.requester_signature_hex.is_some(),
+            "response_found": true,
+            "expected_size_bytes": expected_size_bytes,
+            "observed_size_bytes": blob.len(),
+            "observed_content_hash": actual,
+        })))
     }
 }

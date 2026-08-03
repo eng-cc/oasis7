@@ -316,6 +316,33 @@ def package_provenance(platform: str, platform_dir: Path, asset: Path, info: dic
     }
 
 
+def verify_package_trust(
+    package_dir: Path, platforms: list[str]
+) -> tuple[dict[str, Path], dict[str, dict[str, str]], dict[str, Path], dict[str, list[str]]]:
+    """Verify every requested platform before any package executable can run."""
+    platform_dirs: dict[str, Path] = {}
+    platform_infos: dict[str, dict[str, str]] = {}
+    platform_assets: dict[str, Path] = {}
+    verified_files: dict[str, list[str]] = {}
+    for platform in platforms:
+        platform_dir = find_platform_dir(package_dir, platform)
+        buildinfo = platform_dir / f"{platform}-BUILDINFO"
+        sums = platform_dir / f"{platform}-SHA256SUMS"
+        if not sums.is_file():
+            die(f"missing {platform} checksum file: {sums}")
+        verified = verify_sha256sums(platform_dir, sums)
+        asset = platform_asset(platform_dir, platform)
+        require_verified_files(platform, platform_dir, buildinfo, asset, verified)
+        info = read_buildinfo(buildinfo)
+        if platform == "macos-arm64":
+            require_macos_arm64_metadata(info)
+        platform_dirs[platform] = platform_dir
+        platform_infos[platform] = info
+        platform_assets[platform] = asset
+        verified_files[platform] = verified
+    return platform_dirs, platform_infos, platform_assets, verified_files
+
+
 def load_manifest(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -405,29 +432,8 @@ def load_checkpoint_closure_receipt(path: Path) -> dict[str, Any]:
     return receipt
 
 
-def run_checkpoint_closure_probe(manifest: Path, package_dir: Path, out_dir: Path) -> dict[str, Any]:
-    """Obtain closure evidence only by executing the repository-owned probe.
-
-    This is intentionally not an argument: a JSON file supplied by an operator
-    has no binding to the fresh runtime invocation that fetched the closure.
-    """
-    probe_out = out_dir / "checkpoint-closure-probe.json"
-    command = [sys.executable, str(ROOT_DIR / "scripts/p2p-observer-checkpoint-closure-probe.py"),
-        "--manifest", str(manifest), "--package-dir", str(package_dir),
-        "--out", str(probe_out),
-    ]
-    # A test-only subprocess seam exercises the same invocation/output boundary
-    # without turning a fixture JSON into a production input.  Production
-    # environments cannot select it.
-    test_probe = os.environ.get("OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE")
-    if test_probe:
-        if os.environ.get("OASIS7_TESTING") != "1":
-            die("test checkpoint closure probe override is forbidden outside OASIS7_TESTING=1")
-        command = shlex.split(test_probe) + ["--manifest", str(manifest), "--package-dir", str(package_dir), "--out", str(probe_out)]
-    completed = subprocess.run(command, text=True, capture_output=True)
-    if completed.returncode:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "probe failed"
-        die(f"checkpoint closure probe failed: {detail}")
+def load_probe_result(manifest: Path, package_dir: Path, probe_out: Path) -> dict[str, Any]:
+    """Validate a receipt produced by the repository-owned clean-room probe."""
     if probe_out.is_symlink() or not probe_out.is_file():
         die("checkpoint closure probe did not produce its canonical receipt")
     try:
@@ -470,17 +476,42 @@ def run_checkpoint_closure_probe(manifest: Path, package_dir: Path, out_dir: Pat
     buildinfo = bindings.get("buildinfo")
     if not isinstance(buildinfo, dict) or not all(isinstance(buildinfo.get(k), str) and buildinfo[k] for k in ("commit", "package_version", "run_id")):
         die("checkpoint closure probe BUILDINFO binding is incomplete")
-    # Generated platform gates compare provider status to this identity.
     return {
         "checkpoint_id": runtime["execution_block_hash"],
         "manifest_hash": runtime["manifest_hash"],
         "height": runtime["height"],
         "clean_state": True,
-        "providers": [{"provider_id": "clean-room-probe", "authorized": True, "connected": True,
-                       "complete": True, "hash_size_binding_verified": True, "missing_hashes": []}],
+        "providers": [
+            {
+                "provider_id": "clean-room-probe",
+                "authorized": True,
+                "connected": True,
+                "complete": True,
+                "hash_size_binding_verified": True,
+                "missing_hashes": [],
+            }
+        ],
         "probe_canonical_digest": digest,
         "fetch_observations": observations,
     }
+
+
+def run_checkpoint_closure_probe(manifest: Path, package_dir: Path, out_dir: Path) -> dict[str, Any]:
+    """Obtain closure evidence only by executing the repository-owned probe.
+
+    This is intentionally not an argument: a JSON file supplied by an operator
+    has no binding to the fresh runtime invocation that fetched the closure.
+    """
+    probe_out = out_dir / "checkpoint-closure-probe.json"
+    command = [sys.executable, str(ROOT_DIR / "scripts/p2p-observer-checkpoint-closure-probe.py"),
+        "--manifest", str(manifest), "--package-dir", str(package_dir),
+        "--out", str(probe_out),
+    ]
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "probe failed"
+        die(f"checkpoint closure probe failed: {detail}")
+    return load_probe_result(manifest, package_dir, probe_out)
 
 
 def observer_checkpoint_gate_bash(
@@ -2779,6 +2810,19 @@ def main() -> int:
     if len(names) != len(manifest["nodes"]) or not all(names) or len(set(names)) != len(names):
         die("all rollout manifest nodes must have unique non-empty names")
     observer_rollout_present = any(name not in CANONICAL_PROVIDER_NAMES for name in names)
+    # This happens before the probe starts a runtime from the downloaded Linux
+    # bundle.  A malformed package must fail before any package code executes.
+    trust_platforms = list(platforms)
+    if observer_rollout_present and "linux-x64" not in trust_platforms:
+        # The clean-room closure probe always executes the Linux bundle, even
+        # when the rollout plan mutates only a Windows or macOS observer.
+        trust_platforms.append("linux-x64")
+    platform_dirs, platform_infos, platform_assets, verified_files = verify_package_trust(
+        package_dir, sorted(trust_platforms)
+    )
+    # A multi-platform package is one release truth.  Reject divergent
+    # BUILDINFO before a trusted bundle is allowed to start the probe.
+    commit = require_same_commit(platform_infos)
     provider_status_urls = (
         canonical_provider_status_urls(manifest) if observer_rollout_present else None
     )
@@ -2790,25 +2834,6 @@ def main() -> int:
             args.manifest.resolve(), package_dir, out_dir
         )
 
-    platform_dirs: dict[str, Path] = {}
-    platform_infos: dict[str, dict[str, str]] = {}
-    platform_assets: dict[str, Path] = {}
-    verified_files: dict[str, list[str]] = {}
-    for platform in platforms:
-        platform_dir = find_platform_dir(package_dir, platform)
-        platform_dirs[platform] = platform_dir
-        buildinfo = platform_dir / f"{platform}-BUILDINFO"
-        sums = platform_dir / f"{platform}-SHA256SUMS"
-        if not sums.is_file():
-            die(f"missing {platform} checksum file: {sums}")
-        verified_files[platform] = verify_sha256sums(platform_dir, sums)
-        platform_infos[platform] = read_buildinfo(buildinfo)
-        platform_assets[platform] = platform_asset(platform_dir, platform)
-        require_verified_files(platform, platform_dir, buildinfo, platform_assets[platform], verified_files[platform])
-        if platform == "macos-arm64":
-            require_macos_arm64_metadata(platform_infos[platform])
-
-    commit = require_same_commit(platform_infos)
     platform_provenance = {
         platform: package_provenance(
             platform,
