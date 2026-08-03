@@ -94,14 +94,20 @@ cat >"$bundle_src/bin/oasis7_chain_runtime" <<'EOF'
 set -euo pipefail
 replication_root=''
 world_id=''
+status_bind=''
 while (($#)); do
   case "$1" in
     --replication-root) replication_root="$2"; shift 2 ;;
     --world-id) world_id="$2"; shift 2 ;;
+    --status-bind) status_bind="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
 [[ -n "$replication_root" && -n "$world_id" ]]
+[[ "$status_bind" =~ ^127\.0\.0\.1:[1-9][0-9]*$ ]] || {
+  echo "fixture runtime requires a non-zero loopback status port: $status_bind" >&2
+  exit 2
+}
 mkdir -p "$replication_root/checkpoint-verification"
 cat >"$replication_root/checkpoint-verification/4242.json" <<JSON
 {"schema_version":"oasis7.checkpoint_closure_verification_receipt.v1","world_id":"$world_id","probe_nonce":"$OASIS7_CHECKPOINT_PROBE_NONCE","height":4242,"execution_block_hash":"fixture-checkpoint-v2","execution_state_root":"fixture-state-root","manifest_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","objects":[{"expected_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expected_size_bytes":7,"observed_size_bytes":7}],"fetch_observations":[{"source":"network_fetch","content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","observed_size_bytes":7,"response_found":true,"signed_request":true,"connected_candidate_ids":["fixture-provider"]}]}
