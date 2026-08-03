@@ -62,6 +62,7 @@ impl ChunkRuntimeConfig {
     }
 }
 
+pub(crate) use actions::default_schedule_recipe_readiness;
 pub use micro_depot::{
     MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL, MICRO_DEPOT_DEBIT_AMOUNT_HIGH, MICRO_DEPOT_DEBIT_AMOUNT_LOW,
     MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM, MICRO_DEPOT_DEBIT_AMOUNT_NONE, MICRO_DEPOT_INSTALL_DATA_COST,

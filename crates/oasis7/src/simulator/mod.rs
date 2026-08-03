@@ -74,6 +74,7 @@ pub use init::{
     initialize_kernel,
 };
 pub use kernel::ChunkRuntimeConfig;
+pub(crate) use kernel::default_schedule_recipe_readiness;
 pub use kernel::{
     Observation, ObservedAgent, ObservedLocation, ObservedModuleArtifactRecord,
     ObservedModuleLifecycleState, ObservedModuleMarketState, ObservedPowerMarketState,

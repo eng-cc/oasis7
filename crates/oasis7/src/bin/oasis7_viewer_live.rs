@@ -22,6 +22,7 @@ const RUNTIME_ALIAS_REMOVAL_HINT: &str = "`--runtime-world` was removed; oasis7_
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     scenario: Option<WorldScenario>,
+    debug_scenario: Option<DebugScenario>,
     bind_addr: String,
     web_bind_addr: Option<String>,
     llm_mode: bool,
@@ -35,10 +36,24 @@ struct CliOptions {
     generated_world_dir: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DebugScenario {
+    SmelterAffordability,
+}
+
+impl DebugScenario {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::SmelterAffordability => "smelter_affordability",
+        }
+    }
+}
+
 impl Default for CliOptions {
     fn default() -> Self {
         Self {
             scenario: None,
+            debug_scenario: None,
             bind_addr: DEFAULT_BIND.to_string(),
             web_bind_addr: Some(DEFAULT_WEB_BIND.to_string()),
             llm_mode: true,
@@ -96,6 +111,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
             .scenario
             .map(|value| value.as_str().to_string())
             .unwrap_or_else(|| DEFAULT_SCENARIO_LABEL.to_string()),
+        debug_scenario = ?options.debug_scenario,
         "starting viewer live runtime"
     );
     if let Some(web_bind_addr) = options.web_bind_addr.clone() {
@@ -111,9 +127,14 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         });
     }
 
-    let base_config = match options.scenario {
-        Some(scenario) => ViewerRuntimeLiveServerConfig::new(scenario),
-        None => ViewerRuntimeLiveServerConfig::formal_release_default(),
+    let base_config = if options.debug_scenario == Some(DebugScenario::SmelterAffordability) {
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_world_id("live-runtime-smelter-affordability")
+    } else {
+        match options.scenario {
+            Some(scenario) => ViewerRuntimeLiveServerConfig::new(scenario),
+            None => ViewerRuntimeLiveServerConfig::formal_release_default(),
+        }
     };
     let config = base_config
         .with_bind_addr(options.bind_addr)
@@ -141,8 +162,13 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
     } else {
         config
     };
-    let server = ViewerRuntimeLiveServer::new(config)
+    let mut server = ViewerRuntimeLiveServer::new(config)
         .map_err(|err| format!("failed to create runtime viewer server: {err:?}"))?;
+    if options.debug_scenario == Some(DebugScenario::SmelterAffordability) {
+        server
+            .seed_smelter_affordability_debug_scenario()
+            .map_err(|err| format!("failed to seed smelter affordability debug scenario: {err}"))?;
+    }
     server
         .run()
         .map_err(|err| format!("runtime viewer server exited with error: {err:?}"))
@@ -158,7 +184,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             if scenario_set {
                 return Err(format!("unexpected positional argument `{arg}`"));
             }
-            options.scenario = Some(parse_world_scenario(arg)?);
+            if arg == "smelter_affordability" {
+                options.scenario = None;
+                options.debug_scenario = Some(DebugScenario::SmelterAffordability);
+            } else {
+                options.scenario = Some(parse_world_scenario(arg)?);
+            }
             scenario_set = true;
             continue;
         }
@@ -289,14 +320,18 @@ fn validate_generated_world_options(options: &CliOptions) -> Result<(), String> 
 }
 
 fn validate_debug_scenario_guardrail(options: &CliOptions) -> Result<(), String> {
-    if matches!(options.scenario, Some(WorldScenario::LlmBootstrap))
+    if (matches!(options.scenario, Some(WorldScenario::LlmBootstrap))
+        || options.debug_scenario.is_some())
         && !options.allow_debug_scenario
     {
-        return Err(
-            "`llm_bootstrap` is a seeded debug/LLM scenario, not a normal playtest or testnet entry; \
+        let scenario = options
+            .debug_scenario
+            .map(DebugScenario::as_str)
+            .unwrap_or("llm_bootstrap");
+        return Err(format!(
+            "`{scenario}` is a seeded debug scenario, not a normal playtest or testnet entry; \
 rerun with `--allow-debug-scenario` only for targeted diagnostics, or omit the scenario for the formal release default world"
-                .to_string(),
-        );
+        ));
     }
     Ok(())
 }
@@ -640,8 +675,28 @@ mod tests {
     #[test]
     fn parse_options_rejects_llm_bootstrap_without_debug_opt_in() {
         let err = parse_options(["llm_bootstrap"].into_iter()).expect_err("debug scenario");
-        assert!(err.contains("seeded debug/LLM scenario"));
+        assert!(err.contains("seeded debug scenario"));
         assert!(err.contains("--allow-debug-scenario"));
+    }
+
+    #[test]
+    fn parse_options_rejects_smelter_affordability_without_debug_opt_in() {
+        let err = parse_options(["smelter_affordability"].into_iter())
+            .expect_err("debug scenario requires an explicit opt-in");
+        assert!(err.contains("smelter_affordability"));
+        assert!(err.contains("--allow-debug-scenario"));
+    }
+
+    #[test]
+    fn parse_options_accepts_smelter_affordability_with_debug_opt_in() {
+        let options =
+            parse_options(["smelter_affordability", "--allow-debug-scenario"].into_iter())
+                .expect("debug scenario opt-in");
+        assert_eq!(
+            options.debug_scenario,
+            Some(DebugScenario::SmelterAffordability)
+        );
+        assert!(options.allow_debug_scenario);
     }
 
     #[test]

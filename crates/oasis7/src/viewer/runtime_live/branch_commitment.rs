@@ -93,8 +93,21 @@ pub(super) fn branch_recommendations(
 pub(super) fn effective_branch_stage_status(
     stage_status: PlayerGameplayStageStatus,
     recommendations: &[PlayerGameplayBranchCommitment],
+    available_actions: &[PlayerGameplayAction],
 ) -> PlayerGameplayStageStatus {
-    if stage_status == PlayerGameplayStageStatus::BranchReady && recommendations.is_empty() {
+    let published_branch_action = available_actions.iter().any(|action| {
+        matches!(
+            action.action_id.as_str(),
+            "schedule_recipe_smelter_alloy_plate"
+                | "build_factory_assembler_mk1"
+                | "schedule_recipe_assembler_module_rack"
+                | "schedule_recipe_assembler_factory_core"
+        )
+    });
+    if stage_status == PlayerGameplayStageStatus::BranchReady
+        && recommendations.is_empty()
+        && !published_branch_action
+    {
         PlayerGameplayStageStatus::Blocked
     } else {
         stage_status
@@ -106,7 +119,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn branch_ready_downgrades_when_every_published_candidate_is_disabled() {
+    fn branch_ready_stays_discoverable_when_every_published_candidate_is_disabled() {
         let actions = vec![PlayerGameplayAction {
             action_id: "schedule_recipe_smelter_alloy_plate".to_string(),
             label: "Schedule alloy plate".to_string(),
@@ -125,8 +138,9 @@ mod tests {
             effective_branch_stage_status(
                 PlayerGameplayStageStatus::BranchReady,
                 recommendations.as_slice(),
+                actions.as_slice(),
             ),
-            PlayerGameplayStageStatus::Blocked,
+            PlayerGameplayStageStatus::BranchReady,
         );
     }
 }

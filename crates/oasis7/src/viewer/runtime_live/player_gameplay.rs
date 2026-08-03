@@ -33,6 +33,12 @@ use std::collections::BTreeMap;
 
 #[path = "power_survival_quote.rs"]
 mod power_survival_quote;
+#[path = "schedule_readiness.rs"]
+mod schedule_readiness;
+use schedule_readiness::schedule_recipe_disabled_reason;
+#[path = "smelter_actions.rs"]
+mod smelter_actions;
+use smelter_actions::extend_smelter_actions;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
 
@@ -179,36 +185,7 @@ pub(super) fn extend_available_actions(
         return;
     }
 
-    actions.extend([
-        PlayerGameplayAction {
-            action_id: ACTION_SCHEDULE_SMELTER_IRON_INGOT.to_string(),
-            label: "Queue iron ingot run".to_string(),
-            protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
-            target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
-        },
-        PlayerGameplayAction {
-            action_id: ACTION_SCHEDULE_SMELTER_COPPER_WIRE.to_string(),
-            label: "Queue copper wire run".to_string(),
-            protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
-            target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
-        },
-        PlayerGameplayAction {
-            action_id: ACTION_SCHEDULE_SMELTER_POLYMER_RESIN.to_string(),
-            label: "Queue polymer resin run".to_string(),
-            protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
-            target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
-        },
-        PlayerGameplayAction {
-            action_id: ACTION_SCHEDULE_SMELTER_ALLOY_PLATE.to_string(),
-            label: "Queue alloy plate run".to_string(),
-            protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
-            target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::ScaleOut),
-        },
-    ]);
+    extend_smelter_actions(state, agent_id, industry_stage, actions);
 
     if !assembler_exists {
         actions.push(PlayerGameplayAction {
