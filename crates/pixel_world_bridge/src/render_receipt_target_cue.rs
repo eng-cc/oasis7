@@ -14,6 +14,10 @@ const RECEIPT_BADGE_SIZE: Vec2 = Vec2::new(20.0, 16.0);
 const NARROW_RECEIPT_BADGE_SIZE: Vec2 = Vec2::new(28.0, 22.0);
 const NARROW_RECEIPT_BADGE_OUTLINE_COLOR: Color = Color::srgba_u8(203, 213, 225, 184);
 const NARROW_RECEIPT_BADGE_MAX_WIDTH_PX: f64 = 360.0;
+// At narrow canvas widths the hover tooltip occupies the upper-right overlay.
+// Keep the blocked receipt badge on the target's upper-left shoulder so its
+// pale X remains legible instead of being covered by that player feedback.
+const NARROW_SELECTED_RECEIPT_BADGE_X_OFFSET_PX: f32 = -34.0;
 const RECEIPT_BADGE_BACKING_LAYER_Z_OFFSET: f32 = 0.06;
 const NARROW_RECEIPT_BADGE_OUTLINE_LAYER_Z_OFFSET: f32 = 0.065;
 const RECEIPT_BADGE_STROKE_LAYER_Z_OFFSET: f32 = 0.07;
@@ -78,10 +82,18 @@ fn receipt_cue_specs(
             } else {
                 body_half_size + RECEIPT_BADGE_NONSELECTED_BODY_CLEARANCE_PX
             };
+            let badge_offset = Vec2::new(
+                if is_narrow && is_selected {
+                    NARROW_SELECTED_RECEIPT_BADGE_X_OFFSET_PX
+                } else {
+                    0.0
+                },
+                badge_top,
+            );
             let mut specs = vec![
                 ReceiptCueSpec {
                     part: ReceiptTargetCuePart::BadgeBacking,
-                    offset: Vec2::new(0.0, badge_top),
+                    offset: badge_offset,
                     size: badge_size,
                     rotation: 0.0,
                     color: if is_narrow {
@@ -93,7 +105,7 @@ fn receipt_cue_specs(
                 },
                 ReceiptCueSpec {
                     part: ReceiptTargetCuePart::CrossAscending,
-                    offset: Vec2::new(0.0, badge_top),
+                    offset: badge_offset,
                     size: Vec2::new(
                         if is_narrow {
                             18.0
@@ -112,7 +124,7 @@ fn receipt_cue_specs(
                 },
                 ReceiptCueSpec {
                     part: ReceiptTargetCuePart::CrossDescending,
-                    offset: Vec2::new(0.0, badge_top),
+                    offset: badge_offset,
                     size: Vec2::new(
                         if is_narrow {
                             18.0
@@ -157,7 +169,7 @@ fn receipt_cue_specs(
                 ] {
                     specs.push(ReceiptCueSpec {
                         part,
-                        offset: Vec2::new(0.0, badge_top) + offset,
+                        offset: badge_offset + offset,
                         size,
                         rotation: 0.0,
                         color: NARROW_RECEIPT_BADGE_OUTLINE_COLOR,

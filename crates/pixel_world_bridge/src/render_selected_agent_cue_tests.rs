@@ -83,7 +83,9 @@ fn receipt_cue_geometry(app: &mut App) -> Vec<CueSegmentProbe> {
         .filter_map(|(sprite, transform)| {
             let size = sprite.custom_size?;
             (transform.translation.z > core.z
-                && (transform.translation.x - agent.x).abs() <= agent.size_px
+                // The narrow blocked-receipt badge deliberately sits on the
+                // target's left shoulder to avoid the upper-right tooltip lane.
+                && (transform.translation.x - agent.x).abs() <= agent.size_px + 40.0
                 && transform.translation.y > agent.y)
                 .then_some(CueSegmentProbe {
                     x: transform.translation.x,
@@ -258,6 +260,10 @@ fn narrow_receipt_target_badge_stays_visible_at_actual_canvas_size_with_selected
         .into_iter()
         .find(|agent| agent.id == "agent-0")
         .expect("selected receipt target Agent");
+    assert!(
+        backing.x + (backing.width / 2.0) < agent.x,
+        "narrow selected receipt badge must use the target's upper-left shoulder, clear of the upper-right tooltip lane"
+    );
     let backing_canvas_x = backing.x + (viewport_width / 2.0);
     let backing_canvas_y = (viewport_height / 2.0) - backing.y;
     assert!(
