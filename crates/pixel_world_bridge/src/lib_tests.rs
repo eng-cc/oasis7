@@ -422,6 +422,24 @@ fn assert_unchanged_render_snapshot_preserves_render_state_and_processes_input()
     assert_eq!(runtime.drag_state.as_ref().unwrap().start_pan_y, -8.0);
 }
 
+fn assert_hotspot_click_is_not_promoted_to_entity_selection() {
+    assert_eq!(
+        click_selection_from_hit(Some(("hotspot".to_string(), "hotspot-blocker".to_string()))),
+        None,
+        "hotspot hit regions are hover-only and must not emit select_entity"
+    );
+    assert_eq!(
+        click_selection_from_hit(Some(("agent".to_string(), "agent-0".to_string()))),
+        Some(("agent".to_string(), "agent-0".to_string())),
+        "agent selection remains unchanged"
+    );
+    assert_eq!(
+        click_selection_from_hit(Some(("location".to_string(), "loc-0".to_string()))),
+        Some(("location".to_string(), "loc-0".to_string())),
+        "location selection remains unchanged"
+    );
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn grid_layout_is_stable_for_same_camera_and_size() {
@@ -492,6 +510,12 @@ fn selection_change_to_location_clears_follow_target() {
 #[test]
 fn unchanged_render_snapshot_preserves_render_state_and_processes_input() {
     assert_unchanged_render_snapshot_preserves_render_state_and_processes_input();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hotspot_click_is_not_promoted_to_entity_selection() {
+    assert_hotspot_click_is_not_promoted_to_entity_selection();
 }
 
 #[cfg(target_arch = "wasm32")]

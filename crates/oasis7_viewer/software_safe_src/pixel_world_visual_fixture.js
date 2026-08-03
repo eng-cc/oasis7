@@ -18,12 +18,20 @@ function requestedVisualFixtureName() {
   return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
 }
 
+function liveConnectionDisabledForFixture() {
+  if (typeof window === "undefined" || !window.location) {
+    return false;
+  }
+  return String(new URLSearchParams(window.location.search || "").get("connect") || "").trim() === "0";
+}
+
 export function installPixelWorldVisualFixtureHook() {
-  if (typeof window === "undefined" || !pixelWorldTestApiEnabled()) {
+  if (typeof window === "undefined" || !pixelWorldTestApiEnabled() || !liveConnectionDisabledForFixture()) {
     return null;
   }
   const fixtures = {
     selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
+    hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
