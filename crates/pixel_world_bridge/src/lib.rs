@@ -99,6 +99,12 @@ struct Selection {
     id: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct ReceiptTarget {
+    agent_id: String,
+    state: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct FocusTarget {
     kind: String,
@@ -123,6 +129,8 @@ struct RenderState {
     links: Vec<Link>,
     visual_hotspots: Vec<VisualHotspot>,
     selection: Option<Selection>,
+    #[serde(default)]
+    receipt_target: Option<ReceiptTarget>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -224,6 +232,7 @@ struct BevyRuntimeState {
     render_content_signature: u64,
     camera: CameraState,
     camera_fit_version: u64,
+    last_canvas_size: Option<(u32, u32)>,
     camera_user_override: bool,
     pending_focus_target: Option<FocusTarget>,
     active_follow_target: Option<FocusTarget>,
@@ -565,6 +574,12 @@ fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
         hash_f64(&mut hasher, hotspot.size_hint_px.unwrap_or(0.0));
     }
 
+    render_state.receipt_target.is_some().hash(&mut hasher);
+    if let Some(receipt_target) = render_state.receipt_target.as_ref() {
+        receipt_target.agent_id.hash(&mut hasher);
+        receipt_target.state.hash(&mut hasher);
+    }
+
     hasher.finish()
 }
 
@@ -596,6 +611,7 @@ fn apply_external_render_snapshot(
     let content_changed = next_signature != runtime.render_content_signature;
     if next_signature != runtime.render_content_signature {
         runtime.camera_fit_version = 0;
+        runtime.last_canvas_size = None;
         runtime.camera_user_override = false;
         runtime.render_content_signature = next_signature;
         runtime.hit_regions_dirty = true;

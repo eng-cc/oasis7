@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::json;
 
 pub(super) fn sample_render_state_with_selection(
     fragment_footprint_cm: f64,
@@ -74,6 +75,53 @@ pub(super) fn sample_render_state_with_hotspot_candidates() -> RenderState {
         },
     ];
     render_state
+}
+
+pub(super) fn sample_render_state_with_receipt_target(
+    receipt_state: Option<&str>,
+    target_agent_id: Option<&str>,
+) -> RenderState {
+    serde_json::from_value(json!({
+        "world_bounds": {
+            "width_cm": 3_000_000.0,
+            "depth_cm": 2_000_000.0,
+            "height_cm": 500_000.0,
+        },
+        "locations": [{
+            "id": "loc-0",
+            "label": "Receipt Anchor",
+            "pos": { "x_cm": 1_500_000.0, "y_cm": 1_000_000.0, "z_cm": 0.0 },
+            "radius_cm": 30_000.0,
+            "resource_summary": "-",
+            "size_hint_px": 10.0,
+        }],
+        "fragment_terrain": [{
+            "id": "fragment:loc-0:0",
+            "location_id": "loc-0",
+            "pos": { "x_cm": 1_503_000.0, "y_cm": 1_006_000.0, "z_cm": 0.0 },
+            "footprint_cm": 12_000.0,
+            "dominant_compound": "silicate_matrix",
+            "color": [141, 199, 170],
+            "emphasis": 0.58,
+        }],
+        "agents": [{
+            "id": "agent-0",
+            "label": "Receipt Target",
+            "pos": { "x_cm": 1_520_000.0, "y_cm": 1_015_000.0, "z_cm": 0.0 },
+            "location_id": "loc-0",
+            "resource_summary": "-",
+            "status_badges": [],
+            "size_hint_px": 16.0,
+        }],
+        "links": [],
+        "visual_hotspots": [],
+        "selection": null,
+        "receipt_target": receipt_state.zip(target_agent_id).map(|(state, agent_id)| json!({
+            "state": state,
+            "agent_id": agent_id,
+        })),
+    }))
+    .expect("receipt cue fixture must remain a valid RenderState DTO")
 }
 
 pub(super) fn test_runtime(render_state: RenderState) -> BevyRuntimeState {

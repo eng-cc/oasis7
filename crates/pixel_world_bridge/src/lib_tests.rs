@@ -53,6 +53,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
                 "agent-0".to_string()
             },
         }),
+        receipt_target: None,
     }
 }
 

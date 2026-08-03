@@ -1872,6 +1872,7 @@ async function issueLocalTestPlayerSession() {
     pendingForceRebind: false,
     rebindNotice: null,
   };
+  window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
   persistLocalTestPlayerSession(state.auth);
   render();
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);

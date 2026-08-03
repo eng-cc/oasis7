@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 
 use super::*;
 use bevy::ecs::system::SystemParam;
-
 #[path = "render_fragment_visuals.rs"]
 mod fragment_visuals;
 use fragment_visuals::reconcile_fragments;
@@ -13,12 +12,20 @@ use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouet
 
 #[path = "render_selected_agent_cue.rs"]
 mod selected_agent_cue;
+use selected_agent_cue::AGENT_CORE_LAYER_Z_OFFSET;
 #[cfg(test)]
-use selected_agent_cue::{AGENT_CORE_COLOR, AGENT_CORE_LAYER_Z_OFFSET, agent_core_size_px};
+use selected_agent_cue::{AGENT_CORE_COLOR, agent_core_size_px};
 use selected_agent_cue::{
     PixelWorldAgentCoreVisual, PixelWorldSelectedAgentCue, reconcile_agent_cores,
     reconcile_selected_agent_cues,
 };
+
+#[path = "render_receipt_target_cue.rs"]
+mod receipt_target_cue;
+use receipt_target_cue::{PixelWorldReceiptTargetCue, reconcile_receipt_target_cues};
+
+#[path = "render_canvas_resize.rs"]
+mod canvas_resize;
 
 #[path = "render_hotspot_core.rs"]
 mod hotspot_core;
@@ -957,6 +964,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
+    receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
     hotspot_cues: HotspotCueQueries<'w, 's>,
@@ -987,6 +995,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.selected_agent_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.receipt_target_cues.iter() {
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
@@ -1054,6 +1065,9 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in queries.receipt_target_cues.iter() {
+            commands.entity(entity).despawn();
+        }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
         despawn_hotspot_cues(&mut commands, &queries.hotspot_cues);
         for (entity, _) in queries.agent_silhouettes.iter() {
@@ -1069,6 +1083,7 @@ pub(crate) fn render_scene(
     let height = window.height() as f64;
     let animation_ms = time.elapsed_secs_f64() * 1000.0;
 
+    canvas_resize::requeue_follow_target_after_resize(&mut runtime, width, height);
     maybe_auto_fit_camera(&mut runtime, width, height);
     maybe_focus_selected_entity(&mut runtime, width, height);
     let next_hit_region_cache_key = HitRegionCacheKey::new(&runtime, width, height);
@@ -1140,6 +1155,14 @@ pub(crate) fn render_scene(
         &mut commands,
         &runtime,
         &queries.selected_agent_cues,
+        width,
+        height,
+        animation_ms,
+    );
+    reconcile_receipt_target_cues(
+        &mut commands,
+        &runtime,
+        &queries.receipt_target_cues,
         width,
         height,
         animation_ms,
