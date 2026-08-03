@@ -41,6 +41,13 @@
 - 地图、关系线、方向标记、halo 或其他视觉辅助只用于解释已受支持的关系与效果，不会生成控制权、所有权、因果事实、精确位置或可执行能力。
 - 长期语义缩放在不同密度/尺度下优先保留当前目标、相关行动者或路线、关键 blocker 与下一步；它应先折叠次级 labels 和非关键细节，而非无差别缩小整个决策面到不可读。该方向不承诺当前存在 2D 地图、自动缩放、专用 overview 控件或已交付 semantic zoom。
 
+### 3.1 观察范围、时效与未知边界
+
+- 正式玩家表面若以观察、侦察或缓存情报说明动态世界对象、位置、路线、容量、部署或近期状态，必须区分：当前在适用观察范围内确认、仍有效但可能已变化的最近已知，以及尚未取得或已失效。范围外或未知对象不得因地图、默认选择、历史缓存、组织归属或界面可达而被表现成当前可见的精确世界事实。
+- 已成立的公共规则、已结算结果和依法可公开的安全事实可以作为公共事实呈现；它们不因此授予实时经营情报、精确位置、控制权或额外行动资格。公共事实与观察所得的动态情报必须保留不同的来源语义。
+- 会实质影响当前行动的最近已知或不确定信息，必须保留适用范围和时效边界，并让玩家可理解地选择刷新、等待、改道或停止；过期观察不能静默驱动长期行动，也不能因自动化而绕过权威校验。
+- 本节约束产品事实边界，不要求玩家与 Agent 获得相同原始 observation 或暴露实现字段；专业域仍决定可见性规则、缓存时长、授权、DTO、文案和交互表达。
+
 ## 4. 玩家因果与诊断边界
 
 - 只有已接受的玩家意图及其可归因世界后果，才能被表达为玩家影响；环境变化、Agent 自主活动或渲染更新不能代签。
@@ -58,6 +65,7 @@
 - RW-5：代表性端到端场景可追踪到 gameplay、runtime、Agent、Viewer 与 QA 的当前证据；单张截图、mock、fallback 或局部渲染通过不能单独成立产品结论。
 - RW-6：长期空间舞台样例保持世界、目标、相关行动者/路线、blocker 与下一步的 primary read；相邻 target/command/receipt/selection 管理可展开但不隐藏受支持的 command path，也不替代舞台成为默认决策面。
 - RW-7：长期密度变化样例证明 semantic zoom 先退次级 labels/细节，持续保留目标、相关行动者或路线、blocker 和下一步；terrain/blocks 只解释语境，不表达直接 edit/harvest/build affordance。
+- RW-8：代表性动态信息场景证明正式玩家表面能区分公共已结算事实、当前确认、最近已知和未知/失效观察；范围外或缓存对象不会被表现为当前精确事实，且影响行动的非当前信息提供刷新、等待、改道或停止路径。
 
 ### 5.1 验收权威与证据边界
 
@@ -66,6 +74,7 @@
 | 首读层级与空间关系来源诚实 | viewer_engineer / game_visual_interaction_designer / qa_engineer | `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md`; `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md`; `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md` | 正式玩家表面中的目标、关系、阻塞与下一步可读性，以及权威位置和派生呈现的区分；不复制 DTO、阈值或 renderer 合同 | test_tier_required |
 | 可归因玩家因果与恢复路径 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 以已接受意图、权威世界结果、主要因果和下一决策或恢复路径组成端到端证据；环境活动不能代签玩家影响 | test_tier_full |
 | 长期舞台优先、语义缩放与非直接编辑边界 | game_visual_interaction_designer / viewer_engineer / gameplay_designer / qa_engineer | `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`; `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`; `doc/testing/prd.md` | 目标/行动者/路线/blocker/下一步在密度变化下的保留、次级 label 收敛、command path 可发现性与 terrain 非 affordance 的未来验证；不代签当前 2D/zoom readiness | test_tier_required |
+| 动态观察的范围、时效与未知边界（RW-8） | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 同一动态对象在当前范围、缓存未过期、缓存过期或未取得观察时的来源/状态分层；范围外不泄露为当前事实，影响行动的非当前信息具有刷新、等待、改道或停止路径；不复制可见性算法、TTL、DTO 或 UI 合同 | test_tier_required |
 
 ## 6. 范围
 
