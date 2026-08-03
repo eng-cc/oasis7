@@ -35,6 +35,20 @@
 
 受限的首个认领资助只帮助符合条件的玩家承担这次 `slot-1` 的非零 claim/upkeep 承诺，且不能转成自由财富、设施/材料库存、liquid starter OC 或持续补贴。它与完成 Agent 已存在后、为首次对话授予 liquid starter OC 的独立首聊解锁不同：后者不支付或延长 claim/upkeep，也不将认领变成免费或设施补贴。具体 bucket、资格、余额、回收计算和对话 gate 由专业域维护；跨模块来源与 sink 边界见[资源模型与跨模块 provenance](prd.md#resource-model-and-cross-module-provenance)。
 
+### 2.2 结束、失去控制与不可套利续接
+
+主动结束、到期、回收或其他失去控制权的结果必须是同一条持久世界因果链中的不同可读原因，而不是让玩家以更换候选、身份表面或短暂退出重置世界承诺的入口。玩家可以结束当前控制关系，也可以在专业合同允许的条件下走向恢复、重新选择或安全停止；但不能要求系统把结束解释为“从未认领”，不能把已消耗或受限的支持重新铸造成新的自由余额，也不能以结束来规避已确认的欠费、处罚、交付或争议处理。
+
+结束或失去控制时，玩家必须能读到以下最小结果包：
+
+- 发生的原因、其生效范围和当前控制权为何不再有效；正常主动结束不得被伪装为惩罚，惩罚、回收或争议中的限制也不得被伪装为玩家自愿放弃。
+- 哪些世界结果、历史 receipt、已完成交付和未决义务仍持续，哪些仅随控制权停止；历史可审计不等同于仍可操作、仍有资格或可重复领取支持。
+- 当前可用的恢复、重新选择、申诉或安全停止路径，以及尚未满足时的可读 blocker 和下一次可决策点。不存在安全恢复时，系统必须明确停止，不能显示会静默授予新 claim、重开首次支持或绕过结算的假动作。
+
+为避免 churn 套利，任何重新取得控制权都必须按当时的权威资格、容量、资源、治理和反滥用规则重新评估；它不能仅因玩家曾经结束、曾拥有其他 Agent、曾使用首个支持或持有历史 receipt 而自动通过。世界可以保留玩家的历史、关系和已产生后果，从而让后续选择具有情境与涌现价值；但这些持久记录不能自动升级为控制权、免费 upkeep、额外容量、可转移财富或对其他玩家 Agent 的权限。
+
+这一边界保持 world-first：控制权变化以权威世界事实而非客户端叙述为准；保持 emergence-first：玩家可在同一规则下重建关系和策略，而不能复制补贴或权限；保持 persistent / auditable：结束、未决义务和新选择连续可追溯；保持 extensible：未来的恢复或争议机制可以增加受限路径，但必须满足同样的资格重评、非重置和可读结果包。
+
 ## 3. 权威边界
 
 | 层级 | 本产品分册拥有 | 下层专业域拥有 |
@@ -54,6 +68,7 @@
 - AS-4：支持首个控制权的受限帮助不产生可转移财富、无限补贴、所有权旁路或对后续成长边界的豁免。
 - AS-5：产品、game、runtime、Agent/Viewer 与 testing 指向同一候选和权威事实；局部 UI、运营记录或文档迁移不能单独证明产品承诺通过。
 - AS-6：首个认领样例在确认前证明候选用途/差异、upfront 成本、确认后 upkeep runway、回收或失去触发、恢复/重新选择以及等待或替代动作；受限认领资助与 liquid starter OC 首聊解锁在同一因果链中仍可明确区分，且不产生免费认领或持续补贴含义。
+- AS-7：主动结束、到期/回收和受争议限制的样例可区分原因与生效范围；每条路径保留历史 receipt 与未决义务的可审计连续性，并明确控制权停止后的恢复、重新选择、申诉或安全停止。重新取得控制权按当时资格重新评估，不能重置首个支持、逃避既有义务、取得额外容量或把历史记录转换为权限/财富。
 
 ### 4.1 验收追踪
 
@@ -64,10 +79,12 @@
 | AS-4 | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 非免费、不可旁路和反滥用的权威与玩家可读证据 | test_tier_required |
 | AS-5 | producer_system_designer / qa_engineer | PRD-GAME-011 / PRD-TESTING-003 | 同候选跨域组合审计 | test_tier_full |
 | AS-6 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 首个认领承诺包、持续成本、失去/恢复、替代决策与两类启动支持边界的组合证据 | test_tier_required |
+| AS-7 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 结束/回收/争议限制的原因和范围、历史与义务连续性、可读恢复/停止、以及重新认领资格重评和反 churn 套利的组合证据 | test_tier_full |
 
 ## 5. Non-Goals
 
 - 不冻结费用、倍率、宽限期、容量或回收参数。
 - 不定义账本 bucket、资金 provenance、管理员权限、签名阈值、CLI 或运营 runbook。
 - 不承诺免费 Agent、可转移启动财富、无限补贴、默认多 Agent 囤积或自动认领。
+- 不把主动结束、短暂退出、候选切换或历史 receipt 视为重置首次支持、逃避既有义务、取得额外容量或转移控制权的机制。
 - 不以本文或历史任务状态声明当前 preview、可玩性或公开发行已经通过。
