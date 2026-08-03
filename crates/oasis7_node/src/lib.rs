@@ -58,6 +58,7 @@ mod node_engine_gap_sync_outcome;
 mod node_engine_network;
 mod node_engine_replication;
 mod node_engine_replication_checkpoint;
+mod node_engine_replication_checkpoint_fetch;
 mod node_engine_replication_local_state_block;
 mod node_engine_replication_provider_route;
 mod node_engine_slashing;
