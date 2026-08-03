@@ -29,6 +29,8 @@
 
 - 争端先以合同、行动、世界状态、沟通接受和其他可审计 receipt 为事实基础，而非事后声望、财富、组织权势或不可核验叙事。
 - 合格争端由随机且无利益冲突的本地 panel 审查；panel 的地域/事项权限、排除冲突、证据范围和结果必须有界。它不是任意全局法院，也不能重写未争议的世界历史。
+- 提交争端本身不暂停全部合同或制造免费的风险转移：未争议、到期且仍可安全履行的义务继续按原合同处理。只有争议直接涉及的资产、collateral、权限或不可逆世界效果，才可在有理由、可审计且尽量可逆的最小保护范围内被保全；保全不得扩大为一方对对方资产、行动或声誉的单方控制，也不得新增义务、处罚、收益或新的高风险承诺。
+- 争端期间的 receipt 必须区分未争议的已确认结果、待审事实、被保全的范围和原因，以及当事人仍可执行的履行、补证、和解、等待或停止路径。最终处理只能按授权结果结清、恢复、补救或解除对应范围；不得借由保全静默没收资产、抹去历史、追溯伪造已履行事实，或把一次争端变成无限期冻结。
 - 当事人拥有有限的程序性申诉：针对授权、证据遗漏、利益冲突、程序越界或可验证错误进行复核。申诉不等于无限重审、拖延履约、用外部声量取代 receipt，或自动推翻权威世界已确认的无争议部分。
 
 ### 2.3 情境声誉与转让边界
@@ -62,7 +64,7 @@
 
 - CR-1：沟通与合同样例证明直接人类交流保持非绑定，只有有效授权、明确接受和权威校验后的 Agent-rendered 合同产生可审计义务。
 - CR-2：结算样例区分 hard atomic 交换与可违约持续服务；后者能说明 collateral、证据、补救、重新履行、解除或仲裁，而不产生隐藏部分结算。控制权转让、退休、解散或资不抵债样例会冻结新的风险承诺，并在履行、终止/结清或经明确同意的可审计继受前，不静默取消合同、自动转移责任或处置其相关托管资产。
-- CR-3：争端样例以 receipt 为首要事实，使用随机无冲突本地 panel 和有限程序性申诉；声量、财富或组织地位不能替代事实或扩大重审。
+- CR-3：争端样例以 receipt 为首要事实，使用随机无冲突本地 panel 和有限程序性申诉；争端期间未争议且可安全履行的义务不会自动停摆，直接争议范围只能获得有理由、可审计、尽量可逆的最小保全，并清楚区分已确认、待审、保全和可执行下一步；声量、财富或组织地位不能替代事实、扩大重审或把保全变成单方控制、没收或无限冻结。
 - CR-4：声誉样例区分玩家、Agent、组织和角色/岗位的情境记录，支持到期、更新和申诉而无永久 blacklist；转让披露世界历史但不转移个人/政治 credential。
 - CR-5：R&D 样例以工作前 charter 追溯归因与适用 royalty，永久保留 Agent provenance，并只通过显式合同转让 share；现有社交事实或产业真值不被误报为已实现本专题。
 
@@ -71,7 +73,7 @@
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
 | CR-1 / CR-2 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 非绑定沟通、授权/接受、atomic/持续服务、collateral/evidence/remedy，以及控制权变化时冻结新风险、履行/终止/结清或明确同意继受、托管资产/责任/receipt 连续性的组合证据 | test_tier_full |
-| CR-3 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | receipt-first、随机无冲突本地 panel、程序性申诉与范围限制证据 | test_tier_full |
+| CR-3 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | receipt-first、随机无冲突本地 panel、程序性申诉、未争议履行、最小可逆保全、保全范围/原因/下一步和结清/恢复/补救/解除的范围限制证据 | test_tier_full |
 | CR-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 分主体/情境声誉、到期/更新/申诉、无永久 blacklist 和转让 credential 负例 | test_tier_required |
 | CR-5 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | R&D charter、贡献归因/royalty、永久 Agent provenance、显式 share 转让与现状 claim 分离证据 | test_tier_full |
 
