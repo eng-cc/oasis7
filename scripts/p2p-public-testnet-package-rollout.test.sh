@@ -60,7 +60,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-module_path = Path(r'''$ROOT_DIR''') / "scripts/p2p-public-testnet-package-rollout.py"
+module_path = Path(os.environ.get(
+    "OASIS7_TEST_ROLLOUT_MODULE_PATH",
+    r'''$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py''',
+))
 spec = importlib.util.spec_from_file_location("rollout", module_path)
 rollout = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
@@ -1164,7 +1167,9 @@ set +e
 OASIS7_FIXTURE_WORKSPACE_ROOT="$(cygpath -w "$ROOT_DIR")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
   OASIS7_FIXTURE_PACKAGE_VERSION="$package_version" \
-  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$rollout_driver")" \
+  OASIS7_TEST_ROLLOUT_MODULE_PATH="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_TEST_CLOSURE_FIXTURE="$(cygpath -w "$checkpoint_closure_receipt")" \
   OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
   "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$powershell_fixture_script_windows" >"$powershell_output" 2>&1
 powershell_status=$?
