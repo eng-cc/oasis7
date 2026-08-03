@@ -24,6 +24,7 @@ mod claim_runway;
 mod fine_grain_translation;
 mod industrial_progression;
 mod industrial_progression_grind;
+mod industrial_progression_readiness;
 mod prompt_control;
 mod provider_settings;
 mod smelter_affordability_debug;

@@ -8,7 +8,7 @@ use crate::simulator::{
 };
 use crate::viewer::FACTORY_SMELTER_MK1;
 
-fn setup_runtime_industrial_gameplay_session(
+pub(super) fn setup_runtime_industrial_gameplay_session(
     signer_seed: u8,
 ) -> (ViewerRuntimeLiveServer, String, String, String) {
     let mut server = ViewerRuntimeLiveServer::new(
@@ -40,7 +40,7 @@ fn setup_runtime_industrial_gameplay_session(
     (server, agent_id, public_key, private_key)
 }
 
-fn build_first_smelter_via_gameplay_action(
+pub(super) fn build_first_smelter_via_gameplay_action(
     server: &mut ViewerRuntimeLiveServer,
     agent_id: &str,
     public_key: &str,
@@ -232,7 +232,7 @@ fn complete_smelter_iron_ingot_jobs(
     }
 }
 
-fn setup_industrial_gameplay_with_completed_jobs(
+pub(super) fn setup_industrial_gameplay_with_completed_jobs(
     signer_seed: u8,
     jobs: u64,
 ) -> ViewerRuntimeLiveServer {
@@ -257,7 +257,7 @@ fn setup_industrial_gameplay_with_completed_jobs(
     server
 }
 
-fn expect_player_gameplay(
+pub(super) fn expect_player_gameplay(
     server: &mut ViewerRuntimeLiveServer,
     context: &'static str,
 ) -> crate::simulator::PlayerGameplaySnapshot {
@@ -267,7 +267,7 @@ fn expect_player_gameplay(
         .expect(context)
 }
 
-fn smelter_schedule_action<'a>(
+pub(super) fn smelter_schedule_action<'a>(
     gameplay: &'a crate::simulator::PlayerGameplaySnapshot,
     action_id: &str,
 ) -> &'a crate::simulator::PlayerGameplayAction {
@@ -368,7 +368,9 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
     );
     assert_eq!(
         bootstrap_alloy.disabled_reason.as_deref(),
-        Some("requires industry stage scale_out (current: bootstrap)"),
+        Some(
+            "requires industry stage scale_out (current: bootstrap); complete additional smelter runs to unlock scale_out"
+        ),
         "alloy stage gate takes precedence until the recipe is unlocked"
     );
 
@@ -385,6 +387,14 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
         scale_out_server.world.state().industry_progress.stage,
         IndustryStage::ScaleOut
     );
+    scale_out_server
+        .world
+        .set_material_balance("iron_ingot", 200)
+        .expect("seed alloy iron ingot");
+    scale_out_server
+        .world
+        .set_material_balance("copper_wire", 200)
+        .expect("seed alloy copper wire");
     for (electricity, data, expected_reason) in [
         (0, i64::MAX, Some("insufficient electricity")),
         (i64::MAX, 0, Some("insufficient data")),
@@ -629,96 +639,6 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
 }
 
 #[test]
-fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
-    let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 4);
-    let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
-    assert_eq!(
-        gameplay.goal_id,
-        "post_onboarding.choose_first_expansion_tradeoff"
-    );
-    assert_eq!(
-        gameplay.goal_kind,
-        PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-    );
-    assert_eq!(
-        gameplay.stage_status,
-        PlayerGameplayStageStatus::BranchReady
-    );
-    assert_eq!(gameplay.progress_percent, 92);
-    assert!(
-        gameplay
-            .branch_hint
-            .as_deref()
-            .is_some_and(|hint| hint.contains("throughput expansion"))
-    );
-    assert!(
-        gameplay
-            .available_actions
-            .iter()
-            .any(
-                |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
-                    && action.disabled_reason.is_none()
-            )
-    );
-    assert!(
-        gameplay
-            .available_actions
-            .iter()
-            .any(|action| action.action_id == "build_factory_assembler_mk1")
-    );
-    assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
-    let recommended_action_ids = gameplay
-        .branch_recommendations
-        .iter()
-        .map(|recommendation| recommendation.action_id.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        recommended_action_ids,
-        vec!["schedule_recipe_smelter_alloy_plate"],
-        "branch-ready recommendations must keep the frozen gameplay-design order while excluding disabled actions",
-    );
-    for recommendation in &gameplay.branch_recommendations {
-        assert!(!recommendation.route_label.trim().is_empty());
-        assert!(!recommendation.immediate_gain.trim().is_empty());
-        assert!(!recommendation.future_beat_changed.trim().is_empty());
-        assert!(!recommendation.risk_or_lockin.trim().is_empty());
-        assert!(!recommendation.next_session_hook.trim().is_empty());
-        assert!(
-            gameplay.available_actions.iter().any(|action| {
-                action.action_id == recommendation.action_id && action.disabled_reason.is_none()
-            }),
-            "recommendation {} must bind a real enabled action",
-            recommendation.action_id,
-        );
-    }
-    assert_eq!(
-        gameplay.small_player_lane_id.as_deref(),
-        Some("local_operator")
-    );
-    assert_eq!(
-        gameplay.leverage_class.as_deref(),
-        Some("regional_specialization_option")
-    );
-    assert_eq!(gameplay.same_loop_repeat_count, 3);
-    assert!(!gameplay.grind_only_flag);
-    assert_eq!(
-        gameplay.major_power_dependency_status.as_deref(),
-        Some("independent_path_available")
-    );
-    assert_eq!(
-        gameplay.recovery_path_kind.as_deref(),
-        Some("repair_rebuild_or_pivot")
-    );
-    assert!(
-        gameplay
-            .recovery_path_detail
-            .as_deref()
-            .is_some_and(|detail| detail.contains("repair"))
-    );
-}
-
-#[test]
 fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(42, 4);
@@ -829,6 +749,33 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
 fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .expect("governance-ready agent")
+        .clone();
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, i64::MAX)
+        .expect("fund governance-ready agent electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
+        .expect("fund governance-ready agent data");
+    server
+        .world
+        .set_material_balance("iron_ingot", 200)
+        .expect("seed governance alloy iron ingot");
+    server
+        .world
+        .set_material_balance("copper_wire", 200)
+        .expect("seed governance alloy copper wire");
+    server
+        .world
+        .set_resource_balance(ResourceKind::Electricity, 2_000);
     let gameplay =
         expect_player_gameplay(&mut server, "player gameplay after governance-ready output");
     assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");

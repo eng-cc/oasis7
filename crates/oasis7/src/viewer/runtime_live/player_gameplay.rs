@@ -1078,10 +1078,18 @@ fn stage_gate_disabled_reason(
     if industry_stage_rank(current_stage) >= industry_stage_rank(required_stage) {
         return None;
     }
+    let unlock_path = match required_stage {
+        IndustryStage::ScaleOut => "complete additional smelter runs to unlock scale_out",
+        IndustryStage::Governance => {
+            "complete scale_out progress and the governance objective to unlock governance"
+        }
+        IndustryStage::Bootstrap => unreachable!("bootstrap cannot be a gated stage"),
+    };
     Some(format!(
-        "requires industry stage {} (current: {})",
+        "requires industry stage {} (current: {}); {}",
         industry_stage_label(required_stage),
-        industry_stage_label(current_stage)
+        industry_stage_label(current_stage),
+        unlock_path
     ))
 }
 
