@@ -567,12 +567,25 @@ impl PosNodeEngine {
             {
                 return Ok(false);
             }
-            let checkpoint_bundle = self.fetch_execution_checkpoint_bundle(
-                endpoint,
-                world_id,
-                replication_runtime,
-                &checkpoint_descriptor,
-            )?;
+            let probe_nonce = std::env::var("OASIS7_CHECKPOINT_PROBE_NONCE").ok();
+            if let Some(probe_nonce) = probe_nonce.as_deref() {
+                if !ReplicationRuntime::checkpoint_probe_nonce_is_valid(probe_nonce) {
+                    return Err(NodeError::Replication {
+                        reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string(),
+                    });
+                }
+            }
+            let (checkpoint_bundle, checkpoint_fetch_observations) = self
+                .fetch_execution_checkpoint_bundle(
+                    endpoint,
+                    world_id,
+                    replication_runtime,
+                    &checkpoint_descriptor,
+                    probe_nonce.is_some(),
+                )?;
+            // The closure can be large. Normal sync has no receipt consumer,
+            // so retain a second owned copy only for an explicit probe run.
+            let checkpoint_receipt_bundle = probe_nonce.as_ref().map(|_| checkpoint_bundle.clone());
             with_execution_hook(execution_hook, |hook| {
                 let Some(hook) = hook else {
                     return Ok(None);
@@ -602,6 +615,13 @@ impl PosNodeEngine {
                         ),
                     });
                 }
+                replication_runtime.persist_checkpoint_verification_receipt(
+                    world_id,
+                    probe_nonce.as_deref(),
+                    &checkpoint_descriptor,
+                    checkpoint_receipt_bundle.as_ref(),
+                    checkpoint_fetch_observations.as_slice(),
+                )?;
                 self.last_execution_height = result.execution_height;
                 self.last_execution_block_hash = Some(result.execution_block_hash);
                 self.last_execution_state_root = Some(result.execution_state_root);
@@ -650,22 +670,33 @@ impl PosNodeEngine {
         world_id: &str,
         replication_runtime: &ReplicationRuntime,
         descriptor: &NodeExecutionCheckpointDescriptor,
-    ) -> Result<NodeExecutionCheckpointBundle, NodeError> {
-        self.ensure_execution_checkpoint_blob(
+        collect_fetch_observations: bool,
+    ) -> Result<(NodeExecutionCheckpointBundle, Vec<serde_json::Value>), NodeError> {
+        let mut fetch_observations = Vec::new();
+        if collect_fetch_observations {
+            fetch_observations.reserve(descriptor.blobs.len() + 1);
+        }
+        if let Some(observation) = self.ensure_execution_checkpoint_blob(
             endpoint,
             world_id,
             replication_runtime,
             descriptor.manifest_ref.as_str(),
             descriptor.manifest_size_bytes,
-        )?;
+            collect_fetch_observations,
+        )? {
+            fetch_observations.push(observation);
+        }
         for blob_ref in &descriptor.blobs {
-            self.ensure_execution_checkpoint_blob(
+            if let Some(observation) = self.ensure_execution_checkpoint_blob(
                 endpoint,
                 world_id,
                 replication_runtime,
                 blob_ref.content_hash.as_str(),
                 blob_ref.size_bytes,
-            )?;
+                collect_fetch_observations,
+            )? {
+                fetch_observations.push(observation);
+            }
         }
         replication_runtime.pin_execution_checkpoint_descriptor(descriptor)?;
         Self::publish_execution_checkpoint_descriptor_providers(
@@ -674,14 +705,15 @@ impl PosNodeEngine {
             replication_runtime,
             descriptor,
         )?;
-        replication_runtime
+        let bundle = replication_runtime
             .load_execution_checkpoint_bundle(descriptor)?
             .ok_or_else(|| NodeError::Replication {
                 reason: format!(
                     "execution checkpoint descriptor could not be materialized at height {}",
                     descriptor.height
                 ),
-            })
+            })?;
+        Ok((bundle, fetch_observations))
     }
 
     fn ensure_execution_checkpoint_blob(
@@ -691,7 +723,8 @@ impl PosNodeEngine {
         replication_runtime: &ReplicationRuntime,
         content_hash: &str,
         expected_size_bytes: u64,
-    ) -> Result<(), NodeError> {
+        collect_fetch_observations: bool,
+    ) -> Result<Option<serde_json::Value>, NodeError> {
         if let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? {
             if bytes.len() as u64 != expected_size_bytes {
                 return Err(NodeError::Replication {
@@ -703,7 +736,16 @@ impl PosNodeEngine {
                     ),
                 });
             }
-            return Ok(());
+            return Ok(collect_fetch_observations.then(|| {
+                serde_json::json!({
+                    "content_hash": content_hash,
+                    "source": "local_cache",
+                    "expected_size_bytes": expected_size_bytes,
+                    "observed_size_bytes": bytes.len(),
+                    "response_found": true,
+                    "observed_content_hash": blake3_hex(bytes.as_slice()),
+                })
+            }));
         }
         let request = replication_runtime.build_fetch_blob_request(content_hash)?;
         let mut provider_lookup_failure = None;
@@ -759,7 +801,33 @@ impl PosNodeEngine {
                 ),
             });
         }
-        replication_runtime.store_blob_by_hash(content_hash, blob.as_slice())
+        replication_runtime.store_blob_by_hash(content_hash, blob.as_slice())?;
+        if !collect_fetch_observations {
+            return Ok(None);
+        }
+        let mut provider_candidates = provider_lookup.unwrap_or_default();
+        provider_candidates.sort();
+        provider_candidates.dedup();
+        let mut connected_peer_ids = endpoint.connected_peer_ids();
+        connected_peer_ids.sort();
+        connected_peer_ids.dedup();
+        let connected_candidates: Vec<String> = provider_candidates
+            .iter()
+            .filter(|candidate| connected_peer_ids.binary_search(candidate).is_ok())
+            .cloned()
+            .collect();
+        Ok(Some(serde_json::json!({
+            "content_hash": content_hash,
+            "source": "network_fetch",
+            "provider_candidates": provider_candidates,
+            "connected_peer_ids": connected_peer_ids,
+            "connected_candidate_ids": connected_candidates,
+            "signed_request": request.requester_signature_hex.is_some(),
+            "response_found": true,
+            "expected_size_bytes": expected_size_bytes,
+            "observed_size_bytes": blob.len(),
+            "observed_content_hash": actual,
+        })))
     }
 
     pub(super) fn sync_missing_replication_commits_with_progress(

@@ -405,6 +405,84 @@ def load_checkpoint_closure_receipt(path: Path) -> dict[str, Any]:
     return receipt
 
 
+def run_checkpoint_closure_probe(manifest: Path, package_dir: Path, out_dir: Path) -> dict[str, Any]:
+    """Obtain closure evidence only by executing the repository-owned probe.
+
+    This is intentionally not an argument: a JSON file supplied by an operator
+    has no binding to the fresh runtime invocation that fetched the closure.
+    """
+    probe_out = out_dir / "checkpoint-closure-probe.json"
+    command = [sys.executable, str(ROOT_DIR / "scripts/p2p-observer-checkpoint-closure-probe.py"),
+        "--manifest", str(manifest), "--package-dir", str(package_dir),
+        "--out", str(probe_out),
+    ]
+    # A test-only subprocess seam exercises the same invocation/output boundary
+    # without turning a fixture JSON into a production input.  Production
+    # environments cannot select it.
+    test_probe = os.environ.get("OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE")
+    if test_probe:
+        if os.environ.get("OASIS7_TESTING") != "1":
+            die("test checkpoint closure probe override is forbidden outside OASIS7_TESTING=1")
+        command = shlex.split(test_probe) + ["--manifest", str(manifest), "--package-dir", str(package_dir), "--out", str(probe_out)]
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "probe failed"
+        die(f"checkpoint closure probe failed: {detail}")
+    if probe_out.is_symlink() or not probe_out.is_file():
+        die("checkpoint closure probe did not produce its canonical receipt")
+    try:
+        result = json.loads(probe_out.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        die(f"checkpoint closure probe result is invalid JSON: {error}")
+    if not isinstance(result, dict) or result.get("schema_version") != "oasis7.observer_checkpoint_closure_probe.v1":
+        die("checkpoint closure probe result has invalid schema_version")
+    digest = result.get("canonical_digest")
+    material = dict(result)
+    material.pop("canonical_digest", None)
+    if not isinstance(digest, str) or hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest() != digest:
+        die("checkpoint closure probe canonical digest mismatch")
+    runtime = result.get("runtime_receipt")
+    if not isinstance(runtime, dict) or runtime.get("schema_version") != "oasis7.checkpoint_closure_verification_receipt.v1":
+        die("checkpoint closure probe lacks runtime receipt")
+    if isinstance(runtime.get("height"), bool) or not isinstance(runtime.get("height"), int) or runtime["height"] <= 0:
+        die("checkpoint closure probe receipt has invalid or stale checkpoint height")
+    for field in ("execution_block_hash", "execution_state_root", "manifest_hash"):
+        if not isinstance(runtime.get(field), str) or not runtime[field]:
+            die(f"checkpoint closure probe receipt lacks {field} binding")
+    observations = runtime.get("fetch_observations")
+    objects = runtime.get("objects")
+    if not isinstance(observations, list) or not observations or not isinstance(objects, list) or len(objects) != len(observations):
+        die("checkpoint closure probe has invalid closure observations")
+    for obj, observed in zip(objects, observations):
+        if not isinstance(obj, dict) or not isinstance(observed, dict) or observed.get("source") != "network_fetch" or observed.get("signed_request") is not True or observed.get("response_found") is not True or not isinstance(observed.get("connected_candidate_ids"), list) or not observed["connected_candidate_ids"] or observed.get("content_hash") != obj.get("expected_content_hash") or observed.get("observed_content_hash") != obj.get("expected_content_hash") or observed.get("observed_size_bytes") != obj.get("expected_size_bytes"):
+            die("checkpoint closure probe receipt has unbound network fetch observation")
+    bindings = result.get("input_bindings")
+    if not isinstance(bindings, dict) or bindings.get("rollout_manifest_sha256") != sha256_file(manifest):
+        die("checkpoint closure probe manifest binding mismatch")
+    observer_names = [str(node.get("name") or "") for node in load_manifest(manifest)["nodes"]
+                      if isinstance(node, dict) and str(node.get("name") or "") not in CANONICAL_PROVIDER_NAMES]
+    if bindings.get("observer_name") not in observer_names:
+        die("checkpoint closure probe observer binding mismatch")
+    if bindings.get("world_id") != runtime.get("world_id"):
+        die("checkpoint closure probe world identity mismatch")
+    buildinfo = bindings.get("buildinfo")
+    if not isinstance(buildinfo, dict) or not all(isinstance(buildinfo.get(k), str) and buildinfo[k] for k in ("commit", "package_version", "run_id")):
+        die("checkpoint closure probe BUILDINFO binding is incomplete")
+    # Generated platform gates compare provider status to this identity.
+    return {
+        "checkpoint_id": runtime["execution_block_hash"],
+        "manifest_hash": runtime["manifest_hash"],
+        "height": runtime["height"],
+        "clean_state": True,
+        "providers": [{"provider_id": "clean-room-probe", "authorized": True, "connected": True,
+                       "complete": True, "hash_size_binding_verified": True, "missing_hashes": []}],
+        "probe_canonical_digest": digest,
+        "fetch_observations": observations,
+    }
+
+
 def observer_checkpoint_gate_bash(
     sequencer_status_url: str,
     storage_status_url: str,
@@ -2672,15 +2750,6 @@ def main() -> int:
     parser.add_argument("--package-dir", required=True, type=Path, help="Downloaded GitHub artifact directory")
     parser.add_argument("--out-dir", type=Path, default=Path(".tmp/testnet-package-rollout"))
     parser.add_argument(
-        "--checkpoint-closure-receipt",
-        type=Path,
-        help=(
-            "Structured clean-room observer checkpoint closure receipt. Required whenever the "
-            "rollout contains an observer; its checkpoint identity is embedded into every "
-            "observer mutation gate."
-        ),
-    )
-    parser.add_argument(
         "--apply-local",
         action="store_true",
         help="Mutate local linux-x64 nodes without a host; omitted means plan-only.",
@@ -2715,17 +2784,10 @@ def main() -> int:
     )
     checkpoint_closure_receipt = None
     if observer_rollout_present:
-        closure_receipt_arg = args.checkpoint_closure_receipt
-        if closure_receipt_arg is None:
-            closure_receipt_env = os.environ.get("OASIS7_CHECKPOINT_CLOSURE_RECEIPT")
-            closure_receipt_arg = Path(closure_receipt_env) if closure_receipt_env else None
-        if closure_receipt_arg is None:
-            die(
-                "observer rollout requires checkpoint closure receipt via "
-                "--checkpoint-closure-receipt"
-            )
-        checkpoint_closure_receipt = load_checkpoint_closure_receipt(
-            closure_receipt_arg.expanduser().absolute()
+        if os.environ.get("OASIS7_CHECKPOINT_CLOSURE_RECEIPT"):
+            die("caller-supplied checkpoint closure receipt is forbidden; the rollout executes its checkpoint closure probe")
+        checkpoint_closure_receipt = run_checkpoint_closure_probe(
+            args.manifest.resolve(), package_dir, out_dir
         )
 
     platform_dirs: dict[str, Path] = {}

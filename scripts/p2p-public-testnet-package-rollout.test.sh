@@ -47,7 +47,9 @@ cat >"$checkpoint_closure_receipt" <<'EOF'
 }
 EOF
 
-export OASIS7_CHECKPOINT_CLOSURE_RECEIPT="$checkpoint_closure_receipt"
+export OASIS7_TESTING=1
+export OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE="python3 $ROOT_DIR/scripts/p2p-observer-checkpoint-closure-probe.test.py"
+export OASIS7_TEST_CLOSURE_FIXTURE="$checkpoint_closure_receipt"
 
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
@@ -1380,7 +1382,7 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 closure_receipt = json.loads(
-    Path(os.environ["OASIS7_CHECKPOINT_CLOSURE_RECEIPT"]).read_text(encoding="utf-8")
+    Path(os.environ["OASIS7_TEST_CLOSURE_FIXTURE"]).read_text(encoding="utf-8")
 )
 injected = r"C:\safe'; Write-Output INJECTED; #"
 node = {
@@ -1610,7 +1612,7 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 closure_receipt = json.loads(
-    Path(os.environ["OASIS7_CHECKPOINT_CLOSURE_RECEIPT"]).read_text(encoding="utf-8")
+    Path(os.environ["OASIS7_TEST_CLOSURE_FIXTURE"]).read_text(encoding="utf-8")
 )
 
 # Execute the generated macOS rollback path against deterministic command mocks.
@@ -4178,66 +4180,39 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
 fi
 grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
 
-if env -u OASIS7_CHECKPOINT_CLOSURE_RECEIPT \
-  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
-  --manifest "$observer_gate_manifest" \
-  --package-dir "$package_dir" \
-  --out-dir "$TMP_DIR/observer-missing-closure-receipt-out" \
-  >"$TMP_DIR/observer-missing-closure-receipt.stdout" \
-  2>"$TMP_DIR/observer-missing-closure-receipt.stderr"; then
-  echo "expected observer rollout planning without a clean-room checkpoint closure receipt to fail" >&2
-  exit 1
-fi
-grep -q "checkpoint closure receipt" "$TMP_DIR/observer-missing-closure-receipt.stderr"
-
-invalid_checkpoint_closure_receipt="$TMP_DIR/invalid-observer-checkpoint-closure-receipt.json"
-python3 - "$checkpoint_closure_receipt" "$invalid_checkpoint_closure_receipt" <<'PY'
-from pathlib import Path
-import json
-import sys
-
-receipt = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-receipt["clean_state"] = False
-Path(sys.argv[2]).write_text(json.dumps(receipt) + "\n", encoding="utf-8")
-PY
-if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
-  --manifest "$observer_gate_manifest" \
-  --package-dir "$package_dir" \
-  --checkpoint-closure-receipt "$invalid_checkpoint_closure_receipt" \
-  --out-dir "$TMP_DIR/observer-invalid-closure-receipt-out" \
-  >"$TMP_DIR/observer-invalid-closure-receipt.stdout" \
-  2>"$TMP_DIR/observer-invalid-closure-receipt.stderr"; then
-  echo "expected observer rollout planning with a non-clean closure receipt to fail" >&2
-  exit 1
-fi
-grep -q "clean_state" "$TMP_DIR/observer-invalid-closure-receipt.stderr"
-
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
-  --manifest "$observer_gate_manifest" \
-  --package-dir "$package_dir" \
-  --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
-  --out-dir "$TMP_DIR/observer-closure-receipt-out" \
-  --json >"$TMP_DIR/observer-closure-receipt-plan.json"
-python3 - \
-  "$TMP_DIR/observer-closure-receipt-plan.json" \
-  "$checkpoint_closure_receipt" <<'PY'
-from pathlib import Path
-import json
-import sys
-
-plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-receipt = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-observer = next(node for node in plan["nodes"] if node["name"] == "linux-lan-observer")
-assert observer["checkpoint_closure_receipt"] == receipt
-wrapper = Path(observer["observer_checkpoint_gate_script"]).read_text(encoding="utf-8")
-for field, value in (
-    ("checkpoint_id", receipt["checkpoint_id"]),
-    ("manifest_hash", receipt["manifest_hash"]),
-    ("height", str(receipt["height"])),
-):
-    assert value in wrapper, f"generated observer gate does not bind {field} to receipt identity"
-assert "hash_size_binding_verified" in wrapper
-assert "missing_hashes" in wrapper
+  --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/observer-closure-probe-out" --json >"$TMP_DIR/observer-closure-probe-plan.json"
+probe_gate_script="$(python3 - "$TMP_DIR/observer-closure-probe-plan.json" <<'PY'
+import json, sys
+plan = json.load(open(sys.argv[1], encoding="utf-8"))
+print(next(node["observer_checkpoint_gate_script"] for node in plan["nodes"] if "observer_checkpoint_gate_script" in node))
 PY
+)"
+grep -q 'fixture-checkpoint-v2' "$probe_gate_script"
+
+for mode in bad-digest non-network empty-candidates hash-size stale; do
+  if OASIS7_TEST_PROBE_MODE="$mode" "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+    --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
+    --out-dir "$TMP_DIR/observer-probe-$mode-out" >/dev/null 2>"$TMP_DIR/observer-probe-$mode.err"; then
+    echo "expected controlled probe mode $mode to fail" >&2; exit 1
+  fi
+  grep -q 'checkpoint closure probe' "$TMP_DIR/observer-probe-$mode.err"
+done
+
+# Legacy external input is rejected by argparse, and the legacy environment is
+# rejected before the harness can be consulted.
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
+  --out-dir "$TMP_DIR/legacy-arg-out" >/dev/null 2>"$TMP_DIR/legacy-arg.err"; then
+  echo "expected legacy checkpoint receipt argument to fail" >&2; exit 1
+fi
+grep -q 'unrecognized arguments' "$TMP_DIR/legacy-arg.err"
+if OASIS7_CHECKPOINT_CLOSURE_RECEIPT="$checkpoint_closure_receipt" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" --out-dir "$TMP_DIR/legacy-env-out" >/dev/null 2>"$TMP_DIR/legacy-env.err"; then
+  echo "expected legacy checkpoint receipt environment to fail" >&2; exit 1
+fi
+grep -q 'caller-supplied checkpoint closure receipt is forbidden' "$TMP_DIR/legacy-env.err"
 
 echo "ok: package rollout helper validates artifacts and standardizes linux/windows/macos replacement plans"
