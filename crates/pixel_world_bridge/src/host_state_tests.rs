@@ -150,6 +150,45 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_display() {
+    let blocked = build_render_state(&sample_input());
+    assert_eq!(
+        blocked["receipt_target"],
+        json!({ "agent_id": "agent-0", "state": "blocked" }),
+        "a present blocked receipt must expose a display-only target cue for its rendered Agent"
+    );
+
+    let mut accepted_input = sample_input();
+    accepted_input["gameplay"]["executionState"] = json!("accepted");
+    accepted_input["gameplay"]["recentFeedback"]["stage"] = json!("accepted");
+    let accepted = build_render_state(&accepted_input);
+    assert_eq!(
+        accepted["receipt_target"],
+        json!({ "agent_id": "agent-0", "state": "accepted" }),
+        "accepted/submitted receipt states must retain their target and state for the renderer"
+    );
+
+    let mut absent_input = sample_input();
+    absent_input["gameplay"] = json!({});
+    let absent = build_render_state(&absent_input);
+    assert!(
+        absent.get("receipt_target").is_none() || absent["receipt_target"].is_null(),
+        "an absent receipt must not create a display target"
+    );
+
+    let mut unknown_target_input = sample_input();
+    unknown_target_input["gameplay"]["acceptedIntentTarget"] = json!("agent-not-rendered");
+    unknown_target_input["gameplay"]["recommendedAction"]["targetAgentId"] =
+        json!("agent-not-rendered");
+    let unknown_target = build_render_state(&unknown_target_input);
+    assert!(
+        unknown_target.get("receipt_target").is_none()
+            || unknown_target["receipt_target"].is_null(),
+        "a receipt targeting an Agent absent from RenderState must not create a visual target"
+    );
+}
+
+#[test]
 fn rust_host_state_localizes_command_board_surface_for_zh_locale() {
     let mut input = sample_input();
     input["locale"] = json!("zh-CN");

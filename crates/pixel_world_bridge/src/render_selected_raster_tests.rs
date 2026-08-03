@@ -1,3 +1,4 @@
+use super::fixtures::sample_render_state_with_receipt_target;
 use super::*;
 
 #[test]
@@ -38,4 +39,20 @@ fn bevy_pixel_regression_exports_selected_agent_corner_cue_with_world_layers() {
     );
 
     write_pixel_probe_if_requested(&image, &summary);
+}
+
+#[test]
+fn bevy_pixel_regression_exports_visible_receipt_target_pixels() {
+    let mut visible = render_test_app(sample_render_state_with_receipt_target(
+        Some("accepted"),
+        Some("agent-0"),
+    ));
+    let (_, visible_summary) = rasterize_pixel_regression(&mut visible);
+    let mut absent = render_test_app(sample_render_state_with_receipt_target(None, None));
+    let (_, absent_summary) = rasterize_pixel_regression(&mut absent);
+
+    assert!(
+        visible_summary.non_background_pixels > absent_summary.non_background_pixels,
+        "an accepted receipt cue must contribute visible raster pixels above its target Agent"
+    );
 }

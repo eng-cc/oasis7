@@ -164,6 +164,11 @@ fn selected_agent_cue_visuals(body_half_size: f32) -> [(SelectedAgentCueSegment,
     ]
 }
 
+/// Distance from an Agent center to the outermost top edge of its corner frame.
+pub(super) fn selected_agent_cue_outer_top_offset(body_half_size: f32) -> f32 {
+    body_half_size + SELECTED_AGENT_CUE_PADDING_PX + SELECTED_AGENT_CUE_THICKNESS_PX
+}
+
 pub(super) fn reconcile_selected_agent_cues(
     commands: &mut Commands,
     runtime: &BevyRuntimeState,

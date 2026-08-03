@@ -2,6 +2,7 @@ import * as core from "./legacy_core.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
+const PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
 
 export function pixelWorldTestApiEnabled() {
   if (typeof window === "undefined" || !window.location) {
@@ -41,17 +42,44 @@ export function installPixelWorldVisualFixtureHook() {
   }
   const fixture = fixtures[fixtureName]();
   core.injectSnapshot(fixture, { returnState: false });
-  core.state.auth = {
+  const alignFixtureAuth = () => {
+    const playerId = String(core.state.auth.playerId || "player-one").trim() || "player-one";
+    const publicKey = String(core.state.auth.publicKey || "abcdef0123456789abcdef0123456789").trim();
+    const model = core.state.snapshot?.model || {};
+    model.agent_player_bindings = {
+      ...(model.agent_player_bindings || {}),
+      "agent-0": playerId,
+    };
+    model.agent_player_public_key_bindings = {
+      ...(model.agent_player_public_key_bindings || {}),
+      "agent-0": publicKey,
+    };
+    core.state.auth = {
     ...core.state.auth,
     available: true,
-    playerId: "player-one",
-    publicKey: "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
+      playerId,
+      publicKey,
+      privateKey: core.state.auth.privateKey || "private-key-must-stay-hidden",
     source: "local_test_api_ephemeral",
     registrationStatus: "registered",
     runtimeStatus: "registered",
     boundAgentId: "agent-0",
+    };
+    core.applySelection({ kind: "agent", id: "agent-0" });
+    core.requestRender();
+    return true;
   };
-  core.applySelection({ kind: "agent", id: "agent-0" });
+  window[PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL] = alignFixtureAuth;
+  alignFixtureAuth();
   return fixtureName;
+}
+
+export function installPixelWorldRenderDtoProbe(fixtureName, getRenderState, onCleanup) {
+  if (!fixtureName || !pixelWorldTestApiEnabled()) {
+    return;
+  }
+  window.__OASIS7_PIXEL_WORLD_RENDER_DTO__ = () => core.clone(getRenderState());
+  onCleanup(() => {
+    delete window.__OASIS7_PIXEL_WORLD_RENDER_DTO__;
+  });
 }

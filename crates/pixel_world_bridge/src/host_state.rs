@@ -997,6 +997,21 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         &visual_hotspots,
         &selection,
     );
+    // Keep this target-only projection separate from the player-facing receipt text.
+    let receipt_target = obj(&commercial_surface, "action_receipt")
+        .get("present")
+        .and_then(Value::as_bool)
+        .filter(|present| *present)
+        .and_then(|_| {
+            let receipt = obj(&commercial_surface, "action_receipt");
+            let agent_id = str_key(receipt, "target_agent_id")?;
+            let state = str_key(receipt, "state")?;
+            agents
+                .iter()
+                .any(|agent| str_key(agent, "id") == Some(agent_id))
+                .then(|| json!({ "agent_id": agent_id, "state": state }))
+        })
+        .unwrap_or(Value::Null);
     let presentation = obj(input, "presentation");
 
     json!({
@@ -1011,6 +1026,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "blocker_highlight": blocker_highlight,
         "recent_event_hotspots": recent_event_hotspots,
         "visual_hotspots": visual_hotspots,
+        "receipt_target": receipt_target,
         "commercial_surface": commercial_surface,
         "presentation": {
             "world_bounds_label": obj(presentation, "world_bounds_label").clone(),

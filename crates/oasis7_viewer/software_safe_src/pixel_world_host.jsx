@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, on
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
 import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js";
-import { installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
+import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 
 export { pixelWorldSelectedBlockerVisualFixture };
@@ -1235,6 +1235,7 @@ export function PixelWorldHost(props) {
   const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
   const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
+  installPixelWorldRenderDtoProbe(visualFixtureName, renderState, onCleanup);
   const visualOverlayEnabled = () => Boolean(
     visualFixtureName
       || document.body?.getAttribute("data-viewer-visual-fixture"),

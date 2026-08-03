@@ -136,6 +136,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             kind: "agent".to_string(),
             id: "agent-0".to_string(),
         }),
+        receipt_target: None,
     }
 }
 
@@ -302,6 +303,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         selected_agent_cue_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("selected_agent_cue", sprite, transform)),
+    );
+    let mut receipt_target_cue_query =
+        world.query::<(&PixelWorldReceiptTargetCue, &Sprite, &Transform)>();
+    layers.extend(
+        receipt_target_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("receipt_target_cue", sprite, transform)),
     );
 
     let mut fragment_shadow_query =
