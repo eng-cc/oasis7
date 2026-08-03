@@ -168,6 +168,16 @@ struct HitRegion {
     bottom: f64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct HotspotTestHitTarget {
+    kind: &'static str,
+    id: String,
+    canvas_x: f64,
+    canvas_y: f64,
+}
+
+const HOTSPOT_TEST_READBACK_CONTRACT: &str = "oasis7_hotspot_pointer_evidence_v1";
+
 #[derive(Clone, Debug)]
 enum InputEvent {
     PointerDown {
@@ -203,6 +213,7 @@ struct BridgeSharedState {
     input_events: Vec<InputEvent>,
     on_event: Option<Function>,
     on_fatal: Option<Function>,
+    hotspot_test_targets: Vec<HotspotTestHitTarget>,
 }
 
 #[derive(Resource, Default)]
@@ -642,6 +653,28 @@ fn hit_test(hit_regions: &[HitRegion], x: f64, y: f64) -> Option<(String, String
     None
 }
 
+fn hotspot_test_hit_targets(hit_regions: &[HitRegion]) -> Vec<HotspotTestHitTarget> {
+    hit_regions
+        .iter()
+        .filter(|region| region.kind == "hotspot")
+        .map(|region| HotspotTestHitTarget {
+            kind: region.kind,
+            id: region.id.clone(),
+            canvas_x: (region.left + region.right) / 2.0,
+            canvas_y: (region.top + region.bottom) / 2.0,
+        })
+        .collect()
+}
+
+fn publish_hotspot_test_hit_targets(hit_regions: &[HitRegion]) {
+    let targets = hotspot_test_hit_targets(hit_regions);
+    BRIDGE_SHARED.with(|shared| shared.borrow_mut().hotspot_test_targets = targets);
+}
+
+fn click_selection_from_hit(hit: Option<(String, String)>) -> Option<(String, String)> {
+    hit.filter(|(kind, _)| kind != "hotspot")
+}
+
 fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
     match event {
         InputEvent::PointerDown { x, y, pointer_id } => {
@@ -722,7 +755,8 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
             let _ = emit_camera_state(&runtime.camera);
         }
         InputEvent::Click { x, y } => {
-            if let Some((kind, id)) = hit_test(&runtime.hit_regions, x, y) {
+            if let Some((kind, id)) = click_selection_from_hit(hit_test(&runtime.hit_regions, x, y))
+            {
                 let _ = emit_event_value(&json!({
                     "type": "select_entity",
                     "selection": { "kind": kind, "id": id }
@@ -837,6 +871,17 @@ impl PixelWorldBridge {
     }
 
     #[wasm_bindgen]
+    pub fn hotspot_test_hit_targets(&self, contract: String) -> JsValue {
+        if !self.mounted || contract != HOTSPOT_TEST_READBACK_CONTRACT {
+            return JsValue::NULL;
+        }
+        BRIDGE_SHARED.with(|shared| {
+            js_value_from_serializable(&shared.borrow().hotspot_test_targets)
+                .unwrap_or(JsValue::NULL)
+        })
+    }
+
+    #[wasm_bindgen]
     pub fn pointer_down(&mut self, x: f64, y: f64, pointer_id: i32) -> JsValue {
         push_input_event(InputEvent::PointerDown { x, y, pointer_id });
         status_value("ready")
@@ -880,6 +925,7 @@ impl PixelWorldBridge {
             shared.render_state = None;
             shared.render_version += 1;
             shared.input_events.clear();
+            shared.hotspot_test_targets.clear();
         });
         status_value("detached")
     }

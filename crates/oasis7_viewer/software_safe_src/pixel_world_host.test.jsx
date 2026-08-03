@@ -5,50 +5,54 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
   mountCalls: 0,
+  onEvent: null,
 }));
 
 vi.mock("./pixel_world_runtime_loader.js", () => ({
-  createPixelWorldRuntimeBridge: async ({ onFatal }) => ({
-    source: runtimeMock.deriveRenderState ? "test_rust_runtime" : "wasm_import_failed",
-    moduleUrl: "http://127.0.0.1:4173/pixel-world-bridge/pixel_world_bridge.js",
-    deriveRenderState: runtimeMock.deriveRenderState,
-    bridge: {
-      mount() {
-        runtimeMock.mountCalls += 1;
-        if (runtimeMock.deriveRenderState) {
-          return {
-            status: "ready",
-            fatal: null,
+  createPixelWorldRuntimeBridge: async ({ onEvent, onFatal }) => {
+    runtimeMock.onEvent = onEvent;
+    return {
+      source: runtimeMock.deriveRenderState ? "test_rust_runtime" : "wasm_import_failed",
+      moduleUrl: "http://127.0.0.1:4173/pixel-world-bridge/pixel_world_bridge.js",
+      deriveRenderState: runtimeMock.deriveRenderState,
+      bridge: {
+        mount() {
+          runtimeMock.mountCalls += 1;
+          if (runtimeMock.deriveRenderState) {
+            return {
+              status: "ready",
+              fatal: null,
+            };
+          }
+          const fatal = {
+            code: "pixel_world_renderer_runtime_unavailable",
+            message: "pixel world wasm runtime is unavailable: missing wasm bridge",
           };
-        }
-        const fatal = {
-          code: "pixel_world_renderer_runtime_unavailable",
-          message: "pixel world wasm runtime is unavailable: missing wasm bridge",
-        };
-        onFatal?.(fatal);
-        return {
-          status: "fallback",
-          fatal,
-        };
-      },
-      update() {
-        if (runtimeMock.deriveRenderState) {
+          onFatal?.(fatal);
           return {
-            status: "ready",
-            fatal: null,
+            status: "fallback",
+            fatal,
           };
-        }
-        return {
-          status: "fallback",
-        };
+        },
+        update() {
+          if (runtimeMock.deriveRenderState) {
+            return {
+              status: "ready",
+              fatal: null,
+            };
+          }
+          return {
+            status: "fallback",
+          };
+        },
+        unmount() {
+          return {
+            status: "detached",
+          };
+        },
       },
-      unmount() {
-        return {
-          status: "detached",
-        };
-      },
-    },
-  }),
+    };
+  },
 }));
 
 let activeCleanup = null;
@@ -419,6 +423,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
   runtimeMock.mountCalls = 0;
+  runtimeMock.onEvent = null;
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
   window.localStorage.clear();
   document.body.innerHTML = "";
@@ -653,6 +658,44 @@ describe("pixel world host", () => {
     expect(canvas.querySelector(".pixel-world-route")).toBeNull();
     expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("shows the exact hotspot label only while its hover identity remains in render state", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      visualHotspots: [{
+        id: "hotspot-blocker",
+        label: "Blocked route",
+        kind: "blocker",
+        pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
+      }],
+    }));
+
+    await renderPixelWorldHost();
+    await waitFor(() => {
+      expect(runtimeMock.onEvent).toEqual(expect.any(Function));
+    });
+
+    runtimeMock.onEvent({
+      type: "hover_entity",
+      selection: { kind: "hotspot", id: "hotspot-blocker" },
+    });
+    await waitFor(() => {
+      expect(document.querySelector("[data-hotspot-tooltip]")).toHaveTextContent("Blocked route");
+    });
+
+    runtimeMock.onEvent({ type: "hover_entity", selection: null });
+    await waitFor(() => {
+      expect(document.querySelector("[data-hotspot-tooltip]")).toBeNull();
+    });
+
+    runtimeMock.onEvent({
+      type: "hover_entity",
+      selection: { kind: "hotspot", id: "removed-hotspot" },
+    });
+    await waitFor(() => {
+      expect(document.querySelector("[data-hotspot-tooltip]")).toBeNull();
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("makes the rendered canvas focusable with a read-only accessible world description", async () => {

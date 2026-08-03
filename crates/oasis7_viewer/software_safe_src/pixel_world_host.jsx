@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, on
 
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
+import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js";
 import { installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 
@@ -537,6 +538,9 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     runtimeModuleUrl() {
       return runtimeModuleUrl;
     },
+    hotspotTestHitTargets() {
+      return bridge?.hotspotTestHitTargets?.() || [];
+    },
     deriveRenderState(renderInput) {
       return deriveRenderStateOrUnavailable(renderInput).renderState;
     },
@@ -623,6 +627,11 @@ function PixelWorldCanvasRenderer(props) {
         <Show when={visualState().blockerHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
             {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.label || visualState().blockerHighlight.kind}`}
+          </div>
+        </Show>
+        <Show when={props.hoveredHotspot?.()}>
+          <div class="pixel-world-canvas__hotspot-tooltip" data-hotspot-tooltip role="status">
+            {props.hoveredHotspot().label}
           </div>
         </Show>
       </div>
@@ -1230,6 +1239,13 @@ export function PixelWorldHost(props) {
     visualFixtureName
       || document.body?.getAttribute("data-viewer-visual-fixture"),
   );
+  const hoveredHotspot = () => {
+    const hover = hoverSelection();
+    if (hover?.kind !== "hotspot") {
+      return null;
+    }
+    return visualState().visualHotspots.find((hotspot) => hotspot.id === hover.id) || null;
+  };
 
   function setPersistentFocusMode(next) {
     pixelWorldFocusUiSessionState.focusMode = next;
@@ -1420,6 +1436,7 @@ export function PixelWorldHost(props) {
         applyRendererUpdate();
       });
       onCleanup(() => core.setRenderHook(null));
+      onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
     }
   });
 
@@ -1517,6 +1534,7 @@ export function PixelWorldHost(props) {
           visualOverlayEnabled={visualOverlayEnabled}
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}
+          hoveredHotspot={hoveredHotspot}
           onFatal={(message) => adapter().simulateFatal(message)}
           onCanvasMount={(canvas) => {
             mountedCanvas = canvas;

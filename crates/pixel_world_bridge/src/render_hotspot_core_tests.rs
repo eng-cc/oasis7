@@ -11,7 +11,7 @@ const HOTSPOT_CORE_HIGHLIGHT_COLOR: Color = Color::srgba_u8(248, 250, 252, 230);
 const HOTSPOT_CORE_SHADOW_COLOR: Color = Color::srgba_u8(148, 163, 184, 230);
 
 #[test]
-fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
+fn bevy_ecs_reconciles_neutral_hotspot_cores_with_stable_hover_hit_regions() {
     let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
     let first = visual_probe_summary(&mut app);
     let first_highlight_entities =
@@ -28,8 +28,8 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     assert_eq!(first_shadow_entities.len(), 3);
     assert_eq!(first_cue_entities.len(), 5);
     assert_eq!(
-        first.hit_regions, 2,
-        "hotspot cores must not add hit regions"
+        first.hit_regions, 5,
+        "each visible hotspot needs one hover-only hit region alongside the existing agent and location regions"
     );
     for core in &first.hotspot_cores {
         let base = first
@@ -129,8 +129,8 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     );
     assert_eq!(without_recent_event.hotspots.len(), 2);
     assert_eq!(
-        without_recent_event.hit_regions, 2,
-        "recent-event cue cleanup must not alter hit regions"
+        without_recent_event.hit_regions, 4,
+        "removing a hotspot must remove only that hotspot's hover hit region"
     );
 
     {
@@ -155,7 +155,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
     assert_eq!(removed.hotspot_entity_cache_size, 0);
     assert_eq!(
         removed.hit_regions, 2,
-        "hotspot removal must not alter hit regions"
+        "removing all hotspots must retain only the existing agent and location hit regions"
     );
 
     let mut no_render_state_app = render_test_app(sample_render_state_with_hotspot_candidates());
@@ -181,6 +181,96 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
         .is_empty()
     );
     assert!(hotspot_cue_entities(&mut no_render_state_app).is_empty());
+}
+
+#[test]
+fn hotspot_hover_hit_regions_keep_identity_and_agent_location_precedence() {
+    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
+    let blocker_region = hit_regions(&mut app)
+        .into_iter()
+        .find(|region| region.kind == "hotspot" && region.id == "hotspot-blocker")
+        .expect("visible blocker hotspot needs a stable hover hit region");
+    let blocker_center = (
+        (blocker_region.left + blocker_region.right) / 2.0,
+        (blocker_region.top + blocker_region.bottom) / 2.0,
+    );
+
+    assert_eq!(
+        hit_test(&hit_regions(&mut app), blocker_center.0, blocker_center.1),
+        Some(("hotspot".to_string(), "hotspot-blocker".to_string())),
+        "a visible hotspot must resolve to its stable hover identity"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut overlapping = sample_render_state_with_hotspot_candidates();
+        overlapping.visual_hotspots[0].pos = overlapping.agents[0]
+            .pos
+            .clone()
+            .expect("fixture agent position");
+        runtime.render_state = Some(overlapping);
+        runtime.render_version += 1;
+    }
+    app.update();
+
+    let overlapping_regions = hit_regions(&mut app);
+    let agent_region = overlapping_regions
+        .iter()
+        .find(|region| region.kind == "agent" && region.id == "agent-0")
+        .expect("existing agent hit region");
+    assert_eq!(
+        hit_test(
+            &overlapping_regions,
+            (agent_region.left + agent_region.right) / 2.0,
+            (agent_region.top + agent_region.bottom) / 2.0,
+        ),
+        Some(("agent".to_string(), "agent-0".to_string())),
+        "an overlapping hotspot must not displace existing agent/location hit precedence"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut without_hotspots = sample_render_state_with_hotspot_candidates();
+        without_hotspots.visual_hotspots.clear();
+        runtime.render_state = Some(without_hotspots);
+        runtime.render_version += 1;
+    }
+    app.update();
+    assert!(
+        hit_regions(&mut app)
+            .iter()
+            .all(|region| region.kind != "hotspot"),
+        "hotspot removal clears its hover hit region"
+    );
+}
+
+#[test]
+fn hotspot_test_readback_returns_only_reconciled_stable_centers_and_clears_with_removal() {
+    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
+    let targets = crate::hotspot_test_hit_targets(&hit_regions(&mut app));
+    let blocker = targets
+        .iter()
+        .find(|target| target.id == "hotspot-blocker")
+        .expect("reconciled blocker hotspot exposes a test-only pointer target");
+    assert_eq!(blocker.kind, "hotspot");
+    assert!(
+        hit_test(&hit_regions(&mut app), blocker.canvas_x, blocker.canvas_y)
+            .is_some_and(|(kind, id)| kind == "hotspot" && id == "hotspot-blocker"),
+        "reported center must stay inside the matching live hit region"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut without_hotspots = sample_render_state_with_hotspot_candidates();
+        without_hotspots.visual_hotspots.clear();
+        runtime.render_state = Some(without_hotspots);
+        runtime.render_version += 1;
+    }
+    app.update();
+    assert!(
+        crate::hotspot_test_hit_targets(&hit_regions(&mut app)).is_empty(),
+        "removed hotspots must not remain observable through the test-only readback"
+    );
 }
 
 #[test]

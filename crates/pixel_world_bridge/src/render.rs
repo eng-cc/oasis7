@@ -32,6 +32,7 @@ use hotspot_cues::{HotspotCueQueries, despawn_hotspot_cues, reconcile_hotspot_cu
 
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
+const HOTSPOT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
 const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
@@ -848,6 +849,7 @@ fn reconcile_hotspots(
     width: f64,
     height: f64,
     animation_ms: f64,
+    rebuild_hit_regions: bool,
 ) {
     let Some(render_state) = runtime.render_state.as_ref() else {
         for (_, entity) in runtime.hotspot_entities.drain() {
@@ -870,6 +872,21 @@ fn reconcile_hotspots(
             continue;
         };
         active_ids.insert(hotspot.id.clone());
+        if rebuild_hit_regions {
+            // Insert below the existing location and agent regions: `hit_test` walks
+            // in reverse, so hotspot hover identity never displaces their precedence.
+            runtime.hit_regions.insert(
+                0,
+                HitRegion {
+                    kind: "hotspot",
+                    id: hotspot.id.clone(),
+                    left: canvas_x - HOTSPOT_HIT_HALF_SIZE,
+                    top: canvas_y - HOTSPOT_HIT_HALF_SIZE,
+                    right: canvas_x + HOTSPOT_HIT_HALF_SIZE,
+                    bottom: canvas_y + HOTSPOT_HIT_HALF_SIZE,
+                },
+            );
+        }
         let emphasis = clamp(hotspot.emphasis.unwrap_or(0.7), 0.35, 1.0);
         let pulse = 1.0 + (0.1 * ((animation_ms / 280.0) + index as f64).sin());
         let size = hotspot.size_hint_px.unwrap_or(10.0) * pulse;
@@ -1127,7 +1144,14 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
     );
-    reconcile_hotspots(&mut commands, &mut runtime, width, height, animation_ms);
+    reconcile_hotspots(
+        &mut commands,
+        &mut runtime,
+        width,
+        height,
+        animation_ms,
+        rebuild_hit_regions,
+    );
     reconcile_hotspot_cues(
         &mut commands,
         &runtime,
@@ -1144,6 +1168,7 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
     );
+    publish_hotspot_test_hit_targets(&runtime.hit_regions);
 }
 
 #[cfg(test)]
