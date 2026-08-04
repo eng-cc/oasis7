@@ -662,6 +662,43 @@ fn high_checkpoint_stale_dht_provider_falls_through_to_connected_complete_peer()
 }
 
 #[test]
+fn high_checkpoint_rate_limited_sole_dht_provider_falls_through_to_connected_complete_peer() {
+    let world_id = "world-gap-sync-rate-limited-sole-dht-provider-failover";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 250, 251);
+    fixture.dht.set_providers(&["provider-a"]);
+    fixture.network.set_rate_limited_providers(&["provider-a"]);
+    fixture.network.set_connected_peers(&["provider-b"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("connected provider-b must complete checkpoint closure after sole DHT provider-a is rate-limited");
+
+    assert!(
+        fixture
+            .network
+            .provider_attempts()
+            .contains(&"provider-b".to_string()),
+        "structured fetch-blob rate limit from sole advertised provider-a must not prevent connected provider-b fallback: {:?}",
+        fixture.network.provider_attempts(),
+    );
+    assert_eq!(install_hook.installed, vec![fixture.checkpoint_height]);
+    assert_eq!(
+        fixture.engine.last_replication_gap_sync_blocked_height,
+        None,
+        "a healthy connected peer must avoid entering checkpoint rate-limit cooldown",
+    );
+    fixture.cleanup();
+}
+
+#[test]
 fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() {
     let world_id = "world-gap-sync-no-complete-checkpoint-provider";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 251, 252);
