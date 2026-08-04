@@ -55,7 +55,18 @@ struct Agent {
     resource_summary: String,
     #[allow(dead_code)]
     status_badges: Vec<String>,
+    #[serde(default)]
+    position_source: AgentPositionSource,
     size_hint_px: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum AgentPositionSource {
+    Snapshot,
+    LocationDerived,
+    #[default]
+    Missing,
 }
 
 #[derive(Clone, Debug, Deserialize)]

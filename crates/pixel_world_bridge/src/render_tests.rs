@@ -75,6 +75,7 @@ struct PixelRegressionSummary {
     location_pixels: usize,
     selected_location_cue_pixels: usize,
     selected_agent_cue_pixels: usize,
+    derived_position_cue_pixels: usize,
     agent_pixels: usize,
     agent_core_pixels: usize,
     hotspot_pixels: usize,
@@ -128,6 +129,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             location_id: Some("loc-0".to_string()),
             resource_summary: "-".to_string(),
             status_badges: vec!["position=location_derived".to_string()],
+            position_source: AgentPositionSource::LocationDerived,
             size_hint_px: Some(16.0),
         }],
         links: vec![],
@@ -139,7 +141,6 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
         receipt_target: None,
     }
 }
-
 fn render_test_app(render_state: RenderState) -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
@@ -155,7 +156,6 @@ fn render_test_app(render_state: RenderState) -> App {
     app.update();
     app
 }
-
 fn row(id: &str, sprite: &Sprite, transform: &Transform) -> VisualProbeRow {
     let size = sprite
         .custom_size
@@ -170,75 +170,63 @@ fn row(id: &str, sprite: &Sprite, transform: &Transform) -> VisualProbeRow {
         y: transform.translation.y,
     }
 }
-
 fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
     let world = app.world_mut();
-
     let mut fragment_query = world.query::<(&PixelWorldFragmentVisual, &Sprite, &Transform)>();
     let fragments = fragment_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
-
     let mut fragment_shadow_query =
         world.query::<(&PixelWorldFragmentShadowVisual, &Sprite, &Transform)>();
     let fragment_shadows = fragment_shadow_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut fragment_inset_query =
         world.query::<(&PixelWorldFragmentInsetVisual, &Sprite, &Transform)>();
     let fragment_insets = fragment_inset_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut fragment_fleck_query =
         world.query::<(&PixelWorldFragmentFleckVisual, &Sprite, &Transform)>();
     let fragment_flecks = fragment_fleck_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     let locations = location_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
-
     let mut agent_query = world.query::<(&PixelWorldAgentVisual, &Sprite, &Transform)>();
     let agents = agent_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
-
     let mut agent_core_query = world.query::<(&PixelWorldAgentCoreVisual, &Sprite, &Transform)>();
     let agent_cores = agent_core_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut hotspot_query = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
     let hotspots = hotspot_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut hotspot_core_query =
         world.query::<(&PixelWorldHotspotCoreVisual, &Sprite, &Transform)>();
     let hotspot_cores = hotspot_core_query
         .iter(world)
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
-
     let mut selected_location_cue_query =
         world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
     let selected_location_cues = selected_location_cue_query
         .iter(world)
         .map(|(cue, sprite, transform)| row(&cue.location_id, sprite, transform))
         .collect();
-
     let runtime = world.resource::<BevyRuntimeState>();
     VisualProbeSummary {
         fragments,
@@ -263,14 +251,12 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         hotspot_core_entity_count: hotspot_core_query.iter(world).count(),
     }
 }
-
 fn hit_regions(app: &mut App) -> Vec<HitRegion> {
     app.world_mut()
         .resource::<BevyRuntimeState>()
         .hit_regions
         .clone()
 }
-
 fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> PixelLayer {
     let size_px = sprite
         .custom_size
@@ -303,6 +289,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         selected_agent_cue_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("selected_agent_cue", sprite, transform)),
+    );
+    let mut derived_position_cue_query =
+        world.query::<(&PixelWorldDerivedPositionCue, &Sprite, &Transform)>();
+    layers.extend(
+        derived_position_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("derived_position_cue", sprite, transform)),
     );
     let mut receipt_target_cue_query =
         world.query::<(&PixelWorldReceiptTargetCue, &Sprite, &Transform)>();
@@ -429,6 +422,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "hotspot" => 10,
         "hotspot_core" => 11,
         "selected_agent_cue" => 12,
+        "derived_position_cue" => 13,
         _ => 0,
     }
 }
@@ -489,6 +483,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
     let selected_agent_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 12).count();
+    let derived_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 13).count();
     let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
     let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
 
@@ -522,6 +517,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         location_pixels,
         selected_location_cue_pixels,
         selected_agent_cue_pixels,
+        derived_position_cue_pixels,
         agent_pixels,
         agent_core_pixels,
         hotspot_pixels,
@@ -692,6 +688,9 @@ mod agent_core_tests;
 
 #[path = "render_agent_silhouette_tests.rs"]
 mod agent_silhouette_tests;
+
+#[path = "render_agent_position_provenance_cue_tests.rs"]
+mod agent_position_provenance_cue_tests;
 
 #[test]
 fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {

@@ -41,6 +41,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             location_id: Some("loc-0".to_string()),
             resource_summary: "-".to_string(),
             status_badges: vec!["position=location_derived".to_string()],
+            position_source: AgentPositionSource::LocationDerived,
             size_hint_px: Some(16.0),
         }],
         links: vec![],
@@ -182,6 +183,7 @@ fn assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents() 
         location_id: Some("loc-0".to_string()),
         resource_summary: "-".to_string(),
         status_badges: vec!["position=location_derived".to_string()],
+        position_source: AgentPositionSource::LocationDerived,
         size_hint_px: Some(16.0),
     };
 

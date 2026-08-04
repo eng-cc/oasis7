@@ -10,6 +10,14 @@ use fragment_visuals::reconcile_fragments;
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
 
+#[path = "render_agent_position_provenance_cue.rs"]
+mod agent_position_provenance_cue;
+#[cfg(test)]
+use agent_position_provenance_cue::DerivedPositionCueSegment;
+use agent_position_provenance_cue::{
+    PixelWorldDerivedPositionCue, reconcile_derived_position_cues,
+};
+
 #[path = "render_selected_agent_cue.rs"]
 mod selected_agent_cue;
 use selected_agent_cue::AGENT_CORE_LAYER_Z_OFFSET;
@@ -19,6 +27,10 @@ use selected_agent_cue::{
     PixelWorldAgentCoreVisual, PixelWorldSelectedAgentCue, reconcile_agent_cores,
     reconcile_selected_agent_cues,
 };
+
+#[path = "render_selected_location_cue.rs"]
+mod selected_location_cue;
+use selected_location_cue::{PixelWorldSelectedLocationCue, selected_location_cue_visuals};
 
 #[path = "render_receipt_target_cue.rs"]
 mod receipt_target_cue;
@@ -128,20 +140,6 @@ struct PixelWorldFragmentFleckVisual {
 #[derive(Component)]
 pub(crate) struct PixelWorldLocationVisual {
     id: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum SelectedLocationCueEdge {
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
-
-#[derive(Component)]
-struct PixelWorldSelectedLocationCue {
-    location_id: String,
-    edge: SelectedLocationCueEdge,
 }
 
 #[derive(Component)]
@@ -397,38 +395,6 @@ fn selected_location_visual_style(
         style.layer_z += SELECTED_ENTITY_LAYER_Z_OFFSET;
     }
     style
-}
-
-fn selected_location_cue_visuals(
-    location: &Location,
-    animation_ms: f64,
-) -> [(SelectedLocationCueEdge, Vec2, Vec2); 4] {
-    let location_style = selected_location_visual_style(location, true, animation_ms);
-    let outer_size = location_style.size_px as f32
-        + (SELECTED_LOCATION_CUE_PADDING_PX + SELECTED_LOCATION_CUE_THICKNESS_PX) * 2.0;
-    let edge_offset = (outer_size - SELECTED_LOCATION_CUE_THICKNESS_PX) / 2.0;
-    [
-        (
-            SelectedLocationCueEdge::Top,
-            Vec2::new(0.0, edge_offset),
-            Vec2::new(outer_size, SELECTED_LOCATION_CUE_THICKNESS_PX),
-        ),
-        (
-            SelectedLocationCueEdge::Bottom,
-            Vec2::new(0.0, -edge_offset),
-            Vec2::new(outer_size, SELECTED_LOCATION_CUE_THICKNESS_PX),
-        ),
-        (
-            SelectedLocationCueEdge::Left,
-            Vec2::new(-edge_offset, 0.0),
-            Vec2::new(SELECTED_LOCATION_CUE_THICKNESS_PX, outer_size),
-        ),
-        (
-            SelectedLocationCueEdge::Right,
-            Vec2::new(edge_offset, 0.0),
-            Vec2::new(SELECTED_LOCATION_CUE_THICKNESS_PX, outer_size),
-        ),
-    ]
 }
 
 pub(crate) fn agent_visual_style(
@@ -962,6 +928,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
+    derived_position_cues: Query<'w, 's, (Entity, &'static PixelWorldDerivedPositionCue)>,
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
     receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
@@ -992,6 +959,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.selected_agent_cues.iter() {
@@ -1060,6 +1030,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.selected_agent_cues.iter() {
@@ -1139,6 +1112,14 @@ pub(crate) fn render_scene(
         &mut commands,
         &runtime,
         &queries.agent_silhouettes,
+        width,
+        height,
+        animation_ms,
+    );
+    reconcile_derived_position_cues(
+        &mut commands,
+        &runtime,
+        &queries.derived_position_cues,
         width,
         height,
         animation_ms,

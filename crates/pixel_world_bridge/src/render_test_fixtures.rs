@@ -41,6 +41,7 @@ pub(super) fn sample_render_state_with_beacon_candidates(kind: &str, id: &str) -
         location_id: Some("loc-1".to_string()),
         resource_summary: "-".to_string(),
         status_badges: vec![],
+        position_source: AgentPositionSource::Snapshot,
         size_hint_px: Some(16.0),
     });
     render_state

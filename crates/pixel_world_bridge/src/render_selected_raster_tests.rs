@@ -42,6 +42,29 @@ fn bevy_pixel_regression_exports_selected_agent_corner_cue_with_world_layers() {
 }
 
 #[test]
+fn bevy_pixel_regression_exports_only_location_derived_position_cues() {
+    let mut derived_state = sample_render_state(12_000.0);
+    derived_state.selection = None;
+    let mut derived = render_test_app(derived_state);
+    let (image, derived_summary) = rasterize_pixel_regression(&mut derived);
+    let mut snapshot_state = sample_render_state(12_000.0);
+    snapshot_state.selection = None;
+    snapshot_state.agents[0].position_source = AgentPositionSource::Snapshot;
+    let mut snapshot = render_test_app(snapshot_state);
+    let (_, snapshot_summary) = rasterize_pixel_regression(&mut snapshot);
+
+    assert!(
+        derived_summary.derived_position_cue_pixels > 0,
+        "a location-derived Agent position must contribute a visible hollow cue to the raster"
+    );
+    assert_eq!(
+        snapshot_summary.derived_position_cue_pixels, 0,
+        "snapshot positions must not contribute provenance cue pixels"
+    );
+    write_pixel_probe_if_requested(&image, &derived_summary);
+}
+
+#[test]
 fn bevy_pixel_regression_exports_visible_receipt_target_pixels() {
     let mut visible = render_test_app(sample_render_state_with_receipt_target(
         Some("accepted"),
