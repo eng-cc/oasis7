@@ -519,9 +519,11 @@ fn request_fetch_blob_chunk_with_route_fallback(
         );
     }
 
-    // Provider throttling is an authoritative back-pressure signal. Do not
-    // evade it through a connected or generic route after every advertised
-    // provider has been exhausted; let the caller enter its bounded cooldown.
+    // Provider throttling remains authoritative after multiple advertised
+    // routes are exhausted. A sole advertised provider does not establish that
+    // the connected route set is exhausted, so try those distinct peers below;
+    // if all eligible routes are rate-limited, the final error still enters
+    // cooldown.
     if last_retryable_error
         .as_ref()
         .map(|err| {
@@ -532,6 +534,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         })
         .unwrap_or(false)
         && last_not_found.is_none()
+        && (!policy.allow_connected_peer_fallback || attempted_provider_ids.len() != 1)
     {
         return Err(last_retryable_error.expect("rate-limited error checked above"));
     }
