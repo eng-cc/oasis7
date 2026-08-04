@@ -2,7 +2,7 @@ use super::*;
 
 impl PosNodeEngine {
     pub(super) fn fetch_execution_checkpoint_bundle(
-        &self,
+        &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         world_id: &str,
         replication_runtime: &ReplicationRuntime,
@@ -54,7 +54,7 @@ impl PosNodeEngine {
     }
 
     fn ensure_execution_checkpoint_blob(
-        &self,
+        &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         world_id: &str,
         replication_runtime: &ReplicationRuntime,
@@ -63,6 +63,7 @@ impl PosNodeEngine {
         collect_fetch_observations: bool,
     ) -> Result<Option<serde_json::Value>, NodeError> {
         if let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? {
+            self.checkpoint_blob_fetch_progress.remove(content_hash);
             if bytes.len() as u64 != expected_size_bytes {
                 return Err(NodeError::Replication {
                     reason: format!(
@@ -97,14 +98,35 @@ impl PosNodeEngine {
                 None
             }
         };
-        let response = request_fetch_blob_with_route_fallback(
-            endpoint,
-            world_id,
-            content_hash,
-            &request,
-            provider_lookup.as_deref().filter(|ids| !ids.is_empty()),
-        )?;
+        let response = {
+            let progress = self
+                .checkpoint_blob_fetch_progress
+                .entry(content_hash.to_string())
+                .or_default();
+            request_fetch_blob_with_route_fallback_resuming(
+                endpoint,
+                world_id,
+                content_hash,
+                &request,
+                provider_lookup.as_deref().filter(|ids| !ids.is_empty()),
+                progress,
+                expected_size_bytes,
+            )
+        };
+        let response = match response {
+            Ok(response) => response,
+            Err(err) => {
+                if !crate::network_bridge::replication_network_error_is_rate_limited_protocol(
+                    &err,
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                ) {
+                    self.checkpoint_blob_fetch_progress.remove(content_hash);
+                }
+                return Err(err);
+            }
+        };
         if !response.found {
+            self.checkpoint_blob_fetch_progress.remove(content_hash);
             if let Some(provider_lookup_failure) = provider_lookup_failure {
                 return Err(NodeError::Replication {
                     reason: format!(
@@ -116,10 +138,17 @@ impl PosNodeEngine {
                 reason: format!("execution checkpoint blob not found hash={content_hash}"),
             });
         }
-        let blob = response.blob.ok_or_else(|| NodeError::Replication {
-            reason: format!("execution checkpoint fetch missing blob hash={content_hash}"),
-        })?;
+        let blob = match response.blob {
+            Some(blob) => blob,
+            None => {
+                self.checkpoint_blob_fetch_progress.remove(content_hash);
+                return Err(NodeError::Replication {
+                    reason: format!("execution checkpoint fetch missing blob hash={content_hash}"),
+                });
+            }
+        };
         if blob.len() as u64 != expected_size_bytes {
+            self.checkpoint_blob_fetch_progress.remove(content_hash);
             return Err(NodeError::Replication {
                 reason: format!(
                     "execution checkpoint fetched blob size mismatch hash={} expected={} actual={}",
@@ -131,6 +160,7 @@ impl PosNodeEngine {
         }
         let actual = blake3_hex(blob.as_slice());
         if actual != content_hash {
+            self.checkpoint_blob_fetch_progress.remove(content_hash);
             return Err(NodeError::Replication {
                 reason: format!(
                     "execution checkpoint fetched blob hash mismatch expected={} actual={}",
@@ -139,6 +169,7 @@ impl PosNodeEngine {
             });
         }
         replication_runtime.store_blob_by_hash(content_hash, blob.as_slice())?;
+        self.checkpoint_blob_fetch_progress.remove(content_hash);
         if !collect_fetch_observations {
             return Ok(None);
         }

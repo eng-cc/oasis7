@@ -162,7 +162,8 @@ use replication_fetch_handler_support::{
     register_fetch_blob_handler,
 };
 use replication_probe_gate::{
-    replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
+    FetchBlobChunkProgress, replication_request_waitable_connection_gap,
+    request_fetch_blob_with_route_fallback, request_fetch_blob_with_route_fallback_resuming,
     request_fetch_blob_with_storage_challenge_routes,
 };
 use replication_state_reconcile::{
@@ -1081,6 +1082,7 @@ struct PosNodeEngine {
     network_committed_height: u64,
     replication_enabled: bool,
     replication_persisted_height: u64,
+    checkpoint_blob_fetch_progress: BTreeMap<String, FetchBlobChunkProgress>,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,
     last_replication_gap_sync_blocked_at_ms: Option<i64>,
