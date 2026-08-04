@@ -16,6 +16,63 @@ struct FetchBlobRouteFallbackPolicy {
     require_retryable_provider_route_before_fallback: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(super) struct FetchBlobChunkProgress {
+    bytes: Vec<u8>,
+}
+
+impl FetchBlobChunkProgress {
+    #[cfg(test)]
+    pub(super) fn next_offset(&self) -> u64 {
+        self.bytes.len() as u64
+    }
+
+    fn next_offset_usize(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.bytes.clear();
+    }
+
+    fn append_range_chunk(
+        &mut self,
+        offset: usize,
+        chunk: &[u8],
+        expected_size_bytes: usize,
+    ) -> Result<(), NodeError> {
+        if self.bytes.len() != offset {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "blob fetch progress offset mismatch expected={} actual={}",
+                    self.bytes.len(),
+                    offset
+                ),
+            });
+        }
+        let next_offset =
+            offset
+                .checked_add(chunk.len())
+                .ok_or_else(|| NodeError::Replication {
+                    reason: "blob fetch progress offset overflow".to_string(),
+                })?;
+        if next_offset > expected_size_bytes {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "blob fetch progress exceeds expected size expected={} actual={}",
+                    expected_size_bytes, next_offset
+                ),
+            });
+        }
+        self.bytes.extend_from_slice(chunk);
+        Ok(())
+    }
+
+    fn take_complete(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.bytes)
+    }
+}
+
 impl PosNodeEngine {
     pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
         &mut self,
@@ -344,6 +401,40 @@ pub(super) fn request_fetch_blob_with_route_fallback(
             allow_connected_peer_fallback: true,
             require_retryable_provider_route_before_fallback: false,
         },
+        None,
+        None,
+    )
+}
+
+pub(super) fn request_fetch_blob_with_route_fallback_resuming(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+    progress: &mut FetchBlobChunkProgress,
+    expected_size_bytes: u64,
+) -> Result<FetchBlobResponse, NodeError> {
+    let expected_size_bytes = usize::try_from(expected_size_bytes).map_err(|_| {
+        NodeError::Replication {
+            reason: format!(
+                "blob fetch expected size does not fit platform usize expected={expected_size_bytes}"
+            ),
+        }
+    })?;
+    request_fetch_blob_with_route_fallback_policy(
+        endpoint,
+        world_id,
+        content_hash,
+        request,
+        provider_ids,
+        FetchBlobRouteFallbackPolicy {
+            allow_generic_route: true,
+            allow_connected_peer_fallback: true,
+            require_retryable_provider_route_before_fallback: false,
+        },
+        Some(progress),
+        Some(expected_size_bytes),
     )
 }
 
@@ -365,6 +456,8 @@ pub(super) fn request_fetch_blob_with_storage_challenge_routes(
             allow_connected_peer_fallback: false,
             require_retryable_provider_route_before_fallback: true,
         },
+        None,
+        None,
     )
 }
 
@@ -375,23 +468,43 @@ fn request_fetch_blob_with_route_fallback_policy(
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
     policy: FetchBlobRouteFallbackPolicy,
+    mut progress: Option<&mut FetchBlobChunkProgress>,
+    expected_size_bytes: Option<usize>,
 ) -> Result<FetchBlobResponse, NodeError> {
-    let mut offset = 0usize;
+    let mut offset = progress
+        .as_deref()
+        .map_or(0, FetchBlobChunkProgress::next_offset_usize);
     let mut assembled = Vec::new();
 
     loop {
         let mut chunk_request = request.clone();
         chunk_request.offset_bytes = Some(offset as u64);
         chunk_request.limit_bytes = Some(REPLICATION_FETCH_BLOB_CHUNK_BYTES as u64);
-        let response = request_fetch_blob_chunk_with_route_fallback(
+        let response = match request_fetch_blob_chunk_with_route_fallback(
             endpoint,
             world_id,
             content_hash,
             &chunk_request,
             provider_ids,
             policy,
-        )?;
+        ) {
+            Ok(response) => response,
+            Err(err) => {
+                if !crate::network_bridge::replication_network_error_is_rate_limited_protocol(
+                    &err,
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                ) {
+                    if let Some(progress) = progress.as_deref_mut() {
+                        progress.clear();
+                    }
+                }
+                return Err(err);
+            }
+        };
         if !response.found {
+            if let Some(progress) = progress.as_deref_mut() {
+                progress.clear();
+            }
             return Ok(response);
         }
         let range_aware = response.range_offset_bytes == Some(offset as u64);
@@ -399,6 +512,20 @@ fn request_fetch_blob_with_route_fallback_policy(
             return Ok(response);
         };
         if !range_aware {
+            if offset != 0 {
+                if let Some(progress) = progress.as_deref_mut() {
+                    progress.clear();
+                }
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "blob fetch range response offset mismatch expected={} actual={:?}",
+                        offset, response.range_offset_bytes
+                    ),
+                });
+            }
+            if let Some(progress) = progress.as_deref_mut() {
+                progress.clear();
+            }
             return Ok(FetchBlobResponse {
                 found: true,
                 range_offset_bytes: response.range_offset_bytes,
@@ -407,24 +534,73 @@ fn request_fetch_blob_with_route_fallback_policy(
             });
         }
         if chunk.is_empty() {
+            if response.range_complete != Some(true) {
+                if let Some(progress) = progress.as_deref_mut() {
+                    progress.clear();
+                }
+                return Err(NodeError::Replication {
+                    reason: "blob fetch returned an empty non-final range chunk".to_string(),
+                });
+            }
+            let blob = if let Some(progress) = progress.as_deref_mut() {
+                progress.take_complete()
+            } else {
+                assembled
+            };
             return Ok(FetchBlobResponse {
                 found: true,
                 range_offset_bytes: None,
                 range_complete: None,
-                blob: Some(assembled),
+                blob: Some(blob),
             });
         }
         let is_final_chunk = response
             .range_complete
             .unwrap_or(chunk.len() < REPLICATION_FETCH_BLOB_CHUNK_BYTES);
-        offset = offset.saturating_add(chunk.len());
-        assembled.extend_from_slice(chunk.as_slice());
+        let next_offset =
+            offset
+                .checked_add(chunk.len())
+                .ok_or_else(|| NodeError::Replication {
+                    reason: "blob fetch range offset overflow".to_string(),
+                })?;
+        if let Some(progress) = progress.as_deref_mut() {
+            let Some(expected_size_bytes) = expected_size_bytes else {
+                unreachable!("resumable progress requires an expected size");
+            };
+            if let Err(err) =
+                progress.append_range_chunk(offset, chunk.as_slice(), expected_size_bytes)
+            {
+                progress.clear();
+                return Err(err);
+            }
+        } else {
+            assembled.extend_from_slice(chunk.as_slice());
+        }
+        offset = next_offset;
         if is_final_chunk {
+            if let Some(expected_size_bytes) = expected_size_bytes {
+                if offset != expected_size_bytes {
+                    if let Some(progress) = progress.as_deref_mut() {
+                        progress.clear();
+                    }
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "blob fetch final range size mismatch expected={} actual={}",
+                            expected_size_bytes, offset
+                        ),
+                    });
+                }
+            }
+            let blob = if let Some(progress) = progress.as_deref_mut() {
+                progress.take_complete()
+            } else {
+                assembled
+            };
             return Ok(FetchBlobResponse {
                 found: true,
                 range_offset_bytes: None,
                 range_complete: None,
-                blob: Some(assembled),
+                blob: Some(blob),
             });
         }
     }
@@ -612,6 +788,15 @@ fn request_fetch_blob_chunk_with_route_fallback(
             Err(err) => return Err(err),
         }
         generic_attempts += 1;
+    }
+
+    if last_retryable_error.as_ref().is_some_and(|err| {
+        crate::network_bridge::replication_network_error_is_rate_limited_protocol(
+            err,
+            REPLICATION_FETCH_BLOB_PROTOCOL,
+        )
+    }) {
+        return Err(last_retryable_error.expect("rate-limited error checked above"));
     }
 
     if let Some(response) = last_not_found {
