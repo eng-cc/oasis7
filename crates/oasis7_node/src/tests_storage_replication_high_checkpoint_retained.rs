@@ -75,8 +75,8 @@ fn high_replication_checkpoint_candidates_prefer_release_retained_boundaries() {
 
     assert_eq!(
         &candidates[..4],
-        &[16_715, 16_640, 16_576, 16_512],
-        "release_default 64-height retained checkpoint boundaries should be probed before 32-height fallback boundaries"
+        &[16_715, 16_704, 16_640, 16_576],
+        "the immediate 64-height boundary should follow the advertised head before older retained checkpoints"
     );
     let retained_index = candidates
         .iter()
@@ -89,6 +89,27 @@ fn high_replication_checkpoint_candidates_prefer_release_retained_boundaries() {
     assert!(
         retained_index < fallback_index,
         "retained boundary should be preferred over nearer 32-height fallback boundary; candidates={candidates:?}"
+    );
+}
+
+#[test]
+fn high_replication_checkpoint_candidates_include_latest_aligned_checkpoint_after_live_head() {
+    let candidates = PosNodeEngine::high_replication_checkpoint_candidates(18_574, 0);
+    let latest_aligned_checkpoint = 18_560;
+    let older_checkpoint = 18_496;
+
+    assert_eq!(candidates.first().copied(), Some(18_574));
+    let latest_index = candidates
+        .iter()
+        .position(|height| *height == latest_aligned_checkpoint)
+        .expect("fresh observers must probe the latest completed checkpoint boundary");
+    let older_index = candidates
+        .iter()
+        .position(|height| *height == older_checkpoint)
+        .expect("older retained checkpoint boundary");
+    assert!(
+        latest_index < older_index,
+        "the latest completed checkpoint must precede older fallbacks; candidates={candidates:?}"
     );
 }
 
