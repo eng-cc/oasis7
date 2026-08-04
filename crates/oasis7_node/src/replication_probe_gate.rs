@@ -1,8 +1,11 @@
 use super::*;
 use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 
+// The provider retains the stable v1 2 MiB admission limit. Request one half
+// of that maximum so its legacy JSON byte-array response, when carried in the
+// outer libp2p CBOR envelope, remains below the codec's 10 MiB response cap.
 const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize =
-    oasis7_proto::distributed_net::FETCH_BLOB_MAX_RAW_CHUNK_BYTES;
+    oasis7_proto::distributed_net::FETCH_BLOB_MAX_RAW_CHUNK_BYTES / 2;
 const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
 const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 
@@ -202,6 +205,31 @@ fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
+
+    #[test]
+    fn requested_fetch_blob_chunk_fits_libp2p_outer_cbor_response_limit() {
+        let inner_json = serde_json::to_vec(&FetchBlobResponse {
+            found: true,
+            range_offset_bytes: Some(0),
+            range_complete: Some(false),
+            blob: Some(vec![u8::MAX; REPLICATION_FETCH_BLOB_CHUNK_BYTES]),
+        })
+        .expect("encode worst-case legacy fetch-blob response");
+        let outer_cbor = serde_cbor::to_vec(&oasis7_proto::distributed_net::NetworkResponse {
+            payload: inner_json,
+        })
+        .expect("encode libp2p response envelope");
+
+        assert!(
+            outer_cbor.len() <= LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
+            "requester chunk must fit the libp2p CBOR response cap after legacy JSON and outer envelope encoding: chunk_bytes={} encoded_bytes={} cap_bytes={}",
+            REPLICATION_FETCH_BLOB_CHUNK_BYTES,
+            outer_cbor.len(),
+            LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
+        );
+    }
 
     #[test]
     fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
