@@ -183,7 +183,18 @@ fn runtime_non_sequencer_followers_do_not_advance_without_sequencer() {
     );
 
     runtime_a.stop().expect("stop sequencer");
-    thread::sleep(Duration::from_millis(150));
+    let stopped_sequencer_height = runtime_a.snapshot().consensus.committed_height;
+    let followers_drained = wait_until(Instant::now() + Duration::from_secs(5), || {
+        runtime_b.snapshot().consensus.committed_height >= stopped_sequencer_height
+            && runtime_c.snapshot().consensus.committed_height >= stopped_sequencer_height
+    });
+    assert!(
+        followers_drained,
+        "followers did not drain the sequencer's final committed height before the stopped baseline: sequencer_height={} b_height={} c_height={}",
+        stopped_sequencer_height,
+        runtime_b.snapshot().consensus.committed_height,
+        runtime_c.snapshot().consensus.committed_height
+    );
     let baseline_b = runtime_b.snapshot();
     let baseline_c = runtime_c.snapshot();
     let advanced_without_sequencer =

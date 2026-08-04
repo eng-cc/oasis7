@@ -15,11 +15,13 @@ import os
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,120 @@ RESULT_SCHEMA = "oasis7.observer_checkpoint_closure_probe.v1"
 
 def die(message: str) -> None:
     raise SystemExit(f"error: checkpoint closure probe: {message}")
+
+
+def allocate_loopback_tcp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+def allocate_udp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
+        listener.bind(("0.0.0.0", 0))
+        return int(listener.getsockname()[1])
+
+
+def clean_room_network_overrides(
+    status_port: int, gossip_port: int
+) -> dict[str, str]:
+    return {
+        "STATUS_BIND": f"127.0.0.1:{status_port}",
+        "NODE_GOSSIP_BIND": f"0.0.0.0:{gossip_port}",
+        "REPLICATION_NETWORK_LISTEN_ADDRS_CSV": "/ip4/127.0.0.1/tcp/0",
+        "TRAFFIC_MONITOR_ENABLE": "0",
+    }
+
+
+def runtime_log_excerpt(app_root: Path) -> str:
+    runtime_log = app_root / "logs/chain-runtime.log"
+    if not runtime_log.is_file():
+        return ""
+    output = runtime_log.read_text(encoding="utf-8", errors="replace")
+    if len(output) > 8192:
+        output = (
+            output[:4096]
+            + "\n... runtime log truncated ...\n"
+            + output[-4096:]
+        )
+    return output.strip()
+
+
+def probe_status_excerpt(status_port: int) -> str:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{status_port}/v1/chain/status", timeout=3
+        ) as response:
+            status = json.load(response)
+    except Exception as error:  # diagnostic only; the receipt remains authoritative
+        return f"unavailable:{error}"
+    replication = status.get("replication", {})
+    consensus = status.get("consensus", {})
+    return json.dumps(
+        {
+            "running": status.get("running"),
+            "last_error": status.get("last_error"),
+            "readiness": status.get("readiness"),
+            "sync": status.get("sync"),
+            "checkpoint": status.get("chain_proof", {}).get(
+                "latest_execution_checkpoint"
+            ),
+            "connected_peers": replication.get("connected_peers"),
+            "peer_healths": replication.get("peer_healths"),
+            "recent_errors": replication.get("recent_errors"),
+            "network_head": consensus.get("network_head"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def bind_probe_runtime_metadata(
+    app_root: Path, runtime: Path, buildinfo: dict[str, str]
+) -> None:
+    runtime_sha256 = sha256(runtime)
+    runtime_size = runtime.stat().st_size
+    package_version = buildinfo["package_version"]
+    commit = buildinfo["commit"]
+    run_id = buildinfo["run_id"]
+    updated_by = (
+        "p2p-observer-checkpoint-closure-probe "
+        f"{package_version} (run {run_id}, commit {commit})"
+    )
+    artifact_ref = (
+        f"testnet-package-linux-x64-{package_version}/"
+        "oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"
+    )
+    bundle_paths = sorted(
+        (app_root / "config").rglob(
+            "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+        )
+    )
+    if not bundle_paths:
+        die("governed probe config has no public-testnet bootstrap bundle")
+    for bundle_path in bundle_paths:
+        data = json.loads(bundle_path.read_text(encoding="utf-8"))
+        runtime_build = data.setdefault("runtime_build", {})
+        runtime_build.update(
+            {
+                "git_commit": commit,
+                "kind": "file",
+                "path": str(runtime),
+                "resolved_path": str(runtime.resolve()),
+                "ref": artifact_ref,
+                "sha256": runtime_sha256,
+                "size_bytes": runtime_size,
+                "package_version": package_version,
+                "run_id": run_id,
+                "updated_by": updated_by,
+            }
+        )
+        data["git_commit"] = commit
+        data["updated_by"] = updated_by
+        bundle_path.write_text(
+            json.dumps(data, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
 
 def sha256(path: Path) -> str:
@@ -155,6 +271,18 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     source_env = source_root / "config/node.env"
     if source_env.is_symlink() or not source_env.is_file():
         die("observer node_root must provide config/node.env for governed probe")
+    buildinfos = list(args.package_dir.rglob("linux-x64-BUILDINFO"))
+    if len(buildinfos) != 1 or buildinfos[0].is_symlink() or not buildinfos[0].is_file():
+        die("package must contain exactly one regular linux BUILDINFO")
+    buildinfo = {
+        key: value
+        for line in buildinfos[0].read_text(encoding="utf-8").splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+    for key in ("commit", "package_version", "run_id"):
+        if not buildinfo.get(key):
+            die(f"BUILDINFO missing {key}")
     with tempfile.TemporaryDirectory(prefix="oasis7-checkpoint-probe-") as temp:
         app_root = Path(temp) / "app"
         shutil.copytree(source_root / "config", app_root / "config")
@@ -164,6 +292,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             source = source_root / "config" / name
             if source.is_file():
                 shutil.copy2(source, app_root / "config" / name)
+        bind_probe_runtime_metadata(app_root, runtime, buildinfo)
         env = read_env(source_env)
         world_id = env.get("WORLD_ID", "")
         if not world_id:
@@ -176,13 +305,15 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 die("network tier manifest must be a regular non-symlink file")
             network_manifest_sha256 = sha256(network_path)
         nonce = secrets.token_urlsafe(32)
+        status_port = allocate_loopback_tcp_port()
+        gossip_port = allocate_udp_port()
         env.update({
             "APP_ROOT": str(app_root), "BIN": str(runtime), "NODE_ID": "checkpoint-closure-probe",
-            "NODE_ROLE": "observer", "STATUS_BIND": "127.0.0.1:0",
-            "NODE_GOSSIP_BIND": "127.0.0.1:0", "RUNTIME_ROOT": str(app_root / "runtime-root"),
+            "NODE_ROLE": "observer", "RUNTIME_ROOT": str(app_root / "runtime-root"),
             "EXECUTION_WORLD_DIR": str(app_root / "world"), "EXECUTION_RECORDS_DIR": str(app_root / "execution-records"),
             "STORAGE_ROOT": str(app_root / "storage"), "REPLICATION_ROOT": str(app_root / "replication-root"),
         })
+        env.update(clean_room_network_overrides(status_port, gossip_port))
         for key in ("CONFIG_PATH", "NETWORK_TIER_MANIFEST_PATH", "GENESIS_VALIDATOR_REGISTRY_PATH"):
             value = env.get(key)
             if value:
@@ -204,22 +335,25 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     receipt_path = max(matches, key=lambda p: p.stat().st_mtime)
                     break
                 if proc.poll() is not None:
-                    die(f"probe runtime exited before receipt (status={proc.returncode})")
+                    runtime_tail = runtime_log_excerpt(app_root)
+                    detail = f"; runtime_log_tail={runtime_tail}" if runtime_tail else ""
+                    die(
+                        f"probe runtime exited before receipt (status={proc.returncode})"
+                        f"{detail}"
+                    )
                 time.sleep(1)
             if receipt_path is None:
-                die("timed out waiting for fresh runtime receipt")
+                runtime_tail = runtime_log_excerpt(app_root)
+                status_detail = probe_status_excerpt(status_port)
+                detail = (
+                    f"; probe_status={status_detail}; runtime_log_tail={runtime_tail}"
+                )
+                die(f"timed out waiting for fresh runtime receipt{detail}")
             receipt = validate_runtime_receipt(json.loads(receipt_path.read_text(encoding="utf-8")), nonce)
         finally:
             proc.send_signal(signal.SIGTERM)
             try: proc.wait(timeout=15)
             except subprocess.TimeoutExpired: proc.kill(); proc.wait()
-        buildinfos = list(args.package_dir.rglob("linux-x64-BUILDINFO"))
-        if len(buildinfos) != 1 or buildinfos[0].is_symlink() or not buildinfos[0].is_file():
-            die("package must contain exactly one regular linux BUILDINFO")
-        buildinfo = {k: v for line in buildinfos[0].read_text(encoding="utf-8").splitlines()
-                     if "=" in line for k, v in [line.split("=", 1)]}
-        for key in ("commit", "package_version", "run_id"):
-            if not buildinfo.get(key): die(f"BUILDINFO missing {key}")
         result = {"schema_version": RESULT_SCHEMA, "runtime_receipt": receipt,
                   "input_bindings": {"rollout_manifest_sha256": sha256(args.manifest),
                     "observer_name": observer_name, "world_id": world_id,

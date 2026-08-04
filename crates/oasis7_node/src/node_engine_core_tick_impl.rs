@@ -67,14 +67,6 @@ impl PosNodeEngine {
             let record_peer_heads_from_gap_sync = gossip.is_some() || consensus_network.is_some();
             match (&mut execution_hook, &mut progress_callback) {
                 (Some(hook), Some(callback)) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        Some(&mut **callback),
-                    )?;
                     self.sync_missing_replication_commits_with_progress(
                         endpoint,
                         node_id,
@@ -83,17 +75,17 @@ impl PosNodeEngine {
                         Some(&mut **hook),
                         Some(&mut **callback),
                         record_peer_heads_from_gap_sync,
+                    )?;
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        Some(&mut **callback),
                     )?;
                 }
                 (Some(hook), None) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        None,
-                    )?;
                     self.sync_missing_replication_commits_with_progress(
                         endpoint,
                         node_id,
@@ -102,17 +94,17 @@ impl PosNodeEngine {
                         Some(&mut **hook),
                         None,
                         record_peer_heads_from_gap_sync,
+                    )?;
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        Some(&mut **hook),
+                        None,
                     )?;
                 }
                 (None, Some(callback)) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        Some(&mut **callback),
-                    )?;
                     self.sync_missing_replication_commits_with_progress(
                         endpoint,
                         node_id,
@@ -121,17 +113,17 @@ impl PosNodeEngine {
                         None,
                         Some(&mut **callback),
                         record_peer_heads_from_gap_sync,
+                    )?;
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        Some(&mut **callback),
                     )?;
                 }
                 (None, None) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        None,
-                    )?;
                     self.sync_missing_replication_commits_with_progress(
                         endpoint,
                         node_id,
@@ -140,6 +132,14 @@ impl PosNodeEngine {
                         None,
                         None,
                         record_peer_heads_from_gap_sync,
+                    )?;
+                    self.ingest_network_replications_with_progress(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication.as_deref_mut(),
+                        None,
+                        None,
                     )?;
                 }
             }

@@ -506,6 +506,7 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
     let mut replication_a =
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
+    let mut queued_low_message = None;
     for height in 1..=3 {
         let decision = committed_decision(height, 100, 67);
         let execution_block_hash = format!("exec-block-{height}");
@@ -513,7 +514,7 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
         let checkpoint = (height == 3).then(|| {
             test_execution_checkpoint_bundle(height, &execution_block_hash, &execution_state_root)
         });
-        replication_a
+        let message = replication_a
             .build_local_commit_message_with_checkpoint(
                 "node-a",
                 world_id,
@@ -525,6 +526,9 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
             )
             .expect("build local message")
             .expect("message");
+        if height == 1 {
+            queued_low_message = Some(message);
+        }
     }
     std::fs::remove_file(dir_a.join("replication_commit_messages/00000000000000000001.json"))
         .expect("remove low commit 1");
@@ -542,7 +546,7 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
     )
     .expect("register fetch handlers");
     let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
-    let endpoint_b =
+    let mut endpoint_b =
         ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
             .expect("endpoint b");
     let mut replication_b =
@@ -554,15 +558,26 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
         installed: Vec::new(),
     };
 
+    endpoint_b
+        .publish_replication(
+            queued_low_message
+                .as_ref()
+                .expect("queue low-height replication before observer tick"),
+        )
+        .expect("publish low-height replication");
     engine_b
-        .sync_missing_replication_commits(
-            &endpoint_b,
+        .tick(
             "node-b",
             world_id,
+            6_000,
+            None,
             Some(&mut replication_b),
+            Some(&mut endpoint_b),
+            None,
+            Vec::new(),
             Some(&mut execution_hook),
         )
-        .expect("install checkpoint gap sync");
+        .expect("high checkpoint must install before queued low-height tail replay");
 
     assert_eq!(execution_hook.installed, vec![3]);
     assert_eq!(engine_b.committed_height, 3);
