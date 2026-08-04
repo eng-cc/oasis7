@@ -40,6 +40,7 @@ fn agent_silhouettes_reconcile_once_per_eligible_agent_and_clean_up_stale_state(
         location_id: Some("loc-1".to_string()),
         resource_summary: "-".to_string(),
         status_badges: vec![],
+        position_source: AgentPositionSource::Snapshot,
         size_hint_px: Some(5.0),
     });
     let mut app = render_test_app(state);
@@ -125,42 +126,25 @@ fn separate_agent_silhouette_accent_offsets(
             )
         })
         .collect::<Vec<_>>();
-    let mut core_query = world.query::<(Entity, &PixelWorldAgentCoreVisual)>();
-    let core_entities = core_query
-        .iter(world)
-        .map(|(entity, _)| entity)
-        .collect::<std::collections::HashSet<_>>();
-    let agent_entities = agents
-        .iter()
-        .map(|(entity, _, _)| *entity)
-        .collect::<std::collections::HashSet<_>>();
-    let mut sprite_query = world.query::<(Entity, &Sprite, &Transform)>();
-    let sprites = sprite_query
-        .iter(world)
-        .filter(|(entity, _, _)| {
-            !agent_entities.contains(entity) && !core_entities.contains(entity)
-        })
-        .map(|(entity, sprite, transform)| (entity, row("candidate", sprite, transform)))
-        .collect::<Vec<_>>();
-
-    agents
+    let agent_by_id = agents
         .into_iter()
-        .map(|(_, id, agent)| {
-            let accent = sprites
-                .iter()
-                .filter_map(|(_, candidate)| {
-                    let offset = (candidate.x - agent.x, candidate.y - agent.y);
-                    let is_beside_body = offset.0.abs() >= 1.0 || offset.1.abs() >= 1.0;
-                    let is_near_body =
-                        offset.0.abs() <= agent.size_px && offset.1.abs() <= agent.size_px;
-                    let is_small = candidate.size_px <= agent.size_px * 0.6;
-                    let is_behind_body = candidate.z < agent.z && candidate.z >= agent.z - 0.5;
-                    (is_beside_body && is_near_body && is_small && is_behind_body)
-                        .then_some(offset)
-                })
-                .next()
-                .expect("every visible agent must have a separate neutral silhouette accent behind and beside its body");
-            (id, accent)
+        .map(|(_, id, agent)| (id, agent))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut silhouette_query = world.query::<(&PixelWorldAgentSilhouetteVisual, &Transform)>();
+
+    silhouette_query
+        .iter(world)
+        .map(|(silhouette, transform)| {
+            let agent = agent_by_id
+                .get(&silhouette.id)
+                .expect("every silhouette must have a visible Agent body");
+            (
+                silhouette.id.clone(),
+                (
+                    transform.translation.x - agent.x,
+                    transform.translation.y - agent.y,
+                ),
+            )
         })
         .collect()
 }
