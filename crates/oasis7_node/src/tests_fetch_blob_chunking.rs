@@ -8,6 +8,8 @@ use oasis7_proto::world_error::WorldError;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+const REQUEST_CHUNK_BYTES: usize = FETCH_BLOB_MAX_RAW_CHUNK_BYTES / 2;
+
 #[derive(Clone)]
 struct LegacyExactChunkBlobNetwork {
     attempts: Arc<Mutex<usize>>,
@@ -49,10 +51,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for LegacyExa
         let request: super::replication::FetchBlobRequest =
             serde_json::from_slice(payload).expect("decode fetch blob request");
         assert_eq!(request.offset_bytes, Some(0));
-        assert_eq!(
-            request.limit_bytes,
-            Some(FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64)
-        );
+        assert_eq!(request.limit_bytes, Some(REQUEST_CHUNK_BYTES as u64));
         serde_json::to_vec(&super::replication::FetchBlobResponse {
             found: true,
             range_offset_bytes: None,
@@ -100,7 +99,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
             .lock()
             .expect("lock attempts")
             .push((offset, limit));
-        assert_eq!(limit, FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64);
+        assert_eq!(limit, REQUEST_CHUNK_BYTES as u64);
         let total = FETCH_BLOB_MAX_RAW_CHUNK_BYTES.saturating_add(17) as u64;
         let length = (total.saturating_sub(offset)).min(limit) as usize;
         let response = super::replication::FetchBlobResponse {
@@ -178,10 +177,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         let request: super::replication::FetchBlobRequest =
             serde_json::from_slice(payload).expect("decode fetch blob request");
         assert_eq!(request.offset_bytes, Some(0));
-        assert_eq!(
-            request.limit_bytes,
-            Some(FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64)
-        );
+        assert_eq!(request.limit_bytes, Some(REQUEST_CHUNK_BYTES as u64));
         if providers.iter().any(|provider_id| {
             self.unsupported_provider_ids
                 .iter()
@@ -306,11 +302,9 @@ fn fetch_blob_worst_case_legacy_json_multichunk_response_stays_within_budget() {
     assert_eq!(
         attempts.lock().expect("lock attempts").as_slice(),
         &[
-            (0, FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64),
-            (
-                FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64,
-                FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64
-            )
+            (0, REQUEST_CHUNK_BYTES as u64),
+            (REQUEST_CHUNK_BYTES as u64, REQUEST_CHUNK_BYTES as u64),
+            ((REQUEST_CHUNK_BYTES * 2) as u64, REQUEST_CHUNK_BYTES as u64),
         ]
     );
 }
