@@ -699,6 +699,50 @@ fn high_checkpoint_rate_limited_sole_dht_provider_falls_through_to_connected_com
 }
 
 #[test]
+fn high_checkpoint_rate_limited_sole_dht_and_connected_peer_enters_cooldown() {
+    let world_id = "world-gap-sync-rate-limited-sole-dht-and-connected-peer";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 252, 253);
+    fixture.dht.set_providers(&["provider-a"]);
+    fixture
+        .network
+        .set_rate_limited_providers(&["provider-a", "provider-b"]);
+    fixture.network.set_connected_peers(&["provider-b"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("all eligible fetch routes being rate-limited should enter cooldown");
+
+    assert_eq!(
+        fixture.network.provider_attempts(),
+        vec!["provider-a".to_string(), "provider-b".to_string()],
+        "the sole advertised route and distinct connected fallback must both be attempted",
+    );
+    assert!(install_hook.installed.is_empty());
+    assert_eq!(fixture.engine.last_replication_gap_sync_blocked_height, Some(1));
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("bounded cooldown should suppress an immediate retry");
+    assert_eq!(fixture.network.provider_attempts().len(), 2);
+    fixture.cleanup();
+}
+
+#[test]
 fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() {
     let world_id = "world-gap-sync-no-complete-checkpoint-provider";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 251, 252);
