@@ -23,6 +23,7 @@
 - [`成熟世界成长与区域参与`](mature-world-progression.prd.md)：首次持续能力之后的独立成长、区域专业化、有限影响与 anti-grind / 恢复边界。
 - [`区域冲突、软赛季与可恢复损失`](chartered-conflict-soft-seasons-and-recovery.prd.md)：宣战、有限参战范围、实体战利品/占领、可恢复重建和不重置世界的软赛季边界。
 - [`沟通、合同、声誉与 R&D 连续性`](communication-contracts-reputation-and-rd-continuity.prd.md)：人类沟通与 Agent 合同的边界、持续服务争端、情境声誉及研究归因/份额的长期产品语义。
+- [`组织连续性、解散与长期不活跃保护`](organization-continuity-dissolution-and-dormancy-protection.prd.md)：组织 charter 的个人保护底线、可审计解散顺序，以及长期不活跃时的保护、恢复主张与有限处置边界。
 - [`常态市场与有界紧急保供`](market-normal-state-and-emergency-supply.prd.md)：常态价格形成、系统性必需品危机的最小授权包、受限干预和可审计退出边界。
 - [`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md)：相邻探索、物流与 charter 共同形成的扩展边界，非主权 pioneer priority，以及公共事实、探索数据与实时运营信息的分层可见性。
 - 战争/治理的玩家结果、可读预览与反支配边界由本 PRD 承诺；成本、收益、冷却和评分的专业数值权威见 [`gameplay-war-politics-mvp-baseline.design.md`](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md)。战争不表示已成为当前首局主线。
@@ -113,6 +114,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - SC-12：代表性首局、持续目标与成熟世界样例证明玩家可通过短命令/复盘和有边界的离线授权维持普通成长，同时可自愿进入较长的区域、外交或治理会话；玩家无需先掌握全部系统深度或保持持续在线，且高风险窗口、授权范围与恢复路径可读。
 - SC-13：代表性区域冲突与赛季样例证明攻击只在已声明的 charter 范围和登记参与者/暴露资产间发生，非参与者受保护；实体领地/战利品结算、可恢复损失、软赛季刷新和系统性恢复均保留同一世界时间线、身份与可审计因果。
 - SC-14：代表性协作样例证明直接人类沟通不自动绑定，而 Agent 代表在有效授权、接受与权威校验后可形成可审计合同；持续服务的违约/救济、随机无冲突本地争端程序、情境化可更新声誉和预声明 R&D 归因均不产生永久污点、隐性权力或对个人政治 credential 的转让。
+- SC-15：代表性组织解散与长期不活跃样例证明 charter 不越过个人资产、合同、退出、历史和 Agent 身份的保护底线；风险冻结、合同与托管处理、责任/成本、持续业务处置、剩余分配，以及通知、保护期、可恢复主张、申诉和有限后续处置均留在同一可审计世界因果链中，不产生静默没收、身份删除、历史重写或重复生效。
 
 ### 5.1 验收追踪
 
@@ -132,6 +134,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 | SC-12 | producer_system_designer / gameplay_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 分层信息、短命令/复盘、已授权离线推进、可选深度会话与高风险有界响应的组合体验证据 | test_tier_required |
 | SC-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 参战范围、离线防御、占领/提取、可恢复重建、赛季刷新与统一世界连续性的组合证据 | test_tier_full |
 | SC-14 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 授权/接受合同、atomic 与持续服务、争端 receipt/程序申诉、声誉/转让与 R&D provenance/份额的组合证据 | test_tier_full |
+| SC-15 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | charter 保护底线、解散 waterfall、通知/保护期、estate 或可撤销 delegation、reclaim/appeal、持续业务处置和历史/receipt 连续性的组合证据 | test_tier_full |
 
 ## 6. Non-Goals
 
