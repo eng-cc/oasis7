@@ -8661,6 +8661,19 @@ function pixelWorldSelectedBlockerVisualFixture() {
     }
   };
 }
+function pixelWorldRecommendedTargetVisualFixture() {
+  const fixture = pixelWorldSelectedBlockerVisualFixture();
+  const gameplay = fixture.player_gameplay;
+  gameplay.stage_status = "ready";
+  gameplay.execution_state = "waiting_for_intent";
+  delete gameplay.accepted_intent_id;
+  delete gameplay.intent_summary;
+  delete gameplay.intent_scope;
+  delete gameplay.intent_target;
+  delete gameplay.last_world_change;
+  gameplay.recent_feedback = null;
+  return fixture;
+}
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
 function pixelWorldTestApiEnabled() {
@@ -8688,7 +8701,8 @@ function installPixelWorldVisualFixtureHook() {
   }
   const fixtures = {
     selected_blocker: () => clone(pixelWorldSelectedBlockerVisualFixture()),
-    hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture())
+    hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture()),
+    recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture())
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
   const fixtureName = requestedVisualFixtureName();

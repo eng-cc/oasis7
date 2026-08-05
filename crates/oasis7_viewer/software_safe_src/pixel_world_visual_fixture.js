@@ -1,5 +1,8 @@
 import * as core from "./legacy_core.js";
-import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
+import {
+  pixelWorldRecommendedTargetVisualFixture,
+  pixelWorldSelectedBlockerVisualFixture,
+} from "./pixel_world_visual_fixture_data.js";
 
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
@@ -33,6 +36,7 @@ export function installPixelWorldVisualFixtureHook() {
   const fixtures = {
     selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
+    recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
 

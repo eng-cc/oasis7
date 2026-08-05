@@ -122,3 +122,18 @@ export function pixelWorldSelectedBlockerVisualFixture() {
     },
   };
 }
+
+// Test-only: leave the enabled recommendation visible without an action receipt.
+export function pixelWorldRecommendedTargetVisualFixture() {
+  const fixture = pixelWorldSelectedBlockerVisualFixture();
+  const gameplay = fixture.player_gameplay;
+  gameplay.stage_status = "ready";
+  gameplay.execution_state = "waiting_for_intent";
+  delete gameplay.accepted_intent_id;
+  delete gameplay.intent_summary;
+  delete gameplay.intent_scope;
+  delete gameplay.intent_target;
+  delete gameplay.last_world_change;
+  gameplay.recent_feedback = null;
+  return fixture;
+}
