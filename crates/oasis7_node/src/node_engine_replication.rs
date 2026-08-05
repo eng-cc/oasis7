@@ -388,7 +388,7 @@ impl PosNodeEngine {
                 && self.committed_height == 0
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
-                && self.network_committed_height > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+                && self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
@@ -761,7 +761,7 @@ impl PosNodeEngine {
             return Ok(());
         }
         let mut missing_checkpoint_closure_reason = None;
-        if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
+        if network_lag >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
                 self.replication_persisted_height,
