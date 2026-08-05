@@ -333,9 +333,6 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
-        if let Some(world_head) = endpoint.lookup_world_head(world_id)? {
-            self.network_committed_height = self.network_committed_height.max(world_head.height);
-        }
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         for message in messages {
