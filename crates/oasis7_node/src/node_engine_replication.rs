@@ -335,20 +335,11 @@ impl PosNodeEngine {
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
+        let mut validated_messages = Vec::new();
         for message in messages {
             if message.node_id == node_id {
                 continue;
             }
-            let committed_successor = checked_replication_successor(
-                self.committed_height,
-                "committed_height",
-                "ingesting replication message",
-            )?;
-            let persisted_successor = checked_replication_successor(
-                self.replication_persisted_height,
-                "replication_persisted_height",
-                "ingesting replication message",
-            )?;
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
             match replication_runtime.validate_remote_message_for_apply(node_id, world_id, &message)
             {
@@ -379,11 +370,25 @@ impl PosNodeEngine {
                 }
                 self.observe_network_replication_commit(message.node_id.as_str(), payload);
             }
+            validated_messages.push((message, payload_view));
+        }
+        for (message, payload_view) in validated_messages {
+            let committed_successor = checked_replication_successor(
+                self.committed_height,
+                "committed_height",
+                "ingesting replication message",
+            )?;
+            let persisted_successor = checked_replication_successor(
+                self.replication_persisted_height,
+                "replication_persisted_height",
+                "ingesting replication message",
+            )?;
             let defer_fresh_height_one_for_checkpoint_bootstrap = execution_hook.is_some()
+                && self.checkpoint_bootstrap_enabled
                 && self.committed_height == 0
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
-                && self.network_committed_height > persisted_successor;
+                && self.network_committed_height > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
