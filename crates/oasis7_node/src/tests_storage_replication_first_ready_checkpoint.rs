@@ -60,6 +60,13 @@ struct CheckpointInstallingExecutionHook {
 
 static CHECKPOINT_PROBE_NONCE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+fn lock_checkpoint_probe_nonce() -> std::sync::MutexGuard<'static, ()> {
+    CHECKPOINT_PROBE_NONCE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 struct CheckpointProbeNonceGuard;
 
 impl CheckpointProbeNonceGuard {
@@ -197,10 +204,7 @@ fn committed_decision(height: u64) -> PosDecision {
 
 #[test]
 fn fresh_observer_discovers_checkpoint_after_first_ready_replication_head() {
-    let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .expect("lock checkpoint probe nonce");
+    let _nonce_lock = lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-first-ready-checkpoint-head";
     let dir_a = temp_dir("gap-sync-first-ready-checkpoint-head-a");
     let dir_b = temp_dir("gap-sync-first-ready-checkpoint-head-b");
@@ -335,10 +339,7 @@ fn fresh_observer_discovers_checkpoint_after_first_ready_replication_head() {
 
 #[test]
 fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop() {
-    let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .expect("lock checkpoint probe nonce");
+    let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = CheckpointProbeNonceGuard::install();
     let world_id = "world-checkpoint-connected-candidate-receipt";
     let dir_a = temp_dir("checkpoint-connected-candidate-receipt-a");
@@ -504,10 +505,7 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
 
 #[test]
 fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
-    let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .expect("lock checkpoint probe nonce");
+    let _nonce_lock = lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-bootstrap-before-height-one";
     let dir_a = temp_dir("gap-sync-bootstrap-before-height-one-a");
     let dir_b = temp_dir("gap-sync-bootstrap-before-height-one-b");
