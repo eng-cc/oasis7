@@ -174,6 +174,13 @@ rewrite "$fixture/.codex/config.toml" \
   $'sandbox_mode = "danger-full-access"\nmodel = "gpt-5.5"'
 expect_fail unintended_root_model_pin "$fixture"
 
+new_fixture missing-capability-boundary
+fixture="$FIXTURE"
+rewrite "$fixture/doc/engineering/workflow/source-of-truth.md" \
+  'Adapter registration is not proof of adapter activation.' \
+  'Adapter registration is evidence of adapter activation.'
+expect_fail missing_source_of_truth_capability_boundary "$fixture"
+
 FAKE_BIN="$TMP_DIR/fake-bin"
 FAKE_PID_FILE="$TMP_DIR/fake-codex.pid"
 mkdir -p "$FAKE_BIN"
