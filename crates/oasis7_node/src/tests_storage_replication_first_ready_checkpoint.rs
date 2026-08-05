@@ -695,7 +695,7 @@ fn checkpoint_receipt_recovers_finalization_failure_without_reinstalling_generic
 }
 
 #[test]
-fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
+fn fresh_observer_bootstraps_checkpoint_at_boundary_before_height_one_peer_mismatch() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-bootstrap-before-height-one";
     let dir_a = temp_dir("gap-sync-bootstrap-before-height-one-a");
@@ -730,7 +730,6 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         .expect("pos config b")
         .with_replication(replication_config_b.clone());
     let checkpoint_height = 64;
-    let ready_head_height = checkpoint_height + 1;
     let mut replication_a =
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
@@ -747,7 +746,7 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         .expect("height-one message");
     let checkpoint_block_hash = format!("exec-block-{checkpoint_height}");
     let checkpoint_state_root = format!("exec-state-{checkpoint_height}");
-    replication_a
+    let checkpoint_message = replication_a
         .build_local_commit_message_with_checkpoint(
             "node-a",
             world_id,
@@ -763,17 +762,6 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         )
         .expect("build checkpoint boundary")
         .expect("checkpoint boundary message");
-    let ready_head_message = replication_a
-        .build_local_commit_message(
-            "node-a",
-            world_id,
-            5_964,
-            &committed_decision(ready_head_height),
-            Some(format!("exec-block-{ready_head_height}").as_str()),
-            Some(format!("exec-state-{ready_head_height}").as_str()),
-        )
-        .expect("build ready high head")
-        .expect("ready high head message");
     let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
@@ -796,6 +784,14 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
             .expect("fresh observer runtime");
     let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    assert!(
+        replication_b
+            .load_commit_message_by_height(world_id, checkpoint_height)
+            .expect("inspect fresh observer checkpoint state")
+            .is_none(),
+        "fresh observer must start without a locally persisted checkpoint"
+    );
+    assert_eq!(engine_b.last_execution_height, 0);
     let mut execution_hook = BootstrapBeforeIncrementalHook {
         installed: Vec::new(),
         incremental_commits: Vec::new(),
@@ -805,8 +801,8 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         .publish_replication(&incremental_message)
         .expect("publish incompatible height-one tail");
     endpoint_b
-        .publish_replication(&ready_head_message)
-        .expect("publish ready high head after incremental tail");
+        .publish_replication(&checkpoint_message)
+        .expect("publish checkpoint boundary after incremental tail");
 
     engine_b
         .tick(
@@ -822,7 +818,7 @@ fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
         )
         .expect("checkpoint bootstrap must precede incompatible height-one incremental replay");
 
-    assert_eq!(engine_b.network_committed_height, ready_head_height);
+    assert_eq!(engine_b.network_committed_height, checkpoint_height);
     assert_eq!(execution_hook.installed, vec![checkpoint_height]);
     assert!(
         execution_hook.incremental_commits.is_empty(),
