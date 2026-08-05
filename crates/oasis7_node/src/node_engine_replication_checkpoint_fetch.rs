@@ -103,7 +103,7 @@ impl PosNodeEngine {
                 .checkpoint_blob_fetch_progress
                 .entry(content_hash.to_string())
                 .or_default();
-            request_fetch_blob_with_route_fallback_resuming(
+            request_fetch_blob_with_route_fallback_resuming_with_provenance(
                 endpoint,
                 world_id,
                 content_hash,
@@ -113,7 +113,7 @@ impl PosNodeEngine {
                 expected_size_bytes,
             )
         };
-        let response = match response {
+        let (response, mut connected_candidates) = match response {
             Ok(response) => response,
             Err(err) => {
                 if !crate::network_bridge::replication_network_error_is_rate_limited_protocol(
@@ -179,11 +179,8 @@ impl PosNodeEngine {
         let mut connected_peer_ids = endpoint.connected_peer_ids();
         connected_peer_ids.sort();
         connected_peer_ids.dedup();
-        let connected_candidates: Vec<String> = provider_candidates
-            .iter()
-            .filter(|candidate| connected_peer_ids.binary_search(candidate).is_ok())
-            .cloned()
-            .collect();
+        connected_candidates.sort();
+        connected_candidates.dedup();
         Ok(Some(serde_json::json!({
             "content_hash": content_hash,
             "source": "network_fetch",

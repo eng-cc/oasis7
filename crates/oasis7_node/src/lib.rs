@@ -161,9 +161,12 @@ use replication_fetch_handler_support::{
     admit_fetch_commit_request, attach_checkpoint_for_fetch_commit_if_boundary,
     register_fetch_blob_handler,
 };
+#[cfg(test)]
+use replication_probe_gate::request_fetch_blob_with_route_fallback_resuming;
 use replication_probe_gate::{
     FetchBlobChunkProgress, replication_request_waitable_connection_gap,
-    request_fetch_blob_with_route_fallback, request_fetch_blob_with_route_fallback_resuming,
+    request_fetch_blob_with_route_fallback,
+    request_fetch_blob_with_route_fallback_resuming_with_provenance,
     request_fetch_blob_with_storage_challenge_routes,
 };
 use replication_state_reconcile::{

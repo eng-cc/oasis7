@@ -403,6 +403,7 @@ pub(super) fn request_fetch_blob_with_route_fallback(
         },
         None,
         None,
+        None,
     )
 }
 
@@ -415,6 +416,27 @@ pub(super) fn request_fetch_blob_with_route_fallback_resuming(
     progress: &mut FetchBlobChunkProgress,
     expected_size_bytes: u64,
 ) -> Result<FetchBlobResponse, NodeError> {
+    request_fetch_blob_with_route_fallback_resuming_with_provenance(
+        endpoint,
+        world_id,
+        content_hash,
+        request,
+        provider_ids,
+        progress,
+        expected_size_bytes,
+    )
+    .map(|(response, _)| response)
+}
+
+pub(super) fn request_fetch_blob_with_route_fallback_resuming_with_provenance(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+    progress: &mut FetchBlobChunkProgress,
+    expected_size_bytes: u64,
+) -> Result<(FetchBlobResponse, Vec<String>), NodeError> {
     let expected_size_bytes = usize::try_from(expected_size_bytes).map_err(|_| {
         NodeError::Replication {
             reason: format!(
@@ -422,7 +444,8 @@ pub(super) fn request_fetch_blob_with_route_fallback_resuming(
             ),
         }
     })?;
-    request_fetch_blob_with_route_fallback_policy(
+    let mut successful_provider_ids = std::collections::BTreeSet::new();
+    let response = request_fetch_blob_with_route_fallback_policy(
         endpoint,
         world_id,
         content_hash,
@@ -435,7 +458,9 @@ pub(super) fn request_fetch_blob_with_route_fallback_resuming(
         },
         Some(progress),
         Some(expected_size_bytes),
-    )
+        Some(&mut successful_provider_ids),
+    )?;
+    Ok((response, successful_provider_ids.into_iter().collect()))
 }
 
 pub(super) fn request_fetch_blob_with_storage_challenge_routes(
@@ -458,6 +483,7 @@ pub(super) fn request_fetch_blob_with_storage_challenge_routes(
         },
         None,
         None,
+        None,
     )
 }
 
@@ -470,6 +496,7 @@ fn request_fetch_blob_with_route_fallback_policy(
     policy: FetchBlobRouteFallbackPolicy,
     mut progress: Option<&mut FetchBlobChunkProgress>,
     expected_size_bytes: Option<usize>,
+    mut successful_provider_ids: Option<&mut std::collections::BTreeSet<String>>,
 ) -> Result<FetchBlobResponse, NodeError> {
     let mut offset = progress
         .as_deref()
@@ -480,7 +507,7 @@ fn request_fetch_blob_with_route_fallback_policy(
         let mut chunk_request = request.clone();
         chunk_request.offset_bytes = Some(offset as u64);
         chunk_request.limit_bytes = Some(REPLICATION_FETCH_BLOB_CHUNK_BYTES as u64);
-        let response = match request_fetch_blob_chunk_with_route_fallback(
+        let (response, successful_provider_id) = match request_fetch_blob_chunk_with_route_fallback(
             endpoint,
             world_id,
             content_hash,
@@ -501,6 +528,14 @@ fn request_fetch_blob_with_route_fallback_policy(
                 return Err(err);
             }
         };
+        if response.found {
+            if let (Some(provider_id), Some(successful_provider_ids)) = (
+                successful_provider_id,
+                successful_provider_ids.as_deref_mut(),
+            ) {
+                successful_provider_ids.insert(provider_id);
+            }
+        }
         if !response.found {
             if let Some(progress) = progress.as_deref_mut() {
                 progress.clear();
@@ -613,7 +648,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     request: &FetchBlobRequest,
     provider_ids: Option<&[String]>,
     policy: FetchBlobRouteFallbackPolicy,
-) -> Result<FetchBlobResponse, NodeError> {
+) -> Result<(FetchBlobResponse, Option<String>), NodeError> {
     let mut last_not_found: Option<FetchBlobResponse> = None;
     let mut last_retryable_error: Option<NodeError> = None;
     let mut attempted_provider_ids = std::collections::BTreeSet::new();
@@ -638,7 +673,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
                 ) {
                 Ok(response) => {
                     if response.found {
-                        return Ok(response);
+                        return Ok((response, Some(provider_id.to_string())));
                     }
                     last_not_found = Some(response);
                 }
@@ -652,7 +687,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
 
     if provider_lookup_supplied && !policy.allow_connected_peer_fallback {
         if let Some(response) = last_not_found {
-            return Ok(response);
+            return Ok((response, None));
         }
     }
 
@@ -730,7 +765,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         ) {
             Ok(response) => {
                 if response.found {
-                    return Ok(response);
+                    return Ok((response, None));
                 }
                 last_not_found = Some(response);
             }
@@ -759,7 +794,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
             ) {
                 Ok(response) => {
                     if response.found {
-                        return Ok(response);
+                        return Ok((response, Some(peer_id.to_string())));
                     }
                     last_not_found = Some(response);
                 }
@@ -778,7 +813,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
         ) {
             Ok(response) => {
                 if response.found {
-                    return Ok(response);
+                    return Ok((response, None));
                 }
                 last_not_found = Some(response);
             }
@@ -800,7 +835,7 @@ fn request_fetch_blob_chunk_with_route_fallback(
     }
 
     if let Some(response) = last_not_found {
-        return Ok(response);
+        return Ok((response, None));
     }
 
     Err(
