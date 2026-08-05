@@ -181,6 +181,13 @@ impl PosNodeEngine {
         connected_peer_ids.dedup();
         connected_candidates.sort();
         connected_candidates.dedup();
+        // A generic request has no single provider route to return, but it was
+        // still served through the endpoint's live connected set. Preserve that
+        // concrete set for the clean-room receipt instead of recording an
+        // empty provenance list.
+        if connected_candidates.is_empty() {
+            connected_candidates.clone_from(&connected_peer_ids);
+        }
         Ok(Some(serde_json::json!({
             "content_hash": content_hash,
             "source": "network_fetch",

@@ -629,6 +629,14 @@ impl PosNodeEngine {
                         ),
                     });
                 }
+                // Installation is irreversible from the engine's perspective.
+                // Record its execution boundary before optional probe-receipt
+                // finalization so a receipt failure cannot cause the next
+                // high-checkpoint probe to install the same closure again.
+                self.last_execution_height = result.execution_height;
+                self.last_execution_block_hash = Some(result.execution_block_hash.clone());
+                self.last_execution_state_root = Some(result.execution_state_root.clone());
+                self.remember_execution_binding_for_height(payload.height);
                 replication_runtime.persist_checkpoint_verification_receipt(
                     world_id,
                     probe_nonce.as_deref(),
@@ -636,10 +644,6 @@ impl PosNodeEngine {
                     checkpoint_receipt_bundle.as_ref(),
                     checkpoint_fetch_observations.as_slice(),
                 )?;
-                self.last_execution_height = result.execution_height;
-                self.last_execution_block_hash = Some(result.execution_block_hash);
-                self.last_execution_state_root = Some(result.execution_state_root);
-                self.remember_execution_binding_for_height(payload.height);
                 Ok(Some((payload.block_hash.clone(), payload.committed_at_ms)))
             })?
         } else {
