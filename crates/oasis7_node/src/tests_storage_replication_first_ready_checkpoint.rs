@@ -520,7 +520,7 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
 }
 
 #[test]
-fn checkpoint_receipt_uses_connected_candidates_for_generic_fetch_and_never_reinstalls_pending_closure() {
+fn checkpoint_receipt_recovers_finalization_failure_without_reinstalling_generic_connected_closure() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = CheckpointProbeNonceGuard::install();
     let world_id = "world-checkpoint-generic-connected-candidate";
@@ -611,6 +611,12 @@ fn checkpoint_receipt_uses_connected_candidates_for_generic_fetch_and_never_rein
     let mut execution_hook = CheckpointInstallingExecutionHook {
         installed: Vec::new(),
     };
+    let receipt_path = dir_b
+        .join("checkpoint-verification")
+        .join(format!("{checkpoint_height}.json"));
+    // A directory at the publication path deterministically makes the
+    // no-overwrite hard-link finalization fail after the closure is installed.
+    fs::create_dir_all(&receipt_path).expect("block initial receipt publication");
 
     let first_sync = engine_b
         .sync_missing_replication_commits(
@@ -619,7 +625,17 @@ fn checkpoint_receipt_uses_connected_candidates_for_generic_fetch_and_never_rein
             world_id,
             Some(&mut replication_b),
             Some(&mut execution_hook),
-        );
+        )
+        .expect_err("initial receipt finalization must fail after checkpoint installation");
+    assert!(
+        first_sync.to_string().contains("publish checkpoint verification receipt"),
+        "expected receipt publication failure, got: {first_sync}"
+    );
+    assert_eq!(
+        engine_b.last_execution_height, checkpoint_height,
+        "the failed finalization must retain the installed checkpoint identity for retry"
+    );
+    fs::remove_dir(&receipt_path).expect("unblock receipt publication for retry");
     let second_sync = engine_b
         .sync_missing_replication_commits(
             &endpoint_b,
@@ -627,18 +643,16 @@ fn checkpoint_receipt_uses_connected_candidates_for_generic_fetch_and_never_rein
             world_id,
             Some(&mut replication_b),
             Some(&mut execution_hook),
-        );
+        )
+        .expect("retry must finalize the receipt without reinstalling the closure");
 
-    let _ = (first_sync, second_sync);
+    let _ = second_sync;
 
     assert_eq!(
         execution_hook.installed,
         vec![checkpoint_height],
         "an installed checkpoint must not be installed again while provenance receipt finalization is pending"
     );
-    let receipt_path = dir_b
-        .join("checkpoint-verification")
-        .join(format!("{checkpoint_height}.json"));
     let receipt: serde_json::Value = serde_json::from_slice(
         fs::read(&receipt_path).expect("read checkpoint verification receipt").as_slice(),
     )
@@ -661,6 +675,20 @@ fn checkpoint_receipt_uses_connected_candidates_for_generic_fetch_and_never_rein
         receipt["objects"].as_array().expect("receipt objects").len(),
         checkpoint_descriptor.blobs.len() + 1,
         "receipt must bind the manifest and every checkpoint blob"
+    );
+    assert!(
+        receipt["fetch_observations"]
+            .as_array()
+            .expect("receipt observations")
+            .iter()
+            .zip(receipt["objects"].as_array().expect("receipt closure objects"))
+            .all(|(observation, object)| {
+                observation["response_found"].as_bool() == Some(true)
+                    && observation["content_hash"] == object["expected_content_hash"]
+                    && observation["observed_content_hash"] == object["observed_content_hash"]
+                    && observation["observed_size_bytes"] == object["observed_size_bytes"]
+            }),
+        "recovered runtime receipt must retain response and hash/size bindings: {receipt}"
     );
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
