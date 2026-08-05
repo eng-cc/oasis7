@@ -24,6 +24,7 @@
 - [`区域冲突、软赛季与可恢复损失`](chartered-conflict-soft-seasons-and-recovery.prd.md)：宣战、有限参战范围、实体战利品/占领、可恢复重建和不重置世界的软赛季边界。
 - [`沟通、合同、声誉与 R&D 连续性`](communication-contracts-reputation-and-rd-continuity.prd.md)：人类沟通与 Agent 合同的边界、持续服务争端、情境声誉及研究归因/份额的长期产品语义。
 - [`常态市场与有界紧急保供`](market-normal-state-and-emergency-supply.prd.md)：常态价格形成、系统性必需品危机的最小授权包、受限干预和可审计退出边界。
+- [`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md)：相邻探索、物流与 charter 共同形成的扩展边界，非主权 pioneer priority，以及公共事实、探索数据与实时运营信息的分层可见性。
 - 战争/治理的玩家结果、可读预览与反支配边界由本 PRD 承诺；成本、收益、冷却和评分的专业数值权威见 [`gameplay-war-politics-mvp-baseline.design.md`](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md)。战争不表示已成为当前首局主线。
 - [`可玩性证据与承诺边界`](playability-evidence-and-claim-boundaries.prd.md)：玩家杠杆、继续游玩价值与分层证据如何共同约束当前产品结论。
 
