@@ -1,4 +1,6 @@
-use super::fixtures::sample_render_state_with_receipt_target;
+use super::fixtures::{
+    sample_render_state_with_receipt_target, sample_render_state_with_recommended_target,
+};
 use super::*;
 
 #[test]
@@ -77,5 +79,18 @@ fn bevy_pixel_regression_exports_visible_receipt_target_pixels() {
     assert!(
         visible_summary.non_background_pixels > absent_summary.non_background_pixels,
         "an accepted receipt cue must contribute visible raster pixels above its target Agent"
+    );
+}
+
+#[test]
+fn bevy_pixel_regression_exports_recommended_target_wayfinder_pixels() {
+    let mut visible = render_test_app(sample_render_state_with_recommended_target(Some("agent-0")));
+    let (_, visible_summary) = rasterize_pixel_regression(&mut visible);
+    let mut absent = render_test_app(sample_render_state_with_recommended_target(None));
+    let (_, absent_summary) = rasterize_pixel_regression(&mut absent);
+
+    assert!(
+        visible_summary.non_background_pixels > absent_summary.non_background_pixels,
+        "the recommended target bracket must contribute visible pixels above its target Agent"
     );
 }

@@ -18,6 +18,23 @@ describe("pixel world visual fixtures", () => {
     expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.hotspot_tooltip).toEqual(expect.any(Function));
   });
 
+  it("installs a recommendation-only fixture with an enabled rendered Agent target and no receipt inputs", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=recommended_target");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("recommended_target");
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.recommended_target()).toMatchObject({
+      model: { agents: { "agent-0": { id: "agent-0" } } },
+      player_gameplay: {
+        available_actions: [{ target_agent_id: "agent-0", disabled_reason: null }],
+        recent_feedback: null,
+      },
+    });
+    const gameplay = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.recommended_target().player_gameplay;
+    expect(gameplay.accepted_intent_id).toBeUndefined();
+    expect(gameplay.intent_target).toBeUndefined();
+    expect(gameplay.last_world_change).toBeUndefined();
+  });
+
   it("refuses to install the hotspot tooltip fixture when connect is not explicitly disabled", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&pixel_world_visual_fixture=hotspot_tooltip");
 

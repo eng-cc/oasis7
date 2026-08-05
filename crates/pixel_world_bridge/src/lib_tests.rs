@@ -55,6 +55,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             },
         }),
         receipt_target: None,
+        recommended_target: None,
     }
 }
 

@@ -189,6 +189,34 @@ fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_disp
 }
 
 #[test]
+fn rust_host_state_projects_only_enabled_rendered_recommended_targets_for_display() {
+    let enabled = build_render_state(&sample_input());
+    assert_eq!(
+        enabled["recommended_target"],
+        json!({ "agent_id": "agent-0" }),
+        "the already-gated recommended action may point at its rendered Agent"
+    );
+
+    let mut disabled_input = sample_input();
+    disabled_input["gameplay"]["recommendedAction"]["disabledReason"] = json!("Missing fuel");
+    let disabled = build_render_state(&disabled_input);
+    assert!(
+        disabled.get("recommended_target").is_none() || disabled["recommended_target"].is_null(),
+        "a disabled recommended action must not create a visual target"
+    );
+
+    let mut unknown_target_input = sample_input();
+    unknown_target_input["gameplay"]["recommendedAction"]["targetAgentId"] =
+        json!("agent-not-rendered");
+    let unknown_target = build_render_state(&unknown_target_input);
+    assert!(
+        unknown_target.get("recommended_target").is_none()
+            || unknown_target["recommended_target"].is_null(),
+        "a recommendation for an Agent absent from RenderState must not create a visual target"
+    );
+}
+
+#[test]
 fn rust_host_state_localizes_command_board_surface_for_zh_locale() {
     let mut input = sample_input();
     input["locale"] = json!("zh-CN");

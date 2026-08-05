@@ -125,6 +125,16 @@ pub(super) fn sample_render_state_with_receipt_target(
     .expect("receipt cue fixture must remain a valid RenderState DTO")
 }
 
+pub(super) fn sample_render_state_with_recommended_target(
+    target_agent_id: Option<&str>,
+) -> RenderState {
+    let mut render_state = sample_render_state_with_receipt_target(None, None);
+    render_state.recommended_target = target_agent_id.map(|agent_id| RecommendedTarget {
+        agent_id: agent_id.to_string(),
+    });
+    render_state
+}
+
 pub(super) fn test_runtime(render_state: RenderState) -> BevyRuntimeState {
     BevyRuntimeState {
         mounted: true,
