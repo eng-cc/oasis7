@@ -1012,6 +1012,20 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 .then(|| json!({ "agent_id": agent_id, "state": state }))
         })
         .unwrap_or(Value::Null);
+    // This is a display-only projection of the runtime-gated recommendation.
+    // Do not rank, replace, or otherwise interpret actions in the renderer.
+    let recommended_target = {
+        let recommended_action = obj(gameplay, "recommendedAction");
+        str_key(recommended_action, "targetAgentId")
+            .filter(|_| str_key(recommended_action, "disabledReason").is_none())
+            .filter(|agent_id| {
+                agents
+                    .iter()
+                    .any(|agent| str_key(agent, "id") == Some(agent_id))
+            })
+            .map(|agent_id| json!({ "agent_id": agent_id }))
+            .unwrap_or(Value::Null)
+    };
     let presentation = obj(input, "presentation");
 
     json!({
@@ -1027,6 +1041,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "recent_event_hotspots": recent_event_hotspots,
         "visual_hotspots": visual_hotspots,
         "receipt_target": receipt_target,
+        "recommended_target": recommended_target,
         "commercial_surface": commercial_surface,
         "presentation": {
             "world_bounds_label": obj(presentation, "world_bounds_label").clone(),

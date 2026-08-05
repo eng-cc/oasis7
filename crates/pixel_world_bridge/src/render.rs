@@ -36,6 +36,10 @@ use selected_location_cue::{PixelWorldSelectedLocationCue, selected_location_cue
 mod receipt_target_cue;
 use receipt_target_cue::{PixelWorldReceiptTargetCue, reconcile_receipt_target_cues};
 
+#[path = "render_recommended_target_cue.rs"]
+mod recommended_target_cue;
+use recommended_target_cue::{PixelWorldRecommendedTargetCue, reconcile_recommended_target_cues};
+
 #[path = "render_canvas_resize.rs"]
 mod canvas_resize;
 
@@ -932,6 +936,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
     receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
+    recommended_target_cues: Query<'w, 's, (Entity, &'static PixelWorldRecommendedTargetCue)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
     hotspot_cues: HotspotCueQueries<'w, 's>,
@@ -968,6 +973,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.receipt_target_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.recommended_target_cues.iter() {
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
@@ -1039,6 +1047,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.receipt_target_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.recommended_target_cues.iter() {
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
@@ -1144,6 +1155,14 @@ pub(crate) fn render_scene(
         &mut commands,
         &runtime,
         &queries.receipt_target_cues,
+        width,
+        height,
+        animation_ms,
+    );
+    reconcile_recommended_target_cues(
+        &mut commands,
+        &runtime,
+        &queries.recommended_target_cues,
         width,
         height,
         animation_ms,

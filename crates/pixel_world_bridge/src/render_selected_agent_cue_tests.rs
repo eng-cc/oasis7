@@ -427,3 +427,6 @@ fn selected_agent_corner_frame_cleans_up_without_changing_hit_regions() {
         "removing the selected agent leaves no stale corner cue"
     );
 }
+
+#[path = "render_recommended_target_cue_tests.rs"]
+mod recommended_target_cue_tests;

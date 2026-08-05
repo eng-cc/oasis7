@@ -6,7 +6,6 @@ use image::{Rgba, RgbaImage};
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
-
 #[path = "render_test_fixtures.rs"]
 mod fixtures;
 use fixtures::{
@@ -14,11 +13,9 @@ use fixtures::{
     sample_render_state_with_selection, sample_render_state_with_unoccluded_detail_fleck,
     test_runtime,
 };
-
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 540;
 const PIXEL_BACKGROUND: [u8; 4] = [8, 12, 20, 255];
-
 #[derive(Clone, Debug, Serialize)]
 struct VisualProbeRow {
     id: String,
@@ -28,7 +25,6 @@ struct VisualProbeRow {
     x: f32,
     y: f32,
 }
-
 #[derive(Clone, Debug, Serialize)]
 struct VisualProbeSummary {
     fragments: Vec<VisualProbeRow>,
@@ -52,7 +48,6 @@ struct VisualProbeSummary {
     hotspot_entity_cache_size: usize,
     hotspot_core_entity_count: usize,
 }
-
 #[derive(Clone, Debug)]
 struct PixelLayer {
     kind: &'static str,
@@ -62,7 +57,6 @@ struct PixelLayer {
     z: f32,
     rgba: [f32; 4],
 }
-
 #[derive(Clone, Debug, Serialize)]
 struct PixelRegressionSummary {
     width: u32,
@@ -87,7 +81,6 @@ struct PixelRegressionSummary {
     agent_core_sample_rgba: [u8; 4],
     hotspot_core_sample_rgba: [u8; 4],
 }
-
 fn sample_position(x_cm: f64, y_cm: f64) -> Position {
     Position {
         x_cm,
@@ -95,7 +88,6 @@ fn sample_position(x_cm: f64, y_cm: f64) -> Position {
         z_cm: 0.0,
     }
 }
-
 fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
     RenderState {
         world_bounds: Some(WorldBounds {
@@ -139,6 +131,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             id: "agent-0".to_string(),
         }),
         receipt_target: None,
+        recommended_target: None,
     }
 }
 fn render_test_app(render_state: RenderState) -> App {
@@ -303,6 +296,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         receipt_target_cue_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("receipt_target_cue", sprite, transform)),
+    );
+    let mut recommended_target_cue_query =
+        world.query::<(&PixelWorldRecommendedTargetCue, &Sprite, &Transform)>();
+    layers.extend(
+        recommended_target_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("recommended_target_cue", sprite, transform)),
     );
 
     let mut fragment_shadow_query =
@@ -1195,5 +1195,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
 mod hotspot_core_tests;
 #[path = "render_selected_agent_cue_tests.rs"]
 mod selected_agent_cue_tests;
+
 #[path = "render_selected_raster_tests.rs"]
 mod selected_raster_tests;

@@ -116,6 +116,11 @@ struct ReceiptTarget {
     state: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct RecommendedTarget {
+    agent_id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct FocusTarget {
     kind: String,
@@ -142,6 +147,8 @@ struct RenderState {
     selection: Option<Selection>,
     #[serde(default)]
     receipt_target: Option<ReceiptTarget>,
+    #[serde(default)]
+    recommended_target: Option<RecommendedTarget>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -589,6 +596,11 @@ fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
     if let Some(receipt_target) = render_state.receipt_target.as_ref() {
         receipt_target.agent_id.hash(&mut hasher);
         receipt_target.state.hash(&mut hasher);
+    }
+
+    render_state.recommended_target.is_some().hash(&mut hasher);
+    if let Some(recommended_target) = render_state.recommended_target.as_ref() {
+        recommended_target.agent_id.hash(&mut hasher);
     }
 
     hasher.finish()
