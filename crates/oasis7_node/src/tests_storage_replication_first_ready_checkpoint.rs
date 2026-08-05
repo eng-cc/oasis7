@@ -9,6 +9,13 @@ struct FirstReadyHeadCheckpointNetwork {
     fetch_protocols: Arc<Mutex<Vec<String>>>,
 }
 
+#[derive(Clone)]
+struct PeerHeadCheckpointNetwork {
+    inner: Arc<TestInMemoryNetwork>,
+    fetch_protocols: Arc<Mutex<Vec<String>>>,
+    head: super::replication::FetchHeadResponse,
+}
+
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
     for FirstReadyHeadCheckpointNetwork
 {
@@ -28,6 +35,47 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
             })
             .map_err(|err| WorldError::DistributedValidationFailed {
                 reason: format!("encode absent world head response failed: {err}"),
+            });
+        }
+        self.fetch_protocols
+            .lock()
+            .expect("lock checkpoint fetch protocols")
+            .push(protocol.to_string());
+        self.inner.request(protocol, payload)
+    }
+
+    fn connected_peer_ids(&self) -> Vec<String> {
+        vec!["node-a".to_string()]
+    }
+
+    fn known_peer_ids(&self) -> Vec<String> {
+        vec!["node-a".to_string()]
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadCheckpointNetwork {
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        if protocol == REPLICATION_GET_HEAD_PROTOCOL {
+            return serde_json::to_vec(&self.head).map_err(|err| {
+                WorldError::DistributedValidationFailed {
+                    reason: format!("encode peer checkpoint head failed: {err}"),
+                }
             });
         }
         self.fetch_protocols
@@ -854,6 +902,162 @@ fn fresh_observer_bootstraps_checkpoint_at_boundary_before_height_one_peer_misma
             .expect("inspect height-one replication")
             .is_none(),
         "checkpoint bootstrap must not persist the incompatible height-one tail"
+    );
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn fresh_observer_fetches_peer_head_checkpoint_before_first_height_one_execution() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let world_id = "world-peer-head-checkpoint-before-height-one";
+    let dir_a = temp_dir("peer-head-checkpoint-before-height-one-a");
+    let dir_b = temp_dir("peer-head-checkpoint-before-height-one-b");
+    let (_, public_key_a) = deterministic_keypair_hex(186);
+    let (_, public_key_b) = deterministic_keypair_hex(187);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 186)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 186)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 187)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+    let checkpoint_height = 64;
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let height_one_message = replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            6_100,
+            &committed_decision(1),
+            Some("peer-exec-block-1"),
+            Some("peer-exec-state-1"),
+        )
+        .expect("build incompatible height-one message")
+        .expect("height-one message");
+    let checkpoint_block_hash = format!("exec-block-{checkpoint_height}");
+    let checkpoint_state_root = format!("exec-state-{checkpoint_height}");
+    replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            6_164,
+            &committed_decision(checkpoint_height),
+            Some(checkpoint_block_hash.as_str()),
+            Some(checkpoint_state_root.as_str()),
+            Some(checkpoint_bundle(
+                checkpoint_height,
+                checkpoint_block_hash.as_str(),
+                checkpoint_state_root.as_str(),
+            )),
+        )
+        .expect("build checkpoint only discoverable through peer-head lookup")
+        .expect("checkpoint message");
+    let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols: Arc::clone(&fetch_protocols),
+        head: super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: checkpoint_height,
+                block_hash: format!("block-{checkpoint_height}"),
+                state_root: checkpoint_state_root.clone(),
+                timestamp_ms: 6_164,
+            }),
+        },
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register checkpoint providers");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let mut endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    let mut execution_hook = BootstrapBeforeIncrementalHook {
+        installed: Vec::new(),
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+    endpoint_b
+        .publish_replication(&height_one_message)
+        .expect("publish only the incompatible height-one tail in tick one");
+
+    engine_b
+        .tick(
+            "node-b",
+            world_id,
+            6_200,
+            None,
+            Some(&mut replication_b),
+            Some(&mut endpoint_b),
+            None,
+            Vec::new(),
+            Some(&mut execution_hook),
+        )
+        .expect("peer-head checkpoint bootstrap must precede first height-one execution");
+
+    assert_eq!(execution_hook.installed, vec![checkpoint_height]);
+    assert!(
+        execution_hook.incremental_commits.is_empty(),
+        "fresh observer must not execute height one before a peer-head checkpoint bootstrap: {:?}",
+        execution_hook.incremental_commits
+    );
+    assert!(
+        execution_hook.rollback_heights.is_empty(),
+        "fresh observer must not attempt unavailable height-zero rollback: {:?}",
+        execution_hook.rollback_heights
+    );
+    assert_eq!(engine_b.committed_height, checkpoint_height);
+    assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
+    let fetch_protocols = fetch_protocols
+        .lock()
+        .expect("lock observed checkpoint fetch protocols")
+        .clone();
+    assert!(
+        fetch_protocols
+            .iter()
+            .any(|protocol| protocol == REPLICATION_FETCH_COMMIT_PROTOCOL),
+        "peer-head checkpoint bootstrap must fetch the checkpoint descriptor: {fetch_protocols:?}"
+    );
+    assert!(
+        fetch_protocols
+            .iter()
+            .any(|protocol| protocol == REPLICATION_FETCH_BLOB_PROTOCOL),
+        "peer-head checkpoint bootstrap must fetch the checkpoint closure: {fetch_protocols:?}"
     );
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
