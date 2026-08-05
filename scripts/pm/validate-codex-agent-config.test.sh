@@ -102,6 +102,17 @@ rewrite "$fixture/.codex/config.toml" \
   'config_file = "agents/runtime_engineer.toml"'
 expect_fail swapped_role_path "$fixture"
 
+new_fixture unexpected-registered-role
+fixture="$FIXTURE"
+cat >> "$fixture/.codex/config.toml" <<'TOML'
+
+[agents.unapproved_specialist]
+description = "Unexpected specialist role fixture."
+config_file = "agents/unapproved_specialist.toml"
+TOML
+expect_fail unexpected_registered_role "$fixture" \
+  ".codex/config.toml must register exactly the eleven specialist roles and not tpm"
+
 new_fixture wrong-role
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/gameplay_designer.toml" \
