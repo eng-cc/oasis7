@@ -241,7 +241,7 @@
   - `hardware_shortfall_after`: 精炼后距离当前第一工业目标所需 hardware 的缺口。
   - `first_goal_relevance`: 本次产出将如何推进首个工厂、首个制成品或首条稳定产线。
   - `recommended_refine_amount`: 推荐精炼质量；应避免默认把所有 compound 一次性转成 hardware。
-  - `refine_value_class`: `enough_for_next_step / partial_progress / poor_power_tradeoff`。
+  - `refine_value_class`: `enough_to_advance / partial_progress / poor_power_tradeoff`。
 
 最小守恒与约束：
 - 输入约束：`compound_mass_g > 0`。
