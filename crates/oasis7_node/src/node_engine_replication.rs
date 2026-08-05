@@ -384,10 +384,11 @@ impl PosNodeEngine {
                 "ingesting replication message",
             )?;
             let defer_fresh_height_one_for_checkpoint_bootstrap = execution_hook.is_some()
+                && self.checkpoint_bootstrap_enabled
                 && self.committed_height == 0
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
-                && self.network_committed_height > persisted_successor;
+                && self.network_committed_height > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {

@@ -1076,6 +1076,7 @@ struct PosNodeEngine {
     local_validator_id: String,
     node_player_id: String,
     gossip_reverse_path_seeding_enabled: bool,
+    checkpoint_bootstrap_enabled: bool,
     last_gossip_reverse_path_seed_at_ms: Option<i64>,
     allow_local_proposals: bool,
     require_execution_on_commit: bool,
