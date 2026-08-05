@@ -61,7 +61,7 @@ impl WorldKernel {
         let refine_value_class = if hardware_shortfall_before == 0 {
             "poor_power_tradeoff"
         } else if hardware_shortfall_after == 0 {
-            "enough_for_next_step"
+            "enough_to_advance"
         } else if hardware_output > 0 && electricity_after >= 0 {
             "partial_progress"
         } else {

@@ -496,7 +496,7 @@ fn refine_compound_quote_previews_net_value_without_mutating_state() {
         "enables_factory_build_hardware_goal"
     );
     assert_eq!(quote.recommended_refine_amount, 2_500);
-    assert_eq!(quote.refine_value_class, "enough_for_next_step");
+    assert_eq!(quote.refine_value_class, "enough_to_advance");
 }
 
 #[test]
@@ -621,7 +621,7 @@ fn refine_compound_quote_uses_existing_goal_progress_for_recommendation() {
     assert_eq!(quote.hardware_shortfall_before, 3);
     assert_eq!(quote.hardware_shortfall_after, 0);
     assert_eq!(quote.recommended_refine_amount, 3_000);
-    assert_eq!(quote.refine_value_class, "enough_for_next_step");
+    assert_eq!(quote.refine_value_class, "enough_to_advance");
 }
 
 #[test]

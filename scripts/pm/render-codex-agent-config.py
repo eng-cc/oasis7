@@ -29,7 +29,10 @@ def fail(message: str) -> None:
 
 
 def projection(role_card: Path, role: str) -> dict[str, Any]:
-    text = role_card.read_text(encoding="utf-8")
+    try:
+        text = role_card.read_text(encoding="utf-8")
+    except OSError as error:
+        fail(f"cannot read role card {role_card}: {error}")
     match = re.search(
         r"^## Codex Adapter Projection\n```toml\n(.*?)^```$",
         text,

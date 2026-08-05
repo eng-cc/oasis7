@@ -406,7 +406,7 @@ impl ViewerRuntimeLiveServer {
             target_linkage: quote.first_goal_relevance,
             recommended_refine_amount: quote.recommended_refine_amount,
             value_classification: match quote.refine_value_class.as_str() {
-                "enough_for_next_step" => "enough_to_advance".to_string(),
+                "enough_to_advance" | "enough_for_next_step" => "enough_to_advance".to_string(),
                 "partial_progress" => "partial_progress".to_string(),
                 _ => "poor_power_tradeoff".to_string(),
             },
