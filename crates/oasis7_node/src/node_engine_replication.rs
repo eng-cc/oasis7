@@ -379,9 +379,18 @@ impl PosNodeEngine {
                 }
                 self.observe_network_replication_commit(message.node_id.as_str(), payload);
             }
+            let defer_fresh_height_one_for_checkpoint_bootstrap = execution_hook.is_some()
+                && self.committed_height == 0
+                && self.replication_persisted_height == 0
+                && self.last_execution_height == 0
+                && self.network_committed_height > persisted_successor;
             let should_apply = payload_view
                 .as_ref()
-                .map(|payload| payload.height <= persisted_successor)
+                .map(|payload| {
+                    payload.height <= persisted_successor
+                        && !(defer_fresh_height_one_for_checkpoint_bootstrap
+                            && payload.height == persisted_successor)
+                })
                 .unwrap_or(true);
             if !should_apply {
                 continue;
