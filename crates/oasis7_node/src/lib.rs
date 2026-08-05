@@ -60,6 +60,7 @@ mod node_engine_replication;
 mod node_engine_replication_checkpoint;
 mod node_engine_replication_checkpoint_fetch;
 mod node_engine_replication_local_state_block;
+mod node_engine_replication_pending_checkpoint_receipt;
 mod node_engine_replication_provider_route;
 mod node_engine_slashing;
 mod node_engine_storage_challenge;
@@ -1087,6 +1088,8 @@ struct PosNodeEngine {
     replication_enabled: bool,
     replication_persisted_height: u64,
     checkpoint_blob_fetch_progress: BTreeMap<String, FetchBlobChunkProgress>,
+    pending_checkpoint_receipt:
+        Option<node_engine_replication_pending_checkpoint_receipt::PendingCheckpointReceipt>,
     last_replication_gap_sync_blocked_height: Option<u64>,
     last_replication_gap_sync_blocked_reason: Option<String>,
     last_replication_gap_sync_blocked_at_ms: Option<i64>,

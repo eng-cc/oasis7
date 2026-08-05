@@ -542,6 +542,16 @@ impl PosNodeEngine {
         {
             return Ok(false);
         }
+        if self.pending_checkpoint_receipt.is_some() {
+            return self.finalize_pending_checkpoint_receipt(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                checkpoint_height,
+                progress_callback,
+            );
+        }
         let checkpoint = match self.sync_replication_height_once_for_high_checkpoint_probe(
             endpoint,
             node_id,
@@ -629,6 +639,33 @@ impl PosNodeEngine {
                         ),
                     });
                 }
+                // Installation is irreversible from the engine's perspective.
+                // Record its execution boundary before optional probe-receipt
+                // finalization so a receipt failure cannot cause the next
+                // high-checkpoint probe to install the same closure again.
+                self.last_execution_height = result.execution_height;
+                self.last_execution_block_hash = Some(result.execution_block_hash.clone());
+                self.last_execution_state_root = Some(result.execution_state_root.clone());
+                self.remember_execution_binding_for_height(payload.height);
+                if let (Some(probe_nonce), Some(bundle)) =
+                    (probe_nonce.as_deref(), checkpoint_receipt_bundle.as_ref())
+                {
+                    self.pending_checkpoint_receipt = Some(
+                        crate::node_engine_replication_pending_checkpoint_receipt::PendingCheckpointReceipt {
+                        world_id: world_id.to_string(),
+                        node_id: node_id.to_string(),
+                        height: payload.height,
+                        message: message.clone(),
+                        descriptor: checkpoint_descriptor.clone(),
+                        bundle: bundle.clone(),
+                        fetch_observations: checkpoint_fetch_observations.clone(),
+                        probe_nonce: probe_nonce.to_string(),
+                        receipt_persisted: false,
+                        block_hash: payload.block_hash.clone(),
+                        committed_at_ms: payload.committed_at_ms,
+                        },
+                    );
+                }
                 replication_runtime.persist_checkpoint_verification_receipt(
                     world_id,
                     probe_nonce.as_deref(),
@@ -636,10 +673,9 @@ impl PosNodeEngine {
                     checkpoint_receipt_bundle.as_ref(),
                     checkpoint_fetch_observations.as_slice(),
                 )?;
-                self.last_execution_height = result.execution_height;
-                self.last_execution_block_hash = Some(result.execution_block_hash);
-                self.last_execution_state_root = Some(result.execution_state_root);
-                self.remember_execution_binding_for_height(payload.height);
+                if let Some(pending) = self.pending_checkpoint_receipt.as_mut() {
+                    pending.receipt_persisted = true;
+                }
                 Ok(Some((payload.block_hash.clone(), payload.committed_at_ms)))
             })?
         } else {
@@ -665,6 +701,7 @@ impl PosNodeEngine {
         self.replication_persisted_height =
             self.replication_persisted_height.max(checkpoint_height);
         self.record_synced_replication_height(checkpoint_height, block_hash, committed_at_ms)?;
+        self.pending_checkpoint_receipt = None;
         self.last_replication_gap_sync_blocked_height = None;
         self.last_replication_gap_sync_blocked_reason = None;
         self.last_replication_gap_sync_blocked_at_ms = None;

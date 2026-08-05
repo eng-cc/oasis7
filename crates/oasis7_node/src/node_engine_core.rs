@@ -124,6 +124,7 @@ impl PosNodeEngine {
             replication_enabled: config.replication.is_some(),
             replication_persisted_height: 0,
             checkpoint_blob_fetch_progress: BTreeMap::new(),
+            pending_checkpoint_receipt: None,
             last_replication_gap_sync_blocked_height: None,
             last_replication_gap_sync_blocked_reason: None,
             last_replication_gap_sync_blocked_at_ms: None,

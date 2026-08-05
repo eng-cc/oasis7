@@ -476,6 +476,22 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
             }),
         "every signed network fetch must retain its connected provider candidate: {receipt}"
     );
+    assert!(
+        receipt["fetch_observations"]
+            .as_array()
+            .expect("receipt observations")
+            .iter()
+            .zip(receipt["objects"].as_array().expect("receipt closure objects"))
+            .all(|(observation, object)| {
+                observation["source"].as_str() == Some("network_fetch")
+                    && observation["signed_request"].as_bool() == Some(true)
+                    && observation["response_found"].as_bool() == Some(true)
+                    && observation["content_hash"] == object["expected_content_hash"]
+                    && observation["observed_content_hash"] == object["observed_content_hash"]
+                    && observation["observed_size_bytes"] == object["observed_size_bytes"]
+            }),
+        "receipt observations must bind every fetched closure object to its signed response: {receipt}"
+    );
 
     engine_b
         .sync_missing_replication_commits(
@@ -498,6 +514,181 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
             .iter()
             .any(|protocol| protocol == REPLICATION_FETCH_BLOB_PROTOCOL),
         "receipt must be based on fetched checkpoint closure"
+    );
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn checkpoint_receipt_recovers_finalization_failure_without_reinstalling_generic_connected_closure() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
+    let world_id = "world-checkpoint-generic-connected-candidate";
+    let dir_a = temp_dir("checkpoint-generic-connected-candidate-a");
+    let dir_b = temp_dir("checkpoint-generic-connected-candidate-b");
+    let (_, public_key_a) = deterministic_keypair_hex(188);
+    let (_, public_key_b) = deterministic_keypair_hex(189);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 188)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 188)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 189)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+    let checkpoint_height = 4;
+    let execution_block_hash = format!("exec-block-{checkpoint_height}");
+    let execution_state_root = format!("exec-state-{checkpoint_height}");
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let checkpoint_message = replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            6_200,
+            &committed_decision(checkpoint_height),
+            Some(execution_block_hash.as_str()),
+            Some(execution_state_root.as_str()),
+            Some(checkpoint_bundle(
+                checkpoint_height,
+                execution_block_hash.as_str(),
+                execution_state_root.as_str(),
+            )),
+        )
+        .expect("build checkpoint message")
+        .expect("checkpoint message");
+    let checkpoint_descriptor = super::replication_state_reconcile::parse_replication_commit_payload(
+        checkpoint_message.payload.as_slice(),
+    )
+    .expect("decode checkpoint payload")
+    .execution_checkpoint
+    .expect("checkpoint descriptor");
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FirstReadyHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols: Arc::new(Mutex::new(Vec::new())),
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register checkpoint fetch handlers");
+    // The generic connected route succeeds even before a DHT provider record is visible.
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(Arc::new(TestReplicaMaintenanceDht::new("unused-provider", "node-b")))
+        .with_local_provider_id("node-b");
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    engine_b.network_committed_height = checkpoint_height;
+    let mut execution_hook = CheckpointInstallingExecutionHook {
+        installed: Vec::new(),
+    };
+    let receipt_path = dir_b
+        .join("checkpoint-verification")
+        .join(format!("{checkpoint_height}.json"));
+    // A directory at the publication path deterministically makes the
+    // no-overwrite hard-link finalization fail after the closure is installed.
+    fs::create_dir_all(&receipt_path).expect("block initial receipt publication");
+
+    let first_sync = engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            Some(&mut execution_hook),
+        )
+        .expect_err("initial receipt finalization must fail after checkpoint installation");
+    assert!(
+        first_sync.to_string().contains("publish checkpoint verification receipt"),
+        "expected receipt publication failure, got: {first_sync}"
+    );
+    assert_eq!(
+        engine_b.last_execution_height, checkpoint_height,
+        "the failed finalization must retain the installed checkpoint identity for retry"
+    );
+    fs::remove_dir(&receipt_path).expect("unblock receipt publication for retry");
+    let second_sync = engine_b
+        .sync_missing_replication_commits(
+            &endpoint_b,
+            "node-b",
+            world_id,
+            Some(&mut replication_b),
+            Some(&mut execution_hook),
+        )
+        .expect("retry must finalize the receipt without reinstalling the closure");
+
+    let _ = second_sync;
+
+    assert_eq!(
+        execution_hook.installed,
+        vec![checkpoint_height],
+        "an installed checkpoint must not be installed again while provenance receipt finalization is pending"
+    );
+    let receipt: serde_json::Value = serde_json::from_slice(
+        fs::read(&receipt_path).expect("read checkpoint verification receipt").as_slice(),
+    )
+    .expect("decode checkpoint verification receipt");
+    assert!(
+        receipt["fetch_observations"]
+            .as_array()
+            .expect("receipt observations")
+            .iter()
+            .all(|observation| {
+                observation["source"].as_str() == Some("network_fetch")
+                    && observation["signed_request"].as_bool() == Some(true)
+                    && observation["connected_candidate_ids"]
+                        .as_array()
+                        .is_some_and(|candidates| candidates.iter().any(|id| id.as_str() == Some("node-a")))
+            }),
+        "generic fetches must retain the actual connected candidate, not only a DHT provider hint: {receipt}"
+    );
+    assert_eq!(
+        receipt["objects"].as_array().expect("receipt objects").len(),
+        checkpoint_descriptor.blobs.len() + 1,
+        "receipt must bind the manifest and every checkpoint blob"
+    );
+    assert!(
+        receipt["fetch_observations"]
+            .as_array()
+            .expect("receipt observations")
+            .iter()
+            .zip(receipt["objects"].as_array().expect("receipt closure objects"))
+            .all(|(observation, object)| {
+                observation["response_found"].as_bool() == Some(true)
+                    && observation["content_hash"] == object["expected_content_hash"]
+                    && observation["observed_content_hash"] == object["observed_content_hash"]
+                    && observation["observed_size_bytes"] == object["observed_size_bytes"]
+            }),
+        "recovered runtime receipt must retain response and hash/size bindings: {receipt}"
     );
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
