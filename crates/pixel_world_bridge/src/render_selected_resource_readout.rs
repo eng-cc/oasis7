@@ -8,6 +8,9 @@ const RESOURCE_READOUT_TOP_MARGIN_PX: f64 = 12.0;
 const RESOURCE_READOUT_BOTTOM_HUD_CLEARANCE_PX: f64 = 72.0;
 const RESOURCE_READOUT_HORIZONTAL_MARGIN_PX: f64 = 12.0;
 const RESOURCE_READOUT_GLYPH_ADVANCE_PX: f64 = 6.6;
+const RESOURCE_READOUT_NARROW_VIEWPORT_MAX_WIDTH_PX: f64 = 390.0;
+const RESOURCE_READOUT_PRIORITY_CUE_LANE_OFFSET_PX: f64 = 28.0;
+const RESOURCE_READOUT_PRIORITY_CUE_LEFT_BAND_WIDTH: f64 = 0.44;
 
 /// The selected entity's resource text, kept separate from status badges and
 /// interaction entities so player-facing state cannot alter world input.
@@ -25,6 +28,13 @@ pub(super) fn reconcile_selected_resource_readout(
     width: f64,
     height: f64,
 ) {
+    let reserve_priority_cue_lane = width <= RESOURCE_READOUT_NARROW_VIEWPORT_MAX_WIDTH_PX
+        && runtime.render_state.as_ref().is_some_and(|render_state| {
+            render_state
+                .visual_hotspots
+                .iter()
+                .any(|hotspot| matches!(hotspot.kind.as_str(), "blocker" | "goal"))
+        });
     let selected = runtime.render_state.as_ref().and_then(|render_state| {
         let selection = render_state.selection.as_ref()?;
         match selection.kind.as_str() {
@@ -99,9 +109,10 @@ pub(super) fn reconcile_selected_resource_readout(
     let visuals = resource_readout_visuals(
         &readout.display,
         canvas_x,
-        resource_readout_canvas_y(canvas_y, height),
+        resource_readout_canvas_y(canvas_y, height, reserve_priority_cue_lane),
         width,
         height,
+        reserve_priority_cue_lane,
     );
 
     let mut existing = existing_readouts.iter();
@@ -140,11 +151,20 @@ fn is_empty_amounts_container(resource_summary: &str) -> bool {
         .eq("amounts:{}".chars())
 }
 
-fn resource_readout_canvas_y(selection_canvas_y: f64, canvas_height: f64) -> f64 {
+fn resource_readout_canvas_y(
+    selection_canvas_y: f64,
+    canvas_height: f64,
+    reserve_priority_cue_lane: bool,
+) -> f64 {
     let maximum_y = (canvas_height - RESOURCE_READOUT_BOTTOM_HUD_CLEARANCE_PX)
         .max(RESOURCE_READOUT_TOP_MARGIN_PX);
-    (selection_canvas_y - RESOURCE_READOUT_ABOVE_SELECTION_PX)
-        .clamp(RESOURCE_READOUT_TOP_MARGIN_PX, maximum_y)
+    let lane_offset = RESOURCE_READOUT_ABOVE_SELECTION_PX
+        + if reserve_priority_cue_lane {
+            RESOURCE_READOUT_PRIORITY_CUE_LANE_OFFSET_PX
+        } else {
+            0.0
+        };
+    (selection_canvas_y - lane_offset).clamp(RESOURCE_READOUT_TOP_MARGIN_PX, maximum_y)
 }
 
 fn resource_readout_visuals(
@@ -153,8 +173,10 @@ fn resource_readout_visuals(
     canvas_y: f64,
     width: f64,
     height: f64,
+    reserve_priority_cue_lane: bool,
 ) -> (Text2d, TextFont, TextColor, Transform) {
-    let visible_display = visible_resource_summary(display, width);
+    let (left, right) = resource_readout_horizontal_bounds(width, reserve_priority_cue_lane);
+    let visible_display = visible_resource_summary(display, right - left);
     (
         Text2d::new(visible_display.clone()),
         TextFont {
@@ -163,7 +185,7 @@ fn resource_readout_visuals(
         },
         TextColor(Color::srgb_u8(226, 232, 240)),
         Transform::from_translation(to_bevy_translation(
-            resource_readout_canvas_x(canvas_x, &visible_display, width),
+            resource_readout_canvas_x(canvas_x, &visible_display, left, right),
             canvas_y,
             width,
             height,
@@ -175,26 +197,40 @@ fn resource_readout_visuals(
 fn resource_readout_canvas_x(
     selection_canvas_x: f64,
     visible_display: &str,
-    canvas_width: f64,
+    left: f64,
+    right: f64,
 ) -> f64 {
     let half_width = resource_readout_text_width(visible_display) / 2.0;
-    let minimum_x = half_width + RESOURCE_READOUT_HORIZONTAL_MARGIN_PX;
-    let maximum_x = canvas_width - minimum_x;
+    let minimum_x = left + half_width;
+    let maximum_x = right - half_width;
     if minimum_x <= maximum_x {
         selection_canvas_x.clamp(minimum_x, maximum_x)
     } else {
-        canvas_width / 2.0
+        (left + right) / 2.0
     }
+}
+
+fn resource_readout_horizontal_bounds(
+    canvas_width: f64,
+    reserve_priority_cue_lane: bool,
+) -> (f64, f64) {
+    let left = RESOURCE_READOUT_HORIZONTAL_MARGIN_PX.min(canvas_width / 2.0);
+    let canvas_right = (canvas_width - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX).max(left);
+    let right = if reserve_priority_cue_lane {
+        (canvas_width * RESOURCE_READOUT_PRIORITY_CUE_LEFT_BAND_WIDTH).clamp(left, canvas_right)
+    } else {
+        canvas_right
+    };
+    (left, right)
 }
 
 fn resource_readout_text_width(display: &str) -> f64 {
     display.chars().count() as f64 * RESOURCE_READOUT_GLYPH_ADVANCE_PX
 }
 
-fn visible_resource_summary(display: &str, canvas_width: f64) -> String {
+fn visible_resource_summary(display: &str, max_text_width: f64) -> String {
     let characters = display.chars().collect::<Vec<_>>();
-    let max_visible_chars = ((canvas_width - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX * 2.0)
-        / RESOURCE_READOUT_GLYPH_ADVANCE_PX)
+    let max_visible_chars = (max_text_width / RESOURCE_READOUT_GLYPH_ADVANCE_PX)
         .floor()
         .max(1.0) as usize;
     let payload_limit = RESOURCE_READOUT_MAX_CHARS.min(max_visible_chars);
@@ -218,9 +254,10 @@ mod tests {
         let (text, font, color, transform) = resource_readout_visuals(
             "water=12, ore=5, carbon=9, oxygen=4, hydrogen=7, silicon=3",
             480.0,
-            resource_readout_canvas_y(290.0, 540.0),
+            resource_readout_canvas_y(290.0, 540.0, false),
             960.0,
             540.0,
+            false,
         );
 
         assert!(text.0.ends_with('…'));
@@ -238,9 +275,40 @@ mod tests {
             player_facing_resource_summary(" amounts : { } "),
             EMPTY_RESOURCE_READOUT
         );
-        assert_eq!(resource_readout_canvas_y(20.0, 390.0), 12.0);
-        assert_eq!(resource_readout_canvas_y(380.0, 390.0), 318.0);
-        assert_eq!(resource_readout_canvas_y(220.0, 390.0), 184.0);
+        assert_eq!(resource_readout_canvas_y(20.0, 390.0, false), 12.0);
+        assert_eq!(resource_readout_canvas_y(380.0, 390.0, false), 318.0);
+        assert_eq!(resource_readout_canvas_y(220.0, 390.0, false), 184.0);
+    }
+
+    #[test]
+    fn resource_readout_reserves_a_distinct_390px_lane_for_priority_cues() {
+        let ordinary_lane = resource_readout_canvas_y(220.0, 390.0, false);
+        let priority_cue_lane = resource_readout_canvas_y(220.0, 390.0, true);
+
+        assert_eq!(ordinary_lane, 184.0);
+        assert!(
+            priority_cue_lane < ordinary_lane,
+            "a narrow blocker or goal cue must reserve a distinct lane above the resource readout"
+        );
+        assert_eq!(priority_cue_lane, 156.0);
+        assert!(priority_cue_lane >= RESOURCE_READOUT_TOP_MARGIN_PX);
+    }
+
+    #[test]
+    fn priority_cue_readout_uses_a_left_safe_band_with_width_aware_text() {
+        let (left, right) = resource_readout_horizontal_bounds(318.0, true);
+        let visible = visible_resource_summary(
+            "water=12, ore=5, carbon=9, oxygen=4, hydrogen=7, silicon=3",
+            right - left,
+        );
+        let center = resource_readout_canvas_x(318.0, &visible, left, right);
+        let half_width = resource_readout_text_width(&visible) / 2.0;
+
+        assert_eq!(left, RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
+        assert!(right < 318.0 - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
+        assert!(visible.ends_with('…'));
+        assert!(center - half_width >= left);
+        assert!(center + half_width <= right);
     }
 
     #[test]
@@ -248,9 +316,10 @@ mod tests {
         let display = "water=12, ore=5, carbon=9, oxygen=4, hydrogen=7, silicon=3";
         let visible = visible_resource_summary(display, 390.0);
         let half_width = resource_readout_text_width(&visible) / 2.0;
+        let (left, right) = resource_readout_horizontal_bounds(390.0, false);
 
         for selection_x in [0.0, 390.0] {
-            let safe_x = resource_readout_canvas_x(selection_x, &visible, 390.0);
+            let safe_x = resource_readout_canvas_x(selection_x, &visible, left, right);
             assert!(safe_x - half_width >= RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
             assert!(safe_x + half_width <= 390.0 - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
         }

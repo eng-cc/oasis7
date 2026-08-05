@@ -26,6 +26,35 @@ fn selected_resource_readouts(app: &mut App) -> Vec<ResourceReadoutProbe> {
     probes
 }
 
+fn selected_resource_readout_y(app: &mut App) -> f32 {
+    let world = app.world_mut();
+    let mut readouts = world.query::<(&PixelWorldSelectedResourceReadout, &Transform)>();
+    readouts
+        .iter(world)
+        .next()
+        .expect("selected resource readout")
+        .1
+        .translation
+        .y
+}
+
+fn render_resource_readout_test_app_at_viewport(
+    render_state: RenderState,
+    width: f32,
+    height: f32,
+) -> App {
+    let mut app = render_test_app(render_state);
+    let world = app.world_mut();
+    let mut windows = world.query_filtered::<&mut Window, With<PrimaryWindow>>();
+    windows
+        .single_mut(world)
+        .expect("resource readout test primary window")
+        .resolution
+        .set(width, height);
+    app.update();
+    app
+}
+
 #[test]
 fn selected_resource_readout_tracks_agent_location_empty_state_and_deselection() {
     let mut selected_agent = sample_render_state(12_000.0);
@@ -91,4 +120,45 @@ fn selected_resource_readout_tracks_agent_location_empty_state_and_deselection()
         selected_resource_readouts(&mut app).is_empty(),
         "deselection must remove the selected resource readout"
     );
+}
+
+#[test]
+fn selected_resource_readout_yields_a_narrow_lane_to_blocker_and_goal_cues() {
+    let ordinary_state = sample_render_state(12_000.0);
+    let mut with_priority_cue = ordinary_state.clone();
+    with_priority_cue.visual_hotspots.push(VisualHotspot {
+        id: "blocker-highlight".to_string(),
+        label: "Missing Material".to_string(),
+        kind: "blocker".to_string(),
+        pos: sample_position(1_450_000.0, 950_000.0),
+        emphasis: Some(1.0),
+        size_hint_px: Some(16.0),
+    });
+    with_priority_cue.visual_hotspots.push(VisualHotspot {
+        id: "goal-highlight".to_string(),
+        label: "Recover sustainable capability".to_string(),
+        kind: "goal".to_string(),
+        pos: sample_position(1_550_000.0, 1_050_000.0),
+        emphasis: Some(1.0),
+        size_hint_px: Some(14.0),
+    });
+
+    let mut ordinary = render_resource_readout_test_app_at_viewport(ordinary_state, 390.0, 844.0);
+    let mut priority =
+        render_resource_readout_test_app_at_viewport(with_priority_cue, 390.0, 844.0);
+
+    assert!(
+        selected_resource_readout_y(&mut priority)
+            > selected_resource_readout_y(&mut ordinary) + 27.0,
+        "a 390px blocker or goal cue must reserve a separate upward text lane"
+    );
+    let ordinary_agent_regions = hit_regions(&mut ordinary)
+        .into_iter()
+        .filter(|region| region.kind == "agent")
+        .collect::<Vec<_>>();
+    let priority_agent_regions = hit_regions(&mut priority)
+        .into_iter()
+        .filter(|region| region.kind == "agent")
+        .collect::<Vec<_>>();
+    assert_eq!(priority_agent_regions, ordinary_agent_regions);
 }
