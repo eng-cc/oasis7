@@ -43,6 +43,13 @@
 - 玩家可以自愿进入更大组织或更深治理，但产品不能把这种升级包装成成熟世界中唯一有效的成长答案。
 - 文明尺度项目即使产生更大范围的协作或制度后果，也不构成全体玩家的胜利条件；只有在受影响范围内经授权形成后，才作为参与者可选择的共同目标。
 
+### 2.4 区域服务筹资不能把独立路线变成隐性租金
+
+- 可排他的区域设施或服务应以可读的使用费、服务费、维护费或自愿合同筹资。付款前，玩家必须能知道受益对象、用途、主要成本、服务范围、失效或退出条件，以及不购买时仍可采用的独立、重建或替代路径；一次报价、排队或登记不等于费用已经结算或玩家已承担持续义务。
+- 只有无法按个体使用排除、且受益范围明确的公共品，才可使用区域 levy。levy 必须有 charter 的预先授权，并同时绑定用途、受益范围、上限或预算、到期时间、公开账目和定期复核；组织成员、历史贡献、到访、持有资产或选择某项专业化本身都不自动构成可持续征费资格。
+- levy 不能成为加入组织、维持独立成长、保留基本通行/恢复路径或获得一般世界资格的默认前置，也不能转换为治理权、永久优先权、可交易额度或对特定玩家的隐蔽补贴。范围外、无效、到期、未经审计或已被复核撤销的征费不得产生扣减、服务拒绝、资格限制或其他世界效果。
+- 当筹资授权、受益范围或账目无法核验时，系统应安全地拒绝新的征费或续费，并让受影响玩家区分“提案/待审”“已授权但未结算”“receipt 支持的已结算”与“失效/撤销”。在适用时必须给出补证、申诉、常态付费、独立恢复或重新规划的下一步；不能静默重试、累积欠费，或把临时保护表达为最终义务。
+
 ## 3. 失败、恢复与独立性
 
 局部停机、资源短缺、据点受压或路线失效后，体验应提供可比较的恢复方向：
@@ -104,6 +111,7 @@
 - MW-7：`test_tier_required` 证明合同和可读性；`test_tier_full` 的 fresh mature-world 样例才能给出当前路线 verdict。历史完成态或文档迁移本身不能代替 fresh evidence。
 - MW-8：代表性 disruption 样例针对同一个 active goal 比较 repair、rebuild 与 pivot 的时间/阶段成本、资源成本、保留/失去价值、主要风险、推荐理由和独立 lane 可行性；若独立路径不可行，样例说明约束与重评条件。
 - MW-9：成熟世界样例证明系统围绕三条长期推荐轴提供一个当前主目标、继续路径及少量实质不同的分支或主动换向；文明尺度项目保持自愿共同扩展，后台治理/转译/反支配护栏只在实质相关时进入玩家决策。
+- MW-10：区域服务筹资样例区分可排他服务的自愿费用与不可排他公共品的有界 levy；缺少 charter 授权、用途/受益范围、上限或预算、到期、公开账目或复核任一条件时，征费原子拒绝且不阻断玩家的基本独立、通行或恢复路径。样例同时区分待审、已授权未结算、receipt 支持的已结算与失效/撤销，并证明失效授权不会重试、累积欠费或产生资格/治理旁路。
 
 ### 6.1 验收追踪
 
@@ -115,6 +123,7 @@
 | MW-6 / MW-7 | qa_engineer / runtime_engineer / viewer_engineer | PRD-TESTING-003 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/testing/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | Viewer、pure API 与权威状态对账及 fresh sample verdict | test_tier_full |
 | MW-8 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一 active goal 下三条恢复路径、独立性与受迫外部依赖边界的组合证据 | test_tier_required |
 | MW-9 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-014 / PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 三条长期推荐轴、单一主目标、继续/分支/换向、文明项目自愿性与后台护栏组合证据 | test_tier_required |
+| MW-10 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 自愿服务费/有界 levy 分类、完整授权、原子拒绝、无隐性独立路径门槛、结算状态与失效后的申诉/恢复组合证据 | test_tier_full |
 
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 
@@ -123,5 +132,6 @@
 - 不新增免费 claim、无限补贴、经济旁路或永久保护区。
 - 不承诺完整职业树、固定专业化数值或全局影响力成长曲线。
 - 不把区域专业化扩展为默认战争、联盟或全局治理主线。
+- 不规定服务费、levy、预算、上限、期限、受益计算、资格、账目格式、申诉程序或任何扣减/结算实现。
 - 不把文明尺度共同项目、目标作用域、canonical 转译或治理校验包装成逐动作的玩家表单、重复确认或默认主线。
 - 不用历史任务完成态、旧样本或本次文档整理声称当前 mature-world 体验已经通过。
