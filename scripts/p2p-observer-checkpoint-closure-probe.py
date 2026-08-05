@@ -349,6 +349,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         world_id = env.get("WORLD_ID", "")
         if not world_id:
             die("governed observer env has no WORLD_ID")
+        env = normalize_clean_room_environment(env, source_root, app_root)
         network_manifest = env.get("NETWORK_TIER_MANIFEST_PATH", "")
         network_manifest_sha256 = None
         if network_manifest:
@@ -359,7 +360,6 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         nonce = secrets.token_urlsafe(32)
         status_port = allocate_loopback_tcp_port()
         gossip_port = allocate_udp_port()
-        env = normalize_clean_room_environment(env, source_root, app_root)
         env.update({
             "BIN": str(runtime), "NODE_ID": "checkpoint-closure-probe",
             "NODE_ROLE": "observer",
