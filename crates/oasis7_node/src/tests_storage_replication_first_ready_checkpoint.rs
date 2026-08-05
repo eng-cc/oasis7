@@ -503,7 +503,7 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
 }
 
 #[test]
-fn fresh_observer_bootstraps_checkpoint_before_incompatible_height_one_tail() {
+fn fresh_observer_bootstraps_checkpoint_before_height_one_peer_mismatch() {
     let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
@@ -613,11 +613,11 @@ fn fresh_observer_bootstraps_checkpoint_before_incompatible_height_one_tail() {
         rollback_heights: Vec::new(),
     };
     endpoint_b
-        .publish_replication(&ready_head_message)
-        .expect("publish ready high head before incremental tail");
-    endpoint_b
         .publish_replication(&incremental_message)
         .expect("publish incompatible height-one tail");
+    endpoint_b
+        .publish_replication(&ready_head_message)
+        .expect("publish ready high head after incremental tail");
 
     engine_b
         .tick(
