@@ -51,9 +51,15 @@ PY
 expect_fail() {
   local name="$1"
   local fixture="$2"
+  local expected_message="${3:-}"
   if "$TOML_PYTHON" "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
     --root "$fixture" --skip-native-probe >"$TMP_DIR/$name.out" 2>"$TMP_DIR/$name.err"; then
     echo "validate-codex-agent-config.test: expected failure for $name" >&2
+    exit 1
+  fi
+  if [[ -n "$expected_message" ]] && ! grep -Fq "$expected_message" "$TMP_DIR/$name.err"; then
+    echo "validate-codex-agent-config.test: $name did not report expected diagnostic: $expected_message" >&2
+    cat "$TMP_DIR/$name.err" >&2
     exit 1
   fi
   printf 'negative case passed: %s\n' "$name"
@@ -166,6 +172,12 @@ rewrite "$fixture/.codex/agents/qa_engineer.toml" \
   'Treat third_party as read-only.' \
   'Third-party code is outside this slice.'
 expect_fail missing_mandatory_marker "$fixture"
+
+new_fixture missing-role-card
+fixture="$FIXTURE"
+rm -f "$fixture/.agents/roles/runtime_engineer.md"
+expect_fail missing_role_card "$fixture" \
+  'cannot read role card'
 
 new_fixture root-pin
 fixture="$FIXTURE"
