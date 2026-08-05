@@ -215,6 +215,58 @@ def write_env(path: Path, values: dict[str, str]) -> None:
     path.write_text("".join(f"{k}={v}\n" for k, v in sorted(values.items())), encoding="utf-8")
 
 
+def normalize_clean_room_environment(
+    governed_env: dict[str, str], source_root: Path, app_root: Path
+) -> dict[str, str]:
+    """Rebind governed config references and mutable state to the fresh root.
+
+    ``node.env`` is sourced by the node-start shell script, but the probe never
+    sources it: its values must therefore be expanded deliberately before that
+    script sees them.  Only the copied ``config/`` subtree remains governed
+    startup truth; every state root is newly allocated under ``app_root``.
+    """
+    result = dict(governed_env)
+    source_config = (source_root / "config").resolve()
+    for key in (
+        "CONFIG_PATH",
+        "NETWORK_TIER_MANIFEST_PATH",
+        "GENESIS_VALIDATOR_REGISTRY_PATH",
+    ):
+        value = result.get(key)
+        if not value:
+            continue
+        expanded = value.replace("${STACK_ROOT}", str(source_root)).replace(
+            "$STACK_ROOT", str(source_root)
+        )
+        candidate = Path(expanded)
+        try:
+            relative = candidate.resolve().relative_to(source_config)
+        except (OSError, ValueError):
+            die(f"governed {key} must resolve under source config")
+        result[key] = str(app_root / "config" / relative)
+    result.update(
+        {
+            "STACK_ROOT": str(app_root),
+            "APP_ROOT": str(app_root),
+            "RUNTIME_ROOT": str(app_root / "runtime-root"),
+            "EXECUTION_WORLD_DIR": str(app_root / "world"),
+            "EXECUTION_RECORDS_DIR": str(app_root / "execution-records"),
+            "STORAGE_ROOT": str(app_root / "storage"),
+            "REPLICATION_ROOT": str(app_root / "replication-root"),
+        }
+    )
+    return result
+
+
+def clean_room_launch_environment(env: dict[str, str], nonce: str) -> dict[str, str]:
+    """Return the minimal process environment; do not inherit host state."""
+    return {
+        "PATH": os.defpath,
+        **env,
+        "OASIS7_CHECKPOINT_PROBE_NONCE": nonce,
+    }
+
+
 def package_runtime(package_dir: Path, app_root: Path) -> Path:
     if package_dir.is_symlink() or not package_dir.is_dir():
         die("package directory must be a non-symlink directory")
@@ -307,24 +359,14 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         nonce = secrets.token_urlsafe(32)
         status_port = allocate_loopback_tcp_port()
         gossip_port = allocate_udp_port()
+        env = normalize_clean_room_environment(env, source_root, app_root)
         env.update({
-            "APP_ROOT": str(app_root), "BIN": str(runtime), "NODE_ID": "checkpoint-closure-probe",
-            "NODE_ROLE": "observer", "RUNTIME_ROOT": str(app_root / "runtime-root"),
-            "EXECUTION_WORLD_DIR": str(app_root / "world"), "EXECUTION_RECORDS_DIR": str(app_root / "execution-records"),
-            "STORAGE_ROOT": str(app_root / "storage"), "REPLICATION_ROOT": str(app_root / "replication-root"),
+            "BIN": str(runtime), "NODE_ID": "checkpoint-closure-probe",
+            "NODE_ROLE": "observer",
         })
         env.update(clean_room_network_overrides(status_port, gossip_port))
-        for key in ("CONFIG_PATH", "NETWORK_TIER_MANIFEST_PATH", "GENESIS_VALIDATOR_REGISTRY_PATH"):
-            value = env.get(key)
-            if value:
-                candidate = Path(value)
-                try:
-                    relative = candidate.resolve().relative_to((source_root / "config").resolve())
-                except (OSError, ValueError):
-                    continue
-                env[key] = str(app_root / "config" / relative)
         write_env(app_root / "config/node.env", env)
-        launch_env = os.environ | env | {"APP_ROOT": str(app_root), "OASIS7_CHECKPOINT_PROBE_NONCE": nonce}
+        launch_env = clean_room_launch_environment(env, nonce)
         proc = subprocess.Popen([str(ROOT / "scripts/p2p-triad-node-start.sh")], env=launch_env)
         try:
             deadline = time.monotonic() + args.timeout_secs
