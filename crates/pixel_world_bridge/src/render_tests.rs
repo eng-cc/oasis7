@@ -683,14 +683,8 @@ fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
     assert!(runtime.hit_region_cache_key.is_some());
 }
 
-#[path = "render_agent_core_tests.rs"]
-mod agent_core_tests;
-
-#[path = "render_agent_silhouette_tests.rs"]
-mod agent_silhouette_tests;
-
-#[path = "render_agent_position_provenance_cue_tests.rs"]
-mod agent_position_provenance_cue_tests;
+#[path = "render_test_modules.rs"]
+mod test_modules;
 
 #[test]
 fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
@@ -1191,10 +1185,3 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
         );
     }
 }
-#[path = "render_hotspot_core_tests.rs"]
-mod hotspot_core_tests;
-#[path = "render_selected_agent_cue_tests.rs"]
-mod selected_agent_cue_tests;
-
-#[path = "render_selected_raster_tests.rs"]
-mod selected_raster_tests;

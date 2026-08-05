@@ -45,3 +45,93 @@ pub(super) fn selected_location_cue_visuals(
         ),
     ]
 }
+
+pub(super) fn reconcile_selected_location_cues(
+    commands: &mut Commands,
+    runtime: &BevyRuntimeState,
+    existing_cues: &Query<(Entity, &PixelWorldSelectedLocationCue)>,
+    width: f64,
+    height: f64,
+    animation_ms: f64,
+) {
+    let mut existing_by_key = HashMap::new();
+    for (entity, cue) in existing_cues.iter() {
+        existing_by_key.insert((cue.location_id.clone(), cue.edge), entity);
+    }
+
+    let mut active_keys = HashSet::new();
+    let Some(render_state) = runtime.render_state.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let Some(selection) = render_state.selection.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    if selection.kind != "location" {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
+    let Some(location) = render_state
+        .locations
+        .iter()
+        .find(|location| location.id == selection.id)
+    else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    let Some((canvas_x, canvas_y)) =
+        to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
+    else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    for (edge, offset, size) in selected_location_cue_visuals(location, animation_ms) {
+        let key = (location.id.clone(), edge);
+        active_keys.insert(key.clone());
+        let sprite = sprite_for_rect(SELECTED_LOCATION_CUE_COLOR, size.x, size.y);
+        let transform = Transform::from_translation(to_bevy_translation(
+            canvas_x + f64::from(offset.x),
+            canvas_y + f64::from(offset.y),
+            width,
+            height,
+            SELECTED_LOCATION_CUE_LAYER_Z,
+        ));
+        if let Some(entity) = existing_by_key.get(&key).copied() {
+            commands.entity(entity).insert((sprite, transform));
+        } else {
+            commands.spawn((
+                sprite,
+                transform,
+                PixelWorldSelectedLocationCue {
+                    location_id: location.id.clone(),
+                    edge,
+                },
+            ));
+        }
+    }
+
+    for (key, entity) in existing_by_key {
+        if !active_keys.contains(&key) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
