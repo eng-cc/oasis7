@@ -6,6 +6,8 @@ const RESOURCE_READOUT_ABOVE_SELECTION_PX: f64 = 36.0;
 const RESOURCE_READOUT_MAX_CHARS: usize = 48;
 const RESOURCE_READOUT_TOP_MARGIN_PX: f64 = 12.0;
 const RESOURCE_READOUT_BOTTOM_HUD_CLEARANCE_PX: f64 = 72.0;
+const RESOURCE_READOUT_HORIZONTAL_MARGIN_PX: f64 = 12.0;
+const RESOURCE_READOUT_GLYPH_ADVANCE_PX: f64 = 6.6;
 
 /// The selected entity's resource text, kept separate from status badges and
 /// interaction entities so player-facing state cannot alter world input.
@@ -152,15 +154,16 @@ fn resource_readout_visuals(
     width: f64,
     height: f64,
 ) -> (Text2d, TextFont, TextColor, Transform) {
+    let visible_display = visible_resource_summary(display, width);
     (
-        Text2d::new(visible_resource_summary(display)),
+        Text2d::new(visible_display.clone()),
         TextFont {
             font_size: FontSize::Px(11.0),
             ..default()
         },
         TextColor(Color::srgb_u8(226, 232, 240)),
         Transform::from_translation(to_bevy_translation(
-            canvas_x,
+            resource_readout_canvas_x(canvas_x, &visible_display, width),
             canvas_y,
             width,
             height,
@@ -169,17 +172,41 @@ fn resource_readout_visuals(
     )
 }
 
-fn visible_resource_summary(display: &str) -> String {
-    let mut characters = display.chars();
-    let abbreviated = characters
-        .by_ref()
-        .take(RESOURCE_READOUT_MAX_CHARS)
-        .collect::<String>();
-    if characters.next().is_some() {
-        format!("{abbreviated}…")
+fn resource_readout_canvas_x(
+    selection_canvas_x: f64,
+    visible_display: &str,
+    canvas_width: f64,
+) -> f64 {
+    let half_width = resource_readout_text_width(visible_display) / 2.0;
+    let minimum_x = half_width + RESOURCE_READOUT_HORIZONTAL_MARGIN_PX;
+    let maximum_x = canvas_width - minimum_x;
+    if minimum_x <= maximum_x {
+        selection_canvas_x.clamp(minimum_x, maximum_x)
     } else {
-        abbreviated
+        canvas_width / 2.0
     }
+}
+
+fn resource_readout_text_width(display: &str) -> f64 {
+    display.chars().count() as f64 * RESOURCE_READOUT_GLYPH_ADVANCE_PX
+}
+
+fn visible_resource_summary(display: &str, canvas_width: f64) -> String {
+    let characters = display.chars().collect::<Vec<_>>();
+    let max_visible_chars = ((canvas_width - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX * 2.0)
+        / RESOURCE_READOUT_GLYPH_ADVANCE_PX)
+        .floor()
+        .max(1.0) as usize;
+    let payload_limit = RESOURCE_READOUT_MAX_CHARS.min(max_visible_chars);
+    if characters.len() <= payload_limit {
+        return display.to_string();
+    }
+
+    let abbreviated = characters
+        .iter()
+        .take(RESOURCE_READOUT_MAX_CHARS.min(max_visible_chars.saturating_sub(1)))
+        .collect::<String>();
+    format!("{abbreviated}…")
 }
 
 #[cfg(test)]
@@ -214,5 +241,19 @@ mod tests {
         assert_eq!(resource_readout_canvas_y(20.0, 390.0), 12.0);
         assert_eq!(resource_readout_canvas_y(380.0, 390.0), 318.0);
         assert_eq!(resource_readout_canvas_y(220.0, 390.0), 184.0);
+    }
+
+    #[test]
+    fn resource_readout_keeps_long_text_inside_390px_left_and_right_edges() {
+        let display = "water=12, ore=5, carbon=9, oxygen=4, hydrogen=7, silicon=3";
+        let visible = visible_resource_summary(display, 390.0);
+        let half_width = resource_readout_text_width(&visible) / 2.0;
+
+        for selection_x in [0.0, 390.0] {
+            let safe_x = resource_readout_canvas_x(selection_x, &visible, 390.0);
+            assert!(safe_x - half_width >= RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
+            assert!(safe_x + half_width <= 390.0 - RESOURCE_READOUT_HORIZONTAL_MARGIN_PX);
+        }
+        assert_eq!(visible.chars().count(), RESOURCE_READOUT_MAX_CHARS + 1);
     }
 }
