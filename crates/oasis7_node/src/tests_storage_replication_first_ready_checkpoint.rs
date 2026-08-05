@@ -197,6 +197,10 @@ fn committed_decision(height: u64) -> PosDecision {
 
 #[test]
 fn fresh_observer_discovers_checkpoint_after_first_ready_replication_head() {
+    let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("lock checkpoint probe nonce");
     let world_id = "world-gap-sync-first-ready-checkpoint-head";
     let dir_a = temp_dir("gap-sync-first-ready-checkpoint-head-a");
     let dir_b = temp_dir("gap-sync-first-ready-checkpoint-head-b");
@@ -500,6 +504,10 @@ fn checkpoint_receipt_keeps_connected_provider_provenance_without_reinstall_loop
 
 #[test]
 fn fresh_observer_bootstraps_checkpoint_before_incompatible_height_one_tail() {
+    let _nonce_lock = CHECKPOINT_PROBE_NONCE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("lock checkpoint probe nonce");
     let world_id = "world-gap-sync-bootstrap-before-height-one";
     let dir_a = temp_dir("gap-sync-bootstrap-before-height-one-a");
     let dir_b = temp_dir("gap-sync-bootstrap-before-height-one-b");
