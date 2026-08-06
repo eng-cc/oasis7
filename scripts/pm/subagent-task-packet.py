@@ -212,6 +212,44 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     if plan_path.parent != canonical_plan_dir:
         fail("review plan is outside the canonical task review-plans directory")
 
+    epoch = plan.get("epoch")
+    if not isinstance(epoch, str) or not re.fullmatch(r"[0-9a-f]{64}", epoch):
+        fail("review plan has an invalid batch epoch")
+    canonical_batch = (root / ".pm" / "scratch" / task_uid / "review-batches" / f"{epoch}.json").resolve()
+    planned_batch = plan.get("batch_path")
+    if not isinstance(planned_batch, str) or resolve_path(root, planned_batch) != canonical_batch:
+        fail("review plan does not reference its canonical review batch")
+    batch = load_object(canonical_batch, "review batch")
+    if batch.get("schema") != "oasis7-review-batch/v1":
+        fail("invalid review batch schema")
+    batch_identity = {key: batch.get(key) for key in
+                      ("task_uid", "frozen_head", "relevant_evidence_digest", "expected_slices")}
+    batch_epoch = hashlib.sha256(json.dumps(
+        batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if batch.get("epoch") != batch_epoch or epoch != batch_epoch:
+        fail("review batch epoch does not match immutable batch contents")
+    for field in ("task_uid", "frozen_head", "relevant_evidence_digest"):
+        if plan.get(field) != batch.get(field):
+            fail(f"review plan {field} does not match canonical batch")
+
+    expected = plan.get("expected_slices")
+    refs = plan.get("packet_refs")
+    roles = plan.get("roles")
+    if not isinstance(expected, list) or not isinstance(refs, list) or not isinstance(roles, list):
+        fail("review plan is missing roles, expected_slices, or packet_refs")
+    if any(not isinstance(item, dict) for item in expected + refs):
+        fail("review plan slice and packet references must be objects")
+    canonical_expected = sorted(expected, key=lambda item: (str(item.get("role")), str(item.get("slice_id"))))
+    if canonical_expected != batch.get("expected_slices"):
+        fail("review plan expected slices do not match canonical batch")
+    if roles != [item.get("role") for item in expected] or len(set(str(role) for role in roles)) != len(roles):
+        fail("review plan roles do not match its expected slice order")
+    expected_identities = {(item.get("role"), item.get("slice_id")) for item in expected}
+    ref_identities = [(item.get("role"), item.get("slice_id")) for item in refs]
+    if len(ref_identities) != len(expected_identities) or set(ref_identities) != expected_identities:
+        fail("review plan packet refs do not cover the complete expected slice set")
+
     packet_role = str(slice_contract["role"])
     packet_slice = str(slice_contract["slice_id"])
     if plan.get("task_uid") != task_uid:
@@ -226,10 +264,6 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     if resolved_comparison != plan.get("comparison_oid"):
         fail("review plan comparison ref moved from its recorded OID")
 
-    expected = plan.get("expected_slices")
-    refs = plan.get("packet_refs")
-    if not isinstance(expected, list) or not isinstance(refs, list):
-        fail("review plan is missing expected_slices or packet_refs")
     expected_matches = [item for item in expected if isinstance(item, dict)
                         and item.get("role") == packet_role and item.get("slice_id") == packet_slice]
     ref_matches = [item for item in refs if isinstance(item, dict)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -131,11 +132,36 @@ class PacketTest(unittest.TestCase):
     def create_review_plan(self, packet_path: str, **changes: object) -> Path:
         base_sha = self.git("rev-parse", "main")
         head = self.git("rev-parse", "HEAD")
+        evidence_digest = "b" * 64
+        expected_slices = sorted([
+            {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
+            {"role": "qa_engineer", "slice_id": "qa-review"},
+        ], key=lambda item: (item["role"], item["slice_id"]))
+        batch_identity = {
+            "task_uid": TASK_UID, "frozen_head": head,
+            "relevant_evidence_digest": evidence_digest, "expected_slices": expected_slices,
+        }
+        epoch = hashlib.sha256(json.dumps(
+            batch_identity, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{epoch}.json"
+        batch_path.parent.mkdir(parents=True, exist_ok=True)
+        batch_path.write_text(json.dumps({
+            "schema": "oasis7-review-batch/v1", "epoch": epoch, "task_uid": TASK_UID,
+            "frozen_head": head, "relevant_evidence_digest": evidence_digest,
+            "expected_slices": expected_slices,
+        }), encoding="utf-8")
         plan = {
             "schema": "oasis7-review-plan/v1", "task_uid": TASK_UID,
             "frozen_head": head, "comparison_ref": "main", "comparison_oid": base_sha,
-            "expected_slices": [{"role": "qa_engineer", "slice_id": "qa-review"}],
-            "packet_refs": [{"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path}],
+            "epoch": epoch, "batch_path": str(batch_path), "relevant_evidence_digest": evidence_digest,
+            "roles": [item["role"] for item in expected_slices],
+            "expected_slices": expected_slices,
+            "packet_refs": [
+                {"role": "repository_health_engineer", "slice_id": "repository-health-review",
+                 "packet_ref": f".pm/scratch/{TASK_UID}/slice-packets/repository-health-review.json"},
+                {"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path},
+            ],
         }
         plan.update(changes)
         path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / "admission.json"
@@ -210,6 +236,18 @@ class PacketTest(unittest.TestCase):
         plan = self.create_review_plan(packet)
         admitted = self.review_admission(packet, plan, snapshot)
         self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+    def test_review_admission_rejects_a_replacement_plan_that_drops_a_required_batch_role(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        self.review_admission(packet, plan, snapshot)
+
+        replacement = json.loads(plan.read_text(encoding="utf-8"))
+        replacement["roles"] = ["qa_engineer"]
+        replacement["expected_slices"] = [{"role": "qa_engineer", "slice_id": "qa-review"}]
+        plan.write_text(json.dumps(replacement), encoding="utf-8")
+        self.review_admission(packet, plan, snapshot, ok=False)
 
 
 if __name__ == "__main__":
