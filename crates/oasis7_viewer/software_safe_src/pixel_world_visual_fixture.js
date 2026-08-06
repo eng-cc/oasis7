@@ -2,6 +2,7 @@ import * as core from "./legacy_core.js";
 import {
   pixelWorldRecommendedTargetVisualFixture,
   pixelWorldSelectedBlockerVisualFixture,
+  pixelWorldModuleVisualEntitiesFixture,
 } from "./pixel_world_visual_fixture_data.js";
 
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
@@ -38,6 +39,7 @@ export function installPixelWorldVisualFixtureHook() {
     hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recent_event_glyphs: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
+    module_visual_entities: () => core.clone(pixelWorldModuleVisualEntitiesFixture()),
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
@@ -47,6 +49,22 @@ export function installPixelWorldVisualFixtureHook() {
   }
   const fixture = fixtures[fixtureName]();
   core.injectSnapshot(fixture, { returnState: false });
+  if (fixtureName === "module_visual_entities") {
+    // This is test-api-only and uses whole snapshots so it cannot expose a
+    // production action path. It lets a browser smoke prove update/removal.
+    window.__OASIS7_MODULE_VISUAL_FIXTURE_CONTROL__ = {
+      update(entities) {
+        const next = core.clone(fixture);
+        next.model.module_visual_entities = core.clone(entities || {});
+        core.injectSnapshot(next, { returnState: false });
+        core.requestRender();
+        return true;
+      },
+      clear() {
+        return this.update({});
+      },
+    };
+  }
   if (fixtureName === "recent_event_glyphs") {
     // Test-only input for the real WASM renderer smoke. These event kinds are
     // projected by the bridge into two independent, hoverable visual hotspots.

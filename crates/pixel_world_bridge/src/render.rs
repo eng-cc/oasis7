@@ -12,6 +12,10 @@ use micro_depot_facilities::{
     PixelWorldMicroDepotDetailVisual, PixelWorldMicroDepotVisual, reconcile_micro_depot_facilities,
 };
 
+#[path = "render_module_visual_entities.rs"]
+mod module_visual_entities;
+use module_visual_entities::{PixelWorldModuleVisualEntity, reconcile_module_visual_entities};
+
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
@@ -83,6 +87,7 @@ const FRAGMENT_FLECK_SIZE_SCALE: f32 = 0.16;
 const FRAGMENT_FLECK_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
 const MICRO_DEPOT_LAYER_Z: f32 = 2.55;
+const MODULE_VISUAL_ENTITY_LAYER_Z: f32 = 2.7;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
 const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
@@ -206,6 +211,12 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     for facility in &render_state.micro_depot_facilities {
         if let Some(point) =
             to_canvas_point(&facility.pos, world_bounds, width, height, &base_camera)
+        {
+            points.push(point);
+        }
+    }
+    for entity in &render_state.module_visual_entities {
+        if let Some(point) = to_canvas_point(&entity.pos, world_bounds, width, height, &base_camera)
         {
             points.push(point);
         }
@@ -835,6 +846,9 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
     for (_, entity) in runtime.micro_depot_entities.drain() {
         commands.entity(entity).despawn();
     }
+    for (_, entity) in runtime.module_visual_entities.drain() {
+        commands.entity(entity).despawn();
+    }
     for (_, entity) in runtime.location_entities.drain() {
         commands.entity(entity).despawn();
     }
@@ -864,6 +878,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     fragment_flecks: Query<'w, 's, (Entity, &'static PixelWorldFragmentFleckVisual)>,
     micro_depot_visuals: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotVisual)>,
     micro_depot_details: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotDetailVisual)>,
+    module_visual_entities: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualEntity)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
@@ -945,6 +960,12 @@ pub(crate) fn render_scene(
     for (entity, visual) in queries.micro_depot_visuals.iter() {
         runtime
             .micro_depot_entities
+            .entry(visual.id.clone())
+            .or_insert(entity);
+    }
+    for (entity, visual) in queries.module_visual_entities.iter() {
+        runtime
+            .module_visual_entities
             .entry(visual.id.clone())
             .or_insert(entity);
     }
@@ -1052,6 +1073,7 @@ pub(crate) fn render_scene(
         width,
         height,
     );
+    reconcile_module_visual_entities(&mut commands, &mut runtime, width, height);
     reconcile_links(&mut commands, &mut runtime, width, height);
     reconcile_locations(
         &mut commands,

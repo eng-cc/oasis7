@@ -104,6 +104,18 @@ struct MicroDepotFacility {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct ModuleVisualEntity {
+    id: String,
+    #[allow(dead_code)]
+    module_id: String,
+    #[allow(dead_code)]
+    kind: String,
+    #[allow(dead_code)]
+    label: Option<String>,
+    pos: Position,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct VisualHotspot {
     id: String,
     #[allow(dead_code)]
@@ -154,6 +166,8 @@ struct RenderState {
     fragment_terrain: Vec<FragmentTerrainPatch>,
     #[serde(default)]
     micro_depot_facilities: Vec<MicroDepotFacility>,
+    #[serde(default)]
+    module_visual_entities: Vec<ModuleVisualEntity>,
     agents: Vec<Agent>,
     links: Vec<Link>,
     visual_hotspots: Vec<VisualHotspot>,
@@ -275,6 +289,7 @@ struct BevyRuntimeState {
     grid_layout: Option<render::GridLayoutKey>,
     fragment_entities: HashMap<String, Entity>,
     micro_depot_entities: HashMap<String, Entity>,
+    module_visual_entities: HashMap<String, Entity>,
     location_entities: HashMap<String, Entity>,
     agent_entities: HashMap<String, Entity>,
     link_entities: HashMap<String, Entity>,
@@ -581,6 +596,12 @@ fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
         hash_f64(&mut hasher, fragment.footprint_cm);
         fragment.color.hash(&mut hasher);
         hash_f64(&mut hasher, fragment.emphasis.unwrap_or(0.0));
+    }
+
+    render_state.module_visual_entities.len().hash(&mut hasher);
+    for entity in &render_state.module_visual_entities {
+        entity.id.hash(&mut hasher);
+        hash_position(&mut hasher, &entity.pos);
     }
 
     render_state.agents.len().hash(&mut hasher);

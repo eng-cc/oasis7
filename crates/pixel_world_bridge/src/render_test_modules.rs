@@ -12,6 +12,9 @@ mod agent_position_provenance_cue_tests;
 #[path = "render_micro_depot_facilities_tests.rs"]
 mod micro_depot_facilities_tests;
 
+#[path = "render_module_visual_entities_tests.rs"]
+mod module_visual_entities_tests;
+
 #[path = "render_hotspot_core_tests.rs"]
 mod hotspot_core_tests;
 

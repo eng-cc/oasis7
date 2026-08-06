@@ -8684,6 +8684,33 @@ function pixelWorldRecommendedTargetVisualFixture() {
   gameplay.recent_feedback = null;
   return fixture;
 }
+function pixelWorldModuleVisualEntitiesFixture() {
+  const fixture = pixelWorldSelectedBlockerVisualFixture();
+  fixture.model.module_visual_entities = {
+    "module-absolute": {
+      entity_id: "module-absolute",
+      module_id: "fixture-module",
+      kind: "opaque_fixture_kind",
+      label: "Absolute marker",
+      anchor: { type: "absolute", data: { x_cm: 185e4, y_cm: 36e5, z_cm: 0 } }
+    },
+    "module-location": {
+      entity_id: "module-location",
+      module_id: "fixture-module",
+      kind: "opaque_fixture_kind",
+      label: "Location marker",
+      anchor: { type: "location", data: { location_id: "loc-1" } }
+    },
+    "module-agent": {
+      entity_id: "module-agent",
+      module_id: "fixture-module",
+      kind: "opaque_fixture_kind",
+      label: "Agent marker",
+      anchor: { type: "agent", data: { agent_id: "agent-0" } }
+    }
+  };
+  return fixture;
+}
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
 function pixelWorldTestApiEnabled() {
@@ -8713,7 +8740,8 @@ function installPixelWorldVisualFixtureHook() {
     selected_blocker: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     recent_event_glyphs: () => clone(pixelWorldSelectedBlockerVisualFixture()),
-    recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture())
+    recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture()),
+    module_visual_entities: () => clone(pixelWorldModuleVisualEntitiesFixture())
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
   const fixtureName = requestedVisualFixtureName();
@@ -8722,6 +8750,20 @@ function installPixelWorldVisualFixtureHook() {
   }
   const fixture = fixtures[fixtureName]();
   injectSnapshot(fixture, { returnState: false });
+  if (fixtureName === "module_visual_entities") {
+    window.__OASIS7_MODULE_VISUAL_FIXTURE_CONTROL__ = {
+      update(entities) {
+        const next = clone(fixture);
+        next.model.module_visual_entities = clone(entities || {});
+        injectSnapshot(next, { returnState: false });
+        requestRender();
+        return true;
+      },
+      clear() {
+        return this.update({});
+      }
+    };
+  }
   if (fixtureName === "recent_event_glyphs") {
     state.recentEvents = [
       { event_id: "resource-transfer-fixture", title: "Resource transfer completed", kind: "resource_transfer" },
