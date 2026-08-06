@@ -30,13 +30,20 @@
 - priority 必须绑定明确的开发里程碑、地点/用途与失效条件；未推进、到期、转让或违反适用规则后，机会按规则释放、转交或重新竞争。
 - priority 不等于土地所有权、区域主权、永久排他、军政控制、免除 charter、免除通行义务或阻止其他合格主体探索/提供服务。任何已形成的地点 tenure、公共通行或区域权利仍按各自的受治理边界处理。
 
-### 2.3 探索数据与公共安全基线
+### 2.3 Priority 与 tenure 的独立切割
+
+- pioneer priority 只是对下一个合格开发步骤的限时、限范围优先机会；它本身不创建 tenure、所有权、charter 权力或排他访问。tenure 只能在其独立资格、用途和确认程序完成后成立。
+- tenure 成立前转让 priority，只转让剩余的地点/用途范围、里程碑义务、原到期时点和相关 receipt 链；受让人不继承发现者身份、声誉、私有数据权限或预先批准的 tenure，也不得借转让延长原期限。
+- priority 到期、撤销或里程碑失败时，只终止尚未消费的优先机会并释放对应开发步骤；不得静默取消已独立确认的 tenure、已完成交付、已结算合同或其 receipt。已确认 tenure 仅按自身的续期、使用、违约、公共必要性、通知、申诉与恢复规则处理；过往 priority 也不为 tenure 保留新的排他授予或续期优势。
+- priority 资格、里程碑或到期事实处于争议且证据不足时，拒绝新的 priority 排他授予与转让，但不冻结普通安全披露、非排他探索、已确认 tenure 或已结算义务。争议结果的 receipt 必须说明范围、原因、下一路径以及 tenure 是否曾被独立确认；已撤销 priority 不得通过重放历史 receipt 重新取得。
+
+### 2.4 探索数据与公共安全基线
 
 - 探索获得的数据可在与地点、用途和时间相称的范围内提供私有商业使用或先行研究优势；这不构成永久秘密、对他人基本恢复能力的剥夺或安全风险的隐瞒许可。
 - 至少与公共安全、可通行性、重大已知危险和受影响主体基本恢复有关的最低事实必须按适用授权公开；私有期、保护期或争议处理结束后，可公开的探索知识应形成可复核的公共 baseline。个人数据、敏感漏洞细节、实时防御部署或他人私有合同不因公共 baseline 而自动公开。
 - 已披露或被消费的数据都必须说明来源、范围、取得/更新时间和不确定性；过期、冲突或局部观察不得被包装成整个 frontier 的实时完整真值。
 
-### 2.4 可审计公共事实与需要取得的实时信息
+### 2.5 可审计公共事实与需要取得的实时信息
 
 - 公共规则、已结算世界结果、已成立 charter、适用公共安全信息和可公开 baseline 必须可审计，不能被拥有更强信息能力的主体秘密改写。
 - 实时库存、路线容量/状态、部署、计划、未结算订单和其他 live operational information 默认需要侦察、已有关系、购买、合同或明确授权才能获得；玩家不能因访问产品、持有 OC、加入组织或历史名望自动读取。
@@ -60,7 +67,7 @@
 ## 5. Done：成功标准与验收
 
 - FI-1：frontier 样例证明未知区域只能由相邻探索、物流和 charter 的受治理组合扩展，并持续接入同一时间线、经济和历史；任一跳跃或旁路被拒绝或清楚说明。
-- FI-2：pioneer priority 样例证明其可转让、会到期且绑定开发里程碑/范围；它不自动产生主权、永久排他、区域控制或豁免。
+- FI-2：pioneer priority 样例证明其可转让、会到期且绑定开发里程碑/范围；它不自动产生 tenure、所有权、主权、永久排他、区域控制或豁免。验收至少覆盖：到期于 tenure 成立前时释放/重新竞争；成立前转让不转移身份/声誉/数据权限且不延期；已独立成立 tenure 后 priority 到期不追溯没收；争议期不重复授予、不冻结无关安全/通行/已结算义务；已撤销 priority 不能凭历史 receipt 重放恢复。每个样例都必须区分待定/争议中、有效、已独立成立 tenure 和到期/撤销状态，并提供 receipt 支持的下一动作。
 - FI-3：探索数据样例区分有界私有商业使用、最低公共安全/可通行性披露与最终可公开 baseline，并保留来源、范围、freshness 和不确定性。
 - FI-4：信息样例证明公共规则、已结算结果、charter 和安全事实可审计，而 live inventory、routes、deployments、plans 等需要侦察、关系、购买、合同或授权；每项实时信息均有 freshness 与恢复路径。
 - FI-5：专题说明不将本长期模型或局部探索/市场证据表述为当前地图、信息系统、frontier、preview 或发行 readiness。
@@ -69,7 +76,7 @@
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
-| FI-1 / FI-2 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 相邻 frontier、物流/charter、同世界连续性、priority 里程碑/期限/转让与非主权负例 | test_tier_full |
+| FI-1 / FI-2 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 相邻 frontier、物流/charter、同世界连续性；priority 里程碑/期限/转让；priority/tenure 独立状态、重复转让、receipt 重放和静默 tenure 撤销负例 | test_tier_full |
 | FI-3 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 探索数据私有范围、最低安全/通行披露、公共 baseline、来源与 freshness 证据 | test_tier_required |
 | FI-4 / FI-5 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 公共/实时信息分层、侦察/关系/购买/授权、freshness/恢复和当前 claim 分离审计 | test_tier_required |
 
