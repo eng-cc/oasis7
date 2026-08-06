@@ -177,12 +177,35 @@ grep -q "issue list -R eng-cc/oasis7 --search task_11111111111111111111111111111
 grep -q "issue comment 123 -R eng-cc/oasis7 --body" "$TMPDIR/gh.log"
 grep -q "issuecomment-fixture" "$TMPDIR/no-cache-comment.out"
 
-# A review plan freezes its comparison OID.  Later movement of the symbolic
-# ref must not invalidate that immutable reviewed range; only a supplied or
-# packet OID that disagrees with the frozen OID may fail admission.
-if grep -q 'review-plan comparison ref drift' "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"; then
-  echo "expected immutable review-plan comparison OID to survive symbolic ref movement" >&2
+# A review plan freezes comparison commit A. Moving the symbolic ref to B must
+# preserve acceptance and calculate reviewed paths from A, while a tampered OID
+# remains fail-closed.
+git -C "$TEST_REPO" reset --hard -q "$HEAD_SHA"
+BASE_A="$(git -C "$TEST_REPO" rev-parse refs/heads/base)"
+BASE_B="$(git -C "$TEST_REPO" commit-tree "$HEAD_SHA^{tree}" -p "$BASE_A" -m 'moved symbolic comparison ref')"
+PLAN="$TMPDIR/frozen-plan.json"
+python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" <<'PY'
+import json, sys
+json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json"},open(sys.argv[1],"w"))
+PY
+python3 - "$TEST_REPO/$LEDGER_REL" <<'PY'
+import json,sys
+path=sys.argv[1]
+rows=[json.loads(line) for line in open(path) if line.strip()]
+for row in rows: row["epoch"]="a"*64
+open(path,"w").write("".join(json.dumps(row)+"\n" for row in rows))
+PY
+git -C "$TEST_REPO" update-ref refs/heads/base "$BASE_B"
+"$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_11111111111111111111111111111111 --review-plan "$PLAN" --review-evidence "repository_health_engineer: no_findings; smoke" --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" --finding-disposition-evidence "smoke evidence" --verification "helper -> smoke -> observed" --residual-risk "fixture risk" --slice-ledger "$LEDGER_REL" --print-only >"$TMPDIR/frozen-plan.out"
+grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
+python3 - "$PLAN" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1])); p["comparison_oid"]="0"*40; json.dump(p,open(sys.argv[1],"w"))
+PY
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_11111111111111111111111111111111 --review-plan "$PLAN" --review-evidence "repository_health_engineer: no_findings; smoke" --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" --finding-disposition-evidence "smoke evidence" --verification "helper -> smoke -> observed" --residual-risk "fixture risk" --slice-ledger "$LEDGER_REL" --print-only >/dev/null 2>"$TMPDIR/tampered-oid.err"; then
+  echo "expected tampered frozen comparison OID to fail" >&2
   exit 1
 fi
+grep -qi "comparison OID" "$TMPDIR/tampered-oid.err"
 
 echo "record-pre-pr-review.test: OK"
