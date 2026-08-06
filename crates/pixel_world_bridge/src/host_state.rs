@@ -268,11 +268,20 @@ fn build_micro_depot_facilities(
     location_by_id: &Map<String, Value>,
     world_bounds: &Value,
 ) -> Vec<Value> {
-    let mut facilities: Vec<_> = arr(gameplay, "micro_depot_facilities")
+    // The raw runtime snapshot is snake_case, while `buildGameplaySummary`
+    // normalizes it for the viewer as camelCase. An explicitly published snake
+    // array, including `[]`, remains authoritative over the compatibility form.
+    let facilities = match gameplay.get("micro_depot_facilities") {
+        Some(Value::Array(facilities)) => facilities.as_slice(),
+        _ => arr(gameplay, "microDepotFacilities"),
+    };
+    let mut facilities: Vec<_> = facilities
         .iter()
         .filter_map(|facility| {
-            let facility_id = str_key(facility, "facility_id")?;
-            let location_id = str_key(facility, "location_id")?;
+            let facility_id =
+                str_key(facility, "facility_id").or_else(|| str_key(facility, "facilityId"))?;
+            let location_id =
+                str_key(facility, "location_id").or_else(|| str_key(facility, "locationId"))?;
             let status = str_key(facility, "status")?;
             let location = location_by_id.get(location_id)?;
             let anchor = normalize_position(obj(location, "pos"))?;
