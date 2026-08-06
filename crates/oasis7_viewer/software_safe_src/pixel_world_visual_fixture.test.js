@@ -35,6 +35,22 @@ describe("pixel world visual fixtures", () => {
     expect(gameplay.last_world_change).toBeUndefined();
   });
 
+  it("publishes an active Micro Depot at a known location for the selected-blocker renderer fixture", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=selected_blocker");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("selected_blocker");
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker()).toMatchObject({
+      model: { locations: { "loc-0": { id: "loc-0" } } },
+      player_gameplay: {
+        micro_depot_facilities: [{
+          facility_id: "depot-fixture-loc-0",
+          status: "active",
+          location_id: "loc-0",
+        }],
+      },
+    });
+  });
+
   it("injects the two player-visible recent-event kinds only for the glyph visual fixture", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=recent_event_glyphs");
 
