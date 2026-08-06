@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import queue
+import stat
 import subprocess
 import sys
 import tempfile
@@ -332,6 +333,12 @@ def main() -> None:
         if entry.get("config_file") != expected_relative_path:
             fail(f"agents.{role}.config_file must be exactly {expected_relative_path}")
         adapter_path = root / ".codex" / expected_relative_path
+        try:
+            adapter_mode = adapter_path.lstat().st_mode
+        except OSError as error:
+            fail(f"cannot stat adapter {adapter_path}: {error}")
+        if not stat.S_ISREG(adapter_mode):
+            fail(f"{adapter_path} must be a regular file and not a symlink")
         adapter = load_toml(adapter_path)
         required_adapter_keys = {
             "developer_instructions",
