@@ -7,7 +7,12 @@ mod collect_data;
 pub use collect_data::*;
 mod refine_quote;
 pub use refine_quote::*;
+mod schedule_recipe_quote;
+pub use schedule_recipe_quote::*;
+mod live_control_conversion;
 mod product_validation_quote;
+#[cfg(test)]
+mod schedule_recipe_quote_tests;
 pub use product_validation_quote::*;
 mod power_survival_quote;
 pub use power_survival_quote::*;
@@ -91,6 +96,9 @@ pub enum ViewerRequest {
     },
     QuoteRefineCompound {
         request: RefineQuoteRequest,
+    },
+    QuoteScheduleRecipe {
+        request: ScheduleRecipeQuoteRequest,
     },
     QuoteProductValidation {
         request: ProductValidationQuoteRequest,
@@ -640,6 +648,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     RefineQuotePreflight {
         quote: RefineQuotePreflight,
     },
+    ScheduleRecipeQuotePreflight {
+        quote: ScheduleRecipeQuotePreflight,
+    },
     ProductValidationQuotePreflight {
         quote: ProductValidationQuotePreflight,
     },
@@ -792,19 +803,6 @@ impl From<LiveControl> for ViewerControl {
             LiveControl::Pause => Self::Pause,
             LiveControl::Play => Self::Play,
             LiveControl::Step { count } => Self::Step { count },
-        }
-    }
-}
-
-impl TryFrom<ViewerControl> for LiveControl {
-    type Error = &'static str;
-
-    fn try_from(value: ViewerControl) -> Result<Self, Self::Error> {
-        match value {
-            ViewerControl::Pause => Ok(Self::Pause),
-            ViewerControl::Play => Ok(Self::Play),
-            ViewerControl::Step { count } => Ok(Self::Step { count }),
-            ViewerControl::Seek { .. } => Err("seek is not valid in live control mode"),
         }
     }
 }
