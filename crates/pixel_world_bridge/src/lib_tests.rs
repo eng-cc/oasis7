@@ -30,6 +30,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             marker_alpha: Some(0.32),
         }],
         fragment_terrain: vec![],
+        micro_depot_facilities: vec![],
         agents: vec![Agent {
             id: "agent-0".to_string(),
             label: "Survey Agent".to_string(),

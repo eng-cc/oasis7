@@ -115,6 +115,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             color: [141, 199, 170],
             emphasis: Some(0.58),
         }],
+        micro_depot_facilities: vec![],
         agents: vec![Agent {
             id: "agent-0".to_string(),
             label: "Survey Agent".to_string(),
@@ -350,7 +351,6 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("agent", sprite, transform)),
     );
-
     let mut agent_core_query = world.query::<(&PixelWorldAgentCoreVisual, &Sprite, &Transform)>();
     layers.extend(
         agent_core_query
