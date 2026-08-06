@@ -744,8 +744,11 @@ coverage, head binding, and artifact integrity; the GitHub task issue remains
 the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
 Before publishing a plan-backed packet, `record-pre-pr-review.sh --review-plan`
 derives or exactly validates the task/head/comparison ref+OID/roles from the
-immutable plan and re-resolves the comparison ref. `prepare-task-pr.sh` repeats
-that ref/OID check before a PR mutation; mismatch fails before external write.
+immutable plan and verifies that the recorded comparison OID remains an available
+commit. Symbolic-ref freshness is enforced before reviewer dispatch; after a
+complete review, later movement of that ref does not change the immutable reviewed
+range. `prepare-task-pr.sh` repeats the task/head/OID and ledger checks before a PR
+mutation, while the live PR lifecycle gate owns current-base mergeability.
 
 An unattended supervisor additionally requires runtime-issued dispatch and
 return attestation. Caller-authored receipts, issuer text, local fixtures, and

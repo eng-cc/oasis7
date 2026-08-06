@@ -181,12 +181,9 @@ if ref_explicit == "1" and supplied_ref != plan["comparison_ref"]:
     raise SystemExit(f"error: --review-plan comparison ref mismatch: expected {plan['comparison_ref']}, actual {supplied_ref}")
 if supplied_oid and supplied_oid != plan["comparison_oid"]:
     raise SystemExit(f"error: --review-plan comparison OID mismatch: expected {plan['comparison_oid']}, actual {supplied_oid}")
-resolved = subprocess.run(["git", "-C", root, "rev-parse", "--verify", f"{plan['comparison_ref']}^{{commit}}"], text=True, capture_output=True)
-if resolved.returncode:
-    raise SystemExit(f"error: cannot resolve review-plan comparison ref {plan['comparison_ref']}: {resolved.stderr.strip()}")
-actual_oid = resolved.stdout.strip()
-if actual_oid != plan["comparison_oid"]:
-    raise SystemExit(f"error: review-plan comparison ref drift: expected {plan['comparison_oid']}, actual {actual_oid}")
+resolved = subprocess.run(["git", "-C", root, "rev-parse", "--verify", f"{plan['comparison_oid']}^{{commit}}"], text=True, capture_output=True)
+if resolved.returncode or resolved.stdout.strip() != plan["comparison_oid"]:
+    raise SystemExit(f"error: review-plan comparison OID is not an available commit: {plan['comparison_oid']}")
 print(canonical_roles)
 print(plan["frozen_head"])
 print(plan["comparison_ref"])
@@ -202,14 +199,12 @@ PY
 fi
 CURRENT_HEAD="$(git rev-parse HEAD)"
 [[ "$SOURCE_HEAD" == "$CURRENT_HEAD" ]] || die "source head must be the current frozen HEAD: expected $CURRENT_HEAD, actual $SOURCE_HEAD"
-RESOLVED_COMPARISON_OID="$(git rev-parse --verify "${COMPARISON_REF}^{commit}")" \
-  || die "cannot resolve comparison ref: $COMPARISON_REF"
-if [[ -n "$COMPARISON_OID" && "$COMPARISON_OID" != "$RESOLVED_COMPARISON_OID" ]]; then
-  die "comparison OID mismatch: expected $RESOLVED_COMPARISON_OID, actual $COMPARISON_OID"
-fi
-COMPARISON_OID="$RESOLVED_COMPARISON_OID"
+[[ -n "$COMPARISON_OID" ]] || COMPARISON_OID="$(git rev-parse --verify "${COMPARISON_REF}^{commit}")"
+RESOLVED_COMPARISON_OID="$(git rev-parse --verify "${COMPARISON_OID}^{commit}")" \
+  || die "comparison OID is not an available commit: $COMPARISON_OID"
+[[ "$COMPARISON_OID" == "$RESOLVED_COMPARISON_OID" ]] || die "comparison OID is not canonical: $COMPARISON_OID"
 if [[ -z "$REVIEWED_PATHS" ]]; then
-  REVIEWED_PATHS="$(git diff --name-only "$COMPARISON_REF"...HEAD | paste -sd ';' -)"
+  REVIEWED_PATHS="$(git diff --name-only "$COMPARISON_OID"...HEAD | paste -sd ';' -)"
   REVIEWED_PATHS="${REVIEWED_PATHS:-n/a; no changed paths}"
 fi
 if [[ -z "$ROLE_BASIS" ]]; then

@@ -939,16 +939,16 @@ if not comparison_oid:
     missing.append("Comparison OID")
 else:
     try:
-        current_comparison_oid = subprocess.check_output(
-            ["git", "-C", str(source_worktree), "rev-parse", "--verify", f"{comparison_ref}^{{commit}}"],
+        resolved_comparison_oid = subprocess.check_output(
+            ["git", "-C", str(source_worktree), "rev-parse", "--verify", f"{comparison_oid}^{{commit}}"],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
     except subprocess.CalledProcessError:
-        missing.append(f"Comparison Ref resolvable: {comparison_ref}")
+        missing.append(f"Comparison OID available as commit: {comparison_oid}")
     else:
-        if comparison_oid != current_comparison_oid:
-            missing.append(f"Comparison OID: {current_comparison_oid}")
+        if comparison_oid != resolved_comparison_oid:
+            missing.append(f"Comparison OID canonical: {resolved_comparison_oid}")
 
 for key in (
     "Comparison OID",

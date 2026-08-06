@@ -922,7 +922,7 @@ expected = {
     "Source Worktree: " + Path(expected_worktree).name + " or repo-relative worktree hint",
     f"Source Branch: {expected_branch}",
     "Comparison Ref: refs/remotes/origin/main",
-    f"Comparison OID: {expected_comparison_oid}",
+    "Comparison OID available as commit: 0000000000000000000000000000000000000000",
 }
 if review["status"] != "missing":
     raise SystemExit(f"expected missing review status for prefix-mismatched fields, got: {review}")

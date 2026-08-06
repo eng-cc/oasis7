@@ -177,4 +177,12 @@ grep -q "issue list -R eng-cc/oasis7 --search task_11111111111111111111111111111
 grep -q "issue comment 123 -R eng-cc/oasis7 --body" "$TMPDIR/gh.log"
 grep -q "issuecomment-fixture" "$TMPDIR/no-cache-comment.out"
 
+# A review plan freezes its comparison OID.  Later movement of the symbolic
+# ref must not invalidate that immutable reviewed range; only a supplied or
+# packet OID that disagrees with the frozen OID may fail admission.
+if grep -q 'review-plan comparison ref drift' "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"; then
+  echo "expected immutable review-plan comparison OID to survive symbolic ref movement" >&2
+  exit 1
+fi
+
 echo "record-pre-pr-review.test: OK"
