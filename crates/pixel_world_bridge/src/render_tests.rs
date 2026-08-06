@@ -116,6 +116,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             emphasis: Some(0.58),
         }],
         micro_depot_facilities: vec![],
+        module_visual_entities: vec![],
         agents: vec![Agent {
             id: "agent-0".to_string(),
             label: "Survey Agent".to_string(),
@@ -357,7 +358,6 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("agent_core", sprite, transform)),
     );
-
     let mut hotspot_query = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
     layers.extend(
         hotspot_query

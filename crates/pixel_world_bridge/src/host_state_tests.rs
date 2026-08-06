@@ -150,6 +150,67 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_projects_module_visual_entities_with_resolved_anchors_only() {
+    let mut input = sample_input();
+    input["lists"]["agents"][0]["pos"] =
+        json!({ "x_cm": 5_100_000.0, "y_cm": 2_600_000.0, "z_cm": 30.0 });
+    input["snapshot"]["model"]["module_visual_entities"] = json!({
+        "z-absolute": {
+            "entity_id": "z-absolute",
+            "module_id": "module-z",
+            "kind": "opaque_kind",
+            "label": "Stored label",
+            "anchor": { "type": "absolute", "data": { "x_cm": 7100000, "y_cm": 1200000, "z_cm": 80 } }
+        },
+        "a-location": {
+            "entity_id": "a-location",
+            "module_id": "module-a",
+            "kind": "opaque_kind",
+            "label": null,
+            "anchor": { "type": "location", "data": { "location_id": "loc-0" } }
+        },
+        "m-agent": {
+            "entity_id": "m-agent",
+            "module_id": "module-m",
+            "kind": "opaque_kind",
+            "label": "Agent anchor",
+            "anchor": { "type": "agent", "data": { "agent_id": "agent-0" } }
+        },
+        "missing": {
+            "entity_id": "missing",
+            "module_id": "module-missing",
+            "kind": "opaque_kind",
+            "anchor": { "type": "location", "data": { "location_id": "no-such-location" } }
+        }
+    });
+
+    let state = build_render_state(&input);
+    assert_eq!(
+        state["module_visual_entities"]
+            .as_array()
+            .expect("module visuals project as an array")
+            .iter()
+            .map(|entity| entity["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["a-location", "m-agent", "z-absolute"]
+    );
+    assert_eq!(
+        state["module_visual_entities"][0]["pos"],
+        input["lists"]["locations"][0]["pos"]
+    );
+    assert_eq!(
+        state["module_visual_entities"][1]["pos"],
+        input["lists"]["agents"][0]["pos"]
+    );
+    assert_eq!(
+        state["module_visual_entities"][2]["pos"],
+        json!({ "x_cm": 7100000.0, "y_cm": 1200000.0, "z_cm": 80.0 })
+    );
+    assert_eq!(state["module_visual_entities"][2]["kind"], "opaque_kind");
+    assert_eq!(state["module_visual_entities"][2]["label"], "Stored label");
+}
+
+#[test]
 fn rust_host_state_projects_published_micro_depots_at_stable_known_location_offsets() {
     let mut input = sample_input();
     input["gameplay"]["micro_depot_facilities"] = json!([

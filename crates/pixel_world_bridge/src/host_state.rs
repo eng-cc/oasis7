@@ -387,6 +387,55 @@ fn resolve_selection_position(
     }
 }
 
+fn build_module_visual_entities(
+    input: &Value,
+    locations: &[Value],
+    agents: &[Value],
+) -> Vec<Value> {
+    let Some(entities) = obj(obj(input, "snapshot"), "model")
+        .get("module_visual_entities")
+        .and_then(Value::as_object)
+    else {
+        return Vec::new();
+    };
+
+    let mut projected = entities
+        .values()
+        .filter_map(|entity| {
+            let id = str_key(entity, "entity_id")?.to_string();
+            let anchor = obj(entity, "anchor");
+            let anchor_data = obj(anchor, "data");
+            let pos = match str_key(anchor, "type")? {
+                "absolute" => normalize_position(anchor_data),
+                "location" => {
+                    let location_id = str_key(anchor_data, "location_id")?;
+                    locations
+                        .iter()
+                        .find(|location| str_key(location, "id") == Some(location_id))
+                        .and_then(|location| normalize_position(obj(location, "pos")))
+                }
+                "agent" => {
+                    let agent_id = str_key(anchor_data, "agent_id")?;
+                    agents
+                        .iter()
+                        .find(|agent| str_key(agent, "id") == Some(agent_id))
+                        .and_then(|agent| normalize_position(obj(agent, "pos")))
+                }
+                _ => None,
+            }?;
+            Some(json!({
+                "id": id,
+                "module_id": str_key(entity, "module_id").unwrap_or(""),
+                "kind": str_key(entity, "kind").unwrap_or(""),
+                "label": string_key(entity, "label"),
+                "pos": pos,
+            }))
+        })
+        .collect::<Vec<_>>();
+    projected.sort_by(|left, right| str_key(left, "id").cmp(&str_key(right, "id")));
+    projected
+}
+
 fn build_pixel_world_links(agents: &[Value], location_by_id: &Map<String, Value>) -> Vec<Value> {
     agents
         .iter()
@@ -996,6 +1045,9 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
             })
         })
         .collect();
+    // Persisted module visuals are display-only: keep their anchor resolution
+    // faithful to the already-projected world and suppress unresolved anchors.
+    let module_visual_entities = build_module_visual_entities(input, &locations, &agents);
 
     let selection = match (str_key(input, "selectedKind"), str_key(input, "selectedId")) {
         (Some(kind), Some(id)) => json!({ "kind": kind, "id": id }),
@@ -1085,6 +1137,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "locations": locations,
         "fragment_terrain": fragment_terrain,
         "micro_depot_facilities": micro_depot_facilities,
+        "module_visual_entities": module_visual_entities,
         "agents": agents,
         "links": links,
         "selection": selection,
