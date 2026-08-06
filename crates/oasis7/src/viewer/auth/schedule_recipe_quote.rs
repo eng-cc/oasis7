@@ -1,14 +1,23 @@
 use super::*;
 use crate::viewer::protocol::ScheduleRecipeQuoteRequest;
 
+#[derive(serde::Serialize)]
+struct ScheduleRecipeQuoteSigningTarget<'a> {
+    factory_id: &'a str,
+    recipe_id: &'a str,
+    batches: i64,
+}
+
 fn signing_request(request: &ScheduleRecipeQuoteRequest) -> GameplayActionRequest {
     GameplayActionRequest {
         action_id: "quote_schedule_recipe".to_string(),
-        // Bind the complete requested production operation; this remains a preflight only.
-        target_agent_id: format!(
-            "factory_id:{}|recipe_id:{}|batches:{}",
-            request.factory_id, request.recipe_id, request.batches
-        ),
+        // The structured JSON representation is injective across all request fields.
+        target_agent_id: serde_json::to_string(&ScheduleRecipeQuoteSigningTarget {
+            factory_id: request.factory_id.as_str(),
+            recipe_id: request.recipe_id.as_str(),
+            batches: request.batches,
+        })
+        .expect("ScheduleRecipe quote signing target is serializable"),
         actor_agent_id: None,
         player_id: request.player_id.clone(),
         public_key: request.public_key.clone(),

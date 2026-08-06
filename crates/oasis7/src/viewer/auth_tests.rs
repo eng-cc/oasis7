@@ -1,4 +1,4 @@
-use super::super::protocol::{CollectDataCommand, CollectDataRequest};
+use super::super::protocol::{CollectDataCommand, CollectDataRequest, ScheduleRecipeQuoteRequest};
 use super::*;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -14,6 +14,37 @@ fn test_signer_with_seed(seed: u8) -> (String, String) {
 
 fn test_signer() -> (String, String) {
     test_signer_with_seed(7)
+}
+
+#[test]
+fn schedule_recipe_quote_auth_rejects_delimiter_collision_tuple() {
+    let (public_key, private_key) = test_signer();
+    let signed_request = ScheduleRecipeQuoteRequest {
+        factory_id: "factory-a|recipe_id:recipe-b".to_string(),
+        recipe_id: "recipe-c".to_string(),
+        batches: 2,
+        player_id: "player-a".to_string(),
+        public_key: Some(public_key.clone()),
+        auth: None,
+    };
+    let proof = sign_schedule_recipe_quote_auth_proof(
+        &signed_request,
+        17,
+        public_key.as_str(),
+        private_key.as_str(),
+    )
+    .expect("sign quote");
+    let previously_colliding_request = ScheduleRecipeQuoteRequest {
+        factory_id: "factory-a".to_string(),
+        recipe_id: "recipe-b|recipe_id:recipe-c".to_string(),
+        ..signed_request.clone()
+    };
+
+    verify_schedule_recipe_quote_auth_proof(&signed_request, &proof)
+        .expect("original request remains valid");
+    let err = verify_schedule_recipe_quote_auth_proof(&previously_colliding_request, &proof)
+        .expect_err("structured signing target must reject the former delimiter collision");
+    assert!(err.contains("verify auth signature failed"));
 }
 
 #[test]
