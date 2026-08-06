@@ -87,6 +87,15 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 
 因此，玩家可以在承诺前比较和撤回候选，在已接受后读懂未决范围与下一步，并在结算后凭 receipt 继续、申诉或恢复；不能把建议、界面缓存、Agent 的计划、重连或历史 receipt 当成免费资源、既得资格或第二次执行授权。Agent 自动化与任何表现层同样受此边界约束，不能用“已计划”或“请求已送达”伪装为世界已经结算。
 
+#### 条件报价与提交再校验合同
+
+报价是读取时刻的条件性判断，不是对资源、设施容量、资格、价格、排队顺位或世界结果的预留。报价至少绑定其目标、输入、作用域与当时用于判断的权威条件；产品层不冻结版本字段、过期时钟或锁定实现，但不得把缺少这些实现细节误写成“报价仍然有效”。`electricity_after` 只说明该次报价中的可用资源扣减后余额；它不等同于 Agent 的电力运行 runway，也不能单独承诺生产会持续、不会进入临界/停机状态。两者都影响当前决定时，必须分别说明适用的余额、runway/风险和推荐的恢复或暂缓路径。
+
+- **提交时重新裁决：** 提交必须针对当时的权限、资源、设施/地点、治理与反滥用条件重新校验，而不是消费旧报价。若任一条件已变化，系统只能以当前规则接受并产生一次可追溯 receipt，或原子拒绝且不扣减任何资源/不新建义务；不得静默沿用旧成本、旧风险、旧资格或把不足额变成隐藏欠费。拒绝或重新报价必须说明改变了哪类条件，并给出重新评估、等待、修复、改道或放弃当前候选中的适用下一步。
+- **竞争、重连与 Agent 边界：** 两个玩家/Agent 对同一可争用事实取得的报价可以并存，但先被接受的动作改变条件后，后续提交没有优先权。重连、刷新或重复请求报价只会得到新的条件判断，不构成提交幂等键、自动续期或离线执行授权；Agent 取得报价后仍须拥有独立、有效且范围受限的动作授权才能提交。已经接受的动作的幂等、撤销和未决处理由其专业合同与 receipt 负责，不能由报价本身补足。
+
+以下边界必须可用同一条代表性工业/服务路径验收：报价后插入一个已接受动作，使资源余额、设施可用性、权限或电力状态中的至少一项改变；旧报价的后续提交要么在当前条件下只结算一次并提供 receipt，要么原子拒绝且保留原有余额/义务。玩家能够区分“资源余额仍可支付”与“运行 runway/停机风险”，并能读到变化原因与下一步；把报价缓存直接当作预留、把失败转为欠费，或在重试时产生第二次 sink，均为失败。
+
 ### 世界宪法级产品不变量
 
 - 玩家通过目标、Agent、地点、设施、配方、关系与治理等受支持动作获得间接战略能动性；资源变化必须来自被授权的 source/sink 因果链，不能凭空生成或绕过成本。
@@ -127,7 +136,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - SC-13：代表性区域冲突与赛季样例证明攻击只在已声明的 charter 范围和登记参与者/暴露资产间发生，非参与者受保护；实体领地/战利品结算、可恢复损失、软赛季刷新和系统性恢复均保留同一世界时间线、身份与可审计因果。
 - SC-14：代表性协作样例证明直接人类沟通不自动绑定，而 Agent 代表在有效授权、接受与权威校验后可形成可审计合同；持续服务的违约/救济、随机无冲突本地争端程序、情境化可更新声誉和预声明 R&D 归因均不产生永久污点、隐性权力或对个人政治 credential 的转让。
 - SC-15：代表性组织解散与长期不活跃样例证明 charter 不越过个人资产、合同、退出、历史和 Agent 身份的保护底线；风险冻结、合同与托管处理、责任/成本、持续业务处置、剩余分配，以及通知、保护期、可恢复主张、申诉和有限后续处置均留在同一可审计世界因果链中，不产生静默没收、身份删除、历史重写或重复生效。
-- SC-16：代表性资源、资格或持续义务路径证明预览不产生世界效果；已接受承诺可读出范围、未决后果和下一步；已结算结果有 receipt 支持。过期、撤销、失效、重连重试和历史 receipt 重放不会制造第二次 sink、免费资源、资格续期或隐藏欠费，且未结算部分与既有已发生后果按相应专业合同保留可读 provenance、拒绝/待决或恢复路径。
+- SC-16：代表性资源、资格或持续义务路径证明预览不产生世界效果；已接受承诺可读出范围、未决后果和下一步；已结算结果有 receipt 支持。报价与提交之间发生竞争性状态变化时，提交按当前条件至多结算一次并产生 receipt，或原子拒绝且不产生 sink/义务；`electricity_after` 不被误读为运行 runway 或不停机保证。过期、撤销、失效、重连重试和历史 receipt 重放不会制造第二次 sink、免费资源、资格续期或隐藏欠费，且未结算部分与既有已发生后果按相应专业合同保留可读 provenance、拒绝/待决或恢复路径。
 
 ### 5.1 验收追踪
 
@@ -148,7 +157,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 | SC-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 参战范围、离线防御、占领/提取、可恢复重建、赛季刷新与统一世界连续性的组合证据 | test_tier_full |
 | SC-14 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 授权/接受合同、atomic 与持续服务、争端 receipt/程序申诉、声誉/转让与 R&D provenance/份额的组合证据 | test_tier_full |
 | SC-15 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | charter 保护底线、解散 waterfall、通知/保护期、estate 或可撤销 delegation、reclaim/appeal、持续业务处置和历史/receipt 连续性的组合证据 | test_tier_full |
-| SC-16 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一条资源/资格/持续义务路径的预览、接受、结算、失效、重试与 receipt 重放负例组合证据；正式玩家 surface 需区分预览、待决与已结算而不伪造自动恢复 | test_tier_full |
+| SC-16 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一条资源/资格/持续义务路径的预览、接受、结算、失效、重试与 receipt 重放负例组合证据；必须含“报价后竞争性状态变化”的接受一次/原子拒绝样例，以及正式玩家 surface 对余额、runway/停机风险、预览/待决/已结算的区分，不伪造自动恢复 | test_tier_full |
 
 ## 6. Non-Goals
 
