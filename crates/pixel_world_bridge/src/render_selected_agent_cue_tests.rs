@@ -14,6 +14,7 @@ struct CueSegmentProbe {
     z: f32,
     width: f32,
     height: f32,
+    rotation: f32,
     color: Color,
 }
 
@@ -32,6 +33,7 @@ fn selected_agent_cue_segments(app: &mut App) -> Vec<CueSegmentProbe> {
                     z: transform.translation.z,
                     width: size.x,
                     height: size.y,
+                    rotation: transform.rotation.to_euler(EulerRot::XYZ).2,
                     color: sprite.color,
                 })
         })
@@ -93,6 +95,7 @@ fn receipt_cue_geometry(app: &mut App) -> Vec<CueSegmentProbe> {
                     z: transform.translation.z,
                     width: size.x,
                     height: size.y,
+                    rotation: transform.rotation.to_euler(EulerRot::XYZ).2,
                     color: sprite.color,
                 })
         })
@@ -213,6 +216,75 @@ fn receipt_target_cue_is_target_gated_reused_and_removed_without_hit_regions() {
 }
 
 #[test]
+fn rejected_receipt_badge_uses_one_same_scale_slash_without_changing_hit_regions() {
+    let mut blocked = render_test_app(sample_render_state_with_receipt_target(
+        Some("blocked"),
+        Some("agent-0"),
+    ));
+    let blocked_cues = receipt_cue_geometry(&mut blocked);
+    let blocked_backing = blocked_cues
+        .iter()
+        .find(|cue| cue.width == 20.0 && cue.height == 16.0)
+        .expect("blocked receipt backing");
+
+    let mut rejected = render_test_app(sample_render_state_with_receipt_target(
+        Some("rejected"),
+        Some("agent-0"),
+    ));
+    let baseline_regions = normalized_hit_regions(&mut rejected);
+    let initial = receipt_cue_geometry(&mut rejected);
+    let backing = initial
+        .iter()
+        .find(|cue| cue.width == 20.0 && cue.height == 16.0)
+        .expect("rejected receipt needs the same 20x16 badge backing");
+    assert_eq!(backing.color, RECEIPT_BADGE_BACKING_COLOR);
+    assert_eq!(
+        (
+            backing.x,
+            backing.y,
+            backing.z,
+            backing.width,
+            backing.height
+        ),
+        (
+            blocked_backing.x,
+            blocked_backing.y,
+            blocked_backing.z,
+            blocked_backing.width,
+            blocked_backing.height
+        ),
+        "rejected receipt keeps the blocked badge's placement, scale, and layer"
+    );
+    let slashes = initial
+        .iter()
+        .filter(|cue| {
+            cue.width == 12.0 && cue.height == 2.0 && cue.color == RECEIPT_BADGE_STROKE_COLOR
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        slashes.len(),
+        1,
+        "rejected receipt must be distinct from blocked's two-stroke X"
+    );
+    assert!(
+        (slashes[0].rotation - std::f32::consts::FRAC_PI_4).abs() < f32::EPSILON,
+        "rejected receipt uses a stable ascending rejection slash"
+    );
+    assert_eq!(
+        normalized_hit_regions(&mut rejected),
+        baseline_regions,
+        "the display-only rejection slash must not add or move hit regions"
+    );
+
+    rejected.update();
+    assert_eq!(
+        receipt_cue_geometry(&mut rejected),
+        initial,
+        "unchanged rejected receipt reconcile must deterministically reuse its cue geometry"
+    );
+}
+
+#[test]
 fn narrow_receipt_target_badge_stays_visible_at_actual_canvas_size_with_selected_frame_clearance() {
     let mut render_state =
         sample_render_state_with_receipt_target(Some("blocked"), Some("agent-0"));
@@ -279,6 +351,27 @@ fn narrow_receipt_target_badge_stays_visible_at_actual_canvas_size_with_selected
             && backing_canvas_y - (backing.height / 2.0) >= 0.0
             && backing_canvas_y + (backing.height / 2.0) <= viewport_height,
         "narrow receipt backing must remain fully inside the actual canvas"
+    );
+}
+
+#[test]
+fn narrow_rejected_receipt_badge_keeps_one_enlarged_slash() {
+    let mut render_state =
+        sample_render_state_with_receipt_target(Some("rejected"), Some("agent-0"));
+    render_state.selection = Some(Selection {
+        kind: "agent".to_string(),
+        id: "agent-0".to_string(),
+    });
+    let mut app = render_receipt_test_app_at_viewport(render_state, 318.0, 179.0);
+    let cues = receipt_cue_geometry(&mut app);
+    assert_eq!(
+        cues.iter()
+            .filter(|cue| cue.width == 18.0
+                && cue.height == 3.0
+                && cue.color == RECEIPT_BADGE_STROKE_COLOR)
+            .count(),
+        1,
+        "narrow rejected badge keeps one enlarged pale rejection slash"
     );
 }
 

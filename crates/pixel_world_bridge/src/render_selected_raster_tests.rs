@@ -68,18 +68,28 @@ fn bevy_pixel_regression_exports_only_location_derived_position_cues() {
 
 #[test]
 fn bevy_pixel_regression_exports_visible_receipt_target_pixels() {
-    let mut visible = render_test_app(sample_render_state_with_receipt_target(
-        Some("accepted"),
+    let mut blocked = render_test_app(sample_render_state_with_receipt_target(
+        Some("blocked"),
         Some("agent-0"),
     ));
-    let (_, visible_summary) = rasterize_pixel_regression(&mut visible);
+    let (_, blocked_summary) = rasterize_pixel_regression(&mut blocked);
+    let mut rejected = render_test_app(sample_render_state_with_receipt_target(
+        Some("rejected"),
+        Some("agent-0"),
+    ));
+    let (rejected_image, rejected_summary) = rasterize_pixel_regression(&mut rejected);
     let mut absent = render_test_app(sample_render_state_with_receipt_target(None, None));
     let (_, absent_summary) = rasterize_pixel_regression(&mut absent);
 
     assert!(
-        visible_summary.non_background_pixels > absent_summary.non_background_pixels,
-        "an accepted receipt cue must contribute visible raster pixels above its target Agent"
+        rejected_summary.non_background_pixels > absent_summary.non_background_pixels,
+        "a rejected receipt cue must contribute visible raster pixels above its target Agent"
     );
+    assert_ne!(
+        rejected_summary.raw_rgba_fnv1a64, blocked_summary.raw_rgba_fnv1a64,
+        "rejected receipt raster must remain visibly distinct from blocked's X badge"
+    );
+    write_pixel_probe_if_requested(&rejected_image, &rejected_summary);
 }
 
 #[test]

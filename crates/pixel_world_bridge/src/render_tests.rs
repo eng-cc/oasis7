@@ -54,6 +54,7 @@ struct PixelLayer {
     center_x: f32,
     center_y: f32,
     size: Vec2,
+    rotation: f32,
     z: f32,
     rgba: [f32; 4],
 }
@@ -253,7 +254,7 @@ fn hit_regions(app: &mut App) -> Vec<HitRegion> {
 fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> PixelLayer {
     let size_px = sprite
         .custom_size
-        .map(|custom_size| custom_size.x.max(custom_size.y))
+        .map(|size| size.x.max(size.y))
         .unwrap_or(0.0);
     let color = sprite.color.to_srgba();
     PixelLayer {
@@ -261,15 +262,14 @@ fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> Pi
         center_x: (VIEWPORT_WIDTH as f32 / 2.0) + transform.translation.x,
         center_y: (VIEWPORT_HEIGHT as f32 / 2.0) - transform.translation.y,
         size: sprite.custom_size.unwrap_or(Vec2::splat(size_px)),
+        rotation: transform.rotation.to_euler(EulerRot::XYZ).2,
         z: transform.translation.z,
         rgba: [color.red, color.green, color.blue, color.alpha],
     }
 }
-
 fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
     let world = app.world_mut();
     let mut layers = Vec::new();
-
     let mut grid_query = world.query::<(&PixelWorldGridVisual, &Sprite, &Transform)>();
     layers.extend(
         grid_query
@@ -304,7 +304,6 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("recommended_target_cue", sprite, transform)),
     );
-
     let mut fragment_shadow_query =
         world.query::<(&PixelWorldFragmentShadowVisual, &Sprite, &Transform)>();
     layers.extend(
@@ -312,14 +311,12 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment_shadow", sprite, transform)),
     );
-
     let mut fragment_query = world.query::<(&PixelWorldFragmentVisual, &Sprite, &Transform)>();
     layers.extend(
         fragment_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment", sprite, transform)),
     );
-
     let mut fragment_inset_query =
         world.query::<(&PixelWorldFragmentInsetVisual, &Sprite, &Transform)>();
     layers.extend(
@@ -327,7 +324,6 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment_inset", sprite, transform)),
     );
-
     let mut fragment_fleck_query =
         world.query::<(&PixelWorldFragmentFleckVisual, &Sprite, &Transform)>();
     layers.extend(
@@ -335,7 +331,6 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment_fleck", sprite, transform)),
     );
-
     let mut selected_location_cue_query =
         world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
     layers.extend(
@@ -343,14 +338,12 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("selected_location_cue", sprite, transform)),
     );
-
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     layers.extend(
         location_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("location", sprite, transform)),
     );
-
     let mut agent_query = world.query::<(&PixelWorldAgentVisual, &Sprite, &Transform)>();
     layers.extend(
         agent_query
@@ -456,12 +449,32 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     for layer in &layers {
         let width = layer.size.x.round().max(1.0) as i32;
         let height = layer.size.y.round().max(1.0) as i32;
-        let left = layer.center_x.round() as i32 - (width / 2);
-        let top = layer.center_y.round() as i32 - (height / 2);
-        let right = left + width;
-        let bottom = top + height;
+        let is_rotated = layer.rotation.abs() > f32::EPSILON;
+        let (sin, cos) = layer.rotation.sin_cos();
+        let (left, top, right, bottom) = if is_rotated {
+            let half_width = (layer.size.x * cos.abs()) + (layer.size.y * sin.abs());
+            let half_height = (layer.size.x * sin.abs()) + (layer.size.y * cos.abs());
+            let left = (layer.center_x - (half_width / 2.0)).floor() as i32;
+            let top = (layer.center_y - (half_height / 2.0)).floor() as i32;
+            let right = (layer.center_x + (half_width / 2.0)).ceil() as i32;
+            let bottom = (layer.center_y + (half_height / 2.0)).ceil() as i32;
+            (left, top, right, bottom)
+        } else {
+            let left = layer.center_x.round() as i32 - (width / 2);
+            let top = layer.center_y.round() as i32 - (height / 2);
+            (left, top, left + width, top + height)
+        };
         for y in top.max(0)..bottom.min(VIEWPORT_HEIGHT as i32) {
             for x in left.max(0)..right.min(VIEWPORT_WIDTH as i32) {
+                if is_rotated {
+                    let relative_x = (x as f32 + 0.5) - layer.center_x;
+                    let relative_y = (y as f32 + 0.5) - layer.center_y;
+                    let local_x = (cos * relative_x) + (sin * relative_y);
+                    let local_y = (-sin * relative_x) + (cos * relative_y);
+                    if local_x.abs() > layer.size.x / 2.0 || local_y.abs() > layer.size.y / 2.0 {
+                        continue;
+                    }
+                }
                 let pixel = image.get_pixel_mut(x as u32, y as u32);
                 let next = blend_src_over(layer.rgba, pixel.0);
                 pixel.0 = next;
