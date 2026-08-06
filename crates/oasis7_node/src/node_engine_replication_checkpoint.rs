@@ -5,6 +5,7 @@ use oasis7_proto::distributed::WorldHeadAnnounce;
 pub(super) enum FreshObserverCheckpointBootstrap {
     Installed,
     PreflightUnavailable,
+    RetryPending,
     NotInstalled,
 }
 
@@ -12,6 +13,18 @@ impl PosNodeEngine {
     // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
     // the aligned retained-window boundaries, including the latest completed boundary.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
+
+    pub(super) fn should_defer_fresh_observer_checkpoint_retry(
+        &self,
+        advertised_head: Option<&WorldHeadAnnounce>,
+    ) -> bool {
+        advertised_head.is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+            && self.checkpoint_bootstrap_enabled
+            && self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0
+            && self.fresh_observer_checkpoint_bootstrap_retry_pending
+    }
 
     pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
         &mut self,
@@ -37,6 +50,7 @@ impl PosNodeEngine {
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
         }
@@ -54,7 +68,8 @@ impl PosNodeEngine {
             Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
             Ok(false) => Ok(FreshObserverCheckpointBootstrap::NotInstalled),
             Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
-                Ok(FreshObserverCheckpointBootstrap::NotInstalled)
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                Ok(FreshObserverCheckpointBootstrap::RetryPending)
             }
             Err(err) => Err(err),
         }

@@ -351,6 +351,10 @@ impl PosNodeEngine {
             checkpoint_bootstrap_preflight,
             FreshObserverCheckpointBootstrap::PreflightUnavailable
         );
+        let checkpoint_bootstrap_retry_pending = matches!(
+            checkpoint_bootstrap_preflight,
+            FreshObserverCheckpointBootstrap::RetryPending
+        );
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         let mut validated_messages = Vec::new();
@@ -409,17 +413,14 @@ impl PosNodeEngine {
                 "replication_persisted_height",
                 "ingesting replication message",
             )?;
-            // A connected peer may publish its height-one tail before its
-            // fetch-head preflight is live. Do not make that irreversible
-            // execution transition while a fresh observer can still discover
-            // and install the peer's checkpoint on the next poll.
             let defer_fresh_height_one_for_checkpoint_bootstrap = execution_hook.is_some()
                 && self.checkpoint_bootstrap_enabled
                 && self.committed_height == 0
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
                 && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
-                    || checkpoint_preflight_unavailable);
+                    || checkpoint_preflight_unavailable
+                    || checkpoint_bootstrap_retry_pending);
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
@@ -775,6 +776,9 @@ impl PosNodeEngine {
             // Match ingest's fresh-observer deferral above. A missing peer
             // head is a preflight result, not evidence that it is safe to
             // execute the height-one tail before a checkpoint bootstrap.
+            return Ok(());
+        }
+        if self.should_defer_fresh_observer_checkpoint_retry(advertised_world_head.as_ref()) {
             return Ok(());
         }
         let advertised_network_height = self.network_committed_height.max(
