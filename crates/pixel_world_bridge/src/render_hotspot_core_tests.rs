@@ -26,7 +26,7 @@ fn bevy_ecs_reconciles_neutral_hotspot_cores_with_stable_hover_hit_regions() {
     assert_eq!(first.hotspot_core_entity_count, 3);
     assert_eq!(first_highlight_entities.len(), 3);
     assert_eq!(first_shadow_entities.len(), 3);
-    assert_eq!(first_cue_entities.len(), 5);
+    assert_eq!(first_cue_entities.len(), 6);
     assert_eq!(
         first.hit_regions, 5,
         "each visible hotspot needs one hover-only hit region alongside the existing agent and location regions"
@@ -305,8 +305,78 @@ fn hotspot_kinds_keep_the_same_base_footprint_and_add_distinct_non_color_outline
     );
     assert_eq!(
         cues.get("hotspot-recent-event").map(Vec::len),
-        Some(1),
-        "each recent event needs exactly one neutral, non-color cue above its unchanged base"
+        Some(2),
+        "resource transfer needs two directional, non-color glyph parts above its unchanged base"
+    );
+}
+
+#[test]
+fn recent_event_kinds_have_distinct_low_density_glyph_parts_without_changing_hotspot_bases_or_hits()
+{
+    let mut render_state = sample_render_state_with_hotspot_candidates();
+    render_state.visual_hotspots.extend([
+        VisualHotspot {
+            id: "hotspot-build-queue-event".to_string(),
+            label: "Build queue update".to_string(),
+            kind: "build_queue".to_string(),
+            pos: sample_position(2_000_000.0, 1_000_000.0),
+            emphasis: Some(0.6),
+            size_hint_px: Some(12.0),
+        },
+        VisualHotspot {
+            id: "hotspot-unknown-event".to_string(),
+            label: "Future event kind".to_string(),
+            kind: "future_event_kind".to_string(),
+            pos: sample_position(2_200_000.0, 1_000_000.0),
+            emphasis: Some(0.6),
+            size_hint_px: Some(12.0),
+        },
+    ]);
+    let mut app = render_test_app(render_state);
+
+    for id in [
+        "hotspot-recent-event",
+        "hotspot-build-queue-event",
+        "hotspot-unknown-event",
+    ] {
+        let (width, height, rotation) = hotspot_base_footprints(&mut app)[id];
+        assert_eq!(
+            width, height,
+            "{id} must retain the shared square hotspot base"
+        );
+        assert_eq!(
+            rotation,
+            (std::f32::consts::FRAC_PI_4 * 100.0).round() as i16,
+            "{id} must retain the legacy diamond base orientation"
+        );
+    }
+    assert_eq!(
+        visual_probe_summary(&mut app).hit_regions,
+        7,
+        "kind glyphs must not add hover hit regions"
+    );
+
+    let cues = hotspot_cue_parts(&mut app);
+    let transfer_parts = &cues["hotspot-recent-event"];
+    let build_queue_parts = &cues["hotspot-build-queue-event"];
+    assert_eq!(
+        transfer_parts.len(),
+        2,
+        "resource flow must use two short directional glyph parts rather than the neutral fallback tick"
+    );
+    assert_eq!(
+        build_queue_parts.len(),
+        2,
+        "build queue must use two offset stacked glyph parts rather than the neutral fallback tick"
+    );
+    assert_ne!(
+        transfer_parts, build_queue_parts,
+        "resource flow and build queue must have deterministic, distinct non-color glyph part sets"
+    );
+    assert_eq!(
+        cues["hotspot-unknown-event"],
+        vec![HotspotCuePart::RecentEventTick],
+        "an unknown recent-event kind must retain exactly the existing fallback tick"
     );
 }
 

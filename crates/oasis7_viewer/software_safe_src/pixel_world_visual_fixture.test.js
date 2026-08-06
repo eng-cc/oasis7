@@ -35,6 +35,16 @@ describe("pixel world visual fixtures", () => {
     expect(gameplay.last_world_change).toBeUndefined();
   });
 
+  it("injects the two player-visible recent-event kinds only for the glyph visual fixture", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=recent_event_glyphs");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("recent_event_glyphs");
+    expect(core.state.recentEvents).toEqual([
+      expect.objectContaining({ event_id: "resource-transfer-fixture", kind: "resource_transfer" }),
+      expect.objectContaining({ event_id: "build-queue-fixture", kind: "build_queue" }),
+    ]);
+  });
+
   it("refuses to install the hotspot tooltip fixture when connect is not explicitly disabled", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&pixel_world_visual_fixture=hotspot_tooltip");
 

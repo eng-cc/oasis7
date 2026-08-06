@@ -8484,7 +8484,7 @@ function installPixelWorldHotspotPointerProbe({
   getHoverSelection,
   getHoveredHotspot
 }) {
-  if (typeof window === "undefined" || fixtureName !== "hotspot_tooltip") {
+  if (typeof window === "undefined" || !["hotspot_tooltip", "recent_event_glyphs"].includes(fixtureName)) {
     return () => {
     };
   }
@@ -8493,11 +8493,14 @@ function installPixelWorldHotspotPointerProbe({
     rendererStatus: getRendererStatus(),
     hoverSelection: getHoverSelection()
   });
-  const targetHotspot = () => getHotspotHitTargets().find((entry) => entry.id === "blocker-highlight") || null;
+  const targetHotspot = (id = "blocker-highlight") => getHotspotHitTargets().find((entry) => entry.id === id) || null;
   window[HOTSPOT_POINTER_PROBE_GLOBAL] = {
-    async hover() {
+    targets() {
+      return getHotspotHitTargets();
+    },
+    async hover(id = "blocker-highlight") {
       const canvas = getCanvas();
-      const hotspot = targetHotspot();
+      const hotspot = targetHotspot(id);
       if (!canvas || !hotspot || getRendererStatus() !== "ready") {
         return { ...receiptBase(), dispatched: false, eventType: "pointermove", visible: false, reason: "canvas_hotspot_or_renderer_unavailable" };
       }
@@ -8702,6 +8705,7 @@ function installPixelWorldVisualFixtureHook() {
   const fixtures = {
     selected_blocker: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture()),
+    recent_event_glyphs: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture())
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
@@ -8711,6 +8715,13 @@ function installPixelWorldVisualFixtureHook() {
   }
   const fixture = fixtures[fixtureName]();
   injectSnapshot(fixture, { returnState: false });
+  if (fixtureName === "recent_event_glyphs") {
+    state.recentEvents = [
+      { event_id: "resource-transfer-fixture", title: "Resource transfer completed", kind: "resource_transfer" },
+      { event_id: "build-queue-fixture", title: "Build queue updated", kind: "build_queue" }
+    ];
+    state.eventCount = state.recentEvents.length;
+  }
   const alignFixtureAuth = () => {
     const playerId = String(state.auth.playerId || "player-one").trim() || "player-one";
     const publicKey = String(state.auth.publicKey || "abcdef0123456789abcdef0123456789").trim();
