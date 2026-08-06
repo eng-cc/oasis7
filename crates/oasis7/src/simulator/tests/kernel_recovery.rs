@@ -1,7 +1,7 @@
 #[test]
 fn observe_triggers_chunk_generation_for_agent_chunk() {
     let mut config = WorldConfig::default();
-    config.asteroid_fragment.base_density_per_km3 = 2.0;
+    config.asteroid_fragment.base_density_per_km3 = 100.0;
     config.asteroid_fragment.voxel_size_km = 1;
     config.asteroid_fragment.cluster_noise = 0.0;
     config.asteroid_fragment.layer_scale_height_km = 0.0;
@@ -66,6 +66,69 @@ fn observe_records_chunk_generated_event_with_observe_cause() {
             }
         )
     }));
+}
+
+#[test]
+fn detached_harvest_quote_generates_ungenerated_chunk_without_mutating_live_world() {
+    let mut config = WorldConfig::default();
+    config.physics.radiation_floor = 0;
+    config.physics.radiation_floor_cap_per_tick = 0;
+    config.physics.radiation_decay_k = 0.0;
+    config.asteroid_fragment.base_density_per_km3 = 2.0;
+    config.asteroid_fragment.voxel_size_km = 1;
+    config.asteroid_fragment.cluster_noise = 0.0;
+    config.asteroid_fragment.layer_scale_height_km = 0.0;
+    config.asteroid_fragment.radius_min_cm = 1_000_000;
+    config.asteroid_fragment.radius_max_cm = 1_000_000;
+    config.asteroid_fragment.radiation_emission_scale = 1_000_000.0;
+
+    let location_pos = pos(100_000, 100_000);
+    let mut model = WorldModel::default();
+    for coord in chunk_coords(&config.space) {
+        model.chunks.insert(coord, ChunkState::Unexplored);
+    }
+    model.locations.insert(
+        "origin".to_string(),
+        Location::new_with_profile(
+            "origin".to_string(),
+            "Origin".to_string(),
+            location_pos,
+            LocationProfile::default(),
+        ),
+    );
+    model.agents.insert(
+        "agent-0".to_string(),
+        Agent::new_with_power("agent-0", "origin", location_pos, &config.power),
+    );
+    let chunk_runtime = ChunkRuntimeConfig {
+        world_seed: 9,
+        asteroid_fragment_enabled: true,
+        asteroid_fragment_seed_offset: 1,
+        min_fragment_spacing_cm: None,
+    };
+    let live = WorldKernel::with_model_and_chunk_runtime(config.clone(), model, chunk_runtime);
+    let live_before = live.clone();
+    let mut submitted = live.clone();
+    submitted.submit_action(Action::HarvestRadiation {
+        agent_id: "agent-0".to_string(),
+        max_amount: 20,
+    });
+    let event = submitted.step().expect("submit harvest");
+    let submitted_gain = match event.kind {
+        WorldEventKind::RadiationHarvested { amount, .. } if amount > 0 => amount,
+        other => panic!("expected positive radiation harvest, got {other:?}"),
+    };
+    let projection = live.clone();
+    let quote = projection
+        .quote_harvest_radiation_survival(
+            &ResourceOwner::Agent {
+                agent_id: "agent-0".to_string(),
+            },
+            20,
+        )
+        .expect("detached quote generates the action chunk before estimating harvest");
+    assert_eq!(quote.power_gain_estimate, submitted_gain);
+    assert_eq!(live_before, live);
 }
 
 #[test]
