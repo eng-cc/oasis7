@@ -72,6 +72,223 @@ cleanup_upgrade_lock() {
   fi
 }
 
+journal_transaction_phase() {
+  local transaction_dir=$1
+  local phase=$2
+  python3 - "$transaction_dir/transaction.json" "$phase" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+phase = sys.argv[2]
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["phase"] = phase
+temporary = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
+temporary.write_text(
+    json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+os.replace(temporary, manifest_path)
+PY
+}
+
+create_transaction_snapshot() {
+  local root=$1
+  local transaction_dir=$2
+  python3 - "$root" "$transaction_dir" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import stat
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+transaction_dir = Path(sys.argv[2])
+snapshot_dir = transaction_dir / "snapshot"
+snapshot_dir.mkdir(parents=True, exist_ok=False)
+
+bundle_paths = sorted(
+    (root / "config").rglob("public-testnet-governed-bootstrap-bundle-2026-06-06.json")
+)
+if not bundle_paths:
+    raise SystemExit(f"no governed bootstrap bundle found under {root / 'config'}")
+
+def snapshot_file(path: Path) -> dict[str, object]:
+    relative = path.relative_to(root)
+    backup = snapshot_dir / "files" / relative
+    entry: dict[str, object] = {
+        "path": str(relative),
+        "backup": str(backup.relative_to(transaction_dir)),
+        "present": path.is_file(),
+    }
+    if path.is_file():
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup)
+        entry["mode"] = stat.S_IMODE(path.stat().st_mode)
+    return entry
+
+current = root / "current"
+if current.is_symlink():
+    current_state: dict[str, object] = {
+        "kind": "symlink",
+        "target": os.readlink(current),
+    }
+elif current.is_dir():
+    current_backup = snapshot_dir / "current-directory"
+    shutil.copytree(current, current_backup, symlinks=True, copy_function=shutil.copy2)
+    current_state = {
+        "kind": "directory",
+        "backup": str(current_backup.relative_to(transaction_dir)),
+    }
+elif current.is_file():
+    current_backup = snapshot_dir / "current-file"
+    shutil.copy2(current, current_backup)
+    current_state = {
+        "kind": "file",
+        "backup": str(current_backup.relative_to(transaction_dir)),
+        "mode": stat.S_IMODE(current.stat().st_mode),
+    }
+else:
+    current_state = {"kind": "absent"}
+
+manifest = {
+    "schema_version": "oasis7.package_upgrade_rollback.v1",
+    "phase": "snapshotted",
+    "node_root": str(root),
+    "current": current_state,
+    "files": [
+        *(snapshot_file(path) for path in bundle_paths),
+        snapshot_file(root / "CURRENT_VERSION"),
+        snapshot_file(root / "DEPLOYED_BUILDINFO"),
+    ],
+}
+(transaction_dir / "transaction.json").write_text(
+    json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
+}
+
+rollback_transaction() {
+  local transaction_dir=$1
+  python3 - "$transaction_dir" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import stat
+import sys
+from pathlib import Path
+
+transaction_dir = Path(sys.argv[1])
+manifest_path = transaction_dir / "transaction.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+root = Path(manifest["node_root"])
+
+def write_phase(phase: str) -> None:
+    manifest["phase"] = phase
+    temporary = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, manifest_path)
+
+def remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+def restore_file(entry: dict[str, object]) -> None:
+    destination = root / str(entry["path"])
+    if not entry["present"]:
+        if destination.is_symlink() or destination.is_file():
+            destination.unlink()
+        elif destination.exists():
+            raise RuntimeError(f"refusing to remove non-file rollback target: {destination}")
+        return
+    source = transaction_dir / str(entry["backup"])
+    if not source.is_file():
+        raise RuntimeError(f"rollback snapshot missing: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.rollback-{os.getpid()}.tmp")
+    shutil.copy2(source, temporary)
+    os.chmod(temporary, int(entry["mode"]))
+    os.replace(temporary, destination)
+
+write_phase("rollback_started")
+for entry in manifest["files"]:
+    restore_file(entry)
+
+current = root / "current"
+remove_path(current)
+current_state = manifest["current"]
+kind = current_state["kind"]
+if kind == "symlink":
+    os.symlink(str(current_state["target"]), current)
+elif kind == "directory":
+    source = transaction_dir / str(current_state["backup"])
+    temporary = current.with_name(f".{current.name}.rollback-{os.getpid()}.tmp")
+    shutil.copytree(source, temporary, symlinks=True, copy_function=shutil.copy2)
+    os.replace(temporary, current)
+elif kind == "file":
+    source = transaction_dir / str(current_state["backup"])
+    temporary = current.with_name(f".{current.name}.rollback-{os.getpid()}.tmp")
+    shutil.copy2(source, temporary)
+    os.chmod(temporary, int(current_state["mode"]))
+    os.replace(temporary, current)
+elif kind != "absent":
+    raise RuntimeError(f"unknown current rollback kind: {kind}")
+
+write_phase("rolled_back")
+PY
+}
+
+transaction_dir=""
+transaction_active=0
+transaction_completed=0
+
+handle_upgrade_exit() {
+  local status=$?
+  trap - EXIT
+  if [[ "$status" -ne 0 && "$transaction_active" -eq 1 && "$transaction_completed" -eq 0 ]]; then
+    echo "package_upgrade_rollback_begin=true transaction_dir=$transaction_dir" >&2
+    set +e
+    rollback_transaction "$transaction_dir"
+    rollback_status=$?
+    if [[ "$rollback_status" -eq 0 && "$restart_service" -eq 1 ]]; then
+      systemctl stop "$systemd_service"
+      rollback_status=$?
+      if [[ "$rollback_status" -eq 0 ]]; then
+        systemctl daemon-reload
+        rollback_status=$?
+      fi
+      if [[ "$rollback_status" -eq 0 ]]; then
+        systemctl start "$systemd_service"
+        rollback_status=$?
+      fi
+    fi
+    set -e
+    if [[ "$rollback_status" -eq 0 ]]; then
+      echo "package_upgrade_rollback_complete=true transaction_dir=$transaction_dir" >&2
+    else
+      echo "package_upgrade_rollback_failed=true transaction_dir=$transaction_dir status=$rollback_status" >&2
+      status=$rollback_status
+    fi
+  fi
+  cleanup_upgrade_lock
+  exit "$status"
+}
+
 assert_no_node_processes() {
   local root=$1
   local matches
@@ -320,11 +537,11 @@ upgrade_lock_dir="$node_root/.package-upgrade.lock"
 if ! mkdir "$upgrade_lock_dir" 2>/dev/null; then
   die "another package upgrade is already running for $node_root"
 fi
-trap cleanup_upgrade_lock EXIT
+trap handle_upgrade_exit EXIT
 
 release_dir="$node_root/releases/$package_version"
 tmp_dir="$node_root/releases/.${package_version}.tmp.$$"
-backup_suffix="pre-${package_version//[^A-Za-z0-9_.-]/_}-$(date -u +%Y%m%dT%H%M%SZ)"
+backup_suffix="pre-${package_version//[^A-Za-z0-9_.-]/_}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
 mkdir -p "$node_root/releases"
 rm -rf "$tmp_dir"
@@ -341,6 +558,11 @@ if [[ "$restart_service" -eq 1 ]]; then
   sleep 2
   assert_no_node_processes "$node_root"
 fi
+
+transaction_dir="$node_root/package-upgrade-rollback/$backup_suffix"
+mkdir -p "$(dirname "$transaction_dir")"
+create_transaction_snapshot "$node_root" "$transaction_dir"
+transaction_active=1
 
 python3 - "$node_root" "$bundle_root" "$package_version" "$commit" "$run_id" "$artifact_ref" <<'PY'
 from __future__ import annotations
@@ -419,10 +641,12 @@ print(f"runtime_sha256={runtime_sha}")
 print(f"runtime_size={runtime_size}")
 print(f"updated_bundle_count={len(bundle_paths)}")
 PY
+journal_transaction_phase "$transaction_dir" "metadata_promoted"
 
 rm -rf "$release_dir"
 mv "$bundle_root" "$release_dir"
 rm -rf "$tmp_dir"
+journal_transaction_phase "$transaction_dir" "release_promoted"
 
 current_path="$node_root/current"
 previous_current_path=""
@@ -438,9 +662,12 @@ if [[ -L "$current_path" || -e "$current_path" ]]; then
   fi
 fi
 ln -s "$release_dir" "$current_path"
+journal_transaction_phase "$transaction_dir" "current_promoted"
 
 migrate_legacy_replication_root "$node_root" "$node_id"
+journal_transaction_phase "$transaction_dir" "replication_migrated"
 prune_old_releases "$node_root/releases" "$current_path" "$release_retention_count" "$previous_current_path"
+journal_transaction_phase "$transaction_dir" "releases_pruned"
 
 if [[ "$restart_service" -eq 1 ]]; then
   systemctl daemon-reload
@@ -497,4 +724,6 @@ if [[ "$restart_service" -eq 1 ]]; then
   fi
 fi
 
+journal_transaction_phase "$transaction_dir" "completed"
+transaction_completed=1
 echo "upgraded $node_root to $package_version"

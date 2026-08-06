@@ -253,7 +253,85 @@ test "$blocked_post_restart_status" -ne 0
 grep -q "post-restart status did not become ready before timeout" /tmp/oasis7-package-node-upgrade-blocked-post-restart.out
 grep -q "world_resource_delta_commit_hash_missing" /tmp/oasis7-package-node-upgrade-blocked-post-restart.out
 blocked_post_restart_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$blocked_post_restart_node_abs/current")
-test "$blocked_post_restart_current" = "$blocked_post_restart_node_abs/releases/$package_version-blocked-post-restart"
+test "$blocked_post_restart_current" = "$blocked_post_restart_node_abs/releases/old"
+
+rollback_node="$TMP_DIR/rollback-node"
+rollback_bundle_a="$rollback_node/config/a/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+rollback_bundle_b="$rollback_node/config/b/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+mkdir -p "$rollback_node/releases/old/bin" "$(dirname "$rollback_bundle_a")" "$(dirname "$rollback_bundle_b")"
+printf 'runtime-old-rollback\n' >"$rollback_node/releases/old/bin/oasis7_chain_runtime"
+chmod +x "$rollback_node/releases/old/bin/oasis7_chain_runtime"
+rollback_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$rollback_node")
+ln -s "$rollback_node_abs/releases/old" "$rollback_node/current"
+printf 'old-version-rollback\n' >"$rollback_node/CURRENT_VERSION"
+printf 'old-deployed-buildinfo-rollback\n' >"$rollback_node/DEPLOYED_BUILDINFO"
+rollback_runtime_sha=$(shasum -a 256 "$rollback_node/releases/old/bin/oasis7_chain_runtime" | awk '{print $1}')
+rollback_runtime_size=$(wc -c <"$rollback_node/releases/old/bin/oasis7_chain_runtime" | tr -d ' ')
+cat >"$rollback_bundle_a" <<EOF
+{
+  "marker": "rollback-a",
+  "runtime_build": {
+    "version": "old-version-rollback",
+    "sha256": "$rollback_runtime_sha",
+    "size_bytes": $rollback_runtime_size,
+    "path": "releases/old/bin/oasis7_chain_runtime"
+  }
+}
+EOF
+cat >"$rollback_bundle_b" <<EOF
+{
+  "marker": "rollback-b",
+  "runtime_build": {
+    "version": "old-version-rollback",
+    "sha256": "$rollback_runtime_sha",
+    "size_bytes": $rollback_runtime_size,
+    "path": "releases/old/bin/oasis7_chain_runtime"
+  }
+}
+EOF
+cp "$rollback_bundle_a" "$TMP_DIR/rollback-bundle-a.before"
+cp "$rollback_bundle_b" "$TMP_DIR/rollback-bundle-b.before"
+cp "$rollback_node/CURRENT_VERSION" "$TMP_DIR/rollback-current-version.before"
+cp "$rollback_node/DEPLOYED_BUILDINFO" "$TMP_DIR/rollback-deployed-buildinfo.before"
+rollback_current_before=$(readlink "$rollback_node/current")
+
+for rollback_attempt in first second; do
+  set +e
+  FAKE_SYSTEMCTL_LOG="$TMP_DIR/rollback-systemctl-$rollback_attempt.log" \
+  PATH="$TMP_DIR/fake-bin:$PATH" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+    --node-root "$rollback_node" \
+    --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+    --package-version "$package_version-rollback" \
+    --commit "$commit" \
+    --run-id "$run_id" \
+    --systemd-service oasis7-testnet-rollback.service \
+    --restart-service \
+    --post-restart-status-url http://127.0.0.1:6631/v1/chain/status \
+    --post-restart-timeout-secs 1 \
+    >"$TMP_DIR/rollback-$rollback_attempt.out" 2>&1
+  rollback_status=$?
+  set -e
+  test "$rollback_status" -ne 0
+  grep -q "post-restart status did not become ready before timeout" "$TMP_DIR/rollback-$rollback_attempt.out"
+  test "$(readlink "$rollback_node/current")" = "$rollback_current_before"
+  test -d "$rollback_node/releases/old"
+  cmp -s "$TMP_DIR/rollback-bundle-a.before" "$rollback_bundle_a"
+  cmp -s "$TMP_DIR/rollback-bundle-b.before" "$rollback_bundle_b"
+  cmp -s "$TMP_DIR/rollback-current-version.before" "$rollback_node/CURRENT_VERSION"
+  cmp -s "$TMP_DIR/rollback-deployed-buildinfo.before" "$rollback_node/DEPLOYED_BUILDINFO"
+  test "$(shasum -a 256 "$rollback_node/current/bin/oasis7_chain_runtime" | awk '{print $1}')" = "$rollback_runtime_sha"
+  python3 - "$rollback_bundle_a" "$rollback_bundle_b" "$rollback_runtime_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+expected_sha = sys.argv[3]
+for bundle_path in sys.argv[1:3]:
+    bundle = json.loads(pathlib.Path(bundle_path).read_text())
+    assert bundle["runtime_build"]["sha256"] == expected_sha
+PY
+done
 
 scanner_node="$TMP_DIR/scanner-node"
 mkdir -p "$scanner_node/releases/old/bin" "$scanner_node/config/doc/testing/evidence"
