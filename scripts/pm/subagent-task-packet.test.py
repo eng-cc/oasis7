@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 SOURCE = Path(__file__).with_name("subagent-task-packet.py")
+SNAPSHOT_HELPER = Path(__file__).with_name("bootstrap-task-snapshot.py")
 TASK_UID = "task_11111111111111111111111111111111"
 
 
@@ -23,6 +24,7 @@ class PacketTest(unittest.TestCase):
         for path in ("scripts/pm", ".pm/github-project-sync", ".agents/roles", "doc/engineering/workflow"):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
+        shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
         for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
@@ -34,10 +36,10 @@ class PacketTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def write_mapping(self, **changes: object) -> None:
-        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_url": "https://example.invalid/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed"}
+        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_number": 1, "issue_url": "https://example.invalid/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed", "title": "review dispatch admission", "acceptance": ["reject stale review admission"]}
         task.update(changes)
         path = self.repo / ".pm/github-project-sync/tasks.json"
-        path.write_text(json.dumps({"version": 1, "tasks": {TASK_UID: task}}), encoding="utf-8")
+        path.write_text(json.dumps({"version": 1, "project": {"owner": "example", "number": 1}, "tasks": {TASK_UID: task}}), encoding="utf-8")
 
     def command(self, *extra: str) -> list[str]:
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
@@ -114,6 +116,89 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "add", "new.txt"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
         self.assertIn("stale or mismatched packet head", self.invoke(["validate", packet_path], ok=False).stderr)
+
+    def create_snapshot(self) -> Path:
+        snapshot = self.repo / ".pm/scratch" / TASK_UID / "bootstrap-task-snapshot.json"
+        result = subprocess.run(
+            ["python3", "scripts/pm/bootstrap-task-snapshot.py", "create",
+             "--repo-root", str(self.repo), "--task-uid", TASK_UID,
+             "--request-identity", "review dispatch admission", "--producer", "tpm"],
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        return snapshot
+
+    def create_review_plan(self, packet_path: str, **changes: object) -> Path:
+        base_sha = self.git("rev-parse", "main")
+        head = self.git("rev-parse", "HEAD")
+        plan = {
+            "schema": "oasis7-review-plan/v1", "task_uid": TASK_UID,
+            "frozen_head": head, "comparison_ref": "main", "comparison_oid": base_sha,
+            "expected_slices": [{"role": "qa_engineer", "slice_id": "qa-review"}],
+            "packet_refs": [{"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path}],
+        }
+        plan.update(changes)
+        path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / "admission.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        return path
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
+
+    def review_admission(self, packet: str, plan: Path, snapshot: Path, ok: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            self.command("review-admission", "--packet", packet, "--review-plan", str(plan), "--bootstrap-snapshot", str(snapshot)),
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        if ok:
+            self.assertEqual(0, result.returncode, result.stderr)
+        else:
+            self.assertNotEqual(0, result.returncode, result.stdout)
+        return result
+
+    def test_review_admission_requires_current_cross_bound_packet_plan_and_snapshot(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+        cases = {
+            "plan task mismatch": {"task_uid": "task_22222222222222222222222222222222"},
+            "plan head mismatch": {"frozen_head": "a" * 40},
+            "plan role mismatch": {"expected_slices": [{"role": "runtime_engineer", "slice_id": "qa-review"}]},
+            "plan slice mismatch": {"expected_slices": [{"role": "qa_engineer", "slice_id": "other-slice"}]},
+            "plan packet ref mismatch": {"packet_refs": [{"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": "scope.txt"}]},
+            "comparison oid mismatch": {"comparison_oid": "b" * 40},
+        }
+        for name, changes in cases.items():
+            with self.subTest(name=name):
+                bad_plan = self.create_review_plan(packet, **changes)
+                self.review_admission(packet, bad_plan, snapshot, ok=False)
+
+        plan = self.create_review_plan(packet)
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["producer"] = "tampered"
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_review_admission_invalidates_after_head_or_comparison_ref_changes(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        self.review_admission(packet, plan, snapshot)
+
+        original_base = self.git("rev-parse", "main")
+        moved_base = self.git("commit-tree", "HEAD^{tree}", "-p", original_base, "-m", "moved comparison")
+        self.git("update-ref", "main", moved_base)
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.git("update-ref", "main", original_base)
+
+        (self.repo / "advance.txt").write_text("advance\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "advance.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
+        self.review_admission(packet, plan, snapshot, ok=False)
 
 
 if __name__ == "__main__":

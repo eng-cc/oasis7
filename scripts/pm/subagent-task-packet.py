@@ -100,6 +100,21 @@ def canonical_digest(packet: dict[str, object]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def load_object(path: Path, name: str) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cannot read {name} {path}: {exc}")
+    if not isinstance(value, dict):
+        fail(f"{name} must be a JSON object: {path}")
+    return value
+
+
+def resolve_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return (path if path.is_absolute() else root / path).resolve()
+
+
 def validate_packet(root: Path, packet: dict[str, object]) -> None:
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
@@ -158,6 +173,103 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
         fail("packet digest mismatch")
 
 
+def validate_bootstrap_snapshot(root: Path, snapshot: Path, task_uid: str) -> dict[str, object]:
+    saved = load_object(snapshot, "bootstrap snapshot")
+    request = saved.get("request")
+    request_identity = request.get("identity") if isinstance(request, dict) else None
+    if not isinstance(request_identity, str) or not request_identity:
+        fail("bootstrap snapshot request identity is missing")
+    helper = Path(__file__).with_name("bootstrap-task-snapshot.py")
+    result = subprocess.run(
+        [sys.executable, str(helper), "validate", "--repo-root", str(root),
+         "--task-uid", task_uid, "--request-identity", request_identity,
+         "--snapshot", str(snapshot)],
+        text=True, capture_output=True,
+    )
+    if result.returncode:
+        fail(result.stderr.strip() or result.stdout.strip() or "bootstrap snapshot validation failed")
+    return saved
+
+
+def review_admission(root: Path, packet_path: Path, plan_path: Path,
+                     snapshot_path: Path) -> dict[str, object]:
+    packet = load_object(packet_path, "packet")
+    validate_packet(root, packet)
+    identity = packet["identity"]
+    slice_contract = packet["slice"]
+    assert isinstance(identity, dict) and isinstance(slice_contract, dict)
+    task_uid = str(identity["task_uid"])
+
+    plan = load_object(plan_path, "review plan")
+    if plan.get("schema") != "oasis7-review-plan/v1":
+        fail(f"unsupported review plan schema: {plan.get('schema')}")
+    snapshot = validate_bootstrap_snapshot(root, snapshot_path, task_uid)
+
+    canonical_packet_dir = (root / ".pm" / "scratch" / task_uid / "slice-packets").resolve()
+    if packet_path.parent != canonical_packet_dir:
+        fail("review packet is outside the canonical task slice-packets directory")
+    canonical_plan_dir = (root / ".pm" / "scratch" / task_uid / "review-plans").resolve()
+    if plan_path.parent != canonical_plan_dir:
+        fail("review plan is outside the canonical task review-plans directory")
+
+    packet_role = str(slice_contract["role"])
+    packet_slice = str(slice_contract["slice_id"])
+    if plan.get("task_uid") != task_uid:
+        fail("review plan task UID does not match packet")
+    if plan.get("frozen_head") != identity.get("head"):
+        fail("review plan frozen head does not match current packet head")
+    if plan.get("comparison_ref") != identity.get("base_ref"):
+        fail("review plan comparison ref does not match packet base ref")
+    if plan.get("comparison_oid") != identity.get("base_sha"):
+        fail("review plan comparison OID does not match packet base SHA")
+    resolved_comparison = git(root, "rev-parse", "--verify", f"{plan.get('comparison_ref')}^{{commit}}")
+    if resolved_comparison != plan.get("comparison_oid"):
+        fail("review plan comparison ref moved from its recorded OID")
+
+    expected = plan.get("expected_slices")
+    refs = plan.get("packet_refs")
+    if not isinstance(expected, list) or not isinstance(refs, list):
+        fail("review plan is missing expected_slices or packet_refs")
+    expected_matches = [item for item in expected if isinstance(item, dict)
+                        and item.get("role") == packet_role and item.get("slice_id") == packet_slice]
+    ref_matches = [item for item in refs if isinstance(item, dict)
+                   and item.get("role") == packet_role and item.get("slice_id") == packet_slice]
+    if len(expected_matches) != 1 or len(ref_matches) != 1:
+        fail("packet role and slice must occur exactly once in the review plan")
+    planned_packet = ref_matches[0].get("packet_ref")
+    if not isinstance(planned_packet, str) or resolve_path(root, planned_packet) != packet_path:
+        fail("review packet path does not match the planned packet reference")
+
+    snapshot_task = snapshot.get("task")
+    snapshot_git = snapshot.get("git")
+    if not isinstance(snapshot_task, dict) or not isinstance(snapshot_git, dict):
+        fail("bootstrap snapshot is missing task or git identity")
+    if snapshot_task.get("uid") != task_uid or snapshot.get("repository") != identity.get("repository"):
+        fail("bootstrap snapshot task or repository does not match packet")
+    if (snapshot_git.get("worktree") != identity.get("worktree")
+            or snapshot_git.get("branch") != identity.get("branch")
+            or snapshot_git.get("head") != identity.get("head")):
+        fail("bootstrap snapshot git identity does not match packet")
+    snapshot_base = snapshot_git.get("base")
+    if not isinstance(snapshot_base, dict) or (snapshot_base.get("ref") != identity.get("base_ref")
+                                               and snapshot_base.get("branch") != identity.get("base_ref")):
+        fail("bootstrap snapshot base ref does not match packet")
+    if snapshot_base.get("oid") != identity.get("base_sha"):
+        fail("bootstrap snapshot base OID does not match packet")
+
+    return {
+        "status": "admitted",
+        "task_uid": task_uid,
+        "head": identity["head"],
+        "comparison_ref": identity["base_ref"],
+        "comparison_oid": identity["base_sha"],
+        "role": packet_role,
+        "slice_id": packet_slice,
+        "packet_digest": packet["packet_digest"],
+        "snapshot_digest": snapshot.get("digest"),
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     sub = result.add_subparsers(dest="mode", required=True)
@@ -192,6 +304,10 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--out")
     validate = sub.add_parser("validate")
     validate.add_argument("packet")
+    admission = sub.add_parser("review-admission")
+    admission.add_argument("--packet", required=True)
+    admission.add_argument("--review-plan", required=True)
+    admission.add_argument("--bootstrap-snapshot", required=True)
     return result
 
 
@@ -208,6 +324,13 @@ def main() -> int:
             fail(f"cannot read packet {path}: {exc}")
         validate_packet(root, packet)
         print(f"subagent-task-packet: valid: {path}")
+        return 0
+    if args.mode == "review-admission":
+        packet_path = resolve_path(root, args.packet)
+        plan_path = resolve_path(root, args.review_plan)
+        snapshot_path = resolve_path(root, args.bootstrap_snapshot)
+        print(json.dumps(review_admission(root, packet_path, plan_path, snapshot_path),
+                         ensure_ascii=False, sort_keys=True))
         return 0
 
     task = load_task(root, args.task_uid)
