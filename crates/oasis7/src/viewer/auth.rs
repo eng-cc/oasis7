@@ -16,6 +16,10 @@ pub use fragment_refill_preview::{
 };
 mod refine_quote;
 pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
+mod schedule_recipe_quote;
+pub use schedule_recipe_quote::{
+    sign_schedule_recipe_quote_auth_proof, verify_schedule_recipe_quote_auth_proof,
+};
 mod product_validation_quote;
 pub use product_validation_quote::{
     sign_product_validation_quote_auth_proof, verify_product_validation_quote_auth_proof,

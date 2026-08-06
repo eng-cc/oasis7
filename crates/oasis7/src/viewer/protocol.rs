@@ -5,6 +5,9 @@ use crate::simulator::{
     WorldEventKind, WorldSnapshot, WorldTime,
 };
 
+mod event_kind_match;
+pub use event_kind_match::viewer_event_kind_matches;
+
 pub use proto::{
     AgentChatError, AgentChatRequest, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
     AuthoritativeChallengeCommand, AuthoritativeChallengeError,
@@ -32,8 +35,9 @@ pub use proto::{
     RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackCompensationTransitionRequest,
     RollbackIntent, RollbackOperatorAuthorization, RollbackReceiptAccessRequest,
     RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
-    ViewerStream, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
+    ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest, VIEWER_PROTOCOL_VERSION,
+    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
 
 pub type ViewerResponse =
@@ -56,27 +60,6 @@ pub struct FragmentRefillPreviewRequest {
 
 /// The authoritative, non-mutating kernel forecast returned for a fragment-refill preflight.
 pub type FragmentRefillPreviewPreflight = FragmentRefillPreview;
-
-pub fn viewer_event_kind_matches(filter: &ViewerEventKind, kind: &WorldEventKind) -> bool {
-    match (filter, kind) {
-        (ViewerEventKind::LocationRegistered, WorldEventKind::LocationRegistered { .. }) => true,
-        (ViewerEventKind::AgentRegistered, WorldEventKind::AgentRegistered { .. }) => true,
-        (ViewerEventKind::AgentMoved, WorldEventKind::AgentMoved { .. }) => true,
-        (ViewerEventKind::AgentSpoke, WorldEventKind::AgentSpoke { .. }) => true,
-        (ViewerEventKind::TargetInspected, WorldEventKind::TargetInspected { .. }) => true,
-        (
-            ViewerEventKind::SimpleInteractionPerformed,
-            WorldEventKind::SimpleInteractionPerformed { .. },
-        ) => true,
-        (ViewerEventKind::ResourceTransferred, WorldEventKind::ResourceTransferred { .. }) => true,
-        (ViewerEventKind::RadiationHarvested, WorldEventKind::RadiationHarvested { .. }) => true,
-        (ViewerEventKind::ActionRejected, WorldEventKind::ActionRejected { .. }) => true,
-        (ViewerEventKind::Power, WorldEventKind::Power(_)) => true,
-        (ViewerEventKind::PromptUpdated, WorldEventKind::AgentPromptUpdated { .. }) => true,
-        (ViewerEventKind::RuntimeEvent, WorldEventKind::RuntimeEvent { .. }) => true,
-        _ => false,
-    }
-}
 
 #[cfg(test)]
 mod tests {

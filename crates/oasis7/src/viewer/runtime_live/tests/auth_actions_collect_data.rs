@@ -52,6 +52,35 @@ fn signed_refine_quote_request(
     request
 }
 
+fn signed_schedule_recipe_quote_request(
+    factory_id: &str,
+    recipe_id: &str,
+    batches: i64,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::ScheduleRecipeQuoteRequest {
+    let mut request = crate::viewer::ScheduleRecipeQuoteRequest {
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        batches,
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_schedule_recipe_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign schedule recipe quote auth"),
+    );
+    request
+}
+
 fn signed_product_validation_quote_request(
     product_id: &str,
     amount: i64,
@@ -352,6 +381,172 @@ fn runtime_product_validation_quote_rejects_tampered_auth_proof() {
 
     assert_eq!(err.code, "auth_signature_invalid");
     assert_eq!(err.action_id.as_deref(), Some("quote_validate_product"));
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_is_authenticated_read_only_and_exposes_player_preflight() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(254);
+    register_runtime_session_with_options(
+        &mut server,
+        "local-test-player-schedule-quote",
+        Some(agent_id.as_str()),
+        true,
+        269,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed smelter factory");
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            32,
+        )
+        .expect("seed electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 16)
+        .expect("seed data");
+    let state_before = server.world.state().clone();
+
+    let request = signed_schedule_recipe_quote_request(
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        2,
+        "local-test-player-schedule-quote",
+        270,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let quote = server
+        .handle_schedule_recipe_quote(request.clone())
+        .expect("authenticated schedule recipe quote");
+
+    assert_eq!(quote.owner_agent_id, agent_id);
+    assert_eq!(quote.factory_id, crate::viewer::FACTORY_SMELTER_MK1);
+    assert_eq!(quote.recipe_id, "recipe.smelter.iron_ingot");
+    assert_eq!(quote.batches, 2);
+    assert!(quote.electricity_cost > 0);
+    assert_eq!(quote.electricity_after, 32 - quote.electricity_cost);
+    assert_eq!(quote.continue_production_risk, "low");
+    assert_eq!(quote.recommended_pre_step, "schedule_now");
+    assert_eq!(quote.recommended_maintenance_action, "continue_production");
+    assert_eq!(
+        server
+            .handle_schedule_recipe_quote(request)
+            .expect("repeat schedule recipe quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_requires_auth_proof() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+
+    let err = server
+        .handle_schedule_recipe_quote(crate::viewer::ScheduleRecipeQuoteRequest {
+            factory_id: crate::viewer::FACTORY_SMELTER_MK1.to_string(),
+            recipe_id: "recipe.smelter.iron_ingot".to_string(),
+            batches: 1,
+            player_id: "player-schedule-quote".to_string(),
+            public_key: None,
+            auth: None,
+        })
+        .expect_err("unsigned schedule recipe quote must fail");
+
+    assert_eq!(err.code, "auth_proof_required");
+    assert_eq!(err.action_id.as_deref(), Some("quote_schedule_recipe"));
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_rejects_tampered_auth_proof() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let (public_key, private_key) = test_signer(251);
+    let mut request = signed_schedule_recipe_quote_request(
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        1,
+        "player-schedule-quote",
+        252,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    request.auth.as_mut().expect("signed auth").signature = "00".repeat(64);
+
+    let err = server
+        .handle_schedule_recipe_quote(request)
+        .expect_err("tampered schedule recipe quote auth must fail");
+
+    assert_eq!(err.code, "auth_signature_invalid");
+    assert_eq!(err.action_id.as_deref(), Some("quote_schedule_recipe"));
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_rejects_foreign_factory_ownership() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_ids: Vec<_> = server.world.state().agents.keys().cloned().collect();
+    assert!(agent_ids.len() >= 2, "two_bases must seed two agents");
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed factory owned by the first agent");
+    let foreign_owner = &agent_ids[1];
+    let (public_key, private_key) = test_signer(253);
+    register_runtime_session(
+        &mut server,
+        "player-foreign-schedule-quote",
+        Some(foreign_owner.as_str()),
+        254,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let err = server
+        .handle_schedule_recipe_quote(signed_schedule_recipe_quote_request(
+            crate::viewer::FACTORY_SMELTER_MK1,
+            "recipe.smelter.iron_ingot",
+            1,
+            "player-foreign-schedule-quote",
+            255,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("foreign player must not quote another agent's factory");
+
+    assert_eq!(err.code, "schedule_recipe_quote_rejected");
+    assert!(err.message.contains("factory owner mismatch"));
+    assert_eq!(err.action_id.as_deref(), Some("quote_schedule_recipe"));
+    assert_eq!(err.target_agent_id.as_deref(), Some(foreign_owner.as_str()));
 }
 
 #[test]

@@ -615,6 +615,20 @@ impl ViewerLiveSession {
                     },
                 )?;
             }
+            ViewerRequest::QuoteScheduleRecipe { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message: "quote_schedule_recipe is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("quote_schedule_recipe".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::QuoteProductValidation { request: _ } => {
                 send_response(
                     writer,

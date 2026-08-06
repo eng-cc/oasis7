@@ -1,5 +1,9 @@
-use std::collections::BTreeMap;
-
+use super::ViewerLiveDecisionMode;
+use super::control_plane::{RuntimeLlmSidecar, runtime_provider_settings_from_env};
+use super::location_id_for_pos;
+use super::support::{
+    FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID, formal_release_default_seed_location_for_pos,
+};
 use crate::geometry::space_distance_cm;
 use crate::runtime::{
     DomainEvent as RuntimeDomainEvent, MaterialStack as RuntimeMaterialStack,
@@ -8,17 +12,11 @@ use crate::runtime::{
 };
 use crate::simulator::{
     Agent, AgentExecutionDebugContext, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, Location, RejectReason as SimulatorRejectReason,
-    ResourceOwner, WorldConfig, WorldEvent, WorldEventKind, WorldModel,
-    provider_phase1_required_actions, provider_phase1_required_capabilities,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, Factory, Location,
+    RejectReason as SimulatorRejectReason, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
+    WorldModel, provider_phase1_required_actions, provider_phase1_required_capabilities,
 };
-
-use super::ViewerLiveDecisionMode;
-use super::control_plane::{RuntimeLlmSidecar, runtime_provider_settings_from_env};
-use super::location_id_for_pos;
-use super::support::{
-    FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID, formal_release_default_seed_location_for_pos,
-};
+use std::collections::BTreeMap;
 
 pub(super) fn runtime_state_to_simulator_model(
     state: &crate::runtime::WorldState,
@@ -61,6 +59,27 @@ pub(super) fn runtime_state_to_simulator_model(
         agent.body = cell.state.body.clone();
         agent.resources = cell.state.resources.clone();
         model.agents.insert(agent_id.clone(), agent);
+    }
+
+    // Runtime factories supersede seed factories at their builder's canonical location.
+    model.factories.clear();
+    for factory in state.factories.values() {
+        let location_id = model
+            .agents
+            .get(&factory.builder_agent_id)
+            .map(|agent| agent.location_id.clone())
+            .unwrap_or_else(|| factory.site_id.clone());
+        model.factories.insert(
+            factory.factory_id.clone(),
+            Factory {
+                id: factory.factory_id.clone(),
+                owner: ResourceOwner::Agent {
+                    agent_id: factory.builder_agent_id.clone(),
+                },
+                location_id,
+                kind: factory.spec.factory_id.clone(),
+            },
+        );
     }
 
     model.agent_prompt_profiles = sidecar.prompt_profiles.clone();
@@ -647,9 +666,10 @@ mod tests {
     use super::*;
     use crate::geometry::GeoPos;
     use crate::runtime::{
-        Action, FactoryModuleSpec, MaterialLedgerId, MaterialStack, SnapshotMeta,
+        Action, FactoryModuleSpec, FactoryProductionState, FactoryState, MaterialLedgerId,
+        MaterialStack, SnapshotMeta,
     };
-    use crate::simulator::WorldScenario;
+    use crate::simulator::{ResourceKind, WorldKernel, WorldScenario};
     use crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
     use crate::viewer::runtime_live::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
 
@@ -710,6 +730,74 @@ mod tests {
         let agent = model.agents.get("a1").expect("mapped agent");
         assert_eq!(agent.location_id, "frag-to");
         assert_eq!(agent.pos, to_pos);
+    }
+
+    #[test]
+    fn runtime_state_to_simulator_model_projects_runtime_factory_for_canonical_schedule_quote() {
+        let mut world = crate::runtime::World::default();
+        world.submit_action(Action::RegisterAgent {
+            agent_id: "builder-a".to_string(),
+            pos: GeoPos::new(10, 20, 0),
+        });
+        world.step().expect("register runtime builder");
+        world
+            .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 100)
+            .expect("seed electricity");
+        world
+            .set_agent_resource_balance("builder-a", ResourceKind::Data, 100)
+            .expect("seed hardware");
+        let mut state = world.state().clone();
+        state.factories.insert(
+            "factory.smelter.alpha".to_string(),
+            FactoryState {
+                factory_id: "factory.smelter.alpha".to_string(),
+                site_id: "site-smelter".to_string(),
+                builder_agent_id: "builder-a".to_string(),
+                spec: FactoryModuleSpec {
+                    factory_id: "factory.smelter.mk1".to_string(),
+                    display_name: "Smelter MK1".to_string(),
+                    tier: 2,
+                    tags: vec!["smelter".to_string()],
+                    build_cost: vec![],
+                    build_time_ticks: 1,
+                    base_power_draw: 20,
+                    recipe_slots: 2,
+                    throughput_bps: 10_000,
+                    maintenance_per_tick: 1,
+                },
+                input_ledger: MaterialLedgerId::site("site-smelter"),
+                output_ledger: MaterialLedgerId::site("site-smelter"),
+                durability_ppm: 1_000_000,
+                production: FactoryProductionState::default(),
+                built_at: 1,
+            },
+        );
+        let world = crate::runtime::World::new_with_state(state);
+        let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Script);
+        let model = runtime_state_to_simulator_model(world.state(), &sidecar, None);
+        let factory = model
+            .factories
+            .get("factory.smelter.alpha")
+            .expect("runtime factory is projected");
+        let builder = model.agents.get("builder-a").expect("mapped builder");
+        assert_eq!(
+            factory.owner,
+            ResourceOwner::Agent {
+                agent_id: "builder-a".to_string()
+            }
+        );
+        assert_eq!(factory.location_id, builder.location_id);
+        assert_eq!(factory.kind, "factory.smelter.mk1");
+        WorldKernel::with_model(WorldConfig::default(), model)
+            .quote_schedule_recipe(
+                &ResourceOwner::Agent {
+                    agent_id: "builder-a".to_string(),
+                },
+                "factory.smelter.alpha",
+                "recipe.smelter.iron_ingot",
+                1,
+            )
+            .expect("projected runtime factory supports the canonical quote");
     }
 
     #[test]

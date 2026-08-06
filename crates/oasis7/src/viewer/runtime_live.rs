@@ -41,6 +41,7 @@ mod chain_link;
 mod claim_snapshot;
 #[path = "runtime_live/config.rs"]
 mod config;
+mod constants;
 #[path = "runtime_live/control_blocking.rs"]
 mod control_blocking;
 #[path = "runtime_live/control_feedback.rs"]
@@ -67,6 +68,7 @@ mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
+mod schedule_recipe_quote;
 mod session_policy;
 #[path = "runtime_live/smelter_affordability_debug.rs"]
 mod smelter_affordability_debug;
@@ -83,6 +85,7 @@ use authoritative::{
 };
 use claim_snapshot::build_player_agent_claim_snapshot;
 pub use config::{ChainLinkPolicy, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError};
+use constants::*;
 pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
 use control_plane::{RuntimeLlmSidecar, RuntimePlayerBindingPlan};
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
@@ -105,16 +108,6 @@ use support::{
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
-const AUTHORITATIVE_BATCH_CONFIRM_DELAY_TICKS: u64 = 1;
-const AUTHORITATIVE_BATCH_FINALITY_WINDOW_TICKS: u64 = 2;
-const MAX_AUTHORITATIVE_BATCH_HISTORY: usize = 256;
-const MAX_AUTHORITATIVE_CHALLENGE_HISTORY: usize = 512;
-const MAX_AUTHORITATIVE_STABLE_CHECKPOINTS: usize = 64;
-const LLM_GAMEPLAY_REQUIRED_HINT: &str =
-    "enable --llm and configure a reachable LLM provider before retrying gameplay controls";
-const LLM_PROVIDER_GATEWAY_TIMEOUT_HINT: &str = "local LLM provider gateway timed out; inspect output/local-letai-game-test/*/local-letai-provider-bridge.log, confirm proxy/upstream LetAI reachability, then rerun scripts/run-local-letai-game-test.sh or its chat probe/bridge smoke before retrying gameplay controls";
-const RUNTIME_CONTROL_REQUIRED_HINT: &str = "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
-const BACKGROUND_PLAY_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(2);
 
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
@@ -153,8 +146,6 @@ pub struct ViewerRuntimeLiveServer {
     authoritative_recovery_dir_override: Option<PathBuf>,
 }
 
-const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 12;
-const BACKGROUND_PLAY_TRANSIENT_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(5);
 fn should_emit_runtime_advance_snapshot(
     session: &mut RuntimeLiveSession,
     action: &str,
@@ -803,6 +794,13 @@ impl ViewerRuntimeLiveServer {
                 &self
                     .handle_refine_quote(request)
                     .map(|quote| ViewerResponse::RefineQuotePreflight { quote })
+                    .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
+            )?,
+            ViewerRequest::QuoteScheduleRecipe { request } => send_response(
+                writer,
+                &self
+                    .handle_schedule_recipe_quote(request)
+                    .map(|quote| ViewerResponse::ScheduleRecipeQuotePreflight { quote })
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuoteProductValidation { request } => send_response(
