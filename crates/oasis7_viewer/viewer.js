@@ -3555,6 +3555,102 @@ function createPowerSurvivalQuoteIntegration(getDependencies) {
   const dependencies = getDependencies();
   return { ...createPowerSurvivalQuoteStateModule(dependencies), ...createPowerSurvivalQuoteRequestModule(dependencies) };
 }
+function createPowerSaleQuoteRequestModule({
+  buildAuthEnvelope: buildAuthEnvelope2,
+  clone: clone2,
+  ensureHostedPlayerAuthAvailable: ensureHostedPlayerAuthAvailable2,
+  ensureRegisteredPlayerSession: ensureRegisteredPlayerSession2,
+  getSocket,
+  nextAuthNonce: nextAuthNonce2,
+  sendJson: sendJson2,
+  signAuthPayload: signAuthPayload2,
+  state: state2
+}) {
+  async function buildAuthProof(request, auth) {
+    const nonce = nextAuthNonce2();
+    const signingPayload = buildAuthEnvelope2({
+      operation: "gameplay_action",
+      action_id: "quote_power_sale",
+      target_agent_id: `buyer_agent_id:${request.buyer_agent_id}|amount:${request.amount}|requested_price_per_pu:${request.requested_price_per_pu}`,
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce
+    });
+    return { scheme: "ed25519", player_id: auth.playerId, public_key: auth.publicKey, nonce, signature: await signAuthPayload2(signingPayload, auth) };
+  }
+  async function requestPowerSaleQuote2(buyerAgentId, amount, requestedPricePerPu) {
+    if (state2.powerSaleQuoteRequest?.status === "pending") return { ok: false, reason: "power sale quote request already pending" };
+    const buyer = String(buyerAgentId || "").trim();
+    const amountNumber = Number(amount);
+    const priceNumber = Number(requestedPricePerPu);
+    if (!buyer || !Number.isSafeInteger(amountNumber) || amountNumber <= 0 || !Number.isSafeInteger(priceNumber) || priceNumber < 0) {
+      const reason = "power sale quote requires a buyer, positive whole-number amount, and non-negative whole-number price";
+      state2.powerSaleQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    const socket2 = getSocket();
+    if (!socket2 || socket2.readyState !== WebSocket.OPEN) {
+      const reason = "power sale quote requires a connected viewer websocket";
+      state2.powerSaleQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+    try {
+      await ensureHostedPlayerAuthAvailable2();
+      if (!state2.auth.available) {
+        const reason = state2.auth.error || "power sale quote requires an active player session";
+        state2.powerSaleQuoteRequest = { status: "error", error: reason };
+        return { ok: false, reason };
+      }
+      const seller = String(state2.auth.boundAgentId || "").trim();
+      if (!seller) {
+        const reason = "power sale quote requires a bound player Agent";
+        state2.powerSaleQuoteRequest = { status: "error", error: reason };
+        return { ok: false, reason };
+      }
+      await ensureRegisteredPlayerSession2(seller);
+      const request = { buyer_agent_id: buyer, amount: amountNumber, requested_price_per_pu: priceNumber, player_id: state2.auth.playerId, public_key: state2.auth.publicKey };
+      request.auth = await buildAuthProof(request, state2.auth);
+      state2.powerSaleQuote = null;
+      state2.powerSaleQuoteRequest = { status: "pending", error: null };
+      sendJson2({ type: "quote_power_sale", request });
+      return { ok: true, request: clone2(request) };
+    } catch (error) {
+      const reason = `power sale quote request failed: ${String(error)}`;
+      state2.powerSaleQuoteRequest = { status: "error", error: reason };
+      return { ok: false, reason };
+    }
+  }
+  return { requestPowerSaleQuote: requestPowerSaleQuote2 };
+}
+function createPowerSaleQuoteStateModule({ clone: clone2, isTestApiEnabled: isTestApiEnabled2, render: render2, state: state2 }) {
+  function handlePowerSaleQuote(quote2, acceptUnsolicited = false) {
+    if (!quote2 || typeof quote2 !== "object" || !acceptUnsolicited && state2.powerSaleQuoteRequest?.status !== "pending") return false;
+    state2.powerSaleQuote = clone2(quote2);
+    state2.powerSaleQuoteRequest = { status: "received", error: null };
+    render2();
+    return true;
+  }
+  function handlePowerSaleQuoteError(error) {
+    if (String(error?.action_id || "").trim() !== "quote_power_sale") return false;
+    if (state2.powerSaleQuoteRequest?.status === "pending") state2.powerSaleQuoteRequest = { status: "error", error: String(error?.message || error?.code || "power sale quote request failed") };
+    render2();
+    return true;
+  }
+  function invalidatePowerSaleQuote() {
+    state2.powerSaleQuote = null;
+    state2.powerSaleQuoteRequest = { status: "idle", error: null };
+  }
+  function injectPowerSaleQuoteForTest2(quote2) {
+    if (!isTestApiEnabled2()) throw new Error("injectPowerSaleQuoteForTest requires test_api=1");
+    handlePowerSaleQuote(quote2, true);
+    return clone2(state2.powerSaleQuote);
+  }
+  return { handlePowerSaleQuote, handlePowerSaleQuoteError, injectPowerSaleQuoteForTest: injectPowerSaleQuoteForTest2, invalidatePowerSaleQuote };
+}
+function createPowerSaleQuoteIntegration(getDependencies) {
+  const dependencies = getDependencies();
+  return { ...createPowerSaleQuoteStateModule(dependencies), ...createPowerSaleQuoteRequestModule(dependencies) };
+}
 function createFragmentRefillPreviewRequestModule({
   buildAuthEnvelope: buildAuthEnvelope2,
   clone: clone2,
@@ -3755,13 +3851,14 @@ function createViewerQuoteProtocolFacade({
   handleRefineQuoteError: handleRefineQuoteError2,
   handleRefineQuotePreflight: handleRefineQuotePreflight2,
   marketQuoteDecision: marketQuoteDecision2,
+  powerSaleQuote: powerSaleQuote2,
   powerSurvivalQuote: powerSurvivalQuote2,
   productValidationQuote: productValidationQuote2,
   state: state2,
   warDeclarationQuote: warDeclarationQuote2
 }) {
   function handleQuoteGameplayActionError(error) {
-    return handleRefineQuoteError2(error) || productValidationQuote2.handleProductValidationQuoteError(error) || powerSurvivalQuote2.handlePowerSurvivalQuoteError(error) || fragmentRefillPreview2.handleFragmentRefillPreviewError(error) || warDeclarationQuote2.handleWarDeclarationQuoteError(error) || marketQuoteDecision2.handleMarketQuoteDecisionError(error);
+    return handleRefineQuoteError2(error) || productValidationQuote2.handleProductValidationQuoteError(error) || powerSaleQuote2?.handlePowerSaleQuoteError(error) || powerSurvivalQuote2.handlePowerSurvivalQuoteError(error) || fragmentRefillPreview2.handleFragmentRefillPreviewError(error) || warDeclarationQuote2.handleWarDeclarationQuoteError(error) || marketQuoteDecision2.handleMarketQuoteDecisionError(error);
   }
   function handleQuoteViewerMessage(message) {
     switch (message?.type) {
@@ -3777,6 +3874,10 @@ function createViewerQuoteProtocolFacade({
       case "power_survival_quote_preflight":
         powerSurvivalQuote2.handlePowerSurvivalQuote(message.quote);
         return true;
+      case "power_sale_quote_preflight":
+        if (!powerSaleQuote2) return false;
+        powerSaleQuote2.handlePowerSaleQuote(message.quote);
+        return true;
       case "war_declaration_quote_preflight":
         warDeclarationQuote2.handleWarDeclarationQuote(message.quote);
         return true;
@@ -3788,6 +3889,7 @@ function createViewerQuoteProtocolFacade({
     }
   }
   function invalidateSnapshotBoundQuotes() {
+    powerSaleQuote2?.invalidatePowerSaleQuote();
     powerSurvivalQuote2.invalidatePowerSurvivalQuote();
     fragmentRefillPreview2.invalidateFragmentRefillPreview();
     warDeclarationQuote2.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();
@@ -4053,6 +4155,8 @@ function createSoftwareSafeState() {
     productValidationQuoteRequest: { status: "idle", error: null },
     powerSurvivalQuote: null,
     powerSurvivalQuoteRequest: { status: "idle", error: null },
+    powerSaleQuote: null,
+    powerSaleQuoteRequest: { status: "idle", error: null },
     fragmentRefillPreview: null,
     fragmentRefillPreviewRequest: { status: "idle", error: null },
     marketQuoteDecision: null,
@@ -4445,13 +4549,15 @@ const productValidationQuote = createProductValidationQuoteIntegration(() => ({ 
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
+const powerSaleQuote = createPowerSaleQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
+const { injectPowerSaleQuoteForTest, requestPowerSaleQuote } = powerSaleQuote;
 const fragmentRefillPreview = createFragmentRefillPreviewIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }));
 const { requestFragmentRefillPreview } = fragmentRefillPreview;
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
 function normalizeFiniteNumber(value) {
   if (value == null) {
     return null;
@@ -8106,6 +8212,7 @@ function installTestApi() {
     requestPowerSurvivalQuote,
     requestFragmentRefillPreview,
     requestWarDeclarationQuote,
+    requestPowerSaleQuote,
     requestMarketQuoteDecision,
     injectMarketQuoteDecisionForTest,
     runSteps,
@@ -8120,6 +8227,7 @@ function installTestApi() {
     injectSnapshot,
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
+    injectPowerSaleQuoteForTest,
     injectPowerSurvivalQuoteForTest,
     injectWarDeclarationQuoteForTest,
     logoutHostedPlayerSession,
@@ -8236,6 +8344,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   hostedActionPolicy,
   initializeSoftwareSafeCore,
   injectMarketQuoteDecisionForTest,
+  injectPowerSaleQuoteForTest,
   injectPowerSurvivalQuoteForTest,
   injectProductValidationQuoteForTest,
   injectRefineQuotePreflightForTest,
@@ -8258,6 +8367,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   reportFatalError,
   requestFragmentRefillPreview,
   requestMarketQuoteDecision,
+  requestPowerSaleQuote,
   requestPowerSurvivalQuote,
   requestProductValidationQuote,
   requestRefineQuote,
@@ -8291,7 +8401,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   toggleViewerLocale,
   updatePixelWorldRuntimeMeta
 }, Symbol.toStringTag, { value: "Module" }));
-var _tmpl$$e = /* @__PURE__ */ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`), _tmpl$2$e = /* @__PURE__ */ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
+var _tmpl$$f = /* @__PURE__ */ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`), _tmpl$2$f = /* @__PURE__ */ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
 const ZH_VALUE_MAP = {
   chat_purpose: {
     "Start a first conversation with your claimed Agent.": "与已认领的 Agent 开始第一次对话。"
@@ -8322,13 +8432,13 @@ function FirstChatUnlockPreview(props) {
   const fields = () => [["chat_purpose", tr2("目的", "Purpose")], ["immediate_playable_help", tr2("即时帮助", "Immediate help")], ["first_question_or_action_hint", tr2("先试试", "Try first")], ["resource_boundary", tr2("资源边界", "Resource boundary")], ["defer_effect", tr2("如果等待", "If you wait")], ["recommended_unlock_action", tr2("建议操作", "Recommended action")]];
   const value = (field) => field === "recommended_unlock_action" ? recommendedActionValue(props.preview[field], locale()) : previewValue(field, props.preview[field], locale());
   return (() => {
-    var _el$ = _tmpl$$e();
+    var _el$ = _tmpl$$f();
     insert(_el$, createComponent(For, {
       get each() {
         return fields();
       },
       children: ([field, label]) => (() => {
-        var _el$2 = _tmpl$2$e(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
+        var _el$2 = _tmpl$2$f(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
         setAttribute(_el$2, "data-preview-field", field);
         insert(_el$3, label);
         className(_el$4, field === "chat_purpose" ? "feedback-summary" : "feedback-detail");
@@ -8811,7 +8921,7 @@ function installPixelWorldRenderDtoProbe(fixtureName, getRenderState, onCleanup2
     delete window.__OASIS7_PIXEL_WORLD_RENDER_DTO__;
   });
 }
-var _tmpl$$d = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$d = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$c = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$b = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$b = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$7 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$5 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$2 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__hotspot-tooltip data-hotspot-tooltip role=status>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$19$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$23$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$30$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$31$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$33$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$34$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$35$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$36$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$46$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$47$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$48$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$51$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$53$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
+var _tmpl$$e = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$e = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$d = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$c = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$c = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$8 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$5 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$2 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__hotspot-tooltip data-hotspot-tooltip role=status>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$19$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$23$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$30$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$31$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$33$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$34$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$35$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$36$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$46$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$47$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$48$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$51$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$53$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -9009,12 +9119,12 @@ function PixelWorldHostVisualLayer(props) {
   if (!props.enabled) {
     return [];
   }
-  return [_tmpl$$d(), _tmpl$2$d(), _tmpl$3$c(), createComponent(For, {
+  return [_tmpl$$e(), _tmpl$2$e(), _tmpl$3$d(), createComponent(For, {
     get each() {
       return visualState().fragmentTerrain.slice(0, 96);
     },
     children: (patch, index) => (() => {
-      var _el$4 = _tmpl$4$b();
+      var _el$4 = _tmpl$4$c();
       createRenderEffect((_p$) => {
         var _v$ = patch.dominant_compound, _v$2 = fragmentTerrainStyle(patch, visualState().worldBounds, index()), _v$3 = `${patch.location_id}:${patch.dominant_compound}`;
         _v$ !== _p$.e && setAttribute(_el$4, "data-compound", _p$.e = _v$);
@@ -9033,7 +9143,7 @@ function PixelWorldHostVisualLayer(props) {
       return visualState().links.slice(0, 10);
     },
     children: (link, index) => [(() => {
-      var _el$5 = _tmpl$5$b();
+      var _el$5 = _tmpl$5$c();
       createRenderEffect((_p$) => {
         var _v$4 = link.kind, _v$5 = routeStyle(link, visualState().worldBounds, index()), _v$6 = `${link.kind}:${link.id}`;
         _v$4 !== _p$.e && setAttribute(_el$5, "data-route-kind", _p$.e = _v$4);
@@ -9047,7 +9157,7 @@ function PixelWorldHostVisualLayer(props) {
       });
       return _el$5;
     })(), (() => {
-      var _el$6 = _tmpl$6$7();
+      var _el$6 = _tmpl$6$8();
       createRenderEffect((_p$) => {
         var _v$7 = link.kind, _v$8 = routeWaypointStyle(link, visualState().worldBounds, index(), "mid"), _v$9 = `${link.kind}:waypoint`;
         _v$7 !== _p$.e && setAttribute(_el$6, "data-route-kind", _p$.e = _v$7);
@@ -10688,7 +10798,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$$c = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$c = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--empty">`), _tmpl$3$b = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--unpaid">`), _tmpl$4$a = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$a = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$6$6 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div></div><details class=micro-depot-facilities__technical-evidence data-testid=micro-depot-technical-evidence><summary></summary><div class="summary-grid micro-depot-facilities__technical-grid"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$7$4 = /* @__PURE__ */ template(`<span class="badge micro-depot-facilities__availability-badge"data-action-availability=published>`);
+var _tmpl$$d = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$d = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--empty">`), _tmpl$3$c = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--unpaid">`), _tmpl$4$b = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$b = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$6$7 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div></div><details class=micro-depot-facilities__technical-evidence data-testid=micro-depot-technical-evidence><summary></summary><div class="summary-grid micro-depot-facilities__technical-grid"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$7$4 = /* @__PURE__ */ template(`<span class="badge micro-depot-facilities__availability-badge"data-action-availability=published>`);
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -10720,7 +10830,7 @@ function MicroDepotFacilitiesPanel(props) {
       return facilities().length > 0;
     },
     get children() {
-      var _el$ = _tmpl$$c(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
+      var _el$ = _tmpl$$d(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
       insert(_el$4, () => tr2(locale(), "区域设施", "Regional Facility"));
       insert(_el$5, () => tr2(locale(), "Micro Depot", "Micro Depot"));
       insert(_el$6, () => tr2(locale(), "仅显示当前规范玩法快照已发布的状态、模块和回执证据；动作需由运行时另行发布。", "Shows only state, module, and receipt evidence published by the canonical gameplay snapshot; actions remain runtime-published."));
@@ -10729,7 +10839,7 @@ function MicroDepotFacilitiesPanel(props) {
           return facilities();
         },
         children: (facility) => (() => {
-          var _el$8 = _tmpl$6$6(), _el$9 = _el$8.firstChild, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling, _el$10 = _el$9.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.firstChild, _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$15 = _el$14.nextSibling, _el$17 = _el$12.nextSibling, _el$18 = _el$17.firstChild, _el$19 = _el$18.nextSibling, _el$20 = _el$19.nextSibling, _el$24 = _el$11.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$26.firstChild, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$29.nextSibling, _el$31 = _el$27.nextSibling, _el$32 = _el$31.firstChild, _el$33 = _el$32.nextSibling, _el$34 = _el$33.nextSibling;
+          var _el$8 = _tmpl$6$7(), _el$9 = _el$8.firstChild, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling, _el$10 = _el$9.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.firstChild, _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$15 = _el$14.nextSibling, _el$17 = _el$12.nextSibling, _el$18 = _el$17.firstChild, _el$19 = _el$18.nextSibling, _el$20 = _el$19.nextSibling, _el$24 = _el$11.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$26.firstChild, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$29.nextSibling, _el$31 = _el$27.nextSibling, _el$32 = _el$31.firstChild, _el$33 = _el$32.nextSibling, _el$34 = _el$33.nextSibling;
           insert(_el$0, () => facility.facilityId || tr2(locale(), "未命名 depot", "Unnamed depot"));
           insert(_el$1, () => facilityStatusLabel(facility, locale(), tr2));
           insert(_el$10, () => `claim=${facility.ownerClaimId || "-"} · location=${facility.locationId || "-"} · ${tr2(locale(), "半径", "radius")}=${facility.serviceRadiusCm ?? "-"}cm`);
@@ -10741,7 +10851,7 @@ function MicroDepotFacilitiesPanel(props) {
               return !hasInventory(facility.availableUnitsByKind);
             },
             get children() {
-              var _el$16 = _tmpl$2$c();
+              var _el$16 = _tmpl$2$d();
               insert(_el$16, () => tr2(locale(), "库存为空。", "Inventory is empty."));
               return _el$16;
             }
@@ -10754,7 +10864,7 @@ function MicroDepotFacilitiesPanel(props) {
               return facility.upkeepPaid === false;
             },
             get children() {
-              var _el$21 = _tmpl$3$b();
+              var _el$21 = _tmpl$3$c();
               insert(_el$21, () => tr2(locale(), "维护费未付；服务可用性可能受限。", "Upkeep is unpaid; service availability may be constrained."));
               return _el$21;
             }
@@ -10764,7 +10874,7 @@ function MicroDepotFacilitiesPanel(props) {
               return displayableStrings(facility.supportedResourceKinds).length > 0;
             },
             get children() {
-              var _el$22 = _tmpl$4$a();
+              var _el$22 = _tmpl$4$b();
               insert(_el$22, () => `${tr2(locale(), "支持资源", "Supported resources")}: ${displayableStrings(facility.supportedResourceKinds).join(", ")}`);
               return _el$22;
             }
@@ -10775,13 +10885,13 @@ function MicroDepotFacilitiesPanel(props) {
             },
             get fallback() {
               return (() => {
-                var _el$35 = _tmpl$4$a();
+                var _el$35 = _tmpl$4$b();
                 insert(_el$35, () => tr2(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions."));
                 return _el$35;
               })();
             },
             get children() {
-              var _el$23 = _tmpl$5$a();
+              var _el$23 = _tmpl$5$b();
               insert(_el$23, createComponent(For, {
                 get each() {
                   return displayableStrings(facility.availableActions);
@@ -10811,7 +10921,7 @@ function MicroDepotFacilitiesPanel(props) {
     }
   });
 }
-var _tmpl$$b = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$b = /* @__PURE__ */ template(`<div class=event-list data-testid=viewer-recovery-options>`), _tmpl$3$a = /* @__PURE__ */ template(`<div class="event-card recovery-option-card"><div class=event-card__title><span></span></div><div data-testid=viewer-recovery-option><div class=summary-grid>`);
+var _tmpl$$c = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$c = /* @__PURE__ */ template(`<div class=event-list data-testid=viewer-recovery-options>`), _tmpl$3$b = /* @__PURE__ */ template(`<div class="event-card recovery-option-card"><div class=event-card__title><span></span></div><div data-testid=viewer-recovery-option><div class=summary-grid>`);
 const RECOVERY_OPTION_LABELS = {
   kind: {
     repair: ["修复", "Repair"],
@@ -10846,7 +10956,7 @@ function recoveryOptionDisplayLabel(category, value, locale, tr2) {
 }
 function RecoveryMetric(props) {
   return (() => {
-    var _el$ = _tmpl$$b(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$c(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -10871,13 +10981,13 @@ function RecoveryOptionComparisonPanel(props) {
       });
     },
     get children() {
-      var _el$4 = _tmpl$2$b();
+      var _el$4 = _tmpl$2$c();
       insert(_el$4, createComponent(For, {
         get each() {
           return options();
         },
         children: (option) => (() => {
-          var _el$5 = _tmpl$3$a(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild;
+          var _el$5 = _tmpl$3$b(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild;
           insert(_el$7, () => recoveryOptionDisplayLabel("kind", option.kind, props.locale, props.tr));
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
@@ -10927,7 +11037,7 @@ function RecoveryOptionComparisonPanel(props) {
     }
   });
 }
-var _tmpl$$a = /* @__PURE__ */ template(`<div class=fallback-tradeoff__detail><dt></dt><dd>`), _tmpl$2$a = /* @__PURE__ */ template(`<aside class="event-card fallback-tradeoff__handoff"data-testid=viewer-no-safe-fallback-handoff><div class=event-card__title><h4></h4><span class="badge badge--warn"></span></div><dl class=fallback-tradeoff__details>`), _tmpl$3$9 = /* @__PURE__ */ template(`<section class=fallback-tradeoff aria-labelledby=fallback-tradeoff-heading data-testid=viewer-fallback-tradeoff><div class=fallback-tradeoff__heading><h3 id=fallback-tradeoff-heading></h3><span></span></div><div class=summary-grid role=list>`), _tmpl$4$9 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$5$9 = /* @__PURE__ */ template(`<article data-testid=viewer-fallback-tradeoff-option role=listitem><div class=event-card__title><h4></h4><div class=badge-row><span></span></div></div><dl class=fallback-tradeoff__details>`);
+var _tmpl$$b = /* @__PURE__ */ template(`<div class=fallback-tradeoff__detail><dt></dt><dd>`), _tmpl$2$b = /* @__PURE__ */ template(`<aside class="event-card fallback-tradeoff__handoff"data-testid=viewer-no-safe-fallback-handoff><div class=event-card__title><h4></h4><span class="badge badge--warn"></span></div><dl class=fallback-tradeoff__details>`), _tmpl$3$a = /* @__PURE__ */ template(`<section class=fallback-tradeoff aria-labelledby=fallback-tradeoff-heading data-testid=viewer-fallback-tradeoff><div class=fallback-tradeoff__heading><h3 id=fallback-tradeoff-heading></h3><span></span></div><div class=summary-grid role=list>`), _tmpl$4$a = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$5$a = /* @__PURE__ */ template(`<article data-testid=viewer-fallback-tradeoff-option role=listitem><div class=event-card__title><h4></h4><div class=badge-row><span></span></div></div><dl class=fallback-tradeoff__details>`);
 const FALLBACK_LABELS = {
   safe_wait: ["等待", "Wait"],
   repair_now: ["修复", "Repair"],
@@ -10942,7 +11052,7 @@ function fallbackTradeoffLabel(valueClass, locale, tr2) {
 }
 function Detail$1(props) {
   return (() => {
-    var _el$ = _tmpl$$a(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$b(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value || "—");
     return _el$;
@@ -10961,7 +11071,7 @@ function FallbackTradeoffPanel(props) {
       return options().length > 0 || handoff();
     },
     get children() {
-      var _el$4 = _tmpl$3$9(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling;
+      var _el$4 = _tmpl$3$a(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling;
       insert(_el$6, () => text("恢复选项", "Recovery choices"));
       insert(_el$7, () => text("比较后再执行推荐动作", "Compare before using the recommended action"));
       insert(_el$8, createComponent(For, {
@@ -10969,7 +11079,7 @@ function FallbackTradeoffPanel(props) {
           return options();
         },
         children: (option) => (() => {
-          var _el$12 = _tmpl$5$9(), _el$13 = _el$12.firstChild, _el$14 = _el$13.firstChild, _el$15 = _el$14.nextSibling, _el$16 = _el$15.firstChild, _el$18 = _el$13.nextSibling;
+          var _el$12 = _tmpl$5$a(), _el$13 = _el$12.firstChild, _el$14 = _el$13.firstChild, _el$15 = _el$14.nextSibling, _el$16 = _el$15.firstChild, _el$18 = _el$13.nextSibling;
           insert(_el$14, () => fallbackTradeoffLabel(option.valueClass, props.locale, props.tr));
           insert(_el$16, (() => {
             var _c$ = memo(() => !!option.available);
@@ -10980,7 +11090,7 @@ function FallbackTradeoffPanel(props) {
               return option.recommended;
             },
             get children() {
-              var _el$17 = _tmpl$4$9();
+              var _el$17 = _tmpl$4$a();
               insert(_el$17, () => text("推荐", "Recommended"));
               return _el$17;
             }
@@ -11036,7 +11146,7 @@ function FallbackTradeoffPanel(props) {
           return handoff();
         },
         get children() {
-          var _el$9 = _tmpl$2$a(), _el$0 = _el$9.firstChild, _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling, _el$11 = _el$0.nextSibling;
+          var _el$9 = _tmpl$2$b(), _el$0 = _el$9.firstChild, _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling, _el$11 = _el$0.nextSibling;
           insert(_el$1, () => text("没有安全恢复选项", "No safe fallback"));
           insert(_el$10, () => text("需要新的决定", "New decision required"));
           insert(_el$11, createComponent(Detail$1, {
@@ -11069,14 +11179,14 @@ function FallbackTradeoffPanel(props) {
     }
   });
 }
-var _tmpl$$9 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$9 = /* @__PURE__ */ template(`<section class=event-card data-testid=wait-resolution-quote><div class=event-card__title><h3></h3><span></span></div><div class=feedback-summary></div><div class=summary-grid>`);
+var _tmpl$$a = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$a = /* @__PURE__ */ template(`<section class=event-card data-testid=wait-resolution-quote><div class=event-card__title><h3></h3><span></span></div><div class=feedback-summary></div><div class=summary-grid>`);
 function quoteField(quote2, snakeCase, camelCase) {
   const value = quote2?.[snakeCase] ?? quote2?.[camelCase];
   return typeof value === "string" && value.trim() ? value.trim() : "—";
 }
 function Detail(props) {
   return (() => {
-    var _el$ = _tmpl$$9(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$a(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -11088,7 +11198,7 @@ function WaitResolutionQuoteCard(props) {
   const text = (zh, en) => props.tr(locale(), zh, en);
   const safeToWait = props.quote.safe_to_wait === true || props.quote.safeToWait === true;
   return (() => {
-    var _el$4 = _tmpl$2$9(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling, _el$9 = _el$8.nextSibling;
+    var _el$4 = _tmpl$2$a(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling, _el$9 = _el$8.nextSibling;
     insert(_el$6, () => text("等待结果说明", "Wait resolution"));
     className(_el$7, safeToWait ? "badge badge--good" : "badge badge--warn");
     insert(_el$7, () => safeToWait ? text("可以等待", "Safe to wait") : text("不要等待", "Do not wait"));
@@ -11136,7 +11246,7 @@ function WaitResolutionQuoteCard(props) {
     return _el$4;
   })();
 }
-var _tmpl$$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$8 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=product-validation-quote-recommended-action>`), _tmpl$3$8 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"data-testid=product-validation-quote-advisory>`), _tmpl$4$8 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$8 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=product-validation-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$6$5 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$7$3 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
+var _tmpl$$9 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$9 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=product-validation-quote-recommended-action>`), _tmpl$3$9 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"data-testid=product-validation-quote-advisory>`), _tmpl$4$9 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$9 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=product-validation-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=product-validation-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$6$6 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$7$3 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
 function raw(value) {
   return value == null || value === "" ? "-" : String(value);
 }
@@ -11166,7 +11276,7 @@ function actionLabel(value, locale, tr2) {
 }
 function QuoteMetric$1(props) {
   return (() => {
-    var _el$ = _tmpl$$8(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$9(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -11179,7 +11289,7 @@ function ProductValidationQuoteCard(props) {
   const hasNoKnownBlocker = () => quote2().submission_allowed === true;
   const hasPrerequisite = () => Boolean(String(quote2().missing_prerequisite || "").trim());
   return (() => {
-    var _el$4 = _tmpl$2$8(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling;
+    var _el$4 = _tmpl$2$9(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling;
     insert(_el$7, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$8, () => tr2(locale(), "产品验证预估", "Product Validation Quote"));
     insert(_el$9, () => tr2(locale(), "这是已签名的只读预估；不会提交产品验证、执行模块或生成回执。由于不会执行模块，它不会评估或预测任意模块结果。", "This is a signed read-only quote. It does not submit product validation, execute a module, or create a receipt. Because it does not execute the module, it does not evaluate or predict an arbitrary module outcome."));
@@ -11218,7 +11328,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$2 = memo(() => !!hasPrerequisite());
       return () => _c$2() ? (() => {
-        var _el$16 = _tmpl$3$8();
+        var _el$16 = _tmpl$3$9();
         insert(_el$16, (() => {
           var _c$5 = memo(() => !!hasNoKnownBlocker());
           return () => _c$5() ? tr2(locale(), "阶段前提尚未满足；这是建议，预估未发现阻塞。", "The stage prerequisite is not met; this is advisory and the preflight found no known blocker.") : tr2(locale(), "预估发现阻塞；请先完成所列前提。", "The preflight found a known blocker; complete the listed prerequisite first.");
@@ -11229,7 +11339,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$3 = memo(() => !!hasPrerequisite());
       return () => _c$3() ? (() => {
-        var _el$17 = _tmpl$4$8();
+        var _el$17 = _tmpl$4$9();
         insert(_el$17, () => `${tr2(locale(), "缺少前提", "Missing prerequisite")}: ${raw(quote2().missing_prerequisite)}`);
         createRenderEffect(() => setAttribute(_el$17, "data-raw-missing-prerequisite", raw(quote2().missing_prerequisite)));
         return _el$17;
@@ -11238,7 +11348,7 @@ function ProductValidationQuoteCard(props) {
     insert(_el$0, (() => {
       var _c$4 = memo(() => !!quote2().reachable_advance_or_recovery);
       return () => _c$4() ? (() => {
-        var _el$18 = _tmpl$4$8();
+        var _el$18 = _tmpl$4$9();
         insert(_el$18, () => `${tr2(locale(), "可达路径", "Reachable path")}: ${raw(quote2().reachable_advance_or_recovery)}`);
         createRenderEffect(() => setAttribute(_el$18, "data-raw-recovery", raw(quote2().reachable_advance_or_recovery)));
         return _el$18;
@@ -11287,7 +11397,7 @@ function ProductValidationQuotePanel(props) {
     }
   }
   return (() => {
-    var _el$19 = _tmpl$5$8(), _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.firstChild, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$30.nextSibling, _el$32 = _el$29.nextSibling;
+    var _el$19 = _tmpl$5$9(), _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.firstChild, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$30.nextSibling, _el$32 = _el$29.nextSibling;
     insert(_el$22, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$23, () => tr2(locale(), "产品验证预估", "Product Validation Quote"));
     _el$25.addEventListener("submit", requestQuote);
@@ -11302,7 +11412,7 @@ function ProductValidationQuotePanel(props) {
     insert(_el$24, (() => {
       var _c$7 = memo(() => !!error());
       return () => _c$7() ? (() => {
-        var _el$33 = _tmpl$6$5();
+        var _el$33 = _tmpl$6$6();
         insert(_el$33, error);
         return _el$33;
       })() : null;
@@ -11344,11 +11454,11 @@ function ProductValidationQuotePanel(props) {
   })();
 }
 delegateEvents(["input"]);
-var _tmpl$$7 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$7 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=power-survival-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=power-survival-shutdown-avoidance></div><div class=feedback-summary data-testid=power-survival-recommendation>`), _tmpl$3$7 = /* @__PURE__ */ template(`<section id=viewer-power-survival-quote-panel class="panel panel--nested"data-testid=power-survival-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=power-survival-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><label><span></span><input type=number min=0 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$4$7 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$5$7 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`), _tmpl$6$4 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"role=status data-testid=power-survival-quote-stale>`);
-function display$3(value) {
+var _tmpl$$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$8 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=power-survival-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary data-testid=power-survival-shutdown-avoidance></div><div class=feedback-summary data-testid=power-survival-recommendation>`), _tmpl$3$8 = /* @__PURE__ */ template(`<section id=viewer-power-survival-quote-panel class="panel panel--nested"data-testid=power-survival-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=power-survival-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><label><span></span><input type=number min=0 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$4$8 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$5$8 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`), _tmpl$6$5 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"role=status data-testid=power-survival-quote-stale>`);
+function display$4(value) {
   return value == null || value === "" ? "—" : String(value);
 }
-function powerState(value, locale, tr2) {
+function powerState$1(value, locale, tr2) {
   return {
     normal: tr2(locale, "正常", "Normal"),
     low_power: tr2(locale, "低电量", "Low power"),
@@ -11356,14 +11466,14 @@ function powerState(value, locale, tr2) {
     shutdown: tr2(locale, "已停机", "Shutdown")
   }[String(value || "")] || tr2(locale, "状态暂不可用", "State unavailable");
 }
-function affordability(value, locale, tr2) {
+function affordability$1(value, locale, tr2) {
   return {
     healthy: tr2(locale, "下一步可负担", "Next action affordable"),
     limited: tr2(locale, "下一步受限", "Next action limited"),
     blocked: tr2(locale, "下一步仍不可负担", "Next action still blocked")
   }[String(value || "")] || tr2(locale, "可负担性暂不可用", "Affordability unavailable");
 }
-function recommendation(value, locale, tr2) {
+function recommendation$1(value, locale, tr2) {
   return {
     buy_power: tr2(locale, "按此补电后继续", "Buy this power, then continue"),
     buy_power_partial: tr2(locale, "继续补电后再行动", "Buy more power before acting"),
@@ -11372,18 +11482,18 @@ function recommendation(value, locale, tr2) {
 }
 function shutdownAvoidanceReason(quote2, locale, tr2) {
   const reason = String(quote2.shutdown_avoidance_reason || "");
-  const runway = `${display$3(quote2.survival_runway_ticks)} ${tr2(locale, "步", "ticks")}`;
+  const runway = `${display$4(quote2.survival_runway_ticks)} ${tr2(locale, "步", "ticks")}`;
   if (reason.includes("lifts agent from")) {
-    return tr2(locale, `本次补电恢复 ${runway} 可行动时长，并让 Agent 从${powerState(quote2.power_state_before, locale, tr2)}恢复到${powerState(quote2.power_state_after_recovery, locale, tr2)}。`, `This recovery restores ${runway} of runway and lifts the Agent from ${powerState(quote2.power_state_before, locale, tr2)} to ${powerState(quote2.power_state_after_recovery, locale, tr2)}.`);
+    return tr2(locale, `本次补电恢复 ${runway} 可行动时长，并让 Agent 从${powerState$1(quote2.power_state_before, locale, tr2)}恢复到${powerState$1(quote2.power_state_after_recovery, locale, tr2)}。`, `This recovery restores ${runway} of runway and lifts the Agent from ${powerState$1(quote2.power_state_before, locale, tr2)} to ${powerState$1(quote2.power_state_after_recovery, locale, tr2)}.`);
   }
   if (reason.includes("leaves agent in")) {
-    return tr2(locale, `本次补电后 Agent 仍处于${powerState(quote2.power_state_after_recovery, locale, tr2)}，可行动时长为 ${runway}。`, `This recovery leaves the Agent in ${powerState(quote2.power_state_after_recovery, locale, tr2)} with ${runway} of runway.`);
+    return tr2(locale, `本次补电后 Agent 仍处于${powerState$1(quote2.power_state_after_recovery, locale, tr2)}，可行动时长为 ${runway}。`, `This recovery leaves the Agent in ${powerState$1(quote2.power_state_after_recovery, locale, tr2)} with ${runway} of runway.`);
   }
   return tr2(locale, "运行时已返回防停机说明；请结合电力状态、可行动时长和建议决定是否补电。", "The runtime returned shutdown guidance; use the power state, runway, and recommendation to decide whether to buy.");
 }
-function Metric$3(props) {
+function Metric$4(props) {
   return (() => {
-    var _el$ = _tmpl$$7(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$8(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -11394,58 +11504,58 @@ function PowerSurvivalQuoteCard(props) {
   const locale = () => props.locale;
   const tr2 = props.tr;
   return (() => {
-    var _el$4 = _tmpl$2$7(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling;
+    var _el$4 = _tmpl$2$8(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling;
     insert(_el$7, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$8, () => tr2(locale(), "补电生存预估", "Power Recovery Quote"));
     insert(_el$9, () => tr2(locale(), "这是已签名的只读预估，不会购买电力、扣除成本、推进时间或生成回执。", "This is a signed read-only quote. It does not buy power, charge a cost, advance time, or create a receipt."));
     insert(_el$10, () => tr2(locale(), "预估", "quote"));
-    insert(_el$11, () => `${tr2(locale(), "卖方", "Seller")}: ${display$3(quote2().seller_agent_id)}`);
-    insert(_el$12, () => `${tr2(locale(), "补电量", "Power amount")}: ${display$3(quote2().recovery_amount)}`);
-    insert(_el$13, () => `${tr2(locale(), "报价", "Quoted price")}: ${display$3(quote2().price_per_pu)}`);
-    insert(_el$14, createComponent(Metric$3, {
+    insert(_el$11, () => `${tr2(locale(), "卖方", "Seller")}: ${display$4(quote2().seller_agent_id)}`);
+    insert(_el$12, () => `${tr2(locale(), "补电量", "Power amount")}: ${display$4(quote2().recovery_amount)}`);
+    insert(_el$13, () => `${tr2(locale(), "报价", "Quoted price")}: ${display$4(quote2().price_per_pu)}`);
+    insert(_el$14, createComponent(Metric$4, {
       get label() {
         return tr2(locale(), "预计补电", "Expected gain");
       },
       get value() {
-        return display$3(quote2().power_gain_estimate);
+        return display$4(quote2().power_gain_estimate);
       }
     }), null);
-    insert(_el$14, createComponent(Metric$3, {
+    insert(_el$14, createComponent(Metric$4, {
       get label() {
         return tr2(locale(), "预计成本", "Estimated cost");
       },
       get value() {
-        return display$3(quote2().price_or_time_cost);
+        return display$4(quote2().price_or_time_cost);
       }
     }), null);
-    insert(_el$14, createComponent(Metric$3, {
+    insert(_el$14, createComponent(Metric$4, {
       get label() {
         return tr2(locale(), "电力状态", "Power state");
       },
       get value() {
-        return `${powerState(quote2().power_state_before, locale(), tr2)} → ${powerState(quote2().power_state_after_recovery, locale(), tr2)}`;
+        return `${powerState$1(quote2().power_state_before, locale(), tr2)} → ${powerState$1(quote2().power_state_after_recovery, locale(), tr2)}`;
       }
     }), null);
-    insert(_el$14, createComponent(Metric$3, {
+    insert(_el$14, createComponent(Metric$4, {
       get label() {
         return tr2(locale(), "可行动时长", "Action runway");
       },
       get value() {
-        return `${display$3(quote2().survival_runway_ticks)} ${tr2(locale(), "步", "ticks")}`;
+        return `${display$4(quote2().survival_runway_ticks)} ${tr2(locale(), "步", "ticks")}`;
       }
     }), null);
-    insert(_el$14, createComponent(Metric$3, {
+    insert(_el$14, createComponent(Metric$4, {
       get label() {
         return tr2(locale(), "下一步可负担性", "Next-action affordability");
       },
       get value() {
-        return affordability(quote2().next_action_affordability_after_recovery, locale(), tr2);
+        return affordability$1(quote2().next_action_affordability_after_recovery, locale(), tr2);
       }
     }), null);
     insert(_el$15, () => `${tr2(locale(), "防停机原因", "Why this avoids shutdown")}: ${shutdownAvoidanceReason(quote2(), locale(), tr2)}`);
-    insert(_el$16, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation(quote2().recommended_power_action, locale(), tr2)}`);
+    insert(_el$16, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation$1(quote2().recommended_power_action, locale(), tr2)}`);
     createRenderEffect((_p$) => {
-      var _v$ = display$3(quote2().seller_agent_id), _v$2 = display$3(quote2().recovery_amount), _v$3 = display$3(quote2().requested_price_per_pu);
+      var _v$ = display$4(quote2().seller_agent_id), _v$2 = display$4(quote2().recovery_amount), _v$3 = display$4(quote2().requested_price_per_pu);
       _v$ !== _p$.e && setAttribute(_el$4, "data-seller-agent-id", _p$.e = _v$);
       _v$2 !== _p$.t && setAttribute(_el$4, "data-amount", _p$.t = _v$2);
       _v$3 !== _p$.a && setAttribute(_el$4, "data-requested-price-per-pu", _p$.a = _v$3);
@@ -11483,7 +11593,7 @@ function PowerSurvivalQuotePanel(props) {
     }
   }
   return (() => {
-    var _el$17 = _tmpl$3$7(), _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$18.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$27.nextSibling, _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$33 = _el$30.nextSibling;
+    var _el$17 = _tmpl$3$8(), _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$18.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$27.nextSibling, _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$33 = _el$30.nextSibling;
     insert(_el$20, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$21, () => tr2(locale(), "补电生存预估", "Power Recovery Quote"));
     _el$23.addEventListener("submit", requestQuote);
@@ -11500,7 +11610,7 @@ function PowerSurvivalQuotePanel(props) {
     insert(_el$22, (() => {
       var _c$2 = memo(() => !!error());
       return () => _c$2() ? (() => {
-        var _el$34 = _tmpl$4$7();
+        var _el$34 = _tmpl$4$8();
         insert(_el$34, error);
         return _el$34;
       })() : null;
@@ -11508,7 +11618,7 @@ function PowerSurvivalQuotePanel(props) {
     insert(_el$22, (() => {
       var _c$3 = memo(() => !!(remote().status === "received" && !stale()));
       return () => _c$3() ? (() => {
-        var _el$35 = _tmpl$5$7();
+        var _el$35 = _tmpl$5$8();
         insert(_el$35, () => tr2(locale(), "预估已返回；确认前请查看建议。", "Quote received; review the guidance before confirmation."));
         return _el$35;
       })() : null;
@@ -11516,7 +11626,7 @@ function PowerSurvivalQuotePanel(props) {
     insert(_el$22, (() => {
       var _c$4 = memo(() => !!(stale() && remote().status !== "pending"));
       return () => _c$4() ? (() => {
-        var _el$36 = _tmpl$6$4();
+        var _el$36 = _tmpl$6$5();
         insert(_el$36, () => tr2(locale(), "输入已变更；当前预估已过期。请重新请求预估后再购买电力。", "Inputs changed; this quote is stale. Request a new quote before buying power."));
         return _el$36;
       })() : null;
@@ -11524,7 +11634,7 @@ function PowerSurvivalQuotePanel(props) {
     insert(_el$22, (() => {
       var _c$5 = memo(() => remote().status === "pending");
       return () => _c$5() ? (() => {
-        var _el$37 = _tmpl$5$7();
+        var _el$37 = _tmpl$5$8();
         insert(_el$37, () => tr2(locale(), "正在刷新预估；旧预估已失效。", "Refreshing the quote; the previous quote is no longer current."));
         return _el$37;
       })() : null;
@@ -11558,6 +11668,223 @@ function PowerSurvivalQuotePanel(props) {
     createRenderEffect(() => _el$29.value = amount());
     createRenderEffect(() => _el$32.value = price());
     return _el$17;
+  })();
+}
+delegateEvents(["input"]);
+var _tmpl$$7 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$7 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=power-sale-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div data-testid=power-sale-production-risk></div><div class=feedback-summary data-testid=power-sale-rationale></div><div class=feedback-summary data-testid=power-sale-recommendation>`), _tmpl$3$7 = /* @__PURE__ */ template(`<section id=viewer-power-sale-quote-panel class="panel panel--nested"data-testid=power-sale-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=power-sale-quote-request-form><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><label><span></span><input type=number min=0 step=1 inputmode=numeric></label><button type=submit class="button button--secondary">`), _tmpl$4$7 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$5$7 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`), _tmpl$6$4 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--warn"role=status>`);
+function display$3(value) {
+  return value == null || value === "" ? "—" : String(value);
+}
+function powerState(value, locale, tr2) {
+  return {
+    normal: tr2(locale, "正常", "Normal"),
+    low_power: tr2(locale, "低电量", "Low power"),
+    critical: tr2(locale, "临界电量", "Critical power"),
+    shutdown: tr2(locale, "已停机", "Shutdown")
+  }[String(value || "")] || tr2(locale, "状态暂不可用", "State unavailable");
+}
+function affordability(value, locale, tr2) {
+  return {
+    healthy: tr2(locale, "下一步可负担", "Next action affordable"),
+    limited: tr2(locale, "下一步受限", "Next action limited"),
+    blocked: tr2(locale, "下一步不可负担", "Next action blocked")
+  }[String(value || "")] || tr2(locale, "可负担性暂不可用", "Affordability unavailable");
+}
+function recommendation(value, locale, tr2) {
+  return {
+    proceed_sale: tr2(locale, "可谨慎继续出售", "Proceed with this sale cautiously"),
+    reduce_sale: tr2(locale, "减少出售量后重新预估", "Reduce the sale, then request a fresh quote"),
+    defer_sale: tr2(locale, "暂缓本次出售", "Defer this sale")
+  }[String(value || "")] || tr2(locale, "重新请求预估后再决定", "Request a fresh quote before deciding");
+}
+function rationale(quote2, locale, tr2) {
+  if (quote2.production_interrupt_risk) return tr2(locale, "出售后电力余量可能中断生产；请优先保护可行动时长。", "This sale can interrupt production after it reduces power; protect your action runway first.");
+  return tr2(locale, "运行时未标记生产中断风险；世界状态变化后请重新请求预估。", "The runtime did not flag production interruption risk; request a fresh quote after world state changes.");
+}
+function Metric$3(props) {
+  return (() => {
+    var _el$ = _tmpl$$7(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    insert(_el$2, () => props.label);
+    insert(_el$3, () => props.value);
+    return _el$;
+  })();
+}
+function PowerSaleQuoteCard(props) {
+  const quote2 = () => props.quote || {};
+  const locale = () => props.locale;
+  const tr2 = props.tr;
+  return (() => {
+    var _el$4 = _tmpl$2$7(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.firstChild, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$1.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling, _el$17 = _el$16.nextSibling;
+    insert(_el$7, () => tr2(locale(), "提交前估价", "Before You Commit"));
+    insert(_el$8, () => tr2(locale(), "电力出售预估", "Power Sale Quote"));
+    insert(_el$9, () => tr2(locale(), "这是已签名的只读预估，不会出售电力、收取收入、推进时间或保证稍后成交。", "This is a signed read-only quote. It does not sell power, collect revenue, advance time, or guarantee a later sale."));
+    insert(_el$10, () => tr2(locale(), "预估", "quote"));
+    insert(_el$11, () => `${tr2(locale(), "买方", "Buyer")}: ${display$3(quote2().buyer_agent_id)}`);
+    insert(_el$12, () => `${tr2(locale(), "出售量", "Sale amount")}: ${display$3(quote2().sale_amount)}`);
+    insert(_el$13, () => `${tr2(locale(), "单价", "Price per unit")}: ${display$3(quote2().price_per_pu)}`);
+    insert(_el$14, createComponent(Metric$3, {
+      get label() {
+        return tr2(locale(), "当前电力", "Current power");
+      },
+      get value() {
+        return display$3(quote2().current_power_level);
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric$3, {
+      get label() {
+        return tr2(locale(), "预计收入", "Expected revenue");
+      },
+      get value() {
+        return display$3(quote2().expected_revenue);
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric$3, {
+      get label() {
+        return tr2(locale(), "出售后电力状态", "Power state after sale");
+      },
+      get value() {
+        return `${powerState(quote2().power_state_before, locale(), tr2)} → ${powerState(quote2().power_state_after_sale, locale(), tr2)}`;
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric$3, {
+      get label() {
+        return tr2(locale(), "剩余可行动时长", "Remaining runway");
+      },
+      get value() {
+        return `${display$3(quote2().remaining_runway_ticks)} ${tr2(locale(), "步", "ticks")}`;
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric$3, {
+      get label() {
+        return tr2(locale(), "下一步可负担性", "Next-action affordability");
+      },
+      get value() {
+        return affordability(quote2().next_action_affordability_after_sale, locale(), tr2);
+      }
+    }), null);
+    insert(_el$15, (() => {
+      var _c$ = memo(() => !!quote2().production_interrupt_risk);
+      return () => _c$() ? tr2(locale(), "生产中断风险：本次出售可能中断生产。", "Production interruption risk: this sale can interrupt production.") : tr2(locale(), "生产中断风险：运行时未标记本次出售会中断生产。", "Production interruption risk: the runtime did not flag this sale as interrupting production.");
+    })());
+    insert(_el$16, () => rationale(quote2(), locale(), tr2));
+    insert(_el$17, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation(quote2().recommended_sale_action, locale(), tr2)}`);
+    createRenderEffect((_p$) => {
+      var _v$ = display$3(quote2().seller_agent_id), _v$2 = display$3(quote2().buyer_agent_id), _v$3 = display$3(quote2().sale_amount), _v$4 = display$3(quote2().price_per_pu), _v$5 = quote2().production_interrupt_risk ? "feedback-summary feedback-summary--warn" : "feedback-summary";
+      _v$ !== _p$.e && setAttribute(_el$4, "data-seller-agent-id", _p$.e = _v$);
+      _v$2 !== _p$.t && setAttribute(_el$4, "data-buyer-agent-id", _p$.t = _v$2);
+      _v$3 !== _p$.a && setAttribute(_el$4, "data-amount", _p$.a = _v$3);
+      _v$4 !== _p$.o && setAttribute(_el$4, "data-requested-price-per-pu", _p$.o = _v$4);
+      _v$5 !== _p$.i && className(_el$15, _p$.i = _v$5);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0,
+      a: void 0,
+      o: void 0,
+      i: void 0
+    });
+    return _el$4;
+  })();
+}
+function PowerSaleQuotePanel(props) {
+  const [buyer, setBuyer] = createSignal("agent-buyer");
+  const [amount, setAmount] = createSignal("10");
+  const [price, setPrice] = createSignal("0");
+  const [requesting, setRequesting] = createSignal(false);
+  const [localError, setLocalError] = createSignal("");
+  const locale = () => props.locale;
+  const tr2 = props.tr;
+  const remote = () => props.requestState || {};
+  const stale = () => Boolean(props.quote) && (String(props.quote.buyer_agent_id) !== buyer().trim() || String(props.quote.sale_amount) !== amount().trim() || String(props.quote.price_per_pu) !== price().trim());
+  async function requestQuote(event) {
+    event.preventDefault();
+    setLocalError("");
+    setRequesting(true);
+    try {
+      const result = await props.requestPowerSaleQuote(buyer(), amount(), price());
+      if (!result?.ok) setLocalError(result?.reason || "quote failed");
+    } catch (error) {
+      setLocalError(String(error));
+    } finally {
+      setRequesting(false);
+    }
+  }
+  return (() => {
+    var _el$18 = _tmpl$3$7(), _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$19.nextSibling, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$26.nextSibling, _el$28 = _el$25.nextSibling, _el$29 = _el$28.firstChild, _el$30 = _el$29.nextSibling, _el$31 = _el$28.nextSibling, _el$32 = _el$31.firstChild, _el$33 = _el$32.nextSibling, _el$34 = _el$31.nextSibling;
+    insert(_el$21, () => tr2(locale(), "出售前估价", "Before Selling"));
+    insert(_el$22, () => tr2(locale(), "先查看电力出售影响", "Preview Power Sale Impact"));
+    _el$24.addEventListener("submit", requestQuote);
+    insert(_el$26, () => tr2(locale(), "买方 Agent", "Buyer Agent"));
+    _el$27.$$input = (event) => setBuyer(event.currentTarget.value);
+    insert(_el$29, () => tr2(locale(), "出售电量", "Power amount"));
+    _el$30.$$input = (event) => setAmount(event.currentTarget.value);
+    insert(_el$32, () => tr2(locale(), "每单位报价", "Price per unit"));
+    _el$33.$$input = (event) => setPrice(event.currentTarget.value);
+    insert(_el$34, (() => {
+      var _c$2 = memo(() => !!(requesting() || remote().status === "pending"));
+      return () => _c$2() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求出售预估", "Request sale quote");
+    })());
+    insert(_el$23, (() => {
+      var _c$3 = memo(() => !!(localError() || remote().status === "error"));
+      return () => _c$3() ? (() => {
+        var _el$35 = _tmpl$4$7();
+        insert(_el$35, () => tr2(locale(), "无法获取出售预估。请检查连接、玩家会话和输入后重试。", "Could not get the sale quote. Check the connection, player session, and inputs, then retry."));
+        return _el$35;
+      })() : null;
+    })(), null);
+    insert(_el$23, (() => {
+      var _c$4 = memo(() => !!(remote().status === "received" && !stale()));
+      return () => _c$4() ? (() => {
+        var _el$36 = _tmpl$5$7();
+        insert(_el$36, () => tr2(locale(), "预估已返回；这不会保证稍后出售成功。", "Quote received; it does not guarantee a later sale succeeds."));
+        return _el$36;
+      })() : null;
+    })(), null);
+    insert(_el$23, (() => {
+      var _c$5 = memo(() => !!(stale() && remote().status !== "pending"));
+      return () => _c$5() ? (() => {
+        var _el$37 = _tmpl$6$4();
+        insert(_el$37, () => tr2(locale(), "输入已变更；当前预估已过期。请重新请求预估后再出售。", "Inputs changed; this quote is stale. Request a new quote before selling."));
+        return _el$37;
+      })() : null;
+    })(), null);
+    insert(_el$23, (() => {
+      var _c$6 = memo(() => remote().status === "pending");
+      return () => _c$6() ? (() => {
+        var _el$38 = _tmpl$5$7();
+        insert(_el$38, () => tr2(locale(), "正在刷新预估；旧预估已失效。", "Refreshing the quote; the previous quote is no longer current."));
+        return _el$38;
+      })() : null;
+    })(), null);
+    insert(_el$23, (() => {
+      var _c$7 = memo(() => !!(props.quote && remote().status !== "pending"));
+      return () => _c$7() ? createComponent(PowerSaleQuoteCard, {
+        get quote() {
+          return props.quote;
+        },
+        get locale() {
+          return locale();
+        },
+        tr: tr2
+      }) : null;
+    })(), null);
+    createRenderEffect((_p$) => {
+      var _v$6 = tr2(locale(), "买方 Agent", "Buyer Agent"), _v$7 = tr2(locale(), "出售电量", "Power amount"), _v$8 = tr2(locale(), "每单位报价", "Price per unit"), _v$9 = requesting() || remote().status === "pending";
+      _v$6 !== _p$.e && setAttribute(_el$27, "aria-label", _p$.e = _v$6);
+      _v$7 !== _p$.t && setAttribute(_el$30, "aria-label", _p$.t = _v$7);
+      _v$8 !== _p$.a && setAttribute(_el$33, "aria-label", _p$.a = _v$8);
+      _v$9 !== _p$.o && (_el$34.disabled = _p$.o = _v$9);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0,
+      a: void 0,
+      o: void 0
+    });
+    createRenderEffect(() => _el$27.value = buyer());
+    createRenderEffect(() => _el$30.value = amount());
+    createRenderEffect(() => _el$33.value = price());
+    return _el$18;
   })();
 }
 delegateEvents(["input"]);
@@ -12336,6 +12663,25 @@ function PowerSurvivalQuoteGameplayPanel(props) {
     }
   });
 }
+function PowerSaleQuoteGameplayPanel(props) {
+  return createComponent(PowerSaleQuotePanel, {
+    get quote() {
+      return props.core.state.powerSaleQuote;
+    },
+    get requestState() {
+      return props.core.state.powerSaleQuoteRequest;
+    },
+    get requestPowerSaleQuote() {
+      return props.core.requestPowerSaleQuote;
+    },
+    get locale() {
+      return props.locale;
+    },
+    get tr() {
+      return props.tr;
+    }
+  });
+}
 function FragmentRefillPreviewGameplayPanel(props) {
   return createComponent(FragmentRefillPreviewPanel, {
     get quote() {
@@ -12428,6 +12774,29 @@ function installPowerSurvivalQuoteVisualFixture(fixtures, { core: core2, setFixt
     core2.applySelection({ kind: "agent", id: "agent-0" });
     setFixturePlayerAuth2();
     core2.injectPowerSurvivalQuoteForTest(powerSurvivalQuoteFixture);
+  };
+}
+const powerSaleQuoteFixture = Object.freeze({
+  seller_agent_id: "agent-0",
+  buyer_agent_id: "agent-buyer",
+  current_power_level: 15,
+  power_state_before: "low_power",
+  sale_amount: 10,
+  price_per_pu: 3,
+  expected_revenue: 30,
+  power_state_after_sale: "critical",
+  remaining_runway_ticks: 5,
+  next_action_affordability_after_sale: "limited",
+  production_interrupt_risk: true,
+  recommended_sale_action: "defer_sale",
+  why_sale_is_safe_or_risky: "critical power runway"
+});
+function installPowerSaleQuoteVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.power_sale_quote = () => {
+    core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+    core2.injectPowerSaleQuoteForTest(powerSaleQuoteFixture);
   };
 }
 const productValidationQuoteFixture = Object.freeze({
@@ -16160,6 +16529,12 @@ function WorldSummaryPanel() {
               return locale();
             },
             tr
+          }), createComponent(PowerSaleQuoteGameplayPanel, {
+            core,
+            get locale() {
+              return locale();
+            },
+            tr
           }), createComponent(PowerSurvivalQuoteGameplayPanel, {
             core,
             get locale() {
@@ -18576,6 +18951,11 @@ function installViewerVisualFixture() {
     viewerFixtureBaseSnapshot
   });
   installProductValidationQuoteVisualFixture(fixtures, {
+    core,
+    setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
+  installPowerSaleQuoteVisualFixture(fixtures, {
     core,
     setFixturePlayerAuth,
     viewerFixtureBaseSnapshot

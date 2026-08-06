@@ -3,6 +3,7 @@ export function createViewerQuoteProtocolFacade({
   handleRefineQuoteError,
   handleRefineQuotePreflight,
   marketQuoteDecision,
+  powerSaleQuote,
   powerSurvivalQuote,
   productValidationQuote,
   state,
@@ -11,6 +12,7 @@ export function createViewerQuoteProtocolFacade({
   function handleQuoteGameplayActionError(error) {
     return handleRefineQuoteError(error)
       || productValidationQuote.handleProductValidationQuoteError(error)
+      || powerSaleQuote?.handlePowerSaleQuoteError(error)
       || powerSurvivalQuote.handlePowerSurvivalQuoteError(error)
       || fragmentRefillPreview.handleFragmentRefillPreviewError(error)
       || warDeclarationQuote.handleWarDeclarationQuoteError(error)
@@ -31,6 +33,10 @@ export function createViewerQuoteProtocolFacade({
       case "power_survival_quote_preflight":
         powerSurvivalQuote.handlePowerSurvivalQuote(message.quote);
         return true;
+      case "power_sale_quote_preflight":
+        if (!powerSaleQuote) return false;
+        powerSaleQuote.handlePowerSaleQuote(message.quote);
+        return true;
       case "war_declaration_quote_preflight":
         warDeclarationQuote.handleWarDeclarationQuote(message.quote);
         return true;
@@ -43,6 +49,7 @@ export function createViewerQuoteProtocolFacade({
   }
 
   function invalidateSnapshotBoundQuotes() {
+    powerSaleQuote?.invalidatePowerSaleQuote();
     powerSurvivalQuote.invalidatePowerSurvivalQuote();
     fragmentRefillPreview.invalidateFragmentRefillPreview();
     warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();

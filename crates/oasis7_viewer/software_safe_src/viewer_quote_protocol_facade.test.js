@@ -4,6 +4,7 @@ import { createViewerQuoteProtocolFacade } from "./viewer_quote_protocol_facade.
 function integration() {
   return {
     handleMarketQuoteDecision: vi.fn(), handleMarketQuoteDecisionError: vi.fn(() => false),
+    handlePowerSaleQuote: vi.fn(), handlePowerSaleQuoteError: vi.fn(() => false),
     handlePowerSurvivalQuote: vi.fn(), handlePowerSurvivalQuoteError: vi.fn(() => false),
     handleProductValidationQuote: vi.fn(), handleProductValidationQuoteError: vi.fn(() => false),
     handleFragmentRefillPreview: vi.fn(), handleFragmentRefillPreviewError: vi.fn(() => false),
@@ -51,6 +52,20 @@ describe("viewer quote protocol facade", () => {
 
     expect(facade.handleQuoteViewerMessage({ type: "war_declaration_quote_preflight", quote })).toBe(true);
     expect(warDeclarationQuote.handleWarDeclarationQuote).toHaveBeenCalledWith(quote);
+  });
+
+  it("routes a power sale preflight through the seller-side quote boundary", () => {
+    const powerSaleQuote = integration();
+    const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview: integration(),
+      handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
+      marketQuoteDecision: integration(), powerSaleQuote, powerSurvivalQuote: integration(), productValidationQuote: integration(),
+      state: {}, warDeclarationQuote: integration(),
+    });
+    const quote = { seller_agent_id: "agent-seller", buyer_agent_id: "agent-buyer", production_interrupt_risk: true };
+
+    expect(facade.handleQuoteViewerMessage({ type: "power_sale_quote_preflight", quote })).toBe(true);
+    expect(powerSaleQuote.handlePowerSaleQuote).toHaveBeenCalledWith(quote);
   });
 
   it("invalidates a received quote when an authoritative snapshot changes at the same tick", () => {
