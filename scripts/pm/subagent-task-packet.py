@@ -181,7 +181,7 @@ def validate_bootstrap_snapshot(root: Path, snapshot: Path, task_uid: str) -> di
         fail("bootstrap snapshot request identity is missing")
     helper = Path(__file__).with_name("bootstrap-task-snapshot.py")
     result = subprocess.run(
-        [sys.executable, str(helper), "validate", "--repo-root", str(root),
+        [sys.executable, str(helper), "validate-epoch-identity", "--repo-root", str(root),
          "--task-uid", task_uid, "--request-identity", request_identity,
          "--snapshot", str(snapshot)],
         text=True, capture_output=True,
@@ -247,15 +247,8 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     if snapshot_task.get("uid") != task_uid or snapshot.get("repository") != identity.get("repository"):
         fail("bootstrap snapshot task or repository does not match packet")
     if (snapshot_git.get("worktree") != identity.get("worktree")
-            or snapshot_git.get("branch") != identity.get("branch")
-            or snapshot_git.get("head") != identity.get("head")):
+            or snapshot_git.get("branch") != identity.get("branch")):
         fail("bootstrap snapshot git identity does not match packet")
-    snapshot_base = snapshot_git.get("base")
-    if not isinstance(snapshot_base, dict) or (snapshot_base.get("ref") != identity.get("base_ref")
-                                               and snapshot_base.get("branch") != identity.get("base_ref")):
-        fail("bootstrap snapshot base ref does not match packet")
-    if snapshot_base.get("oid") != identity.get("base_sha"):
-        fail("bootstrap snapshot base OID does not match packet")
 
     return {
         "status": "admitted",

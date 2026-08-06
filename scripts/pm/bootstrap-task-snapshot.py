@@ -220,6 +220,41 @@ def validate(args: argparse.Namespace) -> pathlib.Path:
     return snapshot_path
 
 
+def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
+    """Validate immutable bootstrap identity while allowing later implementation HEAD/base."""
+    root = pathlib.Path(args.repo_root).resolve()
+    tasks_json = pathlib.Path(args.tasks_json).resolve() if args.tasks_json else root / ".pm/github-project-sync/tasks.json"
+    snapshot_path = pathlib.Path(args.snapshot).resolve() if args.snapshot else default_path(root, args.task_uid)
+    try:
+        saved = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SnapshotError(f"cannot read snapshot {snapshot_path}: {exc}") from exc
+    if not isinstance(saved, dict):
+        raise SnapshotError("snapshot root must be an object")
+    if saved.get("digest") != digest(saved):
+        raise SnapshotError("snapshot digest mismatch")
+    expected = live_payload(root, tasks_json, args.task_uid, args.request_identity)
+    for field in ("schema", "task", "repository", "request"):
+        if saved.get(field) != expected[field]:
+            raise SnapshotError(f"snapshot {field} drift")
+    saved_git = saved.get("git")
+    expected_git = expected["git"]
+    if not isinstance(saved_git, dict):
+        raise SnapshotError("snapshot git identity is missing")
+    for field in ("worktree", "branch"):
+        if saved_git.get(field) != expected_git[field]:
+            raise SnapshotError(f"snapshot git {field} drift")
+    saved_base = saved_git.get("base")
+    expected_base = expected_git["base"]
+    if not isinstance(saved_base, dict) or saved_base.get("branch") != expected_base["branch"]:
+        raise SnapshotError("snapshot default branch identity drift")
+    if not isinstance(saved.get("producer"), str) or not saved["producer"]:
+        raise SnapshotError("snapshot producer is missing")
+    if not isinstance(saved.get("created_at"), str) or not saved["created_at"]:
+        raise SnapshotError("snapshot creation time is missing")
+    return snapshot_path
+
+
 def validate_or_create(args: argparse.Namespace) -> tuple[pathlib.Path, str]:
     root = pathlib.Path(args.repo_root).resolve()
     tasks_json = pathlib.Path(args.tasks_json).resolve() if args.tasks_json else root / ".pm/github-project-sync/tasks.json"
@@ -243,7 +278,7 @@ def validate_or_create(args: argparse.Namespace) -> tuple[pathlib.Path, str]:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     subparsers = result.add_subparsers(dest="command", required=True)
-    for command in ("create", "validate", "validate-or-create"):
+    for command in ("create", "validate", "validate-epoch-identity", "validate-or-create"):
         sub = subparsers.add_parser(command)
         sub.add_argument("--repo-root", required=True)
         sub.add_argument("--task-uid", required=True)
@@ -262,6 +297,8 @@ def main() -> int:
             path, status = create(args), "created"
         elif args.command == "validate":
             path, status = validate(args), "valid"
+        elif args.command == "validate-epoch-identity":
+            path, status = validate_epoch_identity(args), "valid_epoch_identity"
         else:
             path, status = validate_or_create(args)
     except SnapshotError as exc:

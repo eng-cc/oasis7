@@ -200,6 +200,17 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
         self.review_admission(packet, plan, snapshot, ok=False)
 
+    def test_review_admission_allows_a_valid_bootstrap_snapshot_before_review_head(self) -> None:
+        snapshot = self.create_snapshot()
+        (self.repo / "implementation.txt").write_text("implementation\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "implementation.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "implementation"], check=True, capture_output=True)
+
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        plan = self.create_review_plan(packet)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
 
 if __name__ == "__main__":
     unittest.main()

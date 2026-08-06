@@ -141,6 +141,17 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         self.git("commit", "-m", "head drift")
         self.assert_invalid("snapshot git drift")
 
+    def test_epoch_identity_allows_later_review_head_while_strict_validation_rejects_it(self) -> None:
+        self.create()
+        (self.root / "REVIEW-HEAD").write_text("implementation\n", encoding="utf-8")
+        self.git("add", "REVIEW-HEAD")
+        self.git("commit", "-m", "implementation head")
+
+        epoch_identity = self.run_helper("validate-epoch-identity")
+        self.assertEqual(0, epoch_identity.returncode, epoch_identity.stderr)
+        self.assertEqual("valid_epoch_identity", json.loads(epoch_identity.stdout)["status"])
+        self.assert_invalid("snapshot git drift")
+
     def test_request_drift_rejected(self) -> None:
         self.create()
         self.assert_invalid("snapshot request drift", request="request-2")
