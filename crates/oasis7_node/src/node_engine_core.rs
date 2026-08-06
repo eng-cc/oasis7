@@ -114,6 +114,7 @@ impl PosNodeEngine {
             node_player_id: config.player_id.clone(),
             gossip_reverse_path_seeding_enabled: matches!(config.role, NodeRole::Observer),
             checkpoint_bootstrap_enabled: matches!(config.role, NodeRole::Observer),
+            fresh_observer_checkpoint_preflight_unavailable: false,
             last_gossip_reverse_path_seed_at_ms: None,
             allow_local_proposals: config.allow_local_proposals,
             require_execution_on_commit: config.require_execution_on_commit,
