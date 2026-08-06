@@ -5,8 +5,8 @@ import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
-import { FragmentRefillPreviewGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
-import { installMarketQuoteDecisionVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
+import { FragmentRefillPreviewGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx";
+import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
@@ -30,11 +30,9 @@ function focusViewerAnchor(event) {
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
 }
-
 function localeCode(locale) {
   return core.isLocaleZh(locale) ? "zh" : "en";
 }
-
 function buildViewerEntryUrls(locale) {
   const softwareSafeUrl = new URL(window.location.href);
   softwareSafeUrl.searchParams.set("locale", localeCode(locale));
@@ -2781,6 +2779,7 @@ function WorldSummaryPanel() {
                 tr={tr}
               />
               <RefineQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
+              <PowerSaleQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <PowerSurvivalQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
               <FragmentRefillPreviewGameplayPanel core={core} locale={locale()} tr={tr} />
               <WarDeclarationQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
@@ -4328,6 +4327,7 @@ function installViewerVisualFixture() {
   };
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installPowerSaleQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installPowerSurvivalQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installMarketQuoteDecisionVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installWaitResolutionQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

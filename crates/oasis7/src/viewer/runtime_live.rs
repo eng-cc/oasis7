@@ -61,6 +61,7 @@ mod gameplay_validation_preview;
 mod mapping;
 mod market_quote_decision;
 mod player_gameplay;
+mod power_sale_quote;
 mod recovery;
 mod recovery_audit;
 mod recovery_compensation;
@@ -811,6 +812,7 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
+            ViewerRequest::QuotePowerSale { request } => self.quote_power_sale(request, writer)?,
             ViewerRequest::QuoteDeclareSocialEdge { request } => {
                 self.quote_declare_social_edge(request, writer)?
             }

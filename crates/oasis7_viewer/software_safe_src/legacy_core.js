@@ -9,6 +9,7 @@ import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
+import { createPowerSaleQuoteIntegration } from "./power_sale_quote_integration.js";
 import { createFragmentRefillPreviewIntegration } from "./fragment_refill_preview_integration.js";
 import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
@@ -180,12 +181,14 @@ const productValidationQuote = createProductValidationQuoteIntegration(() => ({ 
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote;
+const powerSaleQuote = createPowerSaleQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
+const { injectPowerSaleQuoteForTest, requestPowerSaleQuote } = powerSaleQuote;
 const fragmentRefillPreview = createFragmentRefillPreviewIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }));
 const { requestFragmentRefillPreview } = fragmentRefillPreview;
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -4257,6 +4260,7 @@ function installTestApi() {
     requestRefineQuote,
     requestProductValidationQuote,
     requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
+    requestPowerSaleQuote,
     requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
@@ -4270,7 +4274,7 @@ function installTestApi() {
     injectSnapshot,
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
-    injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
+    injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4386,7 +4390,7 @@ export {
   injectSnapshot,
   injectRefineQuotePreflightForTest,
   injectProductValidationQuoteForTest,
-  injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
+  injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4416,6 +4420,7 @@ export {
   requestRefineQuote,
   requestProductValidationQuote,
   requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
+  requestPowerSaleQuote,
   requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,

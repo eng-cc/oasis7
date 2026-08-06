@@ -16,6 +16,8 @@ mod schedule_recipe_quote_tests;
 pub use product_validation_quote::*;
 mod power_survival_quote;
 pub use power_survival_quote::*;
+mod power_sale_quote;
+pub use power_sale_quote::*;
 mod fragment_refill_preview;
 pub use fragment_refill_preview::*;
 mod market_quote_decision;
@@ -105,6 +107,9 @@ pub enum ViewerRequest {
     },
     QuotePowerSurvival {
         request: PowerSurvivalQuoteRequest,
+    },
+    QuotePowerSale {
+        request: PowerSaleQuoteRequest,
     },
     QuoteDeclareSocialEdge {
         request: DeclareSocialEdgeQuoteRequest,
@@ -657,6 +662,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     PowerSurvivalQuotePreflight {
         quote: PowerSurvivalQuotePreflight,
     },
+    PowerSaleQuotePreflight {
+        quote: PowerSaleQuotePreflight,
+    },
     DeclareSocialEdgeQuotePreflight {
         quote: DeclareSocialEdgeQuotePreflight,
     },
@@ -793,16 +801,6 @@ impl From<ViewerControl> for PlaybackControl {
             ViewerControl::Play => Self::Play,
             ViewerControl::Step { count } => Self::Step { count },
             ViewerControl::Seek { tick } => Self::Seek { tick },
-        }
-    }
-}
-
-impl From<LiveControl> for ViewerControl {
-    fn from(value: LiveControl) -> Self {
-        match value {
-            LiveControl::Pause => Self::Pause,
-            LiveControl::Play => Self::Play,
-            LiveControl::Step { count } => Self::Step { count },
         }
     }
 }
