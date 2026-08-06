@@ -118,6 +118,13 @@ export function pixelWorldSelectedBlockerVisualFixture() {
         delta_logical_time: 1,
         delta_event_seq: 2,
       },
+      // Published snapshot data for the renderer's visual fixture only; this
+      // does not introduce an action or alter the selected-blocker scenario.
+      micro_depot_facilities: [{
+        facility_id: "depot-fixture-loc-0",
+        status: "active",
+        location_id: "loc-0",
+      }],
       agent_claim: null,
     },
   };

@@ -150,6 +150,57 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_projects_published_micro_depots_at_stable_known_location_offsets() {
+    let mut input = sample_input();
+    input["gameplay"]["micro_depot_facilities"] = json!([
+        { "facility_id": "depot-active", "status": "active", "location_id": "loc-0" },
+        { "facility_id": "depot-suspended", "status": "suspended", "location_id": "loc-0" },
+        { "facility_id": "depot-depleted", "status": "depleted", "location_id": "loc-0" },
+        { "facility_id": "depot-unknown-location", "status": "active", "location_id": "missing" }
+    ]);
+
+    let first = build_render_state(&input);
+    let second = build_render_state(&input);
+    let facilities = first["micro_depot_facilities"]
+        .as_array()
+        .expect("facility projection must be an array");
+
+    assert_eq!(facilities.len(), 3, "unknown anchors must be suppressed");
+    assert_eq!(facilities[0]["id"], "micro_depot:depot-active");
+    assert_eq!(facilities[1]["status"], "depleted");
+    assert_eq!(facilities[2]["status"], "suspended");
+    assert_ne!(facilities[0]["pos"], first["locations"][0]["pos"]);
+    assert_eq!(
+        first["micro_depot_facilities"], second["micro_depot_facilities"],
+        "the same facility/location pair must retain its deterministic offset"
+    );
+}
+
+#[test]
+fn rust_host_state_projects_viewer_normalized_micro_depot_facilities_and_prefers_snake_array() {
+    let mut camel_input = sample_input();
+    camel_input["gameplay"]["microDepotFacilities"] = json!([
+        { "facilityId": "depot-viewer-active", "status": "active", "locationId": "loc-0" }
+    ]);
+    let camel = build_render_state(&camel_input);
+    assert_eq!(
+        camel["micro_depot_facilities"][0]["id"], "micro_depot:depot-viewer-active",
+        "the Viewer-normalized camelCase payload must reach the Bevy DTO"
+    );
+    assert_eq!(camel["micro_depot_facilities"][0]["location_id"], "loc-0");
+    assert_eq!(camel["micro_depot_facilities"][0]["status"], "active");
+    assert!(camel["micro_depot_facilities"][0]["pos"].is_object());
+
+    camel_input["gameplay"]["micro_depot_facilities"] = json!([]);
+    let snake_empty = build_render_state(&camel_input);
+    assert_eq!(
+        snake_empty["micro_depot_facilities"],
+        json!([]),
+        "an explicitly empty snake_case runtime publication must not revive camelCase compatibility data"
+    );
+}
+
+#[test]
 fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_display() {
     let blocked = build_render_state(&sample_input());
     assert_eq!(

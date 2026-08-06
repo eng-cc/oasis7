@@ -6,6 +6,12 @@ use bevy::ecs::system::SystemParam;
 mod fragment_visuals;
 use fragment_visuals::reconcile_fragments;
 
+#[path = "render_micro_depot_facilities.rs"]
+mod micro_depot_facilities;
+use micro_depot_facilities::{
+    PixelWorldMicroDepotDetailVisual, PixelWorldMicroDepotVisual, reconcile_micro_depot_facilities,
+};
+
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
@@ -76,6 +82,7 @@ const FRAGMENT_INSET_OFFSET_SCALE: f32 = 0.22;
 const FRAGMENT_FLECK_SIZE_SCALE: f32 = 0.16;
 const FRAGMENT_FLECK_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
+const MICRO_DEPOT_LAYER_Z: f32 = 2.55;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
 const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
@@ -192,6 +199,13 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     for fragment in &render_state.fragment_terrain {
         if let Some(point) =
             to_canvas_point(&fragment.pos, world_bounds, width, height, &base_camera)
+        {
+            points.push(point);
+        }
+    }
+    for facility in &render_state.micro_depot_facilities {
+        if let Some(point) =
+            to_canvas_point(&facility.pos, world_bounds, width, height, &base_camera)
         {
             points.push(point);
         }
@@ -818,6 +832,9 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
     for (_, entity) in runtime.fragment_entities.drain() {
         commands.entity(entity).despawn();
     }
+    for (_, entity) in runtime.micro_depot_entities.drain() {
+        commands.entity(entity).despawn();
+    }
     for (_, entity) in runtime.location_entities.drain() {
         commands.entity(entity).despawn();
     }
@@ -845,6 +862,8 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     fragment_shadows: Query<'w, 's, (Entity, &'static PixelWorldFragmentShadowVisual)>,
     fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
     fragment_flecks: Query<'w, 's, (Entity, &'static PixelWorldFragmentFleckVisual)>,
+    micro_depot_visuals: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotVisual)>,
+    micro_depot_details: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotDetailVisual)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
@@ -877,6 +896,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_flecks.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.micro_depot_details.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_shadows.iter() {
@@ -920,6 +942,12 @@ pub(crate) fn render_scene(
             .entry(visual.id.clone())
             .or_insert(entity);
     }
+    for (entity, visual) in queries.micro_depot_visuals.iter() {
+        runtime
+            .micro_depot_entities
+            .entry(visual.id.clone())
+            .or_insert(entity);
+    }
     for (entity, visual) in queries.agent_visuals.iter() {
         runtime
             .agent_entities
@@ -952,6 +980,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_flecks.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.micro_depot_details.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_shadows.iter() {
@@ -1011,6 +1042,13 @@ pub(crate) fn render_scene(
         &queries.fragment_shadows,
         &queries.fragment_insets,
         &queries.fragment_flecks,
+        width,
+        height,
+    );
+    reconcile_micro_depot_facilities(
+        &mut commands,
+        &mut runtime,
+        &queries.micro_depot_details,
         width,
         height,
     );

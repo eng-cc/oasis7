@@ -263,6 +263,53 @@ fn deterministic_hash(input: &str) -> u32 {
     })
 }
 
+fn build_micro_depot_facilities(
+    gameplay: &Value,
+    location_by_id: &Map<String, Value>,
+    world_bounds: &Value,
+) -> Vec<Value> {
+    // The raw runtime snapshot is snake_case, while `buildGameplaySummary`
+    // normalizes it for the viewer as camelCase. An explicitly published snake
+    // array, including `[]`, remains authoritative over the compatibility form.
+    let facilities = match gameplay.get("micro_depot_facilities") {
+        Some(Value::Array(facilities)) => facilities.as_slice(),
+        _ => arr(gameplay, "microDepotFacilities"),
+    };
+    let mut facilities: Vec<_> = facilities
+        .iter()
+        .filter_map(|facility| {
+            let facility_id =
+                str_key(facility, "facility_id").or_else(|| str_key(facility, "facilityId"))?;
+            let location_id =
+                str_key(facility, "location_id").or_else(|| str_key(facility, "locationId"))?;
+            let status = str_key(facility, "status")?;
+            let location = location_by_id.get(location_id)?;
+            let anchor = normalize_position(obj(location, "pos"))?;
+            let hash = deterministic_hash(&format!("{facility_id}:{location_id}"));
+            let angle = ((hash % 360) as f64).to_radians();
+            let radius_hint = number_key(location, "radius_cm", 0.0);
+            let offset_cm = radius_hint.clamp(12_000.0, 60_000.0);
+            let pos = clamp_world_position(
+                &json!({
+                    "x_cm": number_key(&anchor, "x_cm", 0.0) + angle.cos() * offset_cm,
+                    "y_cm": number_key(&anchor, "y_cm", 0.0) + angle.sin() * offset_cm,
+                    "z_cm": number_key(&anchor, "z_cm", 0.0),
+                }),
+                world_bounds,
+            )?;
+            Some(json!({
+                "id": format!("micro_depot:{facility_id}"),
+                "facility_id": facility_id,
+                "location_id": location_id,
+                "status": status,
+                "pos": pos,
+            }))
+        })
+        .collect();
+    facilities.sort_by(|left, right| str_key(left, "id").cmp(&str_key(right, "id")));
+    facilities
+}
+
 fn derive_agent_position(
     agent: &Value,
     location_by_id: &Map<String, Value>,
@@ -909,6 +956,11 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         .iter()
         .filter_map(|location| Some((str_key(location, "id")?.to_string(), location.clone())))
         .collect();
+    // This is a display-only projection of published facility state. A missing
+    // location is intentionally suppressed rather than given a fallback anchor.
+    let gameplay = obj(input, "gameplay");
+    let micro_depot_facilities =
+        build_micro_depot_facilities(gameplay, &location_by_id, &world_bounds);
 
     let agents: Vec<Value> = arr(obj(input, "lists"), "agents")
         .iter()
@@ -963,7 +1015,6 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 .and_then(|location| normalize_position(obj(location, "pos")))
         })
         .or_else(|| world_center_position(&world_bounds));
-    let gameplay = obj(input, "gameplay");
     let goal_highlight = json!({
         "title": localized_goal_title(locale, gameplay),
         "objective": localized_objective_detail(locale, gameplay),
@@ -1033,6 +1084,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "world_bounds": world_bounds,
         "locations": locations,
         "fragment_terrain": fragment_terrain,
+        "micro_depot_facilities": micro_depot_facilities,
         "agents": agents,
         "links": links,
         "selection": selection,

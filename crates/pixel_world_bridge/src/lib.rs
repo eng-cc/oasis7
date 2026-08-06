@@ -93,6 +93,17 @@ struct FragmentTerrainPatch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct MicroDepotFacility {
+    id: String,
+    #[allow(dead_code)]
+    facility_id: String,
+    #[allow(dead_code)]
+    location_id: String,
+    status: String,
+    pos: Position,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct VisualHotspot {
     id: String,
     #[allow(dead_code)]
@@ -141,6 +152,8 @@ struct RenderState {
     locations: Vec<Location>,
     #[serde(default)]
     fragment_terrain: Vec<FragmentTerrainPatch>,
+    #[serde(default)]
+    micro_depot_facilities: Vec<MicroDepotFacility>,
     agents: Vec<Agent>,
     links: Vec<Link>,
     visual_hotspots: Vec<VisualHotspot>,
@@ -261,6 +274,7 @@ struct BevyRuntimeState {
     hover_key: Option<String>,
     grid_layout: Option<render::GridLayoutKey>,
     fragment_entities: HashMap<String, Entity>,
+    micro_depot_entities: HashMap<String, Entity>,
     location_entities: HashMap<String, Entity>,
     agent_entities: HashMap<String, Entity>,
     link_entities: HashMap<String, Entity>,
