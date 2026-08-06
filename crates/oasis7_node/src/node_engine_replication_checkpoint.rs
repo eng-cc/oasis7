@@ -2,6 +2,12 @@ use super::*;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
+pub(super) enum FreshObserverCheckpointBootstrap {
+    Installed,
+    PreflightUnavailable,
+    NotInstalled,
+}
+
 impl PosNodeEngine {
     // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
     // the aligned retained-window boundaries, including the latest completed boundary.
@@ -17,20 +23,22 @@ impl PosNodeEngine {
         progress_callback: &mut Option<
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
-    ) -> Result<bool, NodeError> {
+    ) -> Result<FreshObserverCheckpointBootstrap, NodeError> {
         if execution_hook.is_none()
             || !self.checkpoint_bootstrap_enabled
             || self.committed_height != 0
             || self.replication_persisted_height != 0
             || self.last_execution_height != 0
         {
-            return Ok(false);
+            return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
         }
         let Some(advertised_head) = endpoint.lookup_world_head(world_id)? else {
-            return Ok(false);
+            self.fresh_observer_checkpoint_preflight_unavailable = true;
+            return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
+        self.fresh_observer_checkpoint_preflight_unavailable = false;
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
-            return Ok(false);
+            return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
         }
         match self.try_sync_high_replication_checkpoint_boundary(
             endpoint,
@@ -43,8 +51,11 @@ impl PosNodeEngine {
             execution_hook,
             progress_callback,
         ) {
-            Ok(installed) => Ok(installed),
-            Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => Ok(false),
+            Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
+            Ok(false) => Ok(FreshObserverCheckpointBootstrap::NotInstalled),
+            Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                Ok(FreshObserverCheckpointBootstrap::NotInstalled)
+            }
             Err(err) => Err(err),
         }
     }

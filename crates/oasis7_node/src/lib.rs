@@ -1078,6 +1078,7 @@ struct PosNodeEngine {
     node_player_id: String,
     gossip_reverse_path_seeding_enabled: bool,
     checkpoint_bootstrap_enabled: bool,
+    fresh_observer_checkpoint_preflight_unavailable: bool,
     last_gossip_reverse_path_seed_at_ms: Option<i64>,
     allow_local_proposals: bool,
     require_execution_on_commit: bool,

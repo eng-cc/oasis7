@@ -8,6 +8,7 @@ use super::node_engine_storage_challenge::{
 };
 use super::*;
 use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
+use crate::node_engine_replication_checkpoint::FreshObserverCheckpointBootstrap;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
@@ -333,7 +334,7 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
-        let checkpoint_bootstrapped_before_ingest = self
+        let checkpoint_bootstrap_preflight = self
             .try_bootstrap_fresh_observer_from_advertised_checkpoint(
                 endpoint,
                 node_id,
@@ -342,6 +343,14 @@ impl PosNodeEngine {
                 &mut execution_hook,
                 &mut progress_callback,
             )?;
+        let checkpoint_bootstrapped_before_ingest = matches!(
+            checkpoint_bootstrap_preflight,
+            FreshObserverCheckpointBootstrap::Installed
+        );
+        let checkpoint_preflight_unavailable = matches!(
+            checkpoint_bootstrap_preflight,
+            FreshObserverCheckpointBootstrap::PreflightUnavailable
+        );
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         let mut validated_messages = Vec::new();
@@ -400,12 +409,17 @@ impl PosNodeEngine {
                 "replication_persisted_height",
                 "ingesting replication message",
             )?;
+            // A connected peer may publish its height-one tail before its
+            // fetch-head preflight is live. Do not make that irreversible
+            // execution transition while a fresh observer can still discover
+            // and install the peer's checkpoint on the next poll.
             let defer_fresh_height_one_for_checkpoint_bootstrap = execution_hook.is_some()
                 && self.checkpoint_bootstrap_enabled
                 && self.committed_height == 0
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
-                && self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+                && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                    || checkpoint_preflight_unavailable);
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
@@ -750,6 +764,19 @@ impl PosNodeEngine {
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
         let starting_replication_persisted_height = self.replication_persisted_height;
         let advertised_world_head = endpoint.lookup_world_head(world_id)?;
+        if advertised_world_head.is_none()
+            && self.checkpoint_bootstrap_enabled
+            && self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0
+            && self.network_committed_height == 1
+            && self.fresh_observer_checkpoint_preflight_unavailable
+        {
+            // Match ingest's fresh-observer deferral above. A missing peer
+            // head is a preflight result, not evidence that it is safe to
+            // execute the height-one tail before a checkpoint bootstrap.
+            return Ok(());
+        }
         let advertised_network_height = self.network_committed_height.max(
             advertised_world_head
                 .as_ref()
