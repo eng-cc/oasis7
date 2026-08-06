@@ -42,6 +42,7 @@ enum ReceiptTargetCuePart {
     BadgeOutlineRight,
     CrossAscending,
     CrossDescending,
+    RejectionSlash,
     UpwardStem,
     ConfirmationBar,
     UnknownDot,
@@ -90,58 +91,52 @@ fn receipt_cue_specs(
                 },
                 badge_top,
             );
-            let mut specs = vec![
-                ReceiptCueSpec {
-                    part: ReceiptTargetCuePart::BadgeBacking,
-                    offset: badge_offset,
-                    size: badge_size,
-                    rotation: 0.0,
-                    color: if is_narrow {
-                        NARROW_RECEIPT_BADGE_BACKING_COLOR
-                    } else {
-                        RECEIPT_BADGE_BACKING_COLOR
-                    },
-                    layer_z_offset: RECEIPT_BADGE_BACKING_LAYER_Z_OFFSET,
+            let mut specs = vec![ReceiptCueSpec {
+                part: ReceiptTargetCuePart::BadgeBacking,
+                offset: badge_offset,
+                size: badge_size,
+                rotation: 0.0,
+                color: if is_narrow {
+                    NARROW_RECEIPT_BADGE_BACKING_COLOR
+                } else {
+                    RECEIPT_BADGE_BACKING_COLOR
                 },
-                ReceiptCueSpec {
-                    part: ReceiptTargetCuePart::CrossAscending,
-                    offset: badge_offset,
-                    size: Vec2::new(
-                        if is_narrow {
-                            18.0
-                        } else {
-                            RECEIPT_BADGE_CROSS_DIAGONAL_PX
-                        },
-                        if is_narrow {
-                            3.0
-                        } else {
-                            RECEIPT_TARGET_CUE_THICKNESS_PX
-                        },
-                    ),
-                    rotation: std::f32::consts::FRAC_PI_4,
-                    color: RECEIPT_BADGE_STROKE_COLOR,
-                    layer_z_offset: RECEIPT_BADGE_STROKE_LAYER_Z_OFFSET,
+                layer_z_offset: RECEIPT_BADGE_BACKING_LAYER_Z_OFFSET,
+            }];
+            let stroke_size = Vec2::new(
+                if is_narrow {
+                    18.0
+                } else {
+                    RECEIPT_BADGE_CROSS_DIAGONAL_PX
                 },
-                ReceiptCueSpec {
+                if is_narrow {
+                    3.0
+                } else {
+                    RECEIPT_TARGET_CUE_THICKNESS_PX
+                },
+            );
+            specs.push(ReceiptCueSpec {
+                part: if state == "rejected" {
+                    ReceiptTargetCuePart::RejectionSlash
+                } else {
+                    ReceiptTargetCuePart::CrossAscending
+                },
+                offset: badge_offset,
+                size: stroke_size,
+                rotation: std::f32::consts::FRAC_PI_4,
+                color: RECEIPT_BADGE_STROKE_COLOR,
+                layer_z_offset: RECEIPT_BADGE_STROKE_LAYER_Z_OFFSET,
+            });
+            if state == "blocked" {
+                specs.push(ReceiptCueSpec {
                     part: ReceiptTargetCuePart::CrossDescending,
                     offset: badge_offset,
-                    size: Vec2::new(
-                        if is_narrow {
-                            18.0
-                        } else {
-                            RECEIPT_BADGE_CROSS_DIAGONAL_PX
-                        },
-                        if is_narrow {
-                            3.0
-                        } else {
-                            RECEIPT_TARGET_CUE_THICKNESS_PX
-                        },
-                    ),
+                    size: stroke_size,
                     rotation: -std::f32::consts::FRAC_PI_4,
                     color: RECEIPT_BADGE_STROKE_COLOR,
                     layer_z_offset: RECEIPT_BADGE_STROKE_LAYER_Z_OFFSET,
-                },
-            ];
+                });
+            }
             if is_narrow {
                 let horizontal_offset = (badge_size.y - 1.0) / 2.0;
                 let vertical_offset = (badge_size.x - 1.0) / 2.0;
