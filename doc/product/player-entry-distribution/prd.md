@@ -65,7 +65,7 @@
 
 Agent 离线工作是否继续，只由其独立且仍有效的授权范围、到期条件和专业合同决定。玩家会话恢复不得延长、扩大或复活已失效的 Agent 授权；授权失效后，Agent 必须停止产生新的越权世界动作，或按专业合同把尚未生效的动作明确置为待决、暂停或拒绝，不能伪装成已完成。若 intent 已由权威系统接受，玩家登录中断也不能把它误报为已取消或从历史中隐藏。
 
-`viewer` 与 `pure_api` 的正式 surface 至少要区分“会话阻塞”“待决且未生效”“Agent 授权失效或暂停”和“receipt 已结算”，并让玩家看到原请求、当前因果状态与安全下一步。下一步可以是 reconnect/re-auth、等待、查看 receipt、重新规划，或专业域明确允许的撤回/替代；重新提交必须是新的显式授权，并保留与原请求的关系，不能作为恢复流程的隐含副作用。具体 session token、签名、intent 状态机、Agent 授权字段、去重策略和 UI 表达由 P2P、runtime、Agent、Viewer 与测试专业域拥有。
+`viewer` 与 `pure_api` 的正式 surface 至少要区分“会话阻塞”“待决且未生效”“Agent 授权失效或暂停”和“receipt 已结算”。Viewer 必须以玩家可读形式呈现原请求、当前因果状态与安全下一步；无 UI 的 `pure_api` 必须返回语义等价、可由客户端消费的结构化状态与下一步类别，不要求内建玩家界面。下一步可以是 reconnect/re-auth、等待、查看 receipt、重新规划，或专业域明确允许的撤回/替代；重新提交必须是新的显式授权，并保留与原请求的关系，不能作为恢复流程的隐含副作用。具体 session token、签名、intent 状态机、Agent 授权字段、去重策略、API schema、transport 和 UI 表达由 P2P、runtime、Agent、Viewer 与测试专业域拥有。
 
 ## 3. 权威与冲突处理
 
@@ -105,7 +105,7 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 | SC-6 | viewer_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-020 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_SIMULATOR-045 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同版本、平台和 primary mode 的发现、进入、核验、失败与升级恢复端到端证据，包含适用平台真实资产与完整 release gate | test_tier_full |
 | SC-7 | producer_system_designer / gameplay_designer / viewer_engineer / qa_engineer / liveops_community | PRD-GAME-015 / PRD-WORLD_SIMULATOR-042/043/045 / PRD-TESTING-003 | `doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md`; `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 免费基础进入、非权力型可选服务、世界内成长/认可/区域互赖及当前 claim 分离的组合审计 | test_tier_required |
 | SC-8 | producer_system_designer / viewer_engineer / runtime_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-020 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_RUNTIME-014 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 真实发行资产覆盖兼容继续、写入前失败且可验证回退、未知或可能写入时阻止降级三类样例，并核对版本、平台、primary mode、候选资产、备份来源与权威状态非回退边界 | test_tier_full |
-| SC-9 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-P2P-004 / PRD-P2P-016 / PRD-P2P-021 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`; `doc/product/world-infrastructure/prd.md`; `doc/product/world-rules-core-gameplay/prd.md` | 资源影响 intent 在提交后会话失效、finality 恢复、重新认证与重复重试的组合样例，以及 Agent 授权先于或晚于会话失效的组合；断言单次效果、无越权新提交、无自动续权，并核对 `viewer` / `pure_api` 状态与 receipt 一致 | test_tier_full |
+| SC-9 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-P2P-004 / PRD-P2P-023 / PRD-P2P-029 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`; `doc/product/world-infrastructure/prd.md`; `doc/product/world-rules-core-gameplay/prd.md` | 资源影响 intent 在提交后会话失效、finality 恢复、重新认证与重复重试的组合样例，以及 Agent 授权先于或晚于会话失效的组合；断言单次效果、无越权新提交、无自动续权，并核对 Viewer 玩家可读状态、`pure_api` 结构化状态与 receipt 语义一致 | test_tier_full |
 
 ## 6. Non-Goals
 
