@@ -592,6 +592,19 @@ impl WorldKernel {
             };
         }
 
+        if data_output > 0
+            && available_hardware
+                .checked_sub(hardware_cost)
+                .and_then(|data_after_cost| data_after_cost.checked_add(data_output))
+                .is_none()
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::InvalidAmount {
+                    amount: data_output,
+                },
+            };
+        }
+
         if let Err(reason) =
             self.remove_from_owner(&owner, ResourceKind::Electricity, electricity_cost)
         {

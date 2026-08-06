@@ -438,6 +438,176 @@ fn schedule_recipe_quote_rejects_output_overflow_like_execution() {
 }
 
 #[test]
+fn schedule_recipe_output_overflow_rejection_is_atomic_without_a_success_sink() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 1;
+    config.economy.recipe_hardware_cost_per_batch = 0;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 7);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, i64::MAX - 1);
+
+    let resources_before_submit = kernel
+        .model()
+        .agents
+        .get("agent-smelter")
+        .expect("agent exists")
+        .resources
+        .clone();
+    let journal_len_before_submit = kernel.journal().len();
+    kernel.submit_action(Action::ScheduleRecipe {
+        owner,
+        factory_id: "factory.smelter.alpha".to_string(),
+        recipe_id: "recipe.smelter.alloy_plate".to_string(),
+        batches: 1,
+    });
+
+    let event = kernel.step().expect("overflowing schedule submission");
+    assert!(matches!(
+        event.kind,
+        WorldEventKind::ActionRejected {
+            reason: RejectReason::InvalidAmount { amount: 2 }
+        }
+    ));
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-smelter")
+            .expect("agent exists")
+            .resources,
+        resources_before_submit,
+        "a late output rejection must not debit either input resource"
+    );
+    assert_eq!(kernel.journal().len(), journal_len_before_submit + 1);
+    assert!(matches!(
+        kernel.journal().last().expect("rejection journal entry").kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+    assert!(
+        !kernel.journal()[journal_len_before_submit..]
+            .iter()
+            .any(|event| matches!(event.kind, WorldEventKind::RecipeScheduled { .. })),
+        "a rejected submission must not emit a success receipt/sink"
+    );
+}
+
+#[test]
+fn schedule_recipe_revalidates_after_a_competing_submission_without_a_second_success() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 2;
+    config.economy.recipe_hardware_cost_per_batch = 1;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 5);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 2);
+    kernel
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            1,
+        )
+        .expect("quote is valid before competition");
+
+    let action = || Action::ScheduleRecipe {
+        owner: owner.clone(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        recipe_id: "recipe.smelter.alloy_plate".to_string(),
+        batches: 1,
+    };
+    kernel.submit_action(action());
+    let competing_event = kernel.step().expect("competing submission");
+    assert!(matches!(
+        competing_event.kind,
+        WorldEventKind::RecipeScheduled { .. }
+    ));
+    let resources_after_competition = kernel
+        .model()
+        .agents
+        .get("agent-smelter")
+        .expect("agent exists")
+        .resources
+        .clone();
+    let journal_len_before_stale_submit = kernel.journal().len();
+
+    kernel.submit_action(action());
+    let stale_event = kernel.step().expect("stale quoted submission");
+    assert!(matches!(
+        stale_event.kind,
+        WorldEventKind::ActionRejected {
+            reason: RejectReason::InsufficientResource {
+                kind: ResourceKind::Electricity,
+                requested: 5,
+                available: 0,
+                ..
+            }
+        }
+    ));
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-smelter")
+            .expect("agent exists")
+            .resources,
+        resources_after_competition,
+        "the stale submission must not create a hidden debt after revalidation"
+    );
+    assert_eq!(kernel.journal().len(), journal_len_before_stale_submit + 1);
+    assert!(matches!(
+        kernel.journal().last().expect("rejection journal entry").kind,
+        WorldEventKind::ActionRejected { .. }
+    ));
+}
+
+#[test]
 fn refine_compound_quote_previews_net_value_without_mutating_state() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_hardware_cost = 5;
