@@ -7,6 +7,7 @@ use crate::simulator::{ResourceOwner, WorldKernel};
 use crate::viewer::auth::verify_power_survival_quote_auth_proof;
 use crate::viewer::protocol::{
     GameplayActionError, PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest,
+    PowerSurvivalRecoveryAction,
 };
 
 impl ViewerRuntimeLiveServer {
@@ -67,23 +68,36 @@ impl ViewerRuntimeLiveServer {
             &self.llm_sidecar,
             self.seed_model.as_ref(),
         );
-        let quote = WorldKernel::with_model(self.snapshot_config.clone(), model)
-            .quote_power_survival(
-                &ResourceOwner::Agent {
-                    agent_id: buyer_agent_id.to_string(),
-                },
+        let buyer = ResourceOwner::Agent {
+            agent_id: buyer_agent_id.to_string(),
+        };
+        let kernel = WorldKernel::with_model(self.snapshot_config.clone(), model);
+        let quote = match request.recovery_action {
+            PowerSurvivalRecoveryAction::BuyPower => kernel.quote_power_survival(
+                &buyer,
                 &ResourceOwner::Agent {
                     agent_id: request.seller_agent_id.clone(),
                 },
                 request.amount,
                 request.requested_price_per_pu,
-            )
-            .map_err(|reason| GameplayActionError {
-                code: "power_survival_quote_rejected".to_string(),
-                message: format!("quote_power_survival rejected: {reason:?}"),
-                action_id: Some("quote_power_survival".to_string()),
-                target_agent_id: Some(buyer_agent_id.to_string()),
-            })?;
+            ),
+            PowerSurvivalRecoveryAction::HarvestRadiation => {
+                kernel.quote_harvest_radiation_survival(&buyer, request.amount)
+            }
+        }
+        .map_err(|reason| GameplayActionError {
+            code: "power_survival_quote_rejected".to_string(),
+            message: match request.recovery_action {
+                PowerSurvivalRecoveryAction::HarvestRadiation => {
+                    "quote_power_survival harvest recovery is unavailable".to_string()
+                }
+                PowerSurvivalRecoveryAction::BuyPower => {
+                    format!("quote_power_survival rejected: {reason:?}")
+                }
+            },
+            action_id: Some("quote_power_survival".to_string()),
+            target_agent_id: Some(buyer_agent_id.to_string()),
+        })?;
         Ok(PowerSurvivalQuotePreflight {
             buyer_agent_id: quote.agent_id,
             seller_agent_id: request.seller_agent_id,

@@ -1,4 +1,135 @@
 impl WorldKernel {
+    pub fn quote_harvest_radiation_survival(
+        &self,
+        buyer: &ResourceOwner,
+        max_amount: i64,
+    ) -> Result<PowerSurvivalQuote, RejectReason> {
+        let ResourceOwner::Agent { agent_id } = buyer else {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![LOCATION_ELECTRICITY_POOL_REMOVED_NOTE.to_string()],
+            });
+        };
+        let agent = self
+            .model
+            .agents
+            .get(agent_id)
+            .ok_or_else(|| RejectReason::AgentNotFound {
+                agent_id: agent_id.clone(),
+            })?;
+        let location_pos = self
+            .model
+            .locations
+            .get(&agent.location_id)
+            .ok_or_else(|| RejectReason::LocationNotFound {
+                location_id: agent.location_id.clone(),
+            })?
+            .pos;
+        let mut projection = self.clone();
+        projection.ensure_chunk_generated_at(location_pos, ChunkGenerationCause::Action)?;
+        projection.quote_harvest_radiation_survival_generated(buyer, max_amount)
+    }
+
+    fn quote_harvest_radiation_survival_generated(
+        &self,
+        buyer: &ResourceOwner,
+        max_amount: i64,
+    ) -> Result<PowerSurvivalQuote, RejectReason> {
+        if max_amount <= 0 {
+            return Err(RejectReason::InvalidAmount { amount: max_amount });
+        }
+        let ResourceOwner::Agent { agent_id } = buyer else {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![LOCATION_ELECTRICITY_POOL_REMOVED_NOTE.to_string()],
+            });
+        };
+        let agent = self
+            .model
+            .agents
+            .get(agent_id)
+            .ok_or_else(|| RejectReason::AgentNotFound {
+                agent_id: agent_id.clone(),
+            })?;
+        let location = self
+            .model
+            .locations
+            .get(&agent.location_id)
+            .ok_or_else(|| RejectReason::LocationNotFound {
+                location_id: agent.location_id.clone(),
+            })?;
+        let local_available = self.radiation_available_at(location.pos);
+        if local_available <= 0 {
+            return Err(RejectReason::RadiationUnavailable {
+                location_id: agent.location_id.clone(),
+            });
+        }
+
+        let physics = &self.config.physics;
+        let capped_available = if physics.max_harvest_per_tick > 0 {
+            local_available.min(physics.max_harvest_per_tick)
+        } else {
+            local_available
+        };
+        let mut power_gain_estimate = max_amount.min(capped_available);
+        if physics.thermal_capacity > 0 && agent.thermal.heat > physics.thermal_capacity {
+            let ratio = (physics.thermal_capacity as f64 / agent.thermal.heat as f64)
+                .clamp(0.1, 1.0);
+            power_gain_estimate = (power_gain_estimate as f64 * ratio).floor() as i64;
+            if power_gain_estimate <= 0 {
+                return Err(RejectReason::ThermalOverload {
+                    heat: agent.thermal.heat,
+                    capacity: physics.thermal_capacity,
+                });
+            }
+        }
+
+        let current_power_level = agent.resources.get(ResourceKind::Electricity);
+        let recovered_power = current_power_level.checked_add(power_gain_estimate).ok_or(
+            RejectReason::InvalidAmount {
+                amount: power_gain_estimate,
+            },
+        )?;
+        let power_capacity = agent.power.capacity;
+        let power_state_before_value = self
+            .config
+            .power
+            .compute_state(current_power_level, power_capacity);
+        let power_state_after_value = self
+            .config
+            .power
+            .compute_state(recovered_power, power_capacity);
+        let idle_cost = self.config.power.idle_cost_per_tick.max(1);
+        let survival_runway_ticks = recovered_power / idle_cost;
+        let next_action_affordability_after_recovery =
+            self.power_next_action_affordability(recovered_power, power_capacity);
+        let recommended_power_action = self.power_survival_recommended_action(
+            power_state_after_value,
+            next_action_affordability_after_recovery,
+        );
+        let shutdown_avoidance_reason = self.power_survival_recovery_summary(
+            power_state_before_value,
+            power_state_after_value,
+            survival_runway_ticks,
+            &recommended_power_action,
+        );
+
+        Ok(PowerSurvivalQuote {
+            agent_id: agent_id.clone(),
+            current_power_level,
+            power_state_before: power_state_before_value.label().to_string(),
+            recovery_action: "harvest_radiation".to_string(),
+            recovery_amount: max_amount,
+            power_gain_estimate,
+            price_per_pu: 0,
+            price_or_time_cost: 0,
+            power_state_after_recovery: power_state_after_value.label().to_string(),
+            survival_runway_ticks,
+            next_action_affordability_after_recovery:
+                next_action_affordability_after_recovery.to_string(),
+            shutdown_avoidance_reason,
+            recommended_power_action,
+        })
+    }
+
     pub fn quote_power_survival(
         &self,
         buyer: &ResourceOwner,

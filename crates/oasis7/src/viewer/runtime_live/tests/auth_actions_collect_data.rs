@@ -121,6 +121,7 @@ fn signed_power_survival_quote_request(
         seller_agent_id: seller_agent_id.to_string(),
         amount,
         requested_price_per_pu,
+        recovery_action: crate::viewer::PowerSurvivalRecoveryAction::BuyPower,
         player_id: player_id.to_string(),
         public_key: Some(public_key_hex.to_string()),
         auth: None,
@@ -777,6 +778,221 @@ fn runtime_power_survival_quote_is_signed_deterministic_non_mutating_and_binds_b
         .handle_power_survival_quote(tampered)
         .expect_err("signed buy parameters must reject tampering");
     assert_eq!(tampered_error.code, "auth_signature_invalid");
+}
+
+#[test]
+fn runtime_power_survival_quote_accepts_legacy_signed_buy_power_request_without_recovery_action() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(208);
+    register_runtime_session(
+        &mut server,
+        "player-legacy-power-survival-quote",
+        Some(agent_id.as_str()),
+        208,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            5,
+        )
+        .expect("seed critical electricity");
+    let mut request: crate::viewer::PowerSurvivalQuoteRequest =
+        serde_json::from_value(serde_json::json!({
+            "seller_agent_id": agent_id,
+            "amount": 1,
+            "requested_price_per_pu": 1,
+            "player_id": "player-legacy-power-survival-quote",
+            "public_key": public_key,
+        }))
+        .expect("legacy request omits recovery_action");
+    assert_eq!(
+        request.recovery_action,
+        crate::viewer::PowerSurvivalRecoveryAction::BuyPower
+    );
+    let legacy_payload = crate::viewer::GameplayActionRequest {
+        action_id: "quote_power_survival".to_string(),
+        target_agent_id: format!(
+            "seller_agent_id:{}|amount:{}|requested_price_per_pu:{}",
+            request.seller_agent_id, request.amount, request.requested_price_per_pu
+        ),
+        actor_agent_id: None,
+        player_id: request.player_id.clone(),
+        public_key: request.public_key.clone(),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_gameplay_action_auth_proof(
+            &legacy_payload,
+            279,
+            public_key.as_str(),
+            private_key.as_str(),
+        )
+        .expect("sign legacy buy power quote payload"),
+    );
+    let quote = server
+        .handle_power_survival_quote(request)
+        .expect("legacy signed buy power quote remains valid");
+    assert_eq!(quote.recovery_action, "buy_power");
+}
+
+#[test]
+fn runtime_power_survival_quote_supports_signed_non_mutating_harvest_radiation_recovery() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(205);
+    register_runtime_session(
+        &mut server,
+        "player-harvest-survival-quote",
+        Some(agent_id.as_str()),
+        205,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            5,
+        )
+        .expect("seed critical electricity");
+    let state_before = server.world.state().clone();
+
+    // RED API contract: harvest is a recovery action in the same signed preflight family, not a
+    // fake BuyPower request with a synthetic seller or price.
+    let mut request = crate::viewer::PowerSurvivalQuoteRequest {
+        seller_agent_id: String::new(),
+        amount: 20,
+        requested_price_per_pu: 0,
+        recovery_action: crate::viewer::PowerSurvivalRecoveryAction::HarvestRadiation,
+        player_id: "player-harvest-survival-quote".to_string(),
+        public_key: Some(public_key.clone()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_power_survival_quote_auth_proof(
+            &request,
+            276,
+            public_key.as_str(),
+            private_key.as_str(),
+        )
+        .expect("sign harvest survival quote auth"),
+    );
+
+    let quote = server
+        .handle_power_survival_quote(request.clone())
+        .expect("signed harvest radiation survival quote");
+    assert_eq!(quote.buyer_agent_id, agent_id);
+    assert_eq!(quote.recovery_action, "harvest_radiation");
+    assert_eq!(quote.recovery_amount, 20);
+    assert!(quote.power_gain_estimate > 0);
+    assert_eq!(quote.price_or_time_cost, 0);
+    assert_eq!(
+        server
+            .handle_power_survival_quote(request)
+            .expect("repeat harvest quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+
+    let mut tampered = signed_power_survival_quote_request(
+        agent_id.as_str(),
+        1,
+        1,
+        "player-harvest-survival-quote",
+        277,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered.recovery_action = crate::viewer::PowerSurvivalRecoveryAction::HarvestRadiation;
+    let tampered_error = server
+        .handle_power_survival_quote(tampered)
+        .expect_err("recovery action must be bound by the signed quote payload");
+    assert_eq!(tampered_error.code, "auth_signature_invalid");
+}
+
+#[test]
+fn runtime_harvest_survival_quote_rejection_redacts_location_id() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let location_id = server.compat_snapshot(None).model.agents[&agent_id]
+        .location_id
+        .clone();
+    let (public_key, private_key) = test_signer(207);
+    register_runtime_session(
+        &mut server,
+        "player-harvest-redaction",
+        Some(agent_id.as_str()),
+        207,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server.snapshot_config.physics.radiation_floor = 0;
+    server.snapshot_config.physics.radiation_floor_cap_per_tick = 0;
+    let mut request = crate::viewer::PowerSurvivalQuoteRequest {
+        seller_agent_id: String::new(),
+        amount: 1,
+        requested_price_per_pu: 0,
+        recovery_action: crate::viewer::PowerSurvivalRecoveryAction::HarvestRadiation,
+        player_id: "player-harvest-redaction".to_string(),
+        public_key: Some(public_key.clone()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_power_survival_quote_auth_proof(
+            &request,
+            278,
+            public_key.as_str(),
+            private_key.as_str(),
+        )
+        .expect("sign harvest quote auth"),
+    );
+    let error = server
+        .handle_power_survival_quote(request)
+        .expect_err("no-radiation harvest quote rejected");
+    assert_eq!(error.code, "power_survival_quote_rejected");
+    assert!(!error.message.contains(location_id.as_str()));
 }
 
 #[test]
