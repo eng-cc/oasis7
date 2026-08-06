@@ -24,6 +24,14 @@
 - 认证遵循证据优先路径：技术可用性、场景 parity 与安全证据先成立，才可进入受限试点；试点以明确 tier、范围和可审计结果运行，并可在风险、失效或证据变化时暂停或撤销。一次演示、模型声明或局部成功不能直接成为广泛准入。
 - 所有 provider 都在同一固定权威 cadence 与 action slots 内提出意图。更快模型、更多调用、付费档位或后台代理不得换取额外世界回合、优先排序、绕过冲突窗口或更高的权威行动频率。
 
+#### 准入生命周期与动作边界
+
+provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> 受限试点 -> 已准入范围`；`受限试点` 或 `已准入范围` 可因风险、失效或证据变化转入 `已暂停` 或 `已撤销`。只有 `受限试点` 与 `已准入范围` 可以在其已记录的 tier、场景、权限和有效范围内被玩家选择；其余状态不能形成新的权威意图来源。状态名称只表达玩家可见的准入结果，不定义 profile 字段、评估阈值或专业状态机。
+
+`已暂停` 是可逆的风险隔离：它停止该 profile 提交新的意图；尚未产生 committed 世界效果的请求必须按当时有效的范围和前置条件重新评估，只能明确地继续、被拒绝、过期、取消，或经有权主体重新确认后以新请求继续。重试、去重、receipt 查询和是否继续的判定，均由 [`doc/world-runtime/prd.md`](../../world-runtime/prd.md) 的 request identity、anti-replay 与 canonical journal/receipt 合同决定；本文不定义其实现。历史 receipt 只是既有 committed 结果的证据，不是新意图或重新执行的输入。任何重新确认后的新请求仍按正常权威路径进入，不能获得额外 slot 或制造重复世界效果。`已撤销` 不得通过重连、切换 profile、复制请求或历史 receipt 自动恢复或重放。暂停或撤销不会追溯抹去已 committed 的世界结果、责任或 receipt。
+
+恢复必须由新的、适用范围明确的证据结论进入 `受限试点` 或 `已准入范围`；不得自动还原暂停前更宽的范围或权限。每次状态转换应让受影响玩家读到原因、有效范围、当前待决请求的真实结果和可用下一步；该可读性不把本地排队、Agent 记忆或界面提示表达为权威成功。
+
 ### 2.2 可审计学习、认证和重训
 
 - Agent 的经验、训练、认证和经治理许可的模块必须保留可审计来源、适用范围、有效状态和后续变化；它们不是不可解释的黑箱 power，也不会因模型切换或组织偏好抹去历史。
@@ -42,7 +50,7 @@
 | --- | --- |
 | provider 准入结果语义、固定 cadence 公平、学习/重训历史和情报私有/安全/公共基线的组合边界 | `doc/world-simulator/prd.md` 拥有 provider、Agent、Local Provider parity、社交事实与玩家 surface 的专业合同；`doc/world-runtime/prd.md` 拥有权威时序、资格、receipt 与执行；`doc/testing/prd.md` 拥有测试与当前 verdict |
 
-本分册不扩大 Local Provider parity、社交事实 adjudication 或产业专题的当前专业真值，也不定义认证算法、训练内容、情报保密级别、时长、披露字段、模块实现或执行节拍。缺少同一候选的专业证据时，以较窄的 blocked、limited 或未承诺边界为准。
+本分册不扩大 Local Provider parity、社交事实 adjudication 或产业专题的当前专业真值，也不定义认证算法、训练内容、情报保密级别、时长、披露字段、模块实现、准入状态字段、去重/重放规则或执行节拍。缺少同一候选的专业证据时，以较窄的 blocked、limited 或未承诺边界为准。
 
 ## 4. 路线图
 
@@ -53,24 +61,31 @@
 
 ## 5. Done：成功标准与验收
 
-- PL-1：provider 样例证明认证以技术/parity/安全证据为前置，并经历有范围的试点/分层、暂停或撤销；未经证据的模型、一次成功或付费档位不会自动获得世界权威。
-- PL-2：不同 provider profile 的样例在同一固定 cadence 和 action slots 下获得一致的权威行动机会；provider 性能、调用量或付费便利不增加世界权力。
+- PL-1：provider 样例证明认证以技术/parity/安全证据为前置，并经历有范围的试点/分层、暂停或撤销；未经证据的模型、一次成功或付费档位不会自动获得世界权威。样例至少覆盖：证据不足或超出试点范围时拒绝选择，暂停后新请求不进入权威节奏且未 committed 请求被重新评估，撤销后旧请求或历史 receipt 不能重放，以及恢复只在新的已证实范围内生效。
+- PL-2：不同 provider profile 的样例仅在相同 eligible actor、场景和 slot 输入下比较其权威行动机会；provider 性能、调用量或付费便利不增加世界权力。暂停、撤销、重新确认或恢复也不得借机取得额外 slot、优先排序或跨越冲突窗口；重新确认后的新请求只能按正常 slot 进入。
 - PL-3：训练、认证、受治理模块、撤销和重训样例可追溯来源、适用范围、成本和历史；重训不会洗去责任、失败或 provenance。
 - PL-4：情报样例区分有界私有期、必要安全披露、可公开的最终 baseline 与不应公开的敏感内容，并在决策时显示 freshness/uncertainty 与刷新或纠正路径。
 - PL-5：所有说明将长期目标与当前 Local Provider parity、社交事实或产业专业真值分开；没有新鲜专业证据时不宣称 provider、学习或情报能力已实现或已就绪。
+
+以下为**未来需要补齐的** `test_tier_full` 证据场景，而不是本分支已存在或已通过的测试。每个场景必须记录初始准入状态/范围、操作、权威提交结果、slot 数量与排序，以及 committed 结果：
+
+- `provider_admission_scope_rejection`：证据不足或超出 `受限试点` / `已准入范围` 时，选择或提交被拒绝且无世界效果。
+- `provider_pause_rechecks_pending_request`：暂停阻止新提交；既有未 committed 请求按当时范围重新评估，并留下继续、拒绝、过期、取消或重新确认的真实结果。
+- `provider_revocation_rejects_old_request_or_receipt`：撤销后旧请求和历史 receipt 不能作为新提交或重新执行输入，既有 committed 结果仍可查询。
+- `provider_transition_preserves_slot_fairness`：对相同 eligible actor、场景和 slot 输入，暂停、撤销、恢复或重新确认不改变 slot 数量或排序；新请求仅从正常权威路径进入。
 
 ### 5.1 验收追踪
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
-| PL-1 / PL-2 | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | provider 证据/试点/范围/撤销、固定 cadence/action slots 与非权力负例 | test_tier_full |
+| PL-1 / PL-2 | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 未来 full-tier 场景 `provider_admission_scope_rejection`、`provider_pause_rechecks_pending_request`、`provider_revocation_rejects_old_request_or_receipt`、`provider_transition_preserves_slot_fairness`；每例记录初始状态/范围、操作、权威提交结果、slot 数量/排序与 committed 结果 | test_tier_full |
 | PL-3 | producer_system_designer / agent_engineer / wasm_platform_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 训练/认证/模块/重训的 provenance、成本、撤销和历史连续性证据 | test_tier_full |
 | PL-4 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 私有/安全披露/公共 baseline、freshness/uncertainty 和刷新/纠正组合证据 | test_tier_required |
 | PL-5 | producer_system_designer / agent_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Local Provider/social-fact/industry 现状与长期专题 claim 分离审计 | test_tier_required |
 
 ## 6. Non-Goals
 
-- 不选择或实现 provider、profile、模型、评测、训练、认证、模块、情报分类、cadence/action slots 或玩家 UI。
+- 不选择或实现 provider、profile、模型、评测、训练、认证、模块、情报分类、准入状态字段、去重/重放、cadence/action slots 或玩家 UI。
 - 不为 provider、付费服务、训练、模块或情报授予额外世界权力、治理权或行动频率。
 - 不把当前 Local Provider parity、社交事实或产业专业合同扩写为本专题能力已实现。
 - 不声明任何当前 preview、发布、provider 可用性或 readiness。
