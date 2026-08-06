@@ -7,6 +7,48 @@ impl PosNodeEngine {
     // the aligned retained-window boundaries, including the latest completed boundary.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
 
+    pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
+        progress_callback: &mut Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
+    ) -> Result<bool, NodeError> {
+        if execution_hook.is_none()
+            || !self.checkpoint_bootstrap_enabled
+            || self.committed_height != 0
+            || self.replication_persisted_height != 0
+            || self.last_execution_height != 0
+        {
+            return Ok(false);
+        }
+        let Some(advertised_head) = endpoint.lookup_world_head(world_id)? else {
+            return Ok(false);
+        };
+        if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
+            return Ok(false);
+        }
+        match self.try_sync_high_replication_checkpoint_boundary(
+            endpoint,
+            node_id,
+            world_id,
+            replication_runtime,
+            advertised_head.height,
+            0,
+            Some(&advertised_head),
+            execution_hook,
+            progress_callback,
+        ) {
+            Ok(installed) => Ok(installed),
+            Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
     pub(super) fn validate_world_head_checkpoint_payload(
         world_id: &str,
         payload: &ReplicationCommitPayload,

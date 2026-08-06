@@ -333,6 +333,15 @@ impl PosNodeEngine {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
+        let checkpoint_bootstrapped_before_ingest = self
+            .try_bootstrap_fresh_observer_from_advertised_checkpoint(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                &mut execution_hook,
+                &mut progress_callback,
+            )?;
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         let mut validated_messages = Vec::new();
@@ -373,6 +382,14 @@ impl PosNodeEngine {
             validated_messages.push((message, payload_view));
         }
         for (message, payload_view) in validated_messages {
+            if checkpoint_bootstrapped_before_ingest
+                && payload_view
+                    .as_ref()
+                    .map(|payload| payload.height <= self.replication_persisted_height)
+                    .unwrap_or(false)
+            {
+                continue;
+            }
             let committed_successor = checked_replication_successor(
                 self.committed_height,
                 "committed_height",
