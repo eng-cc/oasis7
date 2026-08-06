@@ -1587,14 +1587,14 @@ reason = required["reason_summary"] or ""
 expected_present = [
     "OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true",
     "OASIS7_CI_RUN_VIEWER_WASM_CHECK=true",
-    "OASIS7_CI_RUN_VIEWER_PERF_SMOKE=true",
+    "OASIS7_CI_RUN_VIEWER_PERF_SMOKE=false",
 ]
 missing = [item for item in expected_present if item not in command]
 if missing:
     raise SystemExit(f"viewer required command missing {missing}: {command}")
 if required["scope"] != "targeted":
     raise SystemExit(f"expected targeted viewer scope, got: {required}")
-if "viewer:crates/oasis7_viewer/src/lib.rs" not in reason:
+if "viewer_js_required:crates/oasis7_viewer/src/lib.rs" not in reason:
     raise SystemExit(f"expected viewer reason, got: {reason}")
 PY
 

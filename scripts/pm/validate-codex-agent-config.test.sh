@@ -71,6 +71,21 @@ fixture="$FIXTURE"
   --root "$fixture" --skip-native-probe >/dev/null
 printf 'positive case passed: baseline\n'
 
+# The executable validator is an operator-facing entrypoint.  It must recover
+# when PATH's conventional python3 is too old for tomllib, provided the
+# repository's generic interpreter finder can discover a compatible runtime.
+# Keep python42 after /usr/bin so the shebang reaches the known old python3,
+# while the finder can still enumerate the compatible fixture interpreter.
+if ! PATH="/usr/bin:/bin:$TMP_DIR/future-python-bin" \
+  "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
+    --root "$fixture" --skip-native-probe >"$TMP_DIR/direct-entrypoint.out" \
+    2>"$TMP_DIR/direct-entrypoint.err"; then
+  echo "validate-codex-agent-config.test: direct validator did not discover a compatible tomllib interpreter" >&2
+  cat "$TMP_DIR/direct-entrypoint.err" >&2
+  exit 1
+fi
+printf 'positive case passed: direct entrypoint interpreter discovery\n'
+
 new_fixture wrong-adapter-model
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
@@ -213,6 +228,23 @@ set -euo pipefail
 printf '%s\n' "$$" >"$FAKE_CODEX_PID_FILE"
 case "${FAKE_CODEX_MODE:-exit}" in
   hang) sleep 60 ;;
+  hold_stdout)
+    sleep 60 &
+    printf '%s\n' "$!" >"$FAKE_CODEX_CHILD_PID_FILE"
+    exit 7
+    ;;
+  delayed_response)
+    exec 3<&0
+    (
+      read -r _ <&3 || true
+      sleep "${FAKE_CODEX_RESPONSE_DELAY_SECONDS:-0.25}"
+      cat "$FAKE_CODEX_DELAYED_RESPONSE_FILE"
+      read -r _ <&3 || true
+      read -r _ <&3 || true
+    ) &
+    printf '%s\n' "$!" >"$FAKE_CODEX_CHILD_PID_FILE"
+    exit 7
+    ;;
   exit) echo "fake early exit" >&2; exit 7 ;;
   *) exit 9 ;;
 esac
@@ -233,6 +265,21 @@ assert_pid_not_live() {
   done
   echo "validate-codex-agent-config.test: leaked fake Codex PID $pid after $label" >&2
   exit 1
+}
+
+terminate_and_assert_pid_not_live() {
+  local pid_file="$1"
+  local label="$2"
+  [[ -f "$pid_file" ]] || {
+    echo "validate-codex-agent-config.test: missing fake Codex child PID for $label" >&2
+    exit 1
+  }
+  local pid
+  pid="$(cat "$pid_file")"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+  fi
+  assert_pid_not_live "$pid_file" "$label"
 }
 
 new_fixture native-lifecycle
@@ -277,5 +324,51 @@ fi
 grep -F "exited before response 1" "$TMP_DIR/native-exit.err" >/dev/null
 assert_pid_not_live "$FAKE_PID_FILE" early-exit
 printf 'native early-exit process cleanup passed\n'
+
+FAKE_CODEX_CHILD_PID_FILE="$TMP_DIR/fake-codex-child.pid"
+rm -f "$FAKE_PID_FILE" "$FAKE_CODEX_CHILD_PID_FILE"
+if PATH="$FAKE_BIN:$PATH" FAKE_CODEX_PID_FILE="$FAKE_PID_FILE" \
+  FAKE_CODEX_CHILD_PID_FILE="$FAKE_CODEX_CHILD_PID_FILE" FAKE_CODEX_MODE=hold_stdout \
+  CODEX_AGENT_CONFIG_PROBE_TIMEOUT_SECONDS=1 \
+  "$TOML_PYTHON" "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
+    --root "$fixture" >"$TMP_DIR/native-held-stdout.out" \
+    2>"$TMP_DIR/native-held-stdout.err"; then
+  terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" held-stdout
+  echo "validate-codex-agent-config.test: expected native held-stdout early exit" >&2
+  exit 1
+fi
+if ! grep -F "exited before response 1" "$TMP_DIR/native-held-stdout.err" >/dev/null; then
+  terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" held-stdout
+  echo "validate-codex-agent-config.test: held-stdout parent exit was not classified as early exit" >&2
+  cat "$TMP_DIR/native-held-stdout.err" >&2
+  exit 1
+fi
+terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" held-stdout
+printf 'native held-stdout early-exit process cleanup passed\n'
+
+FAKE_CODEX_DELAYED_RESPONSE_FILE="$TMP_DIR/fake-codex-delayed-response.jsonl"
+FAKE_CODEX_CHILD_PID_FILE="$TMP_DIR/fake-codex-delayed-response-child.pid"
+printf '%s\n' '{"id":1,"result":{}}' >"$FAKE_CODEX_DELAYED_RESPONSE_FILE"
+rm -f "$FAKE_PID_FILE" "$FAKE_CODEX_CHILD_PID_FILE"
+if PATH="$FAKE_BIN:$PATH" FAKE_CODEX_PID_FILE="$FAKE_PID_FILE" \
+  FAKE_CODEX_CHILD_PID_FILE="$FAKE_CODEX_CHILD_PID_FILE" \
+  FAKE_CODEX_DELAYED_RESPONSE_FILE="$FAKE_CODEX_DELAYED_RESPONSE_FILE" \
+  FAKE_CODEX_MODE=delayed_response CODEX_AGENT_CONFIG_PROBE_TIMEOUT_SECONDS=1 \
+  "$TOML_PYTHON" "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
+    --root "$fixture" >"$TMP_DIR/native-delayed-response.out" \
+    2>"$TMP_DIR/native-delayed-response.err"; then
+  terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" delayed-response
+  echo "validate-codex-agent-config.test: expected delayed initialize response to leave config/read unanswered" >&2
+  exit 1
+else
+  if ! grep -F "exited before response 2" "$TMP_DIR/native-delayed-response.err" >/dev/null; then
+    terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" delayed-response
+    echo "validate-codex-agent-config.test: delayed initialize response was lost after parent exit" >&2
+    cat "$TMP_DIR/native-delayed-response.err" >&2
+    exit 1
+  fi
+  terminate_and_assert_pid_not_live "$FAKE_CODEX_CHILD_PID_FILE" delayed-response
+  printf 'native delayed initialize response reached config/read boundary\n'
+fi
 
 printf 'validate-codex-agent-config.test: PASS\n'
