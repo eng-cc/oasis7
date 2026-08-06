@@ -20,7 +20,7 @@ export function installPixelWorldHotspotPointerProbe({
   getHoverSelection,
   getHoveredHotspot,
 }) {
-  if (typeof window === "undefined" || fixtureName !== "hotspot_tooltip") {
+  if (typeof window === "undefined" || !["hotspot_tooltip", "recent_event_glyphs"].includes(fixtureName)) {
     return () => {};
   }
 
@@ -29,12 +29,15 @@ export function installPixelWorldHotspotPointerProbe({
     rendererStatus: getRendererStatus(),
     hoverSelection: getHoverSelection(),
   });
-  const targetHotspot = () => getHotspotHitTargets().find((entry) => entry.id === "blocker-highlight") || null;
+  const targetHotspot = (id = "blocker-highlight") => getHotspotHitTargets().find((entry) => entry.id === id) || null;
 
   window[HOTSPOT_POINTER_PROBE_GLOBAL] = {
-    async hover() {
+    targets() {
+      return getHotspotHitTargets();
+    },
+    async hover(id = "blocker-highlight") {
       const canvas = getCanvas();
-      const hotspot = targetHotspot();
+      const hotspot = targetHotspot(id);
       if (!canvas || !hotspot || getRendererStatus() !== "ready") {
         return { ...receiptBase(), dispatched: false, eventType: "pointermove", visible: false, reason: "canvas_hotspot_or_renderer_unavailable" };
       }

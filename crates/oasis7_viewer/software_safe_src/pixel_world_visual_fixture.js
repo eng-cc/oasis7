@@ -36,6 +36,7 @@ export function installPixelWorldVisualFixtureHook() {
   const fixtures = {
     selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
+    recent_event_glyphs: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
@@ -46,6 +47,15 @@ export function installPixelWorldVisualFixtureHook() {
   }
   const fixture = fixtures[fixtureName]();
   core.injectSnapshot(fixture, { returnState: false });
+  if (fixtureName === "recent_event_glyphs") {
+    // Test-only input for the real WASM renderer smoke. These event kinds are
+    // projected by the bridge into two independent, hoverable visual hotspots.
+    core.state.recentEvents = [
+      { event_id: "resource-transfer-fixture", title: "Resource transfer completed", kind: "resource_transfer" },
+      { event_id: "build-queue-fixture", title: "Build queue updated", kind: "build_queue" },
+    ];
+    core.state.eventCount = core.state.recentEvents.length;
+  }
   const alignFixtureAuth = () => {
     const playerId = String(core.state.auth.playerId || "player-one").trim() || "player-one";
     const publicKey = String(core.state.auth.publicKey || "abcdef0123456789abcdef0123456789").trim();

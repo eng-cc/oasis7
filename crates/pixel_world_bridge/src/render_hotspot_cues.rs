@@ -14,6 +14,10 @@ pub(crate) enum HotspotCuePart {
     BlockerCrossDescending,
     GoalCornerTop,
     GoalCornerRight,
+    ResourceTransferLead,
+    ResourceTransferTrail,
+    BuildQueueUpper,
+    BuildQueueLower,
     RecentEventTick,
 }
 
@@ -91,6 +95,39 @@ pub(crate) fn reconcile_hotspot_cues(
             "goal" => &[
                 (HotspotCuePart::GoalCornerTop, 0.22, 0.22, 0.44, 1.0, 0.0),
                 (HotspotCuePart::GoalCornerRight, 0.22, 0.22, 1.0, 0.44, 0.0),
+            ],
+            "resource_transfer" => &[
+                // Offset twin strokes suggest directed movement while retaining the
+                // neutral, low-density event hierarchy of the shared hotspot base.
+                (
+                    HotspotCuePart::ResourceTransferLead,
+                    0.18,
+                    -0.20,
+                    0.64,
+                    1.34,
+                    0.0,
+                ),
+                (
+                    HotspotCuePart::ResourceTransferTrail,
+                    -0.18,
+                    0.20,
+                    0.64,
+                    1.34,
+                    0.0,
+                ),
+            ],
+            "build_queue" => &[
+                // Deliberately uneven stacked bars read as queued work, distinct
+                // from the diagonal progression of resource movement.
+                (
+                    HotspotCuePart::BuildQueueUpper,
+                    -0.16,
+                    -0.24,
+                    0.48,
+                    1.34,
+                    0.0,
+                ),
+                (HotspotCuePart::BuildQueueLower, 0.13, 0.24, 0.82, 1.34, 0.0),
             ],
             _ => &[(HotspotCuePart::RecentEventTick, 0.0, -0.26, 0.48, 1.0, 0.0)],
         };
