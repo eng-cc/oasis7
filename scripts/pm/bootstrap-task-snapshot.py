@@ -234,9 +234,28 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
     if saved.get("digest") != digest(saved):
         raise SnapshotError("snapshot digest mismatch")
     expected = live_payload(root, tasks_json, args.task_uid, args.request_identity)
-    for field in ("schema", "task", "repository", "request"):
+
+    def immutable_task_identity(payload: dict[str, Any]) -> dict[str, Any]:
+        task = payload.get("task")
+        project = task.get("project") if isinstance(task, dict) else None
+        return {
+            "uid": task.get("uid") if isinstance(task, dict) else None,
+            "issue": task.get("issue") if isinstance(task, dict) else None,
+            "project": {
+                "owner": project.get("owner") if isinstance(project, dict) else None,
+                "number": project.get("number") if isinstance(project, dict) else None,
+                "item_id": project.get("item_id") if isinstance(project, dict) else None,
+            },
+            "owner_role": task.get("owner_role") if isinstance(task, dict) else None,
+            "acceptance": task.get("acceptance") if isinstance(task, dict) else None,
+            "bootstrap_epoch": task.get("bootstrap_epoch") if isinstance(task, dict) else None,
+        }
+
+    for field in ("schema", "repository", "request"):
         if saved.get(field) != expected[field]:
             raise SnapshotError(f"snapshot {field} drift")
+    if immutable_task_identity(saved) != immutable_task_identity(expected):
+        raise SnapshotError("snapshot task identity drift")
     saved_git = saved.get("git")
     expected_git = expected["git"]
     if not isinstance(saved_git, dict):
