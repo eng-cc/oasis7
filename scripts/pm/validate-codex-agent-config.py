@@ -20,10 +20,40 @@ from typing import Any
 try:
     import tomllib
 except ModuleNotFoundError as error:  # pragma: no cover - selected by the shell wrapper
-    raise SystemExit(
-        "validate-codex-agent-config: Python 3.11+ with stdlib tomllib is required; "
-        "the workflow evaluator searches available interpreters even when python3 is 3.9"
-    ) from error
+    reexec_guard = "OASIS7_CODEX_AGENT_CONFIG_TOMLLIB_REEXEC"
+    if os.environ.get(reexec_guard) == "1":
+        raise SystemExit(
+            "validate-codex-agent-config: Python 3.11+ with stdlib tomllib is required; "
+            "the repository interpreter fallback did not provide tomllib"
+        ) from error
+    finder = Path(__file__).with_name("find-python-with-module.sh")
+    finder_env = os.environ.copy()
+    finder_env["PATH"] = finder_env.get("PATH", "") + os.pathsep
+    try:
+        result = subprocess.run(
+            [str(finder), "tomllib"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=finder_env,
+        )
+    except OSError as finder_error:
+        raise SystemExit(
+            "validate-codex-agent-config: Python 3.11+ with stdlib tomllib is required; "
+            f"cannot run repository interpreter finder {finder}: {finder_error}"
+        ) from error
+    interpreter = result.stdout.strip()
+    if result.returncode != 0 or not interpreter:
+        detail = result.stderr.strip()
+        suffix = f": {detail}" if detail else ""
+        raise SystemExit(
+            "validate-codex-agent-config: Python 3.11+ with stdlib tomllib is required; "
+            f"repository interpreter finder could not locate one{suffix}"
+        ) from error
+    reexec_env = os.environ.copy()
+    reexec_env[reexec_guard] = "1"
+    os.execve(interpreter, [interpreter, str(Path(__file__).resolve()), *sys.argv[1:]], reexec_env)
 
 
 EXPECTED_ROLES = {
@@ -51,6 +81,7 @@ MANDATORY_INSTRUCTION_MARKERS = (
     "uncertainty",
     "residual risk",
 )
+TERMINAL_RESPONSE_DRAIN_SECONDS = 0.5
 
 def fail(message: str) -> None:
     raise SystemExit(f"validate-codex-agent-config: {message}")
@@ -85,19 +116,42 @@ def read_response(
     stderr_tail: deque[str],
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
+    terminal_drain_deadline: float | None = None
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            detail = "".join(stderr_tail).strip()
-            suffix = f"; stderr tail: {detail[-2000:]}" if detail else ""
-            fail(
-                f"Codex app-server timed out after {timeout_seconds:g}s waiting "
-                f"for response {request_id}{suffix}"
-            )
-        try:
-            line = output.get(timeout=remaining)
-        except queue.Empty:
-            continue
+            if terminal_drain_deadline is not None and process.poll() is not None:
+                try:
+                    line = output.get_nowait()
+                except queue.Empty:
+                    detail = "".join(stderr_tail).strip()
+                    suffix = f"; stderr tail: {detail[-2000:]}" if detail else ""
+                    fail(f"Codex app-server exited before response {request_id}{suffix}")
+            else:
+                detail = "".join(stderr_tail).strip()
+                suffix = f"; stderr tail: {detail[-2000:]}" if detail else ""
+                fail(
+                    f"Codex app-server timed out after {timeout_seconds:g}s waiting "
+                    f"for response {request_id}{suffix}"
+                )
+        else:
+            try:
+                line = output.get(timeout=min(remaining, 0.1))
+            except queue.Empty:
+                if process.poll() is None:
+                    continue
+                if terminal_drain_deadline is None:
+                    terminal_drain_deadline = min(
+                        deadline, time.monotonic() + TERMINAL_RESPONSE_DRAIN_SECONDS
+                    )
+                if time.monotonic() < terminal_drain_deadline:
+                    continue
+                try:
+                    line = output.get_nowait()
+                except queue.Empty:
+                    detail = "".join(stderr_tail).strip()
+                    suffix = f"; stderr tail: {detail[-2000:]}" if detail else ""
+                    fail(f"Codex app-server exited before response {request_id}{suffix}")
         if line is None:
             detail = "".join(stderr_tail).strip()
             suffix = f"; stderr tail: {detail[-2000:]}" if detail else ""
