@@ -8,6 +8,14 @@ fn depot(id: &str, status: &str) -> MicroDepotFacility {
         location_id: "loc-0".to_string(),
         status: status.to_string(),
         pos: sample_position(1_530_000.0, 1_010_000.0),
+        service_radius_cm: 0.0,
+    }
+}
+
+fn depot_with_service_radius(id: &str, service_radius_cm: f64) -> MicroDepotFacility {
+    MicroDepotFacility {
+        service_radius_cm,
+        ..depot(id, "active")
     }
 }
 
@@ -156,4 +164,73 @@ fn micro_depot_statuses_have_shape_sensitive_raster_signatures() {
     assert_ne!(active, suspended);
     assert_ne!(suspended, depleted);
     assert_ne!(active, depleted);
+}
+
+#[test]
+fn micro_depot_service_radius_outline_is_noninteractive_and_cleans_up_when_invalid() {
+    let mut state = sample_render_state(12_000.0);
+    state.micro_depot_facilities = vec![depot_with_service_radius("active", 240_000.0)];
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut glyphs = world.query::<(&PixelWorldMicroDepotVisual, &Transform)>();
+    let glyph_z = glyphs
+        .iter(world)
+        .find(|(visual, _)| visual.id == "micro_depot:active")
+        .map(|(_, transform)| transform.translation.z)
+        .expect("active depot glyph renders");
+    let mut outlines = world.query::<(
+        &PixelWorldMicroDepotServiceRadiusVisual,
+        &Sprite,
+        &Transform,
+    )>();
+    let rendered = outlines
+        .iter(world)
+        .filter(|(visual, _, _)| visual.id == "micro_depot:active")
+        .collect::<Vec<_>>();
+    assert!(
+        !rendered.is_empty(),
+        "a positive published service radius needs a visible world-scale outline"
+    );
+    assert!(rendered.iter().all(|(_, sprite, transform)| {
+        sprite.color.to_srgba().alpha < 0.5 && transform.translation.z < glyph_z
+    }));
+    assert!(
+        world
+            .resource::<BevyRuntimeState>()
+            .hit_regions
+            .iter()
+            .all(|region| region.kind != "micro_depot_service_radius"),
+        "service-radius outlines must remain non-interactive"
+    );
+
+    world
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("test render state")
+        .micro_depot_facilities[0]
+        .service_radius_cm = 0.0;
+    app.update();
+    let world = app.world_mut();
+    let mut outlines = world.query::<&PixelWorldMicroDepotServiceRadiusVisual>();
+    assert_eq!(
+        outlines.iter(world).count(),
+        0,
+        "zero radius cleans up its outline"
+    );
+
+    world
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("test render state")
+        .world_bounds = None;
+    app.update();
+    let world = app.world_mut();
+    let mut outlines = world.query::<&PixelWorldMicroDepotServiceRadiusVisual>();
+    assert_eq!(
+        outlines.iter(world).count(),
+        0,
+        "missing world bounds cannot leave a stale service-radius outline"
+    );
 }

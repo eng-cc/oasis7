@@ -303,6 +303,11 @@ fn build_micro_depot_facilities(
                 "location_id": location_id,
                 "status": status,
                 "pos": pos,
+                "service_radius_cm": number_key(
+                    facility,
+                    "service_radius_cm",
+                    number_key(facility, "serviceRadiusCm", 0.0),
+                ),
             }))
         })
         .collect();

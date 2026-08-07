@@ -9,7 +9,11 @@ use fragment_visuals::reconcile_fragments;
 #[path = "render_micro_depot_facilities.rs"]
 mod micro_depot_facilities;
 use micro_depot_facilities::{
-    PixelWorldMicroDepotDetailVisual, PixelWorldMicroDepotVisual, reconcile_micro_depot_facilities,
+    MicroDepotFacilityOverlayQueries, PixelWorldMicroDepotVisual, reconcile_micro_depot_facilities,
+};
+#[cfg(test)]
+use micro_depot_facilities::{
+    PixelWorldMicroDepotDetailVisual, PixelWorldMicroDepotServiceRadiusVisual,
 };
 
 #[path = "render_module_visual_entities.rs"]
@@ -880,7 +884,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
     fragment_flecks: Query<'w, 's, (Entity, &'static PixelWorldFragmentFleckVisual)>,
     micro_depot_visuals: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotVisual)>,
-    micro_depot_details: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotDetailVisual)>,
+    micro_depot_overlays: MicroDepotFacilityOverlayQueries<'w, 's>,
     module_visual_entities: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualEntity)>,
     module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
@@ -917,9 +921,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.fragment_flecks.iter() {
             commands.entity(entity).despawn();
         }
-        for (entity, _) in queries.micro_depot_details.iter() {
-            commands.entity(entity).despawn();
-        }
+        queries.micro_depot_overlays.despawn(&mut commands);
         despawn_module_identity_chips(&mut commands, &queries.module_identity_chips);
         for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
@@ -1008,9 +1010,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.fragment_flecks.iter() {
             commands.entity(entity).despawn();
         }
-        for (entity, _) in queries.micro_depot_details.iter() {
-            commands.entity(entity).despawn();
-        }
+        queries.micro_depot_overlays.despawn(&mut commands);
         despawn_module_identity_chips(&mut commands, &queries.module_identity_chips);
         for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
@@ -1075,7 +1075,7 @@ pub(crate) fn render_scene(
     reconcile_micro_depot_facilities(
         &mut commands,
         &mut runtime,
-        &queries.micro_depot_details,
+        &queries.micro_depot_overlays,
         width,
         height,
     );

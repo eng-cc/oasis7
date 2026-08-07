@@ -101,6 +101,8 @@ struct MicroDepotFacility {
     location_id: String,
     status: String,
     pos: Position,
+    #[serde(default)]
+    service_radius_cm: f64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

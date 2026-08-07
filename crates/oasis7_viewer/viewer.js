@@ -8775,7 +8775,8 @@ function pixelWorldSelectedBlockerVisualFixture() {
       micro_depot_facilities: [{
         facility_id: "depot-fixture-loc-0",
         status: "active",
-        location_id: "loc-0"
+        location_id: "loc-0",
+        service_radius_cm: 24e4
       }],
       agent_claim: null
     }
