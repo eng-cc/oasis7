@@ -186,7 +186,7 @@ BASE_B="$(git -C "$TEST_REPO" commit-tree "$HEAD_SHA^{tree}" -p "$BASE_A" -m 'mo
 PLAN="$TMPDIR/frozen-plan.json"
 python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" <<'PY'
 import json, sys
-json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json"},open(sys.argv[1],"w"))
+json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"relevant_evidence_digest":"b"*64,"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json"},open(sys.argv[1],"w"))
 PY
 python3 - "$TEST_REPO/$LEDGER_REL" <<'PY'
 import json,sys

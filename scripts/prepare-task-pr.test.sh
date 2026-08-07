@@ -262,6 +262,7 @@ write_role_review_packet() {
 - Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
+- Review Evidence Digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 - Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
 - Review Roles: producer_system_designer,repository_health_engineer,qa_engineer
 - Review Evidence: producer_system_designer: 2026-06-03 00:00:00 CST; no_findings; fixture; repository_health_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture
@@ -321,6 +322,7 @@ write_shadowed_role_review_packet() {
 - Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: scripts/prepare-task-pr.sh
 - Review Package: .pm/scratch/$TASK_UID/review-packages/review-fixture.diff
+- Review Evidence Digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 - Role Selection Basis: changed paths include PR helper workflow and project trace; roles producer_system_designer,repository_health_engineer,qa_engineer.
 - Review Roles: producer_system_designer,repository_health_engineer,qa_engineer
 - Review Evidence: producer_system_designer: 2026-06-03 00:01:00 CST; no_findings; fixture; repository_health_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture; qa_engineer: 2026-06-03 00:01:00 CST; no_findings; fixture
@@ -809,7 +811,7 @@ path = Path(sys.argv[1])
 body = path.read_text(encoding="utf-8")
 path.write_text(body.replace(
     "Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths:",
-    f"Comparison Ref: refs/remotes/origin/main\\n- Comparison OID: {sys.argv[2]}\\n- Reviewed Changed Paths:",
+    f"Comparison Ref: refs/remotes/origin/main\\n- Comparison OID: {sys.argv[2]}\\n- Review Evidence Digest: {'a' * 64}\\n- Reviewed Changed Paths:",
 ), encoding="utf-8")
 PY
 local_role_review_function="$(sed -n '/^local_role_review_status()/,/^ensure_branch_exists /p' "$ROOT_DIR/scripts/prepare-task-pr.sh" | sed '$d')"
@@ -985,7 +987,7 @@ for comment in payload["comments"]:
     body = comment.get("body", "")
     comment["body"] = body.replace(
         "Comparison Ref: refs/remotes/origin/main\n- Reviewed Changed Paths:",
-        f"Comparison Ref: refs/remotes/origin/main\n- Comparison OID: {sys.argv[2]}\n- Reviewed Changed Paths:",
+        f"Comparison Ref: refs/remotes/origin/main\n- Comparison OID: {sys.argv[2]}\n- Review Evidence Digest: {'a' * 64}\n- Reviewed Changed Paths:",
     )
 path.write_text(json.dumps(payload), encoding="utf-8")
 PY
@@ -1149,7 +1151,7 @@ PY
 promotion_receipt="$TMPDIR/promotion-receipt.json"
 PROMOTION_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 cat >"$promotion_receipt" <<EOF
-{"repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"check_name":"required-gate","check_app_id":42,"planner_digest":"fixture","head_oid":"$PROMOTION_HEAD"}
+{"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"base_oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","head_oid":"$PROMOTION_HEAD","check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":"fixture","planner_config_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","run_rust_baseline":true,"conclusion":"success","observed_at":"2000-01-01T00:00:00+00:00","review_evidence_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 EOF
 promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
 cat >"$promotion_receipt_helper" <<'PY'
@@ -1201,6 +1203,24 @@ receipt=next(x for x in lines if x.startswith("receipt "))
 assert "--allow-ready-pr" not in receipt,lines
 PY
 assert_promoted_truth
+
+python3 - "$promotion_receipt" <<'PY'
+import json,sys
+p=sys.argv[1]; r=json.load(open(p)); r["review_evidence_digest"]="b"*64
+open(p,"w").write(json.dumps(r)+"\n")
+PY
+set_promotion_ready_truth
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+    run_prepare "$TMPDIR/gh-promotion-mismatch.log" "$TMPDIR/git-promotion-mismatch.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
+  echo "promotion must reject a receipt whose authority digest differs from review evidence" >&2
+  exit 1
+fi
+python3 - "$promotion_receipt" <<'PY'
+import json,sys
+p=sys.argv[1]; r=json.load(open(p)); r["review_evidence_digest"]="a"*64
+open(p,"w").write(json.dumps(r)+"\n")
+PY
 
 set_promotion_ready_truth
 recovery_log="$TMPDIR/gh-promotion-recovery.log"

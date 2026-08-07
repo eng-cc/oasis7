@@ -88,6 +88,7 @@ LIVEOPS_EVIDENCE="n/a; no external/player/community messaging surface"
 COMPARISON_REF="refs/remotes/origin/main"
 COMPARISON_OID=""
 REVIEW_PLAN=""
+REVIEW_EVIDENCE_DIGEST=""
 SOURCE_HEAD=""
 SOURCE_BRANCH=""
 PRINT_ONLY="0"
@@ -158,7 +159,7 @@ try:
     plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"error: cannot read review plan {plan_path}: {exc}")
-required = ("task_uid", "frozen_head", "comparison_ref", "comparison_oid", "roles", "expected_slices", "epoch", "batch_path")
+required = ("task_uid", "frozen_head", "comparison_ref", "comparison_oid", "roles", "expected_slices", "epoch", "batch_path", "relevant_evidence_digest")
 missing = [key for key in required if not plan.get(key)]
 if plan.get("schema") != "oasis7-review-plan/v1" or missing:
     raise SystemExit("error: --review-plan is not a complete oasis7-review-plan/v1: " + ",".join(missing))
@@ -189,6 +190,7 @@ print(plan["frozen_head"])
 print(plan["comparison_ref"])
 print(plan["comparison_oid"])
 print(plan["epoch"])
+print(plan["relevant_evidence_digest"])
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -196,6 +198,7 @@ PY
   COMPARISON_REF="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '3p')"
   COMPARISON_OID="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '4p')"
   REVIEW_PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+  REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
 fi
 CURRENT_HEAD="$(git rev-parse HEAD)"
 [[ "$SOURCE_HEAD" == "$CURRENT_HEAD" ]] || die "source head must be the current frozen HEAD: expected $CURRENT_HEAD, actual $SOURCE_HEAD"
@@ -341,6 +344,7 @@ PACKET="$(cat <<EOF
 - Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: $REVIEWED_PATHS
 - Review Package: $REVIEW_PACKAGE
+- Review Evidence Digest: $REVIEW_EVIDENCE_DIGEST
 - Role Selection Basis: $ROLE_BASIS
 - Review Roles: $ROLES
 - Review Evidence: $REVIEW_EVIDENCE

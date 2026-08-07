@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -44,6 +45,24 @@ def load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ContractError(f"JSON object required: {path}")
     return value
+
+
+def ci_receipt_evidence_digest(path: Path) -> str:
+    receipt = load_json(path)
+    module_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
+    spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity", module_path)
+    if spec is None or spec.loader is None:
+        raise ContractError("cannot load CI receipt identity helper")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        actual = module.review_evidence_digest(receipt)
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"invalid --ci-ready-receipt: {exc}") from exc
+    embedded = receipt.get("review_evidence_digest")
+    if embedded is not None and embedded != actual:
+        raise ContractError("--ci-ready-receipt review evidence digest mismatch")
+    return actual
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
@@ -239,7 +258,9 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--task-uid", required=True)
     parser.add_argument("--head", required=True)
-    parser.add_argument("--evidence-digest", required=True)
+    evidence = parser.add_mutually_exclusive_group(required=True)
+    evidence.add_argument("--evidence-digest")
+    evidence.add_argument("--ci-ready-receipt")
     parser.add_argument("--comparison-ref", required=True)
     parser.add_argument("--comparison-oid", help="optional assertion; must equal the resolved comparison ref OID")
     parser.add_argument("--change-class", required=True,
@@ -257,17 +278,19 @@ def main() -> int:
             raise ContractError("invalid --task-uid")
         if not HEAD_RE.fullmatch(args.head):
             raise ContractError("--head must be a 40-64 character lowercase hex object id")
-        if not SHA_RE.fullmatch(args.evidence_digest):
+        evidence_digest = (ci_receipt_evidence_digest(Path(args.ci_ready_receipt).resolve())
+                           if args.ci_ready_receipt else args.evidence_digest)
+        if not isinstance(evidence_digest, str) or not SHA_RE.fullmatch(evidence_digest):
             raise ContractError("--evidence-digest must be a lowercase SHA-256")
         if args.comparison_oid is not None and not HEAD_RE.fullmatch(args.comparison_oid):
             raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
         root = Path(args.root).resolve()
         comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
         roles = selector_roles(args)
-        slices = expected_slices(args.task_uid, args.head, args.evidence_digest, args.comparison_ref, comparison_oid, roles)
-        batch, batch_reused = ensure_batch(root, args.task_uid, args.head, args.evidence_digest, slices)
+        slices = expected_slices(args.task_uid, args.head, evidence_digest, args.comparison_ref, comparison_oid, roles)
+        batch, batch_reused = ensure_batch(root, args.task_uid, args.head, evidence_digest, slices)
         epoch = str(batch["epoch"])
-        identity = plan_identity(args.task_uid, args.head, args.evidence_digest,
+        identity = plan_identity(args.task_uid, args.head, evidence_digest,
                                  args.comparison_ref, comparison_oid, roles, slices)
         plan_path = (Path(args.out).resolve() if args.out else
                      root / ".pm" / "scratch" / args.task_uid / "review-plans" / f"{epoch}.json")

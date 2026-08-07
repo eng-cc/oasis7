@@ -100,6 +100,13 @@ class ReceiptTest(unittest.TestCase):
     self.assertNotEqual(before["observed_at"],refreshed["observed_at"])
     self.assertEqual({k:v for k,v in before.items() if k!="observed_at"},
                      {k:v for k,v in refreshed.items() if k!="observed_at"})
+  def test_review_evidence_identity_ignores_refresh_time_but_binds_ci_authority(self):
+    receipt=self.invoke_verify()
+    refreshed={**receipt,"observed_at":"2099-01-01T00:00:00+00:00"}
+    self.assertEqual(M.review_evidence_identity(receipt), M.review_evidence_identity(refreshed))
+    for field,value in (("check_run_id",999),("head_oid","d"*40),("planner_digest","e"*64)):
+      changed={**receipt,field:value}
+      self.assertNotEqual(M.review_evidence_identity(receipt), M.review_evidence_identity(changed))
   def test_refresh_fails_on_check_identity_or_conclusion_drift(self):
     cases=(run(app=77), {**run(),"id":10}, run("failure"))
     for changed in cases:
