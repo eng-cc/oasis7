@@ -613,6 +613,7 @@ def emit(
     liveops_evidence: str = "",
     reviewed_source_head: str = "",
     comparison_oid: str = "",
+    review_evidence_digest: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -633,6 +634,7 @@ def emit(
     print(f"liveops_evidence={liveops_evidence}")
     print(f"reviewed_source_head={reviewed_source_head}")
     print(f"comparison_oid={comparison_oid}")
+    print(f"review_evidence_digest={review_evidence_digest}")
     raise SystemExit(0)
 
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
@@ -939,21 +941,22 @@ if not comparison_oid:
     missing.append("Comparison OID")
 else:
     try:
-        current_comparison_oid = subprocess.check_output(
-            ["git", "-C", str(source_worktree), "rev-parse", "--verify", f"{comparison_ref}^{{commit}}"],
+        resolved_comparison_oid = subprocess.check_output(
+            ["git", "-C", str(source_worktree), "rev-parse", "--verify", f"{comparison_oid}^{{commit}}"],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
     except subprocess.CalledProcessError:
-        missing.append(f"Comparison Ref resolvable: {comparison_ref}")
+        missing.append(f"Comparison OID available as commit: {comparison_oid}")
     else:
-        if comparison_oid != current_comparison_oid:
-            missing.append(f"Comparison OID: {current_comparison_oid}")
+        if comparison_oid != resolved_comparison_oid:
+            missing.append(f"Comparison OID canonical: {resolved_comparison_oid}")
 
 for key in (
     "Comparison OID",
     "Reviewed Changed Paths",
     "Review Package",
+    "Review Evidence Digest",
     "Role Selection Basis",
     "Review Roles",
     "Review Evidence",
@@ -976,6 +979,7 @@ if findings_disposition not in {"addressed", "no_findings"}:
 
 review_roles = parse_field(selected_block, "Review Roles")
 review_package = parse_field(selected_block, "Review Package")
+review_evidence_digest = parse_field(selected_block, "Review Evidence Digest")
 review_verdicts = parse_field(selected_block, "Review Verdicts")
 residual_risk = parse_field(selected_block, "Residual Risk")
 slice_ledger = parse_field(selected_block, "Slice Ledger")
@@ -1005,6 +1009,7 @@ if missing:
         liveops_evidence=liveops_evidence,
         reviewed_source_head=reviewed_source_head,
         comparison_oid=comparison_oid,
+        review_evidence_digest=review_evidence_digest,
     )
 
 emit(
@@ -1025,6 +1030,7 @@ emit(
     liveops_evidence=liveops_evidence,
     reviewed_source_head=reviewed_source_head,
     comparison_oid=comparison_oid,
+    review_evidence_digest=review_evidence_digest,
 )
 PY
 }
@@ -1156,6 +1162,7 @@ LOCAL_ROLE_REVIEW_WASM_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "wasm
 LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_evidence")"
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
 LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
+LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_evidence_digest")"
 if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   BOUND_TASK_FIELDS="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$SOURCE_WORKTREE" "$SOURCE_BRANCH" <<'PY'
 import json,os,sys
@@ -1241,10 +1248,16 @@ PY
   [[ "$PR_STATE" == OPEN && -z "$PR_MERGED_AT" ]] || die "promote_draft requires an open, unmerged PR"
   case "$PR_IS_DRAFT" in true|false) ;; *) die "promote_draft received uncertain PR draft state: $PR_IS_DRAFT" ;; esac
   CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
-  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT")
+  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity)
   [[ "$PR_IS_DRAFT" == false ]] && RECEIPT_VERIFY_CMD+=(--allow-ready-pr)
   "${RECEIPT_VERIFY_CMD[@]}" >/dev/null \
     || die "promote_draft ci_ready_receipt live validation failed"
+  RECEIPT_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$PROMOTE_DRAFT_RECEIPT")" \
+    || die "promote_draft could not read ci_ready_receipt review authority"
+  [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
+    || die "promote_draft ci_ready_receipt lacks a canonical review evidence digest"
+  [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" == "$LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST" ]] \
+    || die "promote_draft ci_ready_receipt authority does not match reviewed evidence digest"
   case "$PR_IS_DRAFT" in
     true) gh pr ready "$PR_TO_PROMOTE" -R "$RR" >/dev/null || die "promote_draft failed" ;;
     false) ;;

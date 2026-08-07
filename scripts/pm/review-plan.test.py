@@ -58,6 +58,36 @@ class ReviewPlanTests(unittest.TestCase):
     def plan(self, *extra: str) -> dict[str, object]:
         return json.loads(self.run_plan(*extra).stdout)
 
+    def receipt_plan(self, receipt: Path, out: Path) -> dict[str, object]:
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", HEAD,
+             "--ci-ready-receipt", str(receipt), "--change-class", "workflow-doc",
+             "--comparison-ref", self.comparison_ref, "--comparison-oid", self.comparison_oid,
+             "--out", str(out)], text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_ci_receipt_refresh_reuses_review_epoch_but_authority_drift_does_not(self) -> None:
+        authority = {"receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",
+                     "repository": "example/repo", "task_uid": TASK, "task_issue_number": 1,
+                     "pr_number": 2, "base_oid": self.comparison_oid, "head_oid": HEAD,
+                     "check_name": "required-gate", "check_app_id": 42, "check_run_id": 7,
+                     "planner_digest": "c" * 64, "planner_config_sha256": "sha256:" + "d" * 64,
+                     "run_rust_baseline": True, "conclusion": "success"}
+        first_receipt = self.root / "receipt-a.json"
+        second_receipt = self.root / "receipt-b.json"
+        first_receipt.write_text(json.dumps({**authority, "observed_at": "2026-01-01T00:00:00Z"}))
+        second_receipt.write_text(json.dumps({**authority, "observed_at": "2026-01-01T00:10:00Z"}))
+        first = self.receipt_plan(first_receipt, self.root / "receipt-a-plan.json")
+        refreshed = self.receipt_plan(second_receipt, self.root / "receipt-b-plan.json")
+        self.assertEqual(first["epoch"], refreshed["epoch"])
+        self.assertEqual(first["expected_slices"], refreshed["expected_slices"])
+        changed = self.root / "receipt-changed.json"
+        changed.write_text(json.dumps({**authority, "check_run_id": 8, "observed_at": "2026-01-01T00:10:00Z"}))
+        drifted = self.receipt_plan(changed, self.root / "receipt-changed-plan.json")
+        self.assertNotEqual(first["epoch"], drifted["epoch"])
+
     def test_explicit_document_risk_class_selects_the_minimum_deterministic_roles(self) -> None:
         plan = self.plan()
         self.assertEqual(

@@ -2,6 +2,7 @@
 """Issue/verify a live GitHub CI receipt for a frozen draft-candidate head."""
 import argparse, datetime as dt, hashlib, io, json, re, subprocess, sys, zipfile
 from pathlib import Path
+from ci_ready_receipt_identity import review_evidence_digest, review_evidence_identity
 
 FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "uncertain")
 PLAN_MARKER="oasis7-required-plan-v1"
@@ -149,10 +150,16 @@ def main():
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
       "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
+    payload["review_evidence_digest"]=review_evidence_digest(payload)
     if old is not None:
         for key,val in payload.items():
-            if key=="observed_at": continue
+            if key in ("observed_at", "review_evidence_digest"): continue
             if old.get(key)!=val: raise SystemExit(f"ci-ready-receipt: wrong_head/wrong_app/superseded receipt mismatch: {key}")
-        payload={**old, "observed_at": payload["observed_at"]} if a.refresh_same_identity else old
+        if old.get("review_evidence_digest", payload["review_evidence_digest"]) != payload["review_evidence_digest"]:
+            raise SystemExit("ci-ready-receipt: review evidence authority digest mismatch")
+        refreshed = {**old, "observed_at": payload["observed_at"]} if a.refresh_same_identity else old
+        if "review_evidence_digest" in old:
+            refreshed = {**refreshed, "review_evidence_digest": payload["review_evidence_digest"]}
+        payload = refreshed
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
 if __name__=="__main__": main()

@@ -147,11 +147,16 @@ def f(k):
 print('roles='+f('Review Roles'))
 print('head='+f('Source Head'))
 print('ledger='+f('Slice Ledger'))
+print('evidence_digest='+f('Review Evidence Digest'))
 PY
 )"
   REVIEW_ROLES="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^roles=//p')"
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
+  REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^evidence_digest=//p')"
+  if [[ "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
+    [[ "$REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || die "review packet lacks a canonical Review Evidence Digest"
+  fi
   REVIEW_LEDGER_PATH="$REVIEW_LEDGER"
   reviewed_source_head="$REVIEW_HEAD"
   ci_receipt_head="$FROZEN_HEAD"
@@ -240,6 +245,14 @@ PY
       || die "stale ci-ready receipt failed same-identity refresh"
     CI_READY_RECEIPT="$REFRESHED_CI_READY_RECEIPT"
   fi
+fi
+
+if [[ "$TARGET_STATUS" == "ready" && -n "$CI_READY_RECEIPT" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
+  CI_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$CI_READY_RECEIPT")" \
+    || die "cannot read ci-ready receipt review authority"
+  [[ "$CI_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || die "ci-ready receipt lacks a canonical review evidence digest"
+  [[ "$CI_REVIEW_EVIDENCE_DIGEST" == "$REVIEW_EVIDENCE_DIGEST" ]] \
+    || die "ci-ready receipt authority does not match reviewed evidence digest"
 fi
 
 selected_task_audit() {

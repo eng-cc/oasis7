@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from pathlib import Path
 
 
 SOURCE = Path(__file__).with_name("subagent-task-packet.py")
+SNAPSHOT_HELPER = Path(__file__).with_name("bootstrap-task-snapshot.py")
 TASK_UID = "task_11111111111111111111111111111111"
 
 
@@ -23,6 +25,7 @@ class PacketTest(unittest.TestCase):
         for path in ("scripts/pm", ".pm/github-project-sync", ".agents/roles", "doc/engineering/workflow"):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
+        shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
         for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
@@ -34,10 +37,10 @@ class PacketTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def write_mapping(self, **changes: object) -> None:
-        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_url": "https://example.invalid/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed"}
+        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_number": 1, "issue_url": "https://example.invalid/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed", "title": "review dispatch admission", "acceptance": ["reject stale review admission"]}
         task.update(changes)
         path = self.repo / ".pm/github-project-sync/tasks.json"
-        path.write_text(json.dumps({"version": 1, "tasks": {TASK_UID: task}}), encoding="utf-8")
+        path.write_text(json.dumps({"version": 1, "project": {"owner": "example", "number": 1}, "tasks": {TASK_UID: task}}), encoding="utf-8")
 
     def command(self, *extra: str) -> list[str]:
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
@@ -114,6 +117,137 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "add", "new.txt"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
         self.assertIn("stale or mismatched packet head", self.invoke(["validate", packet_path], ok=False).stderr)
+
+    def create_snapshot(self) -> Path:
+        snapshot = self.repo / ".pm/scratch" / TASK_UID / "bootstrap-task-snapshot.json"
+        result = subprocess.run(
+            ["python3", "scripts/pm/bootstrap-task-snapshot.py", "create",
+             "--repo-root", str(self.repo), "--task-uid", TASK_UID,
+             "--request-identity", "review dispatch admission", "--producer", "tpm"],
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        return snapshot
+
+    def create_review_plan(self, packet_path: str, **changes: object) -> Path:
+        base_sha = self.git("rev-parse", "main")
+        head = self.git("rev-parse", "HEAD")
+        evidence_digest = "b" * 64
+        expected_slices = sorted([
+            {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
+            {"role": "qa_engineer", "slice_id": "qa-review"},
+        ], key=lambda item: (item["role"], item["slice_id"]))
+        batch_identity = {
+            "task_uid": TASK_UID, "frozen_head": head,
+            "relevant_evidence_digest": evidence_digest, "expected_slices": expected_slices,
+        }
+        epoch = hashlib.sha256(json.dumps(
+            batch_identity, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{epoch}.json"
+        batch_path.parent.mkdir(parents=True, exist_ok=True)
+        batch_path.write_text(json.dumps({
+            "schema": "oasis7-review-batch/v1", "epoch": epoch, "task_uid": TASK_UID,
+            "frozen_head": head, "relevant_evidence_digest": evidence_digest,
+            "expected_slices": expected_slices,
+        }), encoding="utf-8")
+        plan = {
+            "schema": "oasis7-review-plan/v1", "task_uid": TASK_UID,
+            "frozen_head": head, "comparison_ref": "main", "comparison_oid": base_sha,
+            "epoch": epoch, "batch_path": str(batch_path), "relevant_evidence_digest": evidence_digest,
+            "roles": [item["role"] for item in expected_slices],
+            "expected_slices": expected_slices,
+            "packet_refs": [
+                {"role": "repository_health_engineer", "slice_id": "repository-health-review",
+                 "packet_ref": f".pm/scratch/{TASK_UID}/slice-packets/repository-health-review.json"},
+                {"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path},
+            ],
+        }
+        plan.update(changes)
+        path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / "admission.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        return path
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
+
+    def review_admission(self, packet: str, plan: Path, snapshot: Path, ok: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            self.command("review-admission", "--packet", packet, "--review-plan", str(plan), "--bootstrap-snapshot", str(snapshot)),
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        if ok:
+            self.assertEqual(0, result.returncode, result.stderr)
+        else:
+            self.assertNotEqual(0, result.returncode, result.stdout)
+        return result
+
+    def test_review_admission_requires_current_cross_bound_packet_plan_and_snapshot(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+        cases = {
+            "plan task mismatch": {"task_uid": "task_22222222222222222222222222222222"},
+            "plan head mismatch": {"frozen_head": "a" * 40},
+            "plan role mismatch": {"expected_slices": [{"role": "runtime_engineer", "slice_id": "qa-review"}]},
+            "plan slice mismatch": {"expected_slices": [{"role": "qa_engineer", "slice_id": "other-slice"}]},
+            "plan packet ref mismatch": {"packet_refs": [{"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": "scope.txt"}]},
+            "comparison oid mismatch": {"comparison_oid": "b" * 40},
+        }
+        for name, changes in cases.items():
+            with self.subTest(name=name):
+                bad_plan = self.create_review_plan(packet, **changes)
+                self.review_admission(packet, bad_plan, snapshot, ok=False)
+
+        plan = self.create_review_plan(packet)
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["producer"] = "tampered"
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_review_admission_invalidates_after_head_or_comparison_ref_changes(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        self.review_admission(packet, plan, snapshot)
+
+        original_base = self.git("rev-parse", "main")
+        moved_base = self.git("commit-tree", "HEAD^{tree}", "-p", original_base, "-m", "moved comparison")
+        self.git("update-ref", "main", moved_base)
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.git("update-ref", "main", original_base)
+
+        (self.repo / "advance.txt").write_text("advance\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "advance.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_review_admission_allows_a_valid_bootstrap_snapshot_before_review_head(self) -> None:
+        snapshot = self.create_snapshot()
+        (self.repo / "implementation.txt").write_text("implementation\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "implementation.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "implementation"], check=True, capture_output=True)
+
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        plan = self.create_review_plan(packet)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+    def test_review_admission_rejects_a_replacement_plan_that_drops_a_required_batch_role(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        self.review_admission(packet, plan, snapshot)
+
+        replacement = json.loads(plan.read_text(encoding="utf-8"))
+        replacement["roles"] = ["qa_engineer"]
+        replacement["expected_slices"] = [{"role": "qa_engineer", "slice_id": "qa-review"}]
+        plan.write_text(json.dumps(replacement), encoding="utf-8")
+        self.review_admission(packet, plan, snapshot, ok=False)
 
 
 if __name__ == "__main__":
