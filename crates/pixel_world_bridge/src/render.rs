@@ -14,7 +14,10 @@ use micro_depot_facilities::{
 
 #[path = "render_module_visual_entities.rs"]
 mod module_visual_entities;
-use module_visual_entities::{PixelWorldModuleVisualEntity, reconcile_module_visual_entities};
+use module_visual_entities::{
+    ModuleIdentityChipQueries, PixelWorldModuleVisualEntity, despawn_module_identity_chips,
+    reconcile_module_visual_entities,
+};
 
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
@@ -879,6 +882,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     micro_depot_visuals: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotVisual)>,
     micro_depot_details: Query<'w, 's, (Entity, &'static PixelWorldMicroDepotDetailVisual)>,
     module_visual_entities: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualEntity)>,
+    module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
@@ -916,6 +920,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.micro_depot_details.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_module_identity_chips(&mut commands, &queries.module_identity_chips);
         for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
         }
@@ -1006,6 +1011,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.micro_depot_details.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_module_identity_chips(&mut commands, &queries.module_identity_chips);
         for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
         }
@@ -1073,7 +1079,13 @@ pub(crate) fn render_scene(
         width,
         height,
     );
-    reconcile_module_visual_entities(&mut commands, &mut runtime, width, height);
+    reconcile_module_visual_entities(
+        &mut commands,
+        &mut runtime,
+        &queries.module_identity_chips,
+        width,
+        height,
+    );
     reconcile_links(&mut commands, &mut runtime, width, height);
     reconcile_locations(
         &mut commands,
