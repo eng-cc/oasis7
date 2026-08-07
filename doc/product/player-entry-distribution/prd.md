@@ -37,6 +37,12 @@
 
 当前升级只支持重新下载最新主包并手动覆盖安装/替换；用户须先备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。这不是应用内更新、自动迁移或跨目录状态保留承诺。Windows codesigning trust chain 与 macOS 签名/notarization 未完成前，不得把技术预览资产、单主 CTA 或手动安装路径表述为普通用户广泛发行已就绪。
 
+### 下载完整性失败边界
+
+玩家可以在开始安装前核对推荐资产的版本、平台、发布来源与 checksum；若该核对缺失、无法完成或不匹配，产品只能明确停止该资产的安装/覆盖路径，并让玩家保留或重新取得与当前发布来源绑定的候选。玩家可以查看预期与实际核对结果、选择重新下载、改用同一候选中明确受支持的正确平台资产，或进入支持/恢复路径；不能把“文件已下载”“曾经可用的旧 checksum”“浏览器/操作系统未报警”或第三方镜像的自述当作验证通过，也不能被引导绕过核对继续覆盖既有状态。
+
+完整性失败只裁定本地候选资产不可信，不自动撤销玩家 identity、session、Agent 授权、待决 intent 或已 committed receipt；同样，重新取得并通过本地核对的资产也不自动恢复这些权威能力。这样 world-first 的权威世界不由分发字节决定，persistent 的世界历史不会被本地安装诊断重写；emergence-first 的玩家、Agent 与组织行动不因下载渠道获得额外规则或经济权力；每次失败/恢复都应能以候选版本、平台、来源类别和结果追溯，而不要求公开本地路径、凭据或敏感诊断。未来新增平台、签名或其他校验机制可以扩展实现，但必须保留同一语义：未验证的资产不能被表达为受支持安装，验证通过也只恢复本地候选资格而不代签世界权威。
+
 ### 手动升级兼容与安全回退边界
 
 新版本在首次不可逆处理旧配置、Launcher 状态或本地 runtime 数据前，必须形成绑定版本、平台、primary mode 与候选资产的兼容判定，并把结果表达为以下三类之一：
@@ -92,6 +98,7 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 - SC-7：产品样例证明免费客户端、账户和基础进入与可选的 hosting/storage/support 便利服务相分离，后者不授予世界权力；成长、认可和区域协作仍以世界内有代价、可审计的资产、行动和有界资格为基础，且长期目标不被误报为当前技术预览可用性或发行就绪。
 - SC-8：每个支持手动覆盖升级的平台资产都在不可逆处理前给出兼容判定；兼容时可继续，只有能证明原状态未改写时才提供绑定明确旧版本与备份来源的回退，未知或可能已改写时停止并禁止盲目降级。本地回退不会被表达为权威世界、identity/session authority、committed receipt 或网络已接受行动的回退。
 - SC-9：代表性 hosted 与恢复样例证明，会话失效不会把已接受的 intent 或已结算 receipt 静默撤销、隐藏、重放或二次结算；重新认证不恢复旧 authority，也不扩展 Agent 委托。待决 intent 与 Agent 授权分别按当时有效的专业合同继续、暂停、拒绝、过期或结算，玩家能读到状态、因果与安全下一步。
+- SC-10：每个受支持平台至少有一条推荐资产的完整性失败样例：缺失、无法完成或不匹配的核对会在写入既有状态前停止安装/覆盖，并给出预期/实际结果和重新下载、正确平台资产或支持/恢复中的适用下一步；通过重新取得资产的本地核对不被表述为 identity/session/Agent authority 恢复、pending intent 结算或 world receipt。新增校验机制或平台必须保留这组语义边界。
 
 ### 5.1 验收追踪
 
@@ -106,6 +113,7 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 | SC-7 | producer_system_designer / gameplay_designer / viewer_engineer / qa_engineer / liveops_community | PRD-GAME-015 / PRD-WORLD_SIMULATOR-042/043/045 / PRD-TESTING-003 | `doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md`; `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 免费基础进入、非权力型可选服务、世界内成长/认可/区域互赖及当前 claim 分离的组合审计 | test_tier_required |
 | SC-8 | producer_system_designer / viewer_engineer / runtime_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-020 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_RUNTIME-014 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 真实发行资产覆盖兼容继续、写入前失败且可验证回退、未知或可能写入时阻止降级三类样例，并核对版本、平台、primary mode、候选资产、备份来源与权威状态非回退边界 | test_tier_full |
 | SC-9 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-P2P-004 / PRD-P2P-023 / PRD-P2P-029 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`; `doc/product/world-infrastructure/prd.md`; `doc/product/world-rules-core-gameplay/prd.md` | 资源影响 intent 在提交后会话失效、finality 恢复、重新认证与重复重试的组合样例，以及 Agent 授权先于或晚于会话失效的组合；断言单次效果、无越权新提交、无自动续权，并核对 Viewer 玩家可读状态、`pure_api` 结构化状态与 receipt 语义一致 | test_tier_full |
+| SC-10 | viewer_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-039 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 每个受支持平台上的错误 checksum、缺失/不可完成核对与重新取得正确候选的安装前负例；核对结果、可用恢复路径，以及不改写本地状态、不恢复世界 authority/receipt 的组合核对 | test_tier_required |
 
 ## 6. Non-Goals
 
