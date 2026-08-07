@@ -54,6 +54,8 @@ pub(crate) struct ExecutionBridgeCommitTimingSnapshot {
     pub(crate) recent_over_budget_ratio_ppm: u64,
     pub(crate) p50_total_ms: Option<u64>,
     pub(crate) p95_total_ms: Option<u64>,
+    /// The newest commit sample, retained independently from the sorted window.
+    pub(crate) latest_total_ms: Option<u64>,
     pub(crate) max_total_ms: Option<u64>,
     pub(crate) slow_count: u64,
     pub(crate) last_slow_stage: Option<String>,
@@ -309,6 +311,7 @@ impl ExecutionBridgeCommitTimingState {
             recent_over_budget_ratio_ppm,
             p50_total_ms: percentile_ms(samples.as_slice(), 50),
             p95_total_ms: percentile_ms(samples.as_slice(), 95),
+            latest_total_ms: self.recent_total_ms.back().copied(),
             max_total_ms: samples.last().copied(),
             slow_count: self.slow_count,
             last_slow_stage: self.last_slow_stage.clone(),

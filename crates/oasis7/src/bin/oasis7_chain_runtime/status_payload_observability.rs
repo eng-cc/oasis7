@@ -18,6 +18,9 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
+const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES: usize = 128;
+const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_OVER_BUDGET: u64 = 1;
+const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_MS: f64 = 1_250.0;
 const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 32;
 const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_OVER_BUDGET_RATIO_PPM: u64 = 200_000;
 
@@ -222,28 +225,35 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     }
     let p50_ms = timing.p50_total_ms.unwrap_or(0) as f64;
     let p95_ms = timing.p95_total_ms.unwrap_or(0) as f64;
+    let latest_ms = timing.latest_total_ms.unwrap_or(0) as f64;
     let max_ms = timing.max_total_ms.unwrap_or(0) as f64;
     let samples_total = timing.recent_commit_count as u64;
-    // Nearest-rank p95 selects the second outlier at 32 samples. Block readiness
-    // only when maturity, severe p95 latency, and sustained density all agree.
-    let health = if samples_total >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES
+    let steady_window_complete = timing.window_capacity
+        == EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES
+        && timing.recent_commit_count == EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES;
+    let steady_window_qualified = steady_window_complete
+        && p95_ms < EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
+        && timing.recent_over_budget_count
+            <= EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_OVER_BUDGET
+        && max_ms < EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_MS;
+    // A partial window is always non-qualifying. Severe, sustained evidence
+    // retains the higher-severity signal without making that window qualifying.
+    let health = if steady_window_qualified {
+        RuntimePerfHealth::Healthy
+    } else if samples_total >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES
         && p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS * 2.0
         && timing.recent_over_budget_ratio_ppm
             >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_OVER_BUDGET_RATIO_PPM
     {
         RuntimePerfHealth::Critical
-    } else if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
-        || max_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
-    {
-        RuntimePerfHealth::Warn
     } else {
-        RuntimePerfHealth::Healthy
+        RuntimePerfHealth::Warn
     };
     let action_execution = RuntimePerfSeriesSnapshot {
         samples_total,
         samples_window: timing.recent_commit_count,
         budget_ms: EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS,
-        last_ms: max_ms,
+        last_ms: latest_ms,
         avg_ms: 0.0,
         min_ms: 0.0,
         max_ms,

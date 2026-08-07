@@ -24,6 +24,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[path = "oasis7_chain_runtime_status_payload_gate_policy_tests.rs"]
+mod gate_policy_tests;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 
@@ -680,6 +682,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
         recent_over_budget_ratio_ppm: 250_000,
         p50_total_ms: Some(780),
         p95_total_ms: Some(1_250),
+        latest_total_ms: Some(1_250),
         max_total_ms: Some(1_250),
         slow_count: 1,
         last_slow_stage: Some("runtime_step".to_string()),
@@ -712,6 +715,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_comm
         recent_over_budget_ratio_ppm: 333_333,
         p50_total_ms: Some(544),
         p95_total_ms: Some(3_388),
+        latest_total_ms: Some(3_388),
         max_total_ms: Some(3_388),
         slow_count: 1,
         last_slow_stage: Some("retention".to_string()),
@@ -740,6 +744,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_cold_start_outliers_
         recent_over_budget_ratio_ppm: 95_238,
         p50_total_ms: Some(544),
         p95_total_ms: Some(2_890),
+        latest_total_ms: Some(4_161),
         max_total_ms: Some(4_161),
         slow_count: 2,
         last_slow_stage: Some("cas_put".to_string()),
@@ -773,6 +778,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_31_sustained_slow_co
         recent_over_budget_ratio_ppm: 1_000_000,
         p50_total_ms: Some(2_500),
         p95_total_ms: Some(2_500),
+        latest_total_ms: Some(2_500),
         max_total_ms: Some(2_500),
         slow_count: 31,
         last_slow_stage: Some("runtime_step".to_string()),
@@ -798,6 +804,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_two_mature_outliers_
         recent_over_budget_ratio_ppm: 62_500,
         p50_total_ms: Some(544),
         p95_total_ms: Some(2_890),
+        latest_total_ms: Some(4_161),
         max_total_ms: Some(4_161),
         slow_count: 2,
         last_slow_stage: Some("cas_put".to_string()),
@@ -823,6 +830,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_moderate_sustained_l
         recent_over_budget_ratio_ppm: 250_000,
         p50_total_ms: Some(780),
         p95_total_ms: Some(1_250),
+        latest_total_ms: Some(1_250),
         max_total_ms: Some(1_250),
         slow_count: 8,
         last_slow_stage: Some("runtime_step".to_string()),
@@ -848,6 +856,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_marks_sustained_slow_commi
         recent_over_budget_ratio_ppm: 1_000_000,
         p50_total_ms: Some(1_500),
         p95_total_ms: Some(2_500),
+        latest_total_ms: Some(2_500),
         max_total_ms: Some(2_500),
         slow_count: 32,
         last_slow_stage: Some("runtime_step".to_string()),
