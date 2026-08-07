@@ -47,6 +47,15 @@
 - 对伪造、刷取、重复申领、相互循环背书、付费换取、自动化批量制造或其他不相称来源的认可，系统只可按预先声明的复核与处置规则拒绝、暂停或撤销未来效果；不得静默删除玩家历史、追溯改写已确认世界因果，或把未审计怀疑直接升级为惩罚。处置结果必须说明事实类别、当前效果、可用复核路径与下一次可重新取得资格的条件。
 - 认可失效、撤销或拒绝不应阻断玩家的独立基线、基本成长或恢复路径。玩家可以继续按普通世界规则行动、补充有效证据、完成新的相称贡献或选择不依赖该认可的替代路线；产品层不承诺任何固定恢复时长、阈值、奖励或资格算法。
 
+#### 容量竞争下的机会申领生命周期
+
+- 资格、邀请、预览或推荐只说明玩家当前可以考虑或尝试申领；它们不预留容量、不锁定顺位、不产生世界内资格，也不保证后续成功。
+- 申领提交后、权威结果生效前始终是待决状态。玩家必须能读到机会的来源和作用域、当前条件、到期或重检边界以及下一步；“已提交”不得表述为“已分配”。
+- 只有经当前权限、资格、容量、期限和反滥用校验接受的有界 hold 或排队，才可以按专业合同预留容量。预留仍是待决承诺；到期、撤销或前置条件失效时，未结算部分必须明确释放、拒绝或保持待决，不得静默变成欠费、补贴、隐性优先权或另一机会。
+- 只有 receipt 支持的已结算分配才产生可使用机会。receipt 至少能追溯相应认可来源、地点/作用域、容量单位、期限和实际世界效果；历史认可、界面缓存或旧 receipt 不能被重放为新分配。
+- 多个合格玩家、重复请求或重连重试竞争同一稀缺单位时，权威世界至多产生一次已结算效果。其余请求必须原子拒绝/释放，或按专业合同明确保持待决；容量、来源、期限或资格在结算前变化时必须按当前条件重新校验，不自动重提、续期、跨区携带或用历史认可补签。
+- 拒绝、释放、到期或撤销必须给出可理解的原因和当前可行下一步：按普通世界规则继续独立路径、补充证据、等待/换路、重新规划，或在适用时复核/申诉；它们不得因一次容量竞争封锁独立基线。
+
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业与执行权威 |
@@ -70,6 +79,7 @@
 - FE-4：成熟世界样例证明玩家具备不立即依附强组织的可行独立基线，同时区域专业化与互赖在不强制依附的前提下带来可读优势。
 - FE-5：任何公开或入口 surface 将长期方向、当前候选证据、实际受支持入口与未承诺内容分开；历史或局部 evidence 不得代签免费可用性、支付服务、成长完整性或发行就绪。
 - FE-6：认可的授予、使用、到期、拒绝、暂停或撤销样例都能说明来源、范围、用途和时间边界；无效或被滥用的认可不会被交易、重放或洗成永久权力，且其处置不静默删除历史、改写已确认因果或封锁独立基线。
+- FE-7：两名合格玩家竞争同一有限机会的样例证明：资格/邀请和申领预览不产生容量效果；最多一项符合当前条件的申领以 receipt 结算；其余请求明确拒绝/释放或保持待决，不产生分配、欠费或隐性优先权；重连重试不产生第二次效果，且失败方仍有可读恢复或独立路径。
 
 ### 5.1 验收追踪
 
@@ -81,6 +91,7 @@
 | FE-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 独立基线、区域互赖优势与非强制依附的 mature-world fresh sample | test_tier_full |
 | FE-5 | producer_system_designer / viewer_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-042/043 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 长期方向、候选证据、支持入口和公开 claim 分离审计 | test_tier_required |
 | FE-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 认可来源/范围/期限、拒绝/暂停/撤销、不可交易/重放、历史与因果连续性、独立基线与复核路径的组合证据 | test_tier_full |
+| FE-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 双申领人容量竞争样例的预览/待决/hold 或排队/receipt 语义、原子单次效果、重试幂等、失败恢复与独立基线证据 | test_tier_full |
 
 ## 6. Non-Goals
 
