@@ -49,6 +49,10 @@ describe("pixel world visual fixtures", () => {
         }],
       },
     });
+    expect(
+      window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker().player_gameplay
+        .micro_depot_facilities[0].service_radius_cm,
+    ).toBe(240_000);
   });
 
   it("injects the two player-visible recent-event kinds only for the glyph visual fixture", () => {

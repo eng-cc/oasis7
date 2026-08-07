@@ -124,6 +124,7 @@ export function pixelWorldSelectedBlockerVisualFixture() {
         facility_id: "depot-fixture-loc-0",
         status: "active",
         location_id: "loc-0",
+        service_radius_cm: 240_000,
       }],
       agent_claim: null,
     },
