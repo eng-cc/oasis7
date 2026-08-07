@@ -145,30 +145,30 @@ export function pixelWorldRecommendedTargetVisualFixture() {
   return fixture;
 }
 
-// Test-only visual fixture. Its opaque module kinds deliberately carry no
-// presentation semantics; it exists solely to exercise the bridge projection.
+// Test-only visual fixture. The known co-anchored pair and unknown fallback
+// exercise the renderer's noninteractive module identity glyphs.
 export function pixelWorldModuleVisualEntitiesFixture() {
   const fixture = pixelWorldSelectedBlockerVisualFixture();
   fixture.model.module_visual_entities = {
     "module-absolute": {
       entity_id: "module-absolute",
       module_id: "fixture-module",
-      kind: "opaque_fixture_kind",
-      label: "Absolute marker",
+      kind: "beacon",
+      label: "Beacon marker",
       anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
     },
-    "module-location": {
-      entity_id: "module-location",
+    "module-relay": {
+      entity_id: "module-relay",
       module_id: "fixture-module",
-      kind: "opaque_fixture_kind",
-      label: "Location marker",
-      anchor: { type: "location", data: { location_id: "loc-1" } },
+      kind: "relay",
+      label: "Relay marker",
+      anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
     },
     "module-agent": {
       entity_id: "module-agent",
       module_id: "fixture-module",
-      kind: "opaque_fixture_kind",
-      label: "Agent marker",
+      kind: "future_module_kind",
+      label: "Unknown marker",
       anchor: { type: "agent", data: { agent_id: "agent-0" } },
     },
   };
