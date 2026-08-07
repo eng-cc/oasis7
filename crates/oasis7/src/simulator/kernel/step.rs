@@ -72,9 +72,6 @@ impl WorldKernel {
         action: Action,
         submitter: ActionSubmitter,
     ) -> ActionId {
-        if matches!(&action, Action::EvaluateMicroDepotQuote { .. }) {
-            return self.next_action_id;
-        }
         let id = self.next_action_id;
         self.next_action_id = self.next_action_id.saturating_add(1);
         self.pending_actions.push_back(ActionEnvelope {
@@ -447,10 +444,6 @@ fn reject_reason_for_agent_submitter(agent_id: &str, action: &Action) -> Option<
             ..
         }
         | Action::HarvestRadiation {
-            agent_id: action_agent_id,
-            ..
-        }
-        | Action::EvaluateMicroDepotQuote {
             agent_id: action_agent_id,
             ..
         }

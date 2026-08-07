@@ -67,6 +67,61 @@ struct WaitingAgent {
     wait_ticks: u64,
 }
 
+struct QuoteThenServiceAgent {
+    id: String,
+    query_results: Vec<AgentQueryResult>,
+    action_results: Vec<ActionResult>,
+}
+
+impl QuoteThenServiceAgent {
+    fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            query_results: Vec::new(),
+            action_results: Vec::new(),
+        }
+    }
+}
+
+impl AgentBehavior for QuoteThenServiceAgent {
+    fn agent_id(&self) -> &str {
+        &self.id
+    }
+
+    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
+        if self.query_results.is_empty() {
+            return AgentDecision::Query(AgentQuery::EvaluateMicroDepotQuote(
+                MicroDepotQuoteRequest {
+                    agent_id: self.id.clone(),
+                    facility_id: "depot-measured".to_string(),
+                    target_id: "loc-measured".to_string(),
+                    action_kind: MicroDepotActionKind::Repair,
+                    base_cost_class: MicroDepotPressureClass::Medium,
+                    base_risk_class: MicroDepotPressureClass::Low,
+                    blocker_type: Some("supply_missing".to_string()),
+                },
+            ));
+        }
+
+        AgentDecision::Act(Action::ServiceMicroDepotRepair {
+            agent_id: self.id.clone(),
+            facility_id: "depot-measured".to_string(),
+            target_id: "loc-measured".to_string(),
+            base_cost_class: MicroDepotPressureClass::Medium,
+            base_risk_class: MicroDepotPressureClass::Low,
+            blocker_type: Some("supply_missing".to_string()),
+        })
+    }
+
+    fn on_query_result(&mut self, result: &AgentQueryResult) {
+        self.query_results.push(result.clone());
+    }
+
+    fn on_action_result(&mut self, result: &ActionResult) {
+        self.action_results.push(result.clone());
+    }
+}
+
 impl WaitingAgent {
     fn new(id: impl Into<String>, wait_ticks: u64) -> Self {
         Self {
@@ -430,6 +485,148 @@ fn agent_runner_tick_decide_only_defers_world_mutation_until_notified() {
             .action_results,
         vec![true]
     );
+}
+
+#[test]
+fn agent_runner_query_returns_preview_without_durable_action_side_effects_then_confirms_service() {
+    let mut kernel =
+        super::micro_depot_measured_supply::installed_micro_depot_with_measured_supply(5, 4, 2);
+    let mut control =
+        super::micro_depot_measured_supply::installed_micro_depot_with_measured_supply(5, 4, 2);
+    kernel
+        .observe("agent-measured")
+        .expect("warm quote-agent observation");
+    control
+        .observe("agent-measured")
+        .expect("warm control observation");
+    let model_before_query = kernel.model().clone();
+    let time_before_query = kernel.time();
+    let journal_before_query = kernel.journal_snapshot();
+
+    let mut runner = AgentRunner::with_rate_limit(RateLimitPolicy::new(1, 10));
+    runner.register(QuoteThenServiceAgent::new("agent-measured"));
+
+    let quote_tick = runner.tick(&mut kernel).expect("quote decision result");
+    assert!(matches!(quote_tick.decision, AgentDecision::Query(_)));
+    assert!(quote_tick.action_result.is_none());
+    assert!(quote_tick.query_result.is_some());
+    assert_eq!(kernel.pending_actions(), 0);
+    assert_eq!(kernel.time(), time_before_query);
+    assert_eq!(kernel.journal_snapshot(), journal_before_query);
+    assert_eq!(kernel.model(), &model_before_query);
+    assert_eq!(
+        runner
+            .get("agent-measured")
+            .expect("registered")
+            .action_count,
+        0,
+        "query must not count against the durable action quota"
+    );
+    assert!(
+        !runner.is_rate_limited("agent-measured", kernel.time()),
+        "query must not consume the durable action rate limit"
+    );
+    let quoted = runner.get("agent-measured").expect("registered");
+    assert_eq!(quoted.behavior.query_results.len(), 1);
+    assert!(quoted.behavior.action_results.is_empty());
+    assert!(
+        serde_json::to_string(&quoted.behavior.query_results[0])
+            .expect("serialize structured quote result")
+            .contains("resource_debits"),
+        "the next decision context must receive the structured quote preview"
+    );
+
+    let control_action_id = control.submit_action_from_agent(
+        "agent-measured",
+        Action::ServiceMicroDepotRepair {
+            agent_id: "agent-measured".to_string(),
+            facility_id: "depot-measured".to_string(),
+            target_id: "loc-measured".to_string(),
+            base_cost_class: MicroDepotPressureClass::Medium,
+            base_risk_class: MicroDepotPressureClass::Low,
+            blocker_type: Some("supply_missing".to_string()),
+        },
+    );
+    let control_event = control.step().expect("control service");
+
+    let service_tick = runner.tick(&mut kernel).expect("service decision result");
+    let service_result = service_tick.action_result.expect("service action result");
+    assert_eq!(service_result.action_id, control_action_id);
+    assert_eq!(service_result.event, control_event);
+    assert!(service_result.success);
+    let behavior = &runner.get("agent-measured").expect("registered").behavior;
+    assert_eq!(behavior.query_results.len(), 1);
+    assert_eq!(behavior.action_results.len(), 1);
+}
+
+#[test]
+fn agent_runner_decide_only_query_is_read_only_and_not_an_action_result() {
+    let mut kernel =
+        super::micro_depot_measured_supply::installed_micro_depot_with_measured_supply(5, 4, 2);
+    kernel
+        .observe("agent-measured")
+        .expect("warm decide-only quote-agent observation");
+    let model_before_query = kernel.model().clone();
+    let time_before_query = kernel.time();
+    let journal_before_query = kernel.journal_snapshot();
+    let mut runner: AgentRunner<QuoteThenServiceAgent> = AgentRunner::new();
+    runner.register(QuoteThenServiceAgent::new("agent-measured"));
+
+    let tick = runner
+        .tick_decide_only(&mut kernel)
+        .expect("query decision");
+    assert!(matches!(tick.decision, AgentDecision::Query(_)));
+    assert!(tick.action_result.is_none());
+    assert!(tick.query_result.is_some());
+    assert_eq!(kernel.pending_actions(), 0);
+    assert_eq!(kernel.time(), time_before_query);
+    assert_eq!(kernel.journal_snapshot(), journal_before_query);
+    assert_eq!(kernel.model(), &model_before_query);
+    let registered = runner.get("agent-measured").expect("registered");
+    assert_eq!(registered.action_count, 0);
+    assert_eq!(registered.behavior.query_results.len(), 1);
+    assert!(registered.behavior.action_results.is_empty());
+}
+
+#[test]
+fn agent_runner_batch_query_uses_precommit_snapshot_and_excludes_query_from_durable_intents() {
+    let mut kernel =
+        super::micro_depot_measured_supply::installed_micro_depot_with_measured_supply(5, 4, 2);
+    let time_before_batch = kernel.time();
+    let journal_before_batch = kernel.journal_snapshot();
+    let mut runner: AgentRunner<QuoteThenServiceAgent> = AgentRunner::new();
+    runner.register(QuoteThenServiceAgent::new("agent-measured"));
+
+    let results = runner.tick_collect_intents_and_commit(&mut kernel, 2);
+    assert_eq!(results.len(), 2);
+    assert!(matches!(results[0].decision, AgentDecision::Query(_)));
+    assert!(results[0].action_result.is_none());
+    assert!(results[0].query_result.is_some());
+    assert!(matches!(results[1].decision, AgentDecision::Act(_)));
+    assert!(results[1].action_result.is_some());
+    let report = kernel
+        .last_intent_batch_report()
+        .expect("one durable service intent committed");
+    assert_eq!(
+        report.intent_count, 1,
+        "query must not become a durable intent"
+    );
+    assert_eq!(kernel.time(), time_before_batch.saturating_add(1));
+    assert_eq!(
+        kernel.journal_snapshot().events.len(),
+        journal_before_batch.events.len() + 1,
+        "only the confirmed service may append history"
+    );
+    let behavior = &runner.get("agent-measured").expect("registered").behavior;
+    assert_eq!(behavior.query_results.len(), 1);
+    let query_json = serde_json::to_string(&behavior.query_results[0])
+        .expect("serialize pre-commit quote result");
+    assert!(query_json.contains("available_units_by_kind"));
+    assert!(
+        query_json.contains("5"),
+        "query must observe stock before service debit"
+    );
+    assert_eq!(behavior.action_results.len(), 1);
 }
 
 #[test]

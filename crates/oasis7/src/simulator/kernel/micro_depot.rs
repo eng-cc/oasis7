@@ -348,14 +348,6 @@ impl WorldKernel {
                 service_radius_cm,
                 supported_resource_kinds,
             ),
-            Action::EvaluateMicroDepotQuote { .. } => WorldEventKind::ActionRejected {
-                reason: RejectReason::RuleDenied {
-                    notes: vec![
-                        "micro_depot quotes are non-mutating; call WorldKernel::micro_depot_quote"
-                            .to_string(),
-                    ],
-                },
-            },
             Action::ServiceMicroDepotRepair {
                 agent_id,
                 facility_id,

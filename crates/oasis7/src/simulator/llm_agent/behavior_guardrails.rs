@@ -12,6 +12,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     self.apply_action_guardrails(action, Some(observation));
                 (AgentDecision::Act(guarded_action), note)
             }
+            AgentDecision::Query(query) => (AgentDecision::Query(query), None),
             AgentDecision::Wait => {
                 if let Some((guarded_action, note)) =
                     self.rewrite_wait_to_sustained_production("wait", observation)

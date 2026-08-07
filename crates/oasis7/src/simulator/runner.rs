@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
+use super::agent::{
+    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
+};
 use super::kernel::{WorldEvent, WorldEventKind, WorldKernel};
 use super::runtime_perf::{RuntimePerfCollector, RuntimePerfSnapshot};
 use super::types::{Action, WorldTime};
@@ -470,6 +472,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
                 agent_id,
                 decision: AgentDecision::Wait,
                 action_result: None,
+                query_result: None,
                 skipped_reason: None,
                 decision_trace,
             }),
@@ -481,6 +484,19 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     agent_id,
                     decision: AgentDecision::WaitTicks(ticks),
                     action_result: None,
+                    query_result: None,
+                    skipped_reason: None,
+                    decision_trace,
+                })
+            }
+            AgentDecision::Query(query) => {
+                let query_result = Self::evaluate_query(kernel, query.clone());
+                self.notify_query_result(agent_id.as_str(), &query_result);
+                Some(AgentTickResult {
+                    agent_id,
+                    decision: AgentDecision::Query(query),
+                    action_result: None,
+                    query_result: Some(query_result),
                     skipped_reason: None,
                     decision_trace,
                 })
@@ -522,6 +538,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     agent_id,
                     decision: AgentDecision::Act(action),
                     action_result,
+                    query_result: None,
                     skipped_reason: None,
                     decision_trace,
                 })
@@ -580,6 +597,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
                 agent_id,
                 decision: AgentDecision::Wait,
                 action_result: None,
+                query_result: None,
                 skipped_reason: None,
                 decision_trace,
             }),
@@ -591,6 +609,19 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     agent_id,
                     decision: AgentDecision::WaitTicks(ticks),
                     action_result: None,
+                    query_result: None,
+                    skipped_reason: None,
+                    decision_trace,
+                })
+            }
+            AgentDecision::Query(query) => {
+                let query_result = Self::evaluate_query(kernel, query.clone());
+                self.notify_query_result(agent_id.as_str(), &query_result);
+                Some(AgentTickResult {
+                    agent_id,
+                    decision: AgentDecision::Query(query),
+                    action_result: None,
+                    query_result: Some(query_result),
                     skipped_reason: None,
                     decision_trace,
                 })
@@ -605,6 +636,7 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     agent_id,
                     decision: AgentDecision::Act(action),
                     action_result: None,
+                    query_result: None,
                     skipped_reason: None,
                     decision_trace,
                 })
@@ -699,6 +731,34 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         let callback_started_at = Instant::now();
         agent.behavior.on_action_result(result);
+        self.runtime_perf
+            .record_callback_duration(callback_started_at.elapsed());
+        true
+    }
+
+    fn evaluate_query(kernel: &WorldKernel, query: AgentQuery) -> AgentQueryResult {
+        match query {
+            AgentQuery::EvaluateMicroDepotQuote(request) => {
+                let available_units_by_kind = kernel
+                    .model()
+                    .regional_infrastructure
+                    .get(request.facility_id.as_str())
+                    .map(|facility| facility.available_units_by_kind.clone());
+                AgentQueryResult::EvaluateMicroDepotQuote {
+                    result: kernel.micro_depot_quote(&request),
+                    request,
+                    available_units_by_kind,
+                }
+            }
+        }
+    }
+
+    pub fn notify_query_result(&mut self, agent_id: &str, result: &AgentQueryResult) -> bool {
+        let Some(agent) = self.agents.get_mut(agent_id) else {
+            return false;
+        };
+        let callback_started_at = Instant::now();
+        agent.behavior.on_query_result(result);
         self.runtime_perf
             .record_callback_duration(callback_started_at.elapsed());
         true
@@ -1053,6 +1113,8 @@ pub struct AgentTickResult {
     pub decision: AgentDecision,
     /// The result of the action if one was taken.
     pub action_result: Option<ActionResult>,
+    /// The result of a read-only query, if one was made.
+    pub query_result: Option<AgentQueryResult>,
     /// Reason why the agent was skipped (if applicable).
     pub skipped_reason: Option<SkippedReason>,
     /// Optional decision trace payload (e.g. LLM prompt/completion).

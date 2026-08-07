@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{
-    Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace,
-    LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmPromptSectionTrace, LlmStepTrace,
-    Observation, WorldEvent, WorldTime,
+    Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
+    AgentQueryResult, LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics,
+    LlmPromptSectionTrace, LlmStepTrace, Observation, WorldEvent, WorldTime,
 };
 
 #[path = "decision_provider_support.rs"]
@@ -256,8 +256,17 @@ impl DecisionRequest {
 #[serde(tag = "decision", rename_all = "snake_case")]
 pub enum ProviderDecision {
     Wait,
-    WaitTicks { ticks: u64 },
-    Act { action_ref: String, action: Action },
+    WaitTicks {
+        ticks: u64,
+    },
+    Act {
+        action_ref: String,
+        action: Action,
+    },
+    Query {
+        query_ref: String,
+        query: AgentQuery,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1014,6 +1023,24 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
                     )
                 }
             }
+            ProviderDecision::Query { query_ref, query } => {
+                if self
+                    .action_catalog
+                    .iter()
+                    .any(|entry| entry.action_ref == *query_ref)
+                {
+                    (AgentDecision::Query(query.clone()), None)
+                } else {
+                    provider_error = provider_error
+                        .or_else(|| Some(format!("provider_invalid_query_ref: {query_ref}")));
+                    (
+                        AgentDecision::Wait,
+                        Some(format!(
+                            "unknown query_ref returned by provider: {query_ref}"
+                        )),
+                    )
+                }
+            }
         };
         let mut response = response;
         if response.diagnostics.latency_ms.is_none() {
@@ -1043,6 +1070,13 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
         self.push_recent_event_summary(summary.clone());
         self.memory_summary = Some(summary);
         let _ = self.provider.push_feedback(&feedback);
+    }
+
+    fn on_query_result(&mut self, result: &AgentQueryResult) {
+        let summary = serde_json::to_string(result)
+            .unwrap_or_else(|_| "query_feedback=serialization_failed".to_string());
+        self.push_recent_event_summary(summary.clone());
+        self.memory_summary = Some(summary);
     }
 
     fn on_event(&mut self, event: &WorldEvent) {

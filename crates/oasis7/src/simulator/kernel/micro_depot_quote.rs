@@ -1,4 +1,3 @@
-use super::super::types::Action;
 use super::super::types::ResourceOwner;
 use super::super::world_model::RegionalInfrastructure;
 use super::WorldKernel;
@@ -8,12 +7,16 @@ use super::micro_depot::{
 };
 use super::micro_depot_validation::measured_micro_depot_inventory_depleted;
 use crate::geometry::space_distance_cm;
+use crate::simulator::MicroDepotQuoteRequest;
 
 impl WorldKernel {
     /// Evaluates a micro-depot service quote against the current snapshot without
     /// reserving inventory, changing the model, or appending a world event.
-    pub fn micro_depot_quote(&self, action: &Action) -> Result<MicroDepotQuotePreview, String> {
-        let Action::EvaluateMicroDepotQuote {
+    pub fn micro_depot_quote(
+        &self,
+        request: &MicroDepotQuoteRequest,
+    ) -> Result<MicroDepotQuotePreview, String> {
+        let MicroDepotQuoteRequest {
             agent_id,
             facility_id,
             target_id,
@@ -21,10 +24,7 @@ impl WorldKernel {
             base_cost_class,
             base_risk_class,
             blocker_type,
-        } = action
-        else {
-            return Err("micro_depot_quote requires EvaluateMicroDepotQuote".to_string());
-        };
+        } = request;
         let evaluator = self
             .rule_hooks
             .micro_depot_wasm

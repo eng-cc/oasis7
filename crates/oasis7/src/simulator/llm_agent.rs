@@ -16,9 +16,9 @@ use std::fs;
 use std::path::Path;
 
 use super::agent::{
-    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, LlmChatMessageTrace,
-    LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace, LlmEffectReceiptTrace,
-    LlmPromptSectionTrace, LlmStepTrace,
+    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
+    LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
+    LlmEffectReceiptTrace, LlmPromptSectionTrace, LlmStepTrace,
 };
 use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
 use super::llm_defaults::DEFAULT_LLM_MODEL;
@@ -1073,6 +1073,7 @@ pub struct LlmAgentBehavior<C: LlmCompletionClient> {
     conversation_history: Vec<LlmChatMessageTrace>,
     conversation_trace_cursor: usize,
     last_action_summary: Option<PromptLastActionSummary>,
+    last_query_result: Option<AgentQueryResult>,
     pending_decision_rewrite: Option<DecisionRewriteReceipt>,
     known_factory_locations: BTreeMap<String, String>,
     known_factory_kinds_by_id: BTreeMap<String, String>,
@@ -1129,6 +1130,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             conversation_history: Vec::new(),
             conversation_trace_cursor: 0,
             last_action_summary: None,
+            last_query_result: None,
             pending_decision_rewrite: None,
             known_factory_locations: BTreeMap::new(),
             known_factory_kinds_by_id: BTreeMap::new(),

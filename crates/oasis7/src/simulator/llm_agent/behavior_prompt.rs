@@ -132,6 +132,11 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             })
             .unwrap_or(serde_json::Value::Null);
         let recipe_coverage = self.recipe_coverage.summary_json();
+        let last_query = self
+            .last_query_result
+            .as_ref()
+            .map(|result| serde_json::json!(result))
+            .unwrap_or(serde_json::Value::Null);
 
         serde_json::to_string(&serde_json::json!({
             "time": observation.time,
@@ -139,6 +144,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             "pos": observation.pos,
             "self_resources": observation.self_resources,
             "last_action": last_action,
+            "last_query": last_query,
             "recipe_coverage": recipe_coverage,
             "visibility_range_cm": observation.visibility_range_cm,
             "visible_agents_total": observation.visible_agents.len(),
@@ -186,7 +192,6 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                 "install_module_to_target_from_artifact"
             }
             Action::InstallMicroDepot { .. } => "install_micro_depot",
-            Action::EvaluateMicroDepotQuote { .. } => "evaluate_micro_depot_quote",
             Action::ServiceMicroDepotRepair { .. } => "service_micro_depot_repair",
             Action::ServiceMicroDepotLogistics { .. } => "service_micro_depot_logistics",
             Action::PayMicroDepotUpkeep { .. } => "pay_micro_depot_upkeep",
@@ -256,6 +261,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     pub(super) fn decision_label_for_rewrite(decision: &AgentDecision) -> String {
         match decision {
             AgentDecision::Act(action) => Self::action_label_for_rewrite(action),
+            AgentDecision::Query(AgentQuery::EvaluateMicroDepotQuote(_)) => {
+                "evaluate_micro_depot_quote".to_string()
+            }
             AgentDecision::Wait => "wait".to_string(),
             AgentDecision::WaitTicks(_) => "wait_ticks".to_string(),
         }
