@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-08-01`
+- Last reviewed：`2026-08-07`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -75,6 +75,14 @@
 
 本条只约束跨域产品承诺；pending 的持久化、去重、重试、过期、receipt 字段和具体 UI 由 runtime、P2P、Agent 与入口/Viewer 专业域分别拥有。
 
+### 恢复目标身份与世界隔离边界
+
+恢复成功只能恢复原有的 `world_id` 及其可验证历史，不能把“某个节点重新可运行”“可读取部分数据”或“建立了新的本地/测试世界”表达为玩家原世界已经回来。恢复候选必须同时能关联既有 `world_id`、受验证 checkpoint 或 snapshot、canonical replay 与 state root；任一关联缺失、相互冲突或指向其他 `world_id` 时，产品结论只能是原世界**不可用且尚未恢复**。此时不得继续接受新的权威 intent、为新世界发放原世界的资格或资源结论，或让入口把替代 endpoint、缓存状态、旧截图或本地开发世界伪装成连续世界。
+
+玩家在该状态下可以查看最后一个已验证 receipt 与明确的世界不可用/待恢复说明；这不是新行动、资产转移、控制权、Agent 授权、组织资格或已完成进度的恢复承诺。已经 committed 的历史仍以其原 receipt 为准；未 final 的 intent 继续遵守上文的待决规则，不因恢复目标不明而被静默确认、取消、重放或迁移。恢复完成后，只有同一 `world_id` 的验证链重新成立，消费者才可按 committed state 恢复结论。
+
+若原 `world_id` 无法被证明恢复，产品不得自行把玩家、资产、Agent、组织或历史复制到替代世界，也不得把替代世界称作自动升级、灾备恢复或无损迁移。是否建立新世界、是否提供受治理的迁移方案及其同意、结算和申诉规则，是需要独立跨模块决策的产品变更；在该决策及其专业合同与证据完成前，唯一安全路径是维持隔离并如实报告不可用。具体 identity 检验、checkpoint 格式、停止服务/投票机制、endpoint 行为和界面/API 字段仍由 P2P、runtime、Viewer 与测试专业域拥有。
+
 ## 5. Done：成功标准与验收
 
 - SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。
@@ -82,6 +90,7 @@
 - SC-3：bootstrap、snapshot、replay、state sync、pruning 和灾难恢复证明同一历史/状态根可重建；任一证明缺失或不匹配时停止 serving/voting。
 - SC-4：全部活动验证者在 attestation 前重执行相同版本化执行；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
 - SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时，待决 intent 不产生下游资格或世界效果，消费者能区分仍待决与须重新规划的结果，并只在恢复后取得的 committed receipt 上更新结论。明确互斥的同 lineage 成员中，首个产生有效世界效果的 receipt 唯一获胜并原子终止其余成员；拒绝/过期只终止自身，独立 intent 保持并发；原请求与撤回/替代请求的关联及各自真实状态可读。
+- SC-6：恢复路径只在同一 `world_id` 的 checkpoint/snapshot、canonical replay 与 state root 验证链成立时恢复世界结论；缺失、冲突或其他 `world_id` 的候选保持原世界不可用和隔离，不接受新权威 intent，也不把本地/测试/替代世界、缓存或部分数据表述为连续恢复。已 committed receipt 保留其原历史，未 final intent 不被静默结算、取消、重放或迁移；任何替代世界或受治理迁移必须作为独立产品决策，而非恢复副作用。
 
 ### 5.1 验收追踪
 
@@ -92,6 +101,7 @@
 | SC-3 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | bootstrap、checkpoint、snapshot、replay、root verification 与 restore drill | test_tier_full |
 | SC-4 | runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | deterministic re-execution、upgrade activation、replay 与 mixed-version 拒绝 | test_tier_full |
 | SC-5 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 本文 `Finality 缺失时的意图连续性` 对应的 committed/pending protocol boundary、待决/无效或重规划结果的可区分性、恢复后重新校验与 receipt-gated 结果、proof verification；包含同 lineage 互斥成员的竞态/同序唯一胜者、拒绝/过期仅终止自身、replay/重复重试无第二效果及独立 intent 并发负例，以及正式 surface 的关联/状态可读性核对 | test_tier_required |
+| SC-6 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 同一 `world_id` 的 checkpoint/snapshot、replay 与 root 验证恢复样例；缺失、冲突或其他 `world_id` 候选的 fail-closed 负例，断言不接收新权威 intent、不把替代 endpoint/缓存/本地世界表述为恢复，并核对 committed receipt 与未 final intent 的连续性 | test_tier_full |
 
 ## 6. Non-Goals
 
