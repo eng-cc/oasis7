@@ -164,29 +164,75 @@ fn micro_depot_evaluate_quote_is_non_mutating_and_keeps_service_confirmation_ava
 }
 
 #[test]
-fn submitted_micro_depot_quote_action_rejects_without_mutating_facility_state() {
-    let (mut kernel, _) = install_fixture(10);
+fn submitted_micro_depot_quote_action_leaves_intent_tick_history_and_next_service_identity_unchanged()
+ {
+    let (mut kernel, replay_base) = install_fixture(10);
+    let (mut control, _) = install_fixture(10);
     assert!(matches!(
         install(&mut kernel, "depot-submitted-quote"),
         WorldEventKind::MicroDepotInstalled { .. }
     ));
+    assert!(matches!(
+        install(&mut control, "depot-submitted-quote"),
+        WorldEventKind::MicroDepotInstalled { .. }
+    ));
+    configure_two_unit_service(&mut kernel);
+    configure_two_unit_service(&mut control);
+
     let model_before = kernel.model().clone();
+    let time_before = kernel.time();
+    let journal_before = kernel.journal_snapshot();
 
     kernel.submit_action(evaluate_repair_quote("depot-submitted-quote"));
-    let event = kernel.step().expect("resolve submitted quote action").kind;
-
-    assert!(matches!(event, WorldEventKind::ActionRejected { .. }));
     assert!(
-        serde_json::to_string(&event)
-            .expect("serialize submitted quote rejection")
-            .contains("micro_depot_quote"),
-        "submitted action must direct callers to the non-mutating quote query"
+        kernel.step().is_none(),
+        "submitted quote action must not enter the tick/journal execution path"
+    );
+    assert_eq!(
+        kernel.pending_actions(),
+        0,
+        "submitted quote action must not enqueue an intent"
+    );
+    assert_eq!(
+        kernel.time(),
+        time_before,
+        "quote must not advance world time"
+    );
+    assert_eq!(
+        kernel.journal_snapshot(),
+        journal_before,
+        "quote must not append canonical/replay history"
     );
     assert_eq!(
         kernel.model(),
         &model_before,
         "submitted quote action must not change facility or player state"
     );
+    let replayed = WorldKernel::replay_from_snapshot(replay_base, journal_before)
+        .expect("quote-free journal remains replayable");
+    assert_eq!(replayed.model(), kernel.model());
+
+    let service = Action::ServiceMicroDepotRepair {
+        agent_id: "agent-owner".to_string(),
+        facility_id: "depot-submitted-quote".to_string(),
+        target_id: "loc-install".to_string(),
+        base_cost_class: MicroDepotPressureClass::Medium,
+        base_risk_class: MicroDepotPressureClass::Low,
+        blocker_type: Some("supply_missing".to_string()),
+    };
+    let service_id_after_quote = kernel.submit_action(service.clone());
+    let control_service_id = control.submit_action(service);
+    assert_eq!(
+        service_id_after_quote, control_service_id,
+        "quote submission must not consume the next real action identity"
+    );
+    let event_after_quote = kernel.step().expect("resolve service after quote").kind;
+    let control_event = control.step().expect("resolve control service").kind;
+    assert_eq!(event_after_quote, control_event);
+    assert!(matches!(
+        event_after_quote,
+        WorldEventKind::MicroDepotServiceApplied { .. }
+    ));
 }
 
 #[test]
