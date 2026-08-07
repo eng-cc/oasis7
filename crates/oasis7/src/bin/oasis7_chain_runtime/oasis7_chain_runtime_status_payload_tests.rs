@@ -24,6 +24,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[path = "oasis7_chain_runtime_status_payload_gate_policy_tests.rs"]
+mod gate_policy_tests;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 
@@ -702,144 +704,6 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
     assert_eq!(runtime_perf.action_execution.p95_ms, 1_250.0);
     assert_eq!(runtime_perf.action_execution.over_budget_total, 1);
     assert_eq!(runtime_perf.action_execution.over_budget_ratio_ppm, 250_000);
-}
-
-#[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_accepts_one_isolated_steady_window_jitter() {
-    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
-        window_capacity: 128,
-        recent_commit_count: 128,
-        recent_over_budget_count: 1,
-        recent_over_budget_ratio_ppm: 7_812,
-        p50_total_ms: Some(780),
-        p95_total_ms: Some(900),
-        latest_total_ms: Some(900),
-        max_total_ms: Some(1_100),
-        slow_count: 1,
-        last_slow_stage: Some("cas_put".to_string()),
-        stages: BTreeMap::new(),
-    };
-
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
-
-    assert_eq!(runtime_perf.health, RuntimePerfHealth::Healthy);
-    assert_eq!(runtime_perf.bottleneck, RuntimePerfBottleneck::None);
-    assert_eq!(runtime_perf.action_execution.samples_window, 128);
-    assert_eq!(runtime_perf.action_execution.p95_ms, 900.0);
-    assert_eq!(runtime_perf.action_execution.over_budget_total, 1);
-    assert_eq!(runtime_perf.action_execution.last_ms, 900.0);
-    assert_eq!(runtime_perf.action_execution.max_ms, 1_100.0);
-}
-
-#[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_projects_latest_sample_separately_from_maximum()
- {
-    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
-        window_capacity: 128,
-        recent_commit_count: 128,
-        recent_over_budget_count: 1,
-        recent_over_budget_ratio_ppm: 7_812,
-        p50_total_ms: Some(780),
-        p95_total_ms: Some(900),
-        latest_total_ms: Some(900),
-        max_total_ms: Some(1_100),
-        slow_count: 1,
-        last_slow_stage: Some("cas_put".to_string()),
-        stages: BTreeMap::new(),
-    };
-
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
-
-    assert_eq!(runtime_perf.action_execution.last_ms, 900.0);
-    assert_eq!(runtime_perf.action_execution.max_ms, 1_100.0);
-}
-
-#[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_second_steady_window_breach() {
-    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
-        window_capacity: 128,
-        recent_commit_count: 128,
-        recent_over_budget_count: 2,
-        recent_over_budget_ratio_ppm: 15_625,
-        p50_total_ms: Some(780),
-        p95_total_ms: Some(900),
-        latest_total_ms: Some(1_100),
-        max_total_ms: Some(1_100),
-        slow_count: 2,
-        last_slow_stage: Some("cas_put".to_string()),
-        stages: BTreeMap::new(),
-    };
-
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
-
-    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
-    assert_eq!(
-        runtime_perf.bottleneck,
-        RuntimePerfBottleneck::ActionExecution
-    );
-    assert_eq!(runtime_perf.action_execution.over_budget_total, 2);
-}
-
-#[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_catastrophic_steady_window_outlier() {
-    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
-        window_capacity: 128,
-        recent_commit_count: 128,
-        recent_over_budget_count: 1,
-        recent_over_budget_ratio_ppm: 7_812,
-        p50_total_ms: Some(780),
-        p95_total_ms: Some(900),
-        latest_total_ms: Some(1_250),
-        max_total_ms: Some(1_250),
-        slow_count: 1,
-        last_slow_stage: Some("cas_put".to_string()),
-        stages: BTreeMap::new(),
-    };
-
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
-
-    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
-    assert_eq!(
-        runtime_perf.bottleneck,
-        RuntimePerfBottleneck::ActionExecution
-    );
-    assert_eq!(runtime_perf.action_execution.max_ms, 1_250.0);
-}
-
-#[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_does_not_qualify_an_incomplete_window() {
-    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
-        window_capacity: 128,
-        recent_commit_count: 127,
-        recent_over_budget_count: 0,
-        recent_over_budget_ratio_ppm: 0,
-        p50_total_ms: Some(780),
-        p95_total_ms: Some(900),
-        latest_total_ms: Some(900),
-        max_total_ms: Some(900),
-        slow_count: 0,
-        last_slow_stage: None,
-        stages: BTreeMap::new(),
-    };
-
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
-
-    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
-    assert_eq!(
-        runtime_perf.bottleneck,
-        RuntimePerfBottleneck::ActionExecution
-    );
-    assert_eq!(runtime_perf.action_execution.samples_window, 127);
 }
 
 #[test]
