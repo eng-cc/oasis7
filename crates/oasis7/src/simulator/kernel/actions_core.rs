@@ -945,6 +945,7 @@ impl WorldKernel {
                 install_target,
             ),
             action @ (Action::InstallMicroDepot { .. }
+            | Action::EvaluateMicroDepotQuote { .. }
             | Action::ServiceMicroDepotRepair { .. }
             | Action::ServiceMicroDepotLogistics { .. }
             | Action::PayMicroDepotUpkeep { .. }

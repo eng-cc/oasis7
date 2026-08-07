@@ -393,6 +393,17 @@ fn action_signature(action: &Action) -> String {
         } => format!(
             "install_module_from_artifact:{installer_agent_id}:{module_id}:{module_version}:{wasm_hash}:{activate}"
         ),
+        Action::EvaluateMicroDepotQuote {
+            agent_id,
+            facility_id,
+            target_id,
+            action_kind,
+            base_cost_class,
+            base_risk_class,
+            blocker_type,
+        } => format!(
+            "evaluate_micro_depot_quote:{agent_id}:{facility_id}:{target_id}:{action_kind:?}:{base_cost_class:?}:{base_risk_class:?}:{blocker_type:?}"
+        ),
         Action::ListModuleArtifactForSale {
             seller_agent_id,
             wasm_hash,

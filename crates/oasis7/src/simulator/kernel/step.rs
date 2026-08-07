@@ -447,6 +447,10 @@ fn reject_reason_for_agent_submitter(agent_id: &str, action: &Action) -> Option<
             agent_id: action_agent_id,
             ..
         }
+        | Action::EvaluateMicroDepotQuote {
+            agent_id: action_agent_id,
+            ..
+        }
         | Action::ServiceMicroDepotRepair {
             agent_id: action_agent_id,
             ..

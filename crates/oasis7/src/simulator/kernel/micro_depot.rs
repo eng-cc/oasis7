@@ -7,8 +7,6 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use crate::geometry::space_distance_cm;
-
 use super::super::types::{
     Action, ActionId, AgentId, FacilityId, LocationId, ResourceKind, ResourceOwner,
 };
@@ -350,6 +348,14 @@ impl WorldKernel {
                 service_radius_cm,
                 supported_resource_kinds,
             ),
+            Action::EvaluateMicroDepotQuote { .. } => WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "micro_depot quotes are non-mutating; call WorldKernel::micro_depot_quote"
+                            .to_string(),
+                    ],
+                },
+            },
             Action::ServiceMicroDepotRepair {
                 agent_id,
                 facility_id,
@@ -996,44 +1002,6 @@ impl WorldKernel {
             facility_id,
             agent_id,
         }
-    }
-
-    fn ensure_micro_depot_owner(
-        &self,
-        facility_id: &str,
-        agent_id: &str,
-    ) -> Result<(), RejectReason> {
-        let Some(facility) = self.model.regional_infrastructure.get(facility_id) else {
-            return Err(RejectReason::FacilityNotFound {
-                facility_id: facility_id.to_string(),
-            });
-        };
-        match &facility.owner {
-            ResourceOwner::Agent {
-                agent_id: owner_agent_id,
-            } if owner_agent_id == agent_id => Ok(()),
-            _ => Err(RejectReason::RuleDenied {
-                notes: vec![format!(
-                    "agent {agent_id} does not own micro_depot {facility_id}"
-                )],
-            }),
-        }
-    }
-
-    fn micro_depot_distance_to_target(
-        &self,
-        facility: &RegionalInfrastructure,
-        target_id: &str,
-    ) -> Option<i64> {
-        let facility_pos = self.model.locations.get(&facility.location_id)?.pos;
-        let target_pos = if let Some(location) = self.model.locations.get(target_id) {
-            location.pos
-        } else if let Some(factory) = self.model.factories.get(target_id) {
-            self.model.locations.get(&factory.location_id)?.pos
-        } else {
-            return None;
-        };
-        Some(space_distance_cm(facility_pos, target_pos))
     }
 }
 

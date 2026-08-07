@@ -20,6 +20,7 @@ impl WorldKernel {
                 if measured_micro_depot_inventory_depleted(facility) {
                     available_actions.push("reclaim_micro_depot".to_string());
                 } else if facility.status == "active" && facility.upkeep_paid {
+                    available_actions.push("evaluate_micro_depot_quote".to_string());
                     available_actions.push("service_micro_depot_repair".to_string());
                     available_actions.push("service_micro_depot_logistics".to_string());
                     available_actions.push("suspend_micro_depot".to_string());

@@ -101,6 +101,94 @@ fn service_repair(kernel: &mut WorldKernel, facility_id: &str) -> WorldEventKind
     kernel.step().expect("resolve repair service").kind
 }
 
+fn evaluate_repair_quote(facility_id: &str) -> Action {
+    Action::EvaluateMicroDepotQuote {
+        agent_id: "agent-owner".to_string(),
+        facility_id: facility_id.to_string(),
+        target_id: "loc-install".to_string(),
+        action_kind: MicroDepotActionKind::Repair,
+        base_cost_class: MicroDepotPressureClass::Medium,
+        base_risk_class: MicroDepotPressureClass::Low,
+        blocker_type: Some("supply_missing".to_string()),
+    }
+}
+
+#[test]
+fn micro_depot_evaluate_quote_is_non_mutating_and_keeps_service_confirmation_available() {
+    let (mut kernel, _) = install_fixture(10);
+    assert!(matches!(
+        install(&mut kernel, "depot-quote-action"),
+        WorldEventKind::MicroDepotInstalled { .. }
+    ));
+    configure_two_unit_service(&mut kernel);
+
+    let model_before = kernel.model().clone();
+    let journal_before = kernel.journal_snapshot();
+    let quote = kernel
+        .micro_depot_quote(&evaluate_repair_quote("depot-quote-action"))
+        .expect("active stocked depot quote");
+
+    assert_eq!(quote.proposal.decision, MicroDepotDecision::Applicable);
+    assert_eq!(
+        quote.proposal.resource_debits,
+        vec![MicroDepotProposalResourceDebit {
+            resource_kind: ResourceKind::Data,
+            units: 2,
+        }]
+    );
+    assert_eq!(
+        kernel.model(),
+        &model_before,
+        "quote must not debit or reserve"
+    );
+    assert_eq!(
+        kernel.journal_snapshot(),
+        journal_before,
+        "quote must not append a canonical world event"
+    );
+
+    let snapshot = kernel
+        .micro_depot_player_facility_snapshots()
+        .pop()
+        .expect("active stocked depot snapshot");
+    assert_eq!(
+        snapshot.available_actions,
+        vec![
+            "evaluate_micro_depot_quote".to_string(),
+            "service_micro_depot_repair".to_string(),
+            "service_micro_depot_logistics".to_string(),
+            "suspend_micro_depot".to_string(),
+        ],
+        "evaluation is a preview; repair/logistics remain the confirmation actions"
+    );
+}
+
+#[test]
+fn submitted_micro_depot_quote_action_rejects_without_mutating_facility_state() {
+    let (mut kernel, _) = install_fixture(10);
+    assert!(matches!(
+        install(&mut kernel, "depot-submitted-quote"),
+        WorldEventKind::MicroDepotInstalled { .. }
+    ));
+    let model_before = kernel.model().clone();
+
+    kernel.submit_action(evaluate_repair_quote("depot-submitted-quote"));
+    let event = kernel.step().expect("resolve submitted quote action").kind;
+
+    assert!(matches!(event, WorldEventKind::ActionRejected { .. }));
+    assert!(
+        serde_json::to_string(&event)
+            .expect("serialize submitted quote rejection")
+            .contains("micro_depot_quote"),
+        "submitted action must direct callers to the non-mutating quote query"
+    );
+    assert_eq!(
+        kernel.model(),
+        &model_before,
+        "submitted quote action must not change facility or player state"
+    );
+}
+
 #[test]
 fn micro_depot_install_requires_ten_data_and_commissions_eight_inventory_sixteen_throughput() {
     let (mut insufficient, _) = install_fixture(9);

@@ -681,6 +681,16 @@ pub enum Action {
         #[serde(default)]
         supported_resource_kinds: Vec<String>,
     },
+    EvaluateMicroDepotQuote {
+        agent_id: AgentId,
+        facility_id: FacilityId,
+        target_id: String,
+        action_kind: crate::simulator::MicroDepotActionKind,
+        base_cost_class: crate::simulator::MicroDepotPressureClass,
+        base_risk_class: crate::simulator::MicroDepotPressureClass,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blocker_type: Option<String>,
+    },
     ServiceMicroDepotRepair {
         agent_id: AgentId,
         facility_id: FacilityId,
