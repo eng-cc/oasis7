@@ -56,12 +56,12 @@ use status_payload_observability::{
     ChainP2pPathObservabilityStatus, build_path_observability_status,
 };
 pub(crate) use status_payload_observability::{
-    ChainP2pTransportTransition, ChainP2pTransportTransitionCounters, build_liveness_status,
-    build_runtime_perf_observability_status,
+    ChainP2pTransportTransition, ChainP2pTransportTransitionCounters, RuntimePerfGateTier,
+    build_liveness_status, build_runtime_perf_observability_status,
     build_runtime_perf_snapshot_from_execution_bridge_timing, classify_transport_stability,
     observability_status_for_alerts, observability_summary_for_alerts,
     push_local_chain_ahead_alert, push_observability_alert, reachability_policy_ok,
-    sequencer_head_publication_pending_summary,
+    runtime_perf_gate_tier_from_manifest, sequencer_head_publication_pending_summary,
 };
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
