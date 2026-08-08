@@ -94,7 +94,7 @@ bash "$ROOT_DIR/scripts/pm/closeout-tmpdir-portability.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-workflow-driver.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-workflow-doc-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
-python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal-transition-order.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-adversarial-contract.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" ruleset >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" none >/dev/null

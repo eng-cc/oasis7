@@ -150,6 +150,18 @@ class WorkflowDocumentationContract(unittest.TestCase):
         positions = [normalized.index(term) for term in expected.split(" -> ")]
         self.assertEqual(sorted(positions), positions)
 
+    def test_workflow_behavior_eval_covers_terminal_transition_order_contract(self) -> None:
+        """The default behavior eval must run the dedicated terminal-order regression."""
+        evaluation = WORKFLOW_EVAL.read_text(encoding="utf-8")
+        terminal_contract = (
+            'python3 "$ROOT_DIR/scripts/pm/terminal-transition-order.test.py" >/dev/null'
+        )
+        supervisor_contract = (
+            'python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null'
+        )
+        self.assertIn(terminal_contract, evaluation)
+        self.assertEqual(1, evaluation.count(supervisor_contract))
+
     def test_state_enum_is_canonical_and_closed(self) -> None:
         states = self.section("Workflow states")
         declared = set(re.findall(r"`([a-z][a-z0-9_]*)`", states))
