@@ -1050,6 +1050,10 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
         self.memory.consolidate(time, 0.9);
     }
 
+    fn on_query_result(&mut self, result: &AgentQueryResult) {
+        self.last_query_result = Some(result.clone());
+    }
+
     fn on_event(&mut self, event: &WorldEvent) {
         if let WorldEventKind::FactoryBuilt {
             factory_id,

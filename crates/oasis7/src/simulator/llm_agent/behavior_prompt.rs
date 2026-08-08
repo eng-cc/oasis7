@@ -132,8 +132,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             })
             .unwrap_or(serde_json::Value::Null);
         let recipe_coverage = self.recipe_coverage.summary_json();
-
-        serde_json::to_string(&serde_json::json!({
+        let mut prompt_observation = serde_json::json!({
             "time": observation.time,
             "agent_id": observation.agent_id,
             "pos": observation.pos,
@@ -153,8 +152,13 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                 .len()
                 .saturating_sub(visible_locations.len()),
             "visible_locations": visible_locations,
-        }))
-        .unwrap_or_else(|_| "{\"error\":\"observation serialize failed\"}".to_string())
+        });
+        if let Some(last_query) = self.last_query_result.as_ref() {
+            prompt_observation["last_query"] = serde_json::json!(last_query);
+        }
+
+        serde_json::to_string(&prompt_observation)
+            .unwrap_or_else(|_| "{\"error\":\"observation serialize failed\"}".to_string())
     }
 
     pub(super) fn action_kind_name_for_prompt(action: &Action) -> &'static str {
@@ -255,6 +259,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     pub(super) fn decision_label_for_rewrite(decision: &AgentDecision) -> String {
         match decision {
             AgentDecision::Act(action) => Self::action_label_for_rewrite(action),
+            AgentDecision::Query(AgentQuery::EvaluateMicroDepotQuote(_)) => {
+                "evaluate_micro_depot_quote".to_string()
+            }
             AgentDecision::Wait => "wait".to_string(),
             AgentDecision::WaitTicks(_) => "wait_ticks".to_string(),
         }

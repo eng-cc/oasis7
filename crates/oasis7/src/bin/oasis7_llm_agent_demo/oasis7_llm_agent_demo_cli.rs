@@ -328,6 +328,7 @@ struct DecisionCounts {
     wait: u64,
     wait_ticks: u64,
     act: u64,
+    query: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
@@ -408,6 +409,9 @@ impl DemoRunReport {
             }
             AgentDecision::Act(_) => {
                 self.decision_counts.act += 1;
+            }
+            AgentDecision::Query(_) => {
+                self.decision_counts.query += 1;
             }
         }
     }

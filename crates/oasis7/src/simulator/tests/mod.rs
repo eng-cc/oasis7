@@ -86,6 +86,7 @@ mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_http;
 mod runner;
+mod runner_query_trace;
 mod social;
 mod social_persist;
 mod submitter_access;

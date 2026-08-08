@@ -43,9 +43,9 @@ mod tests;
 
 // Re-export all public types
 pub use agent::{
-    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, LlmChatMessageTrace,
-    LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace, LlmEffectReceiptTrace,
-    LlmPromptSectionTrace, LlmStepTrace,
+    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
+    LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
+    LlmEffectReceiptTrace, LlmPromptSectionTrace, LlmStepTrace, MicroDepotQuoteRequest,
 };
 pub use asteroid_fragment::generate_fragments;
 pub use chunking::{

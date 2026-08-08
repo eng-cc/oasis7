@@ -1,4 +1,7 @@
-use oasis7::simulator::{Action, ActionCatalogEntry, DecisionRequest, ProviderDecision};
+use oasis7::simulator::{
+    Action, ActionCatalogEntry, AgentQuery, DecisionRequest, MicroDepotQuoteRequest,
+    ProviderDecision,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -59,6 +62,10 @@ pub(super) fn provider_decision_label(decision: &ProviderDecision) -> &'static s
             "simple_interact" => "simple_interact",
             _ => "act",
         },
+        ProviderDecision::Query { query_ref, .. } if query_ref == "evaluate_micro_depot_quote" => {
+            "evaluate_micro_depot_quote"
+        }
+        ProviderDecision::Query { .. } => "query",
     }
 }
 
@@ -321,9 +328,48 @@ pub(super) fn parse_model_decision(
                 action: build_action_from_args(agent_id, action_ref, &args)?,
             }
         }
+        "query" => {
+            let query_ref = envelope
+                .action_ref
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "query requires non-empty action_ref".to_string())?;
+            if !request
+                .observation
+                .action_catalog
+                .iter()
+                .any(|entry| entry.action_ref == query_ref)
+            {
+                return Err(format!(
+                    "query_ref `{query_ref}` not present in action_catalog"
+                ));
+            }
+            let args = envelope.args.unwrap_or(Value::Null);
+            ProviderDecision::Query {
+                query_ref: query_ref.to_string(),
+                query: build_query_from_args(agent_id, query_ref, &args)?,
+            }
+        }
         other => return Err(format!("unsupported decision `{other}`")),
     };
     Ok((decision, schema_repair_count))
+}
+
+fn build_query_from_args(
+    agent_id: &str,
+    query_ref: &str,
+    args: &Value,
+) -> Result<AgentQuery, String> {
+    match query_ref {
+        "evaluate_micro_depot_quote" => {
+            let mut request: MicroDepotQuoteRequest = serde_json::from_value(args.clone())
+                .map_err(|err| format!("evaluate_micro_depot_quote invalid args: {err}"))?;
+            request.agent_id = agent_id.to_string();
+            Ok(AgentQuery::EvaluateMicroDepotQuote(request))
+        }
+        other => Err(format!("unsupported query_ref `{other}`")),
+    }
 }
 
 fn build_action_from_args(
@@ -423,6 +469,9 @@ pub(super) fn apply_profile_guardrails(
             }
             _ => (ProviderDecision::Act { action_ref, action }, None),
         },
+        ProviderDecision::Query { query_ref, query } => {
+            (ProviderDecision::Query { query_ref, query }, None)
+        }
     }
 }
 

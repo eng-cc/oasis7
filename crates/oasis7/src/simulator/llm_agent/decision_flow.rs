@@ -1,4 +1,5 @@
-use super::super::agent::AgentDecision;
+use super::super::agent::{AgentDecision, AgentQuery, MicroDepotQuoteRequest};
+use super::super::kernel::{MicroDepotActionKind, MicroDepotPressureClass};
 use super::super::types::{Action, ResourceKind, ResourceOwner};
 use super::LlmCompletionTurn;
 use super::prompt_assembly::{PromptSectionKind, PromptSectionPriority};
@@ -86,6 +87,12 @@ struct LlmDecisionPayload {
     location_id: Option<String>,
     factory_id: Option<String>,
     factory_kind: Option<String>,
+    facility_id: Option<String>,
+    target_id: Option<String>,
+    action_kind: Option<MicroDepotActionKind>,
+    base_cost_class: Option<MicroDepotPressureClass>,
+    base_risk_class: Option<MicroDepotPressureClass>,
+    blocker_type: Option<String>,
     recipe_id: Option<String>,
     batches: Option<i64>,
     publisher: Option<String>,
@@ -519,6 +526,9 @@ fn parse_execute_until_decision(
     }
     let (action, rewrite_receipt) = match action_decision {
         AgentDecision::Act(action) => (action, None),
+        AgentDecision::Query(_) => {
+            return Err("execute_until action must be durable; queries are read-only".to_string());
+        }
         AgentDecision::Wait => (
             Action::HarvestRadiation {
                 agent_id: agent_id.to_string(),
@@ -632,6 +642,37 @@ fn parse_llm_decision_value_with_error(
     let decision = match parsed.decision.trim().to_ascii_lowercase().as_str() {
         "wait" => AgentDecision::Wait,
         "wait_ticks" => AgentDecision::WaitTicks(parsed.ticks.unwrap_or(1).max(1)),
+        "evaluate_micro_depot_quote" => {
+            let facility_id = parsed.facility_id.filter(|value| !value.trim().is_empty());
+            let target_id = parsed.target_id.filter(|value| !value.trim().is_empty());
+            let (
+                Some(facility_id),
+                Some(target_id),
+                Some(action_kind),
+                Some(base_cost_class),
+                Some(base_risk_class),
+            ) = (
+                facility_id,
+                target_id,
+                parsed.action_kind,
+                parsed.base_cost_class,
+                parsed.base_risk_class,
+            )
+            else {
+                return (AgentDecision::Wait, Some("evaluate_micro_depot_quote requires facility_id, target_id, action_kind, base_cost_class, and base_risk_class".to_string()));
+            };
+            AgentDecision::Query(AgentQuery::EvaluateMicroDepotQuote(
+                MicroDepotQuoteRequest {
+                    agent_id: agent_id.to_string(),
+                    facility_id,
+                    target_id,
+                    action_kind,
+                    base_cost_class,
+                    base_risk_class,
+                    blocker_type: parsed.blocker_type,
+                },
+            ))
+        }
         "move_agent" => {
             let to = parsed.to.unwrap_or_default();
             if to.trim().is_empty() {

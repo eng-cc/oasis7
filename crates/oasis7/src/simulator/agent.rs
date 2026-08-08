@@ -2,8 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::collections::BTreeMap;
 
-use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
+use super::kernel::{
+    MicroDepotActionKind, MicroDepotPressureClass, MicroDepotQuotePreview, Observation,
+    RejectReason, WorldEvent, WorldEventKind,
+};
 use super::types::{Action, ActionId, WorldTime};
 
 // ============================================================================
@@ -35,6 +39,11 @@ pub trait AgentBehavior {
         // Default: no-op
     }
 
+    /// Called after a read-only world query is evaluated.
+    fn on_query_result(&mut self, _result: &AgentQueryResult) {
+        // Default: no-op
+    }
+
     /// Called when an event affecting this agent occurs.
     /// This allows the agent to react to external events.
     fn on_event(&mut self, _event: &WorldEvent) {
@@ -55,10 +64,42 @@ pub trait AgentBehavior {
 pub enum AgentDecision {
     /// The agent decides to perform an action.
     Act(Action),
+    /// The agent requests read-only information from the current world snapshot.
+    Query(AgentQuery),
     /// The agent decides to wait/skip this turn.
     Wait,
     /// The agent decides to wait for a specific number of ticks.
     WaitTicks(u64),
+}
+
+/// A read-only request an Agent can make against the current world snapshot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AgentQuery {
+    EvaluateMicroDepotQuote(MicroDepotQuoteRequest),
+}
+
+/// Arguments needed to preview a micro-depot service without creating an intent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MicroDepotQuoteRequest {
+    pub agent_id: String,
+    pub facility_id: String,
+    pub target_id: String,
+    pub action_kind: MicroDepotActionKind,
+    pub base_cost_class: MicroDepotPressureClass,
+    pub base_risk_class: MicroDepotPressureClass,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker_type: Option<String>,
+}
+
+/// The structured outcome of a read-only Agent query.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AgentQueryResult {
+    EvaluateMicroDepotQuote {
+        request: MicroDepotQuoteRequest,
+        /// Facility stock copied from the same snapshot used for the preview.
+        available_units_by_kind: Option<BTreeMap<String, i64>>,
+        result: Result<MicroDepotQuotePreview, String>,
+    },
 }
 
 impl AgentDecision {

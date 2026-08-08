@@ -1,5 +1,5 @@
 use super::{
-    Action, DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse,
+    Action, AgentQuery, DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse,
     FeedbackEnvelope, ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient,
     ProviderLoopbackHttpError,
 };
@@ -141,6 +141,25 @@ impl ProviderLoopbackAdapter {
                     )),
                 }
             }
+            ProviderDecision::Query { query_ref, query } => {
+                if !Self::request_advertises_action_ref(request, query_ref) {
+                    return Err(DecisionProviderError::new(
+                        "action_ref_not_in_catalog",
+                        format!("query_ref `{query_ref}` is not present in request action_catalog"),
+                        false,
+                    ));
+                }
+                match resolved_query_ref(query) {
+                    expected_query_ref if expected_query_ref == query_ref => Ok(()),
+                    expected_query_ref => Err(DecisionProviderError::new(
+                        "query_ref_mismatch",
+                        format!(
+                            "query_ref `{query_ref}` does not match serialized query kind `{expected_query_ref}`"
+                        ),
+                        false,
+                    )),
+                }
+            }
         }
     }
 
@@ -219,5 +238,11 @@ fn resolved_action_ref(action: &Action) -> Option<&'static str> {
         Action::InspectTarget { .. } => Some("inspect_target"),
         Action::SimpleInteract { .. } => Some("simple_interact"),
         _ => None,
+    }
+}
+
+fn resolved_query_ref(query: &AgentQuery) -> &'static str {
+    match query {
+        AgentQuery::EvaluateMicroDepotQuote(_) => "evaluate_micro_depot_quote",
     }
 }
