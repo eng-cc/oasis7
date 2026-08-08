@@ -465,7 +465,9 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         let llm_api_duration =
             self.record_decision_runtime_samples(decision_duration, decision_trace.as_ref());
-        Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
+        if matches!(&decision, AgentDecision::Act(_)) {
+            Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
+        }
 
         let result = match decision {
             AgentDecision::Wait => Some(AgentTickResult {
@@ -590,7 +592,9 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         let llm_api_duration =
             self.record_decision_runtime_samples(decision_duration, decision_trace.as_ref());
-        Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
+        if matches!(&decision, AgentDecision::Act(_)) {
+            Self::record_decision_trace_effects(kernel, decision_trace.as_ref());
+        }
 
         let result = match decision {
             AgentDecision::Wait => Some(AgentTickResult {

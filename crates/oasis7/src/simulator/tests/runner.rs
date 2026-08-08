@@ -157,6 +157,13 @@ impl TraceEffectAgent {
             emitted: false,
         }
     }
+
+    fn durable_action(&self) -> Action {
+        Action::MoveAgent {
+            agent_id: self.id.clone(),
+            to: "loc-2".to_string(),
+        }
+    }
 }
 
 impl AgentBehavior for TraceEffectAgent {
@@ -165,7 +172,7 @@ impl AgentBehavior for TraceEffectAgent {
     }
 
     fn decide(&mut self, _observation: &Observation) -> AgentDecision {
-        AgentDecision::Wait
+        AgentDecision::Act(self.durable_action())
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
@@ -176,7 +183,7 @@ impl AgentBehavior for TraceEffectAgent {
         Some(AgentDecisionTrace {
             agent_id: self.id.clone(),
             time: 1,
-            decision: AgentDecision::Wait,
+            decision: AgentDecision::Act(self.durable_action()),
             llm_input: Some("in".to_string()),
             llm_output: Some("out".to_string()),
             llm_error: None,
@@ -1090,7 +1097,7 @@ fn runner_runtime_perf_separates_llm_api_from_local_execution() {
 
 #[test]
 fn runner_persists_llm_effect_trace_to_kernel_journal() {
-    let mut kernel = setup_kernel_with_wait_agent("agent-1");
+    let mut kernel = setup_kernel_with_patrol_agent("agent-1");
     let mut runner: AgentRunner<TraceEffectAgent> = AgentRunner::new();
     runner.register(TraceEffectAgent::new("agent-1"));
 
@@ -1101,7 +1108,7 @@ fn runner_persists_llm_effect_trace_to_kernel_journal() {
 
 #[test]
 fn runner_decide_only_persists_llm_effect_trace_to_kernel_journal() {
-    let mut kernel = setup_kernel_with_wait_agent("agent-1");
+    let mut kernel = setup_kernel_with_patrol_agent("agent-1");
     let mut runner: AgentRunner<TraceEffectAgent> = AgentRunner::new();
     runner.register(TraceEffectAgent::new("agent-1"));
 
@@ -1112,7 +1119,7 @@ fn runner_decide_only_persists_llm_effect_trace_to_kernel_journal() {
 
 #[test]
 fn runner_batch_collect_persists_llm_effect_trace_to_kernel_journal() {
-    let mut kernel = setup_kernel_with_wait_agent("agent-1");
+    let mut kernel = setup_kernel_with_patrol_agent("agent-1");
     let mut runner: AgentRunner<TraceEffectAgent> = AgentRunner::new();
     runner.register(TraceEffectAgent::new("agent-1"));
 
