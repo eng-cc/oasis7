@@ -121,9 +121,17 @@ pub(super) fn start_chain_status_server(
     })
 }
 
-fn build_chain_runtime_perf_snapshot() -> Option<oasis7::simulator::RuntimePerfSnapshot> {
+fn build_chain_runtime_perf_snapshot(
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    node_role: NodeRole,
+) -> Option<oasis7::simulator::RuntimePerfSnapshot> {
+    let gate_tier = super::status_payload::runtime_perf_gate_tier_from_manifest(
+        loaded_network_tier_manifest,
+        node_role,
+    );
     super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(
         &super::execution_bridge::snapshot_execution_bridge_commit_timing(),
+        gate_tier,
     )
 }
 
@@ -405,7 +413,7 @@ fn handle_chain_status_connection(
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
                 build_chain_wasm_status(),
-                build_chain_runtime_perf_snapshot(),
+                build_chain_runtime_perf_snapshot(loaded_network_tier_manifest, options.node_role),
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
                 transactions,
                 replication_debug_status,

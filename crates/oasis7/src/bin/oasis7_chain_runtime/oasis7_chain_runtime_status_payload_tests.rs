@@ -663,12 +663,20 @@ fn build_chain_status_payload_marks_runtime_perf_unavailable_without_source() {
     );
 }
 
+fn strict_runtime_perf_from_timing(
+    timing: &super::execution_bridge::ExecutionBridgeCommitTimingSnapshot,
+) -> Option<RuntimePerfSnapshot> {
+    super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(
+        timing,
+        super::status_payload::RuntimePerfGateTier::Strict,
+    )
+}
+
 #[test]
 fn runtime_perf_snapshot_from_execution_bridge_timing_requires_commit_samples() {
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot::default();
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing);
+    let runtime_perf = strict_runtime_perf_from_timing(&timing);
 
     assert!(runtime_perf.is_none());
 }
@@ -689,9 +697,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     assert_eq!(
@@ -722,9 +728,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_comm
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     assert_eq!(
@@ -751,9 +755,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_cold_start_outliers_
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     assert_eq!(
@@ -785,9 +787,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_31_sustained_slow_co
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
@@ -811,9 +811,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_two_mature_outliers_
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
@@ -837,9 +835,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_moderate_sustained_l
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
     let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
@@ -863,9 +859,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_marks_sustained_slow_commi
         stages: BTreeMap::new(),
     };
 
-    let runtime_perf =
-        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
-            .expect("runtime perf snapshot");
+    let runtime_perf = strict_runtime_perf_from_timing(&timing).expect("runtime perf snapshot");
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Critical);
     assert_eq!(

@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 
+use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::simulator::{
     RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,
 };
+use oasis7_node::NodeRole;
 use oasis7_node::NodeSnapshot;
 use serde::Serialize;
 
@@ -19,10 +21,36 @@ use super::{
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
 const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES: usize = 128;
-const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_OVER_BUDGET: u64 = 1;
-const EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_MS: f64 = 1_250.0;
 const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 32;
 const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_OVER_BUDGET_RATIO_PPM: u64 = 200_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimePerfGateTier {
+    Strict,
+    LowResourceValidatorV1,
+}
+
+impl RuntimePerfGateTier {
+    fn steady_window_limits(self) -> (f64, u64, f64) {
+        match self {
+            Self::Strict => (1_000.0, 1, 1_250.0),
+            Self::LowResourceValidatorV1 => (1_500.0, 32, 2_000.0),
+        }
+    }
+}
+
+pub(crate) fn runtime_perf_gate_tier_from_manifest(
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    node_role: NodeRole,
+) -> RuntimePerfGateTier {
+    match (
+        loaded_network_tier_manifest.map(|loaded| loaded.manifest.tier.as_str()),
+        node_role,
+    ) {
+        (Some("public_testnet"), NodeRole::Storage) => RuntimePerfGateTier::LowResourceValidatorV1,
+        _ => RuntimePerfGateTier::Strict,
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainP2pPathObservabilityStatus {
@@ -219,6 +247,7 @@ pub(crate) fn build_runtime_perf_observability_status(
 
 pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     timing: &ExecutionBridgeCommitTimingSnapshot,
+    gate_tier: RuntimePerfGateTier,
 ) -> Option<RuntimePerfSnapshot> {
     if timing.recent_commit_count == 0 {
         return None;
@@ -231,11 +260,11 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     let steady_window_complete = timing.window_capacity
         == EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES
         && timing.recent_commit_count == EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_SAMPLES;
+    let (p95_limit_ms, max_over_budget, max_sample_ms) = gate_tier.steady_window_limits();
     let steady_window_qualified = steady_window_complete
-        && p95_ms < EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
-        && timing.recent_over_budget_count
-            <= EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_OVER_BUDGET
-        && max_ms < EXECUTION_BRIDGE_RUNTIME_PERF_STEADY_WINDOW_MAX_MS;
+        && p95_ms < p95_limit_ms
+        && timing.recent_over_budget_count <= max_over_budget
+        && max_ms < max_sample_ms;
     // A partial window is always non-qualifying. Severe, sustained evidence
     // retains the higher-severity signal without making that window qualifying.
     let health = if steady_window_qualified {
