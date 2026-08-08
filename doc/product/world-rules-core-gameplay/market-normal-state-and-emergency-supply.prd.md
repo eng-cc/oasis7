@@ -39,6 +39,15 @@
 - 退出不删除已经发生的分配、补偿、异议和裁决。其授权、执行结果与 receipt 保持连续、可审计、可回放和可复核，但不能被重用为新的紧急资格。
 - 紧急保供不能改写已确认的所有权、交付、结算或历史因果；纠错与补偿必须通过对应专业合同产生新的可审计结果。
 
+### 4.1 待决请求不跨越授权边界
+
+- 每个采购、补偿、分配或 rationing 请求都必须绑定它提交时的授权身份、适用范围和到期边界。请求已被登记、排队、在途或部分完成，不等于已取得交付、补偿或其他最终世界结果。
+- 原授权到期、被撤销、被拒绝续期，或续期后品类、地点、主体范围或介入方式发生变化时，尚未由权威 receipt 确认的旧请求不得自动转入新授权继续执行、结算或获得优先级。它们只能按原授权仍有效时的专业合同完成、明确拒绝或保持待决；原授权已不支持继续时，必须停止在未完成状态。
+- 玩家可以查看旧请求所绑定的授权及其当前结果，并在新授权实际覆盖其需要时提交新的显式请求；新的请求必须保留与旧请求的可读关联，但不能隐式继承旧排队位置、临时资格、补偿承诺或世界效果。
+- 已确认的 receipt 保持原授权下的历史结果；不因后续续期、撤销或范围变化被追溯改写。重复提交、重新连接或自动重试不得使同一需求在相邻授权中获得第二次世界效果。
+
+这项边界使紧急措施保持 world-first：是否继续由当前权威授权和 receipt 决定，而非客户端队列或历史标签；保持 emergence-first：玩家、Agent 与组织只能在当前共同规则下重新规划，不能从授权切换中取得套利路径；保持 persistent / auditable：旧请求、新请求、授权与结果之间的因果可追溯；保持 extensible：未来可增加介入类别或授权形态，但不得让待决状态跨越已失效或改变范围的授权。
+
 ## 5. 玩家可读的保供状态与恢复路径
 
 紧急保供的制度状态不能只存在于治理记录或后台执行中。受影响玩家、组织和 Agent 必须能区分以下结果，并据此决定继续常态交易、等待、申诉或重新规划；具体文案、布局、状态字段和通知机制由 runtime 与正式玩家 surface 的专业 authority 拥有。
@@ -62,6 +71,7 @@
 - ES-3：分配与补偿样例不产生可转让、可叠加或可兑换的套利资格，且不绕过物流、交付、目的地存储、结算、世界内资格或 receipt。
 - ES-4：到期、拒绝续期、提前撤销和申诉复核样例均可确定性回放；退出后不残留常态限价、配给或未使用临时资格，同时保留已发生结果的审计连续性。
 - ES-5：代表性受影响玩家样例能区分常态/待审、已授权但尚未完成、receipt 支持的已确认结果，以及拒绝、撤销、到期或复核后变更；每种非完成状态均不伪造交付、补偿或资格，并在适用时给出常态替代、补证、申诉或重新规划的下一步。
+- ES-6：原授权到期、撤销或被不同范围的续期替代时，代表性待决采购、补偿、分配与 rationing 请求不会跨授权自动执行、结算、继承优先级或产生第二次效果；玩家只能查看原请求结果，并在新授权确实覆盖时以新的显式请求重新规划。
 
 ## 8. 验收追踪
 
@@ -71,6 +81,7 @@
 | ES-3 | gameplay_designer / runtime_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 紧急资格不可转让/兑换、物理交付、结算和 receipt 无旁路的组合证据 | test_tier_full |
 | ES-4 | producer_system_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 到期/撤销/续期/申诉回放、常态恢复与历史审计连续性证据 | test_tier_full |
 | ES-5 | producer_system_designer / runtime_engineer / viewer_engineer / gameplay_designer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 从常态/待审、授权未完成到 receipt 确认及拒绝/退出的状态区分；每个状态的无伪造结果、可用下一步和正式玩家 surface 可读性组合证据 | test_tier_full |
+| ES-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 授权到期、撤销及范围变化续期下的待决请求、旧/新请求关联、单次 world effect、receipt 不追溯改写与玩家可读恢复路径组合证据 | test_tier_full |
 
 ## 9. Non-Goals
 
