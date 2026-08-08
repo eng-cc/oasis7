@@ -6,6 +6,7 @@ use oasis7::network_tier_manifest::{
     NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
 };
 use oasis7::simulator::{RuntimePerfBottleneck, RuntimePerfHealth};
+use oasis7_node::NodeRole;
 
 use super::super::status_payload::{RuntimePerfGateTier, runtime_perf_gate_tier_from_manifest};
 
@@ -57,7 +58,7 @@ fn loaded_network_tier_manifest(tier: &str) -> LoadedNetworkTierManifest {
 #[test]
 fn runtime_perf_gate_tier_defaults_to_strict_without_loaded_manifest() {
     assert_eq!(
-        runtime_perf_gate_tier_from_manifest(None),
+        runtime_perf_gate_tier_from_manifest(None, NodeRole::Storage),
         RuntimePerfGateTier::Strict
     );
 }
@@ -67,22 +68,36 @@ fn runtime_perf_gate_tier_selects_low_resource_only_for_trusted_public_testnet_m
     let manifest = loaded_network_tier_manifest("public_testnet");
 
     assert_eq!(
-        runtime_perf_gate_tier_from_manifest(Some(&manifest)),
+        runtime_perf_gate_tier_from_manifest(Some(&manifest), NodeRole::Storage),
         RuntimePerfGateTier::LowResourceValidatorV1
     );
 }
 
 #[test]
-fn runtime_perf_gate_tier_keeps_mainnet_and_local_devnet_strict() {
+fn runtime_perf_gate_tier_keeps_non_storage_and_non_testnet_paths_strict() {
     let mainnet_manifest = loaded_network_tier_manifest("mainnet");
     let local_devnet_manifest = loaded_network_tier_manifest("local_devnet");
 
     assert_eq!(
-        runtime_perf_gate_tier_from_manifest(Some(&mainnet_manifest)),
+        runtime_perf_gate_tier_from_manifest(Some(&mainnet_manifest), NodeRole::Storage),
         RuntimePerfGateTier::Strict
     );
     assert_eq!(
-        runtime_perf_gate_tier_from_manifest(Some(&local_devnet_manifest)),
+        runtime_perf_gate_tier_from_manifest(Some(&local_devnet_manifest), NodeRole::Storage),
+        RuntimePerfGateTier::Strict
+    );
+    assert_eq!(
+        runtime_perf_gate_tier_from_manifest(
+            Some(&loaded_network_tier_manifest("public_testnet")),
+            NodeRole::Sequencer
+        ),
+        RuntimePerfGateTier::Strict
+    );
+    assert_eq!(
+        runtime_perf_gate_tier_from_manifest(
+            Some(&loaded_network_tier_manifest("public_testnet")),
+            NodeRole::Observer
+        ),
         RuntimePerfGateTier::Strict
     );
 }

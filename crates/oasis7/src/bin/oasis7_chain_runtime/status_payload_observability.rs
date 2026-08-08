@@ -4,6 +4,7 @@ use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::simulator::{
     RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,
 };
+use oasis7_node::NodeRole;
 use oasis7_node::NodeSnapshot;
 use serde::Serialize;
 
@@ -40,9 +41,13 @@ impl RuntimePerfGateTier {
 
 pub(crate) fn runtime_perf_gate_tier_from_manifest(
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    node_role: NodeRole,
 ) -> RuntimePerfGateTier {
-    match loaded_network_tier_manifest.map(|loaded| loaded.manifest.tier.as_str()) {
-        Some("public_testnet") => RuntimePerfGateTier::LowResourceValidatorV1,
+    match (
+        loaded_network_tier_manifest.map(|loaded| loaded.manifest.tier.as_str()),
+        node_role,
+    ) {
+        (Some("public_testnet"), NodeRole::Storage) => RuntimePerfGateTier::LowResourceValidatorV1,
         _ => RuntimePerfGateTier::Strict,
     }
 }
