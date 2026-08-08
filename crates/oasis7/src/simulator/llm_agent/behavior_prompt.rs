@@ -132,19 +132,12 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             })
             .unwrap_or(serde_json::Value::Null);
         let recipe_coverage = self.recipe_coverage.summary_json();
-        let last_query = self
-            .last_query_result
-            .as_ref()
-            .map(|result| serde_json::json!(result))
-            .unwrap_or(serde_json::Value::Null);
-
-        serde_json::to_string(&serde_json::json!({
+        let mut prompt_observation = serde_json::json!({
             "time": observation.time,
             "agent_id": observation.agent_id,
             "pos": observation.pos,
             "self_resources": observation.self_resources,
             "last_action": last_action,
-            "last_query": last_query,
             "recipe_coverage": recipe_coverage,
             "visibility_range_cm": observation.visibility_range_cm,
             "visible_agents_total": observation.visible_agents.len(),
@@ -159,8 +152,13 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                 .len()
                 .saturating_sub(visible_locations.len()),
             "visible_locations": visible_locations,
-        }))
-        .unwrap_or_else(|_| "{\"error\":\"observation serialize failed\"}".to_string())
+        });
+        if let Some(last_query) = self.last_query_result.as_ref() {
+            prompt_observation["last_query"] = serde_json::json!(last_query);
+        }
+
+        serde_json::to_string(&prompt_observation)
+            .unwrap_or_else(|_| "{\"error\":\"observation serialize failed\"}".to_string())
     }
 
     pub(super) fn action_kind_name_for_prompt(action: &Action) -> &'static str {
