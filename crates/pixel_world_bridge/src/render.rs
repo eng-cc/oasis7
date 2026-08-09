@@ -963,6 +963,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_agent_labels(&mut commands, &queries.agent_labels);
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }

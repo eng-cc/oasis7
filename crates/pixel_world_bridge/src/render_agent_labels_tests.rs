@@ -116,3 +116,26 @@ fn agent_labels_are_zoom_gated_stably_suppressed_and_reconciled_without_hit_regi
         "deleted Agents leave no stale identity label"
     );
 }
+
+#[test]
+fn agent_labels_clear_when_a_mounted_scene_loses_its_render_state() {
+    let mut state = sample_render_state(12_000.0);
+    state.agents = vec![agent_with_label(
+        "agent-a",
+        "Survey agent",
+        sample_position(1_530_000.0, 1_010_000.0),
+    )];
+    let mut app = render_test_app(state);
+
+    assert_eq!(rendered_texts(&mut app), vec!["Survey agent".to_string()]);
+
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .render_state = None;
+    app.update();
+
+    assert!(
+        rendered_texts(&mut app).is_empty(),
+        "a mounted scene without a render snapshot must not retain stale Agent labels"
+    );
+}
