@@ -1571,7 +1571,7 @@ describe("viewer web ui automation baseline", () => {
       branch_hint: "Compare the published consequences before committing.",
       next_step_hint: "Choose only after reading the blocker.",
       branch_recommendations: [{ action_id: "build_alloy_factory", route_label: "Scale alloy throughput",
-        immediate_gain: "Adds a second alloy production lane", future_beat_changed: "The next expansion starts with spare capacity",
+        immediate_gain: "Adds a second alloy production lane", future_beats: ["The next expansion starts with spare capacity", "New throughput requires a steadier structural-frame supply"],
         risk_or_lockin: "Consumes the current structural-frame reserve", next_session_hook: "Return to route the first bulk alloy order" }],
       available_actions: [{ action_id: "build_alloy_factory", label: "Build alloy factory core",
         protocol_action: "gameplay_action.submit", disabled_reason: "missing structural frames" }],
@@ -1580,9 +1580,12 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Expansion Tradeoffs")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Scale alloy throughput")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Immediate gain")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("Future beat")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText(/^Future beat(?: [12])?$/)).toHaveLength(2);
+    expect(within(stagePanel).getByText("The next expansion starts with spare capacity")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("New throughput requires a steadier structural-frame supply")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Risk or lock-in")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Next-session hook")).toBeInTheDocument();
+    expect(within(stagePanel).queryByText("Incomplete recommendation")).not.toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Compare the published consequences before committing.").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Build alloy factory core: missing structural frames")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -1597,13 +1600,29 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText(/structured branch recommendations are unavailable/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("marks partial branch commitments incomplete", async () => {
+  it("marks branch commitments with fewer than two or duplicate future beats incomplete", async () => {
+    for (const futureBeats of [
+      ["Only one published future beat"],
+      ["The capacity opens", "The capacity opens"],
+    ]) {
+      const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+        ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
+        branch_recommendations: [{ action_id: "build_alloy_factory", route_label: "Scale alloy throughput",
+          immediate_gain: "Adds a production lane", future_beats: futureBeats, risk_or_lockin: "Consumes reserves", next_session_hook: "Return to inspect output" }],
+      } }) });
+      expect(within(container.querySelector("#viewer-stage-panel")).getByText("Incomplete recommendation")).toBeInTheDocument();
+    }
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps a singular legacy future beat visible but incomplete", async () => {
     const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
       ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
       branch_recommendations: [{ action_id: "build_alloy_factory", route_label: "Scale alloy throughput",
-        immediate_gain: "Adds a production lane", future_beat_changed: "", risk_or_lockin: "Consumes reserves", next_session_hook: "Return to inspect output" }],
+        immediate_gain: "Adds a production lane", future_beat_changed: "Legacy capacity opens next", risk_or_lockin: "Consumes reserves", next_session_hook: "Return to inspect output" }],
     } }) });
-    expect(within(container.querySelector("#viewer-stage-panel")).getByText("Incomplete recommendation")).toBeInTheDocument();
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Legacy capacity opens next")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Incomplete recommendation")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("compresses world scale details into a one-line details-rail summary", async () => {

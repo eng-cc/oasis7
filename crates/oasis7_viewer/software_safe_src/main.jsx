@@ -6,6 +6,7 @@ import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
+import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
@@ -293,17 +294,14 @@ function expansionBranchCards(gameplay, locale) {
   }
   return recommendations.map((recommendation) => {
     const action = actions.find((candidate) => candidate.actionId === recommendation.actionId) || null;
-    const complete = [
-      recommendation.routeLabel,
-      recommendation.immediateGain,
-      recommendation.futureBeatChanged,
-      recommendation.riskOrLockin,
-      recommendation.nextSessionHook,
-    ].every((value) => Boolean(String(value || "").trim()));
+    const futureBeats = Array.isArray(recommendation.futureBeats) ? recommendation.futureBeats.map((beat) => String(beat || "").trim()) : [];
+    const complete = [recommendation.routeLabel, recommendation.immediateGain, recommendation.riskOrLockin, recommendation.nextSessionHook]
+      .every((value) => Boolean(String(value || "").trim())) && futureBeats.length === 2 && futureBeats.every(Boolean) && new Set(futureBeats).size === 2;
     return {
       ...recommendation,
       action,
       complete,
+      futureBeats,
     };
   });
 }
@@ -424,10 +422,8 @@ function ExpansionTradeoffCards(props) {
                 <div class="metric__label">{tr(locale(), "即时收益", "Immediate gain")}</div>
                 {card.immediateGain || tr(locale(), "即时收益未发布", "Immediate gain unavailable")}
               </div>
-              <div class="feedback-detail">
-                <div class="metric__label">{tr(locale(), "后续变化", "Future beat")}</div>
-                {card.futureBeatChanged || tr(locale(), "后续变化未发布", "Future beat unavailable")}
-              </div>
+              <For each={card.futureBeats}>{(futureBeat, index) => <div class="feedback-detail"><div class="metric__label">{tr(locale(), `后续变化 ${index() + 1}`, `Future beat ${index() + 1}`)}</div>{futureBeat}</div>}</For>
+              <Show when={card.futureBeats.length === 0}><div class="feedback-detail"><div class="metric__label">{tr(locale(), "旧版后续变化", "Legacy future beat")}</div>{card.futureBeatChanged || tr(locale(), "后续变化未发布", "Future beat unavailable")}</div></Show>
               <div class="feedback-detail">
                 <div class="metric__label">{tr(locale(), "风险或锁定", "Risk or lock-in")}</div>
                 {card.riskOrLockin || tr(locale(), "风险或锁定未发布", "Risk or lock-in unavailable")}
@@ -4332,6 +4328,7 @@ function installViewerVisualFixture() {
   installMarketQuoteDecisionVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installWaitResolutionQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installWarDeclarationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installBranchCommitmentVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();
