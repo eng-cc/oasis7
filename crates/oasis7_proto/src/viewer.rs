@@ -120,6 +120,9 @@ pub enum ViewerRequest {
     QuotePublishSocialFact {
         request: PublishSocialFactQuoteRequest,
     },
+    QuoteSocialContact {
+        request: SocialContactQuoteRequest,
+    },
     QuoteGovernanceVote {
         request: GovernanceVoteQuoteRequest,
     },
@@ -676,6 +679,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     PublishSocialFactQuotePreflight {
         quote: PublishSocialFactQuotePreflight,
+    },
+    SocialContactQuotePreflight {
+        quote: SocialContactQuotePreflight,
     },
     GovernanceVoteQuotePreflight {
         quote: GovernanceVoteQuotePreflight,

@@ -7,16 +7,98 @@ use super::*;
 use crate::simulator::{ResourceKind, ResourceOwner, SocialStake, WorldJournal, WorldKernel};
 use crate::viewer::auth::{
     verify_declare_social_edge_quote_auth_proof, verify_publish_social_fact_quote_auth_proof,
+    verify_social_contact_quote_auth_proof,
 };
 use crate::viewer::protocol::{
-    DeclareSocialEdgeQuotePreflight, DeclareSocialEdgeQuoteRequest, GameplayActionError,
-    PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest,
+    DeclareSocialEdgeQuotePreflight, DeclareSocialEdgeQuoteRequest, FirstContactClass,
+    GameplayActionError, PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest,
+    SocialContactQuotePreflight, SocialContactQuoteRequest,
 };
 use std::collections::HashMap;
 use std::io::BufWriter;
 use std::net::TcpStream;
 
 impl ViewerRuntimeLiveServer {
+    /// Computes an authenticated, non-mutating first-contact preview from runtime session state.
+    pub(in crate::viewer::runtime_live) fn handle_social_contact_quote(
+        &mut self,
+        request: SocialContactQuoteRequest,
+    ) -> Result<SocialContactQuotePreflight, GameplayActionError> {
+        const ACTION_ID: &str = "quote_social_contact";
+        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
+            code: "auth_proof_required".to_string(),
+            message: format!("{ACTION_ID} requires auth proof"),
+            action_id: Some(ACTION_ID.to_string()),
+            target_agent_id: None,
+        })?;
+        let verified =
+            verify_social_contact_quote_auth_proof(&request, auth).map_err(|message| {
+                GameplayActionError {
+                    code: map_auth_verify_error_code(message.as_str()).to_string(),
+                    message,
+                    action_id: Some(ACTION_ID.to_string()),
+                    target_agent_id: None,
+                }
+            })?;
+        self.session_policy
+            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
+            .map_err(|message| GameplayActionError {
+                code: map_session_policy_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some(ACTION_ID.to_string()),
+                target_agent_id: None,
+            })?;
+        let agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "player_agent_binding_required".to_string(),
+                message: format!("{ACTION_ID} requires a bound player Agent session"),
+                action_id: Some(ACTION_ID.to_string()),
+                target_agent_id: None,
+            })?;
+        let public_key = normalize_optional_public_key(request.public_key.as_deref());
+        ensure_agent_player_access_runtime(
+            &self.world,
+            &self.llm_sidecar,
+            agent_id,
+            verified.player_id.as_str(),
+            public_key.as_deref(),
+        )
+        .map_err(|err| GameplayActionError {
+            code: err.code,
+            message: err.message,
+            action_id: Some(ACTION_ID.to_string()),
+            target_agent_id: err.agent_id,
+        })?;
+
+        let candidate_agent_id = request.candidate_agent_id.trim();
+        let candidate_is_known = self.world.state().agents.contains_key(candidate_agent_id);
+        let defer_reason = if candidate_agent_id.is_empty() {
+            "A candidate Agent is required before contact can be evaluated.".to_string()
+        } else if candidate_agent_id == agent_id {
+            "Self-contact does not establish a reciprocal opportunity; continue independent local work."
+                .to_string()
+        } else if !candidate_is_known {
+            "The requested candidate Agent is not present in the current runtime state.".to_string()
+        } else {
+            "The candidate is known, but the runtime has no authoritative reciprocal offer, capacity, or consent evidence."
+                .to_string()
+        };
+        Ok(SocialContactQuotePreflight {
+            first_contact_class: FirstContactClass::DeferContact,
+            contact_purpose: request.contact_purpose.trim().to_string(),
+            expected_mutual_value:
+                "No reciprocal value is asserted without authoritative runtime evidence."
+                    .to_string(),
+            risk_or_commitment: "No resources, time, reputation, or membership are exposed."
+                .to_string(),
+            solo_lane_preserved: true,
+            recommended_contact_action: "Continue independent local work".to_string(),
+            defer_reason,
+        })
+    }
+
     /// Computes an authenticated, non-mutating social-edge impact preflight from runtime state.
     pub(in crate::viewer::runtime_live) fn handle_declare_social_edge_quote(
         &mut self,
@@ -315,6 +397,20 @@ impl ViewerRuntimeLiveServer {
             &self
                 .handle_publish_social_fact_quote(request)
                 .map(|quote| ViewerResponse::PublishSocialFactQuotePreflight { quote })
+                .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
+        )
+    }
+
+    pub(in crate::viewer::runtime_live) fn quote_social_contact(
+        &mut self,
+        request: SocialContactQuoteRequest,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        send_response(
+            writer,
+            &self
+                .handle_social_contact_quote(request)
+                .map(|quote| ViewerResponse::SocialContactQuotePreflight { quote })
                 .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
         )
     }

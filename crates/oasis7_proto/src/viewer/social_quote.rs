@@ -2,6 +2,43 @@ use serde::{Deserialize, Serialize};
 
 use super::PlayerAuthProof;
 
+/// The bounded classifications available to a first player-to-player contact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FirstContactClass {
+    TradeOrService,
+    MutualAid,
+    InformationExchange,
+    DeferContact,
+    OrganizationEscalation,
+}
+
+/// A signed, read-only request for a bounded first-contact preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SocialContactQuoteRequest {
+    pub contact_purpose: String,
+    pub first_contact_class: FirstContactClass,
+    /// The candidate Agent for this contact, bound into the authenticated request.
+    pub candidate_agent_id: String,
+    pub player_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<PlayerAuthProof>,
+}
+
+/// The non-mutating, player-readable consequences of a first-contact preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SocialContactQuotePreflight {
+    pub first_contact_class: FirstContactClass,
+    pub contact_purpose: String,
+    pub expected_mutual_value: String,
+    pub risk_or_commitment: String,
+    pub solo_lane_preserved: bool,
+    pub recommended_contact_action: String,
+    pub defer_reason: String,
+}
+
 /// A signed, read-only request for the impact of declaring a social relationship edge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeclareSocialEdgeQuoteRequest {

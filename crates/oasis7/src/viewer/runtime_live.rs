@@ -810,6 +810,9 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::QuotePublishSocialFact { request } => {
                 self.quote_publish_social_fact(request, writer)?
             }
+            ViewerRequest::QuoteSocialContact { request } => {
+                self.quote_social_contact(request, writer)?
+            }
             ViewerRequest::QuoteGovernanceVote { request } => {
                 self.quote_governance_vote(request, writer)?
             }
