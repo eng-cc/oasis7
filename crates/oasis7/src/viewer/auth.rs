@@ -46,6 +46,10 @@ mod publish_social_fact_quote;
 pub use publish_social_fact_quote::{
     sign_publish_social_fact_quote_auth_proof, verify_publish_social_fact_quote_auth_proof,
 };
+mod social_contact_quote;
+pub use social_contact_quote::{
+    sign_social_contact_quote_auth_proof, verify_social_contact_quote_auth_proof,
+};
 mod market_quote_decision;
 pub use market_quote_decision::{
     sign_market_quote_decision_auth_proof, verify_market_quote_decision_auth_proof,
