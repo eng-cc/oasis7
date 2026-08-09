@@ -1,6 +1,6 @@
 # game PRD 文件级索引
 
-区域设施阅读顺序：先从 `doc/product/README.md` 选择“大世界基础设施”，再由其产品 PRD 下钻到本索引中的 `micro_depot` 专题。`PRD-GAME-016` 继续是该设施玩法与经济边界的专业域权威。
+区域设施阅读顺序：先从 `doc/product/README.md` 选择“世界规则与核心玩法”，再读其 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 产品专题，最后下钻到本索引中的 `micro_depot` 专业合同。`PRD-GAME-016` 继续是该设施玩法与经济边界的专业域权威。
 审计轮次: 12
 
 更新时间：2026-07-06
