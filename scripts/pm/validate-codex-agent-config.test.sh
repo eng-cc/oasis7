@@ -124,6 +124,13 @@ ln -s "$fixture/runtime-engineer.toml" "$fixture/.codex/agents/runtime_engineer.
 expect_fail symlinked_adapter "$fixture" \
   "must be a regular file and not a symlink"
 
+new_fixture symlinked-adapter-directory
+fixture="$FIXTURE"
+mv "$fixture/.codex/agents" "$fixture/codex-agents"
+ln -s "$fixture/codex-agents" "$fixture/.codex/agents"
+expect_fail symlinked_adapter_directory "$fixture" \
+  "adapter directory"
+
 new_fixture symlinked-role-card
 fixture="$FIXTURE"
 mv "$fixture/.agents/roles/runtime_engineer.md" "$fixture/runtime-engineer.md"
