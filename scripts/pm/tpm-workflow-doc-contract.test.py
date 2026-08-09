@@ -604,14 +604,28 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("done", canonical)
         self.assertNotIn("post_merge_done", canonical)
         self.assertFalse({"close", "closeout"} & canonical)
+        illegal_persisted_phase = re.compile(
+            r'''(?x)
+            (?:
+                record\[\s*["']workflow_phase["']\s*\]\s*=
+                |
+                ["']Workflow\ Phase["']\s*:
+            )
+            \s*["'](?:close|closeout)["']
+            '''
+        )
         for path in (PROJECT_TASK, PROJECT_SYNC, PROJECT_WORKFLOW):
             text = path.read_text(encoding="utf-8")
             with self.subTest(path=path):
-                self.assertNotRegex(
-                    text,
-                    r"(?is)(?:Workflow Phase|workflow_phase_for|workflow_phase)"
-                    r".{0,500}?[\"'](?:close|closeout)[\"']",
-                )
+                self.assertNotRegex(text, illegal_persisted_phase)
+        for illegal_assignment in (
+            'record["workflow_phase"] = "close"',
+            'record["workflow_phase"] = "closeout"',
+            '"Workflow Phase": "close"',
+            '"Workflow Phase": "closeout"',
+        ):
+            with self.subTest(illegal_assignment=illegal_assignment):
+                self.assertRegex(illegal_assignment, illegal_persisted_phase)
         task_text = PROJECT_TASK.read_text(encoding="utf-8")
         self.assertRegex(
             task_text,
