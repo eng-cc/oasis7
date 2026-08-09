@@ -324,9 +324,30 @@ fn signed_social_contact_quote_request(
     public_key_hex: &str,
     private_key_hex: &str,
 ) -> crate::viewer::SocialContactQuoteRequest {
+    signed_social_contact_quote_request_for_candidate(
+        contact_purpose,
+        first_contact_class,
+        "candidate-agent",
+        player_id,
+        nonce,
+        public_key_hex,
+        private_key_hex,
+    )
+}
+
+fn signed_social_contact_quote_request_for_candidate(
+    contact_purpose: &str,
+    first_contact_class: crate::viewer::FirstContactClass,
+    candidate_agent_id: &str,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::SocialContactQuoteRequest {
     let mut request = crate::viewer::SocialContactQuoteRequest {
         contact_purpose: contact_purpose.to_string(),
         first_contact_class,
+        candidate_agent_id: candidate_agent_id.to_string(),
         player_id: player_id.to_string(),
         public_key: Some(public_key_hex.to_string()),
         auth: None,
@@ -344,7 +365,146 @@ fn signed_social_contact_quote_request(
 }
 
 #[test]
-fn runtime_social_contact_quote_is_authenticated_deterministic_non_mutating_and_has_only_the_six_readable_fields()
+fn runtime_social_contact_quote_defers_known_candidate_without_authoritative_capacity_evidence() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let mut agent_ids = server.world.state().agents.keys().cloned();
+    let actor_id = agent_ids.next().expect("actor Agent");
+    let candidate_id = agent_ids.next().expect("candidate Agent");
+    let (public_key, private_key) = test_signer(102);
+    register_runtime_session(
+        &mut server,
+        "player-social-contact-known-candidate",
+        Some(actor_id.as_str()),
+        3398,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let request = signed_social_contact_quote_request_for_candidate(
+        "exchange local route information",
+        crate::viewer::FirstContactClass::InformationExchange,
+        candidate_id.as_str(),
+        "player-social-contact-known-candidate",
+        3399,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let quote = server
+        .handle_social_contact_quote(request.clone())
+        .expect("known candidate without evidence returns a defer quote");
+    assert_eq!(
+        quote.first_contact_class,
+        crate::viewer::FirstContactClass::DeferContact
+    );
+    assert!(quote.expected_mutual_value.contains("No reciprocal value"));
+    assert!(quote.defer_reason.contains("no authoritative reciprocal"));
+    assert!(quote.solo_lane_preserved);
+    assert_eq!(
+        server
+            .handle_social_contact_quote(request)
+            .expect("repeat known-candidate quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_social_contact_quote_requires_auth_and_binds_candidate_without_mutation() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(101);
+    register_runtime_session(
+        &mut server,
+        "player-social-contact-auth",
+        Some(agent_id.as_str()),
+        3298,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let err = server
+        .handle_social_contact_quote(crate::viewer::SocialContactQuoteRequest {
+            contact_purpose: "exchange local route information".to_string(),
+            first_contact_class: crate::viewer::FirstContactClass::InformationExchange,
+            candidate_agent_id: agent_id.clone(),
+            player_id: "player-social-contact-auth".to_string(),
+            public_key: Some(public_key.clone()),
+            auth: None,
+        })
+        .expect_err("missing auth must reject first contact");
+    assert_eq!(err.code, "auth_proof_required");
+    assert_eq!(server.world.state(), &state_before);
+
+    let mut tampered = signed_social_contact_quote_request(
+        "exchange local route information",
+        crate::viewer::FirstContactClass::InformationExchange,
+        "player-social-contact-auth",
+        3299,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered.candidate_agent_id = agent_id;
+    let err = server
+        .handle_social_contact_quote(tampered)
+        .expect_err("candidate tampering must reject first contact");
+    assert_eq!(err.code, "auth_signature_invalid");
+    assert_eq!(server.world.state(), &state_before);
+
+    let mut tampered_purpose = signed_social_contact_quote_request(
+        "exchange local route information",
+        crate::viewer::FirstContactClass::InformationExchange,
+        "player-social-contact-auth",
+        3300,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered_purpose.contact_purpose = "commit to a long-term supply contract".to_string();
+    assert_eq!(
+        server
+            .handle_social_contact_quote(tampered_purpose)
+            .expect_err("purpose tampering must reject first contact")
+            .code,
+        "auth_signature_invalid"
+    );
+    let mut tampered_class = signed_social_contact_quote_request(
+        "exchange local route information",
+        crate::viewer::FirstContactClass::InformationExchange,
+        "player-social-contact-auth",
+        3301,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    tampered_class.first_contact_class = crate::viewer::FirstContactClass::MutualAid;
+    assert_eq!(
+        server
+            .handle_social_contact_quote(tampered_class)
+            .expect_err("class tampering must reject first contact")
+            .code,
+        "auth_signature_invalid"
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_social_contact_quote_is_authenticated_deterministic_non_mutating_and_has_only_readable_fields()
  {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
@@ -384,14 +544,15 @@ fn runtime_social_contact_quote_is_authenticated_deterministic_non_mutating_and_
         .expect("signed social contact quote");
     assert_eq!(
         quote.first_contact_class,
-        crate::viewer::FirstContactClass::TradeOrService
+        crate::viewer::FirstContactClass::DeferContact
     );
     assert_eq!(quote.contact_purpose, request.contact_purpose);
-    assert!(!quote.expected_mutual_value.is_empty());
+    assert_eq!(request.candidate_agent_id, "candidate-agent");
+    assert!(quote.expected_mutual_value.contains("No reciprocal value"));
     assert!(!quote.risk_or_commitment.is_empty());
     assert!(quote.solo_lane_preserved);
     assert!(!quote.recommended_contact_action.is_empty());
-    assert!(quote.defer_reason.is_empty());
+    assert!(!quote.defer_reason.is_empty());
     let quote_json = serde_json::to_value(&quote).expect("serialize social contact quote");
     assert_eq!(
         quote_json
@@ -542,8 +703,11 @@ fn runtime_social_contact_quote_preserves_low_commitment_classes_and_defers_esca
                 private_key.as_str(),
             ))
             .expect("low-commitment first contact quote");
-        assert_eq!(quote.first_contact_class, class);
-        assert!(quote.defer_reason.is_empty());
+        assert_eq!(
+            quote.first_contact_class,
+            crate::viewer::FirstContactClass::DeferContact
+        );
+        assert!(!quote.defer_reason.is_empty());
         assert!(quote.solo_lane_preserved);
     }
 

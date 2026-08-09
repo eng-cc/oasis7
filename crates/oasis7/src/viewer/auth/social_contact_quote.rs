@@ -2,9 +2,12 @@ use super::*;
 use crate::viewer::protocol::SocialContactQuoteRequest;
 
 fn signing_request(request: &SocialContactQuoteRequest) -> GameplayActionRequest {
-    let parameters =
-        serde_json::to_string(&(&request.contact_purpose, &request.first_contact_class))
-            .expect("social contact quote parameters must serialize for auth binding");
+    let parameters = serde_json::to_string(&(
+        &request.contact_purpose,
+        &request.first_contact_class,
+        &request.candidate_agent_id,
+    ))
+    .expect("social contact quote parameters must serialize for auth binding");
     GameplayActionRequest {
         action_id: "quote_social_contact".to_string(),
         target_agent_id: format!("social_contact:{parameters}"),

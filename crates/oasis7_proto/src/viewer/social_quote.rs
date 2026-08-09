@@ -18,6 +18,8 @@ pub enum FirstContactClass {
 pub struct SocialContactQuoteRequest {
     pub contact_purpose: String,
     pub first_contact_class: FirstContactClass,
+    /// The candidate Agent for this contact, bound into the authenticated request.
+    pub candidate_agent_id: String,
     pub player_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_key: Option<String>,

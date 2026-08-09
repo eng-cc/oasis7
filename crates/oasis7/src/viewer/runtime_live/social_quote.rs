@@ -72,77 +72,29 @@ impl ViewerRuntimeLiveServer {
             target_agent_id: err.agent_id,
         })?;
 
-        let purpose = request.contact_purpose.trim();
-        let (
-            first_contact_class,
-            expected_mutual_value,
-            risk_or_commitment,
-            recommended_contact_action,
-            defer_reason,
-        ) = if purpose.is_empty() {
-            (
-                    FirstContactClass::DeferContact,
-                    "Keep the current local goal visible until a concrete exchange is available."
-                        .to_string(),
-                    "No resources, time, reputation, or membership are exposed.".to_string(),
-                    "Continue independent local work".to_string(),
-                    "No current local purpose makes contact worthwhile; revisit when a specific trade, aid, or information need appears.".to_string(),
-                )
-        } else if matches!(
-            request.first_contact_class,
-            FirstContactClass::OrganizationEscalation
-        ) {
-            (
-                    FirstContactClass::DeferContact,
-                    "Keep the current local goal visible while evaluating later collaboration."
-                        .to_string(),
-                    "Organization membership, governance, long-term supply, and exclusivity require a separate later confirmation.".to_string(),
-                    "Continue independent local work".to_string(),
-                    "Organization escalation is not a default first contact; revisit it only as a separate later decision.".to_string(),
-                )
-        } else if matches!(request.first_contact_class, FirstContactClass::DeferContact) {
-            (
-                    FirstContactClass::DeferContact,
-                    "Retain the local objective without creating a social obligation.".to_string(),
-                    "No resources, time, reputation, or membership are exposed.".to_string(),
-                    "Continue independent local work".to_string(),
-                    "Independent progress is currently the safer choice; revisit when the stated purpose becomes urgent.".to_string(),
-                )
+        let candidate_agent_id = request.candidate_agent_id.trim();
+        let candidate_is_known = self.world.state().agents.contains_key(candidate_agent_id);
+        let defer_reason = if candidate_agent_id.is_empty() {
+            "A candidate Agent is required before contact can be evaluated.".to_string()
+        } else if candidate_agent_id == agent_id {
+            "Self-contact does not establish a reciprocal opportunity; continue independent local work."
+                .to_string()
+        } else if !candidate_is_known {
+            "The requested candidate Agent is not present in the current runtime state.".to_string()
         } else {
-            let (value, risk, action) = match request.first_contact_class {
-                    FirstContactClass::TradeOrService => (
-                        "Both sides can satisfy a concrete, limited exchange.".to_string(),
-                        "Only the stated one-time trade or service is exposed; no membership or governance commitment is created.".to_string(),
-                        "Propose the limited trade or service".to_string(),
-                    ),
-                    FirstContactClass::MutualAid => (
-                        "Both sides can remove a current blocker through recoverable aid.".to_string(),
-                        "Aid remains scoped to the current blocker and creates no continuing membership obligation.".to_string(),
-                        "Request scoped mutual aid".to_string(),
-                    ),
-                    FirstContactClass::InformationExchange => (
-                        "Both sides gain route, price, risk, or opportunity information.".to_string(),
-                        "Information exchange commits no resources, votes, or organization identity.".to_string(),
-                        "Exchange scoped route or price information".to_string(),
-                    ),
-                    FirstContactClass::DeferContact | FirstContactClass::OrganizationEscalation => unreachable!("handled above"),
-                };
-            (
-                request.first_contact_class,
-                value,
-                risk,
-                action,
-                String::new(),
-            )
+            "The candidate is known, but the runtime has no authoritative reciprocal offer, capacity, or consent evidence."
+                .to_string()
         };
-
         Ok(SocialContactQuotePreflight {
-            first_contact_class,
-            contact_purpose: purpose.to_string(),
-            expected_mutual_value,
-            risk_or_commitment,
+            first_contact_class: FirstContactClass::DeferContact,
+            contact_purpose: request.contact_purpose.trim().to_string(),
+            expected_mutual_value:
+                "No reciprocal value is asserted without authoritative runtime evidence."
+                    .to_string(),
+            risk_or_commitment: "No resources, time, reputation, or membership are exposed."
+                .to_string(),
             solo_lane_preserved: true,
-            recommended_contact_action,
+            recommended_contact_action: "Continue independent local work".to_string(),
             defer_reason,
         })
     }
