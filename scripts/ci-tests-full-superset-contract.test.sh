@@ -26,5 +26,6 @@ require_full_check run_pixel_world_bridge_lib_tests
 require_full_check run_pixel_world_bridge_wasm_check
 require_full_check run_oasis7_client_launcher_web_build
 require_full_check run_oasis7_workspace_support_crate_tests
+require_full_check run_scenario_regression_tests
 
 echo "ci-tests full superset contract: passed"
