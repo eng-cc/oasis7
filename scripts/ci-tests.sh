@@ -228,6 +228,10 @@ run_oasis7_client_launcher_web_build() {
   )
 }
 
+run_codex_agent_config_validation() {
+  run ./scripts/pm/validate-codex-agent-config.test.sh
+}
+
 run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
   run python3 ./scripts/product-doc-governance-check.test.py
@@ -239,6 +243,7 @@ run_required_gate_checks() {
   run bash ./scripts/testing-manual-active-contract.test.sh
   run bash ./scripts/ci-tests-argument-contract.test.sh
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
+  run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
@@ -318,6 +323,7 @@ case "$tier" in
     run_required_component "hosted account local smoke" "${OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE:-false}" "not_in_local_required_baseline_or_scope_disabled" run_hosted_account_local_smoke
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_client_launcher_web_build
     run_required_component "workspace support crate tests" "${OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_workspace_support_crate_tests
+    run_required_component "Codex agent-config validation" "${OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION:-}" "disabled_by_scope_planner" run_codex_agent_config_validation
     run_required_component "oasis7 required clippy" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_clippy
     run_required_component "oasis7_consensus clippy" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_clippy
     run_required_component "oasis7_distfs clippy" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_distfs_clippy

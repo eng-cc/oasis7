@@ -96,6 +96,21 @@ unknown_output="$(plan_for_path unknown-unclassified-input.txt)"
 assert_key_equals "$unknown_output" scope full
 assert_reason_contains "$unknown_output" "unclassified_or_unresolvable:unknown-unclassified-input.txt"
 
+codex_agent_config_output="$(plan_for_paths \
+  scripts/pm/validate-codex-agent-config.py \
+  scripts/pm/validate-codex-agent-config.test.sh)"
+assert_key_equals "$codex_agent_config_output" scope targeted
+assert_key_equals "$codex_agent_config_output" run_codex_agent_config_validation true
+assert_key_equals "$codex_agent_config_output" run_oasis7_required_tests false
+assert_key_equals "$codex_agent_config_output" run_consensus_tests false
+assert_key_equals "$codex_agent_config_output" run_viewer_contract_tests false
+assert_key_equals "$codex_agent_config_output" run_launcher_web_build false
+assert_key_equals "$codex_agent_config_output" run_rust_baseline false
+assert_key_equals "$codex_agent_config_output" needs_rust_toolchain false
+assert_key_equals "$codex_agent_config_output" needs_node false
+assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/validate-codex-agent-config.py"
+assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/validate-codex-agent-config.test.sh"
+
 invalid_config="$(mktemp)"
 trap 'rm -f "$invalid_config"' EXIT
 printf '{not json}\n' >"$invalid_config"
