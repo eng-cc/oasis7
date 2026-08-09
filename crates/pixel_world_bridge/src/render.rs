@@ -1,11 +1,9 @@
-use std::collections::{HashMap, HashSet};
-
 use super::*;
 use bevy::ecs::system::SystemParam;
+use std::collections::{HashMap, HashSet};
 #[path = "render_fragment_visuals.rs"]
 mod fragment_visuals;
 use fragment_visuals::reconcile_fragments;
-
 #[path = "render_micro_depot_facilities.rs"]
 mod micro_depot_facilities;
 use micro_depot_facilities::{
@@ -15,18 +13,15 @@ use micro_depot_facilities::{
 use micro_depot_facilities::{
     PixelWorldMicroDepotDetailVisual, PixelWorldMicroDepotServiceRadiusVisual,
 };
-
 #[path = "render_module_visual_entities.rs"]
 mod module_visual_entities;
 use module_visual_entities::{
     ModuleIdentityChipQueries, PixelWorldModuleVisualEntity, despawn_module_identity_chips,
     reconcile_module_visual_entities,
 };
-
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
-
 #[path = "render_agent_position_provenance_cue.rs"]
 mod agent_position_provenance_cue;
 #[cfg(test)]
@@ -34,7 +29,6 @@ use agent_position_provenance_cue::DerivedPositionCueSegment;
 use agent_position_provenance_cue::{
     PixelWorldDerivedPositionCue, reconcile_derived_position_cues,
 };
-
 #[path = "render_links.rs"]
 mod links;
 use links::{PixelWorldLinkVisual, reconcile_links};
@@ -56,39 +50,34 @@ use selected_agent_cue::{
     PixelWorldAgentCoreVisual, PixelWorldSelectedAgentCue, reconcile_agent_cores,
     reconcile_selected_agent_cues,
 };
-
 #[path = "render_selected_location_cue.rs"]
 mod selected_location_cue;
 use selected_location_cue::{PixelWorldSelectedLocationCue, reconcile_selected_location_cues};
-
+#[path = "render_location_corner_frame.rs"]
+mod location_corner_frame;
+use location_corner_frame::{PixelWorldLocationCornerFrame, reconcile_location_corner_frames};
 #[path = "render_selected_resource_readout.rs"]
 mod selected_resource_readout;
 use selected_resource_readout::{
     PixelWorldSelectedResourceReadout, despawn_selected_resource_readouts,
     reconcile_selected_resource_readout,
 };
-
 #[path = "render_receipt_target_cue.rs"]
 mod receipt_target_cue;
 use receipt_target_cue::{PixelWorldReceiptTargetCue, reconcile_receipt_target_cues};
-
 #[path = "render_recommended_target_cue.rs"]
 mod recommended_target_cue;
 use recommended_target_cue::{PixelWorldRecommendedTargetCue, reconcile_recommended_target_cues};
-
 #[path = "render_canvas_resize.rs"]
 mod canvas_resize;
-
 #[path = "render_hotspot_core.rs"]
 mod hotspot_core;
 #[cfg(test)]
 use hotspot_core::PixelWorldHotspotCoreVisual;
 use hotspot_core::{HotspotCoreQueries, despawn_hotspot_core_treatments, reconcile_hotspot_cores};
-
 #[path = "render_hotspot_cues.rs"]
 mod hotspot_cues;
 use hotspot_cues::{HotspotCueQueries, despawn_hotspot_cues, reconcile_hotspot_cues};
-
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const HOTSPOT_HIT_HALF_SIZE: f64 = 8.0;
@@ -114,7 +103,6 @@ const SELECTED_ENTITY_SIZE_SCALE: f64 = 1.35;
 const SELECTED_LOCATION_CUE_THICKNESS_PX: f32 = 2.0;
 const SELECTED_LOCATION_CUE_PADDING_PX: f32 = 2.0;
 const SELECTED_LOCATION_CUE_COLOR: Color = Color::srgb_u8(251, 191, 36);
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GridLayoutKey {
     width: i32,
@@ -123,10 +111,8 @@ pub(crate) struct GridLayoutKey {
     offset_x_milli: i32,
     offset_y_milli: i32,
 }
-
 #[derive(Component)]
 pub(crate) struct PixelWorldGridVisual;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FragmentTerrainLod {
     Hidden,
@@ -834,6 +820,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
+    location_corner_frames: Query<'w, 's, (Entity, &'static PixelWorldLocationCornerFrame)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
@@ -858,6 +845,9 @@ pub(crate) fn render_scene(
     if !runtime.mounted {
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
@@ -948,6 +938,9 @@ pub(crate) fn render_scene(
     let Some(_) = runtime.render_state.as_ref() else {
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
@@ -1069,6 +1062,14 @@ pub(crate) fn render_scene(
         animation_ms,
         rebuild_hit_regions,
     );
+    reconcile_location_corner_frames(
+        &mut commands,
+        &runtime,
+        &queries.location_corner_frames,
+        width,
+        height,
+        animation_ms,
+    );
     reconcile_selected_location_cues(
         &mut commands,
         &runtime,
@@ -1165,6 +1166,7 @@ pub(crate) fn render_scene(
         animation_ms,
     );
     publish_hotspot_test_hit_targets(&runtime.hit_regions);
+    publish_location_test_hit_targets(&runtime.hit_regions);
 }
 
 #[cfg(test)]

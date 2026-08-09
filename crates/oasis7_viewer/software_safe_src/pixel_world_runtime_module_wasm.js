@@ -7,6 +7,7 @@ export const PIXEL_WORLD_RUNTIME_SOURCE = "wasm_bindgen_runtime";
 const DRAG_CLICK_SUPPRESSION_THRESHOLD_PX = 4;
 const HOTSPOT_TEST_READBACK_CONTRACT = "oasis7_hotspot_pointer_evidence_v1";
 const AMBIENT_FRAME_INTERVAL_MS = 1000 / 12;
+const LOCATION_TEST_READBACK_CONTRACT = "oasis7_location_frame_evidence_v1";
 
 let runtimeInitPromise = null;
 
@@ -284,6 +285,12 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
         return [];
       }
       return runtime.hotspot_test_hit_targets(HOTSPOT_TEST_READBACK_CONTRACT) || [];
+    },
+    locationTestHitTargets() {
+      if (!pixelWorldTestApiEnabled()) {
+        return [];
+      }
+      return runtime.location_test_hit_targets(LOCATION_TEST_READBACK_CONTRACT) || [];
     },
   };
 }

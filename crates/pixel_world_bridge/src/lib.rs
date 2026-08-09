@@ -233,7 +233,15 @@ struct HotspotTestHitTarget {
     canvas_y: f64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct LocationTestHitTarget {
+    id: String,
+    canvas_x: f64,
+    canvas_y: f64,
+}
+
 const HOTSPOT_TEST_READBACK_CONTRACT: &str = "oasis7_hotspot_pointer_evidence_v1";
+const LOCATION_TEST_READBACK_CONTRACT: &str = "oasis7_location_frame_evidence_v1";
 
 #[derive(Clone, Debug)]
 enum InputEvent {
@@ -272,6 +280,7 @@ struct BridgeSharedState {
     on_event: Option<Function>,
     on_fatal: Option<Function>,
     hotspot_test_targets: Vec<HotspotTestHitTarget>,
+    location_test_targets: Vec<LocationTestHitTarget>,
 }
 
 #[derive(Resource, Default)]
@@ -765,6 +774,19 @@ fn publish_hotspot_test_hit_targets(hit_regions: &[HitRegion]) {
     BRIDGE_SHARED.with(|shared| shared.borrow_mut().hotspot_test_targets = targets);
 }
 
+fn publish_location_test_hit_targets(hit_regions: &[HitRegion]) {
+    let targets = hit_regions
+        .iter()
+        .filter(|region| region.kind == "location")
+        .map(|region| LocationTestHitTarget {
+            id: region.id.clone(),
+            canvas_x: (region.left + region.right) / 2.0,
+            canvas_y: (region.top + region.bottom) / 2.0,
+        })
+        .collect();
+    BRIDGE_SHARED.with(|shared| shared.borrow_mut().location_test_targets = targets);
+}
+
 fn click_selection_from_hit(hit: Option<(String, String)>) -> Option<(String, String)> {
     hit.filter(|(kind, _)| kind != "hotspot")
 }
@@ -988,6 +1010,17 @@ impl PixelWorldBridge {
     }
 
     #[wasm_bindgen]
+    pub fn location_test_hit_targets(&self, contract: String) -> JsValue {
+        if !self.mounted || contract != LOCATION_TEST_READBACK_CONTRACT {
+            return JsValue::NULL;
+        }
+        BRIDGE_SHARED.with(|shared| {
+            js_value_from_serializable(&shared.borrow().location_test_targets)
+                .unwrap_or(JsValue::NULL)
+        })
+    }
+
+    #[wasm_bindgen]
     pub fn pointer_down(&mut self, x: f64, y: f64, pointer_id: i32) -> JsValue {
         push_input_event(InputEvent::PointerDown { x, y, pointer_id });
         status_value("ready")
@@ -1032,6 +1065,7 @@ impl PixelWorldBridge {
             shared.render_version += 1;
             shared.input_events.clear();
             shared.hotspot_test_targets.clear();
+            shared.location_test_targets.clear();
         });
         status_value("detached")
     }

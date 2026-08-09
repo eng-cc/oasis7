@@ -71,6 +71,18 @@
 
 本文不冻结文案、布局或字段；正式玩家 surface 的表达由相应专业 authority 拥有，但不得隐藏分类、保护边界或下一步。
 
+### 6.1 已通过普通事项的执行闸门、失效与恢复
+
+普通事项的**通过**只证明它在当时的白名单、授权来源和决策程序下取得了有限的执行资格；它不是已经生效的世界结果，也不是对未来资源、角色、charter 范围或权限的预留。只有一个在执行时仍满足当前授权、作用范围、前置条件、反滥用检查和专业合同的权威动作，才可以把该事项的允许部分生效并产生 receipt。执行闸门必须按以下优先级处理：
+
+1. **保护与授权优先：** 若事项实质触及第 3 节保护、已被重新分类为宪制事项，或其原有授权/charter 已撤销、到期、收缩或被替代，则不得执行；不得以既有通过结果、排队位置、自动化计划或“先执行后复核”绕过当前边界。
+2. **当前范围与前置条件优先：** 仍可执行的事项只能作用于其通过时明确的目标、范围和允许效果，且必须重新校验当前资源、资格、对象状态与适用专业条件。范围已变化或前置条件不足时，系统只能原子拒绝、明确过期，或要求在当前有效轨道重新提交；不得静默扩大范围、沿用旧条件、制造隐藏债务或部分拨付/角色变更。
+3. **单次世界效果优先：** 同一已通过事项的并发执行、重连后的自动重试、Agent 代办或历史 receipt 重放，至多产生一个权威世界效果。第一个有效 receipt 确认后，其余请求必须被去重、拒绝、过期或按专业合同保持待决，不能取得第二次资金、权限、排队优先或其他世界效果。
+
+当执行被阻断或失效时，玩家可以查看原事项、导致失效的当前边界、是否已有已确认结果，以及适用的重新提交、等待、申诉或常态替代路径；不能把“已通过”“正在执行”或本地缓存表示成已拨付、已改权或已生效。已确认的结果及其理由、范围和 receipt 保留为历史，但不因后续重试而再次执行，也不授权超出原事项的补充效果。
+
+这项执行闸门保持 **world-first**：世界效果只来自执行时仍有效的权威条件；保持 **emergence-first**：共同决策可产生行动机会，但不能冻结世界或制造治理套利；保持 **persistent / auditable**：通过、失效、拒绝与唯一生效结果之间的因果连续可复核；保持 **extensible**：未来可增加普通事项类别或执行机制，但仍须保留保护优先、当前再校验和单次世界效果。
+
 ## 7. 组合验收
 
 - GCB-1：白名单内的代表性政策、公共财库和既有 charter 日常事项能够进入普通治理；宪制、基本权利、安全、validator/finality、signer 与 custody 事项被原子拒绝或明确路由到非普通轨道，且不产生部分世界效果。
@@ -78,6 +90,7 @@
 - GCB-3：代表性其他宪制变更只有在公开影响说明、延迟与复核、适用超多数、跨区域或受影响主体确认、独立审计和程序性申诉全部成立时才生效；缺失任一条件时不产生部分效果。
 - GCB-4：紧急 containment 只能限制扩散或维持其授权范围内的基本连续性，不能代替宪制修订、扩大白名单或暂停保护、审计与申诉。
 - GCB-5：受理、拒绝、路由、宪制待决与最终结果均保留授权、理由、范围、下一步和 receipt 因果；玩家不会把提案、投票、队列或界面状态误认为已生效世界事实。
+- GCB-6：一个已通过的代表性普通政策、财库或 charter 日常事项，在执行前遇到授权撤销/收缩、范围或前置条件变化、并发提交及重连/Agent 重试时，只有在执行时仍有效的事项可产生一次 receipt 支持的世界效果；其余请求不会部分执行、继承旧条件或产生第二次资源/权限/优先级。玩家能区分已通过、执行受阻/失效与已确认结果，并获得重新提交、等待、申诉或常态替代中的适用下一步。
 
 ## 8. 验收追踪
 
@@ -86,6 +99,7 @@
 | GCB-1 / GCB-2 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通事项白名单、排除事项原子拒绝/路由、保护边界与多种绕过负例的组合证据 | test_tier_full |
 | GCB-3 / GCB-4 | producer_system_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 宪制条件全满足/缺失样例、紧急 containment 与宪制修订分离、无部分效果的确定性证据 | test_tier_full |
 | GCB-5 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 事项分类、受理/拒绝/路由/待决/结果的 receipt 因果及正式玩家 surface 可读性证据 | test_tier_full |
+| GCB-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖执行前再校验、授权/范围失效、玩家状态区分与恢复下一步；`test_tier_full` 覆盖并发执行、Agent/重连重试、去重、replay 与恢复后的唯一 receipt/无第二次世界效果 | test_tier_full |
 
 ## 9. Non-Goals
 

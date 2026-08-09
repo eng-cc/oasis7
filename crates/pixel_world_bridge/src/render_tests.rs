@@ -8,11 +8,14 @@ use std::fs;
 use std::path::Path;
 #[path = "render_test_fixtures.rs"]
 mod fixtures;
+#[path = "render_raster_readback.rs"]
+mod raster_readback;
 use fixtures::{
     sample_render_state_with_beacon_candidates, sample_render_state_with_hotspot_candidates,
     sample_render_state_with_selection, sample_render_state_with_unoccluded_detail_fleck,
     test_runtime,
 };
+use raster_readback::PixelRegressionSummary;
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 540;
 const PIXEL_BACKGROUND: [u8; 4] = [8, 12, 20, 255];
@@ -57,30 +60,6 @@ struct PixelLayer {
     rotation: f32,
     z: f32,
     rgba: [f32; 4],
-}
-#[derive(Clone, Debug, Serialize)]
-struct PixelRegressionSummary {
-    width: u32,
-    height: u32,
-    raw_rgba_fnv1a64: String,
-    non_background_pixels: usize,
-    fragment_pixels: usize,
-    fragment_fleck_pixels: usize,
-    grid_pixels: usize,
-    location_pixels: usize,
-    selected_location_cue_pixels: usize,
-    selected_agent_cue_pixels: usize,
-    derived_position_cue_pixels: usize,
-    agent_pixels: usize,
-    agent_core_pixels: usize,
-    hotspot_pixels: usize,
-    hotspot_core_pixels: usize,
-    fragment_sample_rgba: [u8; 4],
-    fragment_fleck_sample_rgba: [u8; 4],
-    location_sample_rgba: [u8; 4],
-    agent_sample_rgba: [u8; 4],
-    agent_core_sample_rgba: [u8; 4],
-    hotspot_core_sample_rgba: [u8; 4],
 }
 fn sample_position(x_cm: f64, y_cm: f64) -> Position {
     Position {
@@ -340,6 +319,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("selected_location_cue", sprite, transform)),
     );
+    let mut location_corner_frame_query =
+        world.query::<(&PixelWorldLocationCornerFrame, &Sprite, &Transform)>();
+    layers.extend(
+        location_corner_frame_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("location_corner_frame", sprite, transform)),
+    );
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     layers.extend(
         location_query
@@ -419,6 +405,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "hotspot_core" => 11,
         "selected_agent_cue" => 12,
         "derived_position_cue" => 13,
+        "location_corner_frame" => 14,
         _ => 0,
     }
 }
@@ -445,7 +432,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let layers = collect_pixel_layers(app);
     let mut image = RgbaImage::from_pixel(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, Rgba(PIXEL_BACKGROUND));
     let mut kind_buffer = vec![0u8; (VIEWPORT_WIDTH * VIEWPORT_HEIGHT) as usize];
-
     for layer in &layers {
         let width = layer.size.x.round().max(1.0) as i32;
         let height = layer.size.y.round().max(1.0) as i32;
@@ -483,7 +469,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
             }
         }
     }
-
     let non_background_pixels = image
         .pixels()
         .filter(|pixel| pixel.0 != PIXEL_BACKGROUND)
@@ -492,6 +477,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let fragment_pixels = kind_buffer.iter().filter(|kind| **kind == 2).count();
     let fragment_fleck_pixels = kind_buffer.iter().filter(|kind| **kind == 8).count();
     let location_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
+    let location_corner_frame_pixels = kind_buffer.iter().filter(|kind| **kind == 14).count();
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
@@ -499,7 +485,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let derived_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 13).count();
     let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
     let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
-
     let fragment_layer = layers
         .iter()
         .find(|layer| layer.kind == "fragment")
@@ -518,7 +503,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .find(|layer| layer.kind == "agent_core")
         .expect("pixel regression agent core layer");
     let hotspot_core_layer = layers.iter().find(|layer| layer.kind == "hotspot_core");
-
     let summary = PixelRegressionSummary {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
@@ -528,6 +512,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         fragment_pixels,
         fragment_fleck_pixels,
         location_pixels,
+        location_corner_frame_pixels,
         selected_location_cue_pixels,
         selected_agent_cue_pixels,
         derived_position_cue_pixels,

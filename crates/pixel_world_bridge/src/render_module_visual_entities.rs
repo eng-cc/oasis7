@@ -6,9 +6,26 @@ pub(crate) const MODULE_VISUAL_ENTITY_COLOR: Color = Color::srgb_u8(129, 140, 24
 pub(crate) const MODULE_VISUAL_ENTITY_SIZE_PX: f32 = 6.0;
 const MODULE_IDENTITY_CHIP_COLOR: Color = Color::srgba_u8(226, 232, 240, 230);
 const MODULE_IDENTITY_CHIP_LAYER_Z_OFFSET: f32 = 0.01;
+const MODULE_LABEL_COLOR: Color = Color::srgb_u8(226, 232, 240);
+// Text must share the established foreground text plane rather than be depth
+// occluded by the world sprites that surround a module marker.
+pub(crate) const MODULE_LABEL_LAYER_Z: f32 = 5.0;
+const MODULE_LABEL_MIN_ZOOM: f64 = 1.75;
+const MODULE_LABEL_ABOVE_MARKER_PX: f64 = 12.0;
+const MODULE_LABEL_FONT_SIZE_PX: f32 = 10.0;
+const MODULE_LABEL_GLYPH_ADVANCE_PX: f64 = 5.8;
+const MODULE_LABEL_MAX_CHARS: usize = 24;
+const MODULE_LABEL_HEIGHT_PX: f64 = 12.0;
 
 #[derive(Component)]
 pub(crate) struct PixelWorldModuleVisualEntity {
+    pub(crate) id: String,
+}
+
+/// The text identity is intentionally a separate, noninteractive visual. It
+/// follows the marker's reconciled position but never changes world input.
+#[derive(Component)]
+pub(crate) struct PixelWorldModuleVisualLabel {
     pub(crate) id: String,
 }
 
@@ -32,6 +49,7 @@ pub(crate) struct PixelWorldModuleIdentityChipVisual {
 #[derive(SystemParam)]
 pub(crate) struct ModuleIdentityChipQueries<'w, 's> {
     chips: Query<'w, 's, (Entity, &'static PixelWorldModuleIdentityChipVisual)>,
+    labels: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualLabel)>,
 }
 
 pub(crate) fn despawn_module_identity_chips(
@@ -39,6 +57,9 @@ pub(crate) fn despawn_module_identity_chips(
     queries: &ModuleIdentityChipQueries,
 ) {
     for (entity, _) in queries.chips.iter() {
+        commands.entity(entity).despawn();
+    }
+    for (entity, _) in queries.labels.iter() {
         commands.entity(entity).despawn();
     }
 }
@@ -67,6 +88,11 @@ pub(super) fn reconcile_module_visual_entities(
         .iter()
         .map(|(entity, chip)| ((chip.id.clone(), chip.part), entity))
         .collect::<HashMap<_, _>>();
+    let existing_labels = chip_queries
+        .labels
+        .iter()
+        .map(|(entity, label)| (label.id.clone(), entity))
+        .collect::<HashMap<_, _>>();
     let Some(render_state) = runtime.render_state.as_ref() else {
         for (_, entity) in runtime.module_visual_entities.drain() {
             commands.entity(entity).despawn();
@@ -89,6 +115,8 @@ pub(super) fn reconcile_module_visual_entities(
     entities.sort_by(|left, right| left.id.cmp(&right.id));
     let mut active_ids = HashSet::new();
     let mut active_chips = HashSet::new();
+    let mut active_labels = HashSet::new();
+    let mut accepted_label_rects: Vec<ModuleLabelRect> = Vec::new();
     for (index, entity) in entities.iter().enumerate() {
         let Some((canvas_x, canvas_y)) =
             to_canvas_point(&entity.pos, world_bounds, width, height, &runtime.camera)
@@ -156,6 +184,42 @@ pub(super) fn reconcile_module_visual_entities(
                 ));
             }
         }
+        if runtime.camera.zoom >= MODULE_LABEL_MIN_ZOOM {
+            let display = module_visual_label(entity.label.as_deref(), &entity.kind, &entity.id);
+            let label_x = canvas_x + f64::from(co_anchor_offset.x);
+            let label_y = canvas_y + f64::from(co_anchor_offset.y) - MODULE_LABEL_ABOVE_MARKER_PX;
+            let label_rect = ModuleLabelRect::above_marker(label_x, label_y, &display);
+            if accepted_label_rects
+                .iter()
+                .all(|accepted| !accepted.overlaps(label_rect))
+            {
+                accepted_label_rects.push(label_rect);
+                active_labels.insert(entity.id.clone());
+                let label_visuals = (
+                    Text2d::new(display.clone()),
+                    TextFont {
+                        font_size: FontSize::Px(MODULE_LABEL_FONT_SIZE_PX),
+                        ..default()
+                    },
+                    TextColor(MODULE_LABEL_COLOR),
+                    Transform::from_translation(to_bevy_translation(
+                        label_x,
+                        label_y,
+                        width,
+                        height,
+                        MODULE_LABEL_LAYER_Z,
+                    )),
+                );
+                let label = PixelWorldModuleVisualLabel {
+                    id: entity.id.clone(),
+                };
+                if let Some(existing) = existing_labels.get(&entity.id) {
+                    commands.entity(*existing).insert((label, label_visuals));
+                } else {
+                    commands.spawn((label, label_visuals));
+                }
+            }
+        }
     }
     despawn_stale_entities(commands, &mut runtime.module_visual_entities, &active_ids);
     for (key, entity) in existing_chips {
@@ -163,6 +227,62 @@ pub(super) fn reconcile_module_visual_entities(
             commands.entity(entity).despawn();
         }
     }
+    for (id, entity) in existing_labels {
+        if !active_labels.contains(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ModuleLabelRect {
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+}
+
+impl ModuleLabelRect {
+    fn above_marker(canvas_x: f64, canvas_y: f64, display: &str) -> Self {
+        let half_width = module_label_width(display) / 2.0;
+        Self {
+            left: canvas_x - half_width,
+            right: canvas_x + half_width,
+            top: canvas_y - MODULE_LABEL_HEIGHT_PX,
+            bottom: canvas_y,
+        }
+    }
+
+    fn overlaps(self, other: Self) -> bool {
+        self.left < other.right
+            && self.right > other.left
+            && self.top < other.bottom
+            && self.bottom > other.top
+    }
+}
+
+fn module_visual_label(label: Option<&str>, kind: &str, id: &str) -> String {
+    match label.map(str::trim).filter(|label| !label.is_empty()) {
+        Some(explicit) => truncate_module_label(explicit),
+        None => truncate_module_label(&format!("{kind}:{id}")),
+    }
+}
+
+fn truncate_module_label(label: &str) -> String {
+    let mut characters = label.chars();
+    let visible = characters
+        .by_ref()
+        .take(MODULE_LABEL_MAX_CHARS)
+        .collect::<String>();
+    if characters.next().is_some() {
+        format!("{visible}…")
+    } else {
+        visible
+    }
+}
+
+fn module_label_width(display: &str) -> f64 {
+    display.chars().count() as f64 * MODULE_LABEL_GLYPH_ADVANCE_PX
 }
 
 fn module_identity_chip_specs(kind: &str) -> Vec<(ModuleIdentityChipPart, Vec2, Vec2)> {

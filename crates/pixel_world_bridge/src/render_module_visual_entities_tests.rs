@@ -1,7 +1,8 @@
 use super::*;
 use crate::render::module_visual_entities::{
-    MODULE_VISUAL_ENTITY_COLOR, MODULE_VISUAL_ENTITY_SIZE_PX, ModuleIdentityChipPart,
-    PixelWorldModuleIdentityChipVisual, PixelWorldModuleVisualEntity,
+    MODULE_LABEL_LAYER_Z, MODULE_VISUAL_ENTITY_COLOR, MODULE_VISUAL_ENTITY_SIZE_PX,
+    ModuleIdentityChipPart, PixelWorldModuleIdentityChipVisual, PixelWorldModuleVisualEntity,
+    PixelWorldModuleVisualLabel,
 };
 
 fn module_visual(id: &str, pos: Position) -> ModuleVisualEntity {
@@ -14,6 +15,21 @@ fn module_visual_with_kind(id: &str, kind: &str, pos: Position) -> ModuleVisualE
         module_id: "opaque-module".to_string(),
         kind: kind.to_string(),
         label: None,
+        pos,
+    }
+}
+
+fn module_visual_with_label(
+    id: &str,
+    kind: &str,
+    label: Option<&str>,
+    pos: Position,
+) -> ModuleVisualEntity {
+    ModuleVisualEntity {
+        id: id.to_string(),
+        module_id: "opaque-module".to_string(),
+        kind: kind.to_string(),
+        label: label.map(ToString::to_string),
         pos,
     }
 }
@@ -286,5 +302,84 @@ fn known_module_kinds_have_distinct_identity_glyphs_while_unknown_kinds_stay_neu
     assert_eq!(
         unknown, neutral,
         "unknown module kinds must retain the neutral fallback raster"
+    );
+}
+
+#[test]
+fn module_visual_labels_are_zoom_gated_stably_suppressed_and_reconciled() {
+    let anchor = sample_position(1_530_000.0, 1_010_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.module_visual_entities = vec![
+        module_visual_with_label("module-z", "relay", Some("Relay marker"), anchor.clone()),
+        module_visual_with_label("module-a", "beacon", None, anchor),
+    ];
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut labels = world.query::<(&PixelWorldModuleVisualLabel, &Text2d, &Transform)>();
+    let rendered = labels
+        .iter(world)
+        .map(|(label, text, transform)| {
+            assert_eq!(transform.translation.z, MODULE_LABEL_LAYER_Z);
+            (label.id.clone(), text.0.clone())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rendered,
+        vec![("module-a".to_string(), "beacon:module-a".to_string())],
+        "the stable ID-first label wins a co-anchor collision and uses the documented fallback"
+    );
+
+    world.resource_mut::<BevyRuntimeState>().camera.zoom = 1.0;
+    app.update();
+    let world = app.world_mut();
+    let mut labels = world.query::<&PixelWorldModuleVisualLabel>();
+    assert_eq!(
+        labels.iter(world).count(),
+        0,
+        "overview zoom must return to glyph-only rendering"
+    );
+
+    world.resource_mut::<BevyRuntimeState>().camera.zoom = 3.0;
+    world
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("test render state")
+        .module_visual_entities
+        .truncate(1);
+    app.update();
+    let world = app.world_mut();
+    let mut labels = world.query::<(&PixelWorldModuleVisualLabel, &Text2d)>();
+    let updated = labels
+        .iter(world)
+        .map(|(label, text)| (label.id.clone(), text.0.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        updated,
+        vec![("module-z".to_string(), "Relay marker".to_string())]
+    );
+
+    world
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("test render state")
+        .module_visual_entities
+        .clear();
+    app.update();
+    let world = app.world_mut();
+    let mut labels = world.query::<&PixelWorldModuleVisualLabel>();
+    assert_eq!(
+        labels.iter(world).count(),
+        0,
+        "removed markers leave no stale labels"
+    );
+    assert!(
+        world
+            .resource::<BevyRuntimeState>()
+            .hit_regions
+            .iter()
+            .all(|region| region.kind != "module_visual"),
+        "labels must not introduce a hit-test region"
     );
 }
