@@ -478,18 +478,25 @@ impl ReplicationNetworkEndpoint {
         &self,
         world_id: &str,
     ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
+        let mut best_head: Option<WorldHeadAnnounce> = None;
         if let Some(dht) = self.dht.as_ref() {
             match dht.get_world_head(world_id).map_err(network_err) {
                 Ok(Some(head)) => {
                     validate_world_head_world_id(world_id, &head)?;
-                    return Ok(Some(head));
+                    if best_head
+                        .as_ref()
+                        .map(|current| head.height > current.height)
+                        .unwrap_or(true)
+                    {
+                        best_head = Some(head);
+                    }
                 }
                 Ok(None) => {}
                 Err(err) if world_head_lookup_can_fallback(&err) => {}
                 Err(err) => return Err(err),
             }
         }
-        self.request_world_head_from_peers(world_id)
+        self.request_world_head_from_peers(world_id, best_head)
     }
 
     pub(crate) fn request_json<Req, Resp>(

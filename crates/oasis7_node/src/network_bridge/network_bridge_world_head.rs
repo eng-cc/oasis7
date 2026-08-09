@@ -12,6 +12,7 @@ impl ReplicationNetworkEndpoint {
     pub(super) fn request_world_head_from_peers(
         &self,
         world_id: &str,
+        mut best_head: Option<WorldHeadAnnounce>,
     ) -> Result<Option<WorldHeadAnnounce>, NodeError> {
         let request = FetchHeadRequest {
             world_id: world_id.to_string(),
@@ -32,7 +33,8 @@ impl ReplicationNetworkEndpoint {
         candidate_peer_ids.retain(|peer_id| !peer_ids.contains(peer_id));
         peer_ids.extend(candidate_peer_ids);
         peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
-        let mut best_head = None;
+        // A DHT result is useful discovery evidence, but it can lag an already-ready peer.
+        // Sweep ready peers before choosing the greatest valid advertised head.
         if peer_ids.is_empty() {
             self.maybe_update_best_peer_head(
                 world_id,
@@ -46,7 +48,7 @@ impl ReplicationNetworkEndpoint {
             )?;
         } else {
             for peer_id in peer_ids
-                .into_iter()
+                .iter()
                 .take(GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL)
             {
                 self.maybe_update_best_peer_head(
@@ -55,7 +57,7 @@ impl ReplicationNetworkEndpoint {
                     self.request_json_with_providers_budget(
                         REPLICATION_GET_HEAD_PROTOCOL,
                         &request,
-                        std::slice::from_ref(&peer_id),
+                        std::slice::from_ref(peer_id),
                         GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS,
                         GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS,
                     ),
