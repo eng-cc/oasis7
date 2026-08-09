@@ -335,6 +335,8 @@ def main() -> None:
         fail(".codex/config.toml must register exactly the eleven specialist roles and not tpm")
     adapters_dir = root / ".codex/agents"
     require_regular_directory(adapters_dir, "adapter directory")
+    role_cards_dir = root / ".agents/roles"
+    require_regular_directory(role_cards_dir, "role-card directory")
     adapter_files = {path.stem for path in adapters_dir.glob("*.toml")}
     if adapter_files != EXPECTED_ROLES:
         fail(".codex/agents must contain exactly one adapter for each registered specialist role")

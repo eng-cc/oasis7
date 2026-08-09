@@ -11,9 +11,16 @@ if ! TOML_PYTHON="$($ROOT_DIR/scripts/pm/find-python-with-module.sh tomllib)"; t
   exit 1
 fi
 
-mkdir -p "$TMP_DIR/future-python-bin"
+mkdir -p "$TMP_DIR/broken-python-bin" "$TMP_DIR/future-python-bin"
+for name in python python3; do
+  cat >"$TMP_DIR/broken-python-bin/$name" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$TMP_DIR/broken-python-bin/$name"
+done
 ln -s "$TOML_PYTHON" "$TMP_DIR/future-python-bin/python42"
-future_python="$(PATH="$TMP_DIR/future-python-bin:/usr/bin:/bin" \
+future_python="$(PATH="$TMP_DIR/broken-python-bin:$TMP_DIR/future-python-bin:/usr/bin:/bin" \
   "$ROOT_DIR/scripts/pm/find-python-with-module.sh" tomllib)"
 if [[ "$(basename "$future_python")" != "python42" ]]; then
   echo "validate-codex-agent-config.test: generic future Python discovery failed: $future_python" >&2
@@ -74,8 +81,8 @@ printf 'positive case passed: baseline\n'
 # The executable validator is an operator-facing entrypoint.  It must recover
 # when PATH's conventional python3 is too old for tomllib, provided the
 # repository's generic interpreter finder can discover a compatible runtime.
-# Keep python42 after /usr/bin so the shebang reaches the known old python3,
-# while the finder can still enumerate the compatible fixture interpreter.
+# Hosts whose conventional Python already provides tomllib need not re-exec;
+# the controlled broken-python-bin above separately proves fallback discovery.
 if ! PATH="/usr/bin:/bin:$TMP_DIR/future-python-bin" \
   "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
     --root "$fixture" --skip-native-probe >"$TMP_DIR/direct-entrypoint.out" \
@@ -137,6 +144,13 @@ mv "$fixture/.agents/roles/runtime_engineer.md" "$fixture/runtime-engineer.md"
 ln -s "$fixture/runtime-engineer.md" "$fixture/.agents/roles/runtime_engineer.md"
 expect_fail symlinked_role_card "$fixture" \
   "must be a regular file and not a symlink"
+
+new_fixture symlinked-role-card-directory
+fixture="$FIXTURE"
+mv "$fixture/.agents/roles" "$fixture/role-cards"
+ln -s "$fixture/role-cards" "$fixture/.agents/roles"
+expect_fail symlinked_role_card_directory "$fixture" \
+  "role-card directory"
 
 new_fixture swapped-path
 fixture="$FIXTURE"
