@@ -5,6 +5,37 @@ const runtimeState = vi.hoisted(() => ({
   instances: [],
 }));
 
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+const originalMatchMedia = globalThis.matchMedia;
+
+function animationHarness() {
+  const callbacks = new Map();
+  let nextFrameId = 1;
+  globalThis.requestAnimationFrame = vi.fn((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  globalThis.cancelAnimationFrame = vi.fn((frameId) => callbacks.delete(frameId));
+  globalThis.matchMedia = vi.fn(() => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  return {
+    runNext(timestamp) {
+      const next = callbacks.entries().next().value;
+      if (!next) return false;
+      const [frameId, callback] = next;
+      callbacks.delete(frameId);
+      callback(timestamp);
+      return true;
+    },
+  };
+}
+
 vi.mock("./pixel_world_bridge_bindgen.js", () => {
   class MockPixelWorldBridge {
     constructor(onEvent, onFatal) {
@@ -40,6 +71,10 @@ describe("pixel world wasm runtime bridge", () => {
   afterEach(() => {
     runtimeState.mountImpl = null;
     runtimeState.instances.length = 0;
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    globalThis.matchMedia = originalMatchMedia;
+    vi.restoreAllMocks();
   });
 
   function pointerEvent(type, options = {}) {
@@ -109,6 +144,49 @@ describe("pixel world wasm runtime bridge", () => {
         id: "120,75",
       },
     });
+  });
+
+  it("caps WASM ambient ticks at 12Hz while leaving pointer input immediate", async () => {
+    const animation = animationHarness();
+    const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
+    const bridge = await createPixelWorldBridge();
+    const canvas = document.createElement("canvas");
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 270 });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    bridge.mount(canvas, { selection: null });
+    for (let timestamp = 0; timestamp <= 1_000; timestamp += 16) animation.runNext(timestamp);
+
+    expect(runtimeState.instances).toHaveLength(1);
+    expect(runtimeState.instances[0].tick.mock.calls.length).toBeGreaterThan(0);
+    expect(runtimeState.instances[0].tick.mock.calls.length).toBeLessThanOrEqual(12);
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    expect(runtimeState.instances[0].pointer_down).toHaveBeenCalledWith(10, 10, 1);
+    bridge.unmount();
+  });
+
+  it("reacts to reduced-motion preference changes and removes its media listener on unmount", async () => {
+    const animation = animationHarness();
+    let mediaChange = null;
+    const mediaQuery = {
+      matches: false,
+      addEventListener: vi.fn((event, callback) => { if (event === "change") mediaChange = callback; }),
+      removeEventListener: vi.fn(),
+    };
+    globalThis.matchMedia = vi.fn(() => mediaQuery);
+    const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
+    const bridge = await createPixelWorldBridge();
+    const canvas = document.createElement("canvas");
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 270 });
+
+    bridge.mount(canvas, { selection: null });
+    expect(mediaQuery.addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+    mediaChange?.({ matches: true });
+    expect(runtimeState.instances[0].tick).toHaveBeenCalledTimes(1);
+    expect(animation.runNext(100)).toBe(false);
+    bridge.unmount();
+    expect(mediaQuery.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
   });
 
   it("suppresses the synthetic click that follows a drag gesture", async () => {

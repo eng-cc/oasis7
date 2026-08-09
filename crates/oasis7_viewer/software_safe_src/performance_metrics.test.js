@@ -201,7 +201,7 @@ describe("viewer performance metrics", () => {
       locations: 96,
     };
 
-    expect(summary.schemaVersion).toBe(2);
+    expect(summary.schemaVersion).toBe(3);
     expect(summary).toEqual(expect.objectContaining({
       runId: "schema",
       profile: "smoke",
@@ -225,5 +225,65 @@ describe("viewer performance metrics", () => {
         locations: 96,
       },
     }));
+  });
+
+  it("reports CPU samples, hardware eligibility, and repeated idle/dense baselines in schema v3", () => {
+    const summary = summarizeViewerPerformance({
+      runId: "cpu-and-baselines",
+      sampleDurationMs: 2_000,
+      frameIntervals: Array.from({ length: 120 }, () => 16),
+      cpuSamples: [
+        { processTreeCpuPct: 18.5 },
+        { processTreeCpuPct: 24.5 },
+        { processTreeCpuPct: 32.0 },
+      ],
+      renderer: {
+        rendererClass: "hardware",
+        renderer: "ANGLE (Apple, Apple M-series, Metal)",
+      },
+      baselines: {
+        idle: [
+          { runId: "idle-1", frameP95Ms: 16, processTreeCpuPctAvg: 4.2 },
+          { runId: "idle-2", frameP95Ms: 17, processTreeCpuPctAvg: 4.8 },
+        ],
+        dense: [
+          { runId: "dense-1", frameP95Ms: 19, processTreeCpuPctAvg: 22.4 },
+          { runId: "dense-2", frameP95Ms: 20, processTreeCpuPctAvg: 24.6 },
+        ],
+      },
+    });
+
+    expect(summary.schemaVersion).toBe(3);
+    expect(summary.rendererEligibility).toEqual({
+      eligible: true,
+      hardwareAccelerated: true,
+      softwareRenderer: false,
+      renderer: "ANGLE (Apple, Apple M-series, Metal)",
+    });
+    expect(summary.cpu).toEqual({
+      sampleCount: 3,
+      processTreeCpuPctAvg: 25,
+      processTreeCpuPctP95: 32,
+    });
+    expect(summary.baselines.idle).toHaveLength(2);
+    expect(summary.baselines.dense).toHaveLength(2);
+  });
+
+  it("marks software renderer observations ineligible instead of accepting them as a performance baseline", () => {
+    const summary = summarizeViewerPerformance({
+      runId: "software-renderer",
+      renderer: {
+        rendererClass: "software",
+        renderer: "ANGLE (Google, SwiftShader)",
+      },
+      baselines: { idle: [{ runId: "idle-1" }, { runId: "idle-2" }], dense: [{ runId: "dense-1" }, { runId: "dense-2" }] },
+    });
+
+    expect(summary.rendererEligibility).toEqual({
+      eligible: false,
+      hardwareAccelerated: false,
+      softwareRenderer: true,
+      renderer: "ANGLE (Google, SwiftShader)",
+    });
   });
 });

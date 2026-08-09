@@ -984,57 +984,76 @@ pub(crate) fn render_scene(
 
     let width = window.width() as f64;
     let height = window.height() as f64;
-    let animation_ms = time.elapsed_secs_f64() * 1000.0;
-
-    canvas_resize::requeue_follow_target_after_resize(&mut runtime, width, height);
-    maybe_auto_fit_camera(&mut runtime, width, height);
-    maybe_focus_selected_entity(&mut runtime, width, height);
-    let next_hit_region_cache_key = HitRegionCacheKey::new(&runtime, width, height);
-    let rebuild_hit_regions = runtime.hit_regions_dirty
-        || runtime.hit_region_cache_key != Some(next_hit_region_cache_key);
-    if rebuild_hit_regions {
-        runtime.hit_regions.clear();
-        runtime.hit_region_cache_key = Some(next_hit_region_cache_key);
-        runtime.hit_regions_dirty = false;
+    let canvas_size_changed = runtime.last_canvas_size
+        != Some((
+            width.round().max(0.0) as u32,
+            height.round().max(0.0) as u32,
+        ));
+    let static_reconcile =
+        !runtime.reactive_scheduling || runtime.needs_reconcile || canvas_size_changed;
+    let animation_reconcile = runtime.animation_dirty;
+    if runtime.reactive_scheduling && !static_reconcile && !animation_reconcile {
+        return;
     }
-    reconcile_grid(
-        &mut commands,
-        &mut runtime,
-        &queries.current_grid,
-        width,
-        height,
-    );
-    reconcile_fragments(
-        &mut commands,
-        &mut runtime,
-        &queries.fragment_shadows,
-        &queries.fragment_insets,
-        &queries.fragment_flecks,
-        width,
-        height,
-    );
-    reconcile_micro_depot_facilities(
-        &mut commands,
-        &mut runtime,
-        &queries.micro_depot_overlays,
-        width,
-        height,
-    );
-    reconcile_module_visual_entities(
-        &mut commands,
-        &mut runtime,
-        &queries.module_identity_chips,
-        width,
-        height,
-    );
-    reconcile_links(&mut commands, &mut runtime, width, height);
-    reconcile_assignment_cues(
-        &mut commands,
-        &runtime,
-        &queries.assignment_cues,
-        width,
-        height,
-    );
+    if runtime.reactive_scheduling {
+        runtime.needs_reconcile = false;
+        runtime.animation_dirty = false;
+    }
+    let animation_ms = time.elapsed_secs_f64() * 1000.0;
+    let mut rebuild_hit_regions = false;
+    if static_reconcile {
+        canvas_resize::requeue_follow_target_after_resize(&mut runtime, width, height);
+        maybe_auto_fit_camera(&mut runtime, width, height);
+        maybe_focus_selected_entity(&mut runtime, width, height);
+        let next_hit_region_cache_key = HitRegionCacheKey::new(&runtime, width, height);
+        rebuild_hit_regions = runtime.hit_regions_dirty
+            || runtime.hit_region_cache_key != Some(next_hit_region_cache_key);
+        if rebuild_hit_regions {
+            runtime.hit_regions.clear();
+            runtime.hit_region_cache_key = Some(next_hit_region_cache_key);
+            runtime.hit_regions_dirty = false;
+        }
+    }
+    if static_reconcile {
+        reconcile_grid(
+            &mut commands,
+            &mut runtime,
+            &queries.current_grid,
+            width,
+            height,
+        );
+        reconcile_fragments(
+            &mut commands,
+            &mut runtime,
+            &queries.fragment_shadows,
+            &queries.fragment_insets,
+            &queries.fragment_flecks,
+            width,
+            height,
+        );
+        reconcile_micro_depot_facilities(
+            &mut commands,
+            &mut runtime,
+            &queries.micro_depot_overlays,
+            width,
+            height,
+        );
+        reconcile_module_visual_entities(
+            &mut commands,
+            &mut runtime,
+            &queries.module_identity_chips,
+            width,
+            height,
+        );
+        reconcile_links(&mut commands, &mut runtime, width, height);
+        reconcile_assignment_cues(
+            &mut commands,
+            &runtime,
+            &queries.assignment_cues,
+            width,
+            height,
+        );
+    }
     reconcile_locations(
         &mut commands,
         &mut runtime,
