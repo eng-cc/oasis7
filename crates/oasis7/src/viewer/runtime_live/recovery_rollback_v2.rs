@@ -4,6 +4,14 @@ use super::*;
 use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn rollback_to_stable_checkpoint_v2(
+        &mut self,
+        request: AuthoritativeRollbackRequest,
+        canonical_v2_payload: Vec<u8>,
+    ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        self.rollback_to_stable_checkpoint_payload(request, Some(canonical_v2_payload))
+    }
+
     pub(super) fn rollback_v2_to_replay_target(
         &mut self,
         request: AuthoritativeRollbackV2Request,

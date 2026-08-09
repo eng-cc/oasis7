@@ -1,5 +1,15 @@
 use super::*;
 
+pub(super) fn should_emit_runtime_advance_snapshot(
+    session: &mut RuntimeLiveSession,
+    action: &str,
+    emit_while_paused: bool,
+) -> bool {
+    let is_background_play = action == "play" && session.playing && !emit_while_paused;
+    !is_background_play
+        || session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
+}
+
 pub(super) fn control_mode_label(mode: &ViewerControl) -> &'static str {
     match mode {
         ViewerControl::Pause => "pause",

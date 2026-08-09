@@ -3,6 +3,11 @@ use super::*;
 const GOVERNANCE_VOTE_QUOTE_DEBUG_PROPOSAL_KEY: &str = "proposal.viewer-governance-quote";
 
 impl ViewerRuntimeLiveServer {
+    /// Seeds the opt-in local S6 world used to verify governance vote quotes.
+    pub fn seed_governance_vote_quote_debug_scenario(&mut self) -> Result<(), String> {
+        self.seed_governance_vote_quote_debug_scenario_inner()
+    }
+
     /// Seeds one unvoted proposal through the normal runtime action path.
     /// The viewer-live CLI keeps this unreachable without `--allow-debug-scenario`.
     pub(super) fn seed_governance_vote_quote_debug_scenario_inner(&mut self) -> Result<(), String> {
