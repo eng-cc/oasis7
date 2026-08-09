@@ -11,6 +11,7 @@ import { createProductValidationQuoteIntegration } from "./product_validation_qu
 import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js";
 import { createPowerSaleQuoteIntegration } from "./power_sale_quote_integration.js";
 import { createFragmentRefillPreviewIntegration } from "./fragment_refill_preview_integration.js";
+import { createGovernanceVoteQuoteIntegration } from "./governance_vote_quote_integration.js";
 import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
 import { createViewerQuoteProtocolFacade } from "./viewer_quote_protocol_facade.js";
@@ -185,10 +186,11 @@ const powerSaleQuote = createPowerSaleQuoteIntegration(() => ({ buildAuthEnvelop
 const { injectPowerSaleQuoteForTest, requestPowerSaleQuote } = powerSaleQuote;
 const fragmentRefillPreview = createFragmentRefillPreviewIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }));
 const { requestFragmentRefillPreview } = fragmentRefillPreview;
+const governanceVoteQuote = createGovernanceVoteQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { requestGovernanceVoteQuote } = governanceVoteQuote;
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, governanceVoteQuote, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, state, warDeclarationQuote });
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -4259,8 +4261,7 @@ function installTestApi() {
     sendGameplayAction,
     requestRefineQuote,
     requestProductValidationQuote,
-    requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
-    requestPowerSaleQuote,
+    requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote,
     requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
@@ -4419,8 +4420,7 @@ export {
   sendGameplayAction,
   requestRefineQuote,
   requestProductValidationQuote,
-  requestPowerSurvivalQuote, requestFragmentRefillPreview, requestWarDeclarationQuote,
-  requestPowerSaleQuote,
+  requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote,
   requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,

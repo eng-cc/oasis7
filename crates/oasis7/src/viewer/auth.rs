@@ -30,6 +30,10 @@ pub use power_survival_quote::{
 };
 mod power_sale_quote;
 pub use power_sale_quote::{sign_power_sale_quote_auth_proof, verify_power_sale_quote_auth_proof};
+mod governance_vote_quote;
+pub use governance_vote_quote::{
+    sign_governance_vote_quote_auth_proof, verify_governance_vote_quote_auth_proof,
+};
 mod war_declaration_quote;
 pub use war_declaration_quote::{
     sign_war_declaration_quote_auth_proof, verify_war_declaration_quote_auth_proof,

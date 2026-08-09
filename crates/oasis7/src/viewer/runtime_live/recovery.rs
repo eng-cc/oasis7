@@ -86,14 +86,6 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
-    pub(super) fn rollback_to_stable_checkpoint_v2(
-        &mut self,
-        request: AuthoritativeRollbackRequest,
-        canonical_v2_payload: Vec<u8>,
-    ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
-        self.rollback_to_stable_checkpoint_payload(request, Some(canonical_v2_payload))
-    }
-
     fn rollback_to_stable_checkpoint(
         &mut self,
         request: AuthoritativeRollbackRequest,
@@ -101,7 +93,7 @@ impl ViewerRuntimeLiveServer {
         self.rollback_to_stable_checkpoint_payload(request, None)
     }
 
-    fn rollback_to_stable_checkpoint_payload(
+    pub(super) fn rollback_to_stable_checkpoint_payload(
         &mut self,
         request: AuthoritativeRollbackRequest,
         canonical_v2_payload: Option<Vec<u8>>,
@@ -825,6 +817,12 @@ impl ViewerRuntimeLiveServer {
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned)
+            })
+            .or_else(|| {
+                self.governance_vote_quote_debug_agent_for_local_test_player(
+                    verified.player_id.as_str(),
+                )
+                .map(ToOwned::to_owned)
             });
         let (bound_agent_id, binding_plan) = match requested_agent_id.as_deref() {
             Some(agent_id) => {

@@ -3,6 +3,11 @@ use super::*;
 const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
 impl ViewerRuntimeLiveServer {
+    /// Seeds the opt-in local S6 world used to verify smelter affordability UI.
+    pub fn seed_smelter_affordability_debug_scenario(&mut self) -> Result<(), String> {
+        self.seed_smelter_affordability_debug_scenario_inner()
+    }
+
     /// Seeds a local, opt-in S6 diagnostic world through normal runtime actions.
     /// The viewer-live CLI is responsible for keeping this unreachable without
     /// `--allow-debug-scenario`.

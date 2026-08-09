@@ -5,6 +5,7 @@ import { FragmentRefillPreviewPanel } from "./fragment_refill_preview_card.jsx";
 import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
 import { MarketQuoteDecisionPanel } from "./market_quote_decision_card.jsx";
 import { WarDeclarationQuotePanel } from "./war_declaration_quote_card.jsx";
+import { GovernanceVoteQuotePanel } from "./governance_vote_quote_card.jsx";
 
 export function RefineQuoteGameplayPanel(props) {
   return <RefineQuotePreflightPanel
@@ -52,3 +53,4 @@ export function FragmentRefillPreviewGameplayPanel(props) {
 
 export function MarketQuoteDecisionGameplayPanel(props) { return <MarketQuoteDecisionPanel quote={props.core.state.marketQuoteDecision} requestState={props.core.state.marketQuoteDecisionRequest} requestMarketQuoteDecision={props.core.requestMarketQuoteDecision} locale={props.locale} tr={props.tr} />; }
 export function WarDeclarationQuoteGameplayPanel(props) { return <WarDeclarationQuotePanel quote={props.core.state.warDeclarationQuote} requestState={props.core.state.warDeclarationQuoteRequest} requestWarDeclarationQuote={props.core.requestWarDeclarationQuote} logicalTime={props.core.state.logicalTime} locale={props.locale} tr={props.tr} />; }
+export function GovernanceVoteQuoteGameplayPanel(props) { return <GovernanceVoteQuotePanel quote={props.core.state.governanceVoteQuote} requestState={props.core.state.governanceVoteQuoteRequest} requestGovernanceVoteQuote={props.core.requestGovernanceVoteQuote} locale={props.locale} tr={props.tr} />; }

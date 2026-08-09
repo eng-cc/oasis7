@@ -58,6 +58,8 @@ mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
 mod gameplay_snapshot_lane;
 mod gameplay_validation_preview;
+mod governance_vote_quote;
+mod governance_vote_quote_debug;
 mod mapping;
 mod market_quote_decision;
 mod player_gameplay;
@@ -89,7 +91,10 @@ pub use config::{ChainLinkPolicy, ViewerRuntimeLiveServerConfig, ViewerRuntimeLi
 use constants::*;
 pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
 use control_plane::{RuntimeLlmSidecar, RuntimePlayerBindingPlan};
-use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
+use control_utils::{
+    control_mode_for_action, control_mode_label, runtime_control_error_details,
+    should_emit_runtime_advance_snapshot,
+};
 use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
 use gameplay_snapshot::{
     PlayerGameplayCausalitySignal, apply_runtime_snapshot_empty_entities_blocker,
@@ -141,29 +146,14 @@ pub struct ViewerRuntimeLiveServer {
     consumed_rollback_operator_nonces: BTreeSet<String>,
     authoritative_recovery_write_fence: Option<String>,
     smelter_affordability_debug_agent_id: Option<String>,
+    governance_vote_quote_debug_agent_id: Option<String>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
     #[cfg(test)]
     authoritative_recovery_dir_override: Option<PathBuf>,
 }
 
-fn should_emit_runtime_advance_snapshot(
-    session: &mut RuntimeLiveSession,
-    action: &str,
-    emit_while_paused: bool,
-) -> bool {
-    let is_background_play = action == "play" && session.playing && !emit_while_paused;
-    if !is_background_play {
-        return true;
-    }
-    session.should_emit_background_snapshot(BACKGROUND_PLAY_SNAPSHOT_INTERVAL)
-}
 impl ViewerRuntimeLiveServer {
-    /// Seeds the opt-in local S6 world used to verify smelter affordability UI.
-    pub fn seed_smelter_affordability_debug_scenario(&mut self) -> Result<(), String> {
-        self.seed_smelter_affordability_debug_scenario_inner()
-    }
-
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
@@ -341,6 +331,7 @@ impl ViewerRuntimeLiveServer {
                 .unwrap_or_default(),
             authoritative_recovery_write_fence: None,
             smelter_affordability_debug_agent_id: None,
+            governance_vote_quote_debug_agent_id: None,
             #[cfg(test)]
             recovery_fault_injection: None,
             #[cfg(test)]
@@ -818,6 +809,9 @@ impl ViewerRuntimeLiveServer {
             }
             ViewerRequest::QuotePublishSocialFact { request } => {
                 self.quote_publish_social_fact(request, writer)?
+            }
+            ViewerRequest::QuoteGovernanceVote { request } => {
+                self.quote_governance_vote(request, writer)?
             }
             ViewerRequest::QuoteDeclareWar { request } => {
                 self.quote_declare_war(request, writer)?
