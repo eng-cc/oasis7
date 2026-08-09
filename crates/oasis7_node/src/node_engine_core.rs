@@ -116,6 +116,7 @@ impl PosNodeEngine {
             checkpoint_bootstrap_enabled: matches!(config.role, NodeRole::Observer),
             fresh_observer_checkpoint_preflight_unavailable: false,
             fresh_observer_checkpoint_bootstrap_retry_pending: false,
+            fresh_observer_checkpoint_low_head_confirmation: None,
             last_gossip_reverse_path_seed_at_ms: None,
             allow_local_proposals: config.allow_local_proposals,
             require_execution_on_commit: config.require_execution_on_commit,

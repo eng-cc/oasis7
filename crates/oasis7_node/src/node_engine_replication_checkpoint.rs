@@ -6,6 +6,7 @@ pub(super) enum FreshObserverCheckpointBootstrap {
     Installed,
     PreflightUnavailable,
     RetryPending,
+    LowHeadConfirmationPending,
     NotInstalled,
 }
 
@@ -18,12 +19,16 @@ impl PosNodeEngine {
         &self,
         advertised_head: Option<&WorldHeadAnnounce>,
     ) -> bool {
-        advertised_head.is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
-            && self.checkpoint_bootstrap_enabled
+        self.checkpoint_bootstrap_enabled
             && self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0
-            && self.fresh_observer_checkpoint_bootstrap_retry_pending
+            && (self
+                .fresh_observer_checkpoint_low_head_confirmation
+                .is_some()
+                || (advertised_head
+                    .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+                    && self.fresh_observer_checkpoint_bootstrap_retry_pending))
     }
 
     pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
@@ -47,13 +52,36 @@ impl PosNodeEngine {
         }
         let Some(advertised_head) = endpoint.lookup_world_head(world_id)? else {
             self.fresh_observer_checkpoint_preflight_unavailable = true;
+            self.fresh_observer_checkpoint_low_head_confirmation = None;
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
         self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
-            return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
+            // An already observed network height can require an immediate low-height
+            // checkpoint to recover missing history. Only a completely unestablished
+            // fresh observer needs to wait one poll for a stale peer head to advance.
+            if self.network_committed_height != 0 {
+                self.fresh_observer_checkpoint_low_head_confirmation = None;
+                return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
+            }
+            let identity = (
+                advertised_head.height,
+                advertised_head.block_hash.clone(),
+                advertised_head.state_root.clone(),
+            );
+            if self
+                .fresh_observer_checkpoint_low_head_confirmation
+                .as_ref()
+                == Some(&identity)
+            {
+                self.fresh_observer_checkpoint_low_head_confirmation = None;
+                return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
+            }
+            self.fresh_observer_checkpoint_low_head_confirmation = Some(identity);
+            return Ok(FreshObserverCheckpointBootstrap::LowHeadConfirmationPending);
         }
+        self.fresh_observer_checkpoint_low_head_confirmation = None;
         match self.try_sync_high_replication_checkpoint_boundary(
             endpoint,
             node_id,

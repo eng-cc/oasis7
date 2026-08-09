@@ -917,8 +917,15 @@ fn fresh_observer_bootstraps_checkpoint_at_boundary_before_height_one_peer_misma
     let _ = fs::remove_dir_all(&dir_b);
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InitialPeerHead {
+    Unavailable,
+    HighCheckpoint,
+    StaleHeightOne,
+}
+
 fn peer_head_checkpoint_before_height_one(
-    initial_peer_head_available: bool,
+    initial_peer_head: InitialPeerHead,
     initial_checkpoint_fetch_available: bool,
 ) {
     let _nonce_lock = lock_checkpoint_probe_nonce();
@@ -989,8 +996,12 @@ fn peer_head_checkpoint_before_height_one(
         .expect("checkpoint message");
     let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
     let checkpoint_fetch_available = Arc::new(AtomicBool::new(initial_checkpoint_fetch_available));
-    let peer_head = Arc::new(Mutex::new(if initial_peer_head_available {
-        super::replication::FetchHeadResponse {
+    let peer_head = Arc::new(Mutex::new(match initial_peer_head {
+        InitialPeerHead::Unavailable => super::replication::FetchHeadResponse {
+            found: false,
+            head: None,
+        },
+        InitialPeerHead::HighCheckpoint => super::replication::FetchHeadResponse {
             found: true,
             head: Some(super::replication::ReplicationHeadSummary {
                 world_id: world_id.to_string(),
@@ -999,12 +1010,17 @@ fn peer_head_checkpoint_before_height_one(
                 state_root: checkpoint_state_root.clone(),
                 timestamp_ms: 6_164,
             }),
-        }
-    } else {
-        super::replication::FetchHeadResponse {
-            found: false,
-            head: None,
-        }
+        },
+        InitialPeerHead::StaleHeightOne => super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: 1,
+                block_hash: "block-1".to_string(),
+                state_root: "peer-exec-state-1".to_string(),
+                timestamp_ms: 6_100,
+            }),
+        },
     }));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
@@ -1052,7 +1068,7 @@ fn peer_head_checkpoint_before_height_one(
         )
         .expect("peer-head checkpoint bootstrap must precede first height-one execution");
 
-    if !initial_peer_head_available || !initial_checkpoint_fetch_available {
+    if initial_peer_head != InitialPeerHead::HighCheckpoint || !initial_checkpoint_fetch_available {
         assert!(
             execution_hook.incremental_commits.is_empty(),
             "fresh observer must defer height one while peer-head preflight is temporarily unavailable: {:?}",
@@ -1061,7 +1077,7 @@ fn peer_head_checkpoint_before_height_one(
         assert_eq!(engine_b.committed_height, 0);
         assert_eq!(engine_b.replication_persisted_height, 0);
 
-        if !initial_peer_head_available {
+        if initial_peer_head != InitialPeerHead::HighCheckpoint {
             *peer_head.lock().expect("publish delayed peer checkpoint head") =
                 super::replication::FetchHeadResponse {
                     found: true,
@@ -1126,15 +1142,20 @@ fn peer_head_checkpoint_before_height_one(
 
 #[test]
 fn fresh_observer_fetches_peer_head_checkpoint_before_first_height_one_execution() {
-    peer_head_checkpoint_before_height_one(true, true);
+    peer_head_checkpoint_before_height_one(InitialPeerHead::HighCheckpoint, true);
 }
 
 #[test]
 fn fresh_observer_defers_height_one_until_transient_peer_head_preflight_can_bootstrap() {
-    peer_head_checkpoint_before_height_one(false, true);
+    peer_head_checkpoint_before_height_one(InitialPeerHead::Unavailable, true);
 }
 
 #[test]
 fn fresh_observer_defers_height_one_until_advertised_checkpoint_fetch_recovers() {
-    peer_head_checkpoint_before_height_one(true, false);
+    peer_head_checkpoint_before_height_one(InitialPeerHead::HighCheckpoint, false);
+}
+
+#[test]
+fn fresh_observer_defers_height_one_until_stale_peer_head_advances_to_high_checkpoint() {
+    peer_head_checkpoint_before_height_one(InitialPeerHead::StaleHeightOne, true);
 }
