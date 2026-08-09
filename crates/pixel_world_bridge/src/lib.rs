@@ -590,6 +590,14 @@ fn hash_optional_position(hasher: &mut DefaultHasher, position: Option<&Position
 }
 
 fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
+    render_signature(render_state, true)
+}
+
+fn camera_content_signature(render_state: Option<&RenderState>) -> u64 {
+    render_signature(render_state, false)
+}
+
+fn render_signature(render_state: Option<&RenderState>, include_agent_labels: bool) -> u64 {
     let mut hasher = DefaultHasher::new();
     let Some(render_state) = render_state else {
         return hasher.finish();
@@ -629,6 +637,9 @@ fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
     render_state.agents.len().hash(&mut hasher);
     for agent in &render_state.agents {
         agent.id.hash(&mut hasher);
+        if include_agent_labels {
+            agent.label.hash(&mut hasher);
+        }
         hash_optional_position(&mut hasher, agent.pos.as_ref());
         hash_f64(&mut hasher, agent.size_hint_px.unwrap_or(0.0));
     }
@@ -689,26 +700,31 @@ fn apply_external_render_snapshot(
     let next_focus_target = focus_target_from_render_state(render_state.as_ref());
     let next_signature = render_content_signature(render_state.as_ref());
     let content_changed = next_signature != runtime.render_content_signature;
-    if content_changed {
+    let camera_content_changed = camera_content_signature(render_state.as_ref())
+        != camera_content_signature(runtime.render_state.as_ref());
+    if camera_content_changed {
         runtime.camera_fit_version = 0;
         runtime.last_canvas_size = None;
         runtime.camera_user_override = false;
-        runtime.render_content_signature = next_signature;
         runtime.hit_regions_dirty = true;
     }
+    runtime.render_content_signature = next_signature;
     if next_focus_target != previous_focus_target {
         runtime.pending_focus_target = next_focus_target.clone();
         runtime.active_follow_target = next_focus_target
             .as_ref()
             .filter(|target| target.kind == "agent")
             .cloned();
-    } else if content_changed && let Some(follow_target) = runtime.active_follow_target.clone() {
+    } else if camera_content_changed
+        && let Some(follow_target) = runtime.active_follow_target.clone()
+    {
         runtime.pending_focus_target = Some(follow_target);
     }
     runtime.render_version = render_version;
     runtime.render_state = render_state;
     runtime.needs_reconcile = content_changed || next_focus_target != previous_focus_target;
-    runtime.hit_regions_dirty |= runtime.needs_reconcile;
+    runtime.hit_regions_dirty |=
+        camera_content_changed || next_focus_target != previous_focus_target;
 }
 
 fn push_input_event(event: InputEvent) {

@@ -277,6 +277,70 @@ fn assert_content_render_update_clears_manual_camera_override() {
     assert_eq!(runtime.pending_focus_target, None);
 }
 
+#[test]
+fn agent_label_changes_the_render_content_signature() {
+    let original = sample_render_state_for_camera("agent");
+    let mut renamed = original.clone();
+    renamed.agents[0].label = "Renamed Survey Agent".to_string();
+
+    assert_ne!(
+        render_content_signature(Some(&original)),
+        render_content_signature(Some(&renamed)),
+        "a player-visible Agent label must trigger reconciliation"
+    );
+}
+
+fn assert_label_only_render_update_reconciles_without_resetting_camera_or_follow() {
+    let original = sample_render_state_for_camera("agent");
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(original.clone()),
+        render_version: 1,
+        camera: CameraState {
+            zoom: 2.25,
+            pan_x_px: 42.0,
+            pan_y_px: -18.0,
+        },
+        camera_fit_version: 7,
+        last_canvas_size: Some((960, 540)),
+        camera_user_override: true,
+        active_follow_target: Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        }),
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+    let initial_signature = render_content_signature(Some(&original));
+    runtime.render_content_signature = initial_signature;
+
+    let mut renamed = original;
+    renamed.agents[0].label = "Renamed Survey Agent".to_string();
+    apply_external_render_snapshot(
+        &mut runtime,
+        true,
+        RenderSnapshot::Changed {
+            version: 2,
+            state: Some(renamed),
+        },
+    );
+
+    assert_ne!(runtime.render_content_signature, initial_signature);
+    assert!(runtime.needs_reconcile);
+    assert!(runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 7);
+    assert_eq!(runtime.last_canvas_size, Some((960, 540)));
+    assert!(!runtime.hit_regions_dirty);
+    assert_eq!(runtime.pending_focus_target, None);
+    assert_eq!(
+        runtime.active_follow_target,
+        Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        })
+    );
+}
+
 fn assert_selection_change_sets_pending_focus_target() {
     let mut runtime = BevyRuntimeState {
         mounted: true,
@@ -496,6 +560,12 @@ fn content_render_update_clears_manual_camera_override() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
+fn label_only_render_update_reconciles_without_resetting_camera_or_follow() {
+    assert_label_only_render_update_reconciles_without_resetting_camera_or_follow();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
 fn selection_change_sets_pending_focus_target() {
     assert_selection_change_sets_pending_focus_target();
 }
@@ -570,6 +640,12 @@ fn wasm_selection_only_render_update_preserves_manual_camera_override() {
 #[wasm_bindgen_test]
 fn wasm_content_render_update_clears_manual_camera_override() {
     assert_content_render_update_clears_manual_camera_override();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_label_only_render_update_reconciles_without_resetting_camera_or_follow() {
+    assert_label_only_render_update_reconciles_without_resetting_camera_or_follow();
 }
 
 #[cfg(target_arch = "wasm32")]

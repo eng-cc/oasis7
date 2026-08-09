@@ -22,6 +22,9 @@ use module_visual_entities::{
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
+#[path = "render_agent_labels.rs"]
+mod agent_labels;
+use agent_labels::{AgentLabelQueries, despawn_agent_labels, reconcile_agent_labels};
 #[path = "render_agent_position_provenance_cue.rs"]
 mod agent_position_provenance_cue;
 #[cfg(test)]
@@ -823,6 +826,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     location_corner_frames: Query<'w, 's, (Entity, &'static PixelWorldLocationCornerFrame)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
+    agent_labels: AgentLabelQueries<'w, 's>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
     derived_position_cues: Query<'w, 's, (Entity, &'static PixelWorldDerivedPositionCue)>,
     assignment_cues: Query<'w, 's, (Entity, &'static PixelWorldAssignmentCueVisual)>,
@@ -865,6 +869,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_agent_labels(&mut commands, &queries.agent_labels);
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -958,6 +963,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_agent_labels(&mut commands, &queries.agent_labels);
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -1092,6 +1098,13 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    reconcile_agent_labels(
+        &mut commands,
+        &runtime,
+        &queries.agent_labels,
+        width,
+        height,
     );
     reconcile_agent_silhouettes(
         &mut commands,
