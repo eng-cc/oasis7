@@ -668,6 +668,8 @@ def command_append_evidence(args: argparse.Namespace) -> int:
 
 
 def command_workflow_report(args: argparse.Namespace) -> int:
+    if args.phase in {"start", "close"} and not args.task_uid:
+        die("workflow-report: --task-uid is required for start and close")
     if args.phase == "review" and not args.task_uid:
         payload = {"phase": "review", "role": args.role, "status": "ok", "task_source": "github_project"}
         print(json.dumps(payload, indent=2, sort_keys=True) if args.json else "workflow-report review: GitHub Project is authoritative")
@@ -680,8 +682,12 @@ def command_workflow_report(args: argparse.Namespace) -> int:
         "Worktree": record.get("worktree_hint") or "",
     }
     comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_body(args.task_uid, args.role, args.phase, fields))
-    timestamp_key = "last_started_at" if args.phase == "start" else "last_closed_at"
-    record[timestamp_key] = now()
+    timestamp_key = {
+        "start": "last_started_at",
+        "close": "last_workflow_report_close_at",
+    }.get(args.phase)
+    if timestamp_key:
+        record[timestamp_key] = now()
     record["last_evidence_at"] = now()
     record["updated_at"] = now()
     record.setdefault("evidence_comments", []).append(comment_url)
@@ -694,8 +700,9 @@ def command_workflow_report(args: argparse.Namespace) -> int:
         "issue_url": record.get("issue_url"),
         "execution_log_path": record.get("issue_url"),
         "comment_url": comment_url,
-        timestamp_key: record[timestamp_key],
     }
+    if timestamp_key:
+        payload[timestamp_key] = record[timestamp_key]
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"workflow-report {args.phase}: recorded {comment_url}")
     return 0
 

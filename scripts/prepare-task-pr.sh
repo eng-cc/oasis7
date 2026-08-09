@@ -47,6 +47,7 @@ Options:
                          unknown, or mixed
   --review-domain-role <role> Domain role for domain-semantic-doc
   --review-verification-affected Add QA for semantic/external doc verification changes
+  --review-manual-role <role> Repeatable manual role for unknown or mixed review scope
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
 
@@ -103,6 +104,7 @@ BODY_FILE=""
 REVIEW_CHANGE_CLASS=""
 REVIEW_DOMAIN_ROLE=""
 REVIEW_VERIFICATION_AFFECTED=0
+REVIEW_MANUAL_ROLES=()
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -136,6 +138,7 @@ while [[ $# -gt 0 ]]; do
     --review-change-class) REVIEW_CHANGE_CLASS="${2:-}"; shift 2 ;;
     --review-domain-role) REVIEW_DOMAIN_ROLE="${2:-}"; shift 2 ;;
     --review-verification-affected) REVIEW_VERIFICATION_AFFECTED=1; shift ;;
+    --review-manual-role) REVIEW_MANUAL_ROLES+=("${2:-}"); shift 2 ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -1193,6 +1196,9 @@ if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
+  for role in "${REVIEW_MANUAL_ROLES[@]}"; do
+    ROLE_SELECTOR_ARGS+=(--manual-role "$role")
+  done
   REVIEW_ROLE_SELECTION_JSON="$(python3 "$ROOT_DIR/scripts/pm/review-role-selector.py" "${ROLE_SELECTOR_ARGS[@]}")" \
     || die "manual review role selection is required for change class: $REVIEW_CHANGE_CLASS"
   REQUIRED_REVIEW_ROLES="$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["roles"]))' "$REVIEW_ROLE_SELECTION_JSON")"
