@@ -8,11 +8,14 @@ use std::fs;
 use std::path::Path;
 #[path = "render_test_fixtures.rs"]
 mod fixtures;
+#[path = "render_raster_readback.rs"]
+mod raster_readback;
 use fixtures::{
     sample_render_state_with_beacon_candidates, sample_render_state_with_hotspot_candidates,
     sample_render_state_with_selection, sample_render_state_with_unoccluded_detail_fleck,
     test_runtime,
 };
+use raster_readback::PixelRegressionSummary;
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 540;
 const PIXEL_BACKGROUND: [u8; 4] = [8, 12, 20, 255];
@@ -57,31 +60,6 @@ struct PixelLayer {
     rotation: f32,
     z: f32,
     rgba: [f32; 4],
-}
-#[derive(Clone, Debug, Serialize)]
-struct PixelRegressionSummary {
-    width: u32,
-    height: u32,
-    raw_rgba_fnv1a64: String,
-    non_background_pixels: usize,
-    fragment_pixels: usize,
-    fragment_fleck_pixels: usize,
-    grid_pixels: usize,
-    location_pixels: usize,
-    location_corner_frame_pixels: usize,
-    selected_location_cue_pixels: usize,
-    selected_agent_cue_pixels: usize,
-    derived_position_cue_pixels: usize,
-    agent_pixels: usize,
-    agent_core_pixels: usize,
-    hotspot_pixels: usize,
-    hotspot_core_pixels: usize,
-    fragment_sample_rgba: [u8; 4],
-    fragment_fleck_sample_rgba: [u8; 4],
-    location_sample_rgba: [u8; 4],
-    agent_sample_rgba: [u8; 4],
-    agent_core_sample_rgba: [u8; 4],
-    hotspot_core_sample_rgba: [u8; 4],
 }
 fn sample_position(x_cm: f64, y_cm: f64) -> Position {
     Position {
