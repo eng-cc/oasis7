@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use super::*;
+use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_proto::distributed_dht::DistributedDht;
 
 #[derive(Clone)]
 struct FirstReadyHeadCheckpointNetwork {
@@ -924,11 +926,13 @@ enum InitialPeerHead {
     StaleHeightOne,
 }
 
-fn peer_head_checkpoint_before_height_one(
+fn peer_head_checkpoint_before_height_one_with_stale_dht(
     initial_peer_head: InitialPeerHead,
     initial_checkpoint_fetch_available: bool,
+    stale_dht_height_one: bool,
 ) {
     let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = stale_dht_height_one.then(CheckpointProbeNonceGuard::install);
     let world_id = "world-peer-head-checkpoint-before-height-one";
     let dir_a = temp_dir("peer-head-checkpoint-before-height-one-a");
     let dir_b = temp_dir("peer-head-checkpoint-before-height-one-b");
@@ -1022,6 +1026,16 @@ fn peer_head_checkpoint_before_height_one(
             }),
         },
     }));
+    let high_peer_head = super::replication::FetchHeadResponse {
+        found: true,
+        head: Some(super::replication::ReplicationHeadSummary {
+            world_id: world_id.to_string(),
+            height: checkpoint_height,
+            block_hash: format!("block-{checkpoint_height}"),
+            state_root: checkpoint_state_root.clone(),
+            timestamp_ms: 6_164,
+        }),
+    };
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = Arc::new(PeerHeadCheckpointNetwork {
@@ -1038,6 +1052,24 @@ fn peer_head_checkpoint_before_height_one(
     )
     .expect("register checkpoint providers");
     let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let handle_b = if stale_dht_height_one {
+        let dht = Arc::new(TestReplicaMaintenanceDht::new("node-a", "node-b"));
+        dht.put_world_head(
+            world_id,
+            &WorldHeadAnnounce {
+                world_id: world_id.to_string(),
+                height: 1,
+                block_hash: "block-1".to_string(),
+                state_root: "peer-exec-state-1".to_string(),
+                timestamp_ms: 6_100,
+                signature: String::new(),
+            },
+        )
+        .expect("seed stale DHT height-one candidate");
+        handle_b.with_dht(dht)
+    } else {
+        handle_b
+    };
     let mut endpoint_b =
         ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
             .expect("fresh observer endpoint");
@@ -1079,16 +1111,7 @@ fn peer_head_checkpoint_before_height_one(
 
         if initial_peer_head != InitialPeerHead::HighCheckpoint {
             *peer_head.lock().expect("publish delayed peer checkpoint head") =
-                super::replication::FetchHeadResponse {
-                    found: true,
-                    head: Some(super::replication::ReplicationHeadSummary {
-                        world_id: world_id.to_string(),
-                        height: checkpoint_height,
-                        block_hash: format!("block-{checkpoint_height}"),
-                        state_root: checkpoint_state_root.clone(),
-                        timestamp_ms: 6_164,
-                    }),
-                };
+                high_peer_head;
         }
         checkpoint_fetch_available.store(true, Ordering::SeqCst);
 
@@ -1120,6 +1143,16 @@ fn peer_head_checkpoint_before_height_one(
     );
     assert_eq!(engine_b.committed_height, checkpoint_height);
     assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
+    if stale_dht_height_one {
+        assert_stale_dht_checkpoint_provenance(
+            &replication_b,
+            world_id,
+            checkpoint_height,
+            checkpoint_block_hash.as_str(),
+            checkpoint_state_root.as_str(),
+            &dir_b,
+        );
+    }
     let fetch_protocols = fetch_protocols
         .lock()
         .expect("lock observed checkpoint fetch protocols")
@@ -1140,22 +1173,4 @@ fn peer_head_checkpoint_before_height_one(
     let _ = fs::remove_dir_all(&dir_b);
 }
 
-#[test]
-fn fresh_observer_fetches_peer_head_checkpoint_before_first_height_one_execution() {
-    peer_head_checkpoint_before_height_one(InitialPeerHead::HighCheckpoint, true);
-}
-
-#[test]
-fn fresh_observer_defers_height_one_until_transient_peer_head_preflight_can_bootstrap() {
-    peer_head_checkpoint_before_height_one(InitialPeerHead::Unavailable, true);
-}
-
-#[test]
-fn fresh_observer_defers_height_one_until_advertised_checkpoint_fetch_recovers() {
-    peer_head_checkpoint_before_height_one(InitialPeerHead::HighCheckpoint, false);
-}
-
-#[test]
-fn fresh_observer_defers_height_one_until_stale_peer_head_advances_to_high_checkpoint() {
-    peer_head_checkpoint_before_height_one(InitialPeerHead::StaleHeightOne, true);
-}
+include!("tests_storage_replication_stale_dht_checkpoint.rs");
