@@ -186,6 +186,14 @@ fn install_quote_kernel(data_units: i64) -> WorldKernel {
     kernel
 }
 
+fn materialize_install_quote_observation(kernel: &mut WorldKernel) {
+    // Observation owns lazy chunk materialization. Quote purity starts after
+    // that established runtime observation boundary.
+    kernel
+        .observe("agent-install-quote")
+        .expect("materialize install-quote observation");
+}
+
 fn assert_install_quote_query_is_pure(
     kernel: &WorldKernel,
     model_before: &WorldModel,
@@ -329,6 +337,7 @@ fn traced_query_batch_excludes_trace_from_durable_intents_and_history() {
 #[test]
 fn install_quote_query_returns_the_canonical_deployable_dto_without_mutation() {
     let mut kernel = install_quote_kernel(10);
+    materialize_install_quote_observation(&mut kernel);
     let action = prospective_install_action("depot-query-deployable");
     let expected = kernel
         .micro_depot_install_quote(&action)
@@ -390,6 +399,7 @@ fn install_quote_query_returns_the_canonical_deployable_dto_without_mutation() {
 #[test]
 fn install_quote_query_decide_only_returns_canonical_dto_without_mutation() {
     let mut kernel = install_quote_kernel(10);
+    materialize_install_quote_observation(&mut kernel);
     let action = prospective_install_action("depot-query-decide-only");
     let expected = kernel
         .micro_depot_install_quote(&action)
@@ -438,6 +448,7 @@ fn install_quote_query_decide_only_returns_canonical_dto_without_mutation() {
 #[test]
 fn install_quote_query_returns_structured_blocker_without_mutation() {
     let mut kernel = install_quote_kernel(9);
+    materialize_install_quote_observation(&mut kernel);
     let action = prospective_install_action("depot-query-blocked");
     let expected = kernel
         .micro_depot_install_quote(&action)

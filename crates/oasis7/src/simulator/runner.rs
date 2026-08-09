@@ -436,11 +436,6 @@ impl<B: AgentBehavior> AgentRunner<B> {
 
         self.scheduler_cursor = Some(agent_id.clone());
 
-        // Observing can lazily materialize chunks. Keep a checkpoint so a
-        // read-only query cannot turn that observation bookkeeping into a
-        // durable world mutation.
-        let kernel_before_observation = kernel.clone();
-
         // Get observation for the selected agent
         let observation = match kernel.observe(&agent_id) {
             Ok(obs) => obs,
@@ -498,7 +493,6 @@ impl<B: AgentBehavior> AgentRunner<B> {
             }
             AgentDecision::Query(query) => {
                 let query_result = Self::evaluate_query(kernel, query.clone());
-                *kernel = kernel_before_observation;
                 self.notify_query_result(agent_id.as_str(), &query_result);
                 Some(AgentTickResult {
                     agent_id,
@@ -572,10 +566,6 @@ impl<B: AgentBehavior> AgentRunner<B> {
         };
         self.scheduler_cursor = Some(agent_id.clone());
 
-        // Observing can lazily materialize chunks. Keep a checkpoint so a
-        // read-only query cannot turn that observation bookkeeping into a
-        // durable world mutation.
-        let kernel_before_observation = kernel.clone();
         let observation = match kernel.observe(&agent_id) {
             Ok(obs) => obs,
             Err(_) => {
@@ -630,7 +620,6 @@ impl<B: AgentBehavior> AgentRunner<B> {
             }
             AgentDecision::Query(query) => {
                 let query_result = Self::evaluate_query(kernel, query.clone());
-                *kernel = kernel_before_observation;
                 self.notify_query_result(agent_id.as_str(), &query_result);
                 Some(AgentTickResult {
                     agent_id,
