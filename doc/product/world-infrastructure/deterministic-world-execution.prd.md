@@ -22,6 +22,13 @@
 - 普通玩家运行游戏加 light companion；operator 运行 full infrastructure node；development/local test 运行游戏加 embedded 或 full local node。所有 profile 使用同一版本化 game/infrastructure 协议，只改变共识、存储、执行和验证职责。
 - 最终性不可用时权威 progression fail closed；pending signed intent 在最终化前无世界效果。local development world 必须使用不同 `world_id`，且永不合入全局历史。
 
+### 2.1 Finality 中断时的待决 intent 连续性
+
+- 已签名并送出的 intent 在最终性不可用、陈旧或无法验证时，只能保留为**尚无世界效果的待决请求**。本地排队、提交被接收或界面仍显示请求，都不授予资源、控制权、资格、声誉、阶段完成或依赖它的后续结果，也不得被表达为执行成功或对完成时间的承诺。
+- 恢复后，待决请求必须按当时仍有效的权限和前置条件重新进入 canonical 顺序；它可能被执行、拒绝、过期或需要替换。只有可验证的 committed receipt 才能更新玩家、Agent 或入口的世界结论。消费者必须区分仍待决与已无效、被拒绝或须重新规划，并提供查看状态、等待结果，或在专业域允许时明确撤回、替换或重提的路径。
+- 替代或撤回请求本身也是待决请求，在各自 committed receipt 出现前，不得单方面取消、覆盖、隐藏或宣称优先于原请求；原请求与其撤回/替代请求之间的关联和真实状态必须可读。若专业域不支持安全的撤回或替代，消费者只能等待、查看状态或重新规划，不能把普通重提伪装成取消。
+- 对被专业域明确标记为同一 intent lineage 中互斥的成员，首个产生有效世界效果的 committed receipt 是唯一胜者，并原子地终止其余成员为无效果、不可执行且可追溯的状态。拒绝或过期只终止自身；未标记为互斥的独立 intent 仍可并发。产品层不定义 lineage 标记、排序、原子化、pending 持久化、去重、重试、过期或 receipt schema。
+
 ## 3. 当前与目标的分离
 
 当前 runtime/consensus 集成不得因本产品目标自动被表述为 BFT-ready、分区恢复完成或可公开发行。完整目标需要 runtime version activation、certificate-gated execution/replication、replay compatibility、恢复后的 root verification，以及与 P2P 相同候选版本的对抗性证据。
@@ -29,7 +36,7 @@
 ## 4. 组合验收
 
 - DE-1：相同 execution version、已排序输入和 world state 在全部活动验证者上产生相同结果；缺证、冲突、越权或版本不匹配的输入不产生部分副作用。
-- DE-2：游戏/Agent/入口通过稳定协议仅见 committed state，能验证或获得适用证明，并在 finality 缺失时获得不把 pending 包装为结果的失败语义。
+- DE-2：游戏/Agent/入口通过稳定协议仅见 committed state，能验证或获得适用证明，并在 finality 缺失时将 pending 表达为无世界效果的待决请求，而非结果。恢复样例必须证明待决请求按当时条件重审、只有 committed receipt 更新结论，并能区分待决、无效/拒绝、须重新规划及已生效；对明确互斥的同 lineage 成员，竞态、替代/撤回、重复重试和 receipt 重放至多产生一个有效世界效果，拒绝/过期不取消独立 intent。
 - DE-3：执行升级、snapshot/replay、node recovery 与版本混合的样例证明同一 `world_id` 历史和 state root 连续；未证明则 fail closed。
 
 ## 5. Non-Goals
