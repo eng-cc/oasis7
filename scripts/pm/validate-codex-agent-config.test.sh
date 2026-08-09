@@ -138,6 +138,13 @@ ln -s "$fixture/runtime-engineer.md" "$fixture/.agents/roles/runtime_engineer.md
 expect_fail symlinked_role_card "$fixture" \
   "must be a regular file and not a symlink"
 
+new_fixture symlinked-role-card-directory
+fixture="$FIXTURE"
+mv "$fixture/.agents/roles" "$fixture/role-cards"
+ln -s "$fixture/role-cards" "$fixture/.agents/roles"
+expect_fail symlinked_role_card_directory "$fixture" \
+  "role-card directory"
+
 new_fixture swapped-path
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/config.toml" \
