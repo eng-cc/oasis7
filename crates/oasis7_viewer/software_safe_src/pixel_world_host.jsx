@@ -541,6 +541,9 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     hotspotTestHitTargets() {
       return bridge?.hotspotTestHitTargets?.() || [];
     },
+    locationTestHitTargets() {
+      return bridge?.locationTestHitTargets?.() || [];
+    },
     deriveRenderState(renderInput) {
       return deriveRenderStateOrUnavailable(renderInput).renderState;
     },
@@ -1437,7 +1440,7 @@ export function PixelWorldHost(props) {
         applyRendererUpdate();
       });
       onCleanup(() => core.setRenderHook(null));
-      onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
+      onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getLocationHitTargets: () => adapter().locationTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
     }
   });
 

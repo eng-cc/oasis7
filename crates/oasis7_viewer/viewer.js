@@ -8591,6 +8591,7 @@ function installPixelWorldHotspotPointerProbe({
   getCanvas,
   getRendererStatus,
   getHotspotHitTargets,
+  getLocationHitTargets = () => [],
   getHoverSelection,
   getHoveredHotspot
 }) {
@@ -8607,6 +8608,9 @@ function installPixelWorldHotspotPointerProbe({
   window[HOTSPOT_POINTER_PROBE_GLOBAL] = {
     targets() {
       return getHotspotHitTargets();
+    },
+    locationTargets() {
+      return getLocationHitTargets();
     },
     async hover(id = "blocker-highlight") {
       const canvas = getCanvas();
@@ -9500,6 +9504,9 @@ function createPixelWorldHostAdapter({
     },
     hotspotTestHitTargets() {
       return bridge?.hotspotTestHitTargets?.() || [];
+    },
+    locationTestHitTargets() {
+      return bridge?.locationTestHitTargets?.() || [];
     },
     deriveRenderState(renderInput) {
       return deriveRenderStateOrUnavailable(renderInput).renderState;
@@ -10477,6 +10484,7 @@ function PixelWorldHost(props) {
         getCanvas: () => mountedCanvas,
         getRendererStatus: rendererStatus,
         getHotspotHitTargets: () => adapter().hotspotTestHitTargets(),
+        getLocationHitTargets: () => adapter().locationTestHitTargets(),
         getHoverSelection: hoverSelection,
         getHoveredHotspot: hoveredHotspot
       }));

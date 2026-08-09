@@ -21,6 +21,12 @@ mod module_visual_entities_tests;
 #[path = "render_hotspot_core_tests.rs"]
 mod hotspot_core_tests;
 
+#[path = "render_location_corner_frame_tests.rs"]
+mod location_corner_frame_tests;
+
+#[path = "render_location_corner_frame_raster_tests.rs"]
+mod location_corner_frame_raster_tests;
+
 #[path = "render_selected_agent_cue_tests.rs"]
 mod selected_agent_cue_tests;
 
