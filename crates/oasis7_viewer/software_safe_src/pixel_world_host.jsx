@@ -541,9 +541,7 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     hotspotTestHitTargets() {
       return bridge?.hotspotTestHitTargets?.() || [];
     },
-    locationTestHitTargets() {
-      return bridge?.locationTestHitTargets?.() || [];
-    },
+    locationTestHitTargets() { return bridge?.locationTestHitTargets?.() || []; },
     deriveRenderState(renderInput) {
       return deriveRenderStateOrUnavailable(renderInput).renderState;
     },
