@@ -10,6 +10,12 @@ pub(super) enum FreshObserverCheckpointBootstrap {
     NotInstalled,
 }
 
+impl FreshObserverCheckpointBootstrap {
+    pub(super) fn should_defer_height_one(&self) -> bool {
+        matches!(self, Self::LowHeadConfirmationPending)
+    }
+}
+
 impl PosNodeEngine {
     // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
     // the aligned retained-window boundaries, including the latest completed boundary.

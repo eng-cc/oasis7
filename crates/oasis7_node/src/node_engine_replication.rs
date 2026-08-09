@@ -355,10 +355,6 @@ impl PosNodeEngine {
             checkpoint_bootstrap_preflight,
             FreshObserverCheckpointBootstrap::RetryPending
         );
-        let checkpoint_low_head_confirmation_pending = matches!(
-            checkpoint_bootstrap_preflight,
-            FreshObserverCheckpointBootstrap::LowHeadConfirmationPending
-        );
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         let mut validated_messages = Vec::new();
@@ -425,7 +421,7 @@ impl PosNodeEngine {
                 && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
                     || checkpoint_preflight_unavailable
                     || checkpoint_bootstrap_retry_pending
-                    || checkpoint_low_head_confirmation_pending);
+                    || checkpoint_bootstrap_preflight.should_defer_height_one());
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
