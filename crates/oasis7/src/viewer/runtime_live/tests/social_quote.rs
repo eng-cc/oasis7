@@ -315,3 +315,253 @@ fn runtime_publish_social_fact_quote_rejects_missing_runtime_evidence_without_mu
     );
     assert_eq!(server.world.state(), &state_before);
 }
+
+fn signed_social_contact_quote_request(
+    contact_purpose: &str,
+    first_contact_class: crate::viewer::FirstContactClass,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::SocialContactQuoteRequest {
+    let mut request = crate::viewer::SocialContactQuoteRequest {
+        contact_purpose: contact_purpose.to_string(),
+        first_contact_class,
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_social_contact_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign social contact quote auth"),
+    );
+    request
+}
+
+#[test]
+fn runtime_social_contact_quote_is_authenticated_deterministic_non_mutating_and_has_only_the_six_readable_fields()
+ {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(98);
+    register_runtime_session(
+        &mut server,
+        "player-social-contact-quote",
+        Some(agent_id.as_str()),
+        2998,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let request = signed_social_contact_quote_request(
+        "sell a small surplus locally",
+        crate::viewer::FirstContactClass::TradeOrService,
+        "player-social-contact-quote",
+        2999,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let quote = server
+        .handle_social_contact_quote(request.clone())
+        .expect("signed social contact quote");
+    assert_eq!(
+        quote.first_contact_class,
+        crate::viewer::FirstContactClass::TradeOrService
+    );
+    assert_eq!(quote.contact_purpose, request.contact_purpose);
+    assert!(!quote.expected_mutual_value.is_empty());
+    assert!(!quote.risk_or_commitment.is_empty());
+    assert!(quote.solo_lane_preserved);
+    assert!(!quote.recommended_contact_action.is_empty());
+    assert!(quote.defer_reason.is_empty());
+    let quote_json = serde_json::to_value(&quote).expect("serialize social contact quote");
+    assert_eq!(
+        quote_json
+            .as_object()
+            .expect("social contact quote object")
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        [
+            "contact_purpose",
+            "expected_mutual_value",
+            "first_contact_class",
+            "risk_or_commitment",
+            "solo_lane_preserved",
+            "recommended_contact_action",
+            "defer_reason",
+        ]
+        .into_iter()
+        .collect(),
+    );
+    assert_eq!(
+        server
+            .handle_social_contact_quote(request)
+            .expect("repeat signed social contact quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_social_contact_quote_uses_closed_classes_and_explicitly_defers_ineligible_contact() {
+    assert_eq!(
+        serde_json::to_string(&crate::viewer::FirstContactClass::TradeOrService)
+            .expect("serialize trade class"),
+        "\"trade_or_service\""
+    );
+    assert_eq!(
+        serde_json::to_string(&crate::viewer::FirstContactClass::MutualAid)
+            .expect("serialize mutual aid class"),
+        "\"mutual_aid\""
+    );
+    assert_eq!(
+        serde_json::to_string(&crate::viewer::FirstContactClass::InformationExchange)
+            .expect("serialize information exchange class"),
+        "\"information_exchange\""
+    );
+    assert_eq!(
+        serde_json::to_string(&crate::viewer::FirstContactClass::DeferContact)
+            .expect("serialize defer class"),
+        "\"defer_contact\""
+    );
+    assert_eq!(
+        serde_json::to_string(&crate::viewer::FirstContactClass::OrganizationEscalation)
+            .expect("serialize escalation class"),
+        "\"organization_escalation\""
+    );
+    assert!(
+        serde_json::from_str::<crate::viewer::FirstContactClass>("\"unbounded_diplomacy\"")
+            .is_err()
+    );
+
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(99);
+    register_runtime_session(
+        &mut server,
+        "player-social-contact-defer",
+        Some(agent_id.as_str()),
+        3098,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let quote = server
+        .handle_social_contact_quote(signed_social_contact_quote_request(
+            "",
+            crate::viewer::FirstContactClass::TradeOrService,
+            "player-social-contact-defer",
+            3099,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("ineligible first contact returns an explicit defer quote");
+
+    assert_eq!(
+        quote.first_contact_class,
+        crate::viewer::FirstContactClass::DeferContact
+    );
+    assert!(!quote.defer_reason.is_empty());
+    assert!(quote.solo_lane_preserved);
+    assert_ne!(
+        quote.first_contact_class,
+        crate::viewer::FirstContactClass::OrganizationEscalation
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_social_contact_quote_preserves_low_commitment_classes_and_defers_escalation() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(100);
+    register_runtime_session(
+        &mut server,
+        "player-social-contact-classes",
+        Some(agent_id.as_str()),
+        3198,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+
+    for (nonce, class) in [
+        (3199, crate::viewer::FirstContactClass::MutualAid),
+        (3200, crate::viewer::FirstContactClass::InformationExchange),
+    ] {
+        let quote = server
+            .handle_social_contact_quote(signed_social_contact_quote_request(
+                "remove the current local blocker",
+                class.clone(),
+                "player-social-contact-classes",
+                nonce,
+                public_key.as_str(),
+                private_key.as_str(),
+            ))
+            .expect("low-commitment first contact quote");
+        assert_eq!(quote.first_contact_class, class);
+        assert!(quote.defer_reason.is_empty());
+        assert!(quote.solo_lane_preserved);
+    }
+
+    let escalation = server
+        .handle_social_contact_quote(signed_social_contact_quote_request(
+            "join a regional organization",
+            crate::viewer::FirstContactClass::OrganizationEscalation,
+            "player-social-contact-classes",
+            3201,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("organization escalation is deferred from first contact");
+    assert_eq!(
+        escalation.first_contact_class,
+        crate::viewer::FirstContactClass::DeferContact
+    );
+    assert!(!escalation.defer_reason.is_empty());
+    assert!(escalation.solo_lane_preserved);
+    assert_eq!(server.world.state(), &state_before);
+}

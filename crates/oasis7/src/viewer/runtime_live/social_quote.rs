@@ -7,16 +7,146 @@ use super::*;
 use crate::simulator::{ResourceKind, ResourceOwner, SocialStake, WorldJournal, WorldKernel};
 use crate::viewer::auth::{
     verify_declare_social_edge_quote_auth_proof, verify_publish_social_fact_quote_auth_proof,
+    verify_social_contact_quote_auth_proof,
 };
 use crate::viewer::protocol::{
-    DeclareSocialEdgeQuotePreflight, DeclareSocialEdgeQuoteRequest, GameplayActionError,
-    PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest,
+    DeclareSocialEdgeQuotePreflight, DeclareSocialEdgeQuoteRequest, FirstContactClass,
+    GameplayActionError, PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest,
+    SocialContactQuotePreflight, SocialContactQuoteRequest,
 };
 use std::collections::HashMap;
 use std::io::BufWriter;
 use std::net::TcpStream;
 
 impl ViewerRuntimeLiveServer {
+    /// Computes an authenticated, non-mutating first-contact preview from runtime session state.
+    pub(in crate::viewer::runtime_live) fn handle_social_contact_quote(
+        &mut self,
+        request: SocialContactQuoteRequest,
+    ) -> Result<SocialContactQuotePreflight, GameplayActionError> {
+        const ACTION_ID: &str = "quote_social_contact";
+        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
+            code: "auth_proof_required".to_string(),
+            message: format!("{ACTION_ID} requires auth proof"),
+            action_id: Some(ACTION_ID.to_string()),
+            target_agent_id: None,
+        })?;
+        let verified =
+            verify_social_contact_quote_auth_proof(&request, auth).map_err(|message| {
+                GameplayActionError {
+                    code: map_auth_verify_error_code(message.as_str()).to_string(),
+                    message,
+                    action_id: Some(ACTION_ID.to_string()),
+                    target_agent_id: None,
+                }
+            })?;
+        self.session_policy
+            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
+            .map_err(|message| GameplayActionError {
+                code: map_session_policy_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some(ACTION_ID.to_string()),
+                target_agent_id: None,
+            })?;
+        let agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "player_agent_binding_required".to_string(),
+                message: format!("{ACTION_ID} requires a bound player Agent session"),
+                action_id: Some(ACTION_ID.to_string()),
+                target_agent_id: None,
+            })?;
+        let public_key = normalize_optional_public_key(request.public_key.as_deref());
+        ensure_agent_player_access_runtime(
+            &self.world,
+            &self.llm_sidecar,
+            agent_id,
+            verified.player_id.as_str(),
+            public_key.as_deref(),
+        )
+        .map_err(|err| GameplayActionError {
+            code: err.code,
+            message: err.message,
+            action_id: Some(ACTION_ID.to_string()),
+            target_agent_id: err.agent_id,
+        })?;
+
+        let purpose = request.contact_purpose.trim();
+        let (
+            first_contact_class,
+            expected_mutual_value,
+            risk_or_commitment,
+            recommended_contact_action,
+            defer_reason,
+        ) = if purpose.is_empty() {
+            (
+                    FirstContactClass::DeferContact,
+                    "Keep the current local goal visible until a concrete exchange is available."
+                        .to_string(),
+                    "No resources, time, reputation, or membership are exposed.".to_string(),
+                    "Continue independent local work".to_string(),
+                    "No current local purpose makes contact worthwhile; revisit when a specific trade, aid, or information need appears.".to_string(),
+                )
+        } else if matches!(
+            request.first_contact_class,
+            FirstContactClass::OrganizationEscalation
+        ) {
+            (
+                    FirstContactClass::DeferContact,
+                    "Keep the current local goal visible while evaluating later collaboration."
+                        .to_string(),
+                    "Organization membership, governance, long-term supply, and exclusivity require a separate later confirmation.".to_string(),
+                    "Continue independent local work".to_string(),
+                    "Organization escalation is not a default first contact; revisit it only as a separate later decision.".to_string(),
+                )
+        } else if matches!(request.first_contact_class, FirstContactClass::DeferContact) {
+            (
+                    FirstContactClass::DeferContact,
+                    "Retain the local objective without creating a social obligation.".to_string(),
+                    "No resources, time, reputation, or membership are exposed.".to_string(),
+                    "Continue independent local work".to_string(),
+                    "Independent progress is currently the safer choice; revisit when the stated purpose becomes urgent.".to_string(),
+                )
+        } else {
+            let (value, risk, action) = match request.first_contact_class {
+                    FirstContactClass::TradeOrService => (
+                        "Both sides can satisfy a concrete, limited exchange.".to_string(),
+                        "Only the stated one-time trade or service is exposed; no membership or governance commitment is created.".to_string(),
+                        "Propose the limited trade or service".to_string(),
+                    ),
+                    FirstContactClass::MutualAid => (
+                        "Both sides can remove a current blocker through recoverable aid.".to_string(),
+                        "Aid remains scoped to the current blocker and creates no continuing membership obligation.".to_string(),
+                        "Request scoped mutual aid".to_string(),
+                    ),
+                    FirstContactClass::InformationExchange => (
+                        "Both sides gain route, price, risk, or opportunity information.".to_string(),
+                        "Information exchange commits no resources, votes, or organization identity.".to_string(),
+                        "Exchange scoped route or price information".to_string(),
+                    ),
+                    FirstContactClass::DeferContact | FirstContactClass::OrganizationEscalation => unreachable!("handled above"),
+                };
+            (
+                request.first_contact_class,
+                value,
+                risk,
+                action,
+                String::new(),
+            )
+        };
+
+        Ok(SocialContactQuotePreflight {
+            first_contact_class,
+            contact_purpose: purpose.to_string(),
+            expected_mutual_value,
+            risk_or_commitment,
+            solo_lane_preserved: true,
+            recommended_contact_action,
+            defer_reason,
+        })
+    }
+
     /// Computes an authenticated, non-mutating social-edge impact preflight from runtime state.
     pub(in crate::viewer::runtime_live) fn handle_declare_social_edge_quote(
         &mut self,
@@ -315,6 +445,20 @@ impl ViewerRuntimeLiveServer {
             &self
                 .handle_publish_social_fact_quote(request)
                 .map(|quote| ViewerResponse::PublishSocialFactQuotePreflight { quote })
+                .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
+        )
+    }
+
+    pub(in crate::viewer::runtime_live) fn quote_social_contact(
+        &mut self,
+        request: SocialContactQuoteRequest,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        send_response(
+            writer,
+            &self
+                .handle_social_contact_quote(request)
+                .map(|quote| ViewerResponse::SocialContactQuotePreflight { quote })
                 .unwrap_or_else(|error| ViewerResponse::GameplayActionError { error }),
         )
     }
