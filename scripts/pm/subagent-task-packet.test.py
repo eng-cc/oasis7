@@ -226,6 +226,21 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
         self.review_admission(packet, plan, snapshot, ok=False)
 
+    def test_frozen_base_packet_survives_symbolic_ref_movement(self) -> None:
+        frozen_base = self.git("rev-parse", "main")
+        args = self.create_args() + ["--frozen-base-oid", frozen_base]
+        packet = self.invoke(args).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_review_plan(packet)
+        self.review_admission(packet, plan, snapshot)
+
+        moved_base = self.git("commit-tree", "HEAD^{tree}", "-p", frozen_base, "-m", "moved comparison")
+        self.git("update-ref", "main", moved_base)
+
+        self.invoke(["validate", packet])
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
     def test_review_admission_allows_a_valid_bootstrap_snapshot_before_review_head(self) -> None:
         snapshot = self.create_snapshot()
         (self.repo / "implementation.txt").write_text("implementation\n", encoding="utf-8")

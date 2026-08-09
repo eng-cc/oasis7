@@ -47,7 +47,7 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def ci_receipt_evidence_digest(path: Path) -> str:
+def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[str, str]:
     receipt = load_json(path)
     module_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
     spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity", module_path)
@@ -62,7 +62,19 @@ def ci_receipt_evidence_digest(path: Path) -> str:
     embedded = receipt.get("review_evidence_digest")
     if embedded is not None and embedded != actual:
         raise ContractError("--ci-ready-receipt review evidence digest mismatch")
-    return actual
+    if receipt.get("task_uid") != task_uid:
+        raise ContractError("--ci-ready-receipt task UID does not match --task-uid")
+    receipt_head = receipt.get("head_oid")
+    receipt_base = receipt.get("base_oid")
+    if not isinstance(receipt_head, str) or not HEAD_RE.fullmatch(receipt_head):
+        raise ContractError("--ci-ready-receipt head_oid is missing or invalid")
+    if not isinstance(receipt_base, str) or not HEAD_RE.fullmatch(receipt_base):
+        raise ContractError("--ci-ready-receipt base_oid is missing or invalid")
+    if receipt_head != frozen_head:
+        raise ContractError(
+            f"--ci-ready-receipt head mismatch: receipt={receipt_head}, frozen={frozen_head}"
+        )
+    return actual, receipt_base
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
@@ -96,6 +108,24 @@ def resolve_comparison_ref(root: Path, comparison_ref: str, supplied_oid: str | 
             f"--comparison-oid mismatch: expected resolved {resolved}, actual {supplied_oid}; remove it or pass the resolved OID"
         )
     return resolved
+
+
+def require_comparison_ancestor(root: Path, comparison_oid: str, frozen_head: str) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", comparison_oid, frozen_head],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        return
+    if result.returncode == 1:
+        raise ContractError(
+            "comparison OID is not an ancestor of frozen head: "
+            f"comparison={comparison_oid}, head={frozen_head}; "
+            "rebase the task branch onto the canonical comparison ref, refresh exact-head CI, and create a new review epoch"
+        )
+    detail = result.stderr.strip() or result.stdout.strip() or "git merge-base failed"
+    raise ContractError(f"cannot validate comparison ancestry: {detail}")
 
 
 def selector_roles(args: argparse.Namespace) -> list[str]:
@@ -278,14 +308,27 @@ def main() -> int:
             raise ContractError("invalid --task-uid")
         if not HEAD_RE.fullmatch(args.head):
             raise ContractError("--head must be a 40-64 character lowercase hex object id")
-        evidence_digest = (ci_receipt_evidence_digest(Path(args.ci_ready_receipt).resolve())
-                           if args.ci_ready_receipt else args.evidence_digest)
+        receipt_comparison_oid: str | None = None
+        if args.ci_ready_receipt:
+            evidence_digest, receipt_comparison_oid = ci_receipt_authority(
+                Path(args.ci_ready_receipt).resolve(), args.task_uid, args.head
+            )
+        else:
+            evidence_digest = args.evidence_digest
         if not isinstance(evidence_digest, str) or not SHA_RE.fullmatch(evidence_digest):
             raise ContractError("--evidence-digest must be a lowercase SHA-256")
         if args.comparison_oid is not None and not HEAD_RE.fullmatch(args.comparison_oid):
             raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
         root = Path(args.root).resolve()
-        comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
+        if receipt_comparison_oid is not None:
+            if args.comparison_oid is not None and args.comparison_oid != receipt_comparison_oid:
+                raise ContractError(
+                    f"--comparison-oid mismatch: CI receipt binds {receipt_comparison_oid}, actual {args.comparison_oid}"
+                )
+            comparison_oid = receipt_comparison_oid
+        else:
+            comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
+        require_comparison_ancestor(root, comparison_oid, args.head)
         roles = selector_roles(args)
         slices = expected_slices(args.task_uid, args.head, evidence_digest, args.comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, evidence_digest, slices)

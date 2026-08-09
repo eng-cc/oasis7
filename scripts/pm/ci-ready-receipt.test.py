@@ -11,7 +11,7 @@ UID="task_12345678901234567890123456789012"
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
 def plan():
   p={"scope":"targeted","selected_capabilities":"pixel_world_bridge;viewer_js_required","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; p["run_pixel_world_bridge_lib_tests"]="true"; p["run_pixel_world_bridge_wasm_check"]="true"; return p
-def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
+def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
 def null_summary_run(run_id=12345):
   r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
 def artifact(run_id=12345,expired=False):
@@ -29,6 +29,10 @@ class ReceiptTest(unittest.TestCase):
     return patch.object(M,"gh",side_effect=[r or pr(),{"check_runs":runs if runs is not None else [run()]}])
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
+  def test_live_receipt_uses_check_run_base_after_pr_base_moves(self):
+    moved=pr(); moved["base"]["sha"]="c"*40
+    with self.api(r=moved):
+      self.assertEqual("b"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[2])
   def test_planner_config_digest_is_bound_into_the_issued_receipt(self):
     receipt=self.invoke_verify()
     self.assertIn("planner_config_sha256",receipt["planner"],
