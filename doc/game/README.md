@@ -1,6 +1,6 @@
 # game 文档索引
 
-产品层归属：`game` 是“世界规则与核心玩法”的专业域权威；区域设施专题同时向“大世界基础设施”产品 PRD 汇报组合关系，但不形成并列产品入口。产品总导航见 `doc/product/README.md`。
+产品层归属：`game` 是“世界规则与核心玩法”的专业域权威；区域设施的产品组合关系由该模块的 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 专题承载，不形成并列产品入口。产品总导航见 `doc/product/README.md`。
 
 审计轮次: 12
 

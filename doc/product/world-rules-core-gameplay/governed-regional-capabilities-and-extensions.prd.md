@@ -1,17 +1,12 @@
-# 受治理的区域能力与扩展（待迁移）
+# 受治理的区域能力与扩展
 
 ## 文档身份
 
-- 所属产品模块：大世界基础设施
+- 所属产品模块：世界规则与核心玩法
 - 上位产品 PRD：[`prd.md`](prd.md)
-- 生命周期：`superseded`
+- 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
-
-## 迁移状态
-
-本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
-
 
 本文承载受治理的区域设施与工业能力扩展的长期产品承诺：玩家以有限、可读和可审计的方式改变局部世界，授权创作者也只能经治理把新的可用能力接入同一权威世界。它不把每项设施或每个制成品写成独立产品入口，也不冻结实现合同、数值或当前可用性。
 
@@ -27,6 +22,8 @@
 - 设施应在玩家已经理解基础控制权、资源压力和区域 blocker 后提供有限区域 leverage；低价值或不合适的选择必须仍可解释，而不被呈现为必选 buff。
 - 受治理扩展让新制成品、配方、工厂或等价工业能力在批准后进入可用世界能力；玩家和创作者不能任意上传、直接写入权威状态、覆盖既有世界身份或取得默认全局治理权。
 - 设施和扩展都必须保留世界唯一性：玩家报价、确认、权威执行、持久结果、恢复和重连后的可见结果属于同一条可审计链路。
+- 报价只描述当前条件，不预留资源、设施容量、价格、资格或排队顺位；提交时必须按最新权威状态重新校验。报价后条件变化时，系统只能接受一次并产生一个权威结果，或原子拒绝并返回更新后的 blocker、取舍和下一步。
+- 重复、过期、重连或跨入口重试不能产生第二次扣减、设施服务、发布或恢复结果。尚未获得权威确认的交接、发布或恢复保持待决；玩家和创作者不能把请求送达、技术构建成功或本地缓存当作已生效能力。
 - 可扩展不等于已公开、无限容量或所有创作均已支持；当前公开状态与实际证据继续由根 README 和专业域拥有。
 
 ## 3. 权威边界
@@ -47,6 +44,7 @@
 - GR-3：代表性受治理扩展流程贯通创作者提案、授权审查、权威生效、世界可用能力、审计与异常恢复；任一阶段不能用技术旁路替代治理。
 - GR-4：设施和扩展的同一身份在玩家表达、权威执行、持久化/replay、适用的复制或恢复以及重连可见结果中保持一致。
 - GR-5：产品、game、runtime、WASM、P2P 与 testing 证据绑定同一候选；单独的传输 green、模块提交、文档迁移或局部 UI 不得代签端到端闭环。
+- GR-6：报价后资源、容量、资格、治理状态或世界前置发生变化时，提交只能按最新权威状态接受一次或原子拒绝；重复、过期、重连与跨入口重试不会产生第二次扣减、服务、发布或恢复结果，待决状态不会被表达为已生效。
 
 ### 4.1 验收追踪
 
@@ -56,6 +54,7 @@
 | GR-3 | runtime_engineer / wasm_platform_engineer / gameplay_designer | PRD-WORLD_RUNTIME-010 / PRD-WORLD_RUNTIME-011 / PRD-WORLD_RUNTIME-012 | 受治理扩展从提案到可用能力、拒绝和恢复的证据 | test_tier_required |
 | GR-4 | runtime_engineer / blockchain_ops_engineer / viewer_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-002 | 同一能力跨执行、回放、恢复和重连的组合证据 | test_tier_full |
 | GR-5 | producer_system_designer / qa_engineer | PRD-TESTING-003 | 同候选跨域组合审计 | test_tier_full |
+| GR-6 | gameplay_designer / runtime_engineer / wasm_platform_engineer / viewer_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-010 / PRD-TESTING-003 | 报价后状态变化、重复/过期/重连/跨入口提交与待决表达的负例证据 | test_tier_required |
 
 ## 5. Non-Goals
 
