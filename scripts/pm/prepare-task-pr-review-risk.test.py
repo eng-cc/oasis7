@@ -35,6 +35,18 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertIn('--changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS"', source)
         self.assertIn('REQUIRED_REVIEW_ROLES="$(python3 -c', source)
 
+    def test_prepare_task_pr_forwards_repeatable_manual_roles_to_selector_in_order(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        self.assertIn('--review-manual-role <role>', source)
+        self.assertIn('REVIEW_MANUAL_ROLES=()', source)
+        self.assertIn('--review-manual-role) REVIEW_MANUAL_ROLES+=("${2:-}"); shift 2 ;;', source)
+        self.assertIn(
+            'for role in "${REVIEW_MANUAL_ROLES[@]}"; do\n'
+            '    ROLE_SELECTOR_ARGS+=(--manual-role "$role")\n'
+            '  done',
+            source,
+        )
+
     def test_prepare_task_pr_requires_review_packet_comparison_oid(self):
         source = PREPARE.read_text(encoding="utf-8")
         self.assertTrue('"Comparison OID": comparison_oid' in source,
