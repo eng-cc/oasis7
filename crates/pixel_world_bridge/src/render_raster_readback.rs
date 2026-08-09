@@ -1,0 +1,27 @@
+use super::*;
+
+#[derive(Clone, Debug, Serialize)]
+pub(super) struct PixelRegressionSummary {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) raw_rgba_fnv1a64: String,
+    pub(super) non_background_pixels: usize,
+    pub(super) fragment_pixels: usize,
+    pub(super) fragment_fleck_pixels: usize,
+    pub(super) grid_pixels: usize,
+    pub(super) location_pixels: usize,
+    pub(super) location_corner_frame_pixels: usize,
+    pub(super) selected_location_cue_pixels: usize,
+    pub(super) selected_agent_cue_pixels: usize,
+    pub(super) derived_position_cue_pixels: usize,
+    pub(super) agent_pixels: usize,
+    pub(super) agent_core_pixels: usize,
+    pub(super) hotspot_pixels: usize,
+    pub(super) hotspot_core_pixels: usize,
+    pub(super) fragment_sample_rgba: [u8; 4],
+    pub(super) fragment_fleck_sample_rgba: [u8; 4],
+    pub(super) location_sample_rgba: [u8; 4],
+    pub(super) agent_sample_rgba: [u8; 4],
+    pub(super) agent_core_sample_rgba: [u8; 4],
+    pub(super) hotspot_core_sample_rgba: [u8; 4],
+}

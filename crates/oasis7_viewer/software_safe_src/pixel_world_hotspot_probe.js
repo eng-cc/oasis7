@@ -17,6 +17,7 @@ export function installPixelWorldHotspotPointerProbe({
   getCanvas,
   getRendererStatus,
   getHotspotHitTargets,
+  getLocationHitTargets = () => [],
   getHoverSelection,
   getHoveredHotspot,
 }) {
@@ -34,6 +35,9 @@ export function installPixelWorldHotspotPointerProbe({
   window[HOTSPOT_POINTER_PROBE_GLOBAL] = {
     targets() {
       return getHotspotHitTargets();
+    },
+    locationTargets() {
+      return getLocationHitTargets();
     },
     async hover(id = "blocker-highlight") {
       const canvas = getCanvas();
