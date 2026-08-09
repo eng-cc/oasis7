@@ -192,6 +192,18 @@ assert_key_equals "$pixel_world_bridge_output" needs_wasm_target true
 assert_key_equals "$pixel_world_bridge_output" selected_capabilities pixel_world_bridge
 assert_reason_contains "$pixel_world_bridge_output" "pixel_world_bridge:crates/pixel_world_bridge/src/render.rs"
 
+scenario_output="$(plan_for_path crates/oasis7/src/simulator/scenario.rs)"
+assert_key_equals "$scenario_output" scope targeted
+assert_key_equals "$scenario_output" run_scenario_regression true
+assert_key_equals "$scenario_output" selected_capabilities 'launcher_web;oasis7_required;scenario_regression'
+assert_reason_contains "$scenario_output" "scenario_regression:crates/oasis7/src/simulator/scenario.rs"
+
+always_on_output="$(plan_for_path doc/testing/prd.md)"
+assert_key_equals "$always_on_output" scope minimal
+assert_key_equals "$always_on_output" run_required_gate_baseline true
+assert_key_equals "$always_on_output" selected_capabilities required_gate_baseline
+assert_reason_contains "$always_on_output" "required_gate_baseline:always_on"
+
 shared_required_output="$(plan_for_path .github/workflows/rust.yml)"
 assert_key_equals "$shared_required_output" scope full
 assert_key_equals "$shared_required_output" run_oasis7_required_tests true
