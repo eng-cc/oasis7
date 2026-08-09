@@ -6,6 +6,7 @@ function integration() {
     handleMarketQuoteDecision: vi.fn(), handleMarketQuoteDecisionError: vi.fn(() => false),
     handlePowerSaleQuote: vi.fn(), handlePowerSaleQuoteError: vi.fn(() => false),
     handlePowerSurvivalQuote: vi.fn(), handlePowerSurvivalQuoteError: vi.fn(() => false),
+    handleScheduleRecipeQuote: vi.fn(), handleScheduleRecipeQuoteError: vi.fn(() => false), invalidateScheduleRecipeQuote: vi.fn(),
     handleProductValidationQuote: vi.fn(), handleProductValidationQuoteError: vi.fn(() => false),
     handleFragmentRefillPreview: vi.fn(), handleFragmentRefillPreviewError: vi.fn(() => false),
     handleGovernanceVoteQuote: vi.fn(), handleGovernanceVoteQuoteError: vi.fn(() => false),
@@ -53,6 +54,18 @@ describe("viewer quote protocol facade", () => {
 
     expect(facade.handleQuoteViewerMessage({ type: "war_declaration_quote_preflight", quote })).toBe(true);
     expect(warDeclarationQuote.handleWarDeclarationQuote).toHaveBeenCalledWith(quote);
+  });
+
+  it("routes the schedule recipe preflight through the quote boundary", () => {
+    const scheduleRecipeQuote = integration();
+    const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview: integration(), handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
+      marketQuoteDecision: integration(), powerSurvivalQuote: integration(), productValidationQuote: integration(), scheduleRecipeQuote,
+      state: {}, warDeclarationQuote: integration(),
+    });
+    const quote = { factory_id: "factory-0", recipe_id: "assemble_hardware", batches: 2 };
+    expect(facade.handleQuoteViewerMessage({ type: "schedule_recipe_quote_preflight", quote })).toBe(true);
+    expect(scheduleRecipeQuote.handleScheduleRecipeQuote).toHaveBeenCalledWith(quote);
   });
 
   it("routes the authenticated governance vote quote with its player decision fields", () => {

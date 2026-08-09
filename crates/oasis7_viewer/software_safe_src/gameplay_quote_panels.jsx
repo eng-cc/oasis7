@@ -6,6 +6,11 @@ import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
 import { MarketQuoteDecisionPanel } from "./market_quote_decision_card.jsx";
 import { WarDeclarationQuotePanel } from "./war_declaration_quote_card.jsx";
 import { GovernanceVoteQuotePanel } from "./governance_vote_quote_card.jsx";
+import { ScheduleRecipeQuotePanel } from "./schedule_recipe_quote_card.jsx";
+
+export function ScheduleRecipeQuoteGameplayPanel(props) {
+  return <ScheduleRecipeQuotePanel quote={props.core.state.scheduleRecipeQuote} requestState={props.core.state.scheduleRecipeQuoteRequest} requestScheduleRecipeQuote={props.core.requestScheduleRecipeQuote} locale={props.locale} tr={props.tr} />;
+}
 
 export function RefineQuoteGameplayPanel(props) {
   return <RefineQuotePreflightPanel
