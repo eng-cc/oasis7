@@ -164,23 +164,23 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_accepts_bounded_low_resour
 }
 
 #[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_accepts_low_resource_validator_window_at_40_over_budget_samples()
+fn runtime_perf_snapshot_from_execution_bridge_timing_accepts_low_resource_validator_window_at_60_over_budget_samples_and_2999_ms_max()
  {
     let runtime_perf = runtime_perf_for_steady_window(
         RuntimePerfGateTier::LowResourceValidatorV1,
-        40,
+        60,
         1_258,
-        1_797,
-        1_797,
+        1_499,
+        2_999,
     );
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Healthy);
     assert_eq!(runtime_perf.bottleneck, RuntimePerfBottleneck::None);
     assert_eq!(runtime_perf.action_execution.samples_window, 128);
     assert_eq!(runtime_perf.action_execution.p95_ms, 1_258.0);
-    assert_eq!(runtime_perf.action_execution.over_budget_total, 40);
-    assert_eq!(runtime_perf.action_execution.last_ms, 1_797.0);
-    assert_eq!(runtime_perf.action_execution.max_ms, 1_797.0);
+    assert_eq!(runtime_perf.action_execution.over_budget_total, 60);
+    assert_eq!(runtime_perf.action_execution.last_ms, 1_499.0);
+    assert_eq!(runtime_perf.action_execution.max_ms, 2_999.0);
 }
 
 #[test]
@@ -238,14 +238,14 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_p95_a
 }
 
 #[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_over_budget_count_above_boundary()
+fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_over_budget_count_at_61_samples()
  {
     let runtime_perf = runtime_perf_for_steady_window(
         RuntimePerfGateTier::LowResourceValidatorV1,
-        41,
+        61,
         1_380,
         1_452,
-        1_452,
+        2_999,
     );
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
@@ -253,17 +253,17 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_over_
         runtime_perf.bottleneck,
         RuntimePerfBottleneck::ActionExecution
     );
-    assert_eq!(runtime_perf.action_execution.over_budget_total, 41);
+    assert_eq!(runtime_perf.action_execution.over_budget_total, 61);
 }
 
 #[test]
 fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_max_at_boundary() {
     let runtime_perf = runtime_perf_for_steady_window(
         RuntimePerfGateTier::LowResourceValidatorV1,
-        4,
+        60,
         1_380,
         1_452,
-        2_000,
+        3_000,
     );
 
     assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
@@ -272,7 +272,7 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_rejects_low_resource_max_a
         RuntimePerfBottleneck::ActionExecution
     );
     assert_eq!(runtime_perf.action_execution.last_ms, 1_452.0);
-    assert_eq!(runtime_perf.action_execution.max_ms, 2_000.0);
+    assert_eq!(runtime_perf.action_execution.max_ms, 3_000.0);
 }
 
 #[test]
