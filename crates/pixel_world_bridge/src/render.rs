@@ -35,6 +35,18 @@ use agent_position_provenance_cue::{
     PixelWorldDerivedPositionCue, reconcile_derived_position_cues,
 };
 
+#[path = "render_links.rs"]
+mod links;
+use links::{PixelWorldLinkVisual, reconcile_links};
+
+#[path = "render_assignment_cue.rs"]
+mod assignment_cue;
+#[cfg(test)]
+use assignment_cue::AssignmentCuePart;
+use assignment_cue::{
+    PixelWorldAssignmentCueVisual, despawn_assignment_cues, reconcile_assignment_cues,
+};
+
 #[path = "render_selected_agent_cue.rs"]
 mod selected_agent_cue;
 use selected_agent_cue::AGENT_CORE_LAYER_Z_OFFSET;
@@ -174,11 +186,6 @@ pub(crate) struct PixelWorldLocationVisual {
 
 #[derive(Component)]
 pub(crate) struct PixelWorldAgentVisual {
-    id: String,
-}
-
-#[derive(Component)]
-pub(crate) struct PixelWorldLinkVisual {
     id: String,
 }
 
@@ -707,68 +714,6 @@ fn reconcile_agents(
     despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
 }
 
-fn reconcile_links(
-    commands: &mut Commands,
-    runtime: &mut BevyRuntimeState,
-    width: f64,
-    height: f64,
-) {
-    let Some(render_state) = runtime.render_state.as_ref() else {
-        for (_, entity) in runtime.link_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
-        for (_, entity) in runtime.link_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-
-    let mut active_ids = HashSet::new();
-    for link in &render_state.links {
-        let Some((from_x, from_y)) =
-            to_canvas_point(&link.from, world_bounds, width, height, &runtime.camera)
-        else {
-            continue;
-        };
-        let Some((to_x, to_y)) =
-            to_canvas_point(&link.to, world_bounds, width, height, &runtime.camera)
-        else {
-            continue;
-        };
-        active_ids.insert(link.id.clone());
-        let length = ((to_x - from_x).powi(2) + (to_y - from_y).powi(2))
-            .sqrt()
-            .max(4.0);
-        let emphasis = clamp(link.emphasis.unwrap_or(0.7), 0.25, 1.0);
-        let sprite = sprite_for_rect(
-            Color::srgba(0.49, 0.83, 0.98, (0.18 + (emphasis * 0.34)) as f32),
-            length as f32,
-            (1.4 + (emphasis * 2.2)) as f32,
-        );
-        let transform = transform_for_line(from_x, from_y, to_x, to_y, width, height, 0.5);
-
-        if let Some(entity) = runtime.link_entities.get(&link.id).copied() {
-            commands.entity(entity).insert((sprite, transform));
-        } else {
-            let entity = commands
-                .spawn((
-                    sprite,
-                    transform,
-                    PixelWorldLinkVisual {
-                        id: link.id.clone(),
-                    },
-                ))
-                .id();
-            runtime.link_entities.insert(link.id.clone(), entity);
-        }
-    }
-
-    despawn_stale_entities(commands, &mut runtime.link_entities, &active_ids);
-}
-
 fn reconcile_hotspots(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -893,6 +838,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
     derived_position_cues: Query<'w, 's, (Entity, &'static PixelWorldDerivedPositionCue)>,
+    assignment_cues: Query<'w, 's, (Entity, &'static PixelWorldAssignmentCueVisual)>,
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
     receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
@@ -932,6 +878,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_assignment_cues(&mut commands, &queries.assignment_cues);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -1021,6 +968,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_assignment_cues(&mut commands, &queries.assignment_cues);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -1087,6 +1035,13 @@ pub(crate) fn render_scene(
         height,
     );
     reconcile_links(&mut commands, &mut runtime, width, height);
+    reconcile_assignment_cues(
+        &mut commands,
+        &runtime,
+        &queries.assignment_cues,
+        width,
+        height,
+    );
     reconcile_locations(
         &mut commands,
         &mut runtime,

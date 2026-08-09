@@ -9,6 +9,9 @@ mod agent_silhouette_tests;
 #[path = "render_agent_position_provenance_cue_tests.rs"]
 mod agent_position_provenance_cue_tests;
 
+#[path = "render_assignment_cue_tests.rs"]
+mod assignment_cue_tests;
+
 #[path = "render_micro_depot_facilities_tests.rs"]
 mod micro_depot_facilities_tests;
 
