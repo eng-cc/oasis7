@@ -286,6 +286,46 @@ function closeBrowser() {
   );
 }
 
+function processSnapshot() {
+  const result = spawnSync("ps", ["-axo", "pid=,ppid=,pcpu=,command="], { encoding: "utf8" });
+  if (result.status !== 0) return null;
+  return result.stdout.split("\n").map((line) => {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+([\d.]+)\s+(.*)$/);
+    return match ? { pid: Number(match[1]), ppid: Number(match[2]), cpu: Number(match[3]), command: match[4] } : null;
+  }).filter(Boolean);
+}
+
+function establishCpuAttribution(before) {
+  const after = processSnapshot();
+  if (!before || !after) return { unavailableReason: "ps_process_listing_failed" };
+  const known = new Set(before.map((process) => process.pid));
+  const roots = after.filter((process) => !known.has(process.pid)
+    && /chrome|chromium|agent-browser|playwright/i.test(process.command)).map((process) => process.pid);
+  return roots.length ? { roots } : { unavailableReason: "session_process_attribution_unavailable_or_reused" };
+}
+
+function collectProcessTreeCpuSample(attribution) {
+  const processes = processSnapshot();
+  if (!processes) return { attempted: true, processTreeCpuPct: null, unavailableReason: "ps_process_listing_failed" };
+  if (!attribution.roots) return { attempted: true, processTreeCpuPct: null, unavailableReason: attribution.unavailableReason };
+  const included = new Set(attribution.roots);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const process of processes) {
+      if (!included.has(process.pid) && included.has(process.ppid)) {
+        included.add(process.pid);
+        changed = true;
+      }
+    }
+  }
+  return {
+    attempted: true,
+    processTreeCpuPct: processes.filter((process) => included.has(process.pid))
+      .reduce((total, process) => total + process.cpu, 0),
+    processCount: included.size,
+  };
+}
+
 function probeScript({ durationMs, agents, locations }) {
   return `
     (async () => {
@@ -338,18 +378,6 @@ function probeScript({ durationMs, agents, locations }) {
           resources: { energy: { amount: 40 + (index % 60), unit: "%" }, ore: { amount: index % 9, unit: "t" } },
         };
       }
-      const longTasks = [];
-      let observer = null;
-      if ("PerformanceObserver" in window) {
-        try {
-          observer = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-              longTasks.push({ name: entry.name || "longtask", startTime: entry.startTime, duration: entry.duration });
-            }
-          });
-          observer.observe({ type: "longtask", buffered: true });
-        } catch {}
-      }
       api.injectSnapshot({
         time: 128,
         config: { space: { width_cm: 6000000, depth_cm: 4000000, height_cm: 800000 } },
@@ -389,6 +417,18 @@ function probeScript({ durationMs, agents, locations }) {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const readyMs = performance.now() - startedAt;
       const frameIntervals = [];
+      const longTasks = [];
+      let observer = null;
+      if ("PerformanceObserver" in window) {
+        try {
+          observer = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+              longTasks.push({ name: entry.name || "longtask", startTime: entry.startTime, duration: entry.duration });
+            }
+          });
+          observer.observe({ type: "longtask" });
+        } catch {}
+      }
       const heartbeat = document.createElement("div");
       heartbeat.setAttribute("aria-hidden", "true");
       heartbeat.style.cssText = [
@@ -444,6 +484,16 @@ function probeScript({ durationMs, agents, locations }) {
         },
         viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
         browser: { userAgent: navigator.userAgent, renderMeta: window.__OASIS7_VIEWER_RENDER_META || {} },
+        renderer: (() => {
+          const canvas = document.createElement("canvas");
+          const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+          const debug = gl?.getExtension("WEBGL_debug_renderer_info");
+          const renderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
+          return {
+            rendererClass: /swiftshader|software/i.test(String(renderer || "")) ? "software" : (renderer ? "hardware" : "unknown"),
+            renderer,
+          };
+        })(),
         rendererReadyState,
         finalState: api.getState ? api.getState() : null,
       });
@@ -480,14 +530,50 @@ try {
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
   closeBrowser();
+  const cpuProcessBaseline = processSnapshot();
   console.log(`opening viewer performance probe: ${url}`);
   await runAgentBrowserJson(["open", url], { timeout: 120_000 });
   await runAgentBrowserJson(["set", "viewport", String(options.viewport[0]), String(options.viewport[1])]);
+  const cpuAttribution = establishCpuAttribution(cpuProcessBaseline);
 
-  console.log(`sampling frames for ${durationMs}ms with profile=${options.profile}`);
-  const rawProbe = await evalJson(probeScript({ durationMs, agents: options.agents, locations: options.locations }), {
-    timeout: durationMs + 45_000,
-  });
+  async function sampleScenario(name, agents, locations, iteration) {
+    console.log(`sampling ${name}-${iteration} for ${durationMs}ms with profile=${options.profile}`);
+    const cpuSamples = [];
+    const sampleCpu = () => cpuSamples.push(collectProcessTreeCpuSample(cpuAttribution));
+    sampleCpu();
+    const sampler = setInterval(sampleCpu, 500);
+    let rawProbe;
+    try {
+      rawProbe = await evalJson(probeScript({ durationMs, agents, locations }), {
+        timeout: durationMs + 45_000,
+      });
+    } finally {
+      clearInterval(sampler);
+      sampleCpu();
+    }
+    rawProbe.cpuSamples = cpuSamples;
+    rawProbe.scenario = { name, agents, locations, iteration };
+    return rawProbe;
+  }
+
+  const idleRuns = [];
+  for (const iteration of [1, 2]) {
+    idleRuns.push(await sampleScenario("idle", 1, 1, iteration));
+  }
+  const denseRuns = [];
+  for (const iteration of [1, 2]) {
+    denseRuns.push(await sampleScenario("dense", options.agents, options.locations, iteration));
+  }
+  const rawProbe = denseRuns[denseRuns.length - 1];
+  const cpuSamples = [...idleRuns, ...denseRuns].flatMap((run) => run.cpuSamples);
+  const baselineRecord = (run, suffix) => {
+    const measured = summarizeViewerPerformance({ runId: `${runId}-${suffix}`, thresholds, ...run });
+    return {
+      runId: measured.runId,
+      frameP95Ms: measured.metrics.frameP95Ms,
+      processTreeCpuPctAvg: measured.cpu.processTreeCpuPctAvg,
+    };
+  };
   const summary = summarizeViewerPerformance({
     runId,
     url,
@@ -495,6 +581,11 @@ try {
     scenario: { name: "dense", agents: options.agents, locations: options.locations },
     thresholds,
     ...rawProbe,
+    cpuSamples,
+    baselines: {
+      idle: idleRuns.map((run, index) => baselineRecord(run, `idle-${index + 1}`)),
+      dense: denseRuns.map((run, index) => baselineRecord(run, `dense-${index + 1}`)),
+    },
   });
   summary.artifacts = { summaryJson: summaryJsonPath, summaryMarkdown: summaryMdPath, screenshot: screenshotPath };
 

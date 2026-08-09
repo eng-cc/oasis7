@@ -10,6 +10,8 @@ function createInitialCameraState() {
   };
 }
 
+const AMBIENT_FRAME_INTERVAL_MS = 1000 / 12;
+
 function toCanvasPoint(position, worldBounds, width, height, cameraState) {
   if (!position || !worldBounds) {
     return null;
@@ -124,6 +126,17 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
   let suppressNextClick = false;
   let animationFrameId = null;
   let lastAnimationMs = 0;
+  let lastAmbientDrawMs = Number.NEGATIVE_INFINITY;
+  let documentVisible = true;
+  let canvasVisible = true;
+  let reducedMotion = false;
+  let visibilityObserver = null;
+  let removeLifecycleListeners = () => {};
+  let animationGeneration = 0;
+
+  function hasAmbientAnimation() {
+    return (lastRenderState?.locations?.length || 0) > 0 || (lastRenderState?.agents?.length || 0) > 0;
+  }
 
   function emit(event) {
     onEvent?.(event);
@@ -194,7 +207,12 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     rebuildHitRegions(mountedCanvas, lastRenderState);
   }
 
+  function canRender() {
+    return documentVisible && canvasVisible;
+  }
+
   function stopAnimationLoop() {
+    animationGeneration += 1;
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
@@ -203,16 +221,68 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
 
   function scheduleAnimationLoop() {
     stopAnimationLoop();
+    if (reducedMotion || !canRender() || !hasAmbientAnimation()) return;
+    const generation = animationGeneration;
     const animate = (animationMs) => {
-      animationFrameId = requestAnimationFrame(animate);
+      animationFrameId = null;
+      if (generation !== animationGeneration || !canRender() || !hasAmbientAnimation()) return;
       try {
-        renderCurrentFrame(animationMs);
+        if (animationMs - lastAmbientDrawMs >= AMBIENT_FRAME_INTERVAL_MS) {
+          renderCurrentFrame(animationMs);
+          lastAmbientDrawMs = animationMs;
+        }
+        if (generation === animationGeneration && canRender() && hasAmbientAnimation()) animationFrameId = requestAnimationFrame(animate);
       } catch (error) {
         stopAnimationLoop();
         fatal(error);
       }
     };
     animationFrameId = requestAnimationFrame(animate);
+  }
+
+  function syncAfterResume() {
+    if (!canRender() || !mountedCanvas) return;
+    try {
+      renderCurrentFrame();
+      lastAmbientDrawMs = lastAnimationMs;
+      scheduleAnimationLoop();
+    } catch (error) {
+      fatal(error);
+    }
+  }
+
+  function attachLifecycleHooks(canvas) {
+    removeLifecycleListeners();
+    reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    const mediaQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const onMotionChange = (event) => {
+      reducedMotion = event.matches === true;
+      if (reducedMotion) stopAnimationLoop(); else syncAfterResume();
+    };
+    mediaQuery?.addEventListener?.("change", onMotionChange);
+    documentVisible = document.hidden !== true;
+    canvasVisible = true;
+    const onVisibilityChange = () => {
+      documentVisible = document.hidden !== true;
+      if (documentVisible) syncAfterResume(); else stopAnimationLoop();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const disposers = [
+      () => document.removeEventListener("visibilitychange", onVisibilityChange),
+      () => mediaQuery?.removeEventListener?.("change", onMotionChange),
+    ];
+    if (globalThis.IntersectionObserver) {
+      visibilityObserver = new IntersectionObserver((entries) => {
+        canvasVisible = entries.some((entry) => entry.isIntersecting);
+        if (canvasVisible) syncAfterResume(); else stopAnimationLoop();
+      });
+      visibilityObserver.observe(canvas);
+      disposers.push(() => visibilityObserver?.disconnect());
+    }
+    removeLifecycleListeners = () => {
+      for (const dispose of disposers.splice(0)) dispose();
+      visibilityObserver = null;
+    };
   }
 
   function eventPoint(canvas, event) {
@@ -385,6 +455,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       cameraState = createInitialCameraState();
       try {
         attachCanvasEvents(canvas);
+        attachLifecycleHooks(canvas);
         renderCurrentFrame(0);
         scheduleAnimationLoop();
       } catch (error) {
@@ -404,6 +475,8 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       }
       try {
         renderCurrentFrame();
+        lastAmbientDrawMs = lastAnimationMs;
+        scheduleAnimationLoop();
       } catch (error) {
         return { status: "unavailable", fatal: fatal(error) };
       }
@@ -411,6 +484,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     },
     unmount() {
       stopAnimationLoop();
+      removeLifecycleListeners();
       detachCanvasEvents();
       mountedCanvas = null;
       lastRenderState = null;

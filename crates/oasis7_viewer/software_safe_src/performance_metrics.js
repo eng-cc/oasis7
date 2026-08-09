@@ -76,6 +76,41 @@ function sortedNonNegativeNumbers(values) {
   return normalized;
 }
 
+function normalizeRendererEligibility(renderer = {}) {
+  const rendererName = typeof renderer?.renderer === "string" ? renderer.renderer : null;
+  const rendererClass = String(renderer?.rendererClass || "").toLowerCase();
+  const softwareRenderer = rendererClass === "software" || /swiftshader|software renderer/i.test(rendererName || "");
+  const hardwareAccelerated = rendererClass === "hardware" || (Boolean(rendererName) && !softwareRenderer);
+  return {
+    eligible: hardwareAccelerated && !softwareRenderer,
+    hardwareAccelerated,
+    softwareRenderer,
+    renderer: rendererName,
+  };
+}
+
+function summarizeCpu(cpuSamples) {
+  const values = sortedNonNegativeNumbers((cpuSamples || [])
+    .map((sample) => sample?.processTreeCpuPct)
+    .filter((value) => value != null));
+  return {
+    sampleCount: values.length,
+    processTreeCpuPctAvg: round(average(values)),
+    processTreeCpuPctP95: round(percentileSorted(values, 0.95)),
+  };
+}
+
+function normalizeBaselines(baselines = {}) {
+  const normalize = (samples) => (Array.isArray(samples) ? samples.map((sample) => ({
+    runId: sample?.runId || null,
+    frameP95Ms: round(asNumber(sample?.frameP95Ms)),
+    processTreeCpuPctAvg: sample?.processTreeCpuPctAvg == null
+      ? null
+      : round(asNumber(sample.processTreeCpuPctAvg)),
+  })) : []);
+  return { idle: normalize(baselines.idle), dense: normalize(baselines.dense) };
+}
+
 function normalizeLongTasks(longTasks) {
   const items = [];
   let totalMs = 0;
@@ -169,6 +204,9 @@ export function summarizeViewerPerformance({
   notes = [],
   finalState = null,
   browserConsole = [],
+  cpuSamples = [],
+  renderer = {},
+  baselines = {},
 } = {}) {
   const normalizedThresholds = normalizeViewerPerfThresholds(thresholds);
   const frames = sortedNonNegativeNumbers(frameIntervals);
@@ -229,7 +267,7 @@ export function summarizeViewerPerformance({
   };
 
   const result = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: runId || null,
     profile,
     scenario,
@@ -251,6 +289,14 @@ export function summarizeViewerPerformance({
     notes: Array.isArray(notes) ? notes : [],
     finalState,
     browserConsole,
+    cpu: summarizeCpu(cpuSamples),
+    cpuEvidence: {
+      attempted: cpuSamples.some((sample) => sample?.attempted === true),
+      observationCount: cpuSamples.length,
+      unavailableReason: cpuSamples.find((sample) => sample?.unavailableReason)?.unavailableReason || null,
+    },
+    rendererEligibility: normalizeRendererEligibility(renderer),
+    baselines: normalizeBaselines(baselines),
     gates: [],
   };
   result.gates = evaluateViewerPerformance(result).gates;
@@ -304,6 +350,8 @@ export function buildViewerPerformanceMarkdown(summary) {
     `- DOMContentLoaded(ms): \`${metrics.domContentLoadedMs}\``,
     `- Load event(ms): \`${metrics.loadEventMs}\``,
     `- Interaction p95(ms): \`${metrics.interactionP95Ms ?? "-"}\``,
+    `- Process-tree CPU(%): avg \`${summary.cpu?.processTreeCpuPctAvg ?? "-"}\`, p95 \`${summary.cpu?.processTreeCpuPctP95 ?? "-"}\`, samples \`${summary.cpu?.sampleCount ?? 0}\``,
+    `- Renderer eligibility: \`${summary.rendererEligibility?.eligible === true ? "eligible" : "ineligible"}\` (\`${summary.rendererEligibility?.renderer || "unknown"}\`)`,
     `- DOM nodes: \`${metrics.domNodeCount}\`, interactive elements: \`${metrics.interactiveElementCount}\``,
     `- Pixel-world runtime: \`${finalState.pixelWorldRuntimeStatus || "-"}\` / \`${finalState.pixelWorldRuntimeSource || "-"}\``,
     `- Pixel-world renderer DOM: rendered canvas \`${metrics.renderedCanvasCount}\`, fallback shell \`${metrics.fallbackShellCount}\``,

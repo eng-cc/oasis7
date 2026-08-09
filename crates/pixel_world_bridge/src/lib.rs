@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::mem;
+use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
+use bevy::winit::{UpdateMode, WinitSettings};
 use js_sys::{Function, Object, Reflect};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -265,6 +267,7 @@ struct BridgeSharedState {
     canvas_selector: Option<String>,
     render_state: Option<RenderState>,
     render_version: u64,
+    animation_version: u64,
     input_events: Vec<InputEvent>,
     on_event: Option<Function>,
     on_fatal: Option<Function>,
@@ -276,7 +279,11 @@ struct BevyRuntimeState {
     mounted: bool,
     render_state: Option<RenderState>,
     render_version: u64,
+    animation_version: u64,
     render_content_signature: u64,
+    needs_reconcile: bool,
+    animation_dirty: bool,
+    reactive_scheduling: bool,
     camera: CameraState,
     camera_fit_version: u64,
     last_canvas_size: Option<(u32, u32)>,
@@ -552,6 +559,10 @@ fn shared_snapshot(current_render_version: u64) -> SharedSnapshot {
     })
 }
 
+fn shared_animation_version() -> u64 {
+    BRIDGE_SHARED.with(|shared| shared.borrow().animation_version)
+}
+
 fn hash_f64(hasher: &mut DefaultHasher, value: f64) {
     value.to_bits().hash(hasher);
 }
@@ -669,7 +680,7 @@ fn apply_external_render_snapshot(
     let next_focus_target = focus_target_from_render_state(render_state.as_ref());
     let next_signature = render_content_signature(render_state.as_ref());
     let content_changed = next_signature != runtime.render_content_signature;
-    if next_signature != runtime.render_content_signature {
+    if content_changed {
         runtime.camera_fit_version = 0;
         runtime.last_canvas_size = None;
         runtime.camera_user_override = false;
@@ -687,7 +698,8 @@ fn apply_external_render_snapshot(
     }
     runtime.render_version = render_version;
     runtime.render_state = render_state;
-    runtime.hit_regions_dirty = true;
+    runtime.needs_reconcile = content_changed || next_focus_target != previous_focus_target;
+    runtime.hit_regions_dirty |= runtime.needs_reconcile;
 }
 
 fn push_input_event(event: InputEvent) {
@@ -711,6 +723,12 @@ fn boot_bevy_app(canvas_selector: String) {
         }),
         ..default()
     }));
+    app.insert_resource(WinitSettings {
+        // Pointer/window events wake immediately; the timeout is only the
+        // low-power ambient animation heartbeat and stays below the 12 Hz cap.
+        focused_mode: UpdateMode::reactive(Duration::from_millis(500)),
+        unfocused_mode: UpdateMode::reactive_low_power(Duration::from_millis(500)),
+    });
     app.add_systems(Startup, setup_scene);
     app.add_systems(Update, (sync_external_state, render::render_scene));
     app.run();
@@ -843,6 +861,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
 }
 
 fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
+    runtime.reactive_scheduling = true;
     let snapshot = shared_snapshot(runtime.render_version);
     let SharedSnapshot {
         mounted,
@@ -851,8 +870,15 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
     } = snapshot;
     apply_external_render_snapshot(&mut runtime, mounted, render);
 
+    let has_input = !input_events.is_empty();
     for event in input_events {
         process_input_event(&mut runtime, event);
+    }
+    runtime.needs_reconcile |= has_input;
+    let animation_version = shared_animation_version();
+    runtime.animation_dirty |= animation_version != runtime.animation_version;
+    if runtime.animation_dirty {
+        runtime.animation_version = animation_version;
     }
 }
 
@@ -940,6 +966,10 @@ impl PixelWorldBridge {
     #[wasm_bindgen]
     pub fn tick(&mut self, _animation_ms: f64) -> JsValue {
         if self.mounted {
+            BRIDGE_SHARED.with(|shared| {
+                let mut shared = shared.borrow_mut();
+                shared.animation_version = shared.animation_version.wrapping_add(1);
+            });
             status_value("ready")
         } else {
             status_value("detached")
