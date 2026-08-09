@@ -34,7 +34,7 @@ impl RuntimePerfGateTier {
     fn steady_window_limits(self) -> (f64, u64, f64) {
         match self {
             Self::Strict => (1_000.0, 1, 1_250.0),
-            Self::LowResourceValidatorV1 => (1_500.0, 33, 2_000.0),
+            Self::LowResourceValidatorV1 => (1_500.0, 40, 2_000.0),
         }
     }
 }
