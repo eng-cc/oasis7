@@ -108,6 +108,15 @@ def require_regular_file(path: Path, label: str) -> None:
         fail(f"{label} {path} must be a regular file and not a symlink")
 
 
+def require_regular_directory(path: Path, label: str) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except OSError as error:
+        fail(f"cannot stat {label} {path}: {error}")
+    if not stat.S_ISDIR(mode):
+        fail(f"{label} {path} must be a directory and not a symlink")
+
+
 def load_renderer() -> Any:
     path = Path(__file__).with_name("render-codex-agent-config.py")
     spec = importlib.util.spec_from_file_location("oasis7_codex_agent_renderer", path)
@@ -324,7 +333,9 @@ def main() -> None:
     agents = config.get("agents")
     if not isinstance(agents, dict) or set(agents) != EXPECTED_ROLES:
         fail(".codex/config.toml must register exactly the eleven specialist roles and not tpm")
-    adapter_files = {path.stem for path in (root / ".codex/agents").glob("*.toml")}
+    adapters_dir = root / ".codex/agents"
+    require_regular_directory(adapters_dir, "adapter directory")
+    adapter_files = {path.stem for path in adapters_dir.glob("*.toml")}
     if adapter_files != EXPECTED_ROLES:
         fail(".codex/agents must contain exactly one adapter for each registered specialist role")
 
