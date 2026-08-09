@@ -7,6 +7,7 @@ export function createViewerQuoteProtocolFacade({
   powerSaleQuote,
   powerSurvivalQuote,
   productValidationQuote,
+  scheduleRecipeQuote,
   state,
   warDeclarationQuote,
 }) {
@@ -15,6 +16,7 @@ export function createViewerQuoteProtocolFacade({
       || productValidationQuote.handleProductValidationQuoteError(error)
       || powerSaleQuote?.handlePowerSaleQuoteError(error)
       || powerSurvivalQuote.handlePowerSurvivalQuoteError(error)
+      || scheduleRecipeQuote?.handleScheduleRecipeQuoteError(error)
       || fragmentRefillPreview.handleFragmentRefillPreviewError(error)
       || governanceVoteQuote?.handleGovernanceVoteQuoteError(error)
       || warDeclarationQuote.handleWarDeclarationQuoteError(error)
@@ -28,6 +30,10 @@ export function createViewerQuoteProtocolFacade({
         return true;
       case "refine_quote_preflight":
         handleRefineQuotePreflight(message.quote);
+        return true;
+      case "schedule_recipe_quote_preflight":
+        if (!scheduleRecipeQuote) return false;
+        scheduleRecipeQuote.handleScheduleRecipeQuote(message.quote);
         return true;
       case "product_validation_quote_preflight":
         productValidationQuote.handleProductValidationQuote(message.quote);
@@ -57,6 +63,7 @@ export function createViewerQuoteProtocolFacade({
   function invalidateSnapshotBoundQuotes() {
     powerSaleQuote?.invalidatePowerSaleQuote();
     powerSurvivalQuote.invalidatePowerSurvivalQuote();
+    scheduleRecipeQuote?.invalidateScheduleRecipeQuote();
     fragmentRefillPreview.invalidateFragmentRefillPreview();
     governanceVoteQuote?.invalidateGovernanceVoteQuote();
     warDeclarationQuote.invalidateWarDeclarationQuoteForAuthoritativeSnapshot();
