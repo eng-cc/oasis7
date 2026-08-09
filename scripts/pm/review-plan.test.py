@@ -11,7 +11,6 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("review-plan.py")
 TASK = "task_" + "1" * 32
-HEAD = "a" * 40
 EVIDENCE = "b" * 64
 COMPARISON_REF = "refs/remotes/origin/main"
 
@@ -26,6 +25,7 @@ class ReviewPlanTests(unittest.TestCase):
         (self.root / "README").write_text("fixture\n", encoding="utf-8")
         self.git("add", "README")
         self.git("commit", "-m", "base")
+        self.head = self.git("rev-parse", "HEAD")
         self.comparison_ref = COMPARISON_REF
         self.git("update-ref", self.comparison_ref, "HEAD")
         self.comparison_oid = self.git("rev-parse", self.comparison_ref)
@@ -43,7 +43,7 @@ class ReviewPlanTests(unittest.TestCase):
     def run_plan(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
              [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
-              "--head", HEAD, "--evidence-digest", EVIDENCE,
+              "--head", self.head, "--evidence-digest", EVIDENCE,
              "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
              "--comparison-oid", self.comparison_oid, "--out", str(self.out), *extra],
             text=True,
@@ -60,7 +60,7 @@ class ReviewPlanTests(unittest.TestCase):
 
     def receipt_plan(self, receipt: Path, out: Path) -> dict[str, object]:
         result = subprocess.run(
-            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", HEAD,
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", self.head,
              "--ci-ready-receipt", str(receipt), "--change-class", "workflow-doc",
              "--comparison-ref", self.comparison_ref, "--comparison-oid", self.comparison_oid,
              "--out", str(out)], text=True, capture_output=True,
@@ -71,7 +71,7 @@ class ReviewPlanTests(unittest.TestCase):
     def test_ci_receipt_refresh_reuses_review_epoch_but_authority_drift_does_not(self) -> None:
         authority = {"receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",
                      "repository": "example/repo", "task_uid": TASK, "task_issue_number": 1,
-                     "pr_number": 2, "base_oid": self.comparison_oid, "head_oid": HEAD,
+                     "pr_number": 2, "base_oid": self.comparison_oid, "head_oid": self.head,
                      "check_name": "required-gate", "check_app_id": 42, "check_run_id": 7,
                      "planner_digest": "c" * 64, "planner_config_sha256": "sha256:" + "d" * 64,
                      "run_rust_baseline": True, "conclusion": "success"}
@@ -113,7 +113,7 @@ class ReviewPlanTests(unittest.TestCase):
         alternate_out = self.root / "alternate-plan.json"
         result = subprocess.run(
              [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
-              "--head", HEAD, "--evidence-digest", EVIDENCE,
+              "--head", self.head, "--evidence-digest", EVIDENCE,
              "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
              "--comparison-oid", self.comparison_oid, "--out", str(alternate_out)],
             text=True,
@@ -151,8 +151,10 @@ class ReviewPlanTests(unittest.TestCase):
 
     def test_head_evidence_or_role_drift_never_reuses_a_previous_plan(self) -> None:
         first = self.plan()
+        self.git("commit", "--allow-empty", "-m", "head drift")
+        drifted_head = self.git("rev-parse", "HEAD")
         variations = (
-            ("--head", "c" * 40),
+            ("--head", drifted_head),
             ("--evidence-digest", "d" * 64),
             ("--change-class", "domain-semantic-doc", "--domain-role", "runtime_engineer"),
         )
@@ -162,7 +164,7 @@ class ReviewPlanTests(unittest.TestCase):
                 args = list(variation) + ["--out", str(drifted_out)]
                 result = subprocess.run(
                     [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
-                     "--head", HEAD, "--evidence-digest", EVIDENCE,
+                     "--head", self.head, "--evidence-digest", EVIDENCE,
                      "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
                      "--comparison-oid", self.comparison_oid, *args],
                     text=True,
@@ -182,10 +184,27 @@ class ReviewPlanTests(unittest.TestCase):
         self.git("add", "comparison-drift")
         self.git("commit", "-m", "comparison drift")
         self.comparison_oid = self.git("rev-parse", "HEAD")
+        self.head = self.comparison_oid
         self.git("update-ref", self.comparison_ref, self.comparison_oid)
         drifted = self.plan("--out", str(self.root / "comparison-oid-drift.json"))
         self.assertFalse(drifted["reused"])
         self.assertNotEqual(first["epoch"], drifted["epoch"])
+
+    def test_divergent_comparison_fails_before_plan_creation(self) -> None:
+        self.git("checkout", "-b", "topic")
+        (self.root / "README").write_text("topic\n", encoding="utf-8")
+        self.git("commit", "-am", "topic")
+        self.head = self.git("rev-parse", "HEAD")
+        self.git("checkout", "main")
+        (self.root / "README").write_text("advanced base\n", encoding="utf-8")
+        self.git("commit", "-am", "advance base")
+        self.git("update-ref", self.comparison_ref, "HEAD")
+        self.comparison_oid = self.git("rev-parse", self.comparison_ref)
+
+        result = self.run_plan(ok=False)
+
+        self.assertIn("ancestor", result.stderr.lower())
+        self.assertFalse(self.out.exists())
 
     def test_rejects_a_caller_supplied_oid_that_does_not_match_the_real_ref(self) -> None:
         result = self.run_plan("--comparison-oid", "c" * 40, ok=False)

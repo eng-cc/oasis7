@@ -98,6 +98,24 @@ def resolve_comparison_ref(root: Path, comparison_ref: str, supplied_oid: str | 
     return resolved
 
 
+def require_comparison_ancestor(root: Path, comparison_oid: str, frozen_head: str) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", comparison_oid, frozen_head],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        return
+    if result.returncode == 1:
+        raise ContractError(
+            "comparison OID is not an ancestor of frozen head: "
+            f"comparison={comparison_oid}, head={frozen_head}; "
+            "rebase the task branch onto the canonical comparison ref, refresh exact-head CI, and create a new review epoch"
+        )
+    detail = result.stderr.strip() or result.stdout.strip() or "git merge-base failed"
+    raise ContractError(f"cannot validate comparison ancestry: {detail}")
+
+
 def selector_roles(args: argparse.Namespace) -> list[str]:
     selector = Path(__file__).with_name("review-role-selector.py")
     command = [sys.executable, str(selector), "--change-class", args.change_class, "--json"]
@@ -286,6 +304,7 @@ def main() -> int:
             raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
         root = Path(args.root).resolve()
         comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
+        require_comparison_ancestor(root, comparison_oid, args.head)
         roles = selector_roles(args)
         slices = expected_slices(args.task_uid, args.head, evidence_digest, args.comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, evidence_digest, slices)
