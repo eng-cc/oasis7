@@ -229,12 +229,72 @@ python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
   --to-status committed \
   --json > "$TMPDIR/move-committed.json"
 
+MAPPING_BEFORE_MISSING_WORKFLOW_REPORT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+for phase in start close; do
+  set +e
+  python3 "$TMPDIR/github-project-task.py" workflow-report "$TMPDIR" \
+    --repo eng-cc/oasis7 \
+    --role tpm \
+    --phase "$phase" \
+    --json >"$TMPDIR/workflow-report-$phase-without-task.json" 2>"$TMPDIR/workflow-report-$phase-without-task.err"
+  MISSING_TASK_WORKFLOW_REPORT_STATUS=$?
+  set -e
+  if [[ "$MISSING_TASK_WORKFLOW_REPORT_STATUS" == "0" ]]; then
+    echo "github-project-task.test: workflow-report $phase must reject missing --task-uid" >&2
+    exit 1
+  fi
+  if ! grep -Fq -- "--task-uid is required" "$TMPDIR/workflow-report-$phase-without-task.err"; then
+    echo "github-project-task.test: workflow-report $phase must explain the required task identity" >&2
+    cat "$TMPDIR/workflow-report-$phase-without-task.err" >&2
+    exit 1
+  fi
+done
+MAPPING_AFTER_MISSING_WORKFLOW_REPORT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+if [[ "$MAPPING_BEFORE_MISSING_WORKFLOW_REPORT" != "$MAPPING_AFTER_MISSING_WORKFLOW_REPORT" ]]; then
+  echo "github-project-task.test: missing task identity must fail before workflow-report mutates the task mapping" >&2
+  exit 1
+fi
+python3 "$TMPDIR/github-project-task.py" workflow-report "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --role tpm \
+  --phase review \
+  --json > "$TMPDIR/workflow-report-review-without-task.json"
+python3 - "$TMPDIR/workflow-report-review-without-task.json" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+if payload != {"phase": "review", "role": "tpm", "status": "ok", "task_source": "github_project"}:
+    raise SystemExit("workflow-report review without --task-uid must remain supported")
+PY
+
 python3 "$TMPDIR/github-project-task.py" workflow-report "$TMPDIR" \
   --repo eng-cc/oasis7 \
   --task-uid "$TASK_UID" \
   --role tpm \
   --phase start \
   --json > "$TMPDIR/start.json"
+
+python3 "$TMPDIR/github-project-task.py" workflow-report "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --task-uid "$TASK_UID" \
+  --role tpm \
+  --phase close \
+  --json > "$TMPDIR/report-close.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$TMPDIR/report-close.json" <<'PY'
+import json
+import sys
+
+mapping = json.load(open(sys.argv[1], encoding="utf-8"))
+record = mapping["tasks"][sys.argv[2]]
+payload = json.load(open(sys.argv[3], encoding="utf-8"))
+if not payload.get("last_workflow_report_close_at"):
+    raise SystemExit("workflow-report close must return last_workflow_report_close_at")
+if record.get("last_workflow_report_close_at") != payload["last_workflow_report_close_at"]:
+    raise SystemExit("workflow-report close must persist its separate report timestamp")
+if record.get("last_closed_at") not in {None, ""}:
+    raise SystemExit("workflow-report close must not write last_closed_at; task closeout owns it")
+PY
 
 python3 "$TMPDIR/github-project-task.py" append-execution-log "$TMPDIR" \
   --repo eng-cc/oasis7 \

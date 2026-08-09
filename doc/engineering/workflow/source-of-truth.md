@@ -291,6 +291,13 @@ per-PR truth artifact.
   cockpit views, and task-to-issue/project-item mapping.
 - `Task UID` remains the stable internal identity. GitHub issue numbers and
   Project item IDs are external object handles, not replacements for `task_uid`.
+- `workflow-report --phase start` and `workflow-report --phase close` require
+  the selected `--task-uid` before any mapping or GitHub mutation. UID-less
+  `workflow-report --phase review` remains the repository-wide review report.
+  A workflow-report `close` records report/evidence completion only through
+  `last_workflow_report_close_at`; it never writes `last_closed_at`. That field
+  is reserved for a real `task-closeout` lifecycle transition. Historical cache
+  values are audit artifacts and are not backfilled or reinterpreted.
 - `.pm/github-project-sync/tasks.json`, when generated locally, is a
   deterministic mapping cache from `task_uid` to issue/project item handles. It
   is ignored local runtime state, never a frozen implementation-head artifact.
@@ -367,6 +374,8 @@ Deterministic script contract:
   PR, or a classified `non_pr_task`, plus verified `task_complete` evidence. It
   persists the trusted receipt and advances only to PM `done` / `task_done`;
   the issue stays open and processing follows the [terminal runbook](#terminal-runbook).
+  It is the lifecycle writer for `last_closed_at`; workflow-report close is not
+  a terminal closeout.
 
 `post-merge-finalize.py` is the only `post_merge_done` and issue-close writer.
 - `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
