@@ -90,7 +90,7 @@ run_oasis7_required_tier_tests() {
 }
 
 run_scenario_regression_tests() {
-  run_cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_ -- --nocapture
+  run_cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_
 }
 
 run_oasis7_required_tier_clippy() {
