@@ -277,6 +277,19 @@ fn assert_content_render_update_clears_manual_camera_override() {
     assert_eq!(runtime.pending_focus_target, None);
 }
 
+#[test]
+fn agent_label_changes_the_render_content_signature() {
+    let original = sample_render_state_for_camera("agent");
+    let mut renamed = original.clone();
+    renamed.agents[0].label = "Renamed Survey Agent".to_string();
+
+    assert_ne!(
+        render_content_signature(Some(&original)),
+        render_content_signature(Some(&renamed)),
+        "a player-visible Agent label must trigger reconciliation"
+    );
+}
+
 fn assert_selection_change_sets_pending_focus_target() {
     let mut runtime = BevyRuntimeState {
         mounted: true,

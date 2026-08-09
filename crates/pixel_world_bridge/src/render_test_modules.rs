@@ -3,6 +3,9 @@ use super::*;
 #[path = "render_agent_core_tests.rs"]
 mod agent_core_tests;
 
+#[path = "render_agent_labels_tests.rs"]
+mod agent_labels_tests;
+
 #[path = "render_agent_silhouette_tests.rs"]
 mod agent_silhouette_tests;
 

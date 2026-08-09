@@ -629,6 +629,7 @@ fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
     render_state.agents.len().hash(&mut hasher);
     for agent in &render_state.agents {
         agent.id.hash(&mut hasher);
+        agent.label.hash(&mut hasher);
         hash_optional_position(&mut hasher, agent.pos.as_ref());
         hash_f64(&mut hasher, agent.size_hint_px.unwrap_or(0.0));
     }
