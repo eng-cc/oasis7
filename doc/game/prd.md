@@ -1,6 +1,6 @@
 # game PRD
 
-> 专业域 authority：本文件是 `game` 的活跃玩法基线与路由入口，拥有 PRD-ID、专题范围、活跃阅读路径和状态指针；专题在其声明范围内拥有详细玩法合同与验收。产品承诺仍由四模块 `doc/product/` 层拥有，不因本文件或专题而形成并列产品入口。`micro_depot` 等设施规则仍由 `game` 管理；跨域产品承诺由 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 汇总。
+> 专业域 authority：本文件是 `game` 的活跃玩法基线与路由入口，拥有 PRD-ID、专题范围、活跃阅读路径和状态指针；专题在其声明范围内拥有详细玩法合同与验收。产品承诺仍由四模块 `doc/product/` 层拥有，不因本文件或专题而形成并列产品入口。`micro_depot` 等设施规则仍由 `game` 管理；跨域产品承诺由世界规则与核心玩法模块的 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 专题汇总，确定性执行、最终性与恢复底座继续下钻到 [`大世界基础设施`](../product/world-infrastructure/prd.md)。
 
 审计轮次: 11
 
