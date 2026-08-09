@@ -776,6 +776,5 @@ Future unattended automation does not change the current human-operated path:
 
 - it must preserve canonical task/worktree/head/PR identity and lifecycle order;
 - it must derive remote facts and mutation success from trusted readback;
-- it must not manufacture professional judgment or accept caller-authored,
-  self-signed, or fixture evidence as runtime authority; and
+- it must not manufacture professional judgment or accept caller-authored, self-signed, or fixture evidence as runtime authority; and
 - missing required unattended machinery is `capability_blocked`.
