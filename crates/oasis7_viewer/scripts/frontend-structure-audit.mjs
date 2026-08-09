@@ -37,10 +37,10 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next main.jsx UI behavior change must extract another named composition boundary or display-model helper",
   },
   "crates/oasis7_viewer/software_safe_src/main.test.jsx": {
-    maxLines: 3363,
+    maxLines: 3382,
     owner: "viewer_engineer",
-    reason: "task_4b9393c487e244e4bf5f2811eb5ef95c adds focused Next Step semantic assertions to the existing Viewer baseline; moving the broad fixture would exceed this visual-polish task",
-    nextTrigger: "the next broad UI test addition must extract the chat-history fixture/query helpers or place the new behavior in a narrower adjacent test file",
+    reason: "task_f3ca874e83d04a02a805407aa3903a9c adds mandatory two-beat Viewer assertions to the existing baseline; moving the shared fixture would broaden this bounded contract fix",
+    nextTrigger: "the next broad UI test addition must extract shared fixture/query helpers or place the new behavior in a narrower adjacent test file",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
     maxLines: 1680,

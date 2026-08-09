@@ -1078,8 +1078,8 @@ export function createViewerFeedbackModule({
     ).map((recommendation) => ({
       actionId: recommendation.action_id || recommendation.actionId || null,
       routeLabel: recommendation.route_label || recommendation.routeLabel || null,
-      immediateGain: recommendation.immediate_gain || recommendation.immediateGain || null,
-      futureBeatChanged: recommendation.future_beat_changed || recommendation.futureBeatChanged || null,
+      immediateGain: recommendation.immediate_gain || recommendation.immediateGain || null, futureBeatChanged: recommendation.future_beat_changed || recommendation.futureBeatChanged || null,
+      futureBeats: Array.isArray(recommendation.future_beats) ? recommendation.future_beats : Array.isArray(recommendation.futureBeats) ? recommendation.futureBeats : [],
       riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
       nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
     }));

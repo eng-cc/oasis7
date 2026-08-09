@@ -63,6 +63,39 @@ describe("viewer feedback module", () => {
     );
   });
 
+  it("normalizes both persisted future beats from snake_case and camelCase branch recommendations", () => {
+    const summaryFor = (playerGameplay) => createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: playerGameplay,
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary();
+
+    const snakeCase = summaryFor({
+      branch_recommendations: [{
+        action_id: "build_alloy_factory",
+        future_beats: ["Open the extra production lane", "Resolve its new supply pressure"],
+      }],
+    });
+    const camelCase = summaryFor({
+      branchRecommendations: [{
+        actionId: "build_alloy_factory",
+        futureBeats: ["Open the extra production lane", "Resolve its new supply pressure"],
+      }],
+    });
+
+    expect(snakeCase.branchRecommendations[0].futureBeats).toEqual([
+      "Open the extra production lane",
+      "Resolve its new supply pressure",
+    ]);
+    expect(camelCase.branchRecommendations[0].futureBeats).toEqual([
+      "Open the extra production lane",
+      "Resolve its new supply pressure",
+    ]);
+  });
+
   it("retains every published fallback tradeoff instead of collapsing the summary to one CTA", () => {
     const state = {
       lastGameplayActionFeedback: null,
