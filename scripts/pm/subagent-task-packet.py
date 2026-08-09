@@ -56,7 +56,8 @@ def load_task(root: Path, task_uid: str) -> dict[str, object]:
     return task
 
 
-def current_facts(root: Path, task: dict[str, object], base: str) -> dict[str, str]:
+def current_facts(root: Path, task: dict[str, object], base: str,
+                  frozen_base_oid: str | None = None) -> dict[str, object]:
     canonical = Path(str(task.get("canonical_worktree") or task.get("worktree_hint") or "")).resolve()
     if canonical != root:
         fail(f"wrong worktree: mapping requires {canonical}, current worktree is {root}")
@@ -66,12 +67,27 @@ def current_facts(root: Path, task: dict[str, object], base: str) -> dict[str, s
         fail(f"wrong branch: mapping requires {expected_branch}, current branch is {branch or '(detached)'}")
     if not base:
         fail("base ref is required")
+    head = git(root, "rev-parse", "HEAD")
+    if frozen_base_oid:
+        resolved = git(root, "rev-parse", "--verify", f"{frozen_base_oid}^{{commit}}")
+        if resolved != frozen_base_oid:
+            fail(f"frozen base OID does not resolve exactly: {frozen_base_oid}")
+        ancestor = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", resolved, head],
+            text=True, capture_output=True,
+        )
+        if ancestor.returncode != 0:
+            fail(f"frozen base OID is not an ancestor of current head: base={resolved}, head={head}")
+        base_sha = resolved
+    else:
+        base_sha = git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
     return {
         "worktree": str(root),
         "branch": branch,
         "base_ref": base,
-        "base_sha": git(root, "rev-parse", "--verify", f"{base}^{{commit}}"),
-        "head": git(root, "rev-parse", "HEAD"),
+        "base_sha": base_sha,
+        "base_binding": "immutable_oid" if frozen_base_oid else "live_ref",
+        "head": head,
     }
 
 
@@ -126,10 +142,14 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
     assert isinstance(identity, dict) and isinstance(slice_contract, dict) and isinstance(context, dict)
     task_uid = bounded(str(identity.get("task_uid") or ""), "identity.task_uid")
     task = load_task(root, task_uid)
-    facts = current_facts(root, task, str(identity.get("base_ref") or ""))
+    base_binding = str(identity.get("base_binding") or "live_ref")
+    frozen_base_oid = str(identity.get("base_sha")) if base_binding == "immutable_oid" else None
+    facts = current_facts(root, task, str(identity.get("base_ref") or ""), frozen_base_oid)
     for field in ("worktree", "branch", "base_sha", "head"):
         if identity.get(field) != facts[field]:
             fail(f"stale or mismatched packet {field}: expected {facts[field]}, got {identity.get(field)}")
+    if base_binding != facts["base_binding"]:
+        fail(f"stale or mismatched packet base_binding: expected {facts['base_binding']}, got {base_binding}")
     if identity.get("issue_url") != task.get("issue_url"):
         fail("packet issue URL does not match task mapping")
     for field in ("repository", "project_item_id", "task_status"):
@@ -260,9 +280,10 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         fail("review plan comparison ref does not match packet base ref")
     if plan.get("comparison_oid") != identity.get("base_sha"):
         fail("review plan comparison OID does not match packet base SHA")
-    resolved_comparison = git(root, "rev-parse", "--verify", f"{plan.get('comparison_ref')}^{{commit}}")
-    if resolved_comparison != plan.get("comparison_oid"):
-        fail("review plan comparison ref moved from its recorded OID")
+    if str(identity.get("base_binding") or "live_ref") != "immutable_oid":
+        resolved_comparison = git(root, "rev-parse", "--verify", f"{plan.get('comparison_ref')}^{{commit}}")
+        if resolved_comparison != plan.get("comparison_oid"):
+            fail("review plan comparison ref moved from its recorded OID")
 
     expected_matches = [item for item in expected if isinstance(item, dict)
                         and item.get("role") == packet_role and item.get("slice_id") == packet_slice]
@@ -316,6 +337,7 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--actual-runtime-evidence-reason", required=True)
     create.add_argument("--role-activation", choices=sorted(ROLE_ACTIVATIONS), required=True)
     create.add_argument("--base", required=True)
+    create.add_argument("--frozen-base-oid")
     create.add_argument("--user-intent", required=True)
     create.add_argument("--work-item", required=True)
     create.add_argument("--non-goals", required=True)
@@ -361,7 +383,7 @@ def main() -> int:
         return 0
 
     task = load_task(root, args.task_uid)
-    facts = current_facts(root, task, args.base)
+    facts = current_facts(root, task, args.base, args.frozen_base_oid)
     governance = [repo_reference(root, item, "governance-ref") for item in args.governance_ref]
     scoped = [repo_reference(root, item, "scoped-ref") for item in args.scoped_ref]
     packet: dict[str, object] = {

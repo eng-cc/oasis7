@@ -68,6 +68,17 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)
 
+    def write_receipt(self, path: Path, *, base_oid: str, head_oid: str) -> None:
+        path.write_text(json.dumps({
+            "receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",
+            "repository": "example/repo", "task_uid": TASK, "task_issue_number": 1,
+            "pr_number": 2, "base_oid": base_oid, "head_oid": head_oid,
+            "check_name": "required-gate", "check_app_id": 42, "check_run_id": 7,
+            "planner_digest": "c" * 64, "planner_config_sha256": "sha256:" + "d" * 64,
+            "run_rust_baseline": True, "conclusion": "success",
+            "observed_at": "2026-01-01T00:00:00Z",
+        }))
+
     def test_ci_receipt_refresh_reuses_review_epoch_but_authority_drift_does_not(self) -> None:
         authority = {"receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",
                      "repository": "example/repo", "task_uid": TASK, "task_issue_number": 1,
@@ -204,6 +215,34 @@ class ReviewPlanTests(unittest.TestCase):
         result = self.run_plan(ok=False)
 
         self.assertIn("ancestor", result.stderr.lower())
+        self.assertFalse(self.out.exists())
+
+    def test_ci_receipt_keeps_immutable_base_after_symbolic_ref_moves(self) -> None:
+        receipt_base = self.comparison_oid
+        self.git("checkout", "-b", "topic")
+        self.git("commit", "--allow-empty", "-m", "implementation")
+        self.head = self.git("rev-parse", "HEAD")
+        moved_ref = self.git("commit-tree", "HEAD^^{tree}", "-p", receipt_base, "-m", "moved base")
+        self.git("update-ref", self.comparison_ref, moved_ref)
+        receipt = self.root / "immutable-base-receipt.json"
+        self.write_receipt(receipt, base_oid=receipt_base, head_oid=self.head)
+
+        plan = self.receipt_plan(receipt, self.root / "immutable-base-plan.json")
+
+        self.assertEqual(receipt_base, plan["comparison_oid"])
+        self.assertEqual(self.head, plan["frozen_head"])
+
+    def test_ci_receipt_head_must_match_frozen_head(self) -> None:
+        receipt = self.root / "wrong-head-receipt.json"
+        self.write_receipt(receipt, base_oid=self.comparison_oid, head_oid="c" * 40)
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", self.head,
+             "--ci-ready-receipt", str(receipt), "--change-class", "workflow-doc",
+             "--comparison-ref", self.comparison_ref, "--out", str(self.out)],
+            text=True, capture_output=True,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("head", result.stderr.lower())
         self.assertFalse(self.out.exists())
 
     def test_rejects_a_caller_supplied_oid_that_does_not_match_the_real_ref(self) -> None:
