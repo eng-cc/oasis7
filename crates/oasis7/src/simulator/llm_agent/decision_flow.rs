@@ -68,6 +68,7 @@ pub(super) fn summarize_trace_text(text: &str, max_chars: usize) -> String {
 #[derive(Debug, Deserialize)]
 struct LlmDecisionPayload {
     decision: String,
+    action: Option<serde_json::Value>,
     ticks: Option<u64>,
     to: Option<String>,
     from: Option<String>,
@@ -642,6 +643,30 @@ fn parse_llm_decision_value_with_error(
     let decision = match parsed.decision.trim().to_ascii_lowercase().as_str() {
         "wait" => AgentDecision::Wait,
         "wait_ticks" => AgentDecision::WaitTicks(parsed.ticks.unwrap_or(1).max(1)),
+        "quote_micro_depot_install" => {
+            let Some(action) = parsed.action else {
+                return (
+                    AgentDecision::Wait,
+                    Some(
+                        "quote_micro_depot_install requires an InstallMicroDepot action"
+                            .to_string(),
+                    ),
+                );
+            };
+            let action = match serde_json::from_value::<Action>(action) {
+                Ok(action @ Action::InstallMicroDepot { .. }) => action,
+                Ok(_) | Err(_) => {
+                    return (
+                        AgentDecision::Wait,
+                        Some(
+                            "quote_micro_depot_install requires an InstallMicroDepot action"
+                                .to_string(),
+                        ),
+                    );
+                }
+            };
+            AgentDecision::Query(AgentQuery::QuoteMicroDepotInstall(action))
+        }
         "evaluate_micro_depot_quote" => {
             let facility_id = parsed.facility_id.filter(|value| !value.trim().is_empty());
             let target_id = parsed.target_id.filter(|value| !value.trim().is_empty());

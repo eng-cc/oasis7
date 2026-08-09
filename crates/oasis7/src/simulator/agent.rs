@@ -5,8 +5,8 @@ use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
 use super::kernel::{
-    MicroDepotActionKind, MicroDepotPressureClass, MicroDepotQuotePreview, Observation,
-    RejectReason, WorldEvent, WorldEventKind,
+    MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
+    Observation, RejectReason, WorldEvent, WorldEventKind,
 };
 use super::types::{Action, ActionId, WorldTime};
 
@@ -76,6 +76,9 @@ pub enum AgentDecision {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AgentQuery {
     EvaluateMicroDepotQuote(MicroDepotQuoteRequest),
+    /// Preview a prospective micro-depot installation without submitting its
+    /// action or reserving any resources.
+    QuoteMicroDepotInstall(Action),
 }
 
 /// Arguments needed to preview a micro-depot service without creating an intent.
@@ -99,6 +102,10 @@ pub enum AgentQueryResult {
         /// Facility stock copied from the same snapshot used for the preview.
         available_units_by_kind: Option<BTreeMap<String, i64>>,
         result: Result<MicroDepotQuotePreview, String>,
+    },
+    QuoteMicroDepotInstall {
+        action: Action,
+        result: Result<MicroDepotInstallQuote, String>,
     },
 }
 

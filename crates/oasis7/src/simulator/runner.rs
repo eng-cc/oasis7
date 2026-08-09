@@ -754,6 +754,12 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     available_units_by_kind,
                 }
             }
+            AgentQuery::QuoteMicroDepotInstall(action) => {
+                AgentQueryResult::QuoteMicroDepotInstall {
+                    result: kernel.micro_depot_install_quote(&action),
+                    action,
+                }
+            }
         }
     }
 

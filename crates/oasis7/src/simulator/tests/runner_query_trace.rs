@@ -1,9 +1,44 @@
+use super::kernel_wasm_sandbox_bridge::DynamicMicroDepotSandbox;
 use super::*;
+use oasis7_wasm_abi::ModuleLimits;
+use std::sync::{Arc, Mutex};
 
 struct TracedQuoteAgent {
     id: String,
     trace_emitted: bool,
     query_results: Vec<AgentQueryResult>,
+}
+
+/// A test-only agent that requests a prospective install quote. The query must
+/// remain distinct from an accepted `InstallMicroDepot` intent.
+struct TracedInstallQuoteAgent {
+    id: String,
+    action: Action,
+    query_results: Vec<AgentQueryResult>,
+}
+
+impl TracedInstallQuoteAgent {
+    fn new(id: impl Into<String>, action: Action) -> Self {
+        Self {
+            id: id.into(),
+            action,
+            query_results: Vec::new(),
+        }
+    }
+}
+
+impl AgentBehavior for TracedInstallQuoteAgent {
+    fn agent_id(&self) -> &str {
+        &self.id
+    }
+
+    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
+        AgentDecision::Query(AgentQuery::QuoteMicroDepotInstall(self.action.clone()))
+    }
+
+    fn on_query_result(&mut self, result: &AgentQueryResult) {
+        self.query_results.push(result.clone());
+    }
 }
 
 impl TracedQuoteAgent {
@@ -93,6 +128,101 @@ fn measured_service_action() -> Action {
         base_risk_class: MicroDepotPressureClass::Low,
         blocker_type: Some("supply_missing".to_string()),
     }
+}
+
+fn prospective_install_action(facility_id: &str) -> Action {
+    Action::InstallMicroDepot {
+        installer_agent_id: "agent-install-quote".to_string(),
+        facility_id: facility_id.to_string(),
+        location_id: "loc-install-quote".to_string(),
+        owner_claim_id: "claim-install-quote".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-install-quote:1".to_string(),
+        module_id: "regional.micro_depot".to_string(),
+        module_version: "0.2.0".to_string(),
+        wasm_hash: "hash-install-quote".to_string(),
+        entrypoint: "evaluate_quote".to_string(),
+        service_radius_cm: 250_000,
+        supported_resource_kinds: vec!["data".to_string()],
+    }
+}
+
+fn install_quote_kernel(data_units: i64) -> WorldKernel {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-install-quote".to_string(),
+        name: "Install Quote Hub".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.step().expect("register install quote location");
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-install-quote".to_string(),
+        location_id: "loc-install-quote".to_string(),
+    });
+    kernel.step().expect("register install quote agent");
+    super::seed_owner_resource(
+        &mut kernel,
+        ResourceOwner::Agent {
+            agent_id: "agent-install-quote".to_string(),
+        },
+        ResourceKind::Data,
+        data_units,
+    );
+    let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox {
+        resource_debits: Some(vec![MicroDepotProposalResourceDebit {
+            resource_kind: ResourceKind::Data,
+            units: 2,
+        }]),
+        ..DynamicMicroDepotSandbox::default()
+    }));
+    kernel.set_micro_depot_wasm_module_evaluator(
+        "regional.micro_depot",
+        "hash-install-quote",
+        "evaluate_quote",
+        vec![0x00, 0x61, 0x73, 0x6d],
+        ModuleLimits::unbounded(),
+        sandbox,
+    );
+    kernel
+}
+
+fn materialize_install_quote_observation(kernel: &mut WorldKernel) {
+    // Observation owns lazy chunk materialization. Quote purity starts after
+    // that established runtime observation boundary.
+    kernel
+        .observe("agent-install-quote")
+        .expect("materialize install-quote observation");
+}
+
+fn assert_install_quote_query_is_pure(
+    kernel: &WorldKernel,
+    model_before: &WorldModel,
+    snapshot_before: &WorldSnapshot,
+    journal_before: &WorldJournal,
+    data_before: i64,
+) {
+    assert_eq!(kernel.model(), model_before, "quote must not mutate model");
+    assert_eq!(
+        kernel.snapshot(),
+        *snapshot_before,
+        "quote must not mutate snapshot"
+    );
+    assert_eq!(
+        kernel.journal_snapshot(),
+        *journal_before,
+        "quote must not append history"
+    );
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-install-quote")
+            .expect("install quote agent")
+            .resources
+            .get(ResourceKind::Data),
+        data_before,
+        "quote must not reserve or debit install resources"
+    );
 }
 
 fn assert_query_is_checkpoint_pure(
@@ -202,4 +332,184 @@ fn traced_query_batch_excludes_trace_from_durable_intents_and_history() {
         control.submit_action_from_agent("agent-measured", measured_service_action());
     assert_eq!(service_id_after_batch, control_service_id);
     assert_eq!(kernel.step(), control.step());
+}
+
+#[test]
+fn install_quote_query_returns_the_canonical_deployable_dto_without_mutation() {
+    let mut kernel = install_quote_kernel(10);
+    materialize_install_quote_observation(&mut kernel);
+    let action = prospective_install_action("depot-query-deployable");
+    let expected = kernel
+        .micro_depot_install_quote(&action)
+        .expect("canonical deployable install quote");
+    assert!(
+        expected.deployable,
+        "fixture must exercise deployable quote"
+    );
+    let model_before = kernel.model().clone();
+    let snapshot_before = kernel.snapshot();
+    let journal_before = kernel.journal_snapshot();
+    let data_before = kernel
+        .model()
+        .agents
+        .get("agent-install-quote")
+        .expect("install quote agent")
+        .resources
+        .get(ResourceKind::Data);
+    let mut runner: AgentRunner<TracedInstallQuoteAgent> = AgentRunner::new();
+    runner.register(TracedInstallQuoteAgent::new(
+        "agent-install-quote",
+        action.clone(),
+    ));
+
+    let tick = runner.tick(&mut kernel).expect("install quote query tick");
+
+    assert!(matches!(tick.decision, AgentDecision::Query(_)));
+    assert!(tick.action_result.is_none());
+    let query_results = &runner
+        .get("agent-install-quote")
+        .expect("registered install quote agent")
+        .behavior
+        .query_results;
+    assert_eq!(
+        query_results.len(),
+        1,
+        "runner must return exactly one quote"
+    );
+    let result = &query_results[0];
+    match result {
+        AgentQueryResult::QuoteMicroDepotInstall {
+            action: queried_action,
+            result,
+        } => {
+            assert_eq!(queried_action, &action);
+            assert_eq!(result.as_ref().expect("deployable quote result"), &expected);
+        }
+        other => panic!("unexpected install quote query result: {other:?}"),
+    }
+    assert_install_quote_query_is_pure(
+        &kernel,
+        &model_before,
+        &snapshot_before,
+        &journal_before,
+        data_before,
+    );
+}
+
+#[test]
+fn install_quote_query_decide_only_returns_canonical_dto_without_mutation() {
+    let mut kernel = install_quote_kernel(10);
+    materialize_install_quote_observation(&mut kernel);
+    let action = prospective_install_action("depot-query-decide-only");
+    let expected = kernel
+        .micro_depot_install_quote(&action)
+        .expect("canonical deployable install quote");
+    let model_before = kernel.model().clone();
+    let snapshot_before = kernel.snapshot();
+    let journal_before = kernel.journal_snapshot();
+    let data_before = kernel
+        .model()
+        .agents
+        .get("agent-install-quote")
+        .expect("install quote agent")
+        .resources
+        .get(ResourceKind::Data);
+    let mut runner: AgentRunner<TracedInstallQuoteAgent> = AgentRunner::new();
+    runner.register(TracedInstallQuoteAgent::new(
+        "agent-install-quote",
+        action.clone(),
+    ));
+
+    let tick = runner
+        .tick_decide_only(&mut kernel)
+        .expect("install quote decide-only tick");
+
+    assert!(matches!(tick.decision, AgentDecision::Query(_)));
+    assert!(tick.action_result.is_none());
+    match tick.query_result.as_ref().expect("query result") {
+        AgentQueryResult::QuoteMicroDepotInstall {
+            action: queried_action,
+            result,
+        } => {
+            assert_eq!(queried_action, &action);
+            assert_eq!(result.as_ref().expect("deployable quote result"), &expected);
+        }
+        other => panic!("unexpected decide-only install quote result: {other:?}"),
+    }
+    assert_install_quote_query_is_pure(
+        &kernel,
+        &model_before,
+        &snapshot_before,
+        &journal_before,
+        data_before,
+    );
+}
+
+#[test]
+fn install_quote_query_returns_structured_blocker_without_mutation() {
+    let mut kernel = install_quote_kernel(9);
+    materialize_install_quote_observation(&mut kernel);
+    let action = prospective_install_action("depot-query-blocked");
+    let expected = kernel
+        .micro_depot_install_quote(&action)
+        .expect("canonical structured blocked install quote");
+    assert!(
+        !expected.deployable,
+        "fixture must exercise a blocked quote"
+    );
+    assert!(
+        !expected.reasons.is_empty(),
+        "blocked quote must preserve player-readable structured reasons"
+    );
+    let model_before = kernel.model().clone();
+    let snapshot_before = kernel.snapshot();
+    let journal_before = kernel.journal_snapshot();
+    let data_before = kernel
+        .model()
+        .agents
+        .get("agent-install-quote")
+        .expect("install quote agent")
+        .resources
+        .get(ResourceKind::Data);
+    let mut runner: AgentRunner<TracedInstallQuoteAgent> = AgentRunner::new();
+    runner.register(TracedInstallQuoteAgent::new(
+        "agent-install-quote",
+        action.clone(),
+    ));
+
+    runner
+        .tick(&mut kernel)
+        .expect("blocked install quote query tick");
+
+    let query_results = &runner
+        .get("agent-install-quote")
+        .expect("registered install quote agent")
+        .behavior
+        .query_results;
+    assert_eq!(
+        query_results.len(),
+        1,
+        "runner must return exactly one quote"
+    );
+    let result = &query_results[0];
+    match result {
+        AgentQueryResult::QuoteMicroDepotInstall {
+            action: queried_action,
+            result,
+        } => {
+            assert_eq!(queried_action, &action);
+            let quote = result.as_ref().expect("structured blocked quote result");
+            assert_eq!(quote, &expected);
+            assert!(!quote.deployable);
+            assert!(!quote.reasons.is_empty());
+        }
+        other => panic!("unexpected blocked install quote result: {other:?}"),
+    }
+    assert_install_quote_query_is_pure(
+        &kernel,
+        &model_before,
+        &snapshot_before,
+        &journal_before,
+        data_before,
+    );
 }

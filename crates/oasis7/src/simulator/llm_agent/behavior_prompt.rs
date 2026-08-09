@@ -262,6 +262,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             AgentDecision::Query(AgentQuery::EvaluateMicroDepotQuote(_)) => {
                 "evaluate_micro_depot_quote".to_string()
             }
+            AgentDecision::Query(AgentQuery::QuoteMicroDepotInstall(_)) => {
+                "quote_micro_depot_install".to_string()
+            }
             AgentDecision::Wait => "wait".to_string(),
             AgentDecision::WaitTicks(_) => "wait_ticks".to_string(),
         }

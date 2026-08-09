@@ -65,6 +65,9 @@ pub(super) fn provider_decision_label(decision: &ProviderDecision) -> &'static s
         ProviderDecision::Query { query_ref, .. } if query_ref == "evaluate_micro_depot_quote" => {
             "evaluate_micro_depot_quote"
         }
+        ProviderDecision::Query { query_ref, .. } if query_ref == "quote_micro_depot_install" => {
+            "quote_micro_depot_install"
+        }
         ProviderDecision::Query { .. } => "query",
     }
 }
@@ -160,6 +163,7 @@ pub(super) fn build_decision_prompt(
             "{{\"decision\":\"act\",\"action_ref\":\"speak_to_nearby\",\"args\":{{\"message\":\"<short text>\",\"target_agent_id\":\"<optional agent id>\"}}}}\n",
             "{{\"decision\":\"act\",\"action_ref\":\"inspect_target\",\"args\":{{\"target_kind\":\"agent|location|object\",\"target_id\":\"<id>\"}}}}\n",
             "{{\"decision\":\"act\",\"action_ref\":\"simple_interact\",\"args\":{{\"target_kind\":\"agent|location|object\",\"target_id\":\"<id>\",\"interaction\":\"<verb>\"}}}}\n",
+            "{{\"decision\":\"query\",\"action_ref\":\"quote_micro_depot_install\",\"args\":<serialized InstallMicroDepot action>}}\n",
             "Profile guidance:\n{}\n",
             "Do not invent ids. Keep messages short. Context JSON follows:\n{}"
         ),
@@ -367,6 +371,18 @@ fn build_query_from_args(
                 .map_err(|err| format!("evaluate_micro_depot_quote invalid args: {err}"))?;
             request.agent_id = agent_id.to_string();
             Ok(AgentQuery::EvaluateMicroDepotQuote(request))
+        }
+        "quote_micro_depot_install" => {
+            let action = serde_json::from_value::<Action>(args.clone())
+                .map_err(|err| format!("quote_micro_depot_install invalid args: {err}"))?;
+            match action {
+                action @ Action::InstallMicroDepot { .. } => {
+                    Ok(AgentQuery::QuoteMicroDepotInstall(action))
+                }
+                _ => Err(
+                    "quote_micro_depot_install requires an InstallMicroDepot action".to_string(),
+                ),
+            }
         }
         other => Err(format!("unsupported query_ref `{other}`")),
     }

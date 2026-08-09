@@ -1130,3 +1130,53 @@ fn llm_agent_allows_retry_depleted_location_after_cooldown_expires() {
         .iter()
         .any(|step| step.output_summary.contains("cooldown guardrail rerouted")));
 }
+
+#[test]
+fn llm_parse_quote_micro_depot_install_reuses_serialized_install_action() {
+    let install = Action::InstallMicroDepot {
+        installer_agent_id: "agent-1".to_string(),
+        facility_id: "depot-quote".to_string(),
+        location_id: "loc-home".to_string(),
+        owner_claim_id: "claim-quote".to_string(),
+        regional_blocker_receipt_id: "repair-logistics:loc-home:1".to_string(),
+        module_id: "regional.micro_depot".to_string(),
+        module_version: "0.2.0".to_string(),
+        wasm_hash: "quote-hash".to_string(),
+        entrypoint: "evaluate_quote".to_string(),
+        service_radius_cm: 250_000,
+        supported_resource_kinds: vec!["data".to_string()],
+    };
+    let turns = completion_turns_from_output(
+        serde_json::json!({
+            "decision": "quote_micro_depot_install",
+            "action": install,
+        })
+        .to_string()
+        .as_str(),
+    );
+
+    let parsed = super::decision_flow::parse_llm_turn_payloads(turns.as_slice(), "agent-1");
+
+    assert!(matches!(
+        parsed.first(),
+        Some(super::decision_flow::ParsedLlmTurn::Decision {
+            decision: AgentDecision::Query(AgentQuery::QuoteMicroDepotInstall(action)),
+            ..
+        }) if action == &install
+    ));
+}
+
+#[test]
+fn llm_parse_quote_micro_depot_install_rejects_invalid_action_payload() {
+    let turns = completion_turns_from_output(
+        r#"{"decision":"quote_micro_depot_install","action":{"MoveAgent":{"agent_id":"agent-1","to":"loc-home"}}}"#,
+    );
+
+    let parsed = super::decision_flow::parse_llm_turn_payloads(turns.as_slice(), "agent-1");
+
+    assert!(matches!(
+        parsed.first(),
+        Some(super::decision_flow::ParsedLlmTurn::Invalid(error))
+            if error.contains("quote_micro_depot_install requires an InstallMicroDepot action")
+    ));
+}
