@@ -420,7 +420,8 @@ impl PosNodeEngine {
                 && self.last_execution_height == 0
                 && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
                     || checkpoint_preflight_unavailable
-                    || checkpoint_bootstrap_retry_pending);
+                    || checkpoint_bootstrap_retry_pending
+                    || checkpoint_bootstrap_preflight.should_defer_height_one());
             let should_apply = payload_view
                 .as_ref()
                 .map(|payload| {
