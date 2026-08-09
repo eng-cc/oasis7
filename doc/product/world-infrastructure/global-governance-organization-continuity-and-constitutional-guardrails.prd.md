@@ -10,7 +10,7 @@
 
 ## 迁移状态
 
-本页保留完整、未吸收的稳定产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)；其 owner 必须完成语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留尚未完全吸收的稳定产品语义和验收，避免迁移期间丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。GG-1 普通事项白名单与 GG-5 宪制护栏已由 [`普通共同决策与宪制边界`](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md) 接收，GG-4 的组织连续性由 [`组织连续性、解散与长期不活跃保护`](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md) 接收；本页继续保留尚待迁移的 GG-2 资格/控制权公平与 GG-3 外部 OC/游戏内权利分离语义，直至接收 authority 完成回填和活跃引用修复后再删除。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文是长期产品分册，定义普通全局治理的有限产品范围、组织连续性和不可由普通治理改写的宪制保护。它不定义阈值、锁定/解锁时长、身份技术、控制人计算、链上或智能合约结构、runtime 状态机、签名/custody 实现、当前候选 verdict 或发行就绪。
