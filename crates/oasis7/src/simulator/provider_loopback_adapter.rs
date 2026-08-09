@@ -244,5 +244,6 @@ fn resolved_action_ref(action: &Action) -> Option<&'static str> {
 fn resolved_query_ref(query: &AgentQuery) -> &'static str {
     match query {
         AgentQuery::EvaluateMicroDepotQuote(_) => "evaluate_micro_depot_quote",
+        AgentQuery::QuoteMicroDepotInstall(_) => "quote_micro_depot_install",
     }
 }
