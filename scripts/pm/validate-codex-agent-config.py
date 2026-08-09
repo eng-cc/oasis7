@@ -99,6 +99,15 @@ def load_toml(path: Path) -> dict[str, Any]:
     return value
 
 
+def require_regular_file(path: Path, label: str) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except OSError as error:
+        fail(f"cannot stat {label} {path}: {error}")
+    if not stat.S_ISREG(mode):
+        fail(f"{label} {path} must be a regular file and not a symlink")
+
+
 def load_renderer() -> Any:
     path = Path(__file__).with_name("render-codex-agent-config.py")
     spec = importlib.util.spec_from_file_location("oasis7_codex_agent_renderer", path)
@@ -307,6 +316,7 @@ def main() -> None:
     root = args.root.resolve()
     renderer = load_renderer()
     config_path = root / ".codex/config.toml"
+    require_regular_file(config_path, "project config")
     config = load_toml(config_path)
 
     if "model" in config or "model_reasoning_effort" in config:
