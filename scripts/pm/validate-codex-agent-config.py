@@ -321,6 +321,12 @@ def main() -> None:
     adapter_results = []
     for role in sorted(EXPECTED_ROLES):
         role_card_path = root / f".agents/roles/{role}.md"
+        try:
+            role_card_mode = role_card_path.lstat().st_mode
+        except OSError as error:
+            fail(f"cannot read role card {role_card_path}: {error}")
+        if not stat.S_ISREG(role_card_mode):
+            fail(f"{role_card_path} must be a regular file and not a symlink")
         binding = renderer.projection(role_card_path, role)
         entry = agents.get(role)
         if not isinstance(entry, dict):
