@@ -28,6 +28,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 
 - 会造成重大资源暴露、权利移交、不可逆损失、冲突升级或其他高后果承诺的行动，必须有一份可读、范围明确、会到期且可撤销的提前授权，或在行动前获得同等有效的确认。
 - 提前授权至少限定允许的行动/目标、预算或数量上限、风险类别、有效期间和撤销路径；超出范围、授权到期、撤销生效或世界硬边界阻断时，Agent 必须暂停、说明原因并给出升级、改道或恢复选择。
+- 对会消耗资源、占用可争用容量、转移经济权利或累积风险的提前授权，预算或数量上限必须表达为该授权有效期间内的**累计**可用范围，并说明适用的资源/权利来源及对象范围；它不能仅被理解为“每次行动各自不超过上限”。每次提交和权威接受都必须按当时有效的专业合同重验该授权的剩余范围、来源与其他前置条件。拆分请求、并发、自动重试、重连、切换 Agent/owner 或局部缓存均不得把同一授权扩展成多份上限、隐藏债务或额外优先权。
 - 授权已存在不代表必然成功：权威世界仍可因资源、权限、治理、安全或竞争条件拒绝、改道或延后行动。
 
 ### 2.3 待决高后果行动与授权变更
@@ -66,6 +67,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 
 - AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
 - AC-2：高后果行动缺少有效提前授权或确认、超出范围、到期或撤销后，不会静默执行；正式结果能区分授权拒绝、世界规则拒绝、资源/竞争阻塞和可用替代路径。
+- AC-9：代表性资源消耗、可争用容量、经济权利或累积风险行动证明，高后果授权的预算/数量上限在整个有效期内按同一资源/权利来源和对象范围累计执行；拆分、并发、重试、重连或控制权切换不能重置、复制或绕过剩余额度，也不会产生隐藏债务、额外优先权或第二次世界效果。余额不足、来源/对象不匹配或授权失效时，玩家能读到实际 blocker 与升级、改道、等待或重新确认中的适用下一步。
 - AC-8：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
 - AC-3：从一个主 Agent 扩张到团队的样例表明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
 - AC-7：额外 Agent 的样例证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，并在取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
@@ -78,6 +80,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 | 产品承诺 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | AC-1 / AC-2 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 授权范围、到期/撤销、严重后果升级、世界拒绝与恢复的组合证据 | test_tier_required |
+| AC-9 | producer_system_designer / agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一提前授权下的累计上限、资源/权利来源和对象范围再校验；拆分/并发/重试/重连/控制权切换负例、无隐藏债务或第二次效果，以及玩家可读 blocker 与恢复路径的组合证据 | test_tier_full |
 | AC-8 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 待决与 committed 的区分、授权变化后的重新评估/取消/重确认、去重/非重放、转让边界、receipt 时点与硬边界负例 | test_tier_full |
 | AC-3 | gameplay_designer / agent_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 主 Agent 到团队的成本/维护/协调约束与小规模独立路线样例 | test_tier_required |
 | AC-7 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 工业订单、资源/产能/交付、非治理 quota 供给、维护/授权/协调与早期单 Agent 锚点组合证据 | test_tier_full |
