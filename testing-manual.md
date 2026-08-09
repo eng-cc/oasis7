@@ -97,6 +97,9 @@
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
+  - planner 始终声明 `required_gate_baseline`：这是 required-gate 的普适治理/契约 authority，不等同于每个 Rust、Node、provider 或 P2P 套件都对所有路径执行。
+  - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
+  - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
 - `full`：
   - `required` 全部
   - `cargo test -p oasis7 --tests --features test_tier_full,wasmtime,viewer_live_integration`
@@ -105,6 +108,7 @@
   - `cargo test -p oasis7_net --features libp2p --lib`
   - `./scripts/llm-baseline-fixture-smoke.sh`
   - `cargo test -p oasis7 --features wasmtime --lib --bins`
+  - 机械调用所有 scoped-required capability：包括 scenario regression、Pixel World Bridge lib + wasm、Viewer build、launcher web build 与 workspace-support crates；重叠的 support shard 只保留一次，避免无意义的重复执行。
 
 `./scripts/ci-tests.sh` 不设默认 tier；省略参数会打印 usage 并失败，避免误把升级专用的 `full` 当成本地默认。
 

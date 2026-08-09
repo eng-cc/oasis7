@@ -1,9 +1,10 @@
 {
   "schema": "oasis7-ci-required-scope/v2",
-  "capabilities": ["oasis7_required", "consensus", "distfs", "node", "net", "viewer_js_required", "viewer_performance_report", "pixel_world_bridge", "launcher_web", "workspace_support"],
+  "capabilities": ["oasis7_required", "consensus", "distfs", "node", "net", "viewer_js_required", "viewer_performance_report", "pixel_world_bridge", "launcher_web", "workspace_support", "scenario_regression", "operational_contracts", "required_gate_baseline"],
   "rules": [
     {"match": ["doc/**", ".agents/**", ".pm/**", "AGENTS.md", "*.md"], "minimal": true, "reason": "governance_doc"},
     {"match": ["crates/oasis7/**"], "capabilities": ["oasis7_required", "launcher_web"], "reason": "runtime"},
+    {"match": ["crates/oasis7/src/simulator/scenario.rs", "crates/oasis7/tests/oasis7_init_demo.rs", "doc/world-simulator/scenario/**"], "capabilities": ["scenario_regression"], "reason": "scenario_regression"},
     {"match": ["crates/oasis7_consensus/**"], "capabilities": ["consensus"], "reason": "consensus"},
     {"match": ["crates/oasis7_distfs/**"], "capabilities": ["distfs"], "reason": "distfs"},
     {"match": ["crates/oasis7_node/**"], "capabilities": ["node"], "reason": "node"},
@@ -17,6 +18,7 @@
     {"match": ["crates/oasis7_wasm_abi/**"], "capabilities": ["launcher_web"], "reason": "launcher_wasm_abi"},
     {"match": ["crates/oasis7_wasm_build/**", "crates/oasis7_builtin_wasm_modules/**", "crates/oasis7_wasm_sdk/**", "crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "capabilities": ["workspace_support"], "reason": "wasm_support"},
     {"match": ["crates/oasis7_wasm_router/**", "crates/oasis7_wasm_store/**", "crates/oasis7_wasm_executor/**"], "capabilities": ["workspace_support", "oasis7_required"], "reason": "runtime_wasm_support"},
+    {"match": ["scripts/run-local-letai-game-test.test.sh", "scripts/provider-remote-https/**", "scripts/game-world-state-sync-commit-module-required.test.sh", "scripts/state-sync-closure-evidence-template.test.sh", "scripts/s10-five-node-game-soak-summary.test.sh", "scripts/release-gate-bash-preflight.test.sh", "scripts/p2p-public-testnet-local-observer-sync.test.sh", "scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh", "scripts/p2p-public-testnet-package-rollout.test.sh", "scripts/testnet-packages-macos-arm64-contract.test.sh", "scripts/p2p-public-testnet-fleet-health.test.py"], "capabilities": ["operational_contracts"], "reason": "operational_contracts"},
     {"match": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".github/workflows/rust.yml", "scripts/ci-tests.sh", "scripts/plan-rust-required-scope.sh", "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json"], "full": true, "reason": "shared_required_gate"}
   ],
   "unmatched": "full"

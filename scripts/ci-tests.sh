@@ -89,6 +89,10 @@ run_oasis7_required_tier_tests() {
   run_cargo test -p oasis7 --tests --features test_tier_required
 }
 
+run_scenario_regression_tests() {
+  run_cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_
+}
+
 run_oasis7_required_tier_clippy() {
   run_cargo_clippy -p oasis7 --tests --features test_tier_required
 }
@@ -168,6 +172,16 @@ run_provider_remote_https_smoke() {
   run ./scripts/provider-remote-https/provider-bridge-contract-smoke.test.sh
 }
 
+run_operational_contract_tests() {
+  run ./scripts/game-world-state-sync-commit-module-required.test.sh
+  run ./scripts/state-sync-closure-evidence-template.test.sh
+  run ./scripts/s10-five-node-game-soak-summary.test.sh
+  run ./scripts/release-gate-bash-preflight.test.sh
+  run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
+  run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh
+  run_provider_remote_https_smoke
+}
+
 run_provider_bridge_live_gate() {
   run ./scripts/provider-remote-https/provider-bridge-live-gate.sh
 }
@@ -229,14 +243,8 @@ run_required_gate_checks() {
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
-  run ./scripts/game-world-state-sync-commit-module-required.test.sh
-  run ./scripts/state-sync-closure-evidence-template.test.sh
-  run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
-  run ./scripts/release-gate-bash-preflight.test.sh
-  run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
-  run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh
-  run_provider_remote_https_smoke
+  run_required_component "operational contracts" "${OASIS7_CI_RUN_OPERATIONAL_CONTRACTS:-}" "disabled_by_scope_planner" run_operational_contract_tests
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
   run_required_component "cargo-dev library contract" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run ./scripts/cargo-dev-lib.test.sh
   run_required_component "newapi bridge Rust baseline" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_newapi_bridge_service_accounting_tests
@@ -271,6 +279,23 @@ run_full_support_tier_tests() {
   run_cargo test -p oasis7 --features wasmtime --lib --bins
 }
 
+run_full_required_superset() {
+  run_required_gate_checks
+  run_oasis7_required_tier_tests
+  run_scenario_regression_tests
+  run_oasis7_consensus_tests
+  run_oasis7_distfs_tests
+  run_oasis7_node_tests
+  run_oasis7_net_tests
+  run_oasis7_net_libp2p_tests
+  run_oasis7_viewer_software_safe_feedback_contract_tests
+  run_oasis7_viewer_software_safe_build
+  run_pixel_world_bridge_lib_tests
+  run_pixel_world_bridge_wasm_check
+  run_oasis7_client_launcher_web_build
+  run_oasis7_workspace_support_crate_tests
+}
+
 echo "+ ci test tier: $tier"
 case "$tier" in
   commit)
@@ -279,6 +304,7 @@ case "$tier" in
   required)
     run_required_gate_checks
     run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_tests
+    run_required_component "scenario regression" "${OASIS7_CI_RUN_SCENARIO_REGRESSION:-}" "disabled_by_scope_planner" run_scenario_regression_tests
     run_required_component "oasis7_consensus tests" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_tests
     run_required_component "oasis7_distfs tests" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_distfs_tests
     run_required_component "oasis7_node tests" "${OASIS7_CI_RUN_OASIS7_NODE_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_node_tests
@@ -300,8 +326,10 @@ case "$tier" in
     run_required_component "oasis7_net libp2p clippy" "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS:-false}" "not_in_local_required_baseline_or_scope_disabled" run_oasis7_net_libp2p_clippy
     ;;
   full)
-    run_full_core_tier_tests
-    run_full_support_tier_tests
+    run_full_required_superset
+    run_oasis7_full_tier_tests
+    run_oasis7_llm_baseline_fixture_smoke
+    run_cargo test -p oasis7 --features wasmtime --lib --bins
     ;;
   full-core)
     run_full_core_tier_tests
