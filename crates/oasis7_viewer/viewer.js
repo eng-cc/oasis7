@@ -11534,7 +11534,7 @@ function affordability$1(value2, locale, tr2) {
     blocked: tr2(locale, "下一步仍不可负担", "Next action still blocked")
   }[String(value2 || "")] || tr2(locale, "可负担性暂不可用", "Affordability unavailable");
 }
-function recommendation$1(value2, locale, tr2) {
+function recommendation$2(value2, locale, tr2) {
   return {
     buy_power: tr2(locale, "按此补电后继续", "Buy this power, then continue"),
     buy_power_partial: tr2(locale, "继续补电后再行动", "Buy more power before acting"),
@@ -11614,7 +11614,7 @@ function PowerSurvivalQuoteCard(props) {
       }
     }), null);
     insert(_el$15, () => `${tr2(locale(), "防停机原因", "Why this avoids shutdown")}: ${shutdownAvoidanceReason(quote2(), locale(), tr2)}`);
-    insert(_el$16, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation$1(quote2().recommended_power_action, locale(), tr2)}`);
+    insert(_el$16, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation$2(quote2().recommended_power_action, locale(), tr2)}`);
     createRenderEffect((_p$) => {
       var _v$ = display$4(quote2().seller_agent_id), _v$2 = display$4(quote2().recovery_amount), _v$3 = display$4(quote2().requested_price_per_pu);
       _v$ !== _p$.e && setAttribute(_el$4, "data-seller-agent-id", _p$.e = _v$);
@@ -11751,7 +11751,7 @@ function affordability(value2, locale, tr2) {
     blocked: tr2(locale, "下一步不可负担", "Next action blocked")
   }[String(value2 || "")] || tr2(locale, "可负担性暂不可用", "Affordability unavailable");
 }
-function recommendation(value2, locale, tr2) {
+function recommendation$1(value2, locale, tr2) {
   return {
     proceed_sale: tr2(locale, "可谨慎继续出售", "Proceed with this sale cautiously"),
     reduce_sale: tr2(locale, "减少出售量后重新预估", "Reduce the sale, then request a fresh quote"),
@@ -11828,7 +11828,7 @@ function PowerSaleQuoteCard(props) {
       return () => _c$() ? tr2(locale(), "生产中断风险：本次出售可能中断生产。", "Production interruption risk: this sale can interrupt production.") : tr2(locale(), "生产中断风险：运行时未标记本次出售会中断生产。", "Production interruption risk: the runtime did not flag this sale as interrupting production.");
     })());
     insert(_el$16, () => rationale(quote2(), locale(), tr2));
-    insert(_el$17, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation(quote2().recommended_sale_action, locale(), tr2)}`);
+    insert(_el$17, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendation$1(quote2().recommended_sale_action, locale(), tr2)}`);
     createRenderEffect((_p$) => {
       var _v$ = display$3(quote2().seller_agent_id), _v$2 = display$3(quote2().buyer_agent_id), _v$3 = display$3(quote2().sale_amount), _v$4 = display$3(quote2().price_per_pu), _v$5 = quote2().production_interrupt_risk ? "feedback-summary feedback-summary--warn" : "feedback-summary";
       _v$ !== _p$.e && setAttribute(_el$4, "data-seller-agent-id", _p$.e = _v$);
@@ -12667,7 +12667,7 @@ function WarDeclarationQuotePanel(props) {
   })();
 }
 delegateEvents(["input"]);
-var _tmpl$$3 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=governance-vote-quote data-quote-kind=preflight data-submission-allowed=false><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=summary-grid></div><div class=feedback-summary></div><div class="feedback-summary feedback-summary--warn"></div><div class=feedback-summary>`), _tmpl$3$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=governance-vote-quote-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"><label><span></span><input></label><label><span></span><input></label><label><span></span><input type=number min=1></label><button class="button button--secondary"type=submit>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div role=alert class="feedback-summary feedback-summary--warn">`);
+var _tmpl$$3 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=governance-vote-quote data-quote-kind=preflight data-submission-allowed=false><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=summary-grid></div><div class=feedback-summary></div><div class="feedback-summary feedback-summary--warn"></div><div class=feedback-summary><span>`), _tmpl$3$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=governance-vote-quote-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"><label><span></span><input></label><label><span></span><input></label><label><span></span><input type=number min=1></label><button class="button button--secondary"type=submit>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div role=alert class="feedback-summary feedback-summary--warn">`);
 const value = (item) => item == null || item === "" ? "—" : String(item);
 const Metric = (props) => (() => {
   var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
@@ -12675,10 +12675,17 @@ const Metric = (props) => (() => {
   insert(_el$3, () => props.value);
   return _el$;
 })();
+const recommendation = (item, locale, tr2) => ({
+  open_proposal: tr2(locale, "发起提案", "Open a proposal"),
+  cast_vote: tr2(locale, "投票", "Cast vote"),
+  change_vote: tr2(locale, "改票", "Change vote"),
+  wait: tr2(locale, "等待", "Wait"),
+  defer: tr2(locale, "暂缓", "Defer")
+})[String(item || "")] || tr2(locale, "重新请求预览后再决定", "Request a fresh quote before deciding");
 function GovernanceVoteQuoteCard(props) {
   const q = () => props.quote || {};
   return (() => {
-    var _el$4 = _tmpl$2$3(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling;
+    var _el$4 = _tmpl$2$3(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$5.nextSibling, _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.firstChild;
     insert(_el$7, () => props.tr(props.locale, "提交前预览", "Before You Commit"));
     insert(_el$8, () => props.tr(props.locale, "治理投票结果预览", "Governance Vote Outcome"));
     insert(_el$9, () => props.tr(props.locale, "这是签名的只读预览；不会投票、改票或推进世界时间。", "This is a signed read-only quote. It does not cast or change a vote, or advance world time."));
@@ -12732,7 +12739,9 @@ function GovernanceVoteQuoteCard(props) {
     }), null);
     insert(_el$10, () => `${props.tr(props.locale, "通过后改变", "Change if passed")}: ${value(q().world_change_if_passed)}`);
     insert(_el$11, () => `${props.tr(props.locale, "失败或过期代价", "Failure or expiry cost")}: ${value(q().cost_or_cooldown_if_failed)}`);
-    insert(_el$12, () => `${props.tr(props.locale, "建议", "Recommended")}: ${value(q().recommended_governance_action)} — ${value(q().why_this_vote_matters)}`);
+    insert(_el$12, () => `${props.tr(props.locale, "建议", "Recommended")}: `, _el$13);
+    insert(_el$13, () => recommendation(q().recommended_governance_action, props.locale, props.tr));
+    insert(_el$12, () => ` — ${value(q().why_this_vote_matters)}`, null);
     return _el$4;
   })();
 }
@@ -12750,25 +12759,25 @@ function GovernanceVoteQuotePanel(props) {
     if (!result?.ok) setLocalError(result?.reason || "quote failed");
   }
   return (() => {
-    var _el$13 = _tmpl$3$3(), _el$14 = _el$13.firstChild, _el$15 = _el$14.firstChild, _el$16 = _el$15.firstChild, _el$17 = _el$14.nextSibling, _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$19.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.nextSibling, _el$25 = _el$22.nextSibling, _el$26 = _el$25.firstChild, _el$27 = _el$26.nextSibling, _el$28 = _el$25.nextSibling;
-    insert(_el$16, () => props.tr(props.locale, "治理投票结果预览", "Governance Vote Outcome"));
-    _el$18.addEventListener("submit", request);
-    insert(_el$20, () => props.tr(props.locale, "提案 ID", "Proposal ID"));
-    _el$21.$$input = (event) => setProposal(event.currentTarget.value);
-    insert(_el$23, () => props.tr(props.locale, "选项", "Option"));
-    _el$24.$$input = (event) => setOption(event.currentTarget.value);
-    insert(_el$26, () => props.tr(props.locale, "票权", "Vote weight"));
-    _el$27.$$input = (event) => setWeight(event.currentTarget.value);
-    insert(_el$28, () => props.tr(props.locale, "请求投票预览", "Request vote outcome"));
-    insert(_el$17, (() => {
+    var _el$14 = _tmpl$3$3(), _el$15 = _el$14.firstChild, _el$16 = _el$15.firstChild, _el$17 = _el$16.firstChild, _el$18 = _el$15.nextSibling, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$20.nextSibling, _el$24 = _el$23.firstChild, _el$25 = _el$24.nextSibling, _el$26 = _el$23.nextSibling, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling;
+    insert(_el$17, () => props.tr(props.locale, "治理投票结果预览", "Governance Vote Outcome"));
+    _el$19.addEventListener("submit", request);
+    insert(_el$21, () => props.tr(props.locale, "提案 ID", "Proposal ID"));
+    _el$22.$$input = (event) => setProposal(event.currentTarget.value);
+    insert(_el$24, () => props.tr(props.locale, "选项", "Option"));
+    _el$25.$$input = (event) => setOption(event.currentTarget.value);
+    insert(_el$27, () => props.tr(props.locale, "票权", "Vote weight"));
+    _el$28.$$input = (event) => setWeight(event.currentTarget.value);
+    insert(_el$29, () => props.tr(props.locale, "请求投票预览", "Request vote outcome"));
+    insert(_el$18, (() => {
       var _c$ = memo(() => !!error());
       return () => _c$() ? (() => {
-        var _el$29 = _tmpl$4$3();
-        insert(_el$29, () => props.tr(props.locale, "无法获取治理投票预览。", "Could not get the governance vote quote."));
-        return _el$29;
+        var _el$30 = _tmpl$4$3();
+        insert(_el$30, () => props.tr(props.locale, "无法获取治理投票预览。", "Could not get the governance vote quote."));
+        return _el$30;
       })() : null;
     })(), null);
-    insert(_el$17, (() => {
+    insert(_el$18, (() => {
       var _c$2 = memo(() => !!(props.quote && remote().status !== "pending"));
       return () => _c$2() ? createComponent(GovernanceVoteQuoteCard, {
         get quote() {
@@ -12782,11 +12791,11 @@ function GovernanceVoteQuotePanel(props) {
         }
       }) : null;
     })(), null);
-    createRenderEffect(() => _el$28.disabled = remote().status === "pending");
-    createRenderEffect(() => _el$21.value = proposal());
-    createRenderEffect(() => _el$24.value = option());
-    createRenderEffect(() => _el$27.value = weight());
-    return _el$13;
+    createRenderEffect(() => _el$29.disabled = remote().status === "pending");
+    createRenderEffect(() => _el$22.value = proposal());
+    createRenderEffect(() => _el$25.value = option());
+    createRenderEffect(() => _el$28.value = weight());
+    return _el$14;
   })();
 }
 delegateEvents(["input"]);
