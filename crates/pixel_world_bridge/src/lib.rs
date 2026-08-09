@@ -715,13 +715,16 @@ fn apply_external_render_snapshot(
             .as_ref()
             .filter(|target| target.kind == "agent")
             .cloned();
-    } else if camera_content_changed && let Some(follow_target) = runtime.active_follow_target.clone() {
+    } else if camera_content_changed
+        && let Some(follow_target) = runtime.active_follow_target.clone()
+    {
         runtime.pending_focus_target = Some(follow_target);
     }
     runtime.render_version = render_version;
     runtime.render_state = render_state;
     runtime.needs_reconcile = content_changed || next_focus_target != previous_focus_target;
-    runtime.hit_regions_dirty |= camera_content_changed || next_focus_target != previous_focus_target;
+    runtime.hit_regions_dirty |=
+        camera_content_changed || next_focus_target != previous_focus_target;
 }
 
 fn push_input_event(event: InputEvent) {
