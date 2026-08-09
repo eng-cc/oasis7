@@ -580,12 +580,20 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         &journal_before_translation_roundtrip,
     );
 
+    value["player_gameplay"]["branch_recommendations"] = serde_json::json!([{
+        "action_id": "build_factory_assembler_mk1",
+        "route_label": "Open a second production line",
+        "immediate_gain": "Add the assembler capability.",
+        "future_beat_changed": "The next beat becomes coordinating complementary factories.",
+        "risk_or_lockin": "Commits construction materials before the new line produces value.",
+        "next_session_hook": "Return to choose the assembler's first recipe."
+    }]);
+
     let gameplay_object = value
         .get_mut("player_gameplay")
         .and_then(|gameplay| gameplay.as_object_mut())
         .expect("player gameplay object");
     gameplay_object.remove("execution_state");
-    gameplay_object.remove("branch_recommendations");
     gameplay_object.remove("fallback_tradeoff_preview");
     gameplay_object.remove("no_safe_fallback_reason");
     gameplay_object.remove("required_next_decision_action_id");
@@ -607,7 +615,16 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         gameplay.execution_state,
         PlayerGameplayExecutionState::Blocked
     );
-    assert!(gameplay.branch_recommendations.is_empty());
+    assert_eq!(gameplay.branch_recommendations.len(), 1);
+    let legacy_branch_commitment = &gameplay.branch_recommendations[0];
+    assert_eq!(
+        legacy_branch_commitment.future_beat_changed,
+        "The next beat becomes coordinating complementary factories."
+    );
+    assert!(
+        legacy_branch_commitment.future_beats.is_empty(),
+        "legacy branch commitments without two-beat data must remain readable"
+    );
     assert_eq!(
         gameplay.causality_kind,
         Some(PlayerGameplayCausalityKind::WorldConstraint)

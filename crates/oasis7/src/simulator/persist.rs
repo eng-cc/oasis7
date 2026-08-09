@@ -108,6 +108,8 @@ pub struct PlayerGameplayBranchCommitment {
     pub route_label: String,
     pub immediate_gain: String,
     pub future_beat_changed: String,
+    #[serde(default)]
+    pub future_beats: Vec<String>,
     pub risk_or_lockin: String,
     pub next_session_hook: String,
 }

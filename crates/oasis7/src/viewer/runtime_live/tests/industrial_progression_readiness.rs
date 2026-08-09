@@ -225,6 +225,23 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         assert!(!recommendation.route_label.trim().is_empty());
         assert!(!recommendation.immediate_gain.trim().is_empty());
         assert!(!recommendation.future_beat_changed.trim().is_empty());
+        assert_eq!(
+            recommendation.future_beats.len(),
+            2,
+            "each actionable branch recommendation must expose exactly two future beats"
+        );
+        assert!(
+            recommendation
+                .future_beats
+                .iter()
+                .all(|beat| !beat.trim().is_empty()),
+            "future beats must be player-readable"
+        );
+        assert_ne!(
+            recommendation.future_beats[0].trim(),
+            recommendation.future_beats[1].trim(),
+            "future beats must describe substantively distinct changes"
+        );
         assert!(!recommendation.risk_or_lockin.trim().is_empty());
         assert!(!recommendation.next_session_hook.trim().is_empty());
         assert!(

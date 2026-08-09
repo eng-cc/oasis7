@@ -819,6 +819,23 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
     }
     assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
     for recommendation in &gameplay.branch_recommendations {
+        assert_eq!(
+            recommendation.future_beats.len(),
+            2,
+            "each actionable branch recommendation must expose exactly two future beats"
+        );
+        assert!(
+            recommendation
+                .future_beats
+                .iter()
+                .all(|beat| !beat.trim().is_empty()),
+            "future beats must be player-readable"
+        );
+        assert_ne!(
+            recommendation.future_beats[0].trim(),
+            recommendation.future_beats[1].trim(),
+            "future beats must describe substantively distinct changes"
+        );
         let published_claims = format!(
             "{} {} {} {} {}",
             recommendation.route_label,
