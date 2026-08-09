@@ -110,6 +110,13 @@ fixture="$FIXTURE"
 printf 'invalid = [\n' >> "$fixture/.codex/agents/runtime_engineer.toml"
 expect_fail invalid_trailing_toml "$fixture"
 
+new_fixture symlinked-project-config
+fixture="$FIXTURE"
+mv "$fixture/.codex/config.toml" "$fixture/project-config.toml"
+ln -s "$fixture/project-config.toml" "$fixture/.codex/config.toml"
+expect_fail symlinked_project_config "$fixture" \
+  "must be a regular file and not a symlink"
+
 new_fixture symlinked-adapter
 fixture="$FIXTURE"
 mv "$fixture/.codex/agents/runtime_engineer.toml" "$fixture/runtime-engineer.toml"
