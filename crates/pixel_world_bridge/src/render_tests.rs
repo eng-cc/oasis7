@@ -364,13 +364,19 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("hotspot", sprite, transform)),
     );
-
     let mut hotspot_core_query =
         world.query::<(&PixelWorldHotspotCoreVisual, &Sprite, &Transform)>();
     layers.extend(
         hotspot_core_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("hotspot_core", sprite, transform)),
+    );
+    let mut assignment_cue_query =
+        world.query::<(&PixelWorldAssignmentCueVisual, &Sprite, &Transform)>();
+    layers.extend(
+        assignment_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("assignment_cue", sprite, transform)),
     );
 
     layers.sort_by(|left, right| {
@@ -380,13 +386,11 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
     });
     layers
 }
-
 fn blend_src_over(src_rgba: [f32; 4], dst: [u8; 4]) -> [u8; 4] {
     let src_alpha = src_rgba[3].clamp(0.0, 1.0);
     let dst_alpha = (dst[3] as f32 / 255.0).clamp(0.0, 1.0);
     let out_alpha = src_alpha + (dst_alpha * (1.0 - src_alpha));
     let mut out = [0u8; 4];
-
     for channel in 0..3 {
         let src = src_rgba[channel].clamp(0.0, 1.0);
         let dst = (dst[channel] as f32 / 255.0).clamp(0.0, 1.0);
@@ -400,7 +404,6 @@ fn blend_src_over(src_rgba: [f32; 4], dst: [u8; 4]) -> [u8; 4] {
     out[3] = (out_alpha * 255.0).round().clamp(0.0, 255.0) as u8;
     out
 }
-
 fn layer_kind_id(kind: &str) -> u8 {
     match kind {
         "grid" => 1,
@@ -419,7 +422,6 @@ fn layer_kind_id(kind: &str) -> u8 {
         _ => 0,
     }
 }
-
 fn fnv1a64(bytes: &[u8]) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in bytes {
@@ -428,7 +430,6 @@ fn fnv1a64(bytes: &[u8]) -> String {
     }
     format!("{hash:016x}")
 }
-
 fn sample_pixel(image: &RgbaImage, layer: &PixelLayer) -> [u8; 4] {
     let x = layer
         .center_x
@@ -440,7 +441,6 @@ fn sample_pixel(image: &RgbaImage, layer: &PixelLayer) -> [u8; 4] {
         .clamp(0.0, (VIEWPORT_HEIGHT - 1) as f32) as u32;
     image.get_pixel(x, y).0
 }
-
 fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSummary) {
     let layers = collect_pixel_layers(app);
     let mut image = RgbaImage::from_pixel(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, Rgba(PIXEL_BACKGROUND));
