@@ -825,6 +825,12 @@ impl ViewerRuntimeLiveServer {
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned)
+            })
+            .or_else(|| {
+                self.governance_vote_quote_debug_agent_for_local_test_player(
+                    verified.player_id.as_str(),
+                )
+                .map(ToOwned::to_owned)
             });
         let (bound_agent_id, binding_plan) = match requested_agent_id.as_deref() {
             Some(agent_id) => {

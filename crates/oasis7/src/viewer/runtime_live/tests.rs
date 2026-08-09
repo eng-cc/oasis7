@@ -22,6 +22,8 @@ pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_runway;
 mod fine_grain_translation;
+mod governance_vote_quote;
+mod governance_vote_quote_debug;
 mod industrial_progression;
 mod industrial_progression_grind;
 mod industrial_progression_readiness;

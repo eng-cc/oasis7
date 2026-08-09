@@ -50,6 +50,8 @@ export function createSoftwareSafeState() {
     fragmentRefillPreviewRequest: { status: "idle", error: null },
     marketQuoteDecision: null,
     marketQuoteDecisionRequest: { status: "idle", error: null },
+    governanceVoteQuote: null,
+    governanceVoteQuoteRequest: { status: "idle", error: null },
     warDeclarationQuote: null,
     warDeclarationQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {

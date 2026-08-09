@@ -24,6 +24,9 @@ mod market_quote_decision;
 pub use market_quote_decision::*;
 mod social_quote;
 pub use social_quote::*;
+/// Signed, advisory preflight for an existing governance proposal vote.
+mod governance_vote_quote;
+pub use governance_vote_quote::*;
 /// Signed, advisory preflight for the existing DeclareWar action.
 mod war_declaration_quote;
 pub use war_declaration_quote::*;
@@ -116,6 +119,9 @@ pub enum ViewerRequest {
     },
     QuotePublishSocialFact {
         request: PublishSocialFactQuoteRequest,
+    },
+    QuoteGovernanceVote {
+        request: GovernanceVoteQuoteRequest,
     },
     QuoteDeclareWar {
         request: WarDeclarationQuoteRequest,
@@ -670,6 +676,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     PublishSocialFactQuotePreflight {
         quote: PublishSocialFactQuotePreflight,
+    },
+    GovernanceVoteQuotePreflight {
+        quote: GovernanceVoteQuotePreflight,
     },
     WarDeclarationQuotePreflight {
         quote: WarDeclarationQuotePreflight,

@@ -8,6 +8,7 @@ function integration() {
     handlePowerSurvivalQuote: vi.fn(), handlePowerSurvivalQuoteError: vi.fn(() => false),
     handleProductValidationQuote: vi.fn(), handleProductValidationQuoteError: vi.fn(() => false),
     handleFragmentRefillPreview: vi.fn(), handleFragmentRefillPreviewError: vi.fn(() => false),
+    handleGovernanceVoteQuote: vi.fn(), handleGovernanceVoteQuoteError: vi.fn(() => false),
     handleWarDeclarationQuote: vi.fn(), handleWarDeclarationQuoteError: vi.fn(() => false),
     invalidateWarDeclarationQuoteForAuthoritativeSnapshot: vi.fn(),
     invalidateFragmentRefillPreview: vi.fn(),
@@ -52,6 +53,30 @@ describe("viewer quote protocol facade", () => {
 
     expect(facade.handleQuoteViewerMessage({ type: "war_declaration_quote_preflight", quote })).toBe(true);
     expect(warDeclarationQuote.handleWarDeclarationQuote).toHaveBeenCalledWith(quote);
+  });
+
+  it("routes the authenticated governance vote quote with its player decision fields", () => {
+    const governanceVoteQuote = integration();
+    const facade = createViewerQuoteProtocolFacade({
+      fragmentRefillPreview: integration(),
+      governanceVoteQuote,
+      handleRefineQuoteError: vi.fn(() => false), handleRefineQuotePreflight: vi.fn(),
+      marketQuoteDecision: integration(), powerSurvivalQuote: integration(), productValidationQuote: integration(),
+      state: {}, warDeclarationQuote: integration(),
+    });
+    const quote = {
+      proposal_id: "proposal.viewer-governance-quote", proposal_topic: "Keep the solar reserve",
+      actor_id: "agent-0", action_kind: "cast_governance_vote", closes_at_tick: 17, ticks_remaining: 12,
+      current_quorum_weight: 0, required_quorum_weight: 3, current_pass_bps: 0, required_pass_bps: 6000,
+      actor_vote_weight: 3, vote_swing_potential: 3, likely_outcome_before_action: "rejected",
+      likely_outcome_after_action: "passed", affected_rule_or_priority: "Keep the solar reserve",
+      world_change_if_passed: "Prioritize the solar reserve over an emergency drawdown.",
+      cost_or_cooldown_if_failed: "No governance action cost or cooldown is defined for this proposal.",
+      recommended_governance_action: "cast_vote", why_this_vote_matters: "This vote changes the likely outcome.",
+    };
+
+    expect(facade.handleQuoteViewerMessage({ type: "governance_vote_quote_preflight", quote })).toBe(true);
+    expect(governanceVoteQuote.handleGovernanceVoteQuote).toHaveBeenCalledWith(quote);
   });
 
   it("routes a power sale preflight through the seller-side quote boundary", () => {

@@ -58,6 +58,8 @@ mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
 mod gameplay_snapshot_lane;
 mod gameplay_validation_preview;
+mod governance_vote_quote;
+mod governance_vote_quote_debug;
 mod mapping;
 mod market_quote_decision;
 mod player_gameplay;
@@ -141,6 +143,7 @@ pub struct ViewerRuntimeLiveServer {
     consumed_rollback_operator_nonces: BTreeSet<String>,
     authoritative_recovery_write_fence: Option<String>,
     smelter_affordability_debug_agent_id: Option<String>,
+    governance_vote_quote_debug_agent_id: Option<String>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
     #[cfg(test)]
@@ -162,6 +165,11 @@ impl ViewerRuntimeLiveServer {
     /// Seeds the opt-in local S6 world used to verify smelter affordability UI.
     pub fn seed_smelter_affordability_debug_scenario(&mut self) -> Result<(), String> {
         self.seed_smelter_affordability_debug_scenario_inner()
+    }
+
+    /// Seeds the opt-in local S6 world used to verify governance vote quotes.
+    pub fn seed_governance_vote_quote_debug_scenario(&mut self) -> Result<(), String> {
+        self.seed_governance_vote_quote_debug_scenario_inner()
     }
 
     pub fn new(
@@ -341,6 +349,7 @@ impl ViewerRuntimeLiveServer {
                 .unwrap_or_default(),
             authoritative_recovery_write_fence: None,
             smelter_affordability_debug_agent_id: None,
+            governance_vote_quote_debug_agent_id: None,
             #[cfg(test)]
             recovery_fault_injection: None,
             #[cfg(test)]
@@ -818,6 +827,9 @@ impl ViewerRuntimeLiveServer {
             }
             ViewerRequest::QuotePublishSocialFact { request } => {
                 self.quote_publish_social_fact(request, writer)?
+            }
+            ViewerRequest::QuoteGovernanceVote { request } => {
+                self.quote_governance_vote(request, writer)?
             }
             ViewerRequest::QuoteDeclareWar { request } => {
                 self.quote_declare_war(request, writer)?

@@ -39,12 +39,14 @@ struct CliOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DebugScenario {
     SmelterAffordability,
+    GovernanceVoteQuote,
 }
 
 impl DebugScenario {
     fn as_str(self) -> &'static str {
         match self {
             Self::SmelterAffordability => "smelter_affordability",
+            Self::GovernanceVoteQuote => "governance_vote_quote",
         }
     }
 }
@@ -127,17 +129,29 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         });
     }
 
-    let base_config = if options.debug_scenario == Some(DebugScenario::SmelterAffordability) {
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_world_id("live-runtime-smelter-affordability")
-    } else {
-        match options.scenario {
+    let server = initialize_viewer_server(&options)?;
+    server
+        .run()
+        .map_err(|err| format!("runtime viewer server exited with error: {err:?}"))
+}
+
+fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveServer, String> {
+    let base_config = match options.debug_scenario {
+        Some(DebugScenario::SmelterAffordability) => {
+            ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                .with_world_id("live-runtime-smelter-affordability")
+        }
+        Some(DebugScenario::GovernanceVoteQuote) => {
+            ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                .with_world_id("live-runtime-governance-vote-quote")
+        }
+        None => match options.scenario {
             Some(scenario) => ViewerRuntimeLiveServerConfig::new(scenario),
             None => ViewerRuntimeLiveServerConfig::formal_release_default(),
-        }
+        },
     };
     let config = base_config
-        .with_bind_addr(options.bind_addr)
+        .with_bind_addr(options.bind_addr.clone())
         .with_hosted_public_join_mode(options.deployment_mode == "hosted_public_join")
         .with_auto_play_on_connect(options.auto_play)
         .with_agent_chat_echo_enabled(options.agent_chat_echo)
@@ -147,31 +161,37 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         } else {
             ViewerLiveDecisionMode::Script
         });
-    let config = if let Some(generated_world_dir) = options.generated_world_dir {
-        config.with_generated_world_dir(generated_world_dir)
+    let config = if let Some(generated_world_dir) = options.generated_world_dir.as_ref() {
+        config.with_generated_world_dir(generated_world_dir.clone())
     } else {
         config
     };
-    let config = if let Some(chain_status_bind) = options.chain_status_bind {
-        config.with_chain_status_bind(chain_status_bind)
+    let config = if let Some(chain_status_bind) = options.chain_status_bind.as_ref() {
+        config.with_chain_status_bind(chain_status_bind.clone())
     } else {
         config
     };
-    let config = if let Some(chain_submit_bind) = options.chain_submit_bind {
-        config.with_chain_submit_bind(chain_submit_bind)
+    let config = if let Some(chain_submit_bind) = options.chain_submit_bind.as_ref() {
+        config.with_chain_submit_bind(chain_submit_bind.clone())
     } else {
         config
     };
     let mut server = ViewerRuntimeLiveServer::new(config)
         .map_err(|err| format!("failed to create runtime viewer server: {err:?}"))?;
-    if options.debug_scenario == Some(DebugScenario::SmelterAffordability) {
-        server
+    match options.debug_scenario {
+        Some(DebugScenario::SmelterAffordability) => server
             .seed_smelter_affordability_debug_scenario()
-            .map_err(|err| format!("failed to seed smelter affordability debug scenario: {err}"))?;
+            .map_err(|err| format!("failed to seed smelter affordability debug scenario: {err}"))?,
+        Some(DebugScenario::GovernanceVoteQuote) => {
+            server
+                .seed_governance_vote_quote_debug_scenario()
+                .map_err(|err| {
+                    format!("failed to seed governance vote quote debug scenario: {err}")
+                })?;
+        }
+        None => {}
     }
-    server
-        .run()
-        .map_err(|err| format!("runtime viewer server exited with error: {err:?}"))
+    Ok(server)
 }
 
 fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
@@ -187,6 +207,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             if arg == "smelter_affordability" {
                 options.scenario = None;
                 options.debug_scenario = Some(DebugScenario::SmelterAffordability);
+            } else if arg == "governance_vote_quote" {
+                options.scenario = None;
+                options.debug_scenario = Some(DebugScenario::GovernanceVoteQuote);
             } else {
                 options.scenario = Some(parse_world_scenario(arg)?);
             }
@@ -421,7 +444,7 @@ Options:\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   --auto-play               advance gameplay/world on each connected session without pressing Play (default)\n\
   --no-auto-play            keep gameplay/world paused until explicit Play actions\n\
-  --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap\n\
+  --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap, smelter_affordability, governance_vote_quote\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
   -h, --help                show help\n\n\
@@ -697,6 +720,34 @@ mod tests {
             Some(DebugScenario::SmelterAffordability)
         );
         assert!(options.allow_debug_scenario);
+    }
+
+    #[test]
+    fn governance_vote_quote_debug_scenario_requires_explicit_opt_in() {
+        let err = parse_options(["governance_vote_quote"].into_iter())
+            .expect_err("debug scenario requires an explicit opt-in");
+        assert!(err.contains("governance_vote_quote"));
+        assert!(err.contains("--allow-debug-scenario"));
+    }
+
+    #[test]
+    fn governance_vote_quote_debug_scenario_opens_one_deterministic_unvoted_proposal() {
+        let options = parse_options(
+            [
+                "governance_vote_quote",
+                "--allow-debug-scenario",
+                "--no-web-bind",
+                "--no-auto-play",
+            ]
+            .into_iter(),
+        )
+        .expect("debug scenario opt-in");
+        assert_eq!(
+            options.debug_scenario,
+            Some(DebugScenario::GovernanceVoteQuote)
+        );
+
+        initialize_viewer_server(&options).expect("initialize debug viewer");
     }
 
     #[test]
