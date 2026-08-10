@@ -379,10 +379,10 @@ def main() -> None:
                 f"{adapter_path} must contain exactly developer_instructions, model, "
                 "and model_reasoning_effort"
             )
-        if adapter.get("model") != "gpt-5.6-terra":
-            fail(f'{adapter_path} model must be exactly "gpt-5.6-terra"')
-        if adapter.get("model_reasoning_effort") != "medium":
-            fail(f'{adapter_path} model_reasoning_effort must be exactly "medium"')
+        if adapter.get("model") != "gpt-5.6-luna":
+            fail(f'{adapter_path} model must be exactly "gpt-5.6-luna"')
+        if adapter.get("model_reasoning_effort") != "xhigh":
+            fail(f'{adapter_path} model_reasoning_effort must be exactly "xhigh"')
         instructions = adapter.get("developer_instructions")
         if not isinstance(instructions, str) or not instructions.strip():
             fail(f"{adapter_path} must define non-blank developer_instructions")
