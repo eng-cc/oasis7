@@ -6,13 +6,17 @@ pub(super) enum FreshObserverCheckpointBootstrap {
     Installed,
     PreflightUnavailable,
     RetryPending,
+    HighCheckpointPending,
     LowHeadConfirmationPending,
     NotInstalled,
 }
 
 impl FreshObserverCheckpointBootstrap {
     pub(super) fn should_defer_height_one(&self) -> bool {
-        matches!(self, Self::LowHeadConfirmationPending)
+        matches!(
+            self,
+            Self::HighCheckpointPending | Self::LowHeadConfirmationPending
+        )
     }
 }
 
@@ -100,7 +104,12 @@ impl PosNodeEngine {
             progress_callback,
         ) {
             Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
-            Ok(false) => Ok(FreshObserverCheckpointBootstrap::NotInstalled),
+            // A high advertised head is evidence that replaying the height-one
+            // tail is unsafe until this observer has either installed the
+            // matching verified checkpoint or observed that head change. In
+            // particular, a bounded fetch probe can return `NotFound` while
+            // the connected peer is still becoming request-ready.
+            Ok(false) => Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending),
             Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
                 self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
                 Ok(FreshObserverCheckpointBootstrap::RetryPending)

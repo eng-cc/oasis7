@@ -788,6 +788,7 @@ fn fresh_observer_bootstraps_checkpoint_at_boundary_before_height_one_peer_misma
         .expect("config b")
         .with_pos_config(pos_config)
         .expect("pos config b")
+        .with_require_execution_on_commit(true)
         .with_replication(replication_config_b.clone());
     let checkpoint_height = 64;
     let mut replication_a =
