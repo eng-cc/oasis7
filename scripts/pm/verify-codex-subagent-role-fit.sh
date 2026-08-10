@@ -8,8 +8,13 @@ OASIS7_ROLE_FIT_SCRATCH="$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 cd "$ROOT_DIR"
+ROLE_FIT_TASK_UID="${OASIS7_ROLE_FIT_TASK_UID:-}"
+if [[ -z "$ROLE_FIT_TASK_UID" ]]; then
+  echo "verify-codex-subagent-role-fit: OASIS7_ROLE_FIT_TASK_UID is required" >&2
+  exit 2
+fi
 ./scripts/pm/github-project-workflow.sh --json audit \
-  --task-uid task_af5894a457964a9bb8bff5e8a4f87df1 >/dev/null
+  --task-uid "$ROLE_FIT_TASK_UID" >/dev/null
 ./scripts/pm/workflow-behavior-eval.sh
 ./scripts/doc-governance-check.sh
 ./scripts/lint-skills.sh

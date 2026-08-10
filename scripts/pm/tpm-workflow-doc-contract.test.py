@@ -767,6 +767,15 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertNotRegex(eval_text, r"(?m)^\s*(?:rm|cp|mv).+ROOT_DIR.+\.pm")
         self.assertNotRegex(role_text, r"(?m)^\s*(?:rm|cp|mv).+ROOT_DIR.+\.pm")
 
+    def test_role_fit_audit_binds_to_the_current_claim_task(self) -> None:
+        role_text = ROLE_FIT.read_text(encoding="utf-8")
+        claim_text = (ROOT / "scripts/pm/claim-ready.sh").read_text(encoding="utf-8")
+        self.assertIn("OASIS7_ROLE_FIT_TASK_UID", role_text)
+        self.assertIn('ROLE_FIT_TASK_UID="${OASIS7_ROLE_FIT_TASK_UID:-}"', role_text)
+        self.assertNotRegex(role_text, r"--task-uid task_[0-9a-f]{32}")
+        self.assertIn('codex_subagent_role_fit requires --task-uid', claim_text)
+        self.assertIn('export OASIS7_ROLE_FIT_TASK_UID="$TASK_UID"', claim_text)
+
     def test_tpm_is_coordinator_not_the_professional_task_owner(self) -> None:
         ownership = self.section("Lifecycle ownership")
         normalized = re.sub(r"\s+", " ", ownership.lower())

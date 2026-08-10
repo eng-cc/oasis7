@@ -104,7 +104,10 @@ done
 [[ -n "$CLAIM_TYPE" ]] || die "--claim-type is required"
 if [[ -n "$VERIFICATION_PROFILE" ]]; then
   case "$VERIFICATION_PROFILE" in
-    codex_subagent_role_fit) VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh" ;;
+    codex_subagent_role_fit)
+      [[ -n "$TASK_UID" ]] || die "codex_subagent_role_fit requires --task-uid"
+      VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh"
+      ;;
     workflow_behavior) VERIFY_COMMAND="./scripts/pm/workflow-behavior-eval.sh" ;;
     repository_required) VERIFY_COMMAND="true" ;;
     fixture_repository_state)
@@ -360,6 +363,12 @@ python3 "$SCRIPT_DIR/repo-state-fingerprint.py" "$VERIFY_ROOT" >"$FINGERPRINT_BE
 set +e
 (
   cd "$VERIFY_ROOT"
+  if [[ "$VERIFICATION_PROFILE" == "codex_subagent_role_fit" ]]; then
+    # The role-fit profile must audit the same task that authorized this claim;
+    # keep the binding in the verification environment rather than a stale
+    # task identifier embedded in the profile command.
+    export OASIS7_ROLE_FIT_TASK_UID="$TASK_UID"
+  fi
   OASIS7_CLAIM_COMPARISON_REF="$COMPARISON_REF" /bin/bash -lc "$VERIFY_COMMAND"
 ) >"$STDOUT_CAPTURE" 2>"$STDERR_CAPTURE"
 VERIFY_EXIT_CODE=$?
