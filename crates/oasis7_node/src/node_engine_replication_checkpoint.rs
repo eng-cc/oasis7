@@ -41,6 +41,39 @@ impl PosNodeEngine {
                     && self.fresh_observer_checkpoint_bootstrap_retry_pending))
     }
 
+    /// Keep a fresh observer at height zero while connected peers advertise a
+    /// high, unresolved head that the world-head lookup may not expose yet.
+    ///
+    /// The world-head lookup is a bounded DHT/connected-provider probe and may
+    /// transiently return a stale height-one candidate even though the
+    /// validated peer-head cache already contains a current connected
+    /// validator head.  Replaying that candidate would bypass checkpoint
+    /// closure and can trigger an execution-peer mismatch without a height-zero
+    /// rollback.  This gate is intentionally conservative: it is only
+    /// used for a fresh observer with an unresolved high peer head, and callers
+    /// still require a verified checkpoint receipt before advancing.
+    pub(super) fn hold_fresh_observer_for_high_peer_heads(
+        &mut self,
+        advertised_network_height: u64,
+    ) -> bool {
+        if !self.checkpoint_bootstrap_enabled
+            || self.committed_height != 0
+            || self.replication_persisted_height != 0
+            || self.last_execution_height != 0
+            || advertised_network_height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+        {
+            return false;
+        }
+        let hold = self
+            .peer_heads
+            .values()
+            .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
+        if hold {
+            self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+        }
+        hold
+    }
+
     pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
