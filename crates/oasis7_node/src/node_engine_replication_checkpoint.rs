@@ -29,6 +29,10 @@ impl PosNodeEngine {
         &self,
         advertised_head: Option<&WorldHeadAnnounce>,
     ) -> bool {
+        let high_head_retry_pending = self.fresh_observer_checkpoint_bootstrap_retry_pending
+            && (advertised_head
+                .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+                || self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
         self.checkpoint_bootstrap_enabled
             && self.committed_height == 0
             && self.replication_persisted_height == 0
@@ -36,9 +40,7 @@ impl PosNodeEngine {
             && (self
                 .fresh_observer_checkpoint_low_head_confirmation
                 .is_some()
-                || (advertised_head
-                    .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
-                    && self.fresh_observer_checkpoint_bootstrap_retry_pending))
+                || high_head_retry_pending)
     }
 
     /// Keep a fresh observer at height zero while connected peers advertise a
@@ -99,7 +101,11 @@ impl PosNodeEngine {
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
-        self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
+        let preserve_high_checkpoint_retry =
+            self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+        if !preserve_high_checkpoint_retry {
+            self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
+        }
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             // An already observed network height can require an immediate low-height
             // checkpoint to recover missing history. Only a completely unestablished
@@ -124,6 +130,7 @@ impl PosNodeEngine {
             self.fresh_observer_checkpoint_low_head_confirmation = Some(identity);
             return Ok(FreshObserverCheckpointBootstrap::LowHeadConfirmationPending);
         }
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         self.fresh_observer_checkpoint_low_head_confirmation = None;
         match self.try_sync_high_replication_checkpoint_boundary(
             endpoint,
