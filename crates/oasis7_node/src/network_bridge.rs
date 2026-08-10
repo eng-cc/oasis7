@@ -642,9 +642,26 @@ impl ReplicationNetworkEndpoint {
             }
         };
         if !response.found {
-            let mut peer_ids = self.network.known_peer_ids();
+            // A fresh observer can have enough stale discovery candidates to
+            // exhaust this bounded sweep before reaching the validators that
+            // supplied its signed head.  Prefer live connected peers, then
+            // configured bootstrap peers, before using remaining discovery
+            // candidates.  The request remains provider-directed and bounded;
+            // this only determines which existing provenance-backed routes
+            // receive the budget.
+            let mut peer_ids = self.network.connected_peer_ids();
             peer_ids.sort();
             peer_ids.dedup();
+            let mut static_bootstrap_peer_ids = self.network.configured_static_bootstrap_peer_ids();
+            static_bootstrap_peer_ids.sort();
+            static_bootstrap_peer_ids.dedup();
+            static_bootstrap_peer_ids.retain(|peer_id| !peer_ids.contains(peer_id));
+            peer_ids.extend(static_bootstrap_peer_ids);
+            let mut known_peer_ids = self.network.known_peer_ids();
+            known_peer_ids.sort();
+            known_peer_ids.dedup();
+            known_peer_ids.retain(|peer_id| !peer_ids.contains(peer_id));
+            peer_ids.extend(known_peer_ids);
             peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
             peer_ids.truncate(GAP_SYNC_FETCH_COMMIT_MAX_PROVIDER_ROUTES_PER_POLL);
             let peer_count = peer_ids.len();

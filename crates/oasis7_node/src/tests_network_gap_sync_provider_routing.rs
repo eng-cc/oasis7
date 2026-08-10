@@ -9,6 +9,85 @@ struct TimeoutThenProviderUnavailableFetchCommitNetwork {
     provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
+#[derive(Clone)]
+struct BootstrapPriorityFetchCommitNetwork {
+    known_peer_ids: Vec<String>,
+    static_bootstrap_peer_ids: Vec<String>,
+    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+    successful_provider: String,
+    successful_response: Arc<Mutex<super::replication::FetchCommitResponse>>,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for BootstrapPriorityFetchCommitNetwork
+{
+    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!("libp2p-replication no connected providers for protocol {protocol}"),
+        })
+    }
+
+    fn known_peer_ids(&self) -> Vec<String> {
+        self.known_peer_ids.clone()
+    }
+
+    fn configured_static_bootstrap_peer_ids(&self) -> Vec<String> {
+        self.static_bootstrap_peer_ids.clone()
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        _payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .push(providers.to_vec());
+        if protocol != super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        if providers == [self.successful_provider.clone()] {
+            return serde_json::to_vec(
+                &*self
+                    .successful_response
+                    .lock()
+                    .expect("lock successful bootstrap response"),
+            )
+            .map_err(|err| {
+                WorldError::DistributedValidationFailed {
+                    reason: format!("encode successful bootstrap fetch-commit response failed: {err}"),
+                }
+            });
+        }
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!("libp2p-replication no connected providers for protocol {protocol}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
     for TimeoutThenProviderUnavailableFetchCommitNetwork
 {
@@ -174,6 +253,63 @@ fn gap_sync_fetch_commit_single_probe_preserves_generic_timeout_over_provider_ga
             .as_slice(),
         &[vec!["peer-a".to_string()]],
         "single probe should still attempt the provider route for diagnostics"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn fresh_checkpoint_fetch_prioritizes_static_validators_after_peer_head_discovery() {
+    let dir_remote = temp_dir("fresh-checkpoint-static-validator-priority-remote");
+    let dir_local = temp_dir("fresh-checkpoint-static-validator-priority-local");
+    let world_id = "world-fresh-checkpoint-static-validator-priority";
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let successful_provider = "validator-204".to_string();
+    let stale_discovery_peers = (0..8)
+        .map(|index| format!("dht-stale-{index:02}"))
+        .collect::<Vec<_>>();
+    let mut known_peer_ids = stale_discovery_peers;
+    known_peer_ids.extend(["validator-204".to_string(), "validator-205".to_string()]);
+    let successful_response = Arc::new(Mutex::new(super::replication::FetchCommitResponse {
+        found: false,
+        message: None,
+    }));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(BootstrapPriorityFetchCommitNetwork {
+        known_peer_ids,
+        static_bootstrap_peer_ids: vec!["validator-204".to_string(), "validator-205".to_string()],
+        provider_attempts: Arc::clone(&provider_attempts),
+        successful_provider: successful_provider.clone(),
+        successful_response: Arc::clone(&successful_response),
+    });
+    let (_, _, endpoint, message) = network_gap_sync_tests::build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        208,
+        209,
+        Arc::clone(&network),
+    );
+
+    *successful_response
+        .lock()
+        .expect("install signed validator response") = super::replication::FetchCommitResponse {
+        found: true,
+        message: Some(message),
+    };
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 209);
+
+    let response = endpoint
+        .request_fetch_commit_for_gap_sync_single_probe(&request)
+        .expect("fresh observer must fetch its checkpoint from the static validator whose signed head was selected");
+
+    assert!(response.response.found, "static validator must supply the signed checkpoint commit");
+    assert_eq!(
+        provider_attempts.lock().expect("lock provider attempts").as_slice(),
+        &[vec![successful_provider]],
+        "checkpoint fetch must prioritize static validators before stale discovery candidates"
     );
 
     let _ = fs::remove_dir_all(&dir_remote);
