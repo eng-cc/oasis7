@@ -23,7 +23,6 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_repair_attempt_summary = Some(repair_summary);
         self.last_replication_gap_sync_repair_attempt_route_snapshot = Some(route_snapshot);
     }
-
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
         if self
             .last_replication_gap_sync_blocked_height
@@ -38,7 +37,6 @@ impl PosNodeEngine {
             self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         }
     }
-
     fn advance_contiguous_replication_persisted_height(
         &mut self,
         replication_runtime: &ReplicationRuntime,
@@ -67,7 +65,6 @@ impl PosNodeEngine {
         self.clear_replication_gap_sync_blocked_if_unblocked();
         Ok(())
     }
-
     pub(super) fn broadcast_local_replication(
         &mut self,
         gossip_endpoint: Option<&GossipEndpoint>,
@@ -569,7 +566,10 @@ impl PosNodeEngine {
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
     ) -> Result<bool, NodeError> {
-        if self.require_execution_on_commit
+        let fresh_execution_bootstrap = self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0;
+        if (self.require_execution_on_commit && !fresh_execution_bootstrap)
             || checkpoint_height <= blocked_height
             || checkpoint_height <= self.replication_persisted_height
         {
