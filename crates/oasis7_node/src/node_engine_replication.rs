@@ -771,7 +771,7 @@ impl PosNodeEngine {
             && self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0
-            && self.network_committed_height == 1
+            && self.peer_heads.values().all(|head| head.height <= 1)
             && self.fresh_observer_checkpoint_preflight_unavailable
         {
             // Match ingest's fresh-observer deferral above. A missing peer

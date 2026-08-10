@@ -102,3 +102,13 @@ fn fresh_observer_defers_height_one_when_signed_checkpoint_is_temporarily_not_fo
         true,
     );
 }
+
+#[test]
+fn fresh_observer_with_observed_high_head_defers_height_one_without_checkpoint_closure() {
+    peer_head_checkpoint_before_height_one_with_stale_dht(
+        InitialPeerHead::UnavailableWithObservedHigh,
+        false,
+        false,
+        true,
+    );
+}
