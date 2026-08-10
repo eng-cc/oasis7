@@ -51,6 +51,19 @@ fn runtime_gameplay_snapshot_binds_a_deterministic_first_delivery_preview_to_eac
         .and_then(serde_json::Value::as_array)
         .expect("mid-loop snapshot publishes branch recommendations");
     assert!(!branches.is_empty());
+    let expected_inputs = |action_id: &str| match action_id {
+        "schedule_recipe_smelter_alloy_plate" => vec!["iron_ingot × 2", "copper_wire × 2"],
+        "build_factory_assembler_mk1" => {
+            vec!["structural_frame × 8", "iron_ingot × 10", "copper_wire × 8"]
+        }
+        "schedule_recipe_assembler_module_rack" => {
+            vec!["sensor_pack × 2", "control_chip × 1"]
+        }
+        "schedule_recipe_assembler_factory_core" => {
+            vec!["module_rack × 1", "alloy_plate × 3"]
+        }
+        other => panic!("unsupported mid-loop branch action {other}"),
+    };
     for branch in branches {
         let action_id = branch
             .get("action_id")
@@ -86,6 +99,19 @@ fn runtime_gameplay_snapshot_binds_a_deterministic_first_delivery_preview_to_eac
                 .iter()
                 .all(|input| input.as_str().is_some_and(|value| !value.trim().is_empty())),
             "branch {action_id} first-delivery preview inputs must be player-readable"
+        );
+        let actual_inputs = required_inputs
+            .iter()
+            .map(|input| {
+                input
+                    .as_str()
+                    .unwrap_or_else(|| panic!("branch {action_id} input must be a string"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_inputs,
+            expected_inputs(action_id),
+            "branch {action_id} first-delivery preview inputs must match its canonical recipe/build amounts"
         );
     }
 

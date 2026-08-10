@@ -3,61 +3,55 @@ use crate::simulator::persist::{
     PlayerGameplayAction, PlayerGameplayBranchCommitment, PlayerGameplayFirstDeliveryPreview,
     PlayerGameplayStageStatus,
 };
+use crate::viewer::gameplay_actions::first_delivery_preview_inputs;
 
 fn first_delivery_preview(action_id: &str) -> PlayerGameplayFirstDeliveryPreview {
-    let (
-        local_need,
-        expected_output,
-        required_inputs,
-        value_timing,
-        leverage_class_unlocked,
-        return_visit_hook,
-    ) = match action_id {
-        "schedule_recipe_smelter_alloy_plate" => (
-            "Regional fabricators need a dependable alloy input for advanced components.",
-            "Two alloy plates from the first smelter batch.",
-            vec!["iron_ingot", "copper_wire"],
-            "After one smelter run completes.",
-            "regional_material_supplier",
-            "Return with the alloy plates to choose an assembler route or sustain local throughput.",
-        ),
-        "build_factory_assembler_mk1" => (
-            "Nearby operators need a second production capability for finished components.",
-            "A functioning assembler line ready for its first component recipe.",
-            vec!["structural_frame", "iron_ingot", "copper_wire"],
-            "After the assembler construction completes.",
-            "regional_component_builder",
-            "Return to choose and run the assembler's first component recipe.",
-        ),
-        "schedule_recipe_assembler_module_rack" => (
-            "Regional operators need durable module hardware for the next industrial capability.",
-            "One module rack from the first assembler batch.",
-            vec!["sensor_pack", "control_chip"],
-            "After one assembler run completes.",
-            "industrial_module_supplier",
-            "Return with the module rack to prepare a factory-core production run.",
-        ),
-        "schedule_recipe_assembler_factory_core" => (
-            "Regional operators need a factory core to add another industrial capability.",
-            "One factory core from the first assembler batch.",
-            vec!["module_rack", "alloy_plate"],
-            "After one assembler run completes.",
-            "regional_capacity_builder",
-            "Return with the factory core to decide where the added capacity creates leverage.",
-        ),
-        _ => (
-            "Regional fabricators need a dependable alloy input for advanced components.",
-            "Two alloy plates from the first smelter batch.",
-            vec!["iron_ingot", "copper_wire"],
-            "After one smelter run completes.",
-            "regional_material_supplier",
-            "Return with the alloy plates to choose the next advanced recipe.",
-        ),
-    };
+    let (local_need, expected_output, value_timing, leverage_class_unlocked, return_visit_hook) =
+        match action_id {
+            "schedule_recipe_smelter_alloy_plate" => (
+                "Regional fabricators need a dependable alloy input for advanced components.",
+                "Two alloy plates from the first smelter batch.",
+                "After one smelter run completes.",
+                "regional_material_supplier",
+                "Return with the alloy plates to choose an assembler route or sustain local throughput.",
+            ),
+            "build_factory_assembler_mk1" => (
+                "Nearby operators need a second production capability for finished components.",
+                "A functioning assembler line ready for its first component recipe.",
+                "After the assembler construction completes.",
+                "regional_component_builder",
+                "Return to choose and run the assembler's first component recipe.",
+            ),
+            "schedule_recipe_assembler_module_rack" => (
+                "Regional operators need durable module hardware for the next industrial capability.",
+                "One module rack from the first assembler batch.",
+                "After one assembler run completes.",
+                "industrial_module_supplier",
+                "Return with the module rack to prepare a factory-core production run.",
+            ),
+            "schedule_recipe_assembler_factory_core" => (
+                "Regional operators need a factory core to add another industrial capability.",
+                "One factory core from the first assembler batch.",
+                "After one assembler run completes.",
+                "regional_capacity_builder",
+                "Return with the factory core to decide where the added capacity creates leverage.",
+            ),
+            _ => (
+                "Regional fabricators need a dependable alloy input for advanced components.",
+                "Two alloy plates from the first smelter batch.",
+                "After one smelter run completes.",
+                "regional_material_supplier",
+                "Return with the alloy plates to choose the next advanced recipe.",
+            ),
+        };
     PlayerGameplayFirstDeliveryPreview {
         local_need: local_need.to_string(),
         expected_output: expected_output.to_string(),
-        required_inputs: required_inputs.into_iter().map(str::to_string).collect(),
+        required_inputs: first_delivery_preview_inputs(action_id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|input| format!("{} × {}", input.kind, input.amount))
+            .collect(),
         value_timing: value_timing.to_string(),
         leverage_class_unlocked: leverage_class_unlocked.to_string(),
         return_visit_hook: return_visit_hook.to_string(),

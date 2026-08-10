@@ -512,3 +512,25 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
         duration_ticks,
     ))
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(in crate::viewer) fn first_delivery_preview_inputs(
+    action_id: &str,
+) -> Option<Vec<MaterialStack>> {
+    match action_id {
+        ACTION_BUILD_ASSEMBLER_MK1 => {
+            factory_spec_for_kind(FACTORY_ASSEMBLER_MK1, FACTORY_ASSEMBLER_MK1)
+                .map(|spec| spec.build_cost)
+        }
+        ACTION_SCHEDULE_SMELTER_ALLOY_PLATE => {
+            recipe_plan_for_id(RECIPE_SMELTER_ALLOY_PLATE, 1).map(|plan| plan.consume)
+        }
+        ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK => {
+            recipe_plan_for_id(RECIPE_ASSEMBLER_MODULE_RACK, 1).map(|plan| plan.consume)
+        }
+        ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE => {
+            recipe_plan_for_id(RECIPE_ASSEMBLER_FACTORY_CORE, 1).map(|plan| plan.consume)
+        }
+        _ => None,
+    }
+}
