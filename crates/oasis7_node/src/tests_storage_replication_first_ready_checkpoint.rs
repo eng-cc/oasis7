@@ -5,7 +5,6 @@ use std::sync::OnceLock;
 use super::*;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::DistributedDht;
-
 #[derive(Clone)]
 struct FirstReadyHeadCheckpointNetwork {
     inner: Arc<TestInMemoryNetwork>,
@@ -1097,6 +1096,7 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
     let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
     if initial_peer_head == InitialPeerHead::UnavailableWithObservedHigh {
         engine_b.network_committed_height = checkpoint_height;
+        seed_consistent_high_peer_heads(&mut engine_b, checkpoint_height);
     }
     let mut execution_hook = BootstrapBeforeIncrementalHook {
         installed: Vec::new(),
