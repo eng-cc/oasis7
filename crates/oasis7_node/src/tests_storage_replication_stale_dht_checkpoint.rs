@@ -60,7 +60,6 @@ fn peer_head_checkpoint_before_height_one(
         initial_checkpoint_fetch_available,
         false,
         false,
-        false,
     );
 }
 
@@ -91,7 +90,6 @@ fn fresh_observer_prefers_connected_high_checkpoint_over_stale_dht_height_one() 
         true,
         true,
         false,
-        false,
     );
 }
 
@@ -101,7 +99,6 @@ fn fresh_observer_defers_height_one_when_signed_checkpoint_is_temporarily_not_fo
         InitialPeerHead::HighCheckpoint,
         false,
         false,
-        true,
         true,
     );
 }

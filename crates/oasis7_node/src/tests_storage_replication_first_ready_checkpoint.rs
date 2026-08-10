@@ -88,26 +88,19 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
         if protocol == REPLICATION_FETCH_COMMIT_PROTOCOL
             && !self.checkpoint_fetch_available.load(Ordering::SeqCst)
         {
-            if self.checkpoint_fetch_not_found.load(Ordering::SeqCst) {
-                let request = serde_json::from_slice::<super::replication::FetchCommitRequest>(
-                    payload,
-                )
-                .map_err(|err| WorldError::DistributedValidationFailed {
-                    reason: format!("decode checkpoint fetch request failed: {err}"),
-                })?;
-                if request.height > 1 {
-                    return serde_json::to_vec(&super::replication::FetchCommitResponse {
-                        found: false,
-                        message: None,
-                    })
-                    .map_err(|err| WorldError::DistributedValidationFailed {
-                        reason: format!("encode unavailable checkpoint response failed: {err}"),
-                    });
-                }
-            }
             if !self.checkpoint_fetch_not_found.load(Ordering::SeqCst) {
                 return Err(WorldError::NetworkProtocolUnavailable {
                     protocol: protocol.to_string(),
+                });
+            }
+            let request = serde_json::from_slice::<super::replication::FetchCommitRequest>(payload)
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("decode checkpoint fetch request failed: {err}"),
+                })?;
+            if request.height > 1 {
+                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None })
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("encode unavailable checkpoint response failed: {err}"),
                 });
             }
         }
@@ -953,7 +946,6 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
     initial_checkpoint_fetch_available: bool,
     stale_dht_height_one: bool,
     initial_checkpoint_fetch_not_found: bool,
-    dual_connected_provider_heads: bool,
 ) {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = stale_dht_height_one.then(CheckpointProbeNonceGuard::install);
@@ -1069,11 +1061,7 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
         head: Arc::clone(&peer_head),
         checkpoint_fetch_available: Arc::clone(&checkpoint_fetch_available),
         checkpoint_fetch_not_found: Arc::clone(&checkpoint_fetch_not_found),
-        connected_peer_ids: if dual_connected_provider_heads {
-            vec!["node-a".to_string(), "node-c".to_string()]
-        } else {
-            vec!["node-a".to_string()]
-        },
+        connected_peer_ids: vec!["node-a".to_string(), "node-c".to_string()],
     });
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
