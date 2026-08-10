@@ -112,6 +112,22 @@ pub struct PlayerGameplayBranchCommitment {
     pub future_beats: Vec<String>,
     pub risk_or_lockin: String,
     pub next_session_hook: String,
+    /// A read-only, player-facing quote for the first delivery produced by
+    /// this branch. `None` preserves deserialization of snapshots written
+    /// before specialization delivery previews existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_delivery_preview: Option<PlayerGameplayFirstDeliveryPreview>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayFirstDeliveryPreview {
+    pub local_need: String,
+    pub expected_output: String,
+    #[serde(default)]
+    pub required_inputs: Vec<String>,
+    pub value_timing: String,
+    pub leverage_class_unlocked: String,
+    pub return_visit_hook: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
