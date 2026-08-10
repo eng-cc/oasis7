@@ -162,6 +162,353 @@ fn social_fact_impact_quote_previews_challenge_without_mutating_journal() {
 }
 
 #[test]
+fn social_fact_impact_quote_previews_revoke_withdrawal_without_mutating_state() {
+    let mut kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.relationship.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: Some(agent_owner("agent-c")),
+        claim: "agent-b fulfilled delivery contract for agent-c".to_string(),
+        confidence_ppm: 875_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: Some(12),
+        stake: Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        }),
+    });
+    let published = kernel.step().expect("publish");
+    let fact_id = match published.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    kernel.submit_action(Action::DeclareSocialEdge {
+        declarer: agent_owner("agent-a"),
+        schema_id: "social.reputation.relationship.v1".to_string(),
+        relation_kind: "trust".to_string(),
+        from: agent_owner("agent-b"),
+        to: agent_owner("agent-c"),
+        weight_bps: 2_000,
+        backing_fact_ids: vec![fact_id],
+        ttl_ticks: None,
+    });
+    let declared = kernel.step().expect("declare backing edge");
+    let edge_id = match declared.kind {
+        WorldEventKind::SocialEdgeDeclared { edge } => edge.edge_id,
+        other => panic!("unexpected edge event: {other:?}"),
+    };
+
+    assert_eq!(
+        kernel
+            .model()
+            .social_edges
+            .get(&edge_id)
+            .expect("backing edge remains active")
+            .lifecycle,
+        SocialEdgeLifecycleState::Active
+    );
+
+    let journal_len_before_quote = kernel.journal().len();
+    let model_before_quote = kernel.model().clone();
+    let publisher_power_before_quote = electricity_of(&kernel, "agent-a");
+    let quote = kernel
+        .quote_revoke_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            "withdraw obsolete delivery evidence",
+        )
+        .expect("revoke quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(kernel.model(), &model_before_quote);
+    assert_eq!(
+        electricity_of(&kernel, "agent-a"),
+        publisher_power_before_quote
+    );
+    assert_eq!(quote.actor_id, "agent-a");
+    assert_eq!(quote.action_kind, "revoke_social_fact");
+    assert_eq!(quote.schema_id, "social.reputation.relationship.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
+    assert_eq!(quote.object_id.as_deref(), Some("agent-c"));
+    assert!(
+        quote
+            .claim_summary
+            .contains("agent-b fulfilled delivery contract for agent-c")
+    );
+    assert_eq!(quote.confidence_ppm, Some(875_000));
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert_eq!(quote.stake_at_risk, 0);
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"schema:social.reputation.relationship.v1".to_string())
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"subject:agent-b".to_string())
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"object:agent-c".to_string())
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&format!("edge:{edge_id}"))
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"social_fact_ledger".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"reputation".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"relationship".to_string())
+    );
+    assert!(quote.cooperation_opportunity_delta.contains("withdraw"));
+    assert!(quote.blacklist_or_dispute_risk.contains("withdraw"));
+    assert!(quote.governance_or_claim_relevance.contains("withdraw"));
+    assert_eq!(quote.recommended_social_action, "revoke_fact");
+    assert!(quote.why_this_action_matters.contains("agent-b"));
+    assert!(quote.why_this_action_matters.contains("agent-c"));
+    assert!(
+        quote
+            .why_this_action_matters
+            .contains("obsolete delivery evidence")
+    );
+    assert!(quote.why_this_action_matters.contains("30"));
+
+    for (actor, candidate_fact_id, reason, expected_note) in [
+        (
+            agent_owner("agent-a"),
+            fact_id,
+            "   ",
+            "social revoke reason cannot be empty",
+        ),
+        (
+            agent_owner("agent-a"),
+            fact_id + 1,
+            "missing fact",
+            "social fact not found",
+        ),
+        (
+            agent_owner("agent-b"),
+            fact_id,
+            "publisher is not actor",
+            "can only be revoked by publisher",
+        ),
+    ] {
+        let journal_len_before_rejection = kernel.journal().len();
+        let model_before_rejection = kernel.model().clone();
+        let reason = kernel
+            .quote_revoke_social_fact(&actor, candidate_fact_id, reason)
+            .expect_err("revoke quote should mirror execution validation");
+        assert_eq!(kernel.journal().len(), journal_len_before_rejection);
+        assert_eq!(kernel.model(), &model_before_rejection);
+        match reason {
+            RejectReason::RuleDenied { notes } => assert!(
+                notes.iter().any(|note| note.contains(expected_note)),
+                "revoke rejection notes: {notes:?}"
+            ),
+            other => panic!("unexpected revoke rejection: {other:?}"),
+        }
+    }
+
+    kernel.submit_action(Action::RevokeSocialFact {
+        actor: agent_owner("agent-a"),
+        fact_id,
+        reason: "withdraw obsolete delivery evidence".to_string(),
+    });
+    let revoked = kernel.step().expect("revoke");
+    assert!(matches!(
+        revoked.kind,
+        WorldEventKind::SocialFactRevoked { .. }
+    ));
+    assert_eq!(electricity_of(&kernel, "agent-a"), 1_000);
+    assert_eq!(
+        kernel
+            .model()
+            .social_edges
+            .get(&edge_id)
+            .expect("backing edge remains tracked after revoke")
+            .lifecycle,
+        SocialEdgeLifecycleState::Expired
+    );
+
+    let journal_len_before_terminal_rejection = kernel.journal().len();
+    let model_before_terminal_rejection = kernel.model().clone();
+    let reason = kernel
+        .quote_revoke_social_fact(&agent_owner("agent-a"), fact_id, "revoke again")
+        .expect_err("terminal social facts cannot be revoked");
+    assert_eq!(
+        kernel.journal().len(),
+        journal_len_before_terminal_rejection
+    );
+    assert_eq!(kernel.model(), &model_before_terminal_rejection);
+    match reason {
+        RejectReason::RuleDenied { notes } => assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("cannot be revoked in state")),
+            "terminal revoke rejection notes: {notes:?}"
+        ),
+        other => panic!("unexpected terminal revoke rejection: {other:?}"),
+    }
+}
+
+#[test]
+fn social_fact_impact_quote_previews_revoke_returns_challenger_stake_without_mutating_state() {
+    let mut kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.relationship.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: Some(agent_owner("agent-c")),
+        claim: "agent-b fulfilled delivery contract for agent-c".to_string(),
+        confidence_ppm: 875_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: Some(12),
+        stake: Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        }),
+    });
+    let published = kernel.step().expect("publish");
+    let fact_id = match published.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    kernel.submit_action(Action::ChallengeSocialFact {
+        challenger: agent_owner("agent-c"),
+        fact_id,
+        reason: "delivery evidence no longer supports the relationship".to_string(),
+        stake: Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 20,
+        }),
+    });
+    let challenged = kernel.step().expect("challenge");
+    assert!(matches!(
+        challenged.kind,
+        WorldEventKind::SocialFactChallenged { .. }
+    ));
+    assert_eq!(
+        kernel
+            .model()
+            .social_facts
+            .get(&fact_id)
+            .expect("challenged fact remains tracked")
+            .lifecycle,
+        SocialFactLifecycleState::Challenged
+    );
+
+    let journal_len_before_quote = kernel.journal().len();
+    let model_before_quote = kernel.model().clone();
+    let publisher_power_before_quote = electricity_of(&kernel, "agent-a");
+    let challenger_power_before_quote = electricity_of(&kernel, "agent-c");
+    let quote = kernel
+        .quote_revoke_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            "withdraw obsolete delivery evidence",
+        )
+        .expect("revoke quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(kernel.model(), &model_before_quote);
+    assert_eq!(
+        electricity_of(&kernel, "agent-a"),
+        publisher_power_before_quote
+    );
+    assert_eq!(
+        electricity_of(&kernel, "agent-c"),
+        challenger_power_before_quote
+    );
+    assert_eq!(quote.actor_id, "agent-a");
+    assert_eq!(quote.action_kind, "revoke_social_fact");
+    assert_eq!(quote.schema_id, "social.reputation.relationship.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
+    assert_eq!(quote.object_id.as_deref(), Some("agent-c"));
+    assert!(
+        quote
+            .claim_summary
+            .contains("agent-b fulfilled delivery contract for agent-c")
+    );
+    assert_eq!(quote.confidence_ppm, Some(875_000));
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert_eq!(quote.stake_at_risk, 0);
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"schema:social.reputation.relationship.v1".to_string())
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"subject:agent-b".to_string())
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .contains(&"object:agent-c".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"social_fact_ledger".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"reputation".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"relationship".to_string())
+    );
+    assert!(quote.cooperation_opportunity_delta.contains("withdraw"));
+    assert!(quote.blacklist_or_dispute_risk.contains("withdraw"));
+    assert!(quote.governance_or_claim_relevance.contains("withdraw"));
+    assert_eq!(quote.recommended_social_action, "revoke_fact");
+    assert!(quote.why_this_action_matters.contains("agent-b"));
+    assert!(quote.why_this_action_matters.contains("agent-c"));
+    assert!(
+        quote
+            .why_this_action_matters
+            .contains("obsolete delivery evidence")
+    );
+    assert!(quote.why_this_action_matters.contains("30"));
+    assert!(quote.why_this_action_matters.contains("20"));
+
+    kernel.submit_action(Action::RevokeSocialFact {
+        actor: agent_owner("agent-a"),
+        fact_id,
+        reason: "withdraw obsolete delivery evidence".to_string(),
+    });
+    let revoked = kernel.step().expect("revoke");
+    assert!(matches!(
+        revoked.kind,
+        WorldEventKind::SocialFactRevoked { .. }
+    ));
+    assert_eq!(electricity_of(&kernel, "agent-a"), 1_000);
+    assert_eq!(electricity_of(&kernel, "agent-c"), 1_000);
+}
+
+#[test]
 fn social_fact_impact_quote_previews_declare_edge() {
     let mut kernel = setup_social_kernel();
     let evidence_event_id = first_evidence_event_id(&kernel);

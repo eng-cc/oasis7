@@ -138,6 +138,104 @@ impl WorldKernel {
         })
     }
 
+    pub fn quote_revoke_social_fact(
+        &self,
+        actor: &ResourceOwner,
+        fact_id: u64,
+        reason: &str,
+    ) -> Result<SocialFactImpactQuote, RejectReason> {
+        self.ensure_owner_exists(actor)?;
+        let reason = reason.trim();
+        if reason.is_empty() {
+            return social_rule_denied("social revoke reason cannot be empty");
+        }
+
+        let Some(fact) = self.model.social_facts.get(&fact_id) else {
+            return social_rule_denied(format!("social fact not found: {fact_id}"));
+        };
+        if fact.actor != *actor {
+            return social_rule_denied(format!(
+                "social fact {fact_id} can only be revoked by publisher"
+            ));
+        }
+        if matches!(
+            fact.lifecycle,
+            SocialFactLifecycleState::Retracted
+                | SocialFactLifecycleState::Revoked
+                | SocialFactLifecycleState::Expired
+        ) {
+            return social_rule_denied(format!(
+                "social fact {fact_id} cannot be revoked in state {:?}",
+                fact.lifecycle
+            ));
+        }
+
+        let publisher_stake_return = fact.stake.as_ref().map(|stake| stake.amount).unwrap_or(0);
+        let challenger_stake_return = fact
+            .challenge
+            .as_ref()
+            .and_then(|challenge| challenge.stake.as_ref())
+            .map(|stake| stake.amount)
+            .unwrap_or(0);
+        let mut affected_relationships =
+            social_affected_relationships(&fact.schema_id, &fact.subject, fact.object.as_ref());
+        let mut active_edge_ids = Vec::new();
+        let mut inactive_edge_ids = Vec::new();
+        for edge in self.model.social_edges.values() {
+            if !edge.backing_fact_ids.contains(&fact_id) {
+                continue;
+            }
+            affected_relationships.push(format!("edge:{}", edge.edge_id));
+            if edge.is_active() {
+                active_edge_ids.push(edge.edge_id.to_string());
+            } else {
+                inactive_edge_ids.push(edge.edge_id.to_string());
+            }
+        }
+
+        let active_edges = if active_edge_ids.is_empty() {
+            "none".to_string()
+        } else {
+            active_edge_ids.join(", ")
+        };
+        let inactive_edges = if inactive_edge_ids.is_empty() {
+            "none".to_string()
+        } else {
+            inactive_edge_ids.join(", ")
+        };
+        let object_summary = fact
+            .object
+            .as_ref()
+            .map(social_owner_quote_id)
+            .unwrap_or_else(|| "no object".to_string());
+
+        Ok(SocialFactImpactQuote {
+            actor_id: social_owner_quote_id(actor),
+            action_kind: "revoke_social_fact".to_string(),
+            schema_id: fact.schema_id.clone(),
+            subject_id: Some(social_owner_quote_id(&fact.subject)),
+            object_id: fact.object.as_ref().map(social_owner_quote_id),
+            claim_summary: summarize_social_text(&fact.claim),
+            confidence_ppm: Some(fact.confidence_ppm),
+            stake_at_risk: 0,
+            ttl_ticks: fact.ttl_ticks,
+            affected_relationships,
+            affected_social_surfaces: social_affected_surfaces(&fact.schema_id),
+            cooperation_opportunity_delta: "withdraws_relationship_support".to_string(),
+            blacklist_or_dispute_risk: "relationship_withdrawal".to_string(),
+            governance_or_claim_relevance: "withdraws_evidence_backed_claim".to_string(),
+            recommended_social_action: "revoke_fact".to_string(),
+            why_this_action_matters: format!(
+                "Revoking the claim about {} and {} for reason '{}' withdraws active backing edges [{}], while already inactive edges [{}] remain unchanged. Publisher stake return: {publisher_stake_return}; challenger stake return: {challenger_stake_return}.",
+                social_owner_quote_id(&fact.subject),
+                object_summary,
+                reason,
+                active_edges,
+                inactive_edges,
+            ),
+        })
+    }
+
     pub fn quote_declare_social_edge(
         &self,
         declarer: &ResourceOwner,
