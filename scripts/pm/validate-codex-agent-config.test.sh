@@ -96,14 +96,14 @@ printf 'positive case passed: direct entrypoint interpreter discovery\n'
 new_fixture wrong-adapter-model
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
-  'model = "gpt-5.6-terra"' \
+  'model = "gpt-5.6-luna"' \
   'model = "gpt-5.5"'
 expect_fail wrong_adapter_model "$fixture"
 
 new_fixture wrong-adapter-reasoning
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
-  'model_reasoning_effort = "medium"' \
+  'model_reasoning_effort = "xhigh"' \
   'model_reasoning_effort = "high"'
 expect_fail wrong_adapter_reasoning "$fixture"
 
