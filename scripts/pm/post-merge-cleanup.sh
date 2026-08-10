@@ -125,7 +125,14 @@ if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
     || die "cleanup journal says worktree_removed but git still registers it"
   ACTUAL_BRANCH="$RECORDED_BRANCH"
-  BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
+  if [[ "$BRANCH_DELETED" == 1 ]]; then
+    # A prior retry already deleted the branch; the receipt head remains the
+    # only available tip identity for the terminal-receipt retry.
+    BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
+  else
+    BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$ACTUAL_BRANCH^{commit}")" \
+      || die "task branch tip cannot be resolved during cleanup resume"
+  fi
 else
   [[ -e "$WORKTREE" ]] || die "worktree path is absent and no matching cleanup intent proves removal"
   git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "worktree path is not a git worktree"
@@ -209,6 +216,10 @@ if (d.datetime.now(d.timezone.utc)-seen).total_seconds()>600: raise SystemExit('
 print(receipt.get('head_oid') or '')
 PY
 )"
+if [[ "$WORKTREE_REMOVED" == 1 && "$BRANCH_DELETED" != 1 ]]; then
+  BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$ACTUAL_BRANCH^{commit}")" \
+    || die "task branch tip cannot be resolved during cleanup resume"
+fi
 [[ -n "$RECEIPT_HEAD" && "$RECEIPT_HEAD" == "$BRANCH_TIP" ]] || die "fresh PR receipt is not bound to current task branch tip"
 MAIN_COMMIT="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$RECEIPT_DEFAULT_BRANCH")" || die "local default branch is unavailable"
 SYNC_MAIN_COMMIT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("main_commit") or "")' "$MAIN_SYNC_RECEIPT")"

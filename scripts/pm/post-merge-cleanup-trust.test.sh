@@ -64,4 +64,48 @@ if ! grep -Eiq 'branch tip|head_oid|reviewed head|patch equivalence' "$TMPDIR/ti
   exit 1
 fi
 
+# A crash after worktree removal leaves the branch ref alive for retry.  Move
+# that ref to a different main-contained commit before resuming: cleanup must
+# validate the real ref, not compare the receipt head with itself.
+BASE_HEAD="$(git -C "$REPO" rev-parse "$REVIEWED_HEAD^")"
+git -C "$REPO" worktree remove "$WORKTREE"
+git -C "$REPO" branch -f "$BRANCH" "$BASE_HEAD"
+NORMALIZED_WORKTREE="$(python3 - "$WORKTREE" <<'PY'
+import os,sys
+path=os.path.normcase(os.path.realpath(sys.argv[1]))
+print(path.replace("\\", "/") if os.name == "nt" else path)
+PY
+)"
+JOURNAL_JSON="$(python3 - "$TASK_UID" "$NORMALIZED_WORKTREE" "$BRANCH" <<'PY'
+import json,sys
+print(json.dumps({
+    "receipt_type":"oasis7_cleanup_intent",
+    "task_uid":sys.argv[1],
+    "repository":"eng-cc/oasis7",
+    "worktree":sys.argv[2],
+    "branch":sys.argv[3],
+    "worktree_removed":True,
+    "branch_deleted":False,
+    "terminal_receipt_committed":False,
+    "revision":1,
+}))
+PY
+)"
+python3 "$ROOT_DIR/scripts/pm/workflow-durable-store.py" write-journal \
+  --path "$RECEIPT_ROOT/cleanup-intent.json" --json "$JOURNAL_JSON"
+if PATH="$TMPDIR/bin:$PATH" bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" \
+  --repo-root "$REPO" --worktree "$WORKTREE" --branch "$BRANCH" \
+  --main-ref main --task-uid "$TASK_UID" --pr-receipt "$MERGE_RECEIPT" \
+  --main-sync-receipt "$MAIN_SYNC_RECEIPT" \
+  --terminal-receipt-output "$RECEIPT_ROOT/terminal-cleanup-receipt.json" \
+  >"$TMPDIR/resume.out" 2>"$TMPDIR/resume.err"; then
+  echo "expected journal-resume cleanup to reject drifted live branch ref" >&2
+  exit 1
+fi
+if ! grep -Eiq 'branch tip|head_oid|reviewed head|patch equivalence' "$TMPDIR/resume.err"; then
+  echo "expected journal-resume branch-ref rejection, got:" >&2
+  cat "$TMPDIR/resume.err" >&2
+  exit 1
+fi
+
 echo "post-merge-cleanup-trust.test: OK"
