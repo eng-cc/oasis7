@@ -103,6 +103,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - 玩家通过目标、Agent、地点、设施、配方、关系与治理等受支持动作获得间接战略能动性；资源变化必须来自被授权的 source/sink 因果链，不能凭空生成或绕过成本。
 - 每个权威行动都必须经过规则与权限校验并产生可审计后果；玩家能够读懂 target、action、cost、blocker、result、next decision 与 recovery，不靠隐藏状态猜测世界为何变化。
 - 社会关系、组织、市场与制度可以在权限、治理和 anti-abuse 边界内产生有限涌现，但不会因此获得绕过权威规则的能力。世界保持持久、开放式演化，不要求强制终局。
+- 系统性危机只能在受治理、可审计的 containment 边界内限制扩散并保护基本连续性；恢复必须留在同一权威世界时间线中，由玩家、Agent、组织或区域项目按既有资源、权限、治理、反滥用与申诉边界推进。containment 或恢复不得 reset 世界、追溯改写已确认因果、跳过申诉、选择性 bailout，或把局部运维/管理员操作包装成世界恢复；受影响主体必须能读到触发事实、作用范围、当前限制、恢复/申诉路径与下一步。
 - 玩家前台始终围绕一个当前主目标：系统基于权威世界状态给出可达推荐与“继续”路径，玩家只在阶段性方向、主动换向或实际影响共同资源/权限的事项上作出必要选择。目标作用域、canonical 转译、资源/权限校验、共同治理、反支配与审计是后台护栏，只在实质改变当前选择时以原因和替代路径出现；不得把它们扩张为逐动作的表单或确认负担。
 - 当前不支持的细粒度请求必须转换为 canonical 可执行替代动作；没有安全替代时明确停止并说明下一次可决策点。具体规则、确定性执行、Agent 行为与网络/治理合同分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护。
 
@@ -141,6 +142,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - SC-16：代表性资源、资格或持续义务路径证明预览不产生世界效果；已接受承诺可读出范围、未决后果和下一步；已结算结果有 receipt 支持。报价与提交之间发生竞争性状态变化时，提交按当前条件至多结算一次并产生 receipt，或原子拒绝且不产生 sink/义务；`electricity_after` 不被误读为运行 runway 或不停机保证。过期、撤销、失效、重连重试和历史 receipt 重放不会制造第二次 sink、免费资源、资格续期或隐藏欠费，且未结算部分与既有已发生后果按相应专业合同保留可读 provenance、拒绝/待决或恢复路径。
 - SC-17：代表性共同决策样例证明普通治理只受理明示的政策、公共财库与既有 charter 日常事项；宪制、基本权利与系统安全事项被原子拒绝或路由到独立轨道，不产生部分世界效果。普通提案、财库、charter、技术升级、局部多数、历史声望与紧急状态均不能绕过保护底线；其他宪制变更只有在公开影响说明、延迟/复核、适用超多数、跨区域或受影响主体确认、独立审计与程序申诉全部成立时才生效。
 - SC-18：代表性区域设施与受治理扩展样例证明玩家只能在可读压力、条件报价、有限作用域和维护/耗尽/退役边界内取得区域 leverage；创作者提案只有经治理审查和权威生效后才成为世界能力。报价后状态变化、重复/过期/重连或跨入口重试只产生一次权威结果或原子拒绝，待决请求不会被表达为已生效。
+- SC-19：代表性系统性危机样例证明 containment 仅限制扩散并保护基本连续性；恢复项目在同一权威世界时间线内由玩家、Agent、组织或区域参与，并按既有资源、权限、治理、反滥用和申诉边界结算。不存在 reset、历史重写、跳过申诉或选择性 bailout；受影响主体可读触发事实、作用范围、当前限制、恢复/申诉路径与下一步。
 
 ### 5.1 验收追踪
 
@@ -164,6 +166,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 | SC-16 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一条资源/资格/持续义务路径的预览、接受、结算、失效、重试与 receipt 重放负例组合证据；必须含“报价后竞争性状态变化”的接受一次/原子拒绝样例，以及正式玩家 surface 对余额、runway/停机风险、预览/待决/已结算的区分，不伪造自动恢复 | test_tier_full |
 | SC-17 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通事项白名单、排除事项原子拒绝/独立路由、宪制条件全满足/缺失、防绕过与玩家可读 receipt 因果的组合证据 | test_tier_full |
 | SC-18 | producer_system_designer / gameplay_designer / runtime_engineer / wasm_platform_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-010 / PRD-P2P-002 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 区域设施生命周期、扩展治理准入、报价后状态变化、单次权威结果、待决表达与 replay/恢复身份一致性的组合证据 | test_tier_full |
+| SC-19 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-P2P-003 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | containment 与恢复项目在同一世界时间线中的组合证据；无 reset/历史重写/选择性 bailout，保留 appeal、replay/provenance，并区分正式玩家 surface 的 containment、恢复中、已恢复与 blocked；详细 AC-6 与实现合同由上述权威维护 | test_tier_full |
 
 ## 6. Non-Goals
 
