@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{NodeError, NodeReplicationConfig, PosNodeEngine};
+use crate::{
+    NodeError, NodeReplicationConfig, PosNodeEngine, REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL,
+};
 
 const POS_STATE_FILE_NAME: &str = "node_pos_state.json";
 
@@ -237,6 +239,13 @@ impl PosNodeEngine {
         self.pending_consensus_actions.clear();
         self.committed_height = committed_height;
         self.network_committed_height = restored_network_committed_height;
+        // Peer heads are intentionally memory-only. A zero-height observer
+        // restored with a high durable network head must re-enter the
+        // checkpoint retry hold until a fresh signed closure is installed.
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = self.checkpoint_bootstrap_enabled
+            && committed_height == 0
+            && last_execution_height == 0
+            && restored_network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
         self.next_height = restored_next_height;
         self.next_slot = restored_next_slot;
         self.last_observed_slot = self

@@ -29,6 +29,10 @@ impl PosNodeEngine {
         &self,
         advertised_head: Option<&WorldHeadAnnounce>,
     ) -> bool {
+        let high_head_retry_pending = self.fresh_observer_checkpoint_bootstrap_retry_pending
+            && (advertised_head
+                .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+                || self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
         self.checkpoint_bootstrap_enabled
             && self.committed_height == 0
             && self.replication_persisted_height == 0
@@ -36,9 +40,40 @@ impl PosNodeEngine {
             && (self
                 .fresh_observer_checkpoint_low_head_confirmation
                 .is_some()
-                || (advertised_head
-                    .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
-                    && self.fresh_observer_checkpoint_bootstrap_retry_pending))
+                || high_head_retry_pending)
+    }
+
+    /// Keep a fresh observer at height zero while connected peers advertise a
+    /// high, unresolved head that the world-head lookup may not expose yet.
+    ///
+    /// The world-head lookup is a bounded DHT/connected-provider probe and may
+    /// transiently return a stale height-one candidate even though the
+    /// validated peer-head cache already contains a current connected
+    /// validator head.  Replaying that candidate would bypass checkpoint
+    /// closure and can trigger an execution-peer mismatch without a height-zero
+    /// rollback.  This gate is intentionally conservative: it is only
+    /// used for a fresh observer with an unresolved high peer head, and callers
+    /// still require a verified checkpoint receipt before advancing.
+    pub(super) fn hold_fresh_observer_for_high_peer_heads(
+        &mut self,
+        advertised_network_height: u64,
+    ) -> bool {
+        if !self.checkpoint_bootstrap_enabled
+            || self.committed_height != 0
+            || self.replication_persisted_height != 0
+            || self.last_execution_height != 0
+            || advertised_network_height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+        {
+            return false;
+        }
+        let hold = self
+            .peer_heads
+            .values()
+            .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
+        if hold {
+            self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+        }
+        hold
     }
 
     pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
@@ -66,7 +101,11 @@ impl PosNodeEngine {
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
-        self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
+        let preserve_high_checkpoint_retry =
+            self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+        if !preserve_high_checkpoint_retry {
+            self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
+        }
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             // An already observed network height can require an immediate low-height
             // checkpoint to recover missing history. Only a completely unestablished
@@ -91,6 +130,7 @@ impl PosNodeEngine {
             self.fresh_observer_checkpoint_low_head_confirmation = Some(identity);
             return Ok(FreshObserverCheckpointBootstrap::LowHeadConfirmationPending);
         }
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         self.fresh_observer_checkpoint_low_head_confirmation = None;
         match self.try_sync_high_replication_checkpoint_boundary(
             endpoint,

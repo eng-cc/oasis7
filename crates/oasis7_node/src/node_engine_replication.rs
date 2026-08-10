@@ -848,6 +848,9 @@ impl PosNodeEngine {
                     Err(err) => return Err(err),
                 }
             }
+            if self.hold_fresh_observer_for_high_peer_heads(advertised_network_height) {
+                return Ok(());
+            }
             if let Some(reason) = missing_checkpoint_closure_reason {
                 return Err(NodeError::Replication { reason });
             }
@@ -867,7 +870,6 @@ impl PosNodeEngine {
         ) {
             return Ok(());
         }
-
         let mut next_height = next_height;
         if replication_gap_sync_provider_blob_route_blocked_in_cooldown(
             self.last_replication_gap_sync_blocked_height,
@@ -1150,7 +1152,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-
     pub(super) fn refresh_replication_persisted_height(
         &mut self,
         replication_runtime: &ReplicationRuntime,
@@ -1183,7 +1184,6 @@ impl PosNodeEngine {
         )?;
         Ok(())
     }
-
     fn refresh_replication_persisted_height_from_local_execution_baseline(&mut self) {
         if !self.require_execution_on_commit
             || self.committed_height == 0
