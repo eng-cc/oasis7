@@ -102,3 +102,29 @@ fn fresh_observer_defers_height_one_when_signed_checkpoint_is_temporarily_not_fo
         true,
     );
 }
+
+#[test]
+fn fresh_observer_with_observed_high_head_defers_height_one_without_checkpoint_closure() {
+    peer_head_checkpoint_before_height_one_with_stale_dht(
+        InitialPeerHead::UnavailableWithObservedHigh,
+        false,
+        false,
+        true,
+    );
+}
+
+fn seed_consistent_high_peer_heads(engine: &mut PosNodeEngine, height: u64) {
+    let head = PeerCommittedHead {
+        height,
+        block_hash: format!("block-{height}"),
+        committed_at_ms: 6_164,
+        observed_at_ms: 6_200,
+        execution_block_hash: Some(format!("exec-block-{height}")),
+        execution_state_root: Some(format!("exec-state-{height}")),
+        action_root: empty_action_root(),
+        public_key_hex: None,
+        signature_hex: None,
+    };
+    engine.peer_heads.insert("node-a".to_string(), head.clone());
+    engine.peer_heads.insert("node-c".to_string(), head);
+}

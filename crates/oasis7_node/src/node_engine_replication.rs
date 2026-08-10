@@ -145,7 +145,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-
     pub(super) fn enforce_storage_challenge_gate(
         &mut self,
         replication: &ReplicationRuntime,
@@ -297,7 +296,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-
     pub(super) fn ingest_network_replications(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -315,7 +313,6 @@ impl PosNodeEngine {
             None,
         )
     }
-
     pub(super) fn ingest_network_replications_with_progress(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -500,7 +497,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-
     fn observe_network_replication_commit(
         &mut self,
         peer_node_id: &str,
@@ -532,7 +528,6 @@ impl PosNodeEngine {
             },
         );
     }
-
     pub(super) fn sync_missing_replication_commits(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -551,7 +546,6 @@ impl PosNodeEngine {
             true,
         )
     }
-
     pub(super) fn try_sync_high_replication_checkpoint_boundary(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -747,7 +741,6 @@ impl PosNodeEngine {
         }
         Ok(true)
     }
-
     pub(super) fn sync_missing_replication_commits_with_progress(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -771,7 +764,7 @@ impl PosNodeEngine {
             && self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0
-            && self.network_committed_height == 1
+            && self.peer_heads.values().all(|head| head.height <= 1)
             && self.fresh_observer_checkpoint_preflight_unavailable
         {
             // Match ingest's fresh-observer deferral above. A missing peer
@@ -857,6 +850,14 @@ impl PosNodeEngine {
             }
             if let Some(reason) = missing_checkpoint_closure_reason {
                 return Err(NodeError::Replication { reason });
+            }
+            if self.checkpoint_bootstrap_enabled
+                && self.committed_height == 0
+                && self.replication_persisted_height == 0
+                && self.last_execution_height == 0
+                && self.fresh_observer_checkpoint_preflight_unavailable
+            {
+                return Ok(());
             }
         }
         if Self::replication_gap_sync_local_state_blocked(
