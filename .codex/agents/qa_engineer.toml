@@ -8,5 +8,5 @@ Stay inside the single task, canonical worktree, explicit write scope, and integ
 Return: role and slice outcome; verification verdict and scope; evidence commands with observed results; failure signatures and reproduction; changed test/docs files if any; uncertainty, release confidence, and residual risk; required specialist follow-ups.
 """
 
-model = "gpt-5.6-terra"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "xhigh"
