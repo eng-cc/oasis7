@@ -18,6 +18,8 @@ struct PeerHeadCheckpointNetwork {
     fetch_protocols: Arc<Mutex<Vec<String>>>,
     head: Arc<Mutex<super::replication::FetchHeadResponse>>,
     checkpoint_fetch_available: Arc<AtomicBool>,
+    checkpoint_fetch_not_found: Arc<AtomicBool>,
+    connected_peer_ids: Vec<String>,
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
@@ -86,9 +88,21 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
         if protocol == REPLICATION_FETCH_COMMIT_PROTOCOL
             && !self.checkpoint_fetch_available.load(Ordering::SeqCst)
         {
-            return Err(WorldError::NetworkProtocolUnavailable {
-                protocol: protocol.to_string(),
-            });
+            if !self.checkpoint_fetch_not_found.load(Ordering::SeqCst) {
+                return Err(WorldError::NetworkProtocolUnavailable {
+                    protocol: protocol.to_string(),
+                });
+            }
+            let request = serde_json::from_slice::<super::replication::FetchCommitRequest>(payload)
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("decode checkpoint fetch request failed: {err}"),
+                })?;
+            if request.height > 1 {
+                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None })
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("encode unavailable checkpoint response failed: {err}"),
+                });
+            }
         }
         self.fetch_protocols
             .lock()
@@ -98,11 +112,11 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
     }
 
     fn connected_peer_ids(&self) -> Vec<String> {
-        vec!["node-a".to_string()]
+        self.connected_peer_ids.clone()
     }
 
     fn known_peer_ids(&self) -> Vec<String> {
-        vec!["node-a".to_string()]
+        self.connected_peer_ids.clone()
     }
 
     fn register_handler(
@@ -931,6 +945,7 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
     initial_peer_head: InitialPeerHead,
     initial_checkpoint_fetch_available: bool,
     stale_dht_height_one: bool,
+    initial_checkpoint_fetch_not_found: bool,
 ) {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = stale_dht_height_one.then(CheckpointProbeNonceGuard::install);
@@ -1001,6 +1016,7 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
         .expect("checkpoint message");
     let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
     let checkpoint_fetch_available = Arc::new(AtomicBool::new(initial_checkpoint_fetch_available));
+    let checkpoint_fetch_not_found = Arc::new(AtomicBool::new(initial_checkpoint_fetch_not_found));
     let peer_head = Arc::new(Mutex::new(match initial_peer_head {
         InitialPeerHead::Unavailable => super::replication::FetchHeadResponse {
             found: false,
@@ -1044,6 +1060,8 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
         fetch_protocols: Arc::clone(&fetch_protocols),
         head: Arc::clone(&peer_head),
         checkpoint_fetch_available: Arc::clone(&checkpoint_fetch_available),
+        checkpoint_fetch_not_found: Arc::clone(&checkpoint_fetch_not_found),
+        connected_peer_ids: vec!["node-a".to_string(), "node-c".to_string()],
     });
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
@@ -1101,7 +1119,9 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
         )
         .expect("peer-head checkpoint bootstrap must precede first height-one execution");
 
-    if initial_peer_head != InitialPeerHead::HighCheckpoint || !initial_checkpoint_fetch_available {
+    if initial_peer_head != InitialPeerHead::HighCheckpoint
+        || !initial_checkpoint_fetch_available
+    {
         assert!(
             execution_hook.incremental_commits.is_empty(),
             "fresh observer must defer height one while peer-head preflight is temporarily unavailable: {:?}",
@@ -1115,6 +1135,7 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
                 high_peer_head;
         }
         checkpoint_fetch_available.store(true, Ordering::SeqCst);
+        checkpoint_fetch_not_found.store(false, Ordering::SeqCst);
 
         engine_b
             .tick(
