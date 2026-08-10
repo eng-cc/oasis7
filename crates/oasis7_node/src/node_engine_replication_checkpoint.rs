@@ -109,7 +109,10 @@ impl PosNodeEngine {
             // matching verified checkpoint or observed that head change. In
             // particular, a bounded fetch probe can return `NotFound` while
             // the connected peer is still becoming request-ready.
-            Ok(false) => Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending),
+            Ok(false) => {
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending)
+            }
             Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
                 self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
                 Ok(FreshObserverCheckpointBootstrap::RetryPending)
