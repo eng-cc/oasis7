@@ -26,6 +26,7 @@ mod governance_vote_quote;
 mod governance_vote_quote_debug;
 mod industrial_progression;
 mod industrial_progression_grind;
+mod industrial_progression_preview;
 mod industrial_progression_readiness;
 mod power_sale_quote;
 mod prompt_control;

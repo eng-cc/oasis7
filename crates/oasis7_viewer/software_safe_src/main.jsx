@@ -10,6 +10,7 @@ import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
+import { FirstDeliveryPreview } from "./first_delivery_preview.jsx";
 import { fallbackTradeoffVisualFixture } from "./viewer_fallback_tradeoff_fixture.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -37,7 +38,6 @@ function buildViewerEntryUrls(locale) {
   const softwareSafeUrl = new URL(window.location.href);
   softwareSafeUrl.searchParams.set("locale", localeCode(locale));
   softwareSafeUrl.searchParams.delete("language");
-
   return {
     softwareSafeUrl: softwareSafeUrl.toString(),
   };
@@ -432,6 +432,9 @@ function ExpansionTradeoffCards(props) {
                 <div class="metric__label">{tr(locale(), "下次续玩钩子", "Next-session hook")}</div>
                 {card.nextSessionHook || tr(locale(), "下次续玩钩子未发布", "Next-session hook unavailable")}
               </div>
+              <Show when={card.firstDeliveryPreview}>
+                <FirstDeliveryPreview preview={card.firstDeliveryPreview} locale={locale()} tr={tr} />
+              </Show>
               <div class="feedback-summary">
                 {card.action
                   ? card.action.disabledReason

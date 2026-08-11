@@ -2,6 +2,7 @@ import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
 import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
 import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
+import { normalizeFirstDeliveryPreview } from "./first_delivery_preview_display_model.js";
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -74,19 +75,14 @@ export function createViewerFeedbackModule({
     const reason = String(feedback?.reason || "").trim();
     return reason || null;
   }
-
   function formatPromptVersionLabel(value) {
     return `v${Math.max(0, Math.floor(Number(value || 0)))}`;
   }
-
   function humanizePromptField(field) {
     return String(field || "")
       .trim()
       .replaceAll("_", " ");
   }
-
-
-
   function summarizeAppliedFields(feedback) {
     const fields = Array.isArray(feedback?.response?.applied_fields)
       ? feedback.response.applied_fields
@@ -1075,14 +1071,18 @@ export function createViewerFeedbackModule({
         : Array.isArray(gameplay.branchRecommendations)
           ? gameplay.branchRecommendations
           : []
-    ).map((recommendation) => ({
-      actionId: recommendation.action_id || recommendation.actionId || null,
-      routeLabel: recommendation.route_label || recommendation.routeLabel || null,
-      immediateGain: recommendation.immediate_gain || recommendation.immediateGain || null, futureBeatChanged: recommendation.future_beat_changed || recommendation.futureBeatChanged || null,
-      futureBeats: Array.isArray(recommendation.future_beats) ? recommendation.future_beats : Array.isArray(recommendation.futureBeats) ? recommendation.futureBeats : [],
-      riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
-      nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
-    }));
+    ).map((recommendation) => {
+      const rawPreview = recommendation.first_delivery_preview || recommendation.firstDeliveryPreview;
+      return {
+        actionId: recommendation.action_id || recommendation.actionId || null,
+        routeLabel: recommendation.route_label || recommendation.routeLabel || null,
+        immediateGain: recommendation.immediate_gain || recommendation.immediateGain || null, futureBeatChanged: recommendation.future_beat_changed || recommendation.futureBeatChanged || null,
+        futureBeats: Array.isArray(recommendation.future_beats) ? recommendation.future_beats : Array.isArray(recommendation.futureBeats) ? recommendation.futureBeats : [],
+        riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
+        nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
+        firstDeliveryPreview: normalizeFirstDeliveryPreview(rawPreview),
+      };
+    });
     const rawMicroDepotFacilities = (
       Array.isArray(gameplay.micro_depot_facilities)
         ? gameplay.micro_depot_facilities
