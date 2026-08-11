@@ -46,6 +46,8 @@ export function createSoftwareSafeState() {
     powerSurvivalQuoteRequest: { status: "idle", error: null },
     scheduleRecipeQuote: null,
     scheduleRecipeQuoteRequest: { status: "idle", error: null },
+    transferMaterialQuote: null,
+    transferMaterialQuoteRequest: { status: "idle", error: null },
     powerSaleQuote: null,
     powerSaleQuoteRequest: { status: "idle", error: null },
     fragmentRefillPreview: null,
