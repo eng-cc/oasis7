@@ -37,7 +37,7 @@
 - priority 到期、撤销或里程碑失败时，只终止尚未消费的优先机会并释放对应开发步骤；不得静默取消已独立确认的 tenure、已完成交付、已结算合同或其 receipt。已确认 tenure 仅按自身的续期、使用、违约、公共必要性、通知、申诉与恢复规则处理；过往 priority 也不为 tenure 保留新的排他授予或续期优势。
 - priority 资格、里程碑或到期事实处于争议且证据不足时，拒绝新的 priority 排他授予与转让，但不冻结普通安全披露、非排他探索、已确认 tenure 或已结算义务。争议结果的 receipt 必须说明范围、原因、下一路径以及 tenure 是否曾被独立确认；已撤销 priority 不得通过重放历史 receipt 重新取得。
 
-##### 受让人资格与转让再校验
+#### 受让人资格与转让再校验
 
 - 转让不能成为 frontier 资格的旁路。提交或接受转让时，权威必须按当前事实重新核验受让人是否满足该 frontier、地点和用途的适用探索、物流、charter、维护与反滥用条件；原持有人也必须仍有可转让的有效 priority。产品层不冻结资格字段或阈值，但不能把“已登记受让人”表达为“已具备开发资格”。
 - 只有受让人、原 priority 状态、地点/用途范围、未完成里程碑与原到期边界同时通过再校验，转让 receipt 才能确认。确认只转移剩余机会及其 provenance，不转移发现者身份、声誉、私有观察数据、数据访问权、已完成里程碑或任何预先批准的 tenure；不得借转让延长原期限或扩大范围。
@@ -101,7 +101,7 @@ tenure 的续期、转让、收回、迁移、补偿或申诉请求必须绑定�
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
-| FI-1 / FI-2 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 相邻 frontier、物流/charter、同世界连续性；priority 里程碑/期限/转让；priority/tenure 独立状态、转让与开发提交并发、重复转让/重试、关联倒手、receipt 重放和静默 tenure 撤销负例；charter 状态转换下 tenure 待决请求的非跨越、单一处置 receipt 与玩家可读下一步 | test_tier_full |
+| FI-1 / FI-2 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 相邻 frontier、物流/charter、同世界连续性；priority 里程碑/期限/转让；受让人及原 priority 对探索、物流、charter、维护、反滥用条件的当前再校验；待决期间失效时不消费、不延期、不回滚；receipt/trace 可读资格语义结果、原因类别、剩余持有人/范围/期限与下一步且不泄露不必要私有证据；priority/tenure 独立状态、转让与开发提交并发、重复转让/重试、关联倒手、receipt 重放和静默 tenure 撤销负例；charter 状态转换下 tenure 待决请求的非跨越、单一处置 receipt 与玩家可读下一步 | test_tier_full |
 | FI-3 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 探索数据私有范围、最低安全/通行披露、公共 baseline、来源与 freshness 证据 | test_tier_required |
 | FI-4 / FI-5 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 公共/实时信息分层、侦察/关系/购买/授权、freshness/恢复和当前 claim 分离审计 | test_tier_required |
 
