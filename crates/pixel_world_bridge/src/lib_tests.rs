@@ -290,6 +290,37 @@ fn agent_label_changes_the_render_content_signature() {
     );
 }
 
+#[test]
+fn location_resource_report_changes_trigger_reactive_reconcile_without_camera_or_hits() {
+    let mut empty_report = sample_render_state_for_camera("location");
+    empty_report.locations[0].resource_summary = "-".to_string();
+    let mut published_report = empty_report.clone();
+    published_report.locations[0].resource_summary = "water:12".to_string();
+
+    let initial_signature = render_content_signature(Some(&empty_report));
+    assert_ne!(
+        render_content_signature(Some(&published_report)),
+        initial_signature,
+        "a published Location resource report must invalidate reactive render scheduling"
+    );
+
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(empty_report),
+        render_content_signature: initial_signature,
+        reactive_scheduling: true,
+        needs_reconcile: false,
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+    let snapshot = changed_snapshot(true, Some(published_report), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
+
+    assert!(runtime.needs_reconcile);
+    assert!(!runtime.hit_regions_dirty);
+    assert_eq!(runtime.render_version, 2);
+}
+
 fn assert_label_only_render_update_reconciles_without_resetting_camera_or_follow() {
     let original = sample_render_state_for_camera("agent");
     let mut runtime = BevyRuntimeState {
