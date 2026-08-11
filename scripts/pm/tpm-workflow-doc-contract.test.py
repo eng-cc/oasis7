@@ -116,6 +116,27 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("最小 task packet", agents)
         self.assertIn("full-history fork 仅用于已记录具体原因的升级", agents)
 
+    def test_mandatory_slice_context_checklist_is_complete(self) -> None:
+        """The dispatch contract must preserve every authority/context boundary."""
+        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+        match = re.search(
+            r"(?ms)^- The mandatory context checklist must include:\n((?:^  - .*\n)+)",
+            dispatch,
+        )
+        self.assertIsNotNone(match, "5.2 must publish the mandatory context checklist")
+        checklist = re.sub(r"\s+", " ", match.group(1).lower())
+        required_items = (
+            "identity and authority: assigned role, role card path, owner role, and tpm integration owner",
+            "workflow governance: `agents.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills",
+            "task truth: current github issue, github project item/status, `.pm/github-project-sync/tasks.json` mapping record, canonical worktree, branch, base ref, and pr link/status when present",
+            "user intent and acceptance target: original request summary, current work item, explicit non-goals, and done/verification expectations",
+            "scoped repo context: relevant `prd.md`, design, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries",
+            "collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink",
+        )
+        for item in required_items:
+            with self.subTest(item=item):
+                self.assertIn(item, checklist)
+
     def test_efficiency_helpers_have_bounded_enforcement_contracts(self) -> None:
         friction = self.section("1.2.1 Friction Controls After Task Truth")
         dispatch = self.section("5.2 TPM planning and subagent dispatch")
