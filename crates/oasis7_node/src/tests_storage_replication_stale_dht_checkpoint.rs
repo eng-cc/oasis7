@@ -707,11 +707,9 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
     checkpoint_fetch_available.store(true, Ordering::SeqCst);
     checkpoint_fetch_not_found.store(false, Ordering::SeqCst);
 
-    // The next poll receives the stale height-one candidate even though the
-    // connected validator heads above are still higher and consistent. The
-    // live probe has already observed that early candidate, so the current
-    // implementation clears the retry marker and re-enters incremental replay
-    // immediately instead of keeping the observer at height zero.
+    // The next poll receives a stale height-one candidate while the cached
+    // validator heads remain higher; the recovered closure must be retried
+    // before any height-one replay.
     *head.lock().expect("downgrade world head for stale retry") =
         super::replication::FetchHeadResponse {
             found: true,
@@ -738,16 +736,17 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
             Vec::new(),
             Some(&mut execution_hook),
         )
-        .expect("stale height-one candidate must remain deferred before checkpoint receipt");
-    assert_eq!(result.consensus_snapshot.committed_height, 0);
+        .expect("stale height-one candidate must retry the recovered checkpoint");
+    assert_eq!(result.consensus_snapshot.committed_height, checkpoint_height);
     assert!(
         execution_hook.incremental_commits.is_empty(),
         "height-one execution must remain deferred while checkpoint retry is authoritative: {:?}",
         execution_hook.incremental_commits
     );
     assert!(execution_hook.rollback_heights.is_empty());
-    assert_eq!(engine_b.committed_height, 0);
-    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(execution_hook.installed, vec![checkpoint_height]);
+    assert_eq!(engine_b.committed_height, checkpoint_height);
+    assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
