@@ -78,6 +78,25 @@ pub(super) fn sample_render_state_with_hotspot_candidates() -> RenderState {
     render_state
 }
 
+pub(super) fn sample_render_state_with_location_resource_summary(
+    resource_summary: &str,
+) -> RenderState {
+    let mut render_state = sample_render_state(12_000.0);
+    render_state.fragment_terrain.clear();
+    render_state.agents.clear();
+    render_state.links.clear();
+    render_state.visual_hotspots.clear();
+    render_state.selection = None;
+    let location = render_state
+        .locations
+        .first_mut()
+        .expect("sample render state has a location");
+    location.resource_summary = resource_summary.to_string();
+    location.marker_role = Some("logic_anchor".to_string());
+    location.marker_alpha = Some(0.32);
+    render_state
+}
+
 pub(super) fn sample_render_state_with_receipt_target(
     receipt_state: Option<&str>,
     target_agent_id: Option<&str>,

@@ -10,6 +10,7 @@ pub(super) struct PixelRegressionSummary {
     pub(super) fragment_fleck_pixels: usize,
     pub(super) grid_pixels: usize,
     pub(super) location_pixels: usize,
+    pub(super) location_resource_cue_pixels: usize,
     pub(super) location_corner_frame_pixels: usize,
     pub(super) selected_location_cue_pixels: usize,
     pub(super) selected_agent_cue_pixels: usize,

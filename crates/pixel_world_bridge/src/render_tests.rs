@@ -326,6 +326,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("location_corner_frame", sprite, transform)),
     );
+    let mut location_resource_cue_query =
+        world.query::<(&PixelWorldLocationResourceCue, &Sprite, &Transform)>();
+    layers.extend(
+        location_resource_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("location_resource_cue", sprite, transform)),
+    );
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     layers.extend(
         location_query
@@ -399,6 +406,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "fragment_fleck" => 8,
         "location" => 3,
         "selected_location_cue" => 4,
+        "location_resource_cue" => 15,
         "agent" => 5,
         "agent_core" => 9,
         "hotspot" => 10,
@@ -478,6 +486,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let fragment_fleck_pixels = kind_buffer.iter().filter(|kind| **kind == 8).count();
     let location_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
     let location_corner_frame_pixels = kind_buffer.iter().filter(|kind| **kind == 14).count();
+    let location_resource_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 15).count();
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
@@ -512,6 +521,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         fragment_pixels,
         fragment_fleck_pixels,
         location_pixels,
+        location_resource_cue_pixels,
         location_corner_frame_pixels,
         selected_location_cue_pixels,
         selected_agent_cue_pixels,

@@ -590,14 +590,18 @@ fn hash_optional_position(hasher: &mut DefaultHasher, position: Option<&Position
 }
 
 fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
-    render_signature(render_state, true)
+    render_signature(render_state, true, true)
 }
 
 fn camera_content_signature(render_state: Option<&RenderState>) -> u64 {
-    render_signature(render_state, false)
+    render_signature(render_state, false, false)
 }
 
-fn render_signature(render_state: Option<&RenderState>, include_agent_labels: bool) -> u64 {
+fn render_signature(
+    render_state: Option<&RenderState>,
+    include_agent_labels: bool,
+    include_resource_reports: bool,
+) -> u64 {
     let mut hasher = DefaultHasher::new();
     let Some(render_state) = render_state else {
         return hasher.finish();
@@ -617,6 +621,9 @@ fn render_signature(render_state: Option<&RenderState>, include_agent_labels: bo
         hash_f64(&mut hasher, location.size_hint_px.unwrap_or(0.0));
         location.marker_role.hash(&mut hasher);
         hash_f64(&mut hasher, location.marker_alpha.unwrap_or(0.0));
+        if include_resource_reports {
+            location.resource_summary.hash(&mut hasher);
+        }
     }
 
     render_state.fragment_terrain.len().hash(&mut hasher);

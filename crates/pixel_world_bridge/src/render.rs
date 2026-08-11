@@ -59,6 +59,9 @@ use selected_location_cue::{PixelWorldSelectedLocationCue, reconcile_selected_lo
 #[path = "render_location_corner_frame.rs"]
 mod location_corner_frame;
 use location_corner_frame::{PixelWorldLocationCornerFrame, reconcile_location_corner_frames};
+#[path = "render_location_resource_cue.rs"]
+mod location_resource_cue;
+use location_resource_cue::{PixelWorldLocationResourceCue, despawn, reconcile};
 #[path = "render_selected_resource_readout.rs"]
 mod selected_resource_readout;
 use selected_resource_readout::{
@@ -822,6 +825,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     module_visual_entities: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualEntity)>,
     module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
+    location_resource_cues: Query<'w, 's, (Entity, &'static PixelWorldLocationResourceCue)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     location_corner_frames: Query<'w, 's, (Entity, &'static PixelWorldLocationCornerFrame)>,
     selected_resource_readouts: Query<'w, 's, (Entity, &'static PixelWorldSelectedResourceReadout)>,
@@ -854,6 +858,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
+        despawn(&mut commands, &queries.location_resource_cues);
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
         for (entity, _) in queries.fragment_insets.iter() {
             commands.entity(entity).despawn();
@@ -948,6 +953,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
+        despawn(&mut commands, &queries.location_resource_cues);
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
         for (entity, _) in queries.fragment_insets.iter() {
             commands.entity(entity).despawn();
@@ -1075,6 +1081,13 @@ pub(crate) fn render_scene(
         width,
         height,
         animation_ms,
+    );
+    reconcile(
+        &mut commands,
+        &runtime,
+        &queries.location_resource_cues,
+        width,
+        height,
     );
     reconcile_selected_location_cues(
         &mut commands,
