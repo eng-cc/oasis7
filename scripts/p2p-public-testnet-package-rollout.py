@@ -717,7 +717,21 @@ def linux_command(
         if readiness_policy == "strict-ready" and not status_url:
             die(f"linux node {node.get('name', '<unnamed>')} uses strict-ready but has no status_url")
         if readiness_policy == "strict-ready":
-            command.extend(["--post-restart-status-url", status_url])
+            healthz_url = str(node.get("healthz_url") or "")
+            if not healthz_url:
+                status_suffix = "/v1/chain/status"
+                if not status_url.endswith(status_suffix):
+                    die(
+                        f"linux node {node.get('name', '<unnamed>')} strict-ready status_url "
+                        "must end with /v1/chain/status when healthz_url is omitted"
+                    )
+                healthz_url = status_url[: -len(status_suffix)] + "/healthz"
+            if not healthz_url.endswith("/healthz"):
+                die(
+                    f"linux node {node.get('name', '<unnamed>')} strict-ready healthz_url "
+                    "must end with /healthz"
+                )
+            command.extend(["--post-restart-health-url", healthz_url])
             timeout_secs = str(node.get("post_restart_timeout_secs") or 120)
             command.extend(["--post-restart-timeout-secs", timeout_secs])
     return command
@@ -2791,8 +2805,9 @@ def main() -> int:
         default="rpc-running",
         help=(
             "Post-restart health policy for generated plans. rpc-running keeps replacement "
-            "separate from network recovery, strict-ready passes status_url into the Linux "
-            "primitive, and degraded-ok records an operator-tolerated degraded rollout."
+            "separate from network recovery, strict-ready passes an explicit healthz_url into "
+            "the Linux replacement primitive while retaining status_url for later pair "
+            "agreement, and degraded-ok records an operator-tolerated degraded rollout."
         ),
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable rollout plan")

@@ -14,6 +14,7 @@ Usage:
     [--systemd-service <name>] \
     [--release-retention-count <count>] \
     [--restart-service] \
+    [--post-restart-health-url <url>] \
     [--post-restart-status-url <url>] \
     [--post-restart-timeout-secs <secs>]
 
@@ -129,9 +130,12 @@ def snapshot_file(path: Path) -> dict[str, object]:
         "present": path.is_file(),
     }
     if path.is_file():
+        metadata = path.stat()
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, backup)
-        entry["mode"] = stat.S_IMODE(path.stat().st_mode)
+        entry["uid"] = metadata.st_uid
+        entry["gid"] = metadata.st_gid
+        entry["mode"] = stat.S_IMODE(metadata.st_mode)
     return entry
 
 current = root / "current"
@@ -222,6 +226,7 @@ def restore_file(entry: dict[str, object]) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.rollback-{os.getpid()}.tmp")
     shutil.copy2(source, temporary)
+    os.chown(temporary, int(entry["uid"]), int(entry["gid"]))
     os.chmod(temporary, int(entry["mode"]))
     os.replace(temporary, destination)
 
@@ -452,6 +457,7 @@ systemd_service=""
 release_retention_count=3
 restart_service=0
 post_restart_status_url=""
+post_restart_health_url=""
 post_restart_timeout_secs=60
 
 while [[ $# -gt 0 ]]; do
@@ -496,6 +502,10 @@ while [[ $# -gt 0 ]]; do
       post_restart_status_url=${2:-}
       shift 2
       ;;
+    --post-restart-health-url)
+      post_restart_health_url=${2:-}
+      shift 2
+      ;;
     --post-restart-timeout-secs)
       post_restart_timeout_secs=${2:-}
       shift 2
@@ -521,6 +531,15 @@ if [[ "$restart_service" -eq 1 ]]; then
 fi
 if [[ -n "$post_restart_status_url" && "$restart_service" -ne 1 ]]; then
   die "--post-restart-status-url requires --restart-service"
+fi
+if [[ -n "$post_restart_health_url" && "$restart_service" -ne 1 ]]; then
+  die "--post-restart-health-url requires --restart-service"
+fi
+if [[ -n "$post_restart_status_url" && -n "$post_restart_health_url" ]]; then
+  die "--post-restart-status-url and --post-restart-health-url are mutually exclusive"
+fi
+if [[ -n "$post_restart_health_url" && "$post_restart_health_url" != */healthz ]]; then
+  die "--post-restart-health-url must target an explicit /healthz endpoint"
 fi
 if [[ ! "$post_restart_timeout_secs" =~ ^[0-9]+$ || "$post_restart_timeout_secs" -le 0 ]]; then
   die "--post-restart-timeout-secs must be a positive integer"
@@ -564,11 +583,12 @@ mkdir -p "$(dirname "$transaction_dir")"
 create_transaction_snapshot "$node_root" "$transaction_dir"
 transaction_active=1
 
-python3 - "$node_root" "$bundle_root" "$package_version" "$commit" "$run_id" "$artifact_ref" <<'PY'
+python3 - "$node_root" "$bundle_root" "$package_version" "$commit" "$run_id" "$artifact_ref" "$transaction_dir" <<'PY'
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -578,7 +598,31 @@ package_version = sys.argv[3]
 commit = sys.argv[4]
 run_id = sys.argv[5]
 artifact_ref = sys.argv[6]
+transaction_dir = Path(sys.argv[7])
 runtime_bin = bundle_root / "bin" / "oasis7_chain_runtime"
+
+transaction_manifest = json.loads(
+    (transaction_dir / "transaction.json").read_text(encoding="utf-8")
+)
+metadata_by_path = {
+    str(entry["path"]): entry
+    for entry in transaction_manifest["files"]
+    if entry.get("present")
+}
+
+def atomic_write_preserving_metadata(path: Path, content: str) -> None:
+    relative = str(path.relative_to(node_root))
+    entry = metadata_by_path.get(relative)
+    temporary = path.with_name(f".{path.name}.promote-{os.getpid()}.tmp")
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        if entry is not None:
+            os.chown(temporary, int(entry["uid"]), int(entry["gid"]))
+            os.chmod(temporary, int(entry["mode"]))
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 digest = hashlib.sha256()
 with runtime_bin.open("rb") as fh:
@@ -615,13 +659,14 @@ for bundle_path in bundle_paths:
     runtime["updated_by"] = updated_by
     data["git_commit"] = commit
     data["updated_by"] = updated_by
-    bundle_path.write_text(
+    atomic_write_preserving_metadata(
+        bundle_path,
         json.dumps(data, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
 
-(node_root / "CURRENT_VERSION").write_text(package_version + "\n", encoding="utf-8")
-(node_root / "DEPLOYED_BUILDINFO").write_text(
+atomic_write_preserving_metadata(node_root / "CURRENT_VERSION", package_version + "\n")
+atomic_write_preserving_metadata(
+    node_root / "DEPLOYED_BUILDINFO",
     "\n".join(
         [
             "workflow=Testnet Packages",
@@ -635,7 +680,6 @@ for bundle_path in bundle_paths:
             "",
         ]
     ),
-    encoding="utf-8",
 )
 print(f"runtime_sha256={runtime_sha}")
 print(f"runtime_size={runtime_size}")
@@ -675,7 +719,27 @@ if [[ "$restart_service" -eq 1 ]]; then
   sleep 3
   systemctl is-active --quiet "$systemd_service"
   systemctl --no-pager --full status "$systemd_service" | sed -n '1,18p'
-  if [[ -n "$post_restart_status_url" ]]; then
+  if [[ -n "$post_restart_health_url" ]]; then
+    deadline=$((SECONDS + post_restart_timeout_secs))
+    last_health=""
+    while (( SECONDS < deadline )); do
+      if health_json="$(curl -fsS --max-time 5 "$post_restart_health_url" 2>/dev/null)"; then
+        last_health="$health_json"
+        if jq -e '.ok == true' >/dev/null <<<"$health_json"; then
+          echo "post_restart_health=ok"
+          break
+        fi
+      fi
+      sleep 3
+    done
+    if [[ -z "$last_health" ]] || ! jq -e '.ok == true' >/dev/null <<<"$last_health"; then
+      echo "error: post-restart health did not become ok before timeout" >&2
+      if [[ -n "$last_health" ]]; then
+        jq -S . <<<"$last_health" >&2 || true
+      fi
+      exit 1
+    fi
+  elif [[ -n "$post_restart_status_url" ]]; then
     deadline=$((SECONDS + post_restart_timeout_secs))
     last_status=""
     while (( SECONDS < deadline )); do

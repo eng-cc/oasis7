@@ -5,6 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-package-node-upgrade-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+file_metadata() {
+  python3 - "$1" <<'PY'
+import stat
+import sys
+from pathlib import Path
+
+st = Path(sys.argv[1]).stat()
+print(st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode))
+PY
+}
+
 node_root="$TMP_DIR/node"
 bundle_root="$TMP_DIR/bundle/oasis7-linux-x64"
 package_version="0.0.0+testnet.test.abcdef123456"
@@ -48,6 +59,17 @@ cat >"$node_root/config/doc/testing/evidence/public-testnet-governed-bootstrap-b
   }
 }
 EOF
+governed_bundle="$node_root/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+chmod 600 "$governed_bundle"
+printf 'old-version\n' >"$node_root/CURRENT_VERSION"
+chmod 600 "$node_root/CURRENT_VERSION"
+printf 'old-buildinfo\n' >"$node_root/DEPLOYED_BUILDINFO"
+chmod 600 "$node_root/DEPLOYED_BUILDINFO"
+read -r governed_uid governed_gid governed_mode <<<"$(file_metadata "$governed_bundle")"
+read -r current_version_uid current_version_gid current_version_mode \
+  <<<"$(file_metadata "$node_root/CURRENT_VERSION")"
+read -r buildinfo_uid buildinfo_gid buildinfo_mode \
+  <<<"$(file_metadata "$node_root/DEPLOYED_BUILDINFO")"
 
 touch -t 202001010000 "$bundle_root"
 tar -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
@@ -72,6 +94,40 @@ test -f "$node_root_abs/CURRENT_VERSION"
 test -f "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^package_version=$package_version$" "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^commit=$commit$" "$node_root_abs/DEPLOYED_BUILDINFO"
+test "$(file_metadata "$governed_bundle")" = "$governed_uid $governed_gid $governed_mode"
+test "$(file_metadata "$node_root_abs/CURRENT_VERSION")" = \
+  "$current_version_uid $current_version_gid $current_version_mode"
+test "$(file_metadata "$node_root_abs/DEPLOYED_BUILDINFO")" = \
+  "$buildinfo_uid $buildinfo_gid $buildinfo_mode"
+normal_transaction_manifest=$(find "$node_root_abs/package-upgrade-rollback" \
+  -name transaction.json -type f -print -quit)
+test -n "$normal_transaction_manifest"
+if ! jq -e \
+  --arg bundle_path "config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  --argjson bundle_uid "$governed_uid" \
+  --argjson bundle_gid "$governed_gid" \
+  --argjson bundle_mode "$governed_mode" \
+  --argjson current_version_uid "$current_version_uid" \
+  --argjson current_version_gid "$current_version_gid" \
+  --argjson current_version_mode "$current_version_mode" \
+  --argjson buildinfo_uid "$buildinfo_uid" \
+  --argjson buildinfo_gid "$buildinfo_gid" \
+  --argjson buildinfo_mode "$buildinfo_mode" \
+  'any(.files[]; .path == $bundle_path
+      and .uid == $bundle_uid and .gid == $bundle_gid and .mode == $bundle_mode)
+   and any(.files[]; .path == "CURRENT_VERSION"
+      and .uid == $current_version_uid
+      and .gid == $current_version_gid
+      and .mode == $current_version_mode)
+   and any(.files[]; .path == "DEPLOYED_BUILDINFO"
+      and .uid == $buildinfo_uid
+      and .gid == $buildinfo_gid
+      and .mode == $buildinfo_mode)' \
+  "$normal_transaction_manifest" >/dev/null; then
+  echo "transaction snapshot did not preserve governed metadata uid/gid/mode" >&2
+  jq -S . "$normal_transaction_manifest" >&2
+  exit 1
+fi
 release_count=$(find "$node_root_abs/releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l | tr -d ' ')
 test "$release_count" = "5"
 test -d "$node_root_abs/releases/$package_version"
@@ -264,7 +320,9 @@ chmod +x "$rollback_node/releases/old/bin/oasis7_chain_runtime"
 rollback_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$rollback_node")
 ln -s "$rollback_node_abs/releases/old" "$rollback_node/current"
 printf 'old-version-rollback\n' >"$rollback_node/CURRENT_VERSION"
+chmod 600 "$rollback_node/CURRENT_VERSION"
 printf 'old-deployed-buildinfo-rollback\n' >"$rollback_node/DEPLOYED_BUILDINFO"
+chmod 600 "$rollback_node/DEPLOYED_BUILDINFO"
 rollback_runtime_sha=$(shasum -a 256 "$rollback_node/releases/old/bin/oasis7_chain_runtime" | awk '{print $1}')
 rollback_runtime_size=$(wc -c <"$rollback_node/releases/old/bin/oasis7_chain_runtime" | tr -d ' ')
 cat >"$rollback_bundle_a" <<EOF
@@ -289,11 +347,20 @@ cat >"$rollback_bundle_b" <<EOF
   }
 }
 EOF
+chmod 600 "$rollback_bundle_a" "$rollback_bundle_b"
 cp "$rollback_bundle_a" "$TMP_DIR/rollback-bundle-a.before"
 cp "$rollback_bundle_b" "$TMP_DIR/rollback-bundle-b.before"
 cp "$rollback_node/CURRENT_VERSION" "$TMP_DIR/rollback-current-version.before"
 cp "$rollback_node/DEPLOYED_BUILDINFO" "$TMP_DIR/rollback-deployed-buildinfo.before"
 rollback_current_before=$(readlink "$rollback_node/current")
+read -r rollback_a_uid rollback_a_gid rollback_a_mode \
+  <<<"$(file_metadata "$rollback_bundle_a")"
+read -r rollback_b_uid rollback_b_gid rollback_b_mode \
+  <<<"$(file_metadata "$rollback_bundle_b")"
+read -r rollback_version_uid rollback_version_gid rollback_version_mode \
+  <<<"$(file_metadata "$rollback_node/CURRENT_VERSION")"
+read -r rollback_buildinfo_uid rollback_buildinfo_gid rollback_buildinfo_mode \
+  <<<"$(file_metadata "$rollback_node/DEPLOYED_BUILDINFO")"
 
 for rollback_attempt in first second; do
   set +e
@@ -320,6 +387,47 @@ for rollback_attempt in first second; do
   cmp -s "$TMP_DIR/rollback-bundle-b.before" "$rollback_bundle_b"
   cmp -s "$TMP_DIR/rollback-current-version.before" "$rollback_node/CURRENT_VERSION"
   cmp -s "$TMP_DIR/rollback-deployed-buildinfo.before" "$rollback_node/DEPLOYED_BUILDINFO"
+  test "$(file_metadata "$rollback_bundle_a")" = \
+    "$rollback_a_uid $rollback_a_gid $rollback_a_mode"
+  test "$(file_metadata "$rollback_bundle_b")" = \
+    "$rollback_b_uid $rollback_b_gid $rollback_b_mode"
+  test "$(file_metadata "$rollback_node/CURRENT_VERSION")" = \
+    "$rollback_version_uid $rollback_version_gid $rollback_version_mode"
+  test "$(file_metadata "$rollback_node/DEPLOYED_BUILDINFO")" = \
+    "$rollback_buildinfo_uid $rollback_buildinfo_gid $rollback_buildinfo_mode"
+  rollback_transaction_manifest=$(find "$rollback_node/package-upgrade-rollback" \
+    -name transaction.json -type f -print -quit)
+  test -n "$rollback_transaction_manifest"
+  if ! jq -e \
+    --arg bundle_a_path "config/a/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+    --arg bundle_b_path "config/b/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+    --argjson bundle_a_uid "$rollback_a_uid" \
+    --argjson bundle_a_gid "$rollback_a_gid" \
+    --argjson bundle_a_mode "$rollback_a_mode" \
+    --argjson bundle_b_uid "$rollback_b_uid" \
+    --argjson bundle_b_gid "$rollback_b_gid" \
+    --argjson bundle_b_mode "$rollback_b_mode" \
+    --argjson version_uid "$rollback_version_uid" \
+    --argjson version_gid "$rollback_version_gid" \
+    --argjson version_mode "$rollback_version_mode" \
+    --argjson buildinfo_uid "$rollback_buildinfo_uid" \
+    --argjson buildinfo_gid "$rollback_buildinfo_gid" \
+    --argjson buildinfo_mode "$rollback_buildinfo_mode" \
+    'any(.files[]; .path == $bundle_a_path
+        and .uid == $bundle_a_uid and .gid == $bundle_a_gid and .mode == $bundle_a_mode)
+     and any(.files[]; .path == $bundle_b_path
+        and .uid == $bundle_b_uid and .gid == $bundle_b_gid and .mode == $bundle_b_mode)
+     and any(.files[]; .path == "CURRENT_VERSION"
+        and .uid == $version_uid and .gid == $version_gid and .mode == $version_mode)
+     and any(.files[]; .path == "DEPLOYED_BUILDINFO"
+        and .uid == $buildinfo_uid
+        and .gid == $buildinfo_gid
+        and .mode == $buildinfo_mode)' \
+    "$rollback_transaction_manifest" >/dev/null; then
+    echo "rollback transaction snapshot did not preserve governed metadata uid/gid/mode" >&2
+    jq -S . "$rollback_transaction_manifest" >&2
+    exit 1
+  fi
   test "$(shasum -a 256 "$rollback_node/current/bin/oasis7_chain_runtime" | awk '{print $1}')" = "$rollback_runtime_sha"
   python3 - "$rollback_bundle_a" "$rollback_bundle_b" "$rollback_runtime_sha" <<'PY'
 import json
