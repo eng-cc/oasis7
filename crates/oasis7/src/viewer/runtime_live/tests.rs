@@ -42,6 +42,7 @@ mod snapshot_reprioritize;
 mod social_quote;
 #[path = "tests_support.rs"]
 mod tests_support;
+mod transfer_material_quote;
 mod wait_resolution_quote;
 
 use tests_support::*;

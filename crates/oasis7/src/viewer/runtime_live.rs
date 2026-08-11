@@ -115,7 +115,6 @@ use support::{
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
-
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
@@ -153,7 +152,6 @@ pub struct ViewerRuntimeLiveServer {
     #[cfg(test)]
     authoritative_recovery_dir_override: Option<PathBuf>,
 }
-
 impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
@@ -827,7 +825,7 @@ impl ViewerRuntimeLiveServer {
                 self.handle_market_quote_decision_request(request, writer)?
             }
             ViewerRequest::QuoteTransferMaterial { request } => {
-                self.quote_transfer_material(request, writer)?
+                self.transfer_quote(request, writer)?
             }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {

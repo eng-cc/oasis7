@@ -126,7 +126,7 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
-    pub(in crate::viewer::runtime_live) fn quote_transfer_material(
+    pub(in crate::viewer::runtime_live) fn transfer_quote(
         &mut self,
         request: TransferMaterialQuoteRequest,
         writer: &mut BufWriter<TcpStream>,
