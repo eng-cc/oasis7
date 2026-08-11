@@ -8,6 +8,7 @@ import importlib.util,pathlib,re,sys
 
 claim_source=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 ci_path=pathlib.Path(sys.argv[2])
+sys.path.insert(0,str(ci_path.parent))
 spec=importlib.util.spec_from_file_location('ci_ready_receipt',ci_path)
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -22,6 +23,9 @@ def exercise_live(draft,allow_ready):
         if '/check-runs?' in endpoint:
             return {'check_runs':[{'id':9,'name':'required-gate','status':'completed',
                     'conclusion':'success','completed_at':'2026-01-01T00:00:00Z',
+                    'head_sha':'a'*40,
+                    'pull_requests':[{'number':7,'base':{'sha':'b'*40},
+                                      'head':{'sha':'a'*40}}],
                     'app':{'id':15368}}]}
         raise AssertionError(args)
     original=module.gh
