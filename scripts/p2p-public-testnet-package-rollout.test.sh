@@ -4219,7 +4219,9 @@ PY
   --json >"$TMP_DIR/strict-plan.json"
 jq -e '
   .readiness_policy == "strict-ready"
-  and (.nodes[] | select(.name == "sequencer") | .commands[0] | contains("--post-restart-status-url"))' \
+  and (.nodes[] | select(.name == "sequencer") | .commands[0]
+    | (index("--post-restart-health-url") != null)
+    and (index("--post-restart-status-url") == null))' \
   "$TMP_DIR/strict-plan.json" >/dev/null
 
 python3 - "$TMP_DIR/manifest.json" <<'PY'

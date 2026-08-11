@@ -440,6 +440,8 @@ sequencer liveness 未通过时不得启动 storage，也不得开始恢复 obse
 3. 额外保留 `<node-root>/releases` 下按 mtime 排序最新的 3 个 release 目录。
 4. 删除其余非隐藏旧 release 目录；不会把 `<node-root>/data`、`<node-root>/config`、`<node-root>/backups`、service 文件、journal 或 live logs 当作 package 残留清理。
 5. 如需临时扩大回滚窗口，可用 `--release-retention-count <N>` 调整最新 release 保留数量；该参数不取消 current realpath 和 previous current 的强保留。
+6. 升级事务会记录并在 metadata/current promotion 与 rollback 时原子保留受治理文件的 uid、gid、mode；不得用 root 重写替代原有 ownership/mode 合同。
+7. 受限 validator 的替换后存活检查使用显式 `--post-restart-health-url <.../healthz>`，成功只输出 `post_restart_health=ok`；不得在该低成本 gate 中请求完整 `/v1/chain/status`。validator pair 的 readiness、同高与 checkpoint identity 仍按 Phase D 的独立 status/checkpoint 证据闭合。
 
 外层 operator/自动化负责清理脚本作用域之外的上传和 driver 临时目录：
 
