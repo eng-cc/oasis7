@@ -25,14 +25,8 @@ impl PosNodeEngine {
     // the aligned retained-window boundaries, including the latest completed boundary.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
 
-    pub(super) fn should_defer_fresh_observer_checkpoint_retry(
-        &self,
-        advertised_head: Option<&WorldHeadAnnounce>,
-    ) -> bool {
-        let high_head_retry_pending = self.fresh_observer_checkpoint_bootstrap_retry_pending
-            && (advertised_head
-                .is_some_and(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
-                || self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
+    pub(super) fn should_defer_fresh_observer_checkpoint_retry(&self) -> bool {
+        let high_head_retry_pending = self.fresh_observer_checkpoint_bootstrap_retry_pending;
         self.checkpoint_bootstrap_enabled
             && self.committed_height == 0
             && self.replication_persisted_height == 0
@@ -101,8 +95,12 @@ impl PosNodeEngine {
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
-        let preserve_high_checkpoint_retry =
-            self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+        let preserve_high_checkpoint_retry = self.network_committed_height
+            >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+            || self
+                .peer_heads
+                .values()
+                .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
         if !preserve_high_checkpoint_retry {
             self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         }
@@ -112,7 +110,11 @@ impl PosNodeEngine {
             // fresh observer needs to wait one poll for a stale peer head to advance.
             if self.network_committed_height != 0 {
                 self.fresh_observer_checkpoint_low_head_confirmation = None;
-                return Ok(FreshObserverCheckpointBootstrap::NotInstalled);
+                return Ok(if self.fresh_observer_checkpoint_bootstrap_retry_pending {
+                    FreshObserverCheckpointBootstrap::HighCheckpointPending
+                } else {
+                    FreshObserverCheckpointBootstrap::NotInstalled
+                });
             }
             let identity = (
                 advertised_head.height,

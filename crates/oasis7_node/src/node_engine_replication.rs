@@ -413,6 +413,7 @@ impl PosNodeEngine {
                 && self.replication_persisted_height == 0
                 && self.last_execution_height == 0
                 && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                    || self.should_defer_fresh_observer_checkpoint_retry()
                     || checkpoint_preflight_unavailable
                     || checkpoint_bootstrap_retry_pending
                     || checkpoint_bootstrap_preflight.should_defer_height_one());
@@ -772,7 +773,7 @@ impl PosNodeEngine {
             // execute the height-one tail before a checkpoint bootstrap.
             return Ok(());
         }
-        if self.should_defer_fresh_observer_checkpoint_retry(advertised_world_head.as_ref()) {
+        if self.should_defer_fresh_observer_checkpoint_retry() {
             return Ok(());
         }
         let advertised_network_height = self.network_committed_height.max(
@@ -790,7 +791,6 @@ impl PosNodeEngine {
             self.last_replication_gap_sync_blocked_at_ms = None;
             return Ok(());
         }
-
         let network_lag =
             advertised_network_height.saturating_sub(self.replication_persisted_height);
         let next_height = checked_replication_successor(
