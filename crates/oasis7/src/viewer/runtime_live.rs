@@ -80,6 +80,7 @@ mod social_quote;
 mod support;
 #[cfg(test)]
 mod tests;
+mod transfer_material_quote;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
 use authoritative::{
@@ -824,6 +825,9 @@ impl ViewerRuntimeLiveServer {
             }
             ViewerRequest::QuoteMarketDecision { request } => {
                 self.handle_market_quote_decision_request(request, writer)?
+            }
+            ViewerRequest::QuoteTransferMaterial { request } => {
+                self.quote_transfer_material(request, writer)?
             }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
