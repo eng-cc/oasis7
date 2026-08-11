@@ -567,12 +567,44 @@ fn micro_depot_install_quote_is_non_mutating_and_makes_the_finite_commission_vis
     );
     assert_eq!(quote["projected_commissioning_service_uses"], 4);
     assert_eq!(quote["break_even_uses"], 5);
-    assert_eq!(quote["low_use_warning"], true);
+    assert_eq!(
+        quote["forecast_status"], "insufficient",
+        "the current runtime has no canonical regional-pressure forecast horizon"
+    );
+    let forecast_basis = quote["forecast_basis"]
+        .as_str()
+        .expect("forecast insufficiency must be auditable");
+    let forecast_basis_lower = forecast_basis.to_ascii_lowercase();
+    for required_term in [
+        "canonical",
+        "regional",
+        "pressure",
+        "forecast",
+        "unavailable",
+    ] {
+        assert!(
+            forecast_basis_lower.contains(required_term),
+            "forecast basis {forecast_basis:?} must identify missing canonical regional-pressure forecast evidence"
+        );
+    }
     assert!(
-        quote["recommendation_reason"]
-            .as_str()
-            .expect("recommendation is player-readable")
-            .contains("break_even")
+        quote
+            .get("expected_future_blockers_covered")
+            .map_or(true, serde_json::Value::is_null),
+        "missing forecast evidence must not invent future-blocker coverage"
+    );
+    assert_eq!(
+        quote["deployable"], true,
+        "forecast insufficiency preserves player choice when install rules pass"
+    );
+    assert_eq!(quote["low_use_warning"], true);
+    let recommendation_reason = quote["recommendation_reason"]
+        .as_str()
+        .expect("recommendation is player-readable")
+        .to_ascii_lowercase();
+    assert!(
+        recommendation_reason.contains("not recommended"),
+        "insufficient forecast must be explicitly non-recommending: {recommendation_reason:?}"
     );
     assert_eq!(
         quote["expected_blocker_effect"]["blocker_change"],

@@ -13,6 +13,9 @@ use super::micro_depot_commissioning::MicroDepotCommissioning;
 use super::types::{MicroDepotProposalResourceDebit, MicroDepotResourceDebit};
 use super::{Action, WorldKernel};
 
+const MICRO_DEPOT_FORECAST_STATUS_INSUFFICIENT: &str = "insufficient";
+const MICRO_DEPOT_FORECAST_BASIS_UNAVAILABLE: &str = "canonical regional-pressure forecast evidence unavailable: current runtime has no canonical forecast snapshot or horizon";
+
 /// A runtime-derived, prospective install projection. This is intentionally
 /// separate from the install event: obtaining a quote never reserves resources
 /// or creates a facility.
@@ -26,6 +29,12 @@ pub struct MicroDepotInstallQuote {
     pub upkeep_horizon_epochs: i64,
     pub projected_commissioning_service_uses: i64,
     pub break_even_uses: i64,
+    #[serde(default = "default_micro_depot_forecast_status")]
+    pub forecast_status: String,
+    #[serde(default = "default_micro_depot_forecast_basis")]
+    pub forecast_basis: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_future_blockers_covered: Option<i64>,
     pub low_use_warning: bool,
     pub recommendation_reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -228,9 +237,20 @@ impl WorldKernel {
                     .to_string(),
             );
         }
+        // The current runtime has no canonical regional-pressure forecast snapshot or horizon.
+        // Keep capacity and break-even values inspectable, but do not present them as strategic
+        // evidence until a deterministic forecast provider can bind them to regional state.
+        let forecast_status = default_micro_depot_forecast_status();
+        let forecast_basis = default_micro_depot_forecast_basis();
+        let forecast_insufficient = forecast_status == MICRO_DEPOT_FORECAST_STATUS_INSUFFICIENT;
         let low_use_warning = projected_commissioning_service_uses < break_even_uses
-            || projected_commissioning_service_uses == 0;
-        let recommendation_reason = if projected_commissioning_service_uses == 0 {
+            || projected_commissioning_service_uses == 0
+            || forecast_insufficient;
+        let recommendation_reason = if forecast_insufficient {
+            format!(
+                "not recommended: {forecast_basis}; projected uses {projected_commissioning_service_uses} vs break_even {break_even_uses}"
+            )
+        } else if projected_commissioning_service_uses == 0 {
             "not recommended: prospective commissioning service uses are zero".to_string()
         } else if low_use_warning {
             format!(
@@ -251,6 +271,9 @@ impl WorldKernel {
             upkeep_horizon_epochs,
             projected_commissioning_service_uses,
             break_even_uses,
+            forecast_status,
+            forecast_basis,
+            expected_future_blockers_covered: None,
             low_use_warning,
             recommendation_reason,
             expected_blocker_effect,
@@ -261,6 +284,14 @@ impl WorldKernel {
             quote.reasons.is_empty() && quote.projected_commissioning_service_uses > 0;
         Ok(quote)
     }
+}
+
+fn default_micro_depot_forecast_status() -> String {
+    MICRO_DEPOT_FORECAST_STATUS_INSUFFICIENT.to_string()
+}
+
+fn default_micro_depot_forecast_basis() -> String {
+    MICRO_DEPOT_FORECAST_BASIS_UNAVAILABLE.to_string()
 }
 
 fn micro_depot_post_install_upkeep_horizon_epochs(
