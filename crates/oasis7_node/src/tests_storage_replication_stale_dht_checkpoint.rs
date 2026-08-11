@@ -751,3 +751,261 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
+
+struct PackageProbeHeightOneFailureHook {
+    incremental_commits: Vec<u64>,
+    rollback_heights: Vec<u64>,
+}
+
+impl NodeExecutionHook for PackageProbeHeightOneFailureHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        self.incremental_commits.push(context.height);
+        Err(format!(
+            "{} at height {}",
+            EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, context.height
+        ))
+    }
+
+    fn restore_to_height(&mut self, _world_id: &str, height: u64) -> Result<bool, String> {
+        self.rollback_heights.push(height);
+        Ok(false)
+    }
+}
+
+#[test]
+fn fresh_observer_package_probe_keeps_height_zero_before_two_candidate_ingest() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
+    let world_id = "world-live-package-probe-height-one-reentry";
+    let dir_a = temp_dir("live-package-probe-height-one-reentry-a");
+    let dir_b = temp_dir("live-package-probe-height-one-reentry-b");
+    let dir_c = temp_dir("live-package-probe-height-one-reentry-c");
+    let (_, public_key_a) = deterministic_keypair_hex(204);
+    let (_, public_key_b) = deterministic_keypair_hex(205);
+    let (_, public_key_c) = deterministic_keypair_hex(206);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![
+            PosValidator {
+                validator_id: "node-a".to_string(),
+                stake: 50,
+            },
+            PosValidator {
+                validator_id: "node-c".to_string(),
+                stake: 50,
+            },
+        ],
+        &[("node-a", 204), ("node-c", 206)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 204)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 205)
+        .with_remote_writer_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
+        .expect("fetch allowlist b");
+    let replication_config_c = signed_replication_config(dir_c.clone(), 206)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist c")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist c");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let config_c = NodeConfig::new("node-c", world_id, NodeRole::Sequencer)
+        .expect("config c")
+        .with_pos_config(pos_config)
+        .expect("pos config c")
+        .with_replication(replication_config_c.clone());
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let mut replication_c =
+        ReplicationRuntime::new(config_c.replication.as_ref().expect("repl c"), "node-c")
+            .expect("runtime c");
+    let height_one_a = replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            12_100,
+            &committed_decision(1),
+            Some("peer-exec-block-1"),
+            Some("peer-exec-state-1"),
+        )
+        .expect("build node-a height-one candidate")
+        .expect("node-a height-one candidate");
+    let height_one_c = replication_c
+        .build_local_commit_message(
+            "node-c",
+            world_id,
+            12_101,
+            &PosDecision {
+                proposer_id: "node-c".to_string(),
+                ..committed_decision(1)
+            },
+            Some("peer-exec-block-1"),
+            Some("peer-exec-state-1"),
+        )
+        .expect("build node-c height-one candidate")
+        .expect("node-c height-one candidate");
+    let checkpoint_height = 43_340;
+    let checkpoint_state_root = format!("exec-state-{checkpoint_height}");
+    let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
+    let head = Arc::new(Mutex::new(super::replication::FetchHeadResponse {
+        found: true,
+        head: Some(super::replication::ReplicationHeadSummary {
+            world_id: world_id.to_string(),
+            height: checkpoint_height,
+            block_hash: format!("block-{checkpoint_height}"),
+            state_root: checkpoint_state_root,
+            timestamp_ms: 12_164,
+        }),
+    }));
+    let checkpoint_fetch_available = Arc::new(AtomicBool::new(false));
+    let checkpoint_fetch_not_found = Arc::new(AtomicBool::new(true));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(PeerHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols,
+        head: Arc::clone(&head),
+        checkpoint_fetch_available,
+        checkpoint_fetch_not_found,
+        connected_peer_ids: vec!["node-a".to_string(), "node-c".to_string()],
+    });
+    // The package probe talks to both connected validators. The final handler
+    // registration serves the height-one gap request from node-c after the
+    // two gossip candidates have already been drained.
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register node-a provider handlers");
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_c,
+        world_id,
+        &config_c.network_policy,
+    )
+    .expect("register node-c provider handlers");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let mut endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    let high_head = |node_id: &str, public_key_hex: String| PeerCommittedHead {
+        height: checkpoint_height,
+        block_hash: format!("block-{checkpoint_height}"),
+        committed_at_ms: 12_164,
+        observed_at_ms: 12_200,
+        execution_block_hash: Some(format!("exec-block-{checkpoint_height}")),
+        execution_state_root: Some(format!("exec-state-{checkpoint_height}")),
+        action_root: empty_action_root(),
+        public_key_hex: Some(public_key_hex),
+        signature_hex: Some(format!("signed-{node_id}-{checkpoint_height}")),
+    };
+    engine_b.peer_heads.insert(
+        "node-a".to_string(),
+        high_head("node-a", deterministic_keypair_hex(204).1),
+    );
+    engine_b.peer_heads.insert(
+        "node-c".to_string(),
+        high_head("node-c", deterministic_keypair_hex(206).1),
+    );
+    assert_eq!(engine_b.peer_heads.len(), 2);
+    assert!(engine_b
+        .peer_heads
+        .values()
+        .all(|head| head.height == checkpoint_height));
+    let mut execution_hook = PackageProbeHeightOneFailureHook {
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+
+    // Probe ordering: both validators advertise the same signed high head,
+    // checkpoint closure is not yet available, then both height-one candidates
+    // arrive and are ingested before the next poll.
+    endpoint_b
+        .publish_replication(&height_one_a)
+        .expect("publish node-a height-one candidate");
+    endpoint_b
+        .publish_replication(&height_one_c)
+        .expect("publish node-c height-one candidate");
+    engine_b
+        .tick(
+            "node-b",
+            world_id,
+            12_300,
+            None,
+            Some(&mut replication_b),
+            Some(&mut endpoint_b),
+            None,
+            Vec::new(),
+            Some(&mut execution_hook),
+        )
+        .expect("initial unavailable checkpoint probe must hold height zero");
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert!(execution_hook.incremental_commits.is_empty());
+    assert!(execution_hook.rollback_heights.is_empty());
+
+    // The next package poll only sees a stale height-one world head. The
+    // checkpoint is still unavailable, so this must remain at height zero;
+    // current code clears retry authority after both high peer heads were
+    // overwritten by the two ingested candidates and replays height one.
+    *head.lock().expect("downgrade world head for package retry") =
+        super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: 1,
+                block_hash: "block-1".to_string(),
+                state_root: "peer-exec-state-1".to_string(),
+                timestamp_ms: 12_100,
+            }),
+        };
+    let result = engine_b.tick(
+        "node-b",
+        world_id,
+        12_600,
+        None,
+        Some(&mut replication_b),
+        Some(&mut endpoint_b),
+        None,
+        Vec::new(),
+        Some(&mut execution_hook),
+    );
+    assert!(
+        result.is_ok(),
+        "fresh package observer must stay at height zero: result={result:?} incremental={:?} rollback={:?}",
+        execution_hook.incremental_commits,
+        execution_hook.rollback_heights
+    );
+    let snapshot = result.expect("height-zero package probe snapshot");
+    assert_eq!(snapshot.consensus_snapshot.committed_height, 0);
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert!(execution_hook.incremental_commits.is_empty());
+    assert!(execution_hook.rollback_heights.is_empty());
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+    let _ = fs::remove_dir_all(&dir_c);
+}

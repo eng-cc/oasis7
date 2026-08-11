@@ -95,15 +95,6 @@ impl PosNodeEngine {
             return Ok(FreshObserverCheckpointBootstrap::PreflightUnavailable);
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
-        let preserve_high_checkpoint_retry = self.network_committed_height
-            >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
-            || self
-                .peer_heads
-                .values()
-                .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
-        if !preserve_high_checkpoint_retry {
-            self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
-        }
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             // An already observed network height can require an immediate low-height
             // checkpoint to recover missing history. Only a completely unestablished
