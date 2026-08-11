@@ -96,6 +96,22 @@ impl PosNodeEngine {
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
+            // A stale world-head response must not revoke a high connected
+            // peer-head observation.  The DHT/peer world-head route can still
+            // report height one while a fresh observer has already observed
+            // a retained high head from a validator.  Establish retry
+            // authority before low-head confirmation so a later height-one
+            // candidate cannot enter incremental execution without a verified
+            // checkpoint closure.
+            if self
+                .peer_heads
+                .values()
+                .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+            {
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                self.fresh_observer_checkpoint_low_head_confirmation = None;
+                return Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending);
+            }
             // An already observed network height can require an immediate low-height
             // checkpoint to recover missing history. Only a completely unestablished
             // fresh observer needs to wait one poll for a stale peer head to advance.
