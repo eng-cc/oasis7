@@ -9,6 +9,8 @@ describe("TransferMaterialQuote", () => {
   it("renders player-readable arrival, loss, capacity, priority, and recommendation without raw enums", () => {
     const view = render(() => <TransferMaterialQuoteCard quote={quote} locale="en" tr={tr} />);
     const card = within(view.getByTestId("transfer-material-quote"));
+    expect(card.getByText(/Iron ingot/)).toBeInTheDocument();
+    expect(card.queryByText("iron_ingot")).not.toBeInTheDocument();
     expect(card.getByText(/Expected received/)).toBeInTheDocument();
     expect(card.getAllByText(/18/).length).toBeGreaterThan(0);
     expect(card.getByText(/Submit the transfer/)).toBeInTheDocument();
@@ -17,9 +19,19 @@ describe("TransferMaterialQuote", () => {
     expect(card.queryByText("material_default_priority")).not.toBeInTheDocument();
   });
 
+  it("renders the known material label in Chinese without exposing the raw key", () => {
+    const view = render(() => <TransferMaterialQuoteCard quote={quote} locale="zh" tr={tr} />);
+    const card = within(view.getByTestId("transfer-material-quote"));
+    expect(card.getByText(/铁锭/)).toBeInTheDocument();
+    expect(card.queryByText("iron_ingot")).not.toBeInTheDocument();
+  });
+
   it("submits the complete logistics form through the controlled request callback", async () => {
     const requestTransferMaterialQuote = vi.fn(() => Promise.resolve({ ok: true }));
     const view = render(() => <TransferMaterialQuotePanel requesterAgentId="agent-0" quote={null} requestState={{ status: "idle" }} requestTransferMaterialQuote={requestTransferMaterialQuote} locale="zh" tr={tr} />);
+    const materialInput = view.getByLabelText("物料");
+    expect(materialInput).toHaveValue("铁锭");
+    expect(materialInput).not.toHaveValue("iron_ingot");
     await view.getByTestId("transfer-material-quote-request-form").requestSubmit();
     expect(requestTransferMaterialQuote).toHaveBeenCalledWith("agent-0", "site:source", "site:destination", "iron_ingot", "20", "200", "");
   });

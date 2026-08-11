@@ -13307,6 +13307,28 @@ var _tmpl$$4 = /* @__PURE__ */ template(`<div class=metric><div class=metric__la
 function display(value2) {
   return value2 == null || value2 === "" ? "—" : String(value2);
 }
+const MATERIAL_LABELS = {
+  iron_ingot: ["铁锭", "Iron ingot"]
+};
+function humanizeMaterialKey(value2) {
+  const words = String(value2 || "").trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  if (!words) return "—";
+  return words.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+function materialLabel(value2, locale, tr2) {
+  const key = String(value2 || "").trim();
+  const labels = MATERIAL_LABELS[key];
+  if (labels) return tr2(locale, labels[0], labels[1]);
+  const humanized = humanizeMaterialKey(key);
+  return tr2(locale, `未知物料：${humanized}`, `Unknown material: ${humanized}`);
+}
+function materialKeyFromInput(value2) {
+  const input = String(value2 || "").trim();
+  if (input === "铁锭" || input.toLowerCase() === "iron ingot" || input === "iron_ingot") {
+    return "iron_ingot";
+  }
+  return input;
+}
 function priorityCopy(value2, locale, tr2) {
   return {
     urgent: tr2(locale, "紧急优先", "Urgent priority"),
@@ -13340,7 +13362,7 @@ function TransferMaterialQuoteCard(props) {
     insert(_el$8, () => tr2(locale(), "物料转运预估", "Transfer Material Quote"));
     insert(_el$9, () => tr2(locale(), "这是只读预估，不会扣除库存、占用在途容量、推进时间或生成回执。", "This is a read-only quote. It does not spend inventory, reserve transit capacity, advance time, or create a receipt."));
     insert(_el$10, () => tr2(locale(), "预估", "quote"));
-    insert(_el$11, () => `${tr2(locale(), "物料", "Material")}: ${display(quote2().kind)}`);
+    insert(_el$11, () => `${tr2(locale(), "物料", "Material")}: ${materialLabel(quote2().kind, locale(), tr2)}`);
     insert(_el$12, () => `${tr2(locale(), "距离", "Distance")}: ${display(quote2().distance_km)} km`);
     insert(_el$13, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendationCopy(quote2().recommendation, locale(), tr2)}`);
     insert(_el$14, createComponent(Metric, {
@@ -13420,6 +13442,7 @@ function TransferMaterialQuotePanel(props) {
   const [fromLedger, setFromLedger] = createSignal("site:source");
   const [toLedger, setToLedger] = createSignal("site:destination");
   const [kind, setKind] = createSignal("iron_ingot");
+  const [kindInput, setKindInput] = createSignal(null);
   const [amount, setAmount] = createSignal("20");
   const [distance, setDistance] = createSignal("200");
   const [priority, setPriority] = createSignal("");
@@ -13428,6 +13451,11 @@ function TransferMaterialQuotePanel(props) {
   const locale = () => props.locale;
   const tr2 = props.tr;
   const remote = () => props.requestState || {};
+  const displayedKind = () => kindInput() ?? materialLabel(kind(), locale(), tr2);
+  function updateKindInput(value2) {
+    setKind(materialKeyFromInput(value2));
+    setKindInput(String(value2 || ""));
+  }
   async function requestQuote(event) {
     event.preventDefault();
     setLocalError("");
@@ -13451,7 +13479,7 @@ function TransferMaterialQuotePanel(props) {
     insert(_el$28, () => tr2(locale(), "目的地账本", "Destination ledger"));
     _el$29.$$input = (event) => setToLedger(event.currentTarget.value);
     insert(_el$31, () => tr2(locale(), "物料", "Material"));
-    _el$32.$$input = (event) => setKind(event.currentTarget.value);
+    _el$32.$$input = (event) => updateKindInput(event.currentTarget.value);
     insert(_el$34, () => tr2(locale(), "数量", "Amount"));
     _el$35.$$input = (event) => setAmount(event.currentTarget.value);
     insert(_el$37, () => tr2(locale(), "距离（公里）", "Distance (km)"));
@@ -13522,7 +13550,7 @@ function TransferMaterialQuotePanel(props) {
     });
     createRenderEffect(() => _el$26.value = fromLedger());
     createRenderEffect(() => _el$29.value = toLedger());
-    createRenderEffect(() => _el$32.value = kind());
+    createRenderEffect(() => _el$32.value = displayedKind());
     createRenderEffect(() => _el$35.value = amount());
     createRenderEffect(() => _el$38.value = distance());
     createRenderEffect(() => _el$41.value = priority());
