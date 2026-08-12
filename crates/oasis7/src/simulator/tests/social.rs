@@ -229,7 +229,7 @@ fn social_fact_impact_quote_previews_adjudication_confirm_and_retract_without_mu
         let challenger_power_before_quote = electricity_of(&kernel, "agent-c");
         let quote = kernel
             .quote_adjudicate_social_fact(
-                &agent_owner("agent-b"),
+                &agent_owner("agent-a"),
                 fact_id,
                 decision,
                 "evidence satisfies schema thresholds",
@@ -246,7 +246,7 @@ fn social_fact_impact_quote_previews_adjudication_confirm_and_retract_without_mu
             electricity_of(&kernel, "agent-c"),
             challenger_power_before_quote
         );
-        assert_eq!(quote.actor_id, "agent-b");
+        assert_eq!(quote.actor_id, "agent-a");
         assert_eq!(quote.action_kind, "adjudicate_fact");
         assert_eq!(quote.schema_id, "social.reputation.v1");
         assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
@@ -292,7 +292,7 @@ fn social_fact_impact_quote_adjudication_matches_execution_rejections() {
         actor: agent_owner("agent-a"),
         schema_id: "social.reputation.v1".to_string(),
         subject: agent_owner("agent-b"),
-        object: None,
+        object: Some(agent_owner("agent-c")),
         claim: "agent-b delivered mission data".to_string(),
         confidence_ppm: 800_000,
         evidence_event_ids: vec![evidence_event_id],
@@ -307,7 +307,7 @@ fn social_fact_impact_quote_adjudication_matches_execution_rejections() {
 
     for (adjudicator, candidate_fact_id, notes, expected_note) in [
         (
-            agent_owner("agent-b"),
+            agent_owner("agent-a"),
             fact_id,
             "evidence is sufficient",
             "cannot be adjudicated without challenge",
@@ -358,7 +358,7 @@ fn social_fact_impact_quote_adjudication_matches_execution_rejections() {
     ));
     let reason = kernel
         .quote_adjudicate_social_fact(
-            &agent_owner("agent-c"),
+            &agent_owner("agent-b"),
             fact_id,
             SocialAdjudicationDecision::Confirm,
             "evidence is sufficient",
@@ -368,14 +368,47 @@ fn social_fact_impact_quote_adjudication_matches_execution_rejections() {
         RejectReason::RuleDenied { notes } => assert!(
             notes
                 .iter()
-                .any(|note| note.contains("social adjudicator is not a fact party")),
+                .any(|note| note.contains("social adjudicator is not the fact publisher")),
             "unauthorized adjudication rejection notes: {notes:?}"
         ),
         other => panic!("unexpected unauthorized adjudication rejection: {other:?}"),
     }
     let reason = kernel
         .quote_adjudicate_social_fact(
-            &agent_owner("agent-b"),
+            &agent_owner("agent-c"),
+            fact_id,
+            SocialAdjudicationDecision::Confirm,
+            "evidence is sufficient",
+        )
+        .expect_err("object must not adjudicate a challenged fact");
+    assert!(matches!(
+        reason,
+        RejectReason::RuleDenied { ref notes }
+            if notes
+                .iter()
+                .any(|note| note.contains("social adjudicator is not the fact publisher"))
+    ));
+
+    for adjudicator in [agent_owner("agent-b"), agent_owner("agent-c")] {
+        kernel.submit_action(Action::AdjudicateSocialFact {
+            adjudicator,
+            fact_id,
+            decision: SocialAdjudicationDecision::Confirm,
+            notes: "evidence is sufficient".to_string(),
+        });
+        let event = kernel.step().expect("unauthorized adjudication rejection");
+        assert!(matches!(
+            event.kind,
+            WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied { ref notes }
+            } if notes
+                .iter()
+                .any(|note| note.contains("social adjudicator is not the fact publisher"))
+        ));
+    }
+    let reason = kernel
+        .quote_adjudicate_social_fact(
+            &agent_owner("agent-a"),
             fact_id,
             SocialAdjudicationDecision::Retract,
             "evidence is sufficient",
@@ -666,7 +699,7 @@ fn social_adjudication_confirm_slashes_challenge_stake_and_releases_publisher() 
     assert_eq!(electricity_of(&kernel, "agent-c"), 980);
 
     kernel.submit_action(Action::AdjudicateSocialFact {
-        adjudicator: agent_owner("agent-b"),
+        adjudicator: agent_owner("agent-a"),
         fact_id,
         decision: SocialAdjudicationDecision::Confirm,
         notes: "evidence satisfies schema thresholds".to_string(),
@@ -746,7 +779,7 @@ fn social_adjudication_retract_slashes_publisher_and_refunds_challenger() {
     ));
 
     kernel.submit_action(Action::AdjudicateSocialFact {
-        adjudicator: agent_owner("agent-b"),
+        adjudicator: agent_owner("agent-a"),
         fact_id,
         decision: SocialAdjudicationDecision::Retract,
         notes: "publisher evidence is incomplete".to_string(),

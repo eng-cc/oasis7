@@ -132,7 +132,7 @@
 - `confidence_ppm` 必须在闭区间 `[1, 1_000_000]`。
 - `evidence_event_ids` 必须非空，且所有事件 ID 均已存在。
 - `backing_fact_ids` 必须全部存在，且不可引用 `Retracted/Revoked` 事实。
-- 仲裁权限：仅 `ResourceOwner::World` 或事实发布者可仲裁。
+- 仲裁权限：v1 当前可表示的 `ResourceOwner` 中仅事实发布者可仲裁；`ResourceOwner::World` 保留为设计目标，但尚未在 simulator owner ABI 中表示。
 - 撤销权限：仅事实发布者可撤销。
 - 过期规则：带 `ttl_ticks` 的事实/关系在到期 tick 自动标记 `Expired`。
 - 质押规则：若设置 `stake`，发布/质疑动作先扣减资源；

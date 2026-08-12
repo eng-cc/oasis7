@@ -79,7 +79,7 @@ fn social_replay_from_snapshot_keeps_adjudicated_and_declared_state() {
     let _ = kernel.step().expect("challenge");
 
     kernel.submit_action(Action::AdjudicateSocialFact {
-        adjudicator: agent_owner("agent-b"),
+        adjudicator: agent_owner("agent-a"),
         fact_id,
         decision: SocialAdjudicationDecision::Confirm,
         notes: "cross-check passed".to_string(),
@@ -101,6 +101,54 @@ fn social_replay_from_snapshot_keeps_adjudicated_and_declared_state() {
     let journal = kernel.journal_snapshot();
     let replayed = WorldKernel::replay_from_snapshot(snapshot, journal).expect("replay");
     assert_eq!(replayed.model(), kernel.model());
+}
+
+#[test]
+fn social_replay_rejects_non_publisher_adjudicator() {
+    let mut kernel = setup_social_kernel();
+    let snapshot = kernel.snapshot();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: Some(agent_owner("agent-c")),
+        claim: "agent-b reliably delivers requested outcomes".to_string(),
+        confidence_ppm: 850_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let publish = kernel.step().expect("publish");
+    let fact_id = match publish.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+    kernel.submit_action(Action::ChallengeSocialFact {
+        challenger: agent_owner("agent-c"),
+        fact_id,
+        reason: "need stronger corroboration".to_string(),
+        stake: None,
+    });
+    let _ = kernel.step().expect("challenge");
+    kernel.submit_action(Action::AdjudicateSocialFact {
+        adjudicator: agent_owner("agent-a"),
+        fact_id,
+        decision: SocialAdjudicationDecision::Confirm,
+        notes: "cross-check passed".to_string(),
+    });
+    let _ = kernel.step().expect("adjudicate");
+
+    let mut tampered_journal = kernel.journal_snapshot();
+    for event in &mut tampered_journal.events {
+        if let WorldEventKind::SocialFactAdjudicated { adjudicator, .. } = &mut event.kind {
+            *adjudicator = agent_owner("agent-b");
+        }
+    }
+    let error = WorldKernel::replay_from_snapshot(snapshot, tampered_journal)
+        .expect_err("replay must reject non-publisher adjudicator");
+    assert!(format!("{error:?}").contains("social adjudicator is not the fact publisher"));
 }
 
 #[test]

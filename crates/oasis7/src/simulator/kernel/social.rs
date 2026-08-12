@@ -162,9 +162,9 @@ impl WorldKernel {
                 "social fact {fact_id} cannot be adjudicated without challenge"
             ));
         };
-        if !social_fact_party_matches(fact, adjudicator) {
+        if !social_adjudicator_is_authorized(fact, adjudicator) {
             return social_rule_denied(format!(
-                "social adjudicator is not a fact party for fact {fact_id}"
+                "social adjudicator is not the fact publisher for fact {fact_id}"
             ));
         }
 
@@ -455,10 +455,10 @@ impl WorldKernel {
                 "social fact {fact_id} cannot be adjudicated without challenge"
             ));
         }
-        if !social_fact_party_matches(&fact, &adjudicator) {
+        if !social_adjudicator_is_authorized(&fact, &adjudicator) {
             self.model.social_facts.insert(fact_id, fact);
             return social_rule_reject(format!(
-                "social adjudicator is not a fact party for fact {fact_id}"
+                "social adjudicator is not the fact publisher for fact {fact_id}"
             ));
         }
 
@@ -752,9 +752,11 @@ impl WorldKernel {
         let Some(mut fact) = self.model.social_facts.remove(&fact_id) else {
             return Err(format!("social fact not found: {fact_id}"));
         };
-        if !social_fact_party_matches(&fact, adjudicator) {
+        if !social_adjudicator_is_authorized(&fact, adjudicator) {
             self.model.social_facts.insert(fact_id, fact);
-            return Err(format!("social adjudicator is not a fact party: {fact_id}"));
+            return Err(format!(
+                "social adjudicator is not the fact publisher: {fact_id}"
+            ));
         }
         self.apply_social_fact_adjudication_settlement(&mut fact, decision)
             .map_err(|reason| format!("social adjudication settlement failed: {reason:?}"))?;
@@ -1061,13 +1063,11 @@ fn social_edge_affected_surfaces(schema_id: &str) -> Vec<String> {
     surfaces
 }
 
-fn social_fact_party_matches(fact: &SocialFactState, owner: &ResourceOwner) -> bool {
+fn social_adjudicator_is_authorized(fact: &SocialFactState, owner: &ResourceOwner) -> bool {
+    // v1 has no representable `ResourceOwner::World`; the only runtime
+    // authority is the fact publisher. Keep this predicate shared by quote,
+    // execution, and replay so all paths enforce the same rule.
     fact.actor == *owner
-        || fact.subject == *owner
-        || fact
-            .object
-            .as_ref()
-            .is_some_and(|object_owner| object_owner == owner)
 }
 
 fn social_rule_reject(note: impl Into<String>) -> WorldEventKind {
