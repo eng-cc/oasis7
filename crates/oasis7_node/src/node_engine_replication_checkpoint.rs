@@ -85,6 +85,17 @@ impl PosNodeEngine {
         hold
     }
 
+    /// Transport connectivity is not checkpoint authority. Keep this test
+    /// seam available for regression probes without shipping a quorum hold.
+    #[cfg(test)]
+    pub(super) fn hold_fresh_observer_for_connected_validator_quorum(
+        &mut self,
+        _endpoint: &ReplicationNetworkEndpoint,
+        _advertised_height: u64,
+    ) -> bool {
+        false
+    }
+
     fn cached_high_checkpoint_head(&self, world_id: &str) -> Option<WorldHeadAnnounce> {
         self.peer_heads
             .iter()
