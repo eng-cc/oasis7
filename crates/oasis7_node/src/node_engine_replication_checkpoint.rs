@@ -70,6 +70,39 @@ impl PosNodeEngine {
         hold
     }
 
+    fn cached_high_checkpoint_head(&self, world_id: &str) -> Option<WorldHeadAnnounce> {
+        self.peer_heads
+            .iter()
+            .filter_map(|(node_id, head)| {
+                let validator_id = self.validator_id_for_peer_head(node_id)?;
+                if self.quarantined_validators.contains(&validator_id)
+                    || head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                    || head.block_hash.is_empty()
+                {
+                    return None;
+                }
+                let execution_block_hash = head.execution_block_hash.as_ref()?;
+                let state_root = head.execution_state_root.as_ref()?;
+                if execution_block_hash.is_empty() || state_root.is_empty() {
+                    return None;
+                }
+                Some(WorldHeadAnnounce {
+                    world_id: world_id.to_string(),
+                    height: head.height,
+                    block_hash: head.block_hash.clone(),
+                    state_root: state_root.clone(),
+                    timestamp_ms: head.committed_at_ms,
+                    signature: String::new(),
+                })
+            })
+            .max_by(|left, right| {
+                left.height
+                    .cmp(&right.height)
+                    .then_with(|| left.block_hash.cmp(&right.block_hash))
+                    .then_with(|| left.state_root.cmp(&right.state_root))
+            })
+    }
+
     pub(super) fn try_bootstrap_fresh_observer_from_advertised_checkpoint(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -96,6 +129,52 @@ impl PosNodeEngine {
         };
         self.fresh_observer_checkpoint_preflight_unavailable = false;
         if advertised_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
+            // A stale world-head response must not revoke a high connected
+            // peer-head observation.  The DHT/peer world-head route can still
+            // report height one while a fresh observer has already observed
+            // a retained high head from a validator.  Establish retry
+            // authority before low-head confirmation so a later height-one
+            // candidate cannot enter incremental execution without a verified
+            // checkpoint closure.
+            if let Some(cached_head) = self.cached_high_checkpoint_head(world_id) {
+                self.fresh_observer_checkpoint_low_head_confirmation = None;
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
+                return match self.try_sync_high_replication_checkpoint_boundary(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication_runtime,
+                    cached_head.height,
+                    0,
+                    Some(&cached_head),
+                    execution_hook,
+                    progress_callback,
+                ) {
+                    Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
+                    Ok(false) => {
+                        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                        Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending)
+                    }
+                    Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                        Ok(FreshObserverCheckpointBootstrap::RetryPending)
+                    }
+                    Err(err) => Err(err),
+                };
+            }
+            // Preserve the existing fail-closed hold for high heads that are
+            // not trustworthy checkpoint candidates (for example, an unknown
+            // or incomplete peer binding).  They must not be allowed to age
+            // into low-head confirmation and height-one replay.
+            if self
+                .peer_heads
+                .values()
+                .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+            {
+                self.fresh_observer_checkpoint_low_head_confirmation = None;
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                return Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending);
+            }
             // An already observed network height can require an immediate low-height
             // checkpoint to recover missing history. Only a completely unestablished
             // fresh observer needs to wait one poll for a stale peer head to advance.
