@@ -9,6 +9,62 @@ const FACTORY_RECYCLE_BASE_PPM: i64 = 700_000;
 const BOTTLENECK_TAG_KINDS: &[&str] = &["iron_ingot", "copper_wire", "control_chip", "motor_mk1"];
 
 impl World {
+    /// Computes the local scarcity delay that a canonical recipe submission would
+    /// add, without consuming materials or advancing runtime time.  The quote
+    /// endpoint uses this same ledger/profile path as `ScheduleRecipe` execution.
+    pub(crate) fn schedule_recipe_local_scarcity_delay_for_quote(
+        &self,
+        factory_id: &str,
+        recipe_id: &str,
+        consume: &[MaterialStack],
+        produce: &[MaterialStack],
+    ) -> Result<(i64, String), String> {
+        let factory = self
+            .state
+            .factories
+            .get(factory_id)
+            .ok_or_else(|| format!("factory not found: {factory_id}"))?;
+        let effective_consume = merge_recipe_consume_with_maintenance_sink(self, consume, produce);
+        let preferred_consume_ledger = factory.input_ledger.clone();
+        let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
+            preferred_consume_ledger.clone(),
+            &effective_consume,
+        );
+        // Keep quote acceptance identical to ScheduleRecipe execution: the
+        // selected local-or-world ledger must cover every effective input,
+        // including maintenance sinks merged into the recipe consume list.
+        for stack in &effective_consume {
+            if stack.amount <= 0 {
+                return Err(format!(
+                    "recipe consume must be > 0: {}={}",
+                    stack.kind, stack.amount
+                ));
+            }
+            let available = self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
+            if available < stack.amount {
+                return Err(format!(
+                    "insufficient material {}: requested {}, available {}",
+                    stack.kind, stack.amount, available
+                ));
+            }
+        }
+        let bottleneck_tags =
+            resolve_recipe_bottleneck_tags(self.recipe_profile(recipe_id), &effective_consume);
+        let delay = compute_local_scarcity_delay_ticks(
+            self,
+            &preferred_consume_ledger,
+            &consume_ledger,
+            &effective_consume,
+            &bottleneck_tags,
+        ) as i64;
+        let reason = match delay {
+            0 => "none",
+            1 => "local_bottleneck_deficit_moderate",
+            _ => "local_bottleneck_deficit_severe",
+        };
+        Ok((delay, reason.to_string()))
+    }
+
     pub(super) fn action_to_event_economy(
         &self,
         action_id: ActionId,

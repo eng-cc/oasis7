@@ -26,6 +26,8 @@ describe("ScheduleRecipeQuoteCard", () => {
     expect(within(card).getByText("Battery runway")).toBeInTheDocument();
     expect(within(card).getByText("88")).toBeInTheDocument();
     expect(within(card).getByText("40 → 40 ticks")).toBeInTheDocument();
+    expect(within(card).queryByText("Hardware input")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Data output")).not.toBeInTheDocument();
     expect(within(card).getByText(/Maintenance: not tracked for this quote/i)).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /schedule|submit|commit/i })).not.toBeInTheDocument();
   });

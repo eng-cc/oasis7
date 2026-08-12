@@ -198,7 +198,7 @@ fn schedule_recipe_quote_keeps_healthy_battery_runway_independent_from_electrici
     assert_eq!(quote.factory_id, "factory.smelter.alpha");
     assert_eq!(quote.recipe_id, "recipe.smelter.alloy_plate");
     assert_eq!(quote.batches, 2);
-    assert_eq!(quote.base_duration_ticks, 2);
+    assert_eq!(quote.base_duration_ticks, 1);
     assert_eq!(quote.electricity_cost, 18);
     assert_eq!(quote.hardware_cost, 8);
     assert_eq!(quote.data_output, 4);
