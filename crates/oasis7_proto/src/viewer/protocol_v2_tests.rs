@@ -1,6 +1,60 @@
 use super::*;
 
 #[test]
+fn adjudicate_social_fact_quote_request_and_response_round_trip() {
+    let request = ViewerRequest::QuoteAdjudicateSocialFact {
+        request: AdjudicateSocialFactQuoteRequest {
+            fact_id: 42,
+            decision: SocialAdjudicationDecision::Confirm,
+            notes: "evidence is sufficient".to_string(),
+            player_id: "player-social".to_string(),
+            public_key: Some("11".repeat(32)),
+            auth: None,
+        },
+    };
+    let encoded = serde_json::to_string(&request).expect("serialize adjudication request");
+    let decoded: ViewerRequest =
+        serde_json::from_str(&encoded).expect("deserialize adjudication request");
+    assert_eq!(decoded, request);
+
+    let response = ViewerResponse::<
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+        u64,
+    >::AdjudicateSocialFactQuotePreflight {
+        quote: AdjudicateSocialFactQuotePreflight {
+            actor_id: "agent-1".to_string(),
+            action_kind: "adjudicate_fact".to_string(),
+            schema_id: "social.reputation.v1".to_string(),
+            subject_id: Some("agent-1".to_string()),
+            object_id: None,
+            claim_summary: "delivery claim".to_string(),
+            confidence_ppm: Some(800_000),
+            stake_at_risk: 20,
+            ttl_ticks: Some(12),
+            affected_relationships: vec!["schema:social.reputation.v1".to_string()],
+            affected_social_surfaces: vec!["reputation".to_string()],
+            cooperation_opportunity_delta: "confirmed".to_string(),
+            blacklist_or_dispute_risk: "adjudication_settlement".to_string(),
+            governance_or_claim_relevance: "adjudication_relevant".to_string(),
+            recommended_social_action: "confirm_fact".to_string(),
+            why_this_action_matters: "settles the dispute".to_string(),
+        },
+    };
+    let response_json = serde_json::to_string(&response).expect("serialize adjudication response");
+    let parsed: ViewerResponse<
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+        u64,
+    > = serde_json::from_str(&response_json).expect("deserialize adjudication response");
+    assert_eq!(parsed, response);
+}
+
+#[test]
 fn viewer_response_round_trip_authoritative_recovery_ack() {
     let response = ViewerResponse::<
         serde_json::Value,

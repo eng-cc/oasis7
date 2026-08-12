@@ -1,5 +1,7 @@
 use super::*;
-use crate::simulator::{ResourceOwner, SocialFactLifecycleState, SocialFactState};
+use crate::simulator::{
+    ResourceOwner, SocialChallengeState, SocialFactLifecycleState, SocialFactState,
+};
 
 fn seed_active_social_backing_fact(server: &mut ViewerRuntimeLiveServer, agent_id: &str) -> u64 {
     let fact_id = 77;
@@ -34,6 +36,204 @@ fn seed_active_social_backing_fact(server: &mut ViewerRuntimeLiveServer, agent_i
             },
         );
     fact_id
+}
+
+fn seed_challenged_social_fact(server: &mut ViewerRuntimeLiveServer, agent_id: &str) -> u64 {
+    let fact_id = 78;
+    server
+        .seed_model
+        .get_or_insert_default()
+        .social_facts
+        .insert(
+            fact_id,
+            SocialFactState {
+                fact_id,
+                actor: ResourceOwner::Agent {
+                    agent_id: agent_id.to_string(),
+                },
+                schema_id: "social.reputation.v1".to_string(),
+                subject: ResourceOwner::Agent {
+                    agent_id: agent_id.to_string(),
+                },
+                object: None,
+                claim: "agent fulfilled the challenged delivery".to_string(),
+                confidence_ppm: 800_000,
+                evidence_event_ids: Vec::new(),
+                ttl_ticks: Some(12),
+                expires_at_tick: None,
+                stake: None,
+                challenge: Some(SocialChallengeState {
+                    challenger: ResourceOwner::Agent {
+                        agent_id: agent_id.to_string(),
+                    },
+                    reason: "needs adjudication".to_string(),
+                    stake: None,
+                    challenged_at_tick: 0,
+                }),
+                lifecycle: SocialFactLifecycleState::Challenged,
+                created_at_tick: 0,
+                updated_at_tick: 0,
+            },
+        );
+    fact_id
+}
+
+fn signed_adjudicate_social_fact_quote_request(
+    fact_id: u64,
+    decision: crate::viewer::SocialAdjudicationDecision,
+    notes: &str,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::AdjudicateSocialFactQuoteRequest {
+    let mut request = crate::viewer::AdjudicateSocialFactQuoteRequest {
+        fact_id,
+        decision,
+        notes: notes.to_string(),
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_adjudicate_social_fact_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign adjudicate social fact quote auth"),
+    );
+    request
+}
+
+#[test]
+fn runtime_adjudicate_social_fact_quote_requires_auth_proof() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let error = server
+        .handle_adjudicate_social_fact_quote(crate::viewer::AdjudicateSocialFactQuoteRequest {
+            fact_id: 78,
+            decision: crate::viewer::SocialAdjudicationDecision::Confirm,
+            notes: "evidence is sufficient".to_string(),
+            player_id: "player-social-adjudication".to_string(),
+            public_key: None,
+            auth: None,
+        })
+        .expect_err("unsigned adjudication quote must fail");
+    assert_eq!(error.code, "auth_proof_required");
+    assert_eq!(
+        error.action_id.as_deref(),
+        Some("quote_adjudicate_social_fact")
+    );
+}
+
+#[test]
+fn runtime_adjudicate_social_fact_quote_rejects_unknown_session() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let (public_key, private_key) = test_signer(101);
+    let error = server
+        .handle_adjudicate_social_fact_quote(signed_adjudicate_social_fact_quote_request(
+            78,
+            crate::viewer::SocialAdjudicationDecision::Confirm,
+            "evidence is sufficient",
+            "unknown-player-social-adjudication",
+            3301,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("unknown session must fail closed");
+    assert_eq!(error.code, "session_not_found");
+}
+
+#[test]
+fn runtime_adjudicate_social_fact_quote_is_signed_deterministic_non_mutating_and_serializable() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let fact_id = seed_challenged_social_fact(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(102);
+    register_runtime_session(
+        &mut server,
+        "player-social-adjudication",
+        Some(agent_id.as_str()),
+        3302,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let request = signed_adjudicate_social_fact_quote_request(
+        fact_id,
+        crate::viewer::SocialAdjudicationDecision::Confirm,
+        "evidence is sufficient",
+        "player-social-adjudication",
+        3303,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let quote = server
+        .handle_adjudicate_social_fact_quote(request.clone())
+        .expect("signed adjudication quote");
+    assert_eq!(quote.actor_id, agent_id);
+    assert_eq!(quote.action_kind, "adjudicate_fact");
+    assert_eq!(quote.schema_id, "social.reputation.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some(agent_id.as_str()));
+    assert_eq!(quote.stake_at_risk, 0);
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert_eq!(quote.cooperation_opportunity_delta, "confirmed");
+    assert_eq!(quote.recommended_social_action, "confirm_fact");
+    assert_eq!(quote.blacklist_or_dispute_risk, "adjudication_settlement");
+    assert!(quote.why_this_action_matters.contains("stake pool"));
+    assert_eq!(
+        server
+            .handle_adjudicate_social_fact_quote(request.clone())
+            .expect("repeat signed adjudication quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+
+    let request_json =
+        serde_json::to_value(crate::viewer::ViewerRequest::QuoteAdjudicateSocialFact { request })
+            .expect("adjudication quote request serializes");
+    let reparsed: crate::viewer::ViewerRequest =
+        serde_json::from_value(request_json.clone()).expect("adjudication quote request parses");
+    assert_eq!(
+        serde_json::to_value(reparsed).expect("re-serialize request"),
+        request_json
+    );
+    let response_json = serde_json::to_value(
+        crate::viewer::ViewerResponse::AdjudicateSocialFactQuotePreflight { quote },
+    )
+    .expect("adjudication quote response serializes");
+    assert_eq!(
+        response_json["type"],
+        "adjudicate_social_fact_quote_preflight"
+    );
+    assert!(
+        response_json["quote"]
+            .get("recommended_social_action")
+            .is_some()
+    );
 }
 
 fn signed_declare_social_edge_quote_request(
