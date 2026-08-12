@@ -27,10 +27,11 @@ mod agent_labels;
 use agent_labels::{AgentLabelQueries, despawn_agent_labels, reconcile_agent_labels};
 #[path = "render_agent_position_provenance_cue.rs"]
 mod agent_position_provenance_cue;
-#[cfg(test)]
-use agent_position_provenance_cue::DerivedPositionCueSegment;
-use agent_position_provenance_cue::{
-    PixelWorldDerivedPositionCue, reconcile_derived_position_cues,
+use agent_position_provenance_cue::*;
+#[path = "render_agent_position_missing_cue.rs"]
+mod agent_position_missing_cue;
+use agent_position_missing_cue::{
+    PixelWorldMissingPositionCue, despawn_missing_position_cues, reconcile_missing_position_cues,
 };
 #[path = "render_links.rs"]
 mod links;
@@ -152,20 +153,16 @@ pub(crate) struct PixelWorldFragmentVisual {
     id: String,
 }
 
-/// A non-interactive, lower-right depth treatment for visible terrain patches.
 #[derive(Component)]
 struct PixelWorldFragmentShadowVisual {
     id: String,
 }
 
-/// A Detail-only mineral grain. It is intentionally a separate visual so the
-/// base terrain patch remains the sole owner of the DTO-derived terrain color.
 #[derive(Component)]
 struct PixelWorldFragmentInsetVisual {
     id: String,
 }
 
-/// A Detail-only upper-left light chip that makes terrain read as mineral-bearing.
 #[derive(Component)]
 struct PixelWorldFragmentFleckVisual {
     id: String,
@@ -535,7 +532,6 @@ fn reconcile_grid(
 
     runtime.grid_layout = Some(next_layout);
 }
-
 fn despawn_stale_entities(
     commands: &mut Commands,
     entities: &mut HashMap<String, Entity>,
@@ -550,7 +546,6 @@ fn despawn_stale_entities(
         }
     });
 }
-
 fn reconcile_locations(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -626,7 +621,6 @@ fn reconcile_locations(
 
     despawn_stale_entities(commands, &mut runtime.location_entities, &active_ids);
 }
-
 fn reconcile_agents(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -705,7 +699,6 @@ fn reconcile_agents(
 
     despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
 }
-
 fn reconcile_hotspots(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -736,8 +729,6 @@ fn reconcile_hotspots(
         };
         active_ids.insert(hotspot.id.clone());
         if rebuild_hit_regions {
-            // Insert below the existing location and agent regions: `hit_test` walks
-            // in reverse, so hotspot hover identity never displaces their precedence.
             runtime.hit_regions.insert(
                 0,
                 HitRegion {
@@ -782,7 +773,6 @@ fn reconcile_hotspots(
 
     despawn_stale_entities(commands, &mut runtime.hotspot_entities, &active_ids);
 }
-
 fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState) {
     for (_, entity) in runtime.fragment_entities.drain() {
         commands.entity(entity).despawn();
@@ -811,7 +801,6 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
     runtime.hit_regions_dirty = true;
     runtime.hover_key = None;
 }
-
 #[derive(SystemParam)]
 pub(crate) struct RenderSceneQueries<'w, 's> {
     windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
@@ -833,6 +822,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_labels: AgentLabelQueries<'w, 's>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
     derived_position_cues: Query<'w, 's, (Entity, &'static PixelWorldDerivedPositionCue)>,
+    missing_position_cues: Query<'w, 's, (Entity, &'static PixelWorldMissingPositionCue)>,
     assignment_cues: Query<'w, 's, (Entity, &'static PixelWorldAssignmentCueVisual)>,
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
@@ -878,6 +868,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_missing_position_cues(&mut commands, &queries.missing_position_cues);
         despawn_assignment_cues(&mut commands, &queries.assignment_cues);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
@@ -973,6 +964,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.derived_position_cues.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_missing_position_cues(&mut commands, &queries.missing_position_cues);
         despawn_assignment_cues(&mut commands, &queries.assignment_cues);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
@@ -1131,6 +1123,14 @@ pub(crate) fn render_scene(
         &mut commands,
         &runtime,
         &queries.derived_position_cues,
+        width,
+        height,
+        animation_ms,
+    );
+    reconcile_missing_position_cues(
+        &mut commands,
+        &runtime,
+        &queries.missing_position_cues,
         width,
         height,
         animation_ms,
