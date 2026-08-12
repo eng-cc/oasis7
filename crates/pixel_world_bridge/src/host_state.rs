@@ -1,5 +1,8 @@
 use serde_json::{Map, Value, json};
 
+#[path = "host_social_links.rs"]
+mod social_links;
+
 const FRAGMENT_TERRAIN_PALETTE: &[(&str, [u8; 3])] = &[
     ("silicate_matrix", [126, 144, 99]),
     ("iron_nickel_alloy", [176, 184, 196]),
@@ -1059,6 +1062,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         _ => Value::Null,
     };
     let links = build_pixel_world_links(&agents, &location_by_id);
+    let social_links = social_links::build_pixel_world_social_links(input, &agents, &locations);
     let anchor = resolve_selection_position(&selection, &agents, &locations)
         .or_else(|| {
             agents
@@ -1145,6 +1149,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "module_visual_entities": module_visual_entities,
         "agents": agents,
         "links": links,
+        "social_links": social_links,
         "selection": selection,
         "goal_highlight": goal_highlight,
         "blocker_highlight": blocker_highlight,

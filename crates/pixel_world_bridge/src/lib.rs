@@ -82,6 +82,19 @@ struct Link {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct SocialLink {
+    id: String,
+    from: Position,
+    to: Position,
+    #[serde(default)]
+    #[allow(dead_code)]
+    relation_kind: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    lifecycle: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct FragmentTerrainPatch {
     id: String,
     #[allow(dead_code)]
@@ -174,6 +187,8 @@ struct RenderState {
     module_visual_entities: Vec<ModuleVisualEntity>,
     agents: Vec<Agent>,
     links: Vec<Link>,
+    #[serde(default)]
+    social_links: Vec<SocialLink>,
     visual_hotspots: Vec<VisualHotspot>,
     selection: Option<Selection>,
     #[serde(default)]
@@ -589,6 +604,33 @@ fn hash_optional_position(hasher: &mut DefaultHasher, position: Option<&Position
     }
 }
 
+fn social_link_sort_key(link: &SocialLink) -> (&str, u64, u64, u64, u64, u64, u64, &str, &str) {
+    (
+        link.id.as_str(),
+        link.from.x_cm.to_bits(),
+        link.from.y_cm.to_bits(),
+        link.from.z_cm.to_bits(),
+        link.to.x_cm.to_bits(),
+        link.to.y_cm.to_bits(),
+        link.to.z_cm.to_bits(),
+        link.relation_kind.as_str(),
+        link.lifecycle.as_str(),
+    )
+}
+
+fn hash_social_links(hasher: &mut DefaultHasher, links: &[SocialLink]) {
+    let mut ordered = links.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|link| social_link_sort_key(link));
+    ordered.len().hash(hasher);
+    for link in ordered {
+        link.id.hash(hasher);
+        hash_position(hasher, &link.from);
+        hash_position(hasher, &link.to);
+        link.relation_kind.hash(hasher);
+        link.lifecycle.hash(hasher);
+    }
+}
+
 fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
     render_signature(render_state, RenderSignatureMode::Content)
 }
@@ -664,6 +706,10 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_position(&mut hasher, &link.from);
         hash_position(&mut hasher, &link.to);
         hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+    }
+
+    if matches!(mode, RenderSignatureMode::Content) {
+        hash_social_links(&mut hasher, &render_state.social_links);
     }
 
     render_state.visual_hotspots.len().hash(&mut hasher);

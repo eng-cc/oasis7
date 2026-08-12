@@ -47,6 +47,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             size_hint_px: Some(16.0),
         }],
         links: vec![],
+        social_links: vec![],
         visual_hotspots: vec![],
         selection: Some(Selection {
             kind: selection_kind.to_string(),
@@ -364,6 +365,88 @@ fn location_resource_report_changes_trigger_reactive_reconcile_without_camera_or
     assert!(runtime.needs_reconcile);
     assert!(!runtime.hit_regions_dirty);
     assert_eq!(runtime.render_version, 2);
+}
+
+#[test]
+fn social_link_only_render_updates_trigger_reconcile_without_camera_reset() {
+    let social_link = SocialLink {
+        id: "social_edge:7".to_string(),
+        from: Position {
+            x_cm: 1_200_000.0,
+            y_cm: 700_000.0,
+            z_cm: 0.0,
+        },
+        to: Position {
+            x_cm: 1_800_000.0,
+            y_cm: 1_300_000.0,
+            z_cm: 0.0,
+        },
+        relation_kind: "ally".to_string(),
+        lifecycle: "active".to_string(),
+    };
+    let cases = [
+        ("add", Vec::new(), vec![social_link.clone()]),
+        ("remove", vec![social_link.clone()], Vec::new()),
+        (
+            "endpoint",
+            vec![social_link.clone()],
+            vec![SocialLink {
+                to: Position {
+                    x_cm: 1_900_000.0,
+                    ..social_link.to.clone()
+                },
+                ..social_link.clone()
+            }],
+        ),
+        (
+            "metadata",
+            vec![social_link.clone()],
+            vec![SocialLink {
+                relation_kind: "supports".to_string(),
+                ..social_link.clone()
+            }],
+        ),
+    ];
+
+    for (case, initial_links, next_links) in cases {
+        let mut initial = sample_render_state_for_camera("agent");
+        initial.social_links = initial_links;
+        let initial_signature = render_content_signature(Some(&initial));
+        let mut runtime = BevyRuntimeState {
+            mounted: true,
+            render_state: Some(initial),
+            render_content_signature: initial_signature,
+            reactive_scheduling: true,
+            camera: CameraState {
+                zoom: 2.0,
+                pan_x_px: 12.0,
+                pan_y_px: -8.0,
+            },
+            camera_fit_version: 7,
+            camera_user_override: true,
+            hit_regions_dirty: false,
+            ..Default::default()
+        };
+        let mut next = sample_render_state_for_camera("agent");
+        next.social_links = next_links;
+
+        apply_external_render_snapshot(
+            &mut runtime,
+            true,
+            RenderSnapshot::Changed {
+                version: 2,
+                state: Some(next),
+            },
+        );
+
+        assert!(runtime.needs_reconcile, "social-only {case} must reconcile");
+        assert!(
+            runtime.camera_user_override,
+            "social-only {case} must not reset camera"
+        );
+        assert_eq!(runtime.camera_fit_version, 7);
+        assert!(!runtime.hit_regions_dirty);
+    }
 }
 
 fn assert_label_only_render_update_reconciles_without_resetting_camera_or_follow() {
