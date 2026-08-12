@@ -63,6 +63,10 @@
 
 Data 是有归属、有获取成本且受授权边界约束的世界资源。未经授权的使用必须原子失败，不产生未授权收益；产品体验需要说明成本、归属、用途、授权状态和可恢复的授权或替代路径，且可读性层或 Agent 自动化不能静默绕过权限。
 
+Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提交入口做一次布尔判断。预览只说明候选 Data 的 owner、recipient / 使用主体、purpose、scope 与当时的授权有效性，不产生访问、转移、消费或可复用权利；已接受但尚未结算的请求仍不得让 recipient 获得 Data 或由其产生收益。提交到结算之间若授权过期、被撤销、作用域变化或已无法证明当前有效，未结算请求必须原子拒绝或进入可读待决，不产生 Data sink、访问收益或隐性义务，并给出重新授权、缩小用途、改用其他合法来源或放弃的适用路径。
+
+只有 receipt 支持的已结算结果才代表一次、且仅一次的授权使用或转移；receipt 必须能追溯 owner、recipient / 使用主体、purpose、scope、授权依据与实际结果，但产品层不冻结这些信息的字段结构。重试、重连、重复提交或历史 receipt 重放不得复制该结果，也不得让已经过期或撤销的授权复活。结算后的合法使用及其 provenance 不因后续撤销而被追溯抹除；纠错、删除、退款、争议和其他副作用仍由对应专业合同裁决。本模块只定义这些玩家承诺与跨阶段不变量，具体许可状态机、时钟、结算规则、幂等实现和副作用矩阵由专业域拥有。
+
 <a id="resource-model-and-cross-module-provenance"></a>
 ### 资源模型与跨模块 provenance 边界
 
@@ -131,7 +135,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - SC-5：玩家的间接战略动作具备授权资源因果、权威校验和可审计后果，界面或接口可读 target/action/cost/blocker/result/next/recovery；涌现关系与组织不绕过权限、治理或 anti-abuse，未支持细粒度请求有 canonical 替代或安全停止。
 - SC-6：代表性间接控制流程证明玩家意图进入 Agent/策略决策，经权威规则与资源校验产生世界后果，并返回可解释结果与可执行的打断、纠正、下一步或恢复动作；任一专业域的局部 green 不能替代组合闭环。
 - SC-7：同一物理行动在 gameplay、runtime、Agent 与 Viewer 的粗粒度/表现映射中保持距离、顺序、成本和持久化结果一致，不产生第二条时间线或表现层真值；权威时间线在没有直接玩家输入时仍按当前世界规则继续推进，不冻结具体 tick 时长。
-- SC-8：Data 的获取和一次授权使用路径可端到端验证；未经授权的使用原子失败且不产生旁路收益，并向玩家提供可理解的原因和恢复或替代路径。具体许可状态机、结算规则与副作用矩阵由专业域拥有。
+- SC-8：同一条代表性 Data 路径可端到端证明：预览不授予访问或收益；owner、recipient / 使用主体、purpose、scope 与授权状态可读；提交到结算之间授权过期、撤销、变更或无法证明有效时，未结算请求原子拒绝或保持可读待决，不产生 Data sink、访问收益或隐性义务，并提供重新授权或替代路径；有效结算只产生一次 receipt 支持的授权使用或转移。重试、重连、重复提交和历史 receipt 重放不产生第二次结果或复活失效授权，后续撤销不抹除既有合法结果的 provenance。具体许可状态机、时钟、结算规则、幂等实现与副作用矩阵由专业域拥有。
 - SC-9：成熟世界样例证明小规模玩家在不立即依附 major power 的前提下，通过可归因贡献获得新选择、恢复弹性、议价位置或区域用途；失败保留 repair / rebuild / pivot，区域影响不越界为全局治理权。
 - SC-10：产品样例证明世界没有强制通关条件，但每个阶段成果具有完成边界、可归因世界后果与下一阶段方向；长期成果只在新增选择、恢复弹性、局部议价/协调位置或区域用途时成立，不能以库存、吞吐或重复次数冒充成长。
 - SC-11：代表性首局、后引导与成熟世界样例保持一个当前主目标与低负担的继续/分支/换向选择；作用域、canonical 转译、校验、治理、反支配与审计在后台执行，只有改变资源、权限、锁定、恢复或共同承诺时才以可读原因和替代路径进入前台。
@@ -155,7 +159,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 | SC-5 | producer_system_designer | PRD-GAME-002 / PRD-GAME-004 / PRD-GAME-013 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md` | 授权资源因果、权威后果、玩家可读闭环、有限涌现与替代动作跨域审计 | test_tier_required |
 | SC-6 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md` | 玩家意图、Agent 决策、权威后果与打断/纠正/恢复组合证据，含正式玩家 surface 的 S6 交互闭环 | test_tier_required |
 | SC-7 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | 无玩家直接输入时的持续时间线，以及物理真值与粗粒度/表现映射一致性审计，含 S6 表现层核对 | test_tier_required |
-| SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | Data 获取、授权使用、未经授权原子失败与玩家恢复路径证据，含 S6 拒绝/恢复可读性 | test_tier_required |
+| SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Data 预览无效果、授权中途失效无 sink/收益、单次结算、retry/reconnect/replay 不重复、既有 provenance 保留与恢复路径证据，含结构化 pure API 和 S6 正式玩家 surface 的状态/原因/下一步可读性 | test_tier_required |
 | SC-9 | producer_system_designer / gameplay_designer / qa_engineer | PRD-GAME-015 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/testing/prd.md` | mature-world player leverage、anti-grind、恢复与有限区域影响 fresh sample；产品合同见本模块的 mature-world 专题分册 | test_tier_full |
 | SC-10 | producer_system_designer / gameplay_designer / qa_engineer | PRD-GAME-007 / PRD-GAME-015 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/testing/prd.md`; 本模块的首局与成熟世界专题分册 | 阶段成果、三条长期抱负轴、anti-grind 与无强制终局的组合审计 | test_tier_required |
 | SC-11 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer | PRD-GAME-004 / PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | 一个当前主目标、继续/分支/换向与仅在实质相关时显现的后台护栏组合证据 | test_tier_required |
