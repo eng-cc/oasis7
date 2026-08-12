@@ -926,7 +926,10 @@ fn attach_default_replication_network(
                 .with_local_provider_id(network.peer_id().to_string()),
         )
         .with_replica_maintenance_dht(handle_dht)
-        .with_replication_network_consensus_enabled(false);
+        // ObserverLight may subscribe to signed consensus commits (the lane
+        // policy still forbids observer publication). This lets checkpoint
+        // preflight observe validated high peer heads before replication ingest.
+        .with_replication_network_consensus_enabled(true);
     Ok((runtime, network))
 }
 

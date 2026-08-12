@@ -85,35 +85,15 @@ impl PosNodeEngine {
         hold
     }
 
+    /// Transport connectivity is not checkpoint authority. Keep this test
+    /// seam available for regression probes without shipping a quorum hold.
+    #[cfg(test)]
     pub(super) fn hold_fresh_observer_for_connected_validator_quorum(
         &mut self,
-        endpoint: &ReplicationNetworkEndpoint,
-        advertised_height: u64,
+        _endpoint: &ReplicationNetworkEndpoint,
+        _advertised_height: u64,
     ) -> bool {
-        if !self.checkpoint_bootstrap_enabled
-            || self.committed_height != 0
-            || self.replication_persisted_height != 0
-            || self.last_execution_height != 0
-            || advertised_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
-        {
-            return false;
-        }
-        let connected_validator_ids = endpoint
-            .connected_peer_ids()
-            .into_iter()
-            .filter_map(|node_id| self.validator_id_for_peer_head(node_id.as_str()))
-            .filter(|validator_id| !self.quarantined_validators.contains(validator_id))
-            .collect::<BTreeSet<_>>();
-        let connected_stake = connected_validator_ids
-            .iter()
-            .filter_map(|validator_id| self.validators.get(validator_id).copied())
-            .sum::<u64>();
-        if connected_stake < self.required_stake || connected_stake == 0 {
-            return false;
-        }
-        self.fresh_observer_checkpoint_low_head_confirmation = None;
-        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
-        true
+        false
     }
 
     fn cached_high_checkpoint_head(&self, world_id: &str) -> Option<WorldHeadAnnounce> {
@@ -207,12 +187,6 @@ impl PosNodeEngine {
                     }
                     Err(err) => Err(err),
                 };
-            }
-            if self.hold_fresh_observer_for_connected_validator_quorum(
-                endpoint,
-                advertised_head.height,
-            ) {
-                return Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending);
             }
             // Preserve the existing fail-closed hold for high heads that are
             // not trustworthy checkpoint candidates (for example, an unknown

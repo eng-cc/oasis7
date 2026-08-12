@@ -183,13 +183,16 @@ fn fresh_observer_package_probe_does_not_reenter_height_one_after_300s_without_c
 }
 
 #[test]
-fn testnet_249_connected_high_heads_without_cache_reenter_height_one_after_probe_window() {
+fn testnet_249_low_world_connected_transport_without_high_evidence_completes_confirmation() {
+    // Authority correction: this fixture has only an unsigned low FetchHead
+    // and transport connectivity. It intentionally supplies no signed high
+    // peer-head/commit evidence, so connected quorum must not be treated as a
+    // high-head checkpoint authority source; legitimate low-head confirmation
+    // must complete instead of holding forever.
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = CheckpointProbeNonceGuard::install();
     let world_id = "world-testnet-249-connected-high-heads-without-cache";
-    let dir_a = temp_dir("testnet-249-connected-high-heads-a");
     let dir_b = temp_dir("testnet-249-connected-high-heads-b");
-    let dir_c = temp_dir("testnet-249-connected-high-heads-c");
     let (_, public_key_a) = deterministic_keypair_hex(249);
     let (_, public_key_b) = deterministic_keypair_hex(250);
     let (_, public_key_c) = deterministic_keypair_hex(251);
@@ -200,60 +203,17 @@ fn testnet_249_connected_high_heads_without_cache_reenter_height_one_after_probe
         ],
         &[("node-a", 249), ("node-c", 251)],
     );
-    let replication_config_a = signed_replication_config(dir_a.clone(), 249)
-        .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist a")
-        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
-        .expect("fetch allowlist a");
     let replication_config_b = signed_replication_config(dir_b.clone(), 250)
-        .with_remote_writer_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
+        .with_remote_writer_allowlist(vec![public_key_a, public_key_c])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
-        .expect("fetch allowlist b");
-    let replication_config_c = signed_replication_config(dir_c.clone(), 251)
-        .with_remote_writer_allowlist(vec![public_key_b.clone()])
-        .expect("allowlist c")
         .with_fetch_requester_allowlist(vec![public_key_b.clone()])
-        .expect("fetch allowlist c");
-    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
-        .expect("config a")
-        .with_pos_config(pos_config.clone())
-        .expect("pos config a")
-        .with_replication(replication_config_a);
+        .expect("fetch allowlist b");
     let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
         .expect("config b")
         .with_pos_config(pos_config.clone())
         .expect("pos config b")
         .with_require_execution_on_commit(true)
         .with_replication(replication_config_b.clone());
-    let config_c = NodeConfig::new("node-c", world_id, NodeRole::Sequencer)
-        .expect("config c")
-        .with_pos_config(pos_config)
-        .expect("pos config c")
-        .with_replication(replication_config_c);
-    let mut replication_a = ReplicationRuntime::new(
-        config_a.replication.as_ref().expect("repl a"), "node-a",
-    )
-    .expect("runtime a");
-    let mut replication_c = ReplicationRuntime::new(
-        config_c.replication.as_ref().expect("repl c"), "node-c",
-    )
-    .expect("runtime c");
-    let height_one_a = replication_a
-        .build_local_commit_message(
-            "node-a", world_id, 249_100, &committed_decision(1),
-            Some("peer-exec-block-1"), Some("peer-exec-state-1"),
-        )
-        .expect("build node-a height-one candidate")
-        .expect("node-a height-one candidate");
-    let height_one_c = replication_c
-        .build_local_commit_message(
-            "node-c", world_id, 249_101,
-            &PosDecision { proposer_id: "node-c".to_string(), ..committed_decision(1) },
-            Some("peer-exec-block-1"), Some("peer-exec-state-1"),
-        )
-        .expect("build node-c height-one candidate")
-        .expect("node-c height-one candidate");
     let head = Arc::new(Mutex::new(super::replication::FetchHeadResponse {
         found: true,
         head: Some(super::replication::ReplicationHeadSummary {
@@ -313,28 +273,156 @@ fn testnet_249_connected_high_heads_without_cache_reenter_height_one_after_probe
     assert_eq!(engine_b.committed_height, 0);
     assert!(execution_hook.incremental_commits.is_empty());
     assert!(execution_hook.rollback_heights.is_empty());
-    endpoint_b
-        .publish_replication(&height_one_a)
-        .expect("publish first height-one candidate after probe window");
-    let first_result = package_tick!(549_301);
-    assert!(first_result.is_ok(), "first candidate should remain queued: {first_result:?}");
-    endpoint_b
-        .publish_replication(&height_one_c)
-        .expect("publish second height-one candidate after probe window");
-    let result = package_tick!(549_302);
+    let result = package_tick!(549_301);
     assert!(
         result.is_ok(),
-        "post-merge testnet.249 observer must remain fail-closed after two candidates; live bug signature: result={result:?} incremental={:?} rollback={:?}",
+        "legitimate low-head confirmation must complete: result={result:?} incremental={:?} rollback={:?}",
         execution_hook.incremental_commits,
         execution_hook.rollback_heights
     );
     let snapshot = result.expect("height-zero post-merge snapshot");
     assert_eq!(snapshot.consensus_snapshot.committed_height, 0);
+    assert!(!engine_b.fresh_observer_checkpoint_bootstrap_retry_pending);
+    assert!(engine_b.fresh_observer_checkpoint_low_head_confirmation.is_none());
     assert!(execution_hook.incremental_commits.is_empty());
     assert!(execution_hook.rollback_heights.is_empty());
     assert_eq!(engine_b.committed_height, 0);
     assert_eq!(engine_b.replication_persisted_height, 0);
-    let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
-    let _ = fs::remove_dir_all(&dir_c);
+}
+
+fn low_world_connected_quorum_fixture(
+    connected_peer_ids: Vec<String>,
+    world_id: &str,
+    bind_transport_peers: bool,
+) -> (
+    NodeConfig,
+    ReplicationRuntime,
+    ReplicationNetworkEndpoint,
+    PosNodeEngine,
+    Vec<std::path::PathBuf>,
+) {
+    let dir_a = temp_dir("low-world-connected-quorum-a");
+    let dir_b = temp_dir("low-world-connected-quorum-b");
+    let dir_c = temp_dir("low-world-connected-quorum-c");
+    let (_, public_key_a) = deterministic_keypair_hex(252);
+    let (_, public_key_b) = deterministic_keypair_hex(253);
+    let (_, public_key_c) = deterministic_keypair_hex(254);
+    let mut pos_config = signed_pos_config_with_signer_seeds(
+        vec![
+            PosValidator { validator_id: "node-a".to_string(), stake: 50 },
+            PosValidator { validator_id: "node-c".to_string(), stake: 50 },
+        ],
+        &[("node-a", 252), ("node-c", 254)],
+    );
+    if bind_transport_peers {
+        pos_config = pos_config
+            .with_validator_player_ids(
+                [
+                    ("node-a".to_string(), "12D3KooWvalidatorA".to_string()),
+                    ("node-c".to_string(), "12D3KooWvalidatorC".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            )
+            .expect("transport peer binding");
+    }
+    let replication_config = signed_replication_config(dir_b.clone(), 253)
+        .with_remote_writer_allowlist(vec![public_key_a, public_key_c])
+        .expect("allowlist")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist");
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("observer config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config);
+    let head = Arc::new(Mutex::new(super::replication::FetchHeadResponse {
+        found: true,
+        head: Some(super::replication::ReplicationHeadSummary {
+            world_id: world_id.to_string(),
+            height: 1,
+            block_hash: "block-1".to_string(),
+            state_root: "state-1".to_string(),
+            timestamp_ms: 10_100,
+        }),
+    }));
+    let network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync> =
+        Arc::new(PeerHeadCheckpointNetwork {
+            inner: Arc::new(TestInMemoryNetwork::default()),
+            fetch_protocols: Arc::new(Mutex::new(Vec::new())),
+            head,
+            checkpoint_fetch_available: Arc::new(AtomicBool::new(false)),
+            checkpoint_fetch_not_found: Arc::new(AtomicBool::new(true)),
+            connected_peer_ids,
+        });
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint = ReplicationNetworkEndpoint::new(
+        &handle, world_id, true, &config.network_policy,
+    )
+    .expect("observer endpoint");
+    let replication = ReplicationRuntime::new(
+        config.replication.as_ref().expect("replication"), "node-b",
+    )
+    .expect("replication runtime");
+    let engine = PosNodeEngine::new(&config).expect("observer engine");
+    (config, replication, endpoint, engine, vec![dir_a, dir_b, dir_c])
+}
+
+#[test]
+fn unbound_validator_id_shaped_transport_peers_do_not_activate_checkpoint_quorum_hold() {
+    let world_id = "world-unbound-validator-id-shaped-transport-peer";
+    let (_config, _replication, endpoint, mut engine, dirs) =
+        low_world_connected_quorum_fixture(
+            vec!["12D3KooWvalidatorA".to_string(), "12D3KooWvalidatorC".to_string()],
+            world_id,
+            false,
+        );
+    let hold = engine.hold_fresh_observer_for_connected_validator_quorum(&endpoint, 1);
+    assert!(
+        !hold,
+        "transport IDs that merely resemble validator IDs must not activate high-head authority"
+    );
+    assert!(!engine.fresh_observer_checkpoint_bootstrap_retry_pending);
+    for dir in dirs {
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
+fn low_world_with_bound_transport_quorum_completes_confirmation_without_high_evidence() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
+    let world_id = "world-low-head-connected-quorum-confirmation";
+    let (_config, mut replication, mut endpoint, mut engine, dirs) =
+        low_world_connected_quorum_fixture(
+            vec!["12D3KooWvalidatorA".to_string(), "12D3KooWvalidatorC".to_string()],
+            world_id,
+            true,
+        );
+    let mut execution_hook = PackageProbeHeightOneFailureHook {
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+    engine
+        .tick(
+            "node-b", world_id, 10_300, None, Some(&mut replication),
+            Some(&mut endpoint), None, Vec::new(), Some(&mut execution_hook),
+        )
+        .expect("first legitimate low-head confirmation poll");
+    engine
+        .tick(
+            "node-b", world_id, 10_301, None, Some(&mut replication),
+            Some(&mut endpoint), None, Vec::new(), Some(&mut execution_hook),
+        )
+        .expect("second legitimate low-head confirmation poll");
+    assert!(
+        !engine.fresh_observer_checkpoint_bootstrap_retry_pending,
+        "low world without high-head evidence must complete low-head confirmation"
+    );
+    assert!(engine.fresh_observer_checkpoint_low_head_confirmation.is_none());
+    for dir in dirs {
+        let _ = fs::remove_dir_all(dir);
+    }
 }
