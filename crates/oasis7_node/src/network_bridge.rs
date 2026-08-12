@@ -378,6 +378,10 @@ impl NodeReplicationNetworkHandle {
             .unwrap_or_else(|| default_replication_topic(world_id))
     }
 
+    pub(crate) fn uses_default_topic(&self, world_id: &str) -> bool {
+        self.resolved_topic(world_id) == default_replication_topic(world_id)
+    }
+
     fn resolved_lane_registry(&self, world_id: &str) -> TrafficLaneRegistry {
         TrafficLaneRegistry::for_handle(self, world_id)
     }
