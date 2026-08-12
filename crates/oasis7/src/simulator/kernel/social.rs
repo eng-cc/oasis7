@@ -752,6 +752,12 @@ impl WorldKernel {
         let Some(mut fact) = self.model.social_facts.remove(&fact_id) else {
             return Err(format!("social fact not found: {fact_id}"));
         };
+        if fact.challenge.is_none() {
+            self.model.social_facts.insert(fact_id, fact);
+            return Err(format!(
+                "social fact {fact_id} cannot be adjudicated without challenge"
+            ));
+        }
         if !social_adjudicator_is_authorized(&fact, adjudicator) {
             self.model.social_facts.insert(fact_id, fact);
             return Err(format!(

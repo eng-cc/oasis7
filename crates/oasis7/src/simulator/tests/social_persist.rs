@@ -152,6 +152,48 @@ fn social_replay_rejects_non_publisher_adjudicator() {
 }
 
 #[test]
+fn social_replay_rejects_adjudication_without_challenge() {
+    let mut kernel = setup_social_kernel();
+    let snapshot = kernel.snapshot();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: None,
+        claim: "agent-b reliably delivers requested outcomes".to_string(),
+        confidence_ppm: 850_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let publish = kernel.step().expect("publish");
+    let fact_id = match publish.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    let mut tampered_journal = kernel.journal_snapshot();
+    tampered_journal.events.push(WorldEvent {
+        id: tampered_journal.events.last().expect("publish event").id + 1,
+        time: kernel.time(),
+        kind: WorldEventKind::SocialFactAdjudicated {
+            fact_id,
+            adjudicator: agent_owner("agent-a"),
+            decision: SocialAdjudicationDecision::Confirm,
+            notes: "malformed unchallenged adjudication".to_string(),
+            adjudicated_at_tick: kernel.time(),
+        },
+        runtime_event: None,
+    });
+
+    let error = WorldKernel::replay_from_snapshot(snapshot, tampered_journal)
+        .expect_err("replay must reject adjudication without challenge");
+    assert!(format!("{error:?}").contains("cannot be adjudicated without challenge"));
+}
+
+#[test]
 fn social_replay_from_snapshot_keeps_expired_fact_and_edge() {
     let mut kernel = setup_social_kernel();
     let snapshot = kernel.snapshot();
