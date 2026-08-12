@@ -214,3 +214,19 @@ fn missing_cue_geometry_and_color_are_distinct_from_derived_ticks() {
         "Missing 3px arms must stay distinct from Derived 4px midpoint ticks"
     );
 }
+
+#[test]
+fn missing_cue_raster_readback_is_visible_and_below_agent_body() {
+    let mut state = missing_agent_state();
+    state.agents[0].pos = Some(sample_position(1_500_000.0, 1_000_000.0));
+    let mut app = render_test_app(state);
+    let (_, summary) = rasterize_pixel_regression(&mut app);
+    assert!(
+        summary.missing_position_cue_pixels > 0,
+        "Missing cue must contribute stable visible raster pixels"
+    );
+    assert!(
+        summary.missing_position_cue_pixels < summary.agent_pixels,
+        "Missing cue remains a low-density decoration below the Agent body"
+    );
+}

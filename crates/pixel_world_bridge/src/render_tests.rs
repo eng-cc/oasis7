@@ -271,6 +271,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("derived_position_cue", sprite, transform)),
     );
+    let mut missing_position_cue_query =
+        world.query::<(&PixelWorldMissingPositionCue, &Sprite, &Transform)>();
+    layers.extend(
+        missing_position_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("missing_position_cue", sprite, transform)),
+    );
     let mut receipt_target_cue_query =
         world.query::<(&PixelWorldReceiptTargetCue, &Sprite, &Transform)>();
     layers.extend(
@@ -413,6 +420,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "hotspot_core" => 11,
         "selected_agent_cue" => 12,
         "derived_position_cue" => 13,
+        "missing_position_cue" => 16,
         "location_corner_frame" => 14,
         _ => 0,
     }
@@ -492,6 +500,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
     let selected_agent_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 12).count();
     let derived_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 13).count();
+    let missing_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 16).count();
     let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
     let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
     let fragment_layer = layers
@@ -526,6 +535,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         selected_location_cue_pixels,
         selected_agent_cue_pixels,
         derived_position_cue_pixels,
+        missing_position_cue_pixels,
         agent_pixels,
         agent_core_pixels,
         hotspot_pixels,
@@ -544,7 +554,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
 
     (image, summary)
 }
-
 fn write_probe_summary_if_requested(summary: &VisualProbeSummary) {
     let Ok(out_dir) = std::env::var("PIXEL_WORLD_BEVY_RENDER_PROBE_OUT_DIR") else {
         return;
@@ -579,7 +588,6 @@ fn write_pixel_probe_if_requested(image: &RgbaImage, summary: &PixelRegressionSu
             .expect("write bevy pixel fleck crop png");
     }
 }
-
 fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
     zoom_matching_pixels(image, |pixel| pixel != PIXEL_BACKGROUND, scale)
         .expect("find non-background pixels")
@@ -642,7 +650,6 @@ fn zoom_matching_pixels(
     }
     Some(zoomed)
 }
-
 #[test]
 fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     let mut app = render_test_app(sample_render_state(12_000.0));
@@ -690,10 +697,8 @@ fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
     assert!(!runtime.hit_regions_dirty);
     assert!(runtime.hit_region_cache_key.is_some());
 }
-
 #[path = "render_test_modules.rs"]
 mod test_modules;
-
 #[test]
 fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
     let mut app = render_test_app(sample_render_state(12_000.0));
