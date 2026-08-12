@@ -349,6 +349,7 @@ impl PosNodeEngine {
             checkpoint_bootstrap_preflight,
             FreshObserverCheckpointBootstrap::RetryPending
         );
+        let high_peer_head_retry_pending = self.retain_high_peer_checkpoint_retry_authority();
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         let mut validated_messages = Vec::new();
@@ -414,6 +415,7 @@ impl PosNodeEngine {
                 && self.last_execution_height == 0
                 && (self.network_committed_height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
                     || self.should_defer_fresh_observer_checkpoint_retry()
+                    || high_peer_head_retry_pending
                     || checkpoint_preflight_unavailable
                     || checkpoint_bootstrap_retry_pending
                     || checkpoint_bootstrap_preflight.should_defer_height_one());
@@ -497,37 +499,6 @@ impl PosNodeEngine {
             });
         }
         Ok(())
-    }
-    fn observe_network_replication_commit(
-        &mut self,
-        peer_node_id: &str,
-        payload: &ReplicationCommitPayloadView,
-    ) {
-        if payload.height == 0 {
-            return;
-        }
-        if self
-            .validator_id_for_peer_head(peer_node_id)
-            .map(|validator_id| self.quarantined_validators.contains(&validator_id))
-            .unwrap_or(false)
-        {
-            return;
-        }
-        self.network_committed_height = self.network_committed_height.max(payload.height);
-        self.peer_heads.insert(
-            peer_node_id.to_string(),
-            PeerCommittedHead {
-                height: payload.height,
-                block_hash: payload.block_hash.clone(),
-                committed_at_ms: payload.committed_at_ms,
-                observed_at_ms: crate::runtime_util::now_unix_ms(),
-                execution_block_hash: payload.execution_block_hash.clone(),
-                execution_state_root: payload.execution_state_root.clone(),
-                action_root: String::new(),
-                public_key_hex: None,
-                signature_hex: None,
-            },
-        );
     }
     pub(super) fn sync_missing_replication_commits(
         &mut self,
