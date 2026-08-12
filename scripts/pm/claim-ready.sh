@@ -104,7 +104,10 @@ done
 [[ -n "$CLAIM_TYPE" ]] || die "--claim-type is required"
 if [[ -n "$VERIFICATION_PROFILE" ]]; then
   case "$VERIFICATION_PROFILE" in
-    codex_subagent_role_fit) VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh" ;;
+    codex_subagent_role_fit)
+      [[ -n "$TASK_UID" ]] || die "codex_subagent_role_fit requires --task-uid"
+      VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid $(printf '%q' "$TASK_UID")"
+      ;;
     workflow_behavior) VERIFY_COMMAND="./scripts/pm/workflow-behavior-eval.sh" ;;
     repository_required) VERIFY_COMMAND="true" ;;
     fixture_repository_state)

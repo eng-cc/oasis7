@@ -230,6 +230,7 @@ run_oasis7_client_launcher_web_build() {
 
 run_codex_agent_config_validation() {
   run ./scripts/pm/validate-codex-agent-config.test.sh
+  run ./scripts/pm/codex-role-fit-task-binding.test.sh
 }
 
 run_required_gate_checks() {

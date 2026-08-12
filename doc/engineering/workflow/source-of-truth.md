@@ -619,8 +619,8 @@ helpers.
   a caller-owned temporary receipt, and never mutates the original. Any identity,
   planner, or conclusion drift fails closed and starts a new evidence epoch.
 - After the [Pre-PR review packet](#pre-pr-review-packet) passes, run
-  `task-closeout.sh --role <owner-role> --task-uid <TASK-UID> --comparison-ref <ref> --verification-profile <profile>`. Profiles are repo-owned;
-  caller-authored commands cannot authorize a transition.
+  `task-closeout.sh --role <owner-role> --task-uid <TASK-UID> --comparison-ref <ref> --verification-profile <profile>`. Profiles are repo-owned; caller-authored commands cannot authorize a transition.
+- `codex_subagent_role_fit` audits its required `--task-uid`; hard-coded identities are forbidden.
 - On partial remote mutation, run `refresh-task-cache.sh`, audit the selected
   task, then retry. Never edit generated cache JSON.
 - Closeout uses two bounded selected-task audits: one immediately before the

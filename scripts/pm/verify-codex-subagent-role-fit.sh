@@ -7,9 +7,32 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-subagent-role-fit-verify.XXXXXX")"
 OASIS7_ROLE_FIT_SCRATCH="$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+TASK_UID=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --task-uid)
+      TASK_UID="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: ./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid <task_uid>"
+      exit 0
+      ;;
+    *)
+      echo "verify-codex-subagent-role-fit: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$TASK_UID" =~ ^task_[a-z0-9]{32}$ ]] || {
+  echo "verify-codex-subagent-role-fit: --task-uid must be a 32-character task UID" >&2
+  exit 2
+}
+
 cd "$ROOT_DIR"
 ./scripts/pm/github-project-workflow.sh --json audit \
-  --task-uid task_af5894a457964a9bb8bff5e8a4f87df1 >/dev/null
+  --task-uid "$TASK_UID" >/dev/null
 ./scripts/pm/workflow-behavior-eval.sh
 ./scripts/doc-governance-check.sh
 ./scripts/lint-skills.sh

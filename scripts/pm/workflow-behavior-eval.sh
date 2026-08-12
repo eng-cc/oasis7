@@ -72,6 +72,7 @@ fi
 "$TOML_PYTHON" "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
   --root "$ROOT_DIR" > "$CODEX_AGENT_CONFIG_JSON_FILE"
 "$ROOT_DIR/scripts/pm/validate-codex-agent-config.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/codex-role-fit-task-binding.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/guard-tracked-files.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/lint.test.sh" >/dev/null
 

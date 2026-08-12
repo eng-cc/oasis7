@@ -13,6 +13,7 @@ require_line() {
 }
 
 require_line '  run ./scripts/pm/validate-codex-agent-config.test.sh'
+require_line '  run ./scripts/pm/codex-role-fit-task-binding.test.sh'
 require_line '    run_required_component "Codex agent-config validation" "${OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION:-}" "disabled_by_scope_planner" run_codex_agent_config_validation'
 
 echo "ci-tests Codex agent-config required contract: passed"
