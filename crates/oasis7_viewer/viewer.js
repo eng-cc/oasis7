@@ -13149,22 +13149,6 @@ function ScheduleRecipeQuoteCard(props) {
     }), null);
     insert(_el$16, createComponent(Metric$1, {
       get label() {
-        return tr2(locale(), "硬件投入", "Hardware input");
-      },
-      get value() {
-        return display$1(quote2().hardware_cost);
-      }
-    }), null);
-    insert(_el$16, createComponent(Metric$1, {
-      get label() {
-        return tr2(locale(), "数据产出", "Data output");
-      },
-      get value() {
-        return display$1(quote2().data_output);
-      }
-    }), null);
-    insert(_el$16, createComponent(Metric$1, {
-      get label() {
         return tr2(locale(), "成品", "Finished product");
       },
       get value() {
