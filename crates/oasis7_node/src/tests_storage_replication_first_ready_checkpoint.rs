@@ -1196,5 +1196,5 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
-
 include!("tests_storage_replication_stale_dht_checkpoint.rs");
+include!("tests_storage_replication_stale_dht_checkpoint_long_probe.rs");
