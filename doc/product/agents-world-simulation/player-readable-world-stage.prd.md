@@ -48,6 +48,16 @@
 - 会实质影响当前行动的最近已知或不确定信息，必须保留适用范围和时效边界，并让玩家可理解地选择刷新、等待、改道或停止；过期观察不能静默驱动长期行动，也不能因自动化而绕过权威校验。
 - 本节约束产品事实边界，不要求玩家与 Agent 获得相同原始 observation 或暴露实现字段；专业域仍决定可见性规则、缓存时长、授权、DTO、文案和交互表达。
 
+#### 3.1.1 来源冲突、刷新竞态与行动降级
+
+动态情报可能同时来自已结算公共事实、当前授权观察、最近已知缓存或 Agent 的推断。来源之间发生冲突时，产品语义必须先保留冲突，再决定是否允许行动，不能由客户端时间戳、地图排序、默认选中或“最新收到的响应”静默选出一个真值。
+
+- 已结算公共事实继续作为历史结果的依据；它不能单独覆盖更晚的动态观察，也不能被动态观察改写。对同一动态属性的多个当前观察若互相矛盾，surface 应标记为“信息冲突/待重新确认”，并同时保留各自的适用范围和时效语义。
+- 冲突、范围不明、刷新响应落后于当前已显示状态，或观察在提交前已超过适用时效时，低后果动作最多只能作为明确标注不确定性的预览；任何会改变资源、权限、路线承诺、设施状态或他人权利的动作，都必须先重新取得当前权威确认，或提供等待、改道、停止和回到安全入口中的适用选择。
+- 刷新期间，旧观察可以继续作为“最近已知”上下文，但不能被表示为当前确认；较晚开始而较早返回的刷新结果不得覆盖较新的已确认结果。重复刷新、重连或跨入口查看只产生一次可追溯的当前判断，不产生第二份观察资格、优先权或世界效果。
+- Agent 可以基于不确定性提出待核验建议，但不能把推断、冲突中的某一来源或最近已知缓存表述为已确认事实，也不能据此自动提交高后果行动。玩家必须能看到系统是在使用当前确认、最近已知、冲突待核验还是未知，并知道下一步会刷新、等待、改道、停止或重新确认。
+- 该降级不是隐藏失败：反馈至少说明冲突/过期/范围不足的原因、当前仍可依赖的事实、被阻断的行动类别和恢复入口。专业 authority 应能用同一条观察/行动 trace 证明显示的来源分类、提交时重新校验结果及最终接受或拒绝原因；产品层不冻结 trace 字段、排序算法或 TTL。
+
 ## 4. 玩家因果与诊断边界
 
 - 只有已接受的玩家意图及其可归因世界后果，才能被表达为玩家影响；环境变化、Agent 自主活动或渲染更新不能代签。
@@ -66,6 +76,7 @@
 - RW-6：长期空间舞台样例保持世界、目标、相关行动者/路线、blocker 与下一步的 primary read；相邻 target/command/receipt/selection 管理可展开但不隐藏受支持的 command path，也不替代舞台成为默认决策面。
 - RW-7：长期密度变化样例证明 semantic zoom 先退次级 labels/细节，持续保留目标、相关行动者或路线、blocker 和下一步；terrain/blocks 只解释语境，不表达直接 edit/harvest/build affordance。
 - RW-8：代表性动态信息场景证明正式玩家表面能区分公共已结算事实、当前确认、最近已知和未知/失效观察；范围外或缓存对象不会被表现为当前精确事实，且影响行动的非当前信息提供刷新、等待、改道或停止路径。
+- RW-9：同一动态对象出现互相矛盾的观察、刷新竞态（旧响应晚到）或提交前时效失效时，surface 保留冲突/来源/时效语义，不以客户端“最新响应”代签真值；低后果动作至多提供带不确定性标注的预览，高后果动作必须重新取得当前权威确认或明确阻断，并能读到冲突原因与下一步。
 
 ### 5.1 验收权威与证据边界
 
@@ -75,6 +86,7 @@
 | 可归因玩家因果与恢复路径 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 以已接受意图、权威世界结果、主要因果和下一决策或恢复路径组成端到端证据；环境活动不能代签玩家影响 | test_tier_full |
 | 长期舞台优先、语义缩放与非直接编辑边界 | game_visual_interaction_designer / viewer_engineer / gameplay_designer / qa_engineer | `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`; `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`; `doc/testing/prd.md` | 目标/行动者/路线/blocker/下一步在密度变化下的保留、次级 label 收敛、command path 可发现性与 terrain 非 affordance 的未来验证；不代签当前 2D/zoom readiness | test_tier_required |
 | 动态观察的范围、时效与未知边界（RW-8） | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 同一动态对象在当前范围、缓存未过期、缓存过期或未取得观察时的来源/状态分层；范围外不泄露为当前事实，影响行动的非当前信息具有刷新、等待、改道或停止路径；不复制可见性算法、TTL、DTO 或 UI 合同 | test_tier_required |
+| 来源冲突、刷新竞态与行动降级（RW-9） | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 同一对象的冲突观察、旧刷新响应覆盖尝试、提交前过期与重连/重复刷新负例；验证公共事实、当前观察、最近已知、未知/冲突的可读来源语义，高后果动作重新校验或阻断，且 trace 能对账显示分类与最终接受/拒绝原因；不复制字段、排序或 TTL 合同 | test_tier_full |
 
 ## 6. 范围
 
