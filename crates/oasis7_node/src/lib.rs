@@ -188,7 +188,6 @@ const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
 const REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS: i64 = 1_000;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
 const FINALITY_LATENCY_HISTORY_LIMIT: usize = 128;
-
 pub const EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE: &str =
     "execution driver missing predecessor record for non-contiguous committed height";
 
@@ -437,7 +436,8 @@ impl NodeRuntime {
         };
         let mut consensus_network = if let Some(network) = &self.replication_network {
             let subscribe = self.replication_network_consensus_enabled
-                || self.config.role == NodeRole::Observer;
+                || (self.config.role == NodeRole::Observer
+                    && network.uses_default_topic(self.config.world_id.as_str()));
             if subscribe {
                 match ConsensusNetworkEndpoint::new(
                     network,
@@ -1152,7 +1152,6 @@ struct PosNodeEngine {
 
 type PendingProposal = NodePosPendingProposal<NodeConsensusAction, PosConsensusStatus>;
 type PosDecision = NodePosDecision<NodeConsensusAction, PosConsensusStatus>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerCommittedHead {
     height: u64,
@@ -1190,6 +1189,7 @@ struct ConsensusMisbehaviorEvidence {
     validator_stake_root: String,
     quarantined: bool,
 }
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
