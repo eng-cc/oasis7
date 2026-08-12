@@ -30,6 +30,24 @@ impl World {
             preferred_consume_ledger.clone(),
             &effective_consume,
         );
+        // Keep quote acceptance identical to ScheduleRecipe execution: the
+        // selected local-or-world ledger must cover every effective input,
+        // including maintenance sinks merged into the recipe consume list.
+        for stack in &effective_consume {
+            if stack.amount <= 0 {
+                return Err(format!(
+                    "recipe consume must be > 0: {}={}",
+                    stack.kind, stack.amount
+                ));
+            }
+            let available = self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
+            if available < stack.amount {
+                return Err(format!(
+                    "insufficient material {}: requested {}, available {}",
+                    stack.kind, stack.amount, available
+                ));
+            }
+        }
         let bottleneck_tags =
             resolve_recipe_bottleneck_tags(self.recipe_profile(recipe_id), &effective_consume);
         let delay = compute_local_scarcity_delay_ticks(

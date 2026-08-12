@@ -286,6 +286,187 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
 }
 
 #[test]
+fn runtime_schedule_recipe_quote_uses_global_ledgers_when_agent_local_stocks_are_low() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(249);
+    register_runtime_session_with_options(
+        &mut server,
+        "local-test-player-schedule-quote-global-ledger",
+        Some(agent_id.as_str()),
+        true,
+        273,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed smelter factory");
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            0,
+        )
+        .expect("seed low local electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 0)
+        .expect("seed low local data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
+    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 4)
+        .expect("seed partial local iron ore");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "carbon_fuel", 2)
+        .expect("seed local carbon fuel");
+    server
+        .world
+        .set_material_balance("iron_ore", 20)
+        .expect("seed world iron ore fallback");
+    server
+        .world
+        .set_material_balance("carbon_fuel", 20)
+        .expect("seed world carbon fuel fallback");
+
+    let request = signed_schedule_recipe_quote_request(
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        2,
+        "local-test-player-schedule-quote-global-ledger",
+        274,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let quote = server
+        .handle_schedule_recipe_quote(request)
+        .expect("global runtime ledgers should authorize quote");
+    assert_eq!(quote.electricity_cost, 16);
+    assert_eq!(quote.electricity_after, 16);
+    assert_eq!(quote.hardware_cost, 0);
+    assert_eq!(quote.data_output, 0);
+
+    let runtime_action = crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
+        agent_id.as_str(),
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        2,
+    )
+    .expect("canonical runtime recipe plan");
+    server.world.submit_action(runtime_action);
+    server.world.step().expect("start scheduled recipe");
+    assert!(matches!(
+        server
+            .world
+            .journal()
+            .events
+            .last()
+            .map(|event| &event.body),
+        Some(crate::runtime::WorldEventBody::Domain(
+            crate::runtime::DomainEvent::RecipeStarted { .. }
+        ))
+    ));
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        16
+    );
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(248);
+    register_runtime_session_with_options(
+        &mut server,
+        "local-test-player-schedule-quote-global-power",
+        Some(agent_id.as_str()),
+        true,
+        275,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed smelter factory");
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            100,
+        )
+        .expect("seed high local electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 100)
+        .expect("seed high local data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 15);
+
+    let request = signed_schedule_recipe_quote_request(
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        2,
+        "local-test-player-schedule-quote-global-power",
+        276,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_schedule_recipe_quote(request)
+        .expect_err("global runtime electricity must gate quote acceptance");
+    assert_eq!(err.code, "schedule_recipe_quote_rejected");
+    assert!(
+        err.message
+            .contains("requires 16 electricity, available 15")
+    );
+    assert!(!server.world.journal().events.iter().any(|event| matches!(
+        event.body,
+        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeStarted { .. })
+    )));
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        15
+    );
+}
+
+#[test]
 fn runtime_schedule_recipe_quote_rejects_alias_without_canonical_runtime_plan() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

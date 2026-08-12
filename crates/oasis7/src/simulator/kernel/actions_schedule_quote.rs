@@ -33,6 +33,32 @@ impl WorldKernel {
         recipe_id: &str,
         batches: i64,
     ) -> Result<ScheduleQuote, RejectReason> {
+        self.quote_schedule_recipe_internal(owner, factory_id, recipe_id, batches, true)
+    }
+
+    /// Returns the simulator-side validation and power-risk projection needed by
+    /// the live runtime quote. Runtime execution owns electricity/material
+    /// affordability in the global runtime ledgers, so this path deliberately
+    /// skips the simulator's agent-local stock checks while preserving factory
+    /// ownership, colocation, recipe compatibility, and battery-risk signals.
+    pub(crate) fn quote_schedule_recipe_runtime_signals(
+        &self,
+        owner: &ResourceOwner,
+        factory_id: &str,
+        recipe_id: &str,
+        batches: i64,
+    ) -> Result<ScheduleQuote, RejectReason> {
+        self.quote_schedule_recipe_internal(owner, factory_id, recipe_id, batches, false)
+    }
+
+    fn quote_schedule_recipe_internal(
+        &self,
+        owner: &ResourceOwner,
+        factory_id: &str,
+        recipe_id: &str,
+        batches: i64,
+        enforce_simulator_affordability: bool,
+    ) -> Result<ScheduleQuote, RejectReason> {
         if recipe_id.trim().is_empty() {
             return Err(RejectReason::RuleDenied {
                 notes: vec!["recipe_id cannot be empty".to_string()],
@@ -83,37 +109,39 @@ impl WorldKernel {
             .owner_stock(owner)
             .expect("owner exists after ensure_owner_exists");
         let available_electricity = stock.get(ResourceKind::Electricity);
-        if available_electricity < electricity_cost {
-            return Err(RejectReason::InsufficientResource {
-                owner: owner.clone(),
-                kind: ResourceKind::Electricity,
-                requested: electricity_cost,
-                available: available_electricity,
-            });
-        }
-        let available_hardware = stock.get(ResourceKind::Data);
-        if available_hardware < hardware_cost {
-            return Err(RejectReason::InsufficientResource {
-                owner: owner.clone(),
-                kind: ResourceKind::Data,
-                requested: hardware_cost,
-                available: available_hardware,
-            });
-        }
-        if data_output > 0 {
-            let data_after_cost =
-                available_hardware
-                    .checked_sub(hardware_cost)
-                    .ok_or(RejectReason::InsufficientResource {
-                        owner: owner.clone(),
-                        kind: ResourceKind::Data,
-                        requested: hardware_cost,
-                        available: available_hardware,
-                    })?;
-            if data_after_cost.checked_add(data_output).is_none() {
-                return Err(RejectReason::InvalidAmount {
-                    amount: data_output,
+        if enforce_simulator_affordability {
+            if available_electricity < electricity_cost {
+                return Err(RejectReason::InsufficientResource {
+                    owner: owner.clone(),
+                    kind: ResourceKind::Electricity,
+                    requested: electricity_cost,
+                    available: available_electricity,
                 });
+            }
+            let available_hardware = stock.get(ResourceKind::Data);
+            if available_hardware < hardware_cost {
+                return Err(RejectReason::InsufficientResource {
+                    owner: owner.clone(),
+                    kind: ResourceKind::Data,
+                    requested: hardware_cost,
+                    available: available_hardware,
+                });
+            }
+            if data_output > 0 {
+                let data_after_cost =
+                    available_hardware
+                        .checked_sub(hardware_cost)
+                        .ok_or(RejectReason::InsufficientResource {
+                            owner: owner.clone(),
+                            kind: ResourceKind::Data,
+                            requested: hardware_cost,
+                            available: available_hardware,
+                        })?;
+                if data_after_cost.checked_add(data_output).is_none() {
+                    return Err(RejectReason::InvalidAmount {
+                        amount: data_output,
+                    });
+                }
             }
         }
 

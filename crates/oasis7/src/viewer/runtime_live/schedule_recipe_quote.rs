@@ -55,7 +55,7 @@ impl ViewerRuntimeLiveServer {
             self.seed_model.as_ref(),
         );
         let quote = WorldKernel::with_model(self.snapshot_config.clone(), model)
-            .quote_schedule_recipe(
+            .quote_schedule_recipe_runtime_signals(
                 &ResourceOwner::Agent {
                     agent_id: agent_id.to_string(),
                 },
