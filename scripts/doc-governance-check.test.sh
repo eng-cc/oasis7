@@ -268,6 +268,19 @@ if (
 fi
 grep -Fq 'doc/linked must be a real directory, not a symlink' "$TMPDIR/registry-symlink.out"
 
+printf '%s\n' 'not a directory' >"$FIXTURE/linked-file-target"
+ln -s "$FIXTURE/linked-file-target" "$FIXTURE/doc/linked-file"
+ln -s "$FIXTURE/missing-linked-target" "$FIXTURE/doc/linked-dangling"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-nondirectory-symlink.out" 2>"$TMPDIR/registry-nondirectory-symlink.err"; then
+  echo "doc-governance-check.test: non-directory documentation symlinks unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'doc/linked-file must be a real directory, not a symlink' "$TMPDIR/registry-nondirectory-symlink.out"
+grep -Fq 'doc/linked-dangling must be a real directory, not a symlink' "$TMPDIR/registry-nondirectory-symlink.out"
+
 printf '%s\n' 'Active task status: doc/testing/nested/reintroduced.project.md' >"$FIXTURE/doc/testing/nested/active-reference.md"
 if (
   cd "$FIXTURE"
