@@ -150,6 +150,76 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_projects_only_active_social_edges_with_known_endpoints() {
+    let mut input = sample_input();
+    input["snapshot"]["time"] = json!(12);
+    input["lists"]["agents"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "id": "agent-1",
+            "name": "Agent 1",
+            "pos": { "x_cm": 7_000_000.0, "y_cm": 3_000_000.0, "z_cm": 0.0 },
+            "resources": {}
+        }));
+    input["snapshot"]["model"]["social_edges"] = json!({
+        "7": {
+            "edge_id": 7,
+            "schema_id": "cooperation",
+            "relation_kind": "ally",
+            "from": { "type": "Agent", "data": { "agent_id": "agent-0" } },
+            "to": { "type": "Agent", "data": { "agent_id": "agent-1" } },
+            "weight_bps": 4200,
+            "lifecycle": "active"
+        },
+        "8": {
+            "edge_id": 8,
+            "from": { "type": "Agent", "data": { "agent_id": "missing" } },
+            "to": { "type": "Agent", "data": { "agent_id": "agent-1" } },
+            "lifecycle": "active"
+        },
+        "9": {
+            "edge_id": 9,
+            "from": { "type": "Agent", "data": { "agent_id": "agent-0" } },
+            "to": { "type": "Agent", "data": { "agent_id": "agent-1" } },
+            "expires_at_tick": 12,
+            "lifecycle": "active"
+        },
+        "10": {
+            "edge_id": 10,
+            "from": { "type": "Agent", "data": { "agent_id": "agent-0" } },
+            "to": { "type": "Agent", "data": { "agent_id": "agent-1" } },
+            "lifecycle": "expired"
+        },
+        "11": {
+            "edge_id": 11,
+            "schema_id": "supply",
+            "relation_kind": "supports",
+            "from": { "type": "Location", "data": { "location_id": "loc-0" } },
+            "to": { "type": "Agent", "data": { "agent_id": "agent-1" } },
+            "weight_bps": 1000,
+            "lifecycle": "active"
+        }
+    });
+
+    let state = build_render_state(&input);
+    assert_eq!(state["social_links"].as_array().unwrap().len(), 2);
+    let social_links = state["social_links"].as_array().unwrap();
+    let edge_7 = social_links
+        .iter()
+        .find(|edge| edge["id"] == "social_edge:7")
+        .expect("agent-agent edge");
+    assert_eq!(edge_7["relation_kind"], "ally");
+    assert_eq!(edge_7["schema_id"], "cooperation");
+    assert_eq!(edge_7["weight_bps"], 4200.0);
+    let edge_11 = social_links
+        .iter()
+        .find(|edge| edge["id"] == "social_edge:11")
+        .expect("location-agent edge");
+    assert_eq!(edge_11["relation_kind"], "supports");
+}
+
+#[test]
 fn rust_host_state_projects_module_visual_entities_with_resolved_anchors_only() {
     let mut input = sample_input();
     input["lists"]["agents"][0]["pos"] =

@@ -107,6 +107,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             size_hint_px: Some(16.0),
         }],
         links: vec![],
+        social_links: vec![],
         visual_hotspots: vec![],
         selection: Some(Selection {
             kind: "agent".to_string(),
@@ -378,7 +379,12 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("assignment_cue", sprite, transform)),
     );
-
+    let mut social_link_query = world.query::<(&PixelWorldSocialLinkVisual, &Sprite, &Transform)>();
+    layers.extend(
+        social_link_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("social_link", sprite, transform)),
+    );
     layers.sort_by(|left, right| {
         left.z
             .partial_cmp(&right.z)
@@ -422,6 +428,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "derived_position_cue" => 13,
         "missing_position_cue" => 16,
         "location_corner_frame" => 14,
+        "social_link" => 17,
         _ => 0,
     }
 }
@@ -551,7 +558,6 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
             .map(|layer| sample_pixel(&image, layer))
             .unwrap_or(PIXEL_BACKGROUND),
     };
-
     (image, summary)
 }
 fn write_probe_summary_if_requested(summary: &VisualProbeSummary) {
@@ -564,7 +570,6 @@ fn write_probe_summary_if_requested(summary: &VisualProbeSummary) {
         serde_json::to_string_pretty(summary).expect("serialize bevy render probe summary");
     fs::write(out_dir.join("summary.json"), summary_json).expect("write bevy render probe summary");
 }
-
 fn write_pixel_probe_if_requested(image: &RgbaImage, summary: &PixelRegressionSummary) {
     let Ok(out_dir) = std::env::var("PIXEL_WORLD_BEVY_PIXEL_PROBE_OUT_DIR") else {
         return;
@@ -592,11 +597,9 @@ fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
     zoom_matching_pixels(image, |pixel| pixel != PIXEL_BACKGROUND, scale)
         .expect("find non-background pixels")
 }
-
 fn zoom_pixels_matching(image: &RgbaImage, target: [u8; 4], scale: u32) -> Option<RgbaImage> {
     zoom_matching_pixels(image, |pixel| pixel == target, scale)
 }
-
 fn zoom_matching_pixels(
     image: &RgbaImage,
     matches: impl Fn([u8; 4]) -> bool,
@@ -607,7 +610,6 @@ fn zoom_matching_pixels(
     let mut max_x = 0u32;
     let mut max_y = 0u32;
     let mut found = false;
-
     for (x, y, pixel) in image.enumerate_pixels() {
         if !matches(pixel.0) {
             continue;
@@ -618,17 +620,14 @@ fn zoom_matching_pixels(
         max_y = max_y.max(y);
         found = true;
     }
-
     if !found {
         return None;
     }
-
     let padding = 12u32;
     min_x = min_x.saturating_sub(padding);
     min_y = min_y.saturating_sub(padding);
     max_x = (max_x + padding).min(VIEWPORT_WIDTH - 1);
     max_y = (max_y + padding).min(VIEWPORT_HEIGHT - 1);
-
     let crop_width = max_x - min_x + 1;
     let crop_height = max_y - min_y + 1;
     let scale = scale.min((2048 / crop_width.max(crop_height)).max(1));
@@ -637,7 +636,6 @@ fn zoom_matching_pixels(
         crop_height * scale,
         Rgba(PIXEL_BACKGROUND),
     );
-
     for y in 0..crop_height {
         for x in 0..crop_width {
             let source = *image.get_pixel(min_x + x, min_y + y);
@@ -654,7 +652,6 @@ fn zoom_matching_pixels(
 fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     let mut app = render_test_app(sample_render_state(12_000.0));
     let summary = visual_probe_summary(&mut app);
-
     assert_eq!(summary.fragments.len(), 1);
     assert_eq!(summary.locations.len(), 1);
     assert_eq!(summary.agents.len(), 1);
@@ -663,7 +660,6 @@ fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     assert_eq!(summary.locations[0].id, "loc-0");
     assert_eq!(summary.agents[0].id, "agent-0");
     assert_eq!(summary.agent_cores[0].id, "agent-0");
-
     assert!(summary.fragments[0].size_px < summary.locations[0].size_px);
     assert!(summary.locations[0].size_px < summary.agents[0].size_px);
     assert!(summary.fragments[0].alpha < summary.locations[0].alpha);
@@ -677,7 +673,6 @@ fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     assert!(summary.agent_cores[0].z > summary.agents[0].z);
     assert_eq!(summary.hit_regions, 2);
 }
-
 #[test]
 fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
     let mut app = render_test_app(sample_render_state(12_000.0));
@@ -688,9 +683,7 @@ fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
         assert!(!runtime.hit_regions_dirty);
         assert!(runtime.hit_region_cache_key.is_some());
     }
-
     app.update();
-
     let second_regions = hit_regions(&mut app);
     assert_eq!(second_regions, first_regions);
     let runtime = app.world_mut().resource::<BevyRuntimeState>();
@@ -706,7 +699,6 @@ fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
     let mut updated_state = sample_render_state(12_000.0);
     updated_state.agents[0].id = "agent-updated".to_string();
     updated_state.agents[0].pos = Some(sample_position(2_500_000.0, 1_500_000.0));
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(updated_state);
@@ -714,7 +706,6 @@ fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
         runtime.hit_regions_dirty = true;
     }
     app.update();
-
     let second_regions = hit_regions(&mut app);
     assert_ne!(second_regions, first_regions);
     assert!(
@@ -724,51 +715,43 @@ fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
     );
     assert!(!second_regions.iter().any(|region| region.id == "agent-0"));
 }
-
 #[test]
 fn bevy_ecs_refreshes_hit_regions_after_camera_change() {
     let mut app = render_test_app(sample_render_state(12_000.0));
     let first_regions = hit_regions(&mut app);
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.camera.pan_x_px += 40.0;
     }
     app.update();
-
     let second_regions = hit_regions(&mut app);
     assert_ne!(second_regions, first_regions);
     assert_eq!(second_regions.len(), first_regions.len());
 }
-
 #[test]
 fn bevy_ecs_removes_hidden_fragment_visuals_and_stale_cache_entries() {
     let mut app = render_test_app(sample_render_state(12_000.0));
     let before = visual_probe_summary(&mut app);
     assert_eq!(before.fragments.len(), 1);
     assert_eq!(before.fragment_entity_cache_size, 1);
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(100.0));
         runtime.render_version += 1;
     }
     app.update();
-
     let after = visual_probe_summary(&mut app);
     assert_eq!(after.fragments.len(), 0);
     assert_eq!(after.fragment_entity_cache_size, 0);
     assert_eq!(after.locations.len(), 1);
     assert_eq!(after.agents.len(), 1);
 }
-
 #[test]
 fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_them_up() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let detail = visual_probe_summary(&mut app);
     let base = &detail.fragments[0];
     let shadow = &detail.fragment_shadows[0];
-
     assert_eq!(detail.fragment_shadows.len(), 1);
     assert_eq!(detail.fragment_shadow_entity_count, 1);
     assert_eq!(shadow.id, base.id);
@@ -800,14 +783,12 @@ fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_the
     assert!(shadow_color.red < base_color.red);
     assert!(shadow_color.green < base_color.green);
     assert!(shadow_color.blue < base_color.blue);
-
     app.update();
     assert_eq!(
         visual_probe_summary(&mut app).fragment_shadow_entity_count,
         1,
         "a consecutive visible reconcile must reuse its shadow entity"
     );
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(12_000.0));
@@ -817,7 +798,6 @@ fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_the
     let background = visual_probe_summary(&mut app);
     assert_eq!(background.fragment_shadows.len(), 1);
     assert_eq!(background.fragment_shadow_entity_count, 1);
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(100.0));
@@ -827,7 +807,6 @@ fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_the
     let hidden = visual_probe_summary(&mut app);
     assert!(hidden.fragment_shadows.is_empty());
     assert_eq!(hidden.fragment_shadow_entity_count, 0);
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         let mut removed = sample_render_state(12_000.0);
@@ -840,12 +819,10 @@ fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_the
     assert!(removed.fragment_shadows.is_empty());
     assert_eq!(removed.fragment_shadow_entity_count, 0);
 }
-
 #[test]
 fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let detail = visual_probe_summary(&mut app);
-
     assert_eq!(detail.fragments.len(), 1);
     assert_eq!(detail.fragment_insets.len(), 1);
     assert_eq!(detail.fragment_inset_entity_count, 1);
@@ -857,14 +834,12 @@ fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
     assert!(inset.z > base.z);
     assert!(inset.z < detail.locations[0].z);
     assert!((inset.x - base.x).abs() + (inset.y - base.y).abs() < base.size_px);
-
     app.update();
     assert_eq!(
         visual_probe_summary(&mut app).fragment_inset_entity_count,
         1,
         "a consecutive Detail reconcile must reuse its inset entity"
     );
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(12_000.0));
@@ -875,7 +850,6 @@ fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
     assert_eq!(background.fragments.len(), 1);
     assert!(background.fragment_insets.is_empty());
     assert_eq!(background.fragment_inset_entity_count, 0);
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(100.0));
@@ -887,12 +861,10 @@ fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
     assert!(hidden.fragment_insets.is_empty());
     assert_eq!(hidden.fragment_inset_entity_count, 0);
 }
-
 #[test]
 fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let detail = visual_probe_summary(&mut app);
-
     assert_eq!(detail.fragments.len(), 1);
     assert_eq!(detail.fragment_flecks.len(), 1);
     assert_eq!(detail.fragment_fleck_entity_count, 1);
@@ -913,7 +885,6 @@ fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
         "fleck must remain upper-left of its terrain"
     );
     assert_eq!(detail.hit_regions, 2, "flecks must not add hit regions");
-
     let world = app.world_mut();
     let mut base_query = world.query::<(&PixelWorldFragmentVisual, &Sprite)>();
     let base_color = base_query
@@ -934,14 +905,12 @@ fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
     assert!(fleck_color.red > base_color.red);
     assert!(fleck_color.green > base_color.green);
     assert!(fleck_color.blue > base_color.blue);
-
     app.update();
     assert_eq!(
         visual_probe_summary(&mut app).fragment_fleck_entity_count,
         1,
         "a consecutive Detail reconcile must reuse its fleck entity"
     );
-
     for next_state in [sample_render_state(12_000.0), sample_render_state(100.0), {
         let mut removed = sample_render_state(20_000.0);
         removed.fragment_terrain.clear();
@@ -957,7 +926,6 @@ fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
         assert!(summary.fragment_flecks.is_empty());
         assert_eq!(summary.fragment_fleck_entity_count, 0);
     }
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state(20_000.0));
@@ -968,7 +936,6 @@ fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
         visual_probe_summary(&mut app).fragment_fleck_entity_count,
         1
     );
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = None;
@@ -979,12 +946,10 @@ fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
     assert!(no_state.fragment_flecks.is_empty());
     assert_eq!(no_state.fragment_fleck_entity_count, 0);
 }
-
 #[test]
 fn bevy_render_probe_contract_captures_visual_hierarchy() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let summary = visual_probe_summary(&mut app);
-
     assert_eq!(summary.fragment_entity_cache_size, 1);
     assert_eq!(summary.fragment_inset_entity_count, 1);
     assert_eq!(summary.fragment_fleck_entity_count, 1);
@@ -1003,10 +968,8 @@ fn bevy_render_probe_contract_captures_visual_hierarchy() {
     assert_eq!(summary.fragment_flecks.len(), 1);
     assert!(summary.fragment_flecks[0].z > summary.fragment_insets[0].z);
     assert!(summary.fragment_flecks[0].z < summary.locations[0].z);
-
     write_probe_summary_if_requested(&summary);
 }
-
 #[test]
 fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_agents() {
     let mut app = render_test_app(sample_render_state_with_selection(
@@ -1018,7 +981,6 @@ fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_ag
         .iter()
         .find(|location| location.id == "loc-0")
         .expect("selected location visual");
-
     assert_eq!(summary.selected_location_cues.len(), 4);
     for cue in &summary.selected_location_cues {
         assert_eq!(cue.id, "loc-0");
@@ -1028,7 +990,6 @@ fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_ag
         assert!(cue.z > selected_location.z);
         assert!(cue.z < summary.agents[0].z);
     }
-
     let world = app.world_mut();
     let mut cue_query = world.query::<(&Sprite, &PixelWorldSelectedLocationCue)>();
     for (sprite, _) in cue_query.iter(world) {
@@ -1044,7 +1005,6 @@ fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_ag
         );
     }
 }
-
 #[test]
 fn selected_location_ring_tracks_selection_and_leaves_no_stale_entities() {
     let mut app = render_test_app(sample_render_state_with_selection(
@@ -1054,7 +1014,6 @@ fn selected_location_ring_tracks_selection_and_leaves_no_stale_entities() {
         visual_probe_summary(&mut app).selected_location_cues.len(),
         4
     );
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         runtime.render_state = Some(sample_render_state_with_selection(
@@ -1068,7 +1027,6 @@ fn selected_location_ring_tracks_selection_and_leaves_no_stale_entities() {
             .selected_location_cues
             .is_empty()
     );
-
     {
         let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
         let mut render_state = sample_render_state(12_000.0);
@@ -1083,12 +1041,10 @@ fn selected_location_ring_tracks_selection_and_leaves_no_stale_entities() {
             .is_empty()
     );
 }
-
 #[test]
 fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     let mut app = render_test_app(sample_render_state(12_000.0));
     let (image, summary) = rasterize_pixel_regression(&mut app);
-
     assert!(summary.non_background_pixels >= 350);
     assert!(summary.fragment_pixels > 0);
     assert!(summary.location_pixels > 0);
@@ -1098,15 +1054,12 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert_ne!(summary.agent_core_sample_rgba, PIXEL_BACKGROUND);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
-
     write_pixel_probe_if_requested(&image, &summary);
 }
-
 #[test]
 fn bevy_pixel_regression_exports_unoccluded_detail_fleck() {
     let mut app = render_test_app(sample_render_state_with_unoccluded_detail_fleck());
     let (image, summary) = rasterize_pixel_regression(&mut app);
-
     assert!(summary.fragment_fleck_pixels > 0);
     assert_ne!(summary.fragment_fleck_sample_rgba, PIXEL_BACKGROUND);
     assert!(
@@ -1115,16 +1068,13 @@ fn bevy_pixel_regression_exports_unoccluded_detail_fleck() {
             .any(|pixel| pixel.0 == summary.fragment_fleck_sample_rgba),
         "the unoccluded Detail fleck must contribute visible raster pixels"
     );
-
     write_pixel_probe_if_requested(&image, &summary);
 }
-
 #[test]
 fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection() {
     for (kind, id) in [("agent", "agent-0"), ("location", "loc-0")] {
         let mut app = render_test_app(sample_render_state_with_selection(12_000.0, kind, id));
         let (_, summary) = rasterize_pixel_regression(&mut app);
-
         assert!(
             summary.non_background_pixels >= 350,
             "{kind} selection should keep the pixel-world canvas nonblank"
@@ -1147,7 +1097,6 @@ fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection()
         );
     }
 }
-
 #[test]
 fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_beacon() {
     for (kind, selected_id, unselected_id) in [
@@ -1159,7 +1108,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
             selected_id,
         ));
         let summary = visual_probe_summary(&mut app);
-
         let (selected, unselected) = match kind {
             "agent" => (
                 summary
@@ -1187,7 +1135,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
             ),
             _ => unreachable!("test cases use known render entity kinds"),
         };
-
         assert!(
             selected.size_px > unselected.size_px,
             "selected {kind} must have a geometry beacon beyond its color"

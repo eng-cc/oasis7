@@ -47,6 +47,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             size_hint_px: Some(16.0),
         }],
         links: vec![],
+        social_links: vec![],
         visual_hotspots: vec![],
         selection: Some(Selection {
             kind: selection_kind.to_string(),

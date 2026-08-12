@@ -36,7 +36,9 @@ use agent_position_missing_cue::{
 #[path = "render_links.rs"]
 mod links;
 use links::{PixelWorldLinkVisual, reconcile_links};
-
+#[path = "render_social_links.rs"]
+mod social_links;
+use social_links::{PixelWorldSocialLinkVisual, reconcile_social_links};
 #[path = "render_assignment_cue.rs"]
 mod assignment_cue;
 #[cfg(test)]
@@ -44,7 +46,6 @@ use assignment_cue::AssignmentCuePart;
 use assignment_cue::{
     PixelWorldAssignmentCueVisual, despawn_assignment_cues, reconcile_assignment_cues,
 };
-
 #[path = "render_selected_agent_cue.rs"]
 mod selected_agent_cue;
 use selected_agent_cue::AGENT_CORE_LAYER_Z_OFFSET;
@@ -126,7 +127,6 @@ pub(crate) enum FragmentTerrainLod {
     Background,
     Detail,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FragmentVisualStyle {
     pub lod: FragmentTerrainLod,
@@ -134,55 +134,45 @@ pub(crate) struct FragmentVisualStyle {
     pub alpha: f64,
     pub layer_z: f32,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LocationVisualStyle {
     pub size_px: f64,
     pub alpha: f64,
     pub layer_z: f32,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct AgentVisualStyle {
     pub size_px: f64,
     pub layer_z: f32,
 }
-
 #[derive(Component)]
 pub(crate) struct PixelWorldFragmentVisual {
     id: String,
 }
-
 #[derive(Component)]
 struct PixelWorldFragmentShadowVisual {
     id: String,
 }
-
 #[derive(Component)]
 struct PixelWorldFragmentInsetVisual {
     id: String,
 }
-
 #[derive(Component)]
 struct PixelWorldFragmentFleckVisual {
     id: String,
 }
-
 #[derive(Component)]
 pub(crate) struct PixelWorldLocationVisual {
     id: String,
 }
-
 #[derive(Component)]
 pub(crate) struct PixelWorldAgentVisual {
     id: String,
 }
-
 #[derive(Component)]
 pub(crate) struct PixelWorldHotspotVisual {
     id: String,
 }
-
 fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64) {
     if runtime.camera_fit_version == runtime.render_version || runtime.camera_user_override {
         return;
@@ -193,10 +183,8 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     let Some(world_bounds) = render_state.world_bounds.as_ref() else {
         return;
     };
-
     let mut points = Vec::new();
     let base_camera = CameraState::default();
-
     for location in &render_state.locations {
         if let Some(point) =
             to_canvas_point(&location.pos, world_bounds, width, height, &base_camera)
@@ -238,12 +226,10 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
             points.push(point);
         }
     }
-
     if points.is_empty() {
         runtime.camera_fit_version = runtime.render_version;
         return;
     }
-
     let mut min_x = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
     let mut min_y = f64::INFINITY;
@@ -254,7 +240,6 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
         min_y = min_y.min(y);
         max_y = max_y.max(y);
     }
-
     let content_width = (max_x - min_x).max(40.0);
     let content_height = (max_y - min_y).max(40.0);
     let target_zoom_x = ((width - 180.0).max(120.0) / content_width).clamp(0.6, 3.5);
@@ -264,14 +249,12 @@ fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, height: f64
     let content_center_y = (min_y + max_y) / 2.0;
     let centered_x = content_center_x - (width / 2.0);
     let centered_y = content_center_y - (height / 2.0);
-
     runtime.camera.zoom = target_zoom;
     runtime.camera.pan_x_px = -(centered_x * target_zoom);
     runtime.camera.pan_y_px = -(centered_y * target_zoom);
     runtime.camera_fit_version = runtime.render_version;
     let _ = emit_camera_state(&runtime.camera);
 }
-
 fn selection_focus_position(
     render_state: &RenderState,
     focus_target: &FocusTarget,
@@ -290,7 +273,6 @@ fn selection_focus_position(
         _ => None,
     }
 }
-
 fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, height: f64) {
     let Some(focus_target) = runtime.pending_focus_target.clone() else {
         return;
@@ -317,7 +299,6 @@ fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, heigh
         runtime.pending_focus_target = None;
         return;
     };
-
     let centered_x = selected_x - (width / 2.0);
     let centered_y = selected_y - (height / 2.0);
     runtime.camera.pan_x_px = -(centered_x * runtime.camera.zoom.max(0.5));
@@ -327,7 +308,6 @@ fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, heigh
     runtime.pending_focus_target = None;
     let _ = emit_camera_state(&runtime.camera);
 }
-
 pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
     let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
     let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
@@ -340,7 +320,6 @@ pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -
         offset_y_milli: (offset_y * 1000.0).round() as i32,
     }
 }
-
 pub(crate) fn fragment_screen_size_px(
     footprint_cm: f64,
     world_bounds: &WorldBounds,
@@ -352,7 +331,6 @@ pub(crate) fn fragment_screen_size_px(
     let scale_y = (height - 40.0).max(1.0) / world_bounds.depth_cm.max(1.0);
     footprint_cm.max(0.0) * scale_x.min(scale_y) * camera.zoom.max(0.5)
 }
-
 pub(crate) fn classify_fragment_lod(screen_size_px: f64) -> FragmentTerrainLod {
     if screen_size_px < FRAGMENT_HIDDEN_THRESHOLD_PX {
         FragmentTerrainLod::Hidden
@@ -362,7 +340,6 @@ pub(crate) fn classify_fragment_lod(screen_size_px: f64) -> FragmentTerrainLod {
         FragmentTerrainLod::Detail
     }
 }
-
 fn fragment_alpha(fragment: &FragmentTerrainPatch, lod: FragmentTerrainLod) -> f64 {
     match lod {
         FragmentTerrainLod::Hidden => 0.0,
@@ -374,7 +351,6 @@ fn fragment_alpha(fragment: &FragmentTerrainPatch, lod: FragmentTerrainLod) -> f
         }
     }
 }
-
 pub(crate) fn fragment_visual_style(
     fragment: &FragmentTerrainPatch,
     world_bounds: &WorldBounds,
@@ -400,7 +376,6 @@ pub(crate) fn fragment_visual_style(
         layer_z: FRAGMENT_LAYER_Z,
     })
 }
-
 pub(crate) fn location_visual_style(location: &Location, animation_ms: f64) -> LocationVisualStyle {
     let is_logic_anchor = location.marker_role.as_deref() == Some("logic_anchor");
     let pulse = if is_logic_anchor {
@@ -422,7 +397,6 @@ pub(crate) fn location_visual_style(location: &Location, animation_ms: f64) -> L
         layer_z: LOCATION_LAYER_Z,
     }
 }
-
 fn selected_location_visual_style(
     location: &Location,
     is_selected: bool,
@@ -435,7 +409,6 @@ fn selected_location_visual_style(
     }
     style
 }
-
 pub(crate) fn agent_visual_style(
     agent: &Agent,
     is_selected: bool,
@@ -454,7 +427,6 @@ pub(crate) fn agent_visual_style(
             },
     }
 }
-
 fn agent_unanimated_size_px(agent: &Agent, is_selected: bool) -> f64 {
     let base_size = if is_selected {
         agent.size_hint_px.unwrap_or(15.0).max(15.0)
@@ -468,7 +440,6 @@ fn agent_unanimated_size_px(agent: &Agent, is_selected: bool) -> f64 {
             1.0
         }
 }
-
 fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
     (
         layout.step_milli as f64 / 1000.0,
@@ -478,7 +449,6 @@ fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
         Color::srgba_u8(99, 179, 255, 26),
     )
 }
-
 fn reconcile_grid(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -490,14 +460,11 @@ fn reconcile_grid(
     if runtime.grid_layout.as_ref() == Some(&next_layout) {
         return;
     }
-
     for entity in existing_grid.iter() {
         commands.entity(entity).despawn();
     }
-
     let (grid_step, offset_x, offset_y, layout_width, grid_color) = grid_geometry(&next_layout);
     let layout_height = next_layout.height as f64;
-
     let mut x = offset_x;
     while x <= layout_width {
         commands.spawn((
@@ -513,7 +480,6 @@ fn reconcile_grid(
         ));
         x += grid_step;
     }
-
     let mut y = offset_y;
     while y <= layout_height {
         commands.spawn((
@@ -529,7 +495,6 @@ fn reconcile_grid(
         ));
         y += grid_step;
     }
-
     runtime.grid_layout = Some(next_layout);
 }
 fn despawn_stale_entities(
@@ -564,7 +529,6 @@ fn reconcile_locations(
         }
         return;
     };
-
     for location in &render_state.locations {
         let Some((canvas_x, canvas_y)) =
             to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
@@ -589,7 +553,6 @@ fn reconcile_locations(
             Color::srgba_u8(110, 231, 183, (style.alpha * 255.0).round() as u8),
             style.size_px as f32,
         );
-
         if let Some(entity) = runtime.location_entities.get(&location.id).copied() {
             commands.entity(entity).insert((sprite, transform));
         } else {
@@ -606,7 +569,6 @@ fn reconcile_locations(
                 .location_entities
                 .insert(location.id.clone(), entity);
         }
-
         if rebuild_hit_regions {
             runtime.hit_regions.push(HitRegion {
                 kind: "location",
@@ -618,7 +580,6 @@ fn reconcile_locations(
             });
         }
     }
-
     despawn_stale_entities(commands, &mut runtime.location_entities, &active_ids);
 }
 fn reconcile_agents(
@@ -635,7 +596,6 @@ fn reconcile_agents(
         }
         return;
     };
-
     let mut active_ids = HashSet::new();
     for (index, agent) in render_state.agents.iter().enumerate() {
         active_ids.insert(agent.id.clone());
@@ -669,7 +629,6 @@ fn reconcile_agents(
             style.layer_z,
         ));
         let sprite = sprite_for_square(color, style.size_px as f32);
-
         if let Some(entity) = runtime.agent_entities.get(&agent.id).copied() {
             commands.entity(entity).insert((sprite, transform));
         } else {
@@ -684,7 +643,6 @@ fn reconcile_agents(
                 .id();
             runtime.agent_entities.insert(agent.id.clone(), entity);
         }
-
         if rebuild_hit_regions {
             runtime.hit_regions.push(HitRegion {
                 kind: "agent",
@@ -696,7 +654,6 @@ fn reconcile_agents(
             });
         }
     }
-
     despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
 }
 fn reconcile_hotspots(
@@ -719,7 +676,6 @@ fn reconcile_hotspots(
         }
         return;
     };
-
     let mut active_ids = HashSet::new();
     for (index, hotspot) in render_state.visual_hotspots.iter().enumerate() {
         let Some((canvas_x, canvas_y)) =
@@ -754,7 +710,6 @@ fn reconcile_hotspots(
         ));
         transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
         let sprite = sprite_for_square(color, size as f32);
-
         if let Some(entity) = runtime.hotspot_entities.get(&hotspot.id).copied() {
             commands.entity(entity).insert((sprite, transform));
         } else {
@@ -770,7 +725,6 @@ fn reconcile_hotspots(
             runtime.hotspot_entities.insert(hotspot.id.clone(), entity);
         }
     }
-
     despawn_stale_entities(commands, &mut runtime.hotspot_entities, &active_ids);
 }
 fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState) {
@@ -829,11 +783,11 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
     recommended_target_cues: Query<'w, 's, (Entity, &'static PixelWorldRecommendedTargetCue)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
+    social_link_visuals: Query<'w, 's, (Entity, &'static PixelWorldSocialLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
     hotspot_cues: HotspotCueQueries<'w, 's>,
     hotspot_cores: HotspotCoreQueries<'w, 's>,
 }
-
 pub(crate) fn render_scene(
     mut commands: Commands,
     mut runtime: ResMut<BevyRuntimeState>,
@@ -870,6 +824,7 @@ pub(crate) fn render_scene(
         }
         despawn_missing_position_cues(&mut commands, &queries.missing_position_cues);
         despawn_assignment_cues(&mut commands, &queries.assignment_cues);
+        social_links::despawn_social_links(&mut commands, &queries.social_link_visuals);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -889,7 +844,6 @@ pub(crate) fn render_scene(
         }
         return;
     }
-
     for (entity, visual) in queries.location_visuals.iter() {
         runtime
             .location_entities
@@ -932,7 +886,6 @@ pub(crate) fn render_scene(
             .entry(visual.id.clone())
             .or_insert(entity);
     }
-
     let Ok(window) = queries.windows.single() else {
         return;
     };
@@ -966,6 +919,7 @@ pub(crate) fn render_scene(
         }
         despawn_missing_position_cues(&mut commands, &queries.missing_position_cues);
         despawn_assignment_cues(&mut commands, &queries.assignment_cues);
+        social_links::despawn_social_links(&mut commands, &queries.social_link_visuals);
         for (entity, _) in queries.selected_agent_cues.iter() {
             commands.entity(entity).despawn();
         }
@@ -985,7 +939,6 @@ pub(crate) fn render_scene(
         }
         return;
     };
-
     let width = window.width() as f64;
     let height = window.height() as f64;
     let canvas_size_changed = runtime.last_canvas_size
@@ -1050,6 +1003,13 @@ pub(crate) fn render_scene(
             height,
         );
         reconcile_links(&mut commands, &mut runtime, width, height);
+        reconcile_social_links(
+            &mut commands,
+            &runtime,
+            &queries.social_link_visuals,
+            width,
+            height,
+        );
         reconcile_assignment_cues(
             &mut commands,
             &runtime,
@@ -1194,7 +1154,6 @@ pub(crate) fn render_scene(
     publish_hotspot_test_hit_targets(&runtime.hit_regions);
     publish_location_test_hit_targets(&runtime.hit_regions);
 }
-
 #[cfg(test)]
 #[path = "render_tests.rs"]
 mod tests;

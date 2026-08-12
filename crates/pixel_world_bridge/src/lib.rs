@@ -82,6 +82,19 @@ struct Link {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct SocialLink {
+    id: String,
+    from: Position,
+    to: Position,
+    #[serde(default)]
+    #[allow(dead_code)]
+    relation_kind: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    lifecycle: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct FragmentTerrainPatch {
     id: String,
     #[allow(dead_code)]
@@ -174,6 +187,8 @@ struct RenderState {
     module_visual_entities: Vec<ModuleVisualEntity>,
     agents: Vec<Agent>,
     links: Vec<Link>,
+    #[serde(default)]
+    social_links: Vec<SocialLink>,
     visual_hotspots: Vec<VisualHotspot>,
     selection: Option<Selection>,
     #[serde(default)]
