@@ -85,6 +85,16 @@
 
 可回退的路线还必须说明回退仍有效的窗口、回退的主要代价，以及回退后保留与失去的价值；不可回退或尚无安全回退时也必须明确这一点。上述承诺不冻结成本、数值、世界状态、runtime 字段或 UI 表现；具体可用路线仍取决于权威世界状态。
 
+### 3.2 目标换向与在途意图边界
+
+主动换向改变玩家接下来要追求的主目标，但不把旧目标的不同处理阶段混成一个结果：
+
+- **预览 / 推荐**只说明候选目标、预计成本、主要 blocker 与下一步，不产生世界效果；换向可以放弃它，不能把预览当作已提交或已占用资源。
+- **已接受但尚未生效的请求**仍按其专业合同判断可继续、明确取消、过期或重新评估。换向、重连、刷新或普通重试不得把旧请求自动迁移到新目标、复制其资格/优先级或产生第二次世界效果；若需要新目标下的行动，玩家或 Agent 必须形成独立的新请求。
+- **已提交的世界结果**不因换向被追溯取消、伪装成未发生或再次执行；后续纠错、救济或持续义务只能沿适用专业合同处理。换向前已存在的义务、风险和可归因后果仍须可读。
+
+换向确认后，正式入口只将新目标作为当前主焦点，同时保留旧目标的已生效结果、未决义务/风险和可执行的取消、等待、恢复或重新规划下一步；不得把两个目标同时表现为已接受的当前主线，也不得以切换成功代替旧请求的权威结果。具体请求身份、去重、取消、过期、重评与 receipt 由 runtime、Agent 和 Viewer 专业权威定义。
+
 ## 4. 首次持续能力与中循环展开
 
 首次持续能力不是完成一次重复动作，而是玩家建立了一项能够继续运转、修复并产生新选择的世界能力。
@@ -121,6 +131,7 @@
 - FS-10：首次持续能力后的样例提供 2 至 3 个当前可达的分支类别，并为每项证明即时收益、实质不同的后续两个 beat、约束/风险/锁定与下次会话第一动作；可回退项还证明窗口、代价、保留价值与失去价值。
 - FS-11：代表性早期 quote/preview 样例围绕一个当前主要决策突出一个主导 blocker 或成本，并保留可恢复细节的回看路径；任何损失、锁定、权威移交、不可逆行动或恢复可用性变化均被提升，不会因信息仲裁而遗漏或改变语义。
 - FS-12：首局至首次持续能力的样例以预设引导脊柱建立一个当前主目标和可执行“继续”路径；达成阶段成果后只在 2 至 3 个实质不同方向或玩家主动换向时请求选择，后台作用域/转译/校验/治理/审计只在实质影响当前选择时提供原因和替代路径。
+- FS-13：代表性主动换向样例区分预览、已接受但尚未生效的请求与已提交的世界结果；换向、重连、并发或重试不会追溯取消已提交结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
 
 ### 6.1 验收追踪
 
@@ -138,6 +149,7 @@
 | FS-10 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 当前可达分支的即时收益、两个不同后续 beat、约束/锁定、回访第一动作及适用时的回退取舍证据 | test_tier_required |
 | FS-11 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首局 quote/preview 的主要决策、主导成本/阻塞、延后信息回看与高后果信息提升证据 | test_tier_required |
 | FS-12 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 单一主目标、预设引导脊柱、继续/分支/换向及仅在实质相关时出现的后台护栏 S6 组合证据 | test_tier_required |
+| FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受或待决/已提交分类、旧请求不自动迁移、已提交结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
 
