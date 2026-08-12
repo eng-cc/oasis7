@@ -166,7 +166,7 @@ impl WorldKernel {
         };
 
         let Some(base_duration_ticks) =
-            crate::runtime::canonical_recipe_base_duration_ticks(recipe_id)
+            crate::simulator::canonical_recipe_base_duration_ticks(recipe_id)
         else {
             return Err(RejectReason::RuleDenied {
                 notes: vec![format!(

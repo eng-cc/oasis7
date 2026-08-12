@@ -497,7 +497,7 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
         scale_material_stacks(&produce, accepted_batches_i64),
         scale_material_stacks(&byproducts, accepted_batches_i64),
         power_per_batch.saturating_mul(accepted_batches_i64),
-        crate::runtime::canonical_recipe_base_duration_ticks(recipe_id)?,
+        crate::simulator::canonical_recipe_base_duration_ticks(recipe_id)?,
     ))
 }
 
