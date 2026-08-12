@@ -464,6 +464,49 @@ fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient
             .resource_balance(crate::simulator::ResourceKind::Electricity),
         15
     );
+
+    // Once global electricity is restored, the runtime material ledger remains
+    // authoritative as the next independent acceptance gate.
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
+    server
+        .world
+        .set_material_balance("iron_ore", 0)
+        .expect("clear world iron ore");
+    server
+        .world
+        .set_material_balance("carbon_fuel", 0)
+        .expect("clear world carbon fuel");
+    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 0)
+        .expect("clear local iron ore");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "carbon_fuel", 0)
+        .expect("clear local carbon fuel");
+    let material_request = signed_schedule_recipe_quote_request(
+        crate::viewer::FACTORY_SMELTER_MK1,
+        "recipe.smelter.iron_ingot",
+        2,
+        "local-test-player-schedule-quote-global-power",
+        277,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let material_err = server
+        .handle_schedule_recipe_quote(material_request)
+        .expect_err("global runtime material ledger must gate quote acceptance");
+    assert_eq!(material_err.code, "schedule_recipe_quote_rejected");
+    assert!(material_err.message.contains("insufficient material"));
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        32
+    );
 }
 
 #[test]
