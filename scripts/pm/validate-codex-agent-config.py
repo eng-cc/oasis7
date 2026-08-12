@@ -287,12 +287,17 @@ def native_config_probe(root: Path, expected_roles: set[str]) -> dict[str, Any]:
         fail("Codex config/read did not expose config layers")
     project_folder = str((root / ".codex").resolve())
     project_layer = None
+    project_layer_disabled_reason: str | None = None
     for layer in layers:
         name = layer.get("name") if isinstance(layer, dict) else None
         if not isinstance(name, dict):
             continue
         if name.get("type") == "project" and name.get("dotCodexFolder") == project_folder:
             project_layer = layer.get("config")
+            disabled_reason = layer.get("disabledReason")
+            if disabled_reason is not None and not isinstance(disabled_reason, str):
+                fail("Codex native config/read returned a non-string project disabledReason")
+            project_layer_disabled_reason = disabled_reason
             break
     if not isinstance(project_layer, dict):
         fail("Codex native config/read did not load this worktree's .codex layer")
@@ -307,6 +312,12 @@ def native_config_probe(root: Path, expected_roles: set[str]) -> dict[str, Any]:
         "transport": "cross-platform reader threads with bounded stderr capture",
         "timeout_seconds": timeout_seconds,
         "registered_roles": sorted(native_agents),
+        "project_layer_status": (
+            "disabled_by_project_trust"
+            if project_layer_disabled_reason
+            else "enabled"
+        ),
+        "project_layer_disabled_reason": project_layer_disabled_reason,
         "adapter_native_parse": "not_run",
         "representative_role_activation": "not_run",
         "activation_capability": "requires a dispatch surface with a named-role selector; current Desktop spawn_agent schema has none",
