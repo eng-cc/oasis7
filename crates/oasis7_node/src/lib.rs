@@ -436,7 +436,9 @@ impl NodeRuntime {
             None
         };
         let mut consensus_network = if let Some(network) = &self.replication_network {
-            if self.replication_network_consensus_enabled {
+            let subscribe = self.replication_network_consensus_enabled
+                || self.config.role == NodeRole::Observer;
+            if subscribe {
                 match ConsensusNetworkEndpoint::new(
                     network,
                     &self.config.world_id,
@@ -1188,7 +1190,6 @@ struct ConsensusMisbehaviorEvidence {
     validator_stake_root: String,
     quarantined: bool,
 }
-
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
