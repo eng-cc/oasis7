@@ -162,6 +162,262 @@ fn social_fact_impact_quote_previews_challenge_without_mutating_journal() {
 }
 
 #[test]
+fn social_fact_impact_quote_previews_adjudication_confirm_and_retract_without_mutation() {
+    for (
+        decision,
+        expected_action,
+        expected_delta,
+        expected_stake_at_risk,
+        expected_slash,
+        expected_return,
+    ) in [
+        (
+            SocialAdjudicationDecision::Confirm,
+            "confirm_fact",
+            "confirmed",
+            20,
+            "challenger",
+            "publisher",
+        ),
+        (
+            SocialAdjudicationDecision::Retract,
+            "retract_fact",
+            "retracted",
+            30,
+            "publisher",
+            "challenger",
+        ),
+    ] {
+        let mut kernel = setup_social_kernel();
+        let evidence_event_id = first_evidence_event_id(&kernel);
+        kernel.submit_action(Action::PublishSocialFact {
+            actor: agent_owner("agent-a"),
+            schema_id: "social.reputation.v1".to_string(),
+            subject: agent_owner("agent-b"),
+            object: None,
+            claim: "agent-b delivered mission data".to_string(),
+            confidence_ppm: 800_000,
+            evidence_event_ids: vec![evidence_event_id],
+            ttl_ticks: None,
+            stake: Some(SocialStake {
+                kind: ResourceKind::Electricity,
+                amount: 30,
+            }),
+        });
+        let publish = kernel.step().expect("publish");
+        let fact_id = match publish.kind {
+            WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+            other => panic!("unexpected publish event: {other:?}"),
+        };
+        kernel.submit_action(Action::ChallengeSocialFact {
+            challenger: agent_owner("agent-c"),
+            fact_id,
+            reason: "insufficient on-chain proof".to_string(),
+            stake: Some(SocialStake {
+                kind: ResourceKind::Electricity,
+                amount: 20,
+            }),
+        });
+        assert!(matches!(
+            kernel.step().expect("challenge").kind,
+            WorldEventKind::SocialFactChallenged { .. }
+        ));
+
+        let journal_before_quote = kernel.journal().len();
+        let model_before_quote = kernel.model().clone();
+        let publisher_power_before_quote = electricity_of(&kernel, "agent-a");
+        let challenger_power_before_quote = electricity_of(&kernel, "agent-c");
+        let quote = kernel
+            .quote_adjudicate_social_fact(
+                &agent_owner("agent-a"),
+                fact_id,
+                decision,
+                "evidence satisfies schema thresholds",
+            )
+            .expect("adjudication quote");
+
+        assert_eq!(kernel.journal().len(), journal_before_quote);
+        assert_eq!(kernel.model(), &model_before_quote);
+        assert_eq!(
+            electricity_of(&kernel, "agent-a"),
+            publisher_power_before_quote
+        );
+        assert_eq!(
+            electricity_of(&kernel, "agent-c"),
+            challenger_power_before_quote
+        );
+        assert_eq!(quote.actor_id, "agent-a");
+        assert_eq!(quote.action_kind, "adjudicate_fact");
+        assert_eq!(quote.schema_id, "social.reputation.v1");
+        assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
+        assert_eq!(quote.object_id, None);
+        assert_eq!(quote.claim_summary, "agent-b delivered mission data");
+        assert_eq!(quote.confidence_ppm, Some(800_000));
+        assert_eq!(quote.stake_at_risk, expected_stake_at_risk);
+        assert_eq!(quote.recommended_social_action, expected_action);
+        assert_eq!(quote.cooperation_opportunity_delta, expected_delta);
+        assert_eq!(quote.blacklist_or_dispute_risk, "adjudication_settlement");
+        assert_eq!(quote.governance_or_claim_relevance, "adjudication_relevant");
+        assert!(
+            quote
+                .affected_relationships
+                .contains(&"schema:social.reputation.v1".to_string())
+        );
+        assert!(
+            quote
+                .affected_social_surfaces
+                .contains(&"reputation".to_string())
+        );
+        assert!(
+            quote
+                .why_this_action_matters
+                .contains(&format!("{expected_slash} stake"))
+        );
+        assert!(
+            quote
+                .why_this_action_matters
+                .contains(&format!("{expected_return} stake"))
+        );
+        assert!(quote.why_this_action_matters.contains("30"));
+        assert!(quote.why_this_action_matters.contains("20"));
+        assert!(quote.why_this_action_matters.contains("stake pool"));
+    }
+}
+
+#[test]
+fn social_fact_impact_quote_adjudication_matches_execution_rejections() {
+    let mut kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: Some(agent_owner("agent-c")),
+        claim: "agent-b delivered mission data".to_string(),
+        confidence_ppm: 800_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let publish = kernel.step().expect("publish");
+    let fact_id = match publish.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    for (adjudicator, candidate_fact_id, notes, expected_note) in [
+        (
+            agent_owner("agent-a"),
+            fact_id,
+            "evidence is sufficient",
+            "cannot be adjudicated without challenge",
+        ),
+        (
+            agent_owner("agent-b"),
+            fact_id,
+            "   ",
+            "social adjudication notes cannot be empty",
+        ),
+        (
+            agent_owner("agent-b"),
+            fact_id + 1,
+            "evidence is sufficient",
+            "social fact not found",
+        ),
+    ] {
+        let journal_before_quote = kernel.journal().len();
+        let model_before_quote = kernel.model().clone();
+        let reason = kernel
+            .quote_adjudicate_social_fact(
+                &adjudicator,
+                candidate_fact_id,
+                SocialAdjudicationDecision::Confirm,
+                notes,
+            )
+            .expect_err("adjudication quote should mirror execution validation");
+        assert_eq!(kernel.journal().len(), journal_before_quote);
+        assert_eq!(kernel.model(), &model_before_quote);
+        match reason {
+            RejectReason::RuleDenied { notes } => assert!(
+                notes.iter().any(|note| note.contains(expected_note)),
+                "adjudication rejection notes: {notes:?}"
+            ),
+            other => panic!("unexpected adjudication rejection: {other:?}"),
+        }
+    }
+
+    kernel.submit_action(Action::ChallengeSocialFact {
+        challenger: agent_owner("agent-c"),
+        fact_id,
+        reason: "insufficient on-chain proof".to_string(),
+        stake: None,
+    });
+    assert!(matches!(
+        kernel.step().expect("challenge").kind,
+        WorldEventKind::SocialFactChallenged { .. }
+    ));
+    let reason = kernel
+        .quote_adjudicate_social_fact(
+            &agent_owner("agent-b"),
+            fact_id,
+            SocialAdjudicationDecision::Confirm,
+            "evidence is sufficient",
+        )
+        .expect_err("challenged fact must still reject an unauthorized adjudicator");
+    match reason {
+        RejectReason::RuleDenied { notes } => assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("social adjudicator is not the fact publisher")),
+            "unauthorized adjudication rejection notes: {notes:?}"
+        ),
+        other => panic!("unexpected unauthorized adjudication rejection: {other:?}"),
+    }
+    let reason = kernel
+        .quote_adjudicate_social_fact(
+            &agent_owner("agent-c"),
+            fact_id,
+            SocialAdjudicationDecision::Confirm,
+            "evidence is sufficient",
+        )
+        .expect_err("object must not adjudicate a challenged fact");
+    assert!(matches!(
+        reason,
+        RejectReason::RuleDenied { ref notes }
+            if notes
+                .iter()
+                .any(|note| note.contains("social adjudicator is not the fact publisher"))
+    ));
+
+    for adjudicator in [agent_owner("agent-b"), agent_owner("agent-c")] {
+        kernel.submit_action(Action::AdjudicateSocialFact {
+            adjudicator,
+            fact_id,
+            decision: SocialAdjudicationDecision::Confirm,
+            notes: "evidence is sufficient".to_string(),
+        });
+        let event = kernel.step().expect("unauthorized adjudication rejection");
+        assert!(matches!(
+            event.kind,
+            WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied { ref notes }
+            } if notes
+                .iter()
+                .any(|note| note.contains("social adjudicator is not the fact publisher"))
+        ));
+    }
+    let reason = kernel
+        .quote_adjudicate_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            SocialAdjudicationDecision::Retract,
+            "evidence is sufficient",
+        )
+        .expect("challenged fact should be quotable");
+    assert_eq!(reason.action_kind, "adjudicate_fact");
+}
+
+#[test]
 fn social_fact_impact_quote_previews_declare_edge() {
     let mut kernel = setup_social_kernel();
     let evidence_event_id = first_evidence_event_id(&kernel);
@@ -443,7 +699,7 @@ fn social_adjudication_confirm_slashes_challenge_stake_and_releases_publisher() 
     assert_eq!(electricity_of(&kernel, "agent-c"), 980);
 
     kernel.submit_action(Action::AdjudicateSocialFact {
-        adjudicator: agent_owner("agent-b"),
+        adjudicator: agent_owner("agent-a"),
         fact_id,
         decision: SocialAdjudicationDecision::Confirm,
         notes: "evidence satisfies schema thresholds".to_string(),
@@ -523,7 +779,7 @@ fn social_adjudication_retract_slashes_publisher_and_refunds_challenger() {
     ));
 
     kernel.submit_action(Action::AdjudicateSocialFact {
-        adjudicator: agent_owner("agent-b"),
+        adjudicator: agent_owner("agent-a"),
         fact_id,
         decision: SocialAdjudicationDecision::Retract,
         notes: "publisher evidence is incomplete".to_string(),

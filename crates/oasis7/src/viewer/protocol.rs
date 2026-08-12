@@ -9,7 +9,8 @@ mod event_kind_match;
 pub use event_kind_match::viewer_event_kind_matches;
 
 pub use proto::{
-    AgentChatError, AgentChatRequest, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
+    AdjudicateSocialFactQuotePreflight, AdjudicateSocialFactQuoteRequest, AgentChatError,
+    AgentChatRequest, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
     AuthoritativeChallengeCommand, AuthoritativeChallengeError,
     AuthoritativeChallengeResolveRequest, AuthoritativeChallengeStatus,
     AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
@@ -37,11 +38,11 @@ pub use proto::{
     RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackCompensationTransitionRequest,
     RollbackIntent, RollbackOperatorAuthorization, RollbackReceiptAccessRequest,
     RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
-    ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest, SocialContactQuotePreflight,
-    SocialContactQuoteRequest, TransferMaterialPriority, TransferMaterialQuotePreflight,
-    TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
-    ViewerEventKind, ViewerRequest, ViewerStream, WarDeclarationQuotePreflight,
-    WarDeclarationQuoteRequest,
+    ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest, SocialAdjudicationDecision,
+    SocialContactQuotePreflight, SocialContactQuoteRequest, TransferMaterialPriority,
+    TransferMaterialQuotePreflight, TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION,
+    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
 
 pub type ViewerResponse =

@@ -138,6 +138,86 @@ impl WorldKernel {
         })
     }
 
+    pub fn quote_adjudicate_social_fact(
+        &self,
+        adjudicator: &ResourceOwner,
+        fact_id: u64,
+        decision: SocialAdjudicationDecision,
+        notes: &str,
+    ) -> Result<SocialFactImpactQuote, RejectReason> {
+        // Keep the quote validation in the same order as the production action:
+        // owner, notes, fact, challenge, and party authorization.  The quote
+        // only borrows state, so it cannot consume or settle either stake.
+        self.ensure_owner_exists(adjudicator)?;
+        let notes = notes.trim();
+        if notes.is_empty() {
+            return social_rule_denied("social adjudication notes cannot be empty");
+        }
+
+        let Some(fact) = self.model.social_facts.get(&fact_id) else {
+            return social_rule_denied(format!("social fact not found: {fact_id}"));
+        };
+        let Some(challenge) = fact.challenge.as_ref() else {
+            return social_rule_denied(format!(
+                "social fact {fact_id} cannot be adjudicated without challenge"
+            ));
+        };
+        if !social_adjudicator_is_authorized(fact, adjudicator) {
+            return social_rule_denied(format!(
+                "social adjudicator is not the fact publisher for fact {fact_id}"
+            ));
+        }
+
+        let actor_stake = fact.stake.as_ref().map(|stake| stake.amount).unwrap_or(0);
+        let challenger_stake = challenge
+            .stake
+            .as_ref()
+            .map(|stake| stake.amount)
+            .unwrap_or(0);
+        let (stake_at_risk, cooperation_opportunity_delta, recommended_social_action, outcome) =
+            match decision {
+                SocialAdjudicationDecision::Confirm => (
+                    challenger_stake,
+                    "confirmed",
+                    "confirm_fact",
+                    format!(
+                        "Confirming this fact slashes the challenger stake ({challenger_stake}) to the stake pool and returns the publisher stake ({actor_stake})."
+                    ),
+                ),
+                SocialAdjudicationDecision::Retract => (
+                    actor_stake,
+                    "retracted",
+                    "retract_fact",
+                    format!(
+                        "Retracting this fact slashes the publisher stake ({actor_stake}) to the stake pool and returns the challenger stake ({challenger_stake})."
+                    ),
+                ),
+            };
+
+        Ok(SocialFactImpactQuote {
+            actor_id: social_owner_quote_id(adjudicator),
+            action_kind: "adjudicate_fact".to_string(),
+            schema_id: fact.schema_id.clone(),
+            subject_id: Some(social_owner_quote_id(&fact.subject)),
+            object_id: fact.object.as_ref().map(social_owner_quote_id),
+            claim_summary: summarize_social_text(&fact.claim),
+            confidence_ppm: Some(fact.confidence_ppm),
+            stake_at_risk,
+            ttl_ticks: fact.ttl_ticks,
+            affected_relationships: social_affected_relationships(
+                &fact.schema_id,
+                &fact.subject,
+                fact.object.as_ref(),
+            ),
+            affected_social_surfaces: social_affected_surfaces(&fact.schema_id),
+            cooperation_opportunity_delta: cooperation_opportunity_delta.to_string(),
+            blacklist_or_dispute_risk: "adjudication_settlement".to_string(),
+            governance_or_claim_relevance: "adjudication_relevant".to_string(),
+            recommended_social_action: recommended_social_action.to_string(),
+            why_this_action_matters: outcome,
+        })
+    }
+
     pub fn quote_declare_social_edge(
         &self,
         declarer: &ResourceOwner,
@@ -375,10 +455,10 @@ impl WorldKernel {
                 "social fact {fact_id} cannot be adjudicated without challenge"
             ));
         }
-        if !social_fact_party_matches(&fact, &adjudicator) {
+        if !social_adjudicator_is_authorized(&fact, &adjudicator) {
             self.model.social_facts.insert(fact_id, fact);
             return social_rule_reject(format!(
-                "social adjudicator is not a fact party for fact {fact_id}"
+                "social adjudicator is not the fact publisher for fact {fact_id}"
             ));
         }
 
@@ -672,9 +752,17 @@ impl WorldKernel {
         let Some(mut fact) = self.model.social_facts.remove(&fact_id) else {
             return Err(format!("social fact not found: {fact_id}"));
         };
-        if !social_fact_party_matches(&fact, adjudicator) {
+        if fact.challenge.is_none() {
             self.model.social_facts.insert(fact_id, fact);
-            return Err(format!("social adjudicator is not a fact party: {fact_id}"));
+            return Err(format!(
+                "social fact {fact_id} cannot be adjudicated without challenge"
+            ));
+        }
+        if !social_adjudicator_is_authorized(&fact, adjudicator) {
+            self.model.social_facts.insert(fact_id, fact);
+            return Err(format!(
+                "social adjudicator is not the fact publisher: {fact_id}"
+            ));
         }
         self.apply_social_fact_adjudication_settlement(&mut fact, decision)
             .map_err(|reason| format!("social adjudication settlement failed: {reason:?}"))?;
@@ -981,13 +1069,11 @@ fn social_edge_affected_surfaces(schema_id: &str) -> Vec<String> {
     surfaces
 }
 
-fn social_fact_party_matches(fact: &SocialFactState, owner: &ResourceOwner) -> bool {
+fn social_adjudicator_is_authorized(fact: &SocialFactState, owner: &ResourceOwner) -> bool {
+    // v1 has no representable `ResourceOwner::World`; the only runtime
+    // authority is the fact publisher. Keep this predicate shared by quote,
+    // execution, and replay so all paths enforce the same rule.
     fact.actor == *owner
-        || fact.subject == *owner
-        || fact
-            .object
-            .as_ref()
-            .is_some_and(|object_owner| object_owner == owner)
 }
 
 fn social_rule_reject(note: impl Into<String>) -> WorldEventKind {

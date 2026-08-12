@@ -700,6 +700,21 @@ impl ViewerLiveSession {
                     },
                 )?;
             }
+            ViewerRequest::QuoteAdjudicateSocialFact { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message:
+                                "quote_adjudicate_social_fact is only available in runtime live mode"
+                                    .to_string(),
+                            action_id: Some("quote_adjudicate_social_fact".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::QuoteSocialContact { request: _ } => {
                 send_response(
                     writer,

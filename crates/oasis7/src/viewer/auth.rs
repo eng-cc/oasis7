@@ -42,6 +42,10 @@ mod declare_social_edge_quote;
 pub use declare_social_edge_quote::{
     sign_declare_social_edge_quote_auth_proof, verify_declare_social_edge_quote_auth_proof,
 };
+mod adjudicate_social_fact_quote;
+pub use adjudicate_social_fact_quote::{
+    sign_adjudicate_social_fact_quote_auth_proof, verify_adjudicate_social_fact_quote_auth_proof,
+};
 mod publish_social_fact_quote;
 pub use publish_social_fact_quote::{
     sign_publish_social_fact_quote_auth_proof, verify_publish_social_fact_quote_auth_proof,

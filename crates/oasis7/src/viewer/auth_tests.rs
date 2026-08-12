@@ -1,4 +1,7 @@
-use super::super::protocol::{CollectDataCommand, CollectDataRequest, ScheduleRecipeQuoteRequest};
+use super::super::protocol::{
+    AdjudicateSocialFactQuoteRequest, CollectDataCommand, CollectDataRequest,
+    ScheduleRecipeQuoteRequest, SocialAdjudicationDecision,
+};
 use super::*;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -14,6 +17,43 @@ fn test_signer_with_seed(seed: u8) -> (String, String) {
 
 fn test_signer() -> (String, String) {
     test_signer_with_seed(7)
+}
+
+#[test]
+fn adjudicate_social_fact_quote_auth_binds_decision_and_notes() {
+    let (public_key, private_key) = test_signer();
+    let request = AdjudicateSocialFactQuoteRequest {
+        fact_id: 42,
+        decision: SocialAdjudicationDecision::Confirm,
+        notes: "evidence is sufficient".to_string(),
+        player_id: "player-social".to_string(),
+        public_key: Some(public_key.clone()),
+        auth: None,
+    };
+    let proof = sign_adjudicate_social_fact_quote_auth_proof(
+        &request,
+        17,
+        public_key.as_str(),
+        private_key.as_str(),
+    )
+    .expect("sign adjudication quote");
+    verify_adjudicate_social_fact_quote_auth_proof(&request, &proof)
+        .expect("original adjudication request remains valid");
+
+    let mut tampered = request.clone();
+    tampered.notes = "tampered".to_string();
+    assert!(
+        verify_adjudicate_social_fact_quote_auth_proof(&tampered, &proof)
+            .expect_err("tampered notes must fail")
+            .contains("verify auth signature failed")
+    );
+    let mut decision_tampered = request;
+    decision_tampered.decision = SocialAdjudicationDecision::Retract;
+    assert!(
+        verify_adjudicate_social_fact_quote_auth_proof(&decision_tampered, &proof)
+            .expect_err("tampered decision must fail")
+            .contains("verify auth signature failed")
+    );
 }
 
 #[test]
