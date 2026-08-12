@@ -234,6 +234,40 @@ fi
 grep -Fq 'project.md / *.project.md ledgers are retired' "$TMPDIR/ledger.out"
 rm -f "$FIXTURE/doc/testing/nested/reintroduced.project.md"
 
+# A top-level documentation symlink must not be able to register an external
+# corpus whose contents are outside the scanner's real-directory traversal.
+mkdir -p "$FIXTURE/linked-target"
+printf '%s\n' 'external fixture landing page' >"$FIXTURE/linked-target/README.md"
+ln -s "$FIXTURE/linked-target" "$FIXTURE/doc/linked"
+"$REAL_PYTHON" - "$FIXTURE/doc/.governance/top-level-directory-registry.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["directories"].append(
+    {
+        "name": "linked",
+        "type": "professional_domain",
+        "owner": "repository_health_engineer",
+        "entry": "doc/linked/README.md",
+        "reason": "fixture symlink",
+        "exception": None,
+    }
+)
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+printf '%s\n' 'doc/linked/README.md' >>"$FIXTURE/doc/README.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/registry-symlink.out" 2>"$TMPDIR/registry-symlink.err"; then
+  echo "doc-governance-check.test: top-level documentation symlink unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'doc/linked must be a real directory, not a symlink' "$TMPDIR/registry-symlink.out"
+
 printf '%s\n' 'Active task status: doc/testing/nested/reintroduced.project.md' >"$FIXTURE/doc/testing/nested/active-reference.md"
 if (
   cd "$FIXTURE"

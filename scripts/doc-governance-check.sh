@@ -274,9 +274,23 @@ except json.JSONDecodeError as error:
     raise SystemExit(f"top-level-directory-registry: invalid JSON: {error}")
 if payload.get("version") != 1 or not isinstance(payload.get("directories"), list):
     raise SystemExit("top-level-directory-registry: expected version 1 and directories list")
-actual = {path.name for path in Path("doc").iterdir() if path.is_dir() and not path.name.startswith(".")}
+doc_root = Path("doc")
+symlink_directories = sorted(
+    path.name
+    for path in doc_root.iterdir()
+    if path.is_symlink() and path.is_dir() and not path.name.startswith(".")
+)
+actual = {
+    path.name
+    for path in doc_root.iterdir()
+    if path.is_dir() and not path.is_symlink() and not path.name.startswith(".")
+}
 entries = payload["directories"]
 registered, errors = [], []
+for name in symlink_directories:
+    errors.append(
+        f"top-level-directory-registry: doc/{name} must be a real directory, not a symlink"
+    )
 owners = {path.stem for path in Path(".agents/roles").glob("*.md")}
 root_navigation = root_readme.read_text(encoding="utf-8")
 for index, entry in enumerate(entries):
