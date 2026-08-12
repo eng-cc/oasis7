@@ -165,12 +165,22 @@ impl WorldKernel {
             "continue_production"
         };
 
+        let Some(base_duration_ticks) =
+            crate::runtime::canonical_recipe_base_duration_ticks(recipe_id)
+        else {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "recipe has no canonical base duration: {recipe_id}"
+                )],
+            });
+        };
+
         Ok(ScheduleQuote {
             owner: owner.clone(),
             factory_id: factory_id.to_string(),
             recipe_id: recipe_id.to_string(),
             batches,
-            base_duration_ticks: batches,
+            base_duration_ticks: i64::from(base_duration_ticks),
             electricity_cost,
             electricity_after,
             hardware_cost,

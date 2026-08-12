@@ -388,12 +388,11 @@ fn scale_material_stacks(stacks: &[MaterialStack], scale: i64) -> Vec<MaterialSt
 #[cfg(not(target_arch = "wasm32"))]
 fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeExecutionPlan> {
     let accepted_batches_i64 = i64::from(accepted_batches);
-    let (consume, produce, byproducts, power_per_batch, duration_ticks): (
+    let (consume, produce, byproducts, power_per_batch): (
         Vec<MaterialStack>,
         Vec<MaterialStack>,
         Vec<MaterialStack>,
         i64,
-        u32,
     ) = match recipe_id {
         RECIPE_SMELTER_IRON_INGOT => (
             vec![
@@ -403,14 +402,12 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("iron_ingot", 3)],
             vec![MaterialStack::new("slag", 1)],
             8,
-            1,
         ),
         RECIPE_SMELTER_COPPER_WIRE => (
             vec![MaterialStack::new("copper_ore", 3)],
             vec![MaterialStack::new("copper_wire", 4)],
             Vec::new(),
             6,
-            1,
         ),
         RECIPE_SMELTER_POLYMER_RESIN => (
             vec![
@@ -420,7 +417,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("polymer_resin", 2)],
             vec![MaterialStack::new("waste_resin", 1)],
             7,
-            1,
         ),
         RECIPE_SMELTER_ALLOY_PLATE => (
             vec![
@@ -430,14 +426,12 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("alloy_plate", 2)],
             vec![MaterialStack::new("slag", 1)],
             9,
-            1,
         ),
         RECIPE_ASSEMBLER_GEAR => (
             vec![MaterialStack::new("iron_ingot", 2)],
             vec![MaterialStack::new("gear", 1)],
             Vec::new(),
             4,
-            1,
         ),
         RECIPE_ASSEMBLER_CONTROL_CHIP => (
             vec![
@@ -447,7 +441,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("control_chip", 1)],
             vec![MaterialStack::new("waste_resin", 1)],
             6,
-            1,
         ),
         RECIPE_ASSEMBLER_MOTOR_MK1 => (
             vec![
@@ -457,7 +450,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("motor_mk1", 1)],
             Vec::new(),
             7,
-            1,
         ),
         RECIPE_ASSEMBLER_LOGISTICS_DRONE => (
             vec![
@@ -468,7 +460,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("logistics_drone", 1)],
             vec![MaterialStack::new("assembly_scrap", 1)],
             12,
-            1,
         ),
         RECIPE_ASSEMBLER_SENSOR_PACK => (
             vec![
@@ -478,7 +469,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("sensor_pack", 1)],
             vec![MaterialStack::new("calibration_scrap", 1)],
             8,
-            1,
         ),
         RECIPE_ASSEMBLER_MODULE_RACK => (
             vec![
@@ -488,7 +478,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("module_rack", 1)],
             vec![MaterialStack::new("precision_scrap", 1)],
             10,
-            1,
         ),
         RECIPE_ASSEMBLER_FACTORY_CORE => (
             vec![
@@ -498,7 +487,6 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
             vec![MaterialStack::new("factory_core", 1)],
             vec![MaterialStack::new("structural_waste", 1)],
             14,
-            1,
         ),
         _ => return None,
     };
@@ -509,7 +497,7 @@ fn recipe_plan_for_id(recipe_id: &str, accepted_batches: u32) -> Option<RecipeEx
         scale_material_stacks(&produce, accepted_batches_i64),
         scale_material_stacks(&byproducts, accepted_batches_i64),
         power_per_batch.saturating_mul(accepted_batches_i64),
-        duration_ticks,
+        crate::runtime::canonical_recipe_base_duration_ticks(recipe_id)?,
     ))
 }
 

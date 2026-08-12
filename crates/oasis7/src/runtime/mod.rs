@@ -125,6 +125,7 @@ pub use gameplay_state::{
     GovernanceVoteState, GovernanceVoteWeightSnapshotState, MetaProgressState,
     WarParticipantOutcome, WarState,
 };
+pub(crate) use modules::canonical_recipe_base_duration_ticks;
 pub use modules::{
     EconomyModuleKind, FactoryBuildDecision, FactoryBuildRequest, FactoryModuleApi,
     FactoryModuleSpec, FactoryProfileV1, GameplayContract, GameplayModuleKind,

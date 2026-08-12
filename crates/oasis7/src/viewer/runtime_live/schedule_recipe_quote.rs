@@ -2,6 +2,7 @@ use super::control_plane::{
     ensure_agent_player_access_runtime, map_auth_verify_error_code, normalize_optional_public_key,
 };
 use super::*;
+use crate::runtime::Action as RuntimeAction;
 use crate::simulator::{ResourceOwner, WorldKernel};
 use crate::viewer::{
     GameplayActionError, ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest,
@@ -68,20 +69,61 @@ impl ViewerRuntimeLiveServer {
                 action_id: Some("quote_schedule_recipe".to_string()),
                 target_agent_id: Some(agent_id.to_string()),
             })?;
+        let canonical_plan = match crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
+            agent_id,
+            request.factory_id.as_str(),
+            request.recipe_id.as_str(),
+            u32::try_from(request.batches).map_err(|_| GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: "quote_schedule_recipe batches exceed supported range".to_string(),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })?,
+        ) {
+            Some(RuntimeAction::ScheduleRecipe { plan, .. }) => plan,
+            _ => {
+                return Err(GameplayActionError {
+                    code: "schedule_recipe_quote_rejected".to_string(),
+                    message: format!(
+                        "quote_schedule_recipe has no canonical runtime plan for recipe `{}`",
+                        request.recipe_id
+                    ),
+                    action_id: Some("quote_schedule_recipe".to_string()),
+                    target_agent_id: Some(agent_id.to_string()),
+                });
+            }
+        };
+        let (local_shortage_delay_ticks, shortage_reason) = self
+            .world
+            .schedule_recipe_local_scarcity_delay_for_quote(
+                request.factory_id.as_str(),
+                request.recipe_id.as_str(),
+                &canonical_plan.consume,
+                &canonical_plan.produce,
+            )
+            .map_err(|message| GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message,
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })?;
         Ok(ScheduleRecipeQuotePreflight {
             owner_agent_id: agent_id.to_string(),
             factory_id: quote.factory_id,
             recipe_id: quote.recipe_id,
             batches: quote.batches,
-            base_duration_ticks: quote.base_duration_ticks,
+            // The runtime action plan is the duration authority.  In particular,
+            // batches scale resource/material quantities, while the built-in
+            // plan's one-tick duration is the execution base duration.
+            base_duration_ticks: i64::from(canonical_plan.duration_ticks.max(1)),
             electricity_cost: quote.electricity_cost,
             electricity_after: quote.electricity_after,
             hardware_cost: quote.hardware_cost,
             data_output: quote.data_output,
             finished_product_id: quote.finished_product_id,
             finished_product_units: quote.finished_product_units,
-            local_shortage_delay_ticks: quote.local_shortage_delay_ticks,
-            shortage_reason: quote.shortage_reason,
+            local_shortage_delay_ticks: i64::from(local_shortage_delay_ticks),
+            shortage_reason,
             recommended_pre_step: quote.recommended_pre_step,
             runway_before_ticks: quote.runway_before_ticks,
             runway_after_ticks: quote.runway_after_ticks,

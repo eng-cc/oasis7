@@ -31,6 +31,7 @@ mod industrial_progression_readiness;
 mod power_sale_quote;
 mod prompt_control;
 mod provider_settings;
+mod schedule_recipe_quote;
 mod smelter_affordability_debug;
 mod snapshot_fallback;
 mod snapshot_first_chat_unlock_preview;
