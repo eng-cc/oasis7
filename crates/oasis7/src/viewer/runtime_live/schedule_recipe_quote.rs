@@ -3,7 +3,7 @@ use super::control_plane::{
 };
 use super::*;
 use crate::runtime::Action as RuntimeAction;
-use crate::simulator::{ResourceOwner, WorldKernel};
+use crate::simulator::{ResourceKind, ResourceOwner, WorldKernel};
 use crate::viewer::{
     GameplayActionError, ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest,
     VerifiedPlayerAuth, verify_schedule_recipe_quote_auth_proof,
@@ -93,6 +93,37 @@ impl ViewerRuntimeLiveServer {
                 });
             }
         };
+        if canonical_plan.power_required < 0 {
+            return Err(GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: "quote_schedule_recipe canonical runtime plan has negative power cost"
+                    .to_string(),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            });
+        }
+        let available_electricity = self.world.resource_balance(ResourceKind::Electricity);
+        if available_electricity < canonical_plan.power_required {
+            return Err(GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: format!(
+                    "quote_schedule_recipe canonical runtime plan requires {} electricity, available {}",
+                    canonical_plan.power_required, available_electricity
+                ),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            });
+        }
+        let Some(primary_output) = canonical_plan.produce.iter().find(|stack| stack.amount > 0)
+        else {
+            return Err(GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: "quote_schedule_recipe canonical runtime plan has no primary output"
+                    .to_string(),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            });
+        };
         let (local_shortage_delay_ticks, shortage_reason) = self
             .world
             .schedule_recipe_local_scarcity_delay_for_quote(
@@ -116,12 +147,14 @@ impl ViewerRuntimeLiveServer {
             // batches scale resource/material quantities, while the built-in
             // plan's one-tick duration is the execution base duration.
             base_duration_ticks: i64::from(canonical_plan.duration_ticks.max(1)),
-            electricity_cost: quote.electricity_cost,
-            electricity_after: quote.electricity_after,
-            hardware_cost: quote.hardware_cost,
-            data_output: quote.data_output,
-            finished_product_id: quote.finished_product_id,
-            finished_product_units: quote.finished_product_units,
+            electricity_cost: canonical_plan.power_required,
+            electricity_after: available_electricity.saturating_sub(canonical_plan.power_required),
+            // Runtime execution has no generic hardware/data accounting for this action;
+            // material-ledger inputs and primary output below are the authoritative fields.
+            hardware_cost: 0,
+            data_output: 0,
+            finished_product_id: primary_output.kind.clone(),
+            finished_product_units: primary_output.amount,
             local_shortage_delay_ticks: i64::from(local_shortage_delay_ticks),
             shortage_reason,
             recommended_pre_step: quote.recommended_pre_step,

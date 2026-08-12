@@ -70,6 +70,9 @@ fn runtime_schedule_recipe_quote_is_authenticated_read_only_and_exposes_player_p
         .world
         .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 16)
         .expect("seed data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
     let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
     server
         .world
@@ -115,8 +118,12 @@ fn runtime_schedule_recipe_quote_is_authenticated_read_only_and_exposes_player_p
     assert_eq!(quote.factory_id, crate::viewer::FACTORY_SMELTER_MK1);
     assert_eq!(quote.recipe_id, "recipe.smelter.iron_ingot");
     assert_eq!(quote.batches, 2);
-    assert!(quote.electricity_cost > 0);
-    assert_eq!(quote.electricity_after, 32 - quote.electricity_cost);
+    assert_eq!(quote.electricity_cost, 16);
+    assert_eq!(quote.electricity_after, 16);
+    assert_eq!(quote.hardware_cost, 0);
+    assert_eq!(quote.data_output, 0);
+    assert_eq!(quote.finished_product_id, "iron_ingot");
+    assert_eq!(quote.finished_product_units, 6);
     assert_eq!(quote.local_shortage_delay_ticks, 1);
     assert_eq!(quote.shortage_reason, "local_bottleneck_deficit_moderate");
     assert_eq!(quote.continue_production_risk, "low");
@@ -172,6 +179,9 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
         .world
         .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 16)
         .expect("seed data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
     let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
     server
         .world
@@ -229,10 +239,28 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
         .expect("recipe started");
     match &started.body {
         crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeStarted {
+            power_required,
             duration_ticks,
+            consume,
+            produce,
             ready_at,
             ..
         }) => {
+            assert_eq!(i64::from(*power_required), quote.electricity_cost);
+            assert_eq!(
+                consume
+                    .iter()
+                    .find(|stack| stack.kind == "iron_ore")
+                    .map(|stack| stack.amount),
+                Some(8)
+            );
+            assert_eq!(
+                produce
+                    .iter()
+                    .find(|stack| stack.kind == quote.finished_product_id)
+                    .map(|stack| stack.amount),
+                Some(quote.finished_product_units)
+            );
             assert_eq!(
                 i64::from(*duration_ticks),
                 quote.base_duration_ticks + quote.local_shortage_delay_ticks,
@@ -249,6 +277,12 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
         }
         other => panic!("expected RecipeStarted, got {other:?}"),
     }
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        16
+    );
 }
 
 #[test]
