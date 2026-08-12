@@ -25,6 +25,21 @@ impl PosNodeEngine {
     // the aligned retained-window boundaries, including the latest completed boundary.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
 
+    pub(super) fn retain_high_peer_checkpoint_retry_authority(&mut self) -> bool {
+        let pending = self.checkpoint_bootstrap_enabled
+            && self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0
+            && self
+                .peer_heads
+                .values()
+                .any(|head| head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL);
+        if pending {
+            self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+        }
+        pending
+    }
+
     pub(super) fn should_defer_fresh_observer_checkpoint_retry(&self) -> bool {
         let high_head_retry_pending = self.fresh_observer_checkpoint_bootstrap_retry_pending;
         self.checkpoint_bootstrap_enabled
