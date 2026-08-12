@@ -291,6 +291,51 @@ fn agent_label_changes_the_render_content_signature() {
 }
 
 #[test]
+fn agent_position_source_changes_trigger_reactive_reconcile_without_camera_reset() {
+    let mut missing = sample_render_state_for_camera("agent");
+    missing.agents[0].position_source = AgentPositionSource::Missing;
+    let mut snapshot = missing.clone();
+    snapshot.agents[0].position_source = AgentPositionSource::Snapshot;
+    let mut derived = missing.clone();
+    derived.agents[0].position_source = AgentPositionSource::LocationDerived;
+
+    let missing_signature = render_content_signature(Some(&missing));
+    assert_ne!(missing_signature, render_content_signature(Some(&snapshot)));
+    assert_ne!(missing_signature, render_content_signature(Some(&derived)));
+    assert_ne!(
+        render_content_signature(Some(&snapshot)),
+        render_content_signature(Some(&derived))
+    );
+
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(missing),
+        render_content_signature: missing_signature,
+        reactive_scheduling: true,
+        camera: CameraState {
+            zoom: 2.0,
+            pan_x_px: 12.0,
+            pan_y_px: -8.0,
+        },
+        camera_fit_version: 7,
+        camera_user_override: true,
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+    apply_external_render_snapshot(
+        &mut runtime,
+        true,
+        RenderSnapshot::Changed {
+            version: 2,
+            state: Some(snapshot),
+        },
+    );
+    assert!(runtime.needs_reconcile);
+    assert!(runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 7);
+}
+
+#[test]
 fn location_resource_report_changes_trigger_reactive_reconcile_without_camera_or_hits() {
     let mut empty_report = sample_render_state_for_camera("location");
     empty_report.locations[0].resource_summary = "-".to_string();

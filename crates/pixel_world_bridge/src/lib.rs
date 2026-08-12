@@ -62,7 +62,7 @@ struct Agent {
     size_hint_px: Option<f64>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 enum AgentPositionSource {
     Snapshot,
@@ -590,18 +590,22 @@ fn hash_optional_position(hasher: &mut DefaultHasher, position: Option<&Position
 }
 
 fn render_content_signature(render_state: Option<&RenderState>) -> u64 {
-    render_signature(render_state, true, true)
+    render_signature(render_state, RenderSignatureMode::Content)
 }
 
 fn camera_content_signature(render_state: Option<&RenderState>) -> u64 {
-    render_signature(render_state, false, false)
+    render_signature(render_state, RenderSignatureMode::Camera)
 }
 
-fn render_signature(
-    render_state: Option<&RenderState>,
-    include_agent_labels: bool,
-    include_resource_reports: bool,
-) -> u64 {
+#[derive(Clone, Copy)]
+enum RenderSignatureMode {
+    Content,
+    Camera,
+}
+
+fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMode) -> u64 {
+    let include_agent_labels = matches!(mode, RenderSignatureMode::Content);
+    let include_resource_reports = matches!(mode, RenderSignatureMode::Content);
     let mut hasher = DefaultHasher::new();
     let Some(render_state) = render_state else {
         return hasher.finish();
@@ -649,6 +653,9 @@ fn render_signature(
         }
         hash_optional_position(&mut hasher, agent.pos.as_ref());
         hash_f64(&mut hasher, agent.size_hint_px.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            agent.position_source.hash(&mut hasher);
+        }
     }
 
     render_state.links.len().hash(&mut hasher);
