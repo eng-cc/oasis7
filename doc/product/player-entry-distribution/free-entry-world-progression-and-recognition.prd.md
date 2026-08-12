@@ -25,6 +25,13 @@
 - 便利服务也不得绕过资源、时间、资格、授权、物流、治理、反支配或反滥用边界；若服务影响世界内动作，它只能在与免费路径相同的权威规则和可审计因果下执行。
 - 首个 Agent 的取得、持续经营和任何受限资助仍由世界规则与专业 authority 决定。本分册不把免费账户或可选服务改写成免费 Agent claim，也不改变既有 OC 到 quota 的单向边界。
 
+#### 可选服务中断、取消与独立基线
+
+- hosting、storage 或 support 的不可用、降级、到期、取消或续费失败，只能改变其便利交付状态；它们不得自动撤销玩家身份、Agent 控制权、已确认世界结果、仍有效的合同义务或历史 receipt，也不得把服务状态改写成世界权威状态。
+- 玩家 surface 必须区分“便利服务不可用”“世界权威不可用”和“动作尚未结算”。恢复、重购或更换服务商本身不确认、回滚、迁移或补发世界内结果；未结算动作由对应专业合同明确保持待决、拒绝、到期或要求重新规划。
+- 服务中断时，玩家必须获得与真实状态相符的下一步，例如保留或导出适用数据、重新进入、等待、采用不依赖该服务的独立路径，或在无法安全继续时停止。可选服务不得成为基本成长、独立恢复或读取已确认历史的唯一正常路径；备份、缓存或支持工单也不得代签世界迁移、恢复或结算。
+- 重购、续费成功或更换服务商只建立新的便利服务承诺；它们不自动续期世界内资格、恢复已经失效的机会或扩大玩家的世界权力。具体支付、保留期、导出格式、迁移协议与恢复实现仍由对应专业 authority 定义。
+
 ### 2.2 易进入而自愿展开的真实深度
 
 - 早期路径先给出当前目标、主要阻塞、下一步和可理解的世界后果；玩家无需在进入时掌握完整经济、组织、外交或治理体系。
@@ -80,6 +87,7 @@
 - FE-5：任何公开或入口 surface 将长期方向、当前候选证据、实际受支持入口与未承诺内容分开；历史或局部 evidence 不得代签免费可用性、支付服务、成长完整性或发行就绪。
 - FE-6：认可的授予、使用、到期、拒绝、暂停或撤销样例都能说明来源、范围、用途和时间边界；无效或被滥用的认可不会被交易、重放或洗成永久权力，且其处置不静默删除历史、改写已确认因果或封锁独立基线。
 - FE-7：两名合格玩家竞争同一有限机会的样例证明：资格/邀请和申领预览不产生容量效果；最多一项符合当前条件的申领以 receipt 结算；其余请求明确拒绝/释放或保持待决，不产生分配、欠费或隐性优先权；重连重试不产生第二次效果，且失败方仍有可读恢复或独立路径。
+- FE-8：可选服务不可用、降级、到期、取消或续费失败的样例证明：便利服务状态与世界权威/结算状态保持分离；玩家身份、Agent 控制权、已确认历史和仍有效义务连续可追溯；未结算动作按专业合同真实处置；玩家具有不依赖付费服务的恢复或安全停止路径；重购、续费或换商不自动续期资格、恢复机会或扩大世界权力。
 
 ### 5.1 验收追踪
 
@@ -92,6 +100,7 @@
 | FE-5 | producer_system_designer / viewer_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-042/043 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 长期方向、候选证据、支持入口和公开 claim 分离审计 | test_tier_required |
 | FE-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 认可来源/范围/期限、拒绝/暂停/撤销、不可交易/重放、历史与因果连续性、独立基线与复核路径的组合证据 | test_tier_full |
 | FE-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 双申领人容量竞争样例的预览/待决/hold 或排队/receipt 语义、原子单次效果、重试幂等、失败恢复与独立基线证据 | test_tier_full |
+| FE-8 | producer_system_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 服务中断/降级/到期/取消下的状态分离、已确认历史连续性、未结算动作处置、独立恢复或安全停止，以及非自动续期/恢复/扩权的组合证据 | test_tier_required |
 
 ## 6. Non-Goals
 
