@@ -24,6 +24,8 @@ mod market_quote_decision;
 pub use market_quote_decision::*;
 mod social_quote;
 pub use social_quote::*;
+mod transfer_material_quote;
+pub use transfer_material_quote::*;
 /// Signed, advisory preflight for an existing governance proposal vote.
 mod governance_vote_quote;
 pub use governance_vote_quote::*;
@@ -134,6 +136,9 @@ pub enum ViewerRequest {
     },
     QuoteMarketDecision {
         request: MarketQuoteDecisionRequest,
+    },
+    QuoteTransferMaterial {
+        request: TransferMaterialQuoteRequest,
     },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
@@ -694,6 +699,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     MarketQuoteDecisionPreflight {
         quote: MarketQuoteDecisionPreflight,
+    },
+    TransferMaterialQuotePreflight {
+        quote: TransferMaterialQuotePreflight,
     },
     Error {
         message: String,

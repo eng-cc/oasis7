@@ -8,7 +8,7 @@ import { createViewerBrowserPersistenceModule } from "./viewer_browser_persisten
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
-import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js"; import { createScheduleRecipeQuoteIntegration } from "./schedule_recipe_quote_integration.js";
+import { createPowerSurvivalQuoteIntegration } from "./power_survival_quote_integration.js"; import { createScheduleRecipeQuoteIntegration } from "./schedule_recipe_quote_integration.js"; import { createTransferMaterialQuoteIntegration } from "./transfer_material_quote_integration.js";
 import { createPowerSaleQuoteIntegration } from "./power_sale_quote_integration.js";
 import { createFragmentRefillPreviewIntegration } from "./fragment_refill_preview_integration.js";
 import { createGovernanceVoteQuoteIntegration } from "./governance_vote_quote_integration.js";
@@ -181,7 +181,7 @@ const {
 const productValidationQuote = createProductValidationQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectProductValidationQuoteForTest, requestProductValidationQuote } = productValidationQuote;
 const powerSurvivalQuote = createPowerSurvivalQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
-const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote; const scheduleRecipeQuote = createScheduleRecipeQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state })); const { injectScheduleRecipeQuoteForTest, requestScheduleRecipeQuote } = scheduleRecipeQuote;
+const { injectPowerSurvivalQuoteForTest, requestPowerSurvivalQuote } = powerSurvivalQuote; const scheduleRecipeQuote = createScheduleRecipeQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state })); const { injectScheduleRecipeQuoteForTest, requestScheduleRecipeQuote } = scheduleRecipeQuote; const transferMaterialQuote = createTransferMaterialQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSearchParams, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state })); const { injectTransferMaterialQuoteForTest, requestTransferMaterialQuote } = transferMaterialQuote;
 const powerSaleQuote = createPowerSaleQuoteIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, isTestApiEnabled, nextAuthNonce, render, sendJson, signAuthPayload, state }));
 const { injectPowerSaleQuoteForTest, requestPowerSaleQuote } = powerSaleQuote;
 const fragmentRefillPreview = createFragmentRefillPreviewIntegration(() => ({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }));
@@ -190,7 +190,7 @@ const governanceVoteQuote = createGovernanceVoteQuoteIntegration({ buildAuthEnve
 const warDeclarationQuote = createWarDeclarationQuoteIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state }); const { injectWarDeclarationQuoteForTest, requestWarDeclarationQuote } = warDeclarationQuote;
 const marketQuoteDecision = createMarketQuoteDecisionIntegration({ buildAuthEnvelope, clone, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession, getSocket: () => socket, nextAuthNonce, sendJson, signAuthPayload, state });
 const { injectMarketQuoteDecisionForTest, requestMarketQuoteDecision } = marketQuoteDecision;
-const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, governanceVoteQuote, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, scheduleRecipeQuote, state, warDeclarationQuote });
+const quoteProtocolFacade = createViewerQuoteProtocolFacade({ fragmentRefillPreview, governanceVoteQuote, handleRefineQuoteError, handleRefineQuotePreflight, marketQuoteDecision, powerSaleQuote, powerSurvivalQuote, productValidationQuote, scheduleRecipeQuote, state, transferMaterialQuote, warDeclarationQuote });
 function normalizeU64Display(value) {
   if (value == null) {
     return null;
@@ -4261,7 +4261,7 @@ function installTestApi() {
     sendGameplayAction,
     requestRefineQuote,
     requestProductValidationQuote,
-    requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote, requestScheduleRecipeQuote,
+    requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote, requestScheduleRecipeQuote, requestTransferMaterialQuote,
     requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
     runSteps,
     setMode,
@@ -4275,7 +4275,7 @@ function installTestApi() {
     injectSnapshot,
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
-    injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest,
+    injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest, injectTransferMaterialQuoteForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4299,7 +4299,7 @@ function bootstrap() {
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture();
   productValidationQuote.installProductValidationQuoteVisualFixture();
-  powerSurvivalQuote.installPowerSurvivalQuoteVisualFixture(); scheduleRecipeQuote.installScheduleRecipeQuoteVisualFixture();
+  powerSurvivalQuote.installPowerSurvivalQuoteVisualFixture(); scheduleRecipeQuote.installScheduleRecipeQuoteVisualFixture(); transferMaterialQuote.installTransferMaterialQuoteVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -4391,7 +4391,7 @@ export {
   injectSnapshot,
   injectRefineQuotePreflightForTest,
   injectProductValidationQuoteForTest,
-  injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest,
+  injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest, injectTransferMaterialQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4420,7 +4420,7 @@ export {
   sendGameplayAction,
   requestRefineQuote,
   requestProductValidationQuote,
-  requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote, requestScheduleRecipeQuote,
+  requestPowerSurvivalQuote, requestFragmentRefillPreview, requestGovernanceVoteQuote, requestWarDeclarationQuote, requestPowerSaleQuote, requestScheduleRecipeQuote, requestTransferMaterialQuote,
   requestMarketQuoteDecision, injectMarketQuoteDecisionForTest,
   sendPromptControl,
   setMode,
