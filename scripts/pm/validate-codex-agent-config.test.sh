@@ -93,6 +93,31 @@ if ! PATH="/usr/bin:/bin:$TMP_DIR/future-python-bin" \
 fi
 printf 'positive case passed: direct entrypoint interpreter discovery\n'
 
+# The native probe must expose whether the project layer was actually enabled.
+# A registry read can succeed while Codex still reports a trust-disabled layer;
+# that state is evidence about config loading, not adapter activation.
+if command -v codex >/dev/null 2>&1; then
+  native_output="$($TOML_PYTHON "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
+    --root "$fixture" 2>"$TMP_DIR/native-positive.err")" || {
+    echo "validate-codex-agent-config.test: native positive probe failed" >&2
+    cat "$TMP_DIR/native-positive.err" >&2
+    exit 1
+  }
+  NATIVE_OUTPUT="$native_output" "$TOML_PYTHON" - <<'PY'
+import json
+import os
+
+probe = json.loads(os.environ["NATIVE_OUTPUT"])["native_probe"]
+if probe["project_layer_status"] not in {"enabled", "disabled_by_project_trust"}:
+    raise SystemExit("native probe returned unknown project_layer_status")
+if "project_layer_disabled_reason" not in probe:
+    raise SystemExit("native probe omitted project_layer_disabled_reason")
+print(f"native project-layer status surfaced: {probe['project_layer_status']}")
+PY
+else
+  printf 'native project-layer status regression skipped: codex unavailable\n'
+fi
+
 new_fixture wrong-adapter-model
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
