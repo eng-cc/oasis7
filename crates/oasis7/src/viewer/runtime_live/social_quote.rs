@@ -20,6 +20,32 @@ use std::io::BufWriter;
 use std::net::TcpStream;
 
 impl ViewerRuntimeLiveServer {
+    pub(in crate::viewer::runtime_live) fn handle_social_quote_request(
+        &mut self,
+        request: ViewerRequest,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        match request {
+            ViewerRequest::QuoteDeclareSocialEdge { request } => {
+                self.quote_declare_social_edge(request, writer)
+            }
+            ViewerRequest::QuotePublishSocialFact { request } => {
+                self.quote_publish_social_fact(request, writer)
+            }
+            ViewerRequest::QuoteAdjudicateSocialFact { request } => {
+                self.quote_adjudicate_social_fact(request, writer)
+            }
+            ViewerRequest::QuoteSocialContact { request } => {
+                self.quote_social_contact(request, writer)
+            }
+            ViewerRequest::QuoteGovernanceVote { request } => {
+                self.quote_governance_vote(request, writer)
+            }
+            ViewerRequest::QuoteDeclareWar { request } => self.quote_declare_war(request, writer),
+            _ => unreachable!("non-social quote routed to social quote helper"),
+        }
+    }
+
     /// Computes an authenticated, non-mutating social-fact settlement preflight from runtime state.
     pub(in crate::viewer::runtime_live) fn handle_adjudicate_social_fact_quote(
         &mut self,

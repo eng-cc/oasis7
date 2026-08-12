@@ -803,23 +803,13 @@ impl ViewerRuntimeLiveServer {
             )?,
             ViewerRequest::QuotePowerSurvival { request } => self.quote_power(request, writer)?,
             ViewerRequest::QuotePowerSale { request } => self.quote_power_sale(request, writer)?,
-            ViewerRequest::QuoteDeclareSocialEdge { request } => {
-                self.quote_declare_social_edge(request, writer)?
-            }
-            ViewerRequest::QuotePublishSocialFact { request } => {
-                self.quote_publish_social_fact(request, writer)?
-            }
-            ViewerRequest::QuoteAdjudicateSocialFact { request } => {
-                self.quote_adjudicate_social_fact(request, writer)?
-            }
-            ViewerRequest::QuoteSocialContact { request } => {
-                self.quote_social_contact(request, writer)?
-            }
-            ViewerRequest::QuoteGovernanceVote { request } => {
-                self.quote_governance_vote(request, writer)?
-            }
-            ViewerRequest::QuoteDeclareWar { request } => {
-                self.quote_declare_war(request, writer)?
+            request @ (ViewerRequest::QuoteDeclareSocialEdge { .. }
+            | ViewerRequest::QuotePublishSocialFact { .. }
+            | ViewerRequest::QuoteAdjudicateSocialFact { .. }
+            | ViewerRequest::QuoteSocialContact { .. }
+            | ViewerRequest::QuoteGovernanceVote { .. }
+            | ViewerRequest::QuoteDeclareWar { .. }) => {
+                self.handle_social_quote_request(request, writer)?
             }
             ViewerRequest::PreviewFragmentReplenishment { request } => {
                 self.preview_refill(request, writer)?
