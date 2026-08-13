@@ -63,6 +63,8 @@ mod governance_vote_quote_debug;
 mod mapping;
 mod market_quote_decision;
 mod player_gameplay;
+#[path = "runtime_live/power_projection.rs"]
+mod power_projection;
 mod power_sale_quote;
 mod recovery;
 mod recovery_audit;

@@ -1,6 +1,7 @@
 use super::ViewerLiveDecisionMode;
 use super::control_plane::{RuntimeLlmSidecar, runtime_provider_settings_from_env};
 use super::location_id_for_pos;
+use super::power_projection::runtime_storage_power_statuses;
 use super::support::{
     FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID, formal_release_default_seed_location_for_pos,
 };
@@ -25,6 +26,7 @@ pub(super) fn runtime_state_to_simulator_model(
 ) -> WorldModel {
     let mut model = seed_model.cloned().unwrap_or_default();
     model.agents.clear();
+    let runtime_power_statuses = runtime_storage_power_statuses(state);
 
     for (agent_id, cell) in &state.agents {
         let seeded_agent = seed_model.and_then(|seed| seed.agents.get(agent_id));
@@ -58,6 +60,9 @@ pub(super) fn runtime_state_to_simulator_model(
         let mut agent = Agent::new(agent_id.clone(), location_id, cell.state.pos);
         agent.body = cell.state.body.clone();
         agent.resources = cell.state.resources.clone();
+        if let Some(power) = runtime_power_statuses.get(agent_id) {
+            agent.power = power.clone();
+        }
         model.agents.insert(agent_id.clone(), agent);
     }
 
@@ -672,7 +677,6 @@ mod tests {
     use crate::simulator::{ResourceKind, WorldKernel, WorldScenario};
     use crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
     use crate::viewer::runtime_live::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
-
     #[test]
     fn runtime_state_to_simulator_model_preserves_formal_release_seed_fragment_location() {
         let (world, _) = super::super::support::bootstrap_formal_release_runtime_world()
@@ -693,7 +697,6 @@ mod tests {
         assert_eq!(agent.location_id, location.id);
         assert!(location.fragment_budget.is_some());
     }
-
     #[test]
     fn runtime_state_to_simulator_model_recomputes_seeded_location_after_agent_moves() {
         let mut world = crate::runtime::World::default();
@@ -731,7 +734,6 @@ mod tests {
         assert_eq!(agent.location_id, "frag-to");
         assert_eq!(agent.pos, to_pos);
     }
-
     #[test]
     fn runtime_state_to_simulator_model_projects_runtime_factory_for_canonical_schedule_quote() {
         let mut world = crate::runtime::World::default();
@@ -799,7 +801,6 @@ mod tests {
             )
             .expect("projected runtime factory supports the canonical quote");
     }
-
     #[test]
     fn map_runtime_domain_event_agent_registered_uses_runtime_location_id() {
         let event = RuntimeDomainEvent::AgentRegistered {
@@ -821,7 +822,6 @@ mod tests {
             other => panic!("unexpected mapped event: {other:?}"),
         }
     }
-
     #[test]
     fn map_runtime_domain_event_agent_moved_sets_distance_and_cost() {
         let config = WorldConfig::default();
