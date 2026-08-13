@@ -304,6 +304,8 @@ impl WasmExecutor {
             let mut engine_config = wasmtime::Config::new();
             engine_config.consume_fuel(true);
             engine_config.epoch_interruption(true);
+            engine_config.wasm_gc(false);
+            engine_config.wasm_exceptions(false);
             engine_config.wasm_multi_value(true);
             engine_config.wasm_reference_types(true);
             engine_config.wasm_threads(false);
