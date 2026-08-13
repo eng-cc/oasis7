@@ -41,6 +41,16 @@
 - cold start 必须优先给出能建立第一条有效意图链的动作；进行中的目标必须优先给出推进、确认或有价值的改道动作；重连/续玩必须恢复当前目标、blocker 和相应的有效动作；空快照或被阻塞快照必须把恢复、替代或重新定目标作为有效动作，而不能只呈现空动作列表或技术错误。
 - 一个动作被解释为暂不可用，不得伪装成已接受、已完成或永久失败；一旦状态变化，入口必须更新有效动作、不可用原因和解锁/恢复路径，使玩家可以重新作出选择。
 
+### 2.1.1 状态置信度与多重 blocker 的动作优先级
+
+动作集必须先通过状态置信度闸门，再进行 blocker 仲裁。这里的置信度是产品语义，不规定快照字段、时钟或实现方式：
+
+- 只有在入口能够取得一份相互一致、仍适用于当前目标的权威状态时，任何会改变资源、权限、路线承诺、设施状态或他人权利的动作才可标记为有效。状态缺失、明显陈旧、来源冲突或无法判断适用范围时，入口必须收窄为取得当前权威状态、重新进入、等待明确复核，或安全停止/重新定目标中的适用恢复动作；不得根据缓存、推断或 Agent 计划猜测一个可执行的世界动作。
+- 状态置信度恢复前，入口仍须保留玩家的决策权：至少给出一个真实的恢复或安全停止动作，并说明当前未知/冲突为何阻止原目标。单纯展示“查看状态”、无限等待或空动作列表不构成恢复，除非它就是当前唯一有意义且有边界的复核选择。
+- 在状态一致时，多个 blocker 按以下稳定优先级仲裁当前主要 blocker：**安全/权利/授权保护**高于**不可逆损失、资源扣减或锁定**，高于**当前目标的可恢复前置条件**，高于**可选优化或补充信息**。高优先级 blocker 必须先决定主动作；较低优先级 blocker 只有在会改变当前选择、损失、锁定或恢复路径时才同时呈现，不能用次要信息遮蔽高后果约束。
+- 同一优先级的多个安全路径不得被静默合并或随机择一：入口可以给出一个有理由的主推荐，但必须保留其他仍适用的可比较路径；如果没有可解释的安全推荐，则明确返回重新定目标或安全停止。推荐排序不能制造新的资格、优先权或世界效果。
+- 动作集生成后到提交前若状态、权限或 blocker 发生变化，提交必须按当前权威状态重新判断；旧动作只能被明确拒绝、重新评估或转为恢复/改道提示，不得沿用旧成本、旧资格、旧风险，也不得静默切换到另一个动作。Viewer 与 pure API 可以有不同表现，但这套状态置信度、主 blocker 和重新判断语义必须一致。
+
 专业 gameplay 合同负责把上述决策语义映射到真实动作能力、状态边界与验证样例；runtime 与 viewer/API 专业域分别负责实现和入口证据。本分册不新增 runtime 字段或规定表现层结构。
 
 ### 2.2 目标清晰度与首屏优先级
@@ -132,6 +142,7 @@
 - FS-11：代表性早期 quote/preview 样例围绕一个当前主要决策突出一个主导 blocker 或成本，并保留可恢复细节的回看路径；任何损失、锁定、权威移交、不可逆行动或恢复可用性变化均被提升，不会因信息仲裁而遗漏或改变语义。
 - FS-12：首局至首次持续能力的样例以预设引导脊柱建立一个当前主目标和可执行“继续”路径；达成阶段成果后只在 2 至 3 个实质不同方向或玩家主动换向时请求选择，后台作用域/转译/校验/治理/审计只在实质影响当前选择时提供原因和替代路径。
 - FS-13：代表性主动换向样例区分预览、已接受但尚未生效的请求与已提交的世界结果；换向、重连、并发或重试不会追溯取消已提交结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
+- FS-14：空、陈旧或冲突状态，以及同时存在多个 blocker 的代表性样例，证明 Viewer 与 pure API 采用相同的状态置信度闸门和主要 blocker 优先级：状态未确认时不提供会改变世界的猜测动作，至少保留真实的复核、恢复、安全停止或重新定目标路径；状态一致时先呈现安全/权利/授权与不可逆后果，再处理可恢复前置和可选信息；同级安全路径可比较且不会被静默合并。状态在展示后变化时，旧动作必须按当前状态重新判断，不得沿用旧资格/成本、静默改道或产生第二次世界效果。
 
 ### 6.1 验收追踪
 
@@ -150,6 +161,7 @@
 | FS-11 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首局 quote/preview 的主要决策、主导成本/阻塞、延后信息回看与高后果信息提升证据 | test_tier_required |
 | FS-12 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 单一主目标、预设引导脊柱、继续/分支/换向及仅在实质相关时出现的后台护栏 S6 组合证据 | test_tier_required |
 | FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受或待决/已提交分类、旧请求不自动迁移、已提交结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
+| FS-14 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 空/陈旧/冲突状态与多 blocker 的状态置信度闸门、稳定优先级、同级路径比较、展示后重新判断，以及无猜测动作/无静默改道/无第二次效果的 Viewer + pure API 组合证据 | test_tier_full |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
 
