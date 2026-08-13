@@ -19,6 +19,7 @@ fn agent_with_label(id: &str, label: &str, pos: Position) -> Agent {
         status_badges: Vec::new(),
         position_source: AgentPositionSource::Snapshot,
         size_hint_px: None,
+        power_state: None,
     }
 }
 

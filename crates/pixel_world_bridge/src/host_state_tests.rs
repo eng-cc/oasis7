@@ -150,6 +150,31 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn rust_host_state_projects_only_valid_agent_power_states() {
+    let mut input = sample_input();
+    let agents = input["lists"]["agents"].as_array_mut().expect("agents");
+    agents[0]["power"] = json!({ "capacity": 100, "level": 20, "state": "low_power" });
+    agents.push(json!({
+        "id": "agent-critical",
+        "name": "Critical",
+        "pos": { "x_cm": 8_000_000.0, "y_cm": 3_000_000.0, "z_cm": 0.0 },
+        "power": { "capacity": 100, "level": 5, "state": "critical" },
+        "resources": {}
+    }));
+    agents.push(json!({
+        "id": "agent-invalid",
+        "name": "Invalid",
+        "power": { "capacity": 100, "level": 99, "state": "depleted" },
+        "resources": {}
+    }));
+
+    let state = build_render_state(&input);
+    assert_eq!(state["agents"][0]["power_state"], "low_power");
+    assert_eq!(state["agents"][1]["power_state"], "critical");
+    assert!(state["agents"][2]["power_state"].is_null());
+}
+
+#[test]
 fn rust_host_state_projects_only_active_social_edges_with_known_endpoints() {
     let mut input = sample_input();
     input["snapshot"]["time"] = json!(12);

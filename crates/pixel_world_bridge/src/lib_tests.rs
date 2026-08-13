@@ -45,6 +45,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
             status_badges: vec!["position=location_derived".to_string()],
             position_source: AgentPositionSource::LocationDerived,
             size_hint_px: Some(16.0),
+            power_state: None,
         }],
         links: vec![],
         social_links: vec![],
@@ -189,6 +190,7 @@ fn assert_bevy_visual_styles_keep_fragments_background_behind_readable_agents() 
         status_badges: vec!["position=location_derived".to_string()],
         position_source: AgentPositionSource::LocationDerived,
         size_hint_px: Some(16.0),
+        power_state: None,
     };
 
     let fragment_style = fragment_visual_style(&fragment, &bounds, 960.0, 540.0, &camera).unwrap();

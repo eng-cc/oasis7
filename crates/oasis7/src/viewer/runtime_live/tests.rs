@@ -28,6 +28,8 @@ mod industrial_progression;
 mod industrial_progression_grind;
 mod industrial_progression_preview;
 mod industrial_progression_readiness;
+#[path = "tests/power_projection.rs"]
+mod power_projection;
 mod power_sale_quote;
 mod prompt_control;
 mod provider_settings;

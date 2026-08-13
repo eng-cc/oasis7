@@ -16,6 +16,7 @@ pub(super) struct PixelRegressionSummary {
     pub(super) selected_agent_cue_pixels: usize,
     pub(super) derived_position_cue_pixels: usize,
     pub(super) missing_position_cue_pixels: usize,
+    pub(super) agent_power_cue_pixels: usize,
     pub(super) agent_pixels: usize,
     pub(super) agent_core_pixels: usize,
     pub(super) hotspot_pixels: usize,

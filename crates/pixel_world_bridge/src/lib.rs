@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
 use bevy::winit::{UpdateMode, WinitSettings};
 use js_sys::{Function, Object, Reflect};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use serde_wasm_bindgen::{Serializer, from_value};
 use wasm_bindgen::prelude::*;
@@ -60,6 +60,16 @@ struct Agent {
     #[serde(default)]
     position_source: AgentPositionSource,
     size_hint_px: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_string")]
+    power_state: Option<String>,
+}
+
+fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| value.as_str().map(ToOwned::to_owned)))
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Hash)]
@@ -69,6 +79,16 @@ enum AgentPositionSource {
     LocationDerived,
     #[default]
     Missing,
+}
+
+/// Authoritative simulator power state, projected only when the source
+/// snapshot contains one of the published enum values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum AgentPowerState {
+    Normal,
+    LowPower,
+    Critical,
+    Shutdown,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -697,6 +717,7 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_f64(&mut hasher, agent.size_hint_px.unwrap_or(0.0));
         if matches!(mode, RenderSignatureMode::Content) {
             agent.position_source.hash(&mut hasher);
+            agent.power_state.hash(&mut hasher);
         }
     }
 
