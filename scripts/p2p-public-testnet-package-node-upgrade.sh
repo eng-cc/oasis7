@@ -76,7 +76,8 @@ cleanup_upgrade_lock() {
 journal_transaction_phase() {
   local transaction_dir=$1
   local phase=$2
-  python3 - "$transaction_dir/transaction.json" "$phase" <<'PY'
+  local promoted_current=${3:-}
+  python3 - "$transaction_dir/transaction.json" "$phase" "$promoted_current" <<'PY'
 from __future__ import annotations
 
 import json
@@ -86,14 +87,31 @@ from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
 phase = sys.argv[2]
+promoted_current = sys.argv[3] if len(sys.argv) > 3 else ""
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 manifest["phase"] = phase
+if promoted_current:
+    manifest["promoted_current"] = {
+        "kind": "symlink",
+        # Preserve the exact target spelling used for the in-flight symlink.
+        # The resolved field is the canonical safety identity; target spelling
+        # remains observable evidence and may contain a caller-provided double
+        # slash on macOS temporary paths.
+        "target": promoted_current,
+        "resolved": str(Path(promoted_current).resolve(strict=False)),
+    }
 temporary = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
-temporary.write_text(
-    json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
+payload = (json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n").encode("utf-8")
+with temporary.open("wb") as handle:
+    handle.write(payload)
+    handle.flush()
+    os.fsync(handle.fileno())
 os.replace(temporary, manifest_path)
+directory_fd = os.open(manifest_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+try:
+    os.fsync(directory_fd)
+finally:
+    os.close(directory_fd)
 PY
 }
 
@@ -133,6 +151,13 @@ def snapshot_file(path: Path) -> dict[str, object]:
         metadata = path.stat()
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, backup)
+        with backup.open("rb") as handle:
+            os.fsync(handle.fileno())
+        parent_fd = os.open(backup.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
         entry["uid"] = metadata.st_uid
         entry["gid"] = metadata.st_gid
         entry["mode"] = stat.S_IMODE(metadata.st_mode)
@@ -143,21 +168,31 @@ if current.is_symlink():
     current_state: dict[str, object] = {
         "kind": "symlink",
         "target": os.readlink(current),
+        "resolved": str(current.resolve(strict=False)),
     }
 elif current.is_dir():
     current_backup = snapshot_dir / "current-directory"
     shutil.copytree(current, current_backup, symlinks=True, copy_function=shutil.copy2)
+    current_metadata = current.stat()
+    shutil.copystat(current, current_backup, follow_symlinks=False)
     current_state = {
         "kind": "directory",
         "backup": str(current_backup.relative_to(transaction_dir)),
+        "uid": current_metadata.st_uid,
+        "gid": current_metadata.st_gid,
+        "mode": stat.S_IMODE(current_metadata.st_mode),
     }
 elif current.is_file():
     current_backup = snapshot_dir / "current-file"
     shutil.copy2(current, current_backup)
+    current_metadata = current.stat()
     current_state = {
         "kind": "file",
         "backup": str(current_backup.relative_to(transaction_dir)),
-        "mode": stat.S_IMODE(current.stat().st_mode),
+        "sha256": __import__("hashlib").sha256(current.read_bytes()).hexdigest(),
+        "uid": current_metadata.st_uid,
+        "gid": current_metadata.st_gid,
+        "mode": stat.S_IMODE(current_metadata.st_mode),
     }
 else:
     current_state = {"kind": "absent"}
@@ -173,10 +208,17 @@ manifest = {
         snapshot_file(root / "DEPLOYED_BUILDINFO"),
     ],
 }
-(transaction_dir / "transaction.json").write_text(
-    json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
+manifest_path = transaction_dir / "transaction.json"
+payload = (json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n").encode("utf-8")
+with manifest_path.open("wb") as handle:
+    handle.write(payload)
+    handle.flush()
+    os.fsync(handle.fileno())
+directory_fd = os.open(transaction_dir, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+try:
+    os.fsync(directory_fd)
+finally:
+    os.close(directory_fd)
 PY
 }
 
@@ -195,16 +237,87 @@ from pathlib import Path
 transaction_dir = Path(sys.argv[1])
 manifest_path = transaction_dir / "transaction.json"
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if not isinstance(manifest, dict) or manifest.get("schema_version") != "oasis7.package_upgrade_rollback.v1":
+    raise RuntimeError(
+        "rollback manifest has unsupported schema_version; refusing mutation"
+    )
 root = Path(manifest["node_root"])
 
 def write_phase(phase: str) -> None:
     manifest["phase"] = phase
     temporary = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    payload = (json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    with temporary.open("wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temporary, manifest_path)
+    directory_fd = os.open(manifest_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+def current_identity(path: Path) -> dict[str, object]:
+    if path.is_symlink():
+        return {"kind": "symlink", "target": os.readlink(path), "resolved": str(path.resolve(strict=False))}
+    if path.is_dir():
+        metadata = path.stat()
+        return {"kind": "directory", "resolved": str(path.resolve(strict=False)), "uid": metadata.st_uid, "gid": metadata.st_gid, "mode": stat.S_IMODE(metadata.st_mode)}
+    if path.is_file():
+        metadata = path.stat()
+        return {"kind": "file", "resolved": str(path.resolve(strict=False)), "uid": metadata.st_uid, "gid": metadata.st_gid, "mode": stat.S_IMODE(metadata.st_mode), "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest()}
+    return {"kind": "absent"}
+
+def current_matches(
+    path: Path,
+    expected: dict[str, object],
+    *,
+    allow_symlink_spelling: bool = False,
+) -> bool:
+    actual = current_identity(path)
+    kind = expected.get("kind")
+    if actual.get("kind") != kind:
+        return False
+    fields = {
+        "symlink": ("resolved",) if allow_symlink_spelling else ("target", "resolved"),
+        "directory": ("resolved", "uid", "gid", "mode"),
+        "file": ("resolved", "uid", "gid", "mode", "sha256"),
+        "absent": (),
+    }[str(kind)]
+    return all(actual.get(field) == expected.get(field) for field in fields)
+
+def current_matches_resolved(path: Path, expected: dict[str, object]) -> bool:
+    actual = current_identity(path)
+    return actual.get("kind") == expected.get("kind") and actual.get("resolved") == expected.get("resolved")
+
+current = root / "current"
+current_state = manifest.get("current")
+if not isinstance(current_state, dict):
+    raise RuntimeError("rollback manifest has invalid current state")
+promoted_current = manifest.get("promoted_current")
+expected_current = promoted_current if isinstance(promoted_current, dict) else current_state
+current_phase = str(manifest.get("phase", ""))
+allow_promoted_spelling = current_phase in {
+    "current_promotion_intent",
+    "current_promoted",
+    "current_normalized",
+}
+current_matches_expected = current_matches(
+    current,
+    expected_current,
+    allow_symlink_spelling=allow_promoted_spelling,
+)
+current_matches_snapshot = current_matches(current, current_state)
+if current_phase == "current_promotion_intent":
+    # The write-ahead intent is durable before removing the old link.  A crash
+    # can therefore leave either the exact snapshot current or the promoted
+    # target exposed; both are safe rollback-recognizable states.  Any other
+    # identity remains external drift and fails closed.
+    if not (current_matches_expected or current_matches_snapshot or current_matches_resolved(current, expected_current)):
+        raise RuntimeError("current identity drift detected; refusing rollback")
+elif not (current_matches_expected or current_matches_resolved(current, expected_current)):
+    raise RuntimeError("current identity drift detected; refusing rollback")
 
 def remove_path(path: Path) -> None:
     if path.is_symlink() or path.is_file():
@@ -244,11 +357,14 @@ elif kind == "directory":
     source = transaction_dir / str(current_state["backup"])
     temporary = current.with_name(f".{current.name}.rollback-{os.getpid()}.tmp")
     shutil.copytree(source, temporary, symlinks=True, copy_function=shutil.copy2)
+    os.chown(temporary, int(current_state["uid"]), int(current_state["gid"]))
+    os.chmod(temporary, int(current_state["mode"]))
     os.replace(temporary, current)
 elif kind == "file":
     source = transaction_dir / str(current_state["backup"])
     temporary = current.with_name(f".{current.name}.rollback-{os.getpid()}.tmp")
     shutil.copy2(source, temporary)
+    os.chown(temporary, int(current_state["uid"]), int(current_state["gid"]))
     os.chmod(temporary, int(current_state["mode"]))
     os.replace(temporary, current)
 elif kind != "absent":
@@ -268,15 +384,22 @@ handle_upgrade_exit() {
   if [[ "$status" -ne 0 && "$transaction_active" -eq 1 && "$transaction_completed" -eq 0 ]]; then
     echo "package_upgrade_rollback_begin=true transaction_dir=$transaction_dir" >&2
     set +e
-    rollback_transaction "$transaction_dir"
-    rollback_status=$?
-    if [[ "$rollback_status" -eq 0 && "$restart_service" -eq 1 ]]; then
+    rollback_status=0
+    if [[ "$restart_service" -eq 1 ]]; then
       systemctl stop "$systemd_service"
       rollback_status=$?
       if [[ "$rollback_status" -eq 0 ]]; then
-        systemctl daemon-reload
+        assert_no_node_processes "$node_root"
         rollback_status=$?
       fi
+    fi
+    if [[ "$rollback_status" -eq 0 ]]; then
+      rollback_transaction "$transaction_dir"
+      rollback_status=$?
+    fi
+    if [[ "$rollback_status" -eq 0 && "$restart_service" -eq 1 ]]; then
+      systemctl daemon-reload
+      rollback_status=$?
       if [[ "$rollback_status" -eq 0 ]]; then
         systemctl start "$systemd_service"
         rollback_status=$?
@@ -391,6 +514,105 @@ print(
     "legacy_replication_migration="
     f"node_id={node_id} commits={copied_commits} blobs={copied_blobs} metadata={copied_metadata}"
 )
+PY
+}
+
+normalize_promoted_current_link() {
+  local current_path=$1
+  local promoted_target=$2
+  local canonical_target=$3
+  python3 - "$current_path" "$promoted_target" "$canonical_target" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+current = Path(sys.argv[1])
+promoted_target = sys.argv[2]
+canonical_target = Path(sys.argv[3])
+if not current.is_symlink():
+    raise SystemExit(f"current is not the promoted symlink: {current}")
+if os.readlink(current) != promoted_target:
+    raise SystemExit("current target changed before commit normalization")
+if current.resolve(strict=False) != canonical_target.resolve(strict=False):
+    raise SystemExit("current resolved target changed before commit normalization")
+
+temporary = current.with_name(f".{current.name}.normalize-{os.getpid()}.tmp")
+try:
+    os.symlink(str(canonical_target), temporary)
+    os.replace(temporary, current)
+    directory_fd = os.open(current.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+finally:
+    if temporary.is_symlink() or temporary.exists():
+        temporary.unlink()
+PY
+}
+
+promote_current_link() {
+  local current_path=$1
+  local promoted_target=$2
+  local directory_backup=$3
+  python3 - "$current_path" "$promoted_target" "$directory_backup" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+current = Path(sys.argv[1])
+promoted_target = sys.argv[2]
+directory_backup = Path(sys.argv[3])
+temporary = current.with_name(f".{current.name}.promote-{os.getpid()}.tmp")
+
+def fsync_parent(path: Path) -> None:
+    directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+def present(path: Path) -> bool:
+    return path.is_symlink() or path.exists()
+
+if present(temporary):
+    raise RuntimeError(f"promotion temporary already exists: {temporary}")
+
+try:
+    os.symlink(promoted_target, temporary)
+    fsync_parent(temporary)
+
+    # A non-symlink directory cannot be atomically replaced by a symlink while
+    # retaining its governed backup.  Rename it to the durable backup first,
+    # then atomically expose the prepared symlink.  Any failure after the
+    # backup rename is intentionally fail-closed: rollback must not guess
+    # whether the replacement reached disk; an operator must recover the
+    # explicitly named backup/current paths.
+    if current.is_dir() and not current.is_symlink():
+        if present(directory_backup):
+            raise RuntimeError(f"directory backup already exists: {directory_backup}")
+        os.replace(current, directory_backup)
+        fsync_parent(current)
+        try:
+            os.replace(temporary, current)
+        except Exception as exc:
+            raise RuntimeError(
+                "directory current promotion incomplete; manual recovery required"
+            ) from exc
+        fsync_parent(current)
+    else:
+        # Symlink, regular file, absent current, and dangling symlink all use
+        # same-directory temporary symlink + atomic replacement, so current is
+        # never intentionally absent during this promotion path.
+        os.replace(temporary, current)
+        fsync_parent(current)
+finally:
+    if temporary.is_symlink() or temporary.exists():
+        temporary.unlink()
 PY
 }
 
@@ -548,6 +770,7 @@ if [[ ! "$release_retention_count" =~ ^[0-9]+$ ]]; then
   die "--release-retention-count must be a non-negative integer"
 fi
 
+node_root_lexical=$(python3 -c 'import os,sys; value=os.path.expanduser(sys.argv[1]); print(value if os.path.isabs(value) else os.path.join(os.getcwd(), value))' "$node_root")
 node_root=$(abs_path "$node_root")
 bundle_tar=$(abs_path "$bundle_tar")
 artifact_ref=${artifact_ref:-"oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"}
@@ -561,6 +784,7 @@ trap handle_upgrade_exit EXIT
 release_dir="$node_root/releases/$package_version"
 tmp_dir="$node_root/releases/.${package_version}.tmp.$$"
 backup_suffix="pre-${package_version//[^A-Za-z0-9_.-]/_}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+transaction_dir="$node_root/package-upgrade-rollback/$backup_suffix"
 
 mkdir -p "$node_root/releases"
 rm -rf "$tmp_dir"
@@ -571,17 +795,20 @@ runtime_bin="$bundle_root/bin/oasis7_chain_runtime"
 [[ -x "$runtime_bin" ]] || die "bundle missing executable runtime: $runtime_bin"
 ensure_governed_bootstrap_bundle_exists "$node_root"
 
+# The durable rollback snapshot is the boundary for all service-manager calls.
+# Keep setup/preflight failures side-effect free with respect to systemd.  This
+# also means a stop/restart failure can use handle_upgrade_exit's existing
+# transaction rollback path without guessing the previous current release.
+mkdir -p "$(dirname "$transaction_dir")"
+create_transaction_snapshot "$node_root" "$transaction_dir"
+transaction_active=1
+
 if [[ "$restart_service" -eq 1 ]]; then
   systemctl daemon-reload
   systemctl stop "$systemd_service"
   sleep 2
   assert_no_node_processes "$node_root"
 fi
-
-transaction_dir="$node_root/package-upgrade-rollback/$backup_suffix"
-mkdir -p "$(dirname "$transaction_dir")"
-create_transaction_snapshot "$node_root" "$transaction_dir"
-transaction_active=1
 
 python3 - "$node_root" "$bundle_root" "$package_version" "$commit" "$run_id" "$artifact_ref" "$transaction_dir" <<'PY'
 from __future__ import annotations
@@ -614,12 +841,23 @@ def atomic_write_preserving_metadata(path: Path, content: str) -> None:
     relative = str(path.relative_to(node_root))
     entry = metadata_by_path.get(relative)
     temporary = path.with_name(f".{path.name}.promote-{os.getpid()}.tmp")
+    payload = content.encode("utf-8")
     try:
-        temporary.write_text(content, encoding="utf-8")
-        if entry is not None:
-            os.chown(temporary, int(entry["uid"]), int(entry["gid"]))
-            os.chmod(temporary, int(entry["mode"]))
+        with temporary.open("wb") as handle:
+            written = 0
+            while written < len(payload):
+                written += handle.write(payload[written:])
+            if entry is not None:
+                os.fchown(handle.fileno(), int(entry["uid"]), int(entry["gid"]))
+                os.fchmod(handle.fileno(), int(entry["mode"]))
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -694,19 +932,17 @@ journal_transaction_phase "$transaction_dir" "release_promoted"
 
 current_path="$node_root/current"
 previous_current_path=""
+promoted_current_path="$node_root/releases/$package_version"
+promoted_current_target="$node_root_lexical/releases/$package_version"
+journal_transaction_phase "$transaction_dir" "current_promotion_intent" "$promoted_current_target"
 if [[ -L "$current_path" || -e "$current_path" ]]; then
   previous_current_path="$(readlink -f "$current_path" || true)"
   if [[ -n "$previous_current_path" ]]; then
     printf '%s\n' "$previous_current_path" >"$node_root/last-$backup_suffix.txt"
   fi
-  if [[ -d "$current_path" && ! -L "$current_path" ]]; then
-    mv "$current_path" "$node_root/current-$backup_suffix.dir"
-  else
-    rm -f "$current_path"
-  fi
 fi
-ln -s "$release_dir" "$current_path"
-journal_transaction_phase "$transaction_dir" "current_promoted"
+promote_current_link "$current_path" "$promoted_current_target" "$node_root/current-$backup_suffix.dir"
+journal_transaction_phase "$transaction_dir" "current_promoted" "$promoted_current_target"
 
 migrate_legacy_replication_root "$node_root" "$node_id"
 journal_transaction_phase "$transaction_dir" "replication_migrated"
@@ -788,6 +1024,13 @@ if [[ "$restart_service" -eq 1 ]]; then
   fi
 fi
 
+# Keep the lexical target spelling during the in-flight transaction so service
+# stop/quiescence evidence identifies exactly the promoted path.  Canonicalize
+# only after all post-start readiness checks pass, before committing the
+# transaction; this preserves existing canonical readback semantics while
+# making rollback evidence unambiguous across symlinked platform prefixes.
+normalize_promoted_current_link "$current_path" "$promoted_current_target" "$promoted_current_path"
+journal_transaction_phase "$transaction_dir" "current_normalized" "$promoted_current_path"
 journal_transaction_phase "$transaction_dir" "completed"
 transaction_completed=1
 echo "upgraded $node_root to $package_version"
