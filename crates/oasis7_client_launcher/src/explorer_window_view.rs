@@ -46,6 +46,14 @@ impl ClientLauncherApp {
                 ui.add_space(8.0);
                 self.render_explorer_command_deck(ui);
                 ui.add_space(6.0);
+                if let Some(error) = self.explorer_panel_state.query_error.as_ref() {
+                    Self::render_explorer_error_panel(
+                        ui,
+                        self.tr("当前查询不可用", "Current Query Unavailable"),
+                        format!("{} ({})", error.message, error.error_code),
+                    );
+                    ui.add_space(6.0);
+                }
                 self.render_overview(ui);
                 ui.add_space(6.0);
                 self.render_tabs(ui);
