@@ -175,6 +175,22 @@ pub(super) enum ExplorerQueryResponse {
     Mempool(WebExplorerMempoolResponse),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExplorerQuerySurface {
+    Overview,
+    Blocks,
+    Block,
+    Txs,
+    Tx,
+    Search,
+    Address,
+    Contracts,
+    Contract,
+    Assets,
+    Mempool,
+    Unknown,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ExplorerQueryError {
     pub(super) error_code: String,
@@ -238,6 +254,7 @@ impl Default for ExplorerTab {
 pub(super) struct ExplorerPanelState {
     pub(super) overview: Option<WebExplorerOverviewResponse>,
     pub(super) query_error: Option<ExplorerQueryError>,
+    query_error_surface: Option<ExplorerQuerySurface>,
     active_tab: ExplorerTab,
     pub(super) blocks: Vec<WebExplorerBlockItem>,
     pub(super) selected_block: Option<WebExplorerBlockItem>,
@@ -279,6 +296,7 @@ impl Default for ExplorerPanelState {
         Self {
             overview: None,
             query_error: None,
+            query_error_surface: None,
             active_tab: ExplorerTab::default(),
             blocks: Vec::new(),
             selected_block: None,
@@ -641,10 +659,11 @@ impl ClientLauncherApp {
         match result {
             Ok(ExplorerQueryResponse::Overview(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Overview);
                     self.explorer_panel_state.overview = Some(response);
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Overview,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -657,7 +676,7 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Blocks(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Blocks);
                     let selected_height = self
                         .explorer_panel_state
                         .selected_block
@@ -678,6 +697,7 @@ impl ClientLauncherApp {
                     }
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Blocks,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -690,10 +710,11 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Block(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Block);
                     self.explorer_panel_state.selected_block = response.block;
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Block,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -706,7 +727,7 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Txs(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Txs);
                     let selected_hash = self
                         .explorer_panel_state
                         .selected_tx
@@ -727,6 +748,7 @@ impl ClientLauncherApp {
                     }
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Txs,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -739,13 +761,14 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Tx(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Tx);
                     if let Some(tx_hash) = response.tx_hash {
                         self.explorer_panel_state.tx_hash_input = tx_hash;
                     }
                     self.explorer_panel_state.selected_tx = response.tx;
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Tx,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -758,11 +781,12 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Search(response)) => {
                 if response.ok {
-                    self.explorer_panel_state.query_error = None;
+                    self.clear_explorer_query_error(ExplorerQuerySurface::Search);
                     self.explorer_panel_state.search_query = response.q;
                     self.explorer_panel_state.search_results = response.items;
                 } else {
                     self.set_explorer_query_error(
+                        ExplorerQuerySurface::Search,
                         response.error_code.clone(),
                         response.error.clone(),
                     );
@@ -790,6 +814,7 @@ impl ClientLauncherApp {
             }
             Err(err) => {
                 self.set_explorer_query_error(
+                    ExplorerQuerySurface::Unknown,
                     Some("transport_error".to_string()),
                     Some(err.clone()),
                 );
@@ -816,12 +841,25 @@ impl ClientLauncherApp {
 
     pub(super) fn set_explorer_query_error(
         &mut self,
+        surface: ExplorerQuerySurface,
         error_code: Option<String>,
         error: Option<String>,
     ) {
+        self.explorer_panel_state.query_error_surface = Some(surface);
         self.explorer_panel_state.query_error = Some(ExplorerQueryError {
             error_code: error_code.unwrap_or_else(|| "unknown".to_string()),
             message: error.unwrap_or_else(|| self.tr("未知错误", "Unknown error").to_string()),
         });
+    }
+
+    pub(super) fn clear_explorer_query_error(&mut self, surface: ExplorerQuerySurface) {
+        let should_clear = self
+            .explorer_panel_state
+            .query_error_surface
+            .is_none_or(|current| current == surface || current == ExplorerQuerySurface::Unknown);
+        if should_clear {
+            self.explorer_panel_state.query_error = None;
+            self.explorer_panel_state.query_error_surface = None;
+        }
     }
 }

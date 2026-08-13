@@ -357,7 +357,7 @@ impl ClientLauncherApp {
 
     pub(super) fn apply_explorer_address_response(&mut self, response: WebExplorerAddressResponse) {
         if response.ok {
-            self.explorer_panel_state.query_error = None;
+            self.clear_explorer_query_error(ExplorerQuerySurface::Address);
             self.explorer_panel_state.p1.address_cursor = response.cursor;
             self.explorer_panel_state.p1.address_limit = response.limit;
             if let Some(account_id) = response.account_id.as_ref() {
@@ -365,7 +365,11 @@ impl ClientLauncherApp {
             }
             self.explorer_panel_state.p1.address_response = Some(response);
         } else {
-            self.set_explorer_query_error(response.error_code.clone(), response.error.clone());
+            self.set_explorer_query_error(
+                ExplorerQuerySurface::Address,
+                response.error_code.clone(),
+                response.error.clone(),
+            );
             self.explorer_panel_state.p1.address_response = Some(response.clone());
             self.log_explorer_error(
                 self.tr("地址查询失败", "Address query failed"),
@@ -380,12 +384,16 @@ impl ClientLauncherApp {
         response: WebExplorerContractsResponse,
     ) {
         if response.ok {
-            self.explorer_panel_state.query_error = None;
+            self.clear_explorer_query_error(ExplorerQuerySurface::Contracts);
             self.explorer_panel_state.p1.contracts_cursor = response.cursor;
             self.explorer_panel_state.p1.contracts_limit = response.limit;
             self.explorer_panel_state.p1.contracts_response = Some(response);
         } else {
-            self.set_explorer_query_error(response.error_code.clone(), response.error.clone());
+            self.set_explorer_query_error(
+                ExplorerQuerySurface::Contracts,
+                response.error_code.clone(),
+                response.error.clone(),
+            );
             self.log_explorer_error(
                 self.tr("合约列表查询失败", "Contracts query failed"),
                 response.error_code,
@@ -399,13 +407,17 @@ impl ClientLauncherApp {
         response: WebExplorerContractResponse,
     ) {
         if response.ok {
-            self.explorer_panel_state.query_error = None;
+            self.clear_explorer_query_error(ExplorerQuerySurface::Contract);
             if let Some(contract_id) = response.contract_id.as_ref() {
                 self.explorer_panel_state.p1.contract_id_input = contract_id.clone();
             }
             self.explorer_panel_state.p1.contract_response = Some(response);
         } else {
-            self.set_explorer_query_error(response.error_code.clone(), response.error.clone());
+            self.set_explorer_query_error(
+                ExplorerQuerySurface::Contract,
+                response.error_code.clone(),
+                response.error.clone(),
+            );
             self.explorer_panel_state.p1.contract_response = Some(response.clone());
             self.log_explorer_error(
                 self.tr("合约详情查询失败", "Contract detail query failed"),
@@ -417,12 +429,16 @@ impl ClientLauncherApp {
 
     pub(super) fn apply_explorer_assets_response(&mut self, response: WebExplorerAssetsResponse) {
         if response.ok {
-            self.explorer_panel_state.query_error = None;
+            self.clear_explorer_query_error(ExplorerQuerySurface::Assets);
             self.explorer_panel_state.p1.assets_cursor = response.cursor;
             self.explorer_panel_state.p1.assets_limit = response.limit;
             self.explorer_panel_state.p1.assets_response = Some(response);
         } else {
-            self.set_explorer_query_error(response.error_code.clone(), response.error.clone());
+            self.set_explorer_query_error(
+                ExplorerQuerySurface::Assets,
+                response.error_code.clone(),
+                response.error.clone(),
+            );
             self.log_explorer_error(
                 self.tr("资产查询失败", "Assets query failed"),
                 response.error_code,
@@ -433,7 +449,7 @@ impl ClientLauncherApp {
 
     pub(super) fn apply_explorer_mempool_response(&mut self, response: WebExplorerMempoolResponse) {
         if response.ok {
-            self.explorer_panel_state.query_error = None;
+            self.clear_explorer_query_error(ExplorerQuerySurface::Mempool);
             let selected_hash = self
                 .explorer_panel_state
                 .p1
@@ -446,7 +462,11 @@ impl ClientLauncherApp {
                 .and_then(|hash| response.items.iter().find(|tx| tx.tx_hash == hash).cloned());
             self.explorer_panel_state.p1.mempool_response = Some(response);
         } else {
-            self.set_explorer_query_error(response.error_code.clone(), response.error.clone());
+            self.set_explorer_query_error(
+                ExplorerQuerySurface::Mempool,
+                response.error_code.clone(),
+                response.error.clone(),
+            );
             self.log_explorer_error(
                 self.tr("内存池查询失败", "Mempool query failed"),
                 response.error_code,

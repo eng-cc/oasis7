@@ -1,5 +1,7 @@
 use super::*;
-use crate::explorer_window::{ExplorerQueryError, ExplorerQueryResponse};
+use crate::explorer_window::{
+    ExplorerQueryError, ExplorerQueryResponse, WebExplorerBlockItem, WebExplorerBlocksResponse,
+};
 
 #[test]
 fn explorer_query_not_ready_error_is_kept_on_current_panel() {
@@ -56,6 +58,90 @@ fn explorer_query_success_clears_previous_visible_error() {
             network_committed_height: 1,
             last_block_hash: Some("hash-a".to_string()),
             last_execution_block_hash: Some("hash-b".to_string()),
+            tracked_records: 0,
+            transfer_total: 0,
+            transfer_accepted: 0,
+            transfer_pending: 0,
+            transfer_confirmed: 0,
+            transfer_failed: 0,
+            transfer_timeout: 0,
+            error_code: None,
+            error: None,
+        },
+    )));
+
+    assert_eq!(app.explorer_panel_state.query_error, None);
+}
+
+#[test]
+fn explorer_blocks_success_preserves_overview_error_until_overview_succeeds() {
+    let mut app = ClientLauncherApp::default();
+
+    app.apply_web_explorer_query_result(Ok(ExplorerQueryResponse::Overview(
+        WebExplorerOverviewResponse {
+            ok: false,
+            observed_at_unix_ms: 1,
+            node_id: String::new(),
+            world_id: String::new(),
+            latest_height: 0,
+            committed_height: 0,
+            network_committed_height: 0,
+            last_block_hash: None,
+            last_execution_block_hash: None,
+            tracked_records: 0,
+            transfer_total: 0,
+            transfer_accepted: 0,
+            transfer_pending: 0,
+            transfer_confirmed: 0,
+            transfer_failed: 0,
+            transfer_timeout: 0,
+            error_code: Some("not_ready".to_string()),
+            error: Some("chain is still starting".to_string()),
+        },
+    )));
+
+    app.apply_web_explorer_query_result(Ok(ExplorerQueryResponse::Blocks(
+        WebExplorerBlocksResponse {
+            ok: true,
+            observed_at_unix_ms: 2,
+            limit: 50,
+            cursor: 0,
+            total: 1,
+            next_cursor: None,
+            items: vec![WebExplorerBlockItem {
+                height: 1,
+                slot: 1,
+                epoch: 1,
+                block_hash: "block-hash".to_string(),
+                action_root: "action-root".to_string(),
+                action_count: 0,
+                committed_at_unix_ms: 2,
+                tx_hashes: Vec::new(),
+            }],
+            error_code: None,
+            error: None,
+        },
+    )));
+
+    assert_eq!(
+        app.explorer_panel_state.query_error,
+        Some(ExplorerQueryError {
+            error_code: "not_ready".to_string(),
+            message: "chain is still starting".to_string(),
+        })
+    );
+
+    app.apply_web_explorer_query_result(Ok(ExplorerQueryResponse::Overview(
+        WebExplorerOverviewResponse {
+            ok: true,
+            observed_at_unix_ms: 3,
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            latest_height: 1,
+            committed_height: 1,
+            network_committed_height: 1,
+            last_block_hash: Some("block-hash".to_string()),
+            last_execution_block_hash: Some("block-hash".to_string()),
             tracked_records: 0,
             transfer_total: 0,
             transfer_accepted: 0,
