@@ -82,7 +82,7 @@ PY
 
 # The journal is the durable transaction authority, not an operator claim.
 jq -e '
-  .schema_version == "oasis7.node_env_transaction.v1"
+  .schema_version == "oasis7.node_env_transaction.v2"
   and .phase == "committed"
   and (.env_path | type == "string")
   and (.service_name | type == "string")
@@ -123,5 +123,36 @@ non_utf8_env="$TMP_DIR/non-utf8-node.env"
 printf 'SERVICE_NAME=old.service\nBROKEN=\377\n' >"$non_utf8_env"
 expect_rejected non-utf8 "$non_utf8_env" \
   run_replace "$non_utf8_env" oasis7-triad-storage.service "$TMP_DIR/non-utf8.journal.json"
+
+# A relative env-file must be journaled as an absolute identity.  Rollback is
+# intentionally invoked from a different cwd to prove it does not resolve the
+# recorded path against an operator's current directory.
+relative_root="$TMP_DIR/relative"
+relative_work="$relative_root/work"
+relative_other="$relative_root/other"
+mkdir -p "$relative_work" "$relative_other"
+relative_env="$relative_work/node.env"
+relative_journal="$relative_work/node.journal.json"
+cat >"$relative_env" <<'EOF'
+NODE_ID=relative-test
+SERVICE_NAME=old.service
+EOF
+cp "$relative_env" "$relative_root/relative.before"
+(
+  cd "$relative_work"
+  "$HELPER" --env-file node.env --service-name new.service --journal node.journal.json >/dev/null
+)
+expected_relative_env="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$relative_env")"
+jq -e --arg expected "$expected_relative_env" '.env_path == $expected and (.env_path | startswith("/"))' \
+  "$relative_journal" >/dev/null || {
+    printf '%s\n' 'journal did not persist absolute env path for relative --env-file' >&2
+    jq '.env_path' "$relative_journal" >&2
+    exit 1
+  }
+(
+  cd "$relative_other"
+  "$HELPER" --rollback --journal "$relative_journal" >/dev/null
+)
+cmp -s "$relative_root/relative.before" "$relative_env"
 
 printf '%s\n' 'ok: governed node.env transaction contract'

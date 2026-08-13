@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-SCHEMA = "oasis7.node_env_transaction.v1"
+SCHEMA = "oasis7.node_env_transaction.v2"
 SERVICE_NAME_RE = re.compile(r"^[A-Za-z0-9_.@:-]+$")
 
 
@@ -55,10 +55,21 @@ def digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def descriptor_integrity(content: bytes, metadata: dict[str, int]) -> str:
+    binding = json.dumps(
+        {"sha256": digest(content), "stat": metadata},
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return digest(binding)
+
+
 def descriptor(content: bytes, metadata: dict[str, int]) -> dict[str, Any]:
     return {
         "sha256": digest(content),
         "stat": metadata,
+        "integrity_sha256": descriptor_integrity(content, metadata),
         "content_base64": base64.b64encode(content).decode("ascii"),
     }
 
@@ -69,11 +80,19 @@ def descriptor_content(raw: Any, label: str) -> tuple[bytes, dict[str, int], str
     try:
         encoded = raw["content_base64"]
         expected_sha = raw["sha256"]
+        expected_integrity = raw["integrity_sha256"]
         raw_stat = raw["stat"]
-        if not isinstance(encoded, str) or not isinstance(expected_sha, str) or not isinstance(raw_stat, dict):
+        if (
+            not isinstance(encoded, str)
+            or not isinstance(expected_sha, str)
+            or not isinstance(expected_integrity, str)
+            or not isinstance(raw_stat, dict)
+        ):
             raise ValueError("invalid descriptor field types")
         if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
             raise ValueError("invalid sha256")
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_integrity):
+            raise ValueError("invalid integrity_sha256")
         metadata = {
             key: int(raw_stat[key]) for key in ("uid", "gid", "mode")
         }
@@ -85,6 +104,9 @@ def descriptor_content(raw: Any, label: str) -> tuple[bytes, dict[str, int], str
     actual_sha = digest(content)
     if actual_sha != expected_sha:
         fail(f"journal {label} content hash mismatch")
+    actual_integrity = descriptor_integrity(content, metadata)
+    if actual_integrity != expected_integrity:
+        fail(f"journal {label} integrity binding mismatch")
     return content, metadata, actual_sha
 
 
@@ -208,7 +230,7 @@ def validate_service_name(service_name: str) -> None:
 
 def replace(args: argparse.Namespace) -> int:
     env_path = Path(args.env_file).expanduser()
-    journal_path = Path(args.journal).expanduser()
+    journal_path = Path(args.journal).expanduser().resolve(strict=False)
     if env_path.resolve(strict=False) == journal_path.resolve(strict=False):
         fail("env-file and journal must be different paths")
     if journal_path.exists() or journal_path.is_symlink():
@@ -216,6 +238,7 @@ def replace(args: argparse.Namespace) -> int:
     directory_path(journal_path.parent, "journal parent")
     validate_service_name(args.service_name)
     before_content, text, before_stat = read_env(env_path)
+    env_path = env_path.resolve(strict=True)
     index, line = assignment_line(text)
     if line.endswith("\r\n"):
         ending = "\r\n"
@@ -276,15 +299,20 @@ def replace(args: argparse.Namespace) -> int:
 
 
 def rollback(args: argparse.Namespace) -> int:
-    journal_path = Path(args.journal).expanduser()
+    journal_path = Path(args.journal).expanduser().resolve(strict=False)
     regular_path(journal_path, "journal")
     try:
         payload = json.loads(journal_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         fail(f"invalid journal: {error}")
     if not isinstance(payload, dict) or payload.get("schema_version") != SCHEMA:
-        fail("journal has invalid schema_version")
+        fail(
+            "unsupported schema_version; expected "
+            f"{SCHEMA} with cryptographically bound content/stat descriptors"
+        )
     env_path = Path(str(payload.get("env_path") or ""))
+    if not env_path.is_absolute():
+        fail("journal env_path must be an absolute canonical path")
     regular_path(env_path, "env file")
     before = payload.get("before")
     after = payload.get("after")

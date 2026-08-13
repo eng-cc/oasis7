@@ -237,6 +237,10 @@ from pathlib import Path
 transaction_dir = Path(sys.argv[1])
 manifest_path = transaction_dir / "transaction.json"
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if not isinstance(manifest, dict) or manifest.get("schema_version") != "oasis7.package_upgrade_rollback.v1":
+    raise RuntimeError(
+        "rollback manifest has unsupported schema_version; refusing mutation"
+    )
 root = Path(manifest["node_root"])
 
 def write_phase(phase: str) -> None:
@@ -265,18 +269,27 @@ def current_identity(path: Path) -> dict[str, object]:
         return {"kind": "file", "resolved": str(path.resolve(strict=False)), "uid": metadata.st_uid, "gid": metadata.st_gid, "mode": stat.S_IMODE(metadata.st_mode), "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest()}
     return {"kind": "absent"}
 
-def current_matches(path: Path, expected: dict[str, object]) -> bool:
+def current_matches(
+    path: Path,
+    expected: dict[str, object],
+    *,
+    allow_symlink_spelling: bool = False,
+) -> bool:
     actual = current_identity(path)
     kind = expected.get("kind")
     if actual.get("kind") != kind:
         return False
     fields = {
-        "symlink": ("target", "resolved"),
+        "symlink": ("resolved",) if allow_symlink_spelling else ("target", "resolved"),
         "directory": ("resolved", "uid", "gid", "mode"),
         "file": ("resolved", "uid", "gid", "mode", "sha256"),
         "absent": (),
     }[str(kind)]
     return all(actual.get(field) == expected.get(field) for field in fields)
+
+def current_matches_resolved(path: Path, expected: dict[str, object]) -> bool:
+    actual = current_identity(path)
+    return actual.get("kind") == expected.get("kind") and actual.get("resolved") == expected.get("resolved")
 
 current = root / "current"
 current_state = manifest.get("current")
@@ -284,7 +297,26 @@ if not isinstance(current_state, dict):
     raise RuntimeError("rollback manifest has invalid current state")
 promoted_current = manifest.get("promoted_current")
 expected_current = promoted_current if isinstance(promoted_current, dict) else current_state
-if not current_matches(current, expected_current):
+current_phase = str(manifest.get("phase", ""))
+allow_promoted_spelling = current_phase in {
+    "current_promotion_intent",
+    "current_promoted",
+    "current_normalized",
+}
+current_matches_expected = current_matches(
+    current,
+    expected_current,
+    allow_symlink_spelling=allow_promoted_spelling,
+)
+current_matches_snapshot = current_matches(current, current_state)
+if current_phase == "current_promotion_intent":
+    # The write-ahead intent is durable before removing the old link.  A crash
+    # can therefore leave either the exact snapshot current or the promoted
+    # target exposed; both are safe rollback-recognizable states.  Any other
+    # identity remains external drift and fails closed.
+    if not (current_matches_expected or current_matches_snapshot or current_matches_resolved(current, expected_current)):
+        raise RuntimeError("current identity drift detected; refusing rollback")
+elif not (current_matches_expected or current_matches_resolved(current, expected_current)):
     raise RuntimeError("current identity drift detected; refusing rollback")
 
 def remove_path(path: Path) -> None:
@@ -515,6 +547,69 @@ try:
         os.fsync(directory_fd)
     finally:
         os.close(directory_fd)
+finally:
+    if temporary.is_symlink() or temporary.exists():
+        temporary.unlink()
+PY
+}
+
+promote_current_link() {
+  local current_path=$1
+  local promoted_target=$2
+  local directory_backup=$3
+  python3 - "$current_path" "$promoted_target" "$directory_backup" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+current = Path(sys.argv[1])
+promoted_target = sys.argv[2]
+directory_backup = Path(sys.argv[3])
+temporary = current.with_name(f".{current.name}.promote-{os.getpid()}.tmp")
+
+def fsync_parent(path: Path) -> None:
+    directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+def present(path: Path) -> bool:
+    return path.is_symlink() or path.exists()
+
+if present(temporary):
+    raise RuntimeError(f"promotion temporary already exists: {temporary}")
+
+try:
+    os.symlink(promoted_target, temporary)
+    fsync_parent(temporary)
+
+    # A non-symlink directory cannot be atomically replaced by a symlink while
+    # retaining its governed backup.  Rename it to the durable backup first,
+    # then atomically expose the prepared symlink.  Any failure after the
+    # backup rename is intentionally fail-closed: rollback must not guess
+    # whether the replacement reached disk; an operator must recover the
+    # explicitly named backup/current paths.
+    if current.is_dir() and not current.is_symlink():
+        if present(directory_backup):
+            raise RuntimeError(f"directory backup already exists: {directory_backup}")
+        os.replace(current, directory_backup)
+        fsync_parent(current)
+        try:
+            os.replace(temporary, current)
+        except Exception as exc:
+            raise RuntimeError(
+                "directory current promotion incomplete; manual recovery required"
+            ) from exc
+        fsync_parent(current)
+    else:
+        # Symlink, regular file, absent current, and dangling symlink all use
+        # same-directory temporary symlink + atomic replacement, so current is
+        # never intentionally absent during this promotion path.
+        os.replace(temporary, current)
+        fsync_parent(current)
 finally:
     if temporary.is_symlink() or temporary.exists():
         temporary.unlink()
@@ -839,18 +934,14 @@ current_path="$node_root/current"
 previous_current_path=""
 promoted_current_path="$node_root/releases/$package_version"
 promoted_current_target="$node_root_lexical/releases/$package_version"
+journal_transaction_phase "$transaction_dir" "current_promotion_intent" "$promoted_current_target"
 if [[ -L "$current_path" || -e "$current_path" ]]; then
   previous_current_path="$(readlink -f "$current_path" || true)"
   if [[ -n "$previous_current_path" ]]; then
     printf '%s\n' "$previous_current_path" >"$node_root/last-$backup_suffix.txt"
   fi
-  if [[ -d "$current_path" && ! -L "$current_path" ]]; then
-    mv "$current_path" "$node_root/current-$backup_suffix.dir"
-  else
-    rm -f "$current_path"
-  fi
 fi
-ln -s "$promoted_current_target" "$current_path"
+promote_current_link "$current_path" "$promoted_current_target" "$node_root/current-$backup_suffix.dir"
 journal_transaction_phase "$transaction_dir" "current_promoted" "$promoted_current_target"
 
 migrate_legacy_replication_root "$node_root" "$node_id"

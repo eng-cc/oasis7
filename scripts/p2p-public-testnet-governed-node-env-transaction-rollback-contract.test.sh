@@ -41,6 +41,7 @@ fi
 read -r stat_env stat_journal <<<"$(make_transaction stat)"
 jq '.before.stat.mode = 0' "$stat_journal" >"$TMP_DIR/stat-tampered.json"
 mv "$TMP_DIR/stat-tampered.json" "$stat_journal"
+cp "$stat_env" "$TMP_DIR/stat.before"
 set +e
 "$HELPER" --rollback --journal "$stat_journal" >"$TMP_DIR/stat.out" 2>&1
 stat_rc=$?
@@ -48,6 +49,9 @@ set -e
 if [[ "$stat_rc" -eq 0 ]]; then
   printf '%s\n' 'rollback accepted a journal with a tampered before.stat.mode descriptor' >&2
   cat "$TMP_DIR/stat.out" >&2
+  failures=1
+elif ! cmp -s "$TMP_DIR/stat.before" "$stat_env"; then
+  printf '%s\n' 'rollback mutated env bytes after rejecting a tampered before.stat descriptor' >&2
   failures=1
 fi
 
