@@ -175,6 +175,12 @@ pub(super) enum ExplorerQueryResponse {
     Mempool(WebExplorerMempoolResponse),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ExplorerQueryError {
+    pub(super) error_code: String,
+    pub(super) message: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ExplorerStatusFilter {
     All,
@@ -231,6 +237,7 @@ impl Default for ExplorerTab {
 #[derive(Debug, Clone)]
 pub(super) struct ExplorerPanelState {
     pub(super) overview: Option<WebExplorerOverviewResponse>,
+    pub(super) query_error: Option<ExplorerQueryError>,
     active_tab: ExplorerTab,
     pub(super) blocks: Vec<WebExplorerBlockItem>,
     pub(super) selected_block: Option<WebExplorerBlockItem>,
@@ -271,6 +278,7 @@ impl Default for ExplorerPanelState {
     fn default() -> Self {
         Self {
             overview: None,
+            query_error: None,
             active_tab: ExplorerTab::default(),
             blocks: Vec::new(),
             selected_block: None,
@@ -633,8 +641,13 @@ impl ClientLauncherApp {
         match result {
             Ok(ExplorerQueryResponse::Overview(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     self.explorer_panel_state.overview = Some(response);
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("浏览器概览查询失败", "Explorer overview query failed"),
                         response.error_code,
@@ -644,6 +657,7 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Blocks(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     let selected_height = self
                         .explorer_panel_state
                         .selected_block
@@ -663,6 +677,10 @@ impl ClientLauncherApp {
                             .cloned();
                     }
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("区块列表查询失败", "Block list query failed"),
                         response.error_code,
@@ -672,8 +690,13 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Block(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     self.explorer_panel_state.selected_block = response.block;
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("区块详情查询失败", "Block detail query failed"),
                         response.error_code,
@@ -683,6 +706,7 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Txs(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     let selected_hash = self
                         .explorer_panel_state
                         .selected_tx
@@ -702,6 +726,10 @@ impl ClientLauncherApp {
                             .cloned();
                     }
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("交易列表查询失败", "Tx list query failed"),
                         response.error_code,
@@ -711,11 +739,16 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Tx(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     if let Some(tx_hash) = response.tx_hash {
                         self.explorer_panel_state.tx_hash_input = tx_hash;
                     }
                     self.explorer_panel_state.selected_tx = response.tx;
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("交易详情查询失败", "Tx detail query failed"),
                         response.error_code,
@@ -725,9 +758,14 @@ impl ClientLauncherApp {
             }
             Ok(ExplorerQueryResponse::Search(response)) => {
                 if response.ok {
+                    self.explorer_panel_state.query_error = None;
                     self.explorer_panel_state.search_query = response.q;
                     self.explorer_panel_state.search_results = response.items;
                 } else {
+                    self.set_explorer_query_error(
+                        response.error_code.clone(),
+                        response.error.clone(),
+                    );
                     self.log_explorer_error(
                         self.tr("搜索查询失败", "Search query failed"),
                         response.error_code,
@@ -751,6 +789,10 @@ impl ClientLauncherApp {
                 self.apply_explorer_mempool_response(response);
             }
             Err(err) => {
+                self.set_explorer_query_error(
+                    Some("transport_error".to_string()),
+                    Some(err.clone()),
+                );
                 self.append_log(format!(
                     "{}: {err}",
                     self.tr("浏览器查询失败", "Explorer query failed")
@@ -770,5 +812,16 @@ impl ClientLauncherApp {
             .map(|code| format!(" ({code})"))
             .unwrap_or_default();
         self.append_log(format!("{prefix}{error_code}: {error_text}"));
+    }
+
+    pub(super) fn set_explorer_query_error(
+        &mut self,
+        error_code: Option<String>,
+        error: Option<String>,
+    ) {
+        self.explorer_panel_state.query_error = Some(ExplorerQueryError {
+            error_code: error_code.unwrap_or_else(|| "unknown".to_string()),
+            message: error.unwrap_or_else(|| self.tr("未知错误", "Unknown error").to_string()),
+        });
     }
 }

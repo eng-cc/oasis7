@@ -1,4 +1,75 @@
 use super::*;
+use crate::explorer_window::{ExplorerQueryError, ExplorerQueryResponse};
+
+#[test]
+fn explorer_query_not_ready_error_is_kept_on_current_panel() {
+    let mut app = ClientLauncherApp::default();
+
+    app.apply_web_explorer_query_result(Ok(ExplorerQueryResponse::Overview(
+        WebExplorerOverviewResponse {
+            ok: false,
+            observed_at_unix_ms: 1,
+            node_id: String::new(),
+            world_id: String::new(),
+            latest_height: 0,
+            committed_height: 0,
+            network_committed_height: 0,
+            last_block_hash: None,
+            last_execution_block_hash: None,
+            tracked_records: 0,
+            transfer_total: 0,
+            transfer_accepted: 0,
+            transfer_pending: 0,
+            transfer_confirmed: 0,
+            transfer_failed: 0,
+            transfer_timeout: 0,
+            error_code: Some("not_ready".to_string()),
+            error: Some("chain is still starting".to_string()),
+        },
+    )));
+
+    assert_eq!(
+        app.explorer_panel_state.query_error,
+        Some(ExplorerQueryError {
+            error_code: "not_ready".to_string(),
+            message: "chain is still starting".to_string(),
+        })
+    );
+}
+
+#[test]
+fn explorer_query_success_clears_previous_visible_error() {
+    let mut app = ClientLauncherApp::default();
+    app.explorer_panel_state.query_error = Some(ExplorerQueryError {
+        error_code: "not_ready".to_string(),
+        message: "chain is still starting".to_string(),
+    });
+
+    app.apply_web_explorer_query_result(Ok(ExplorerQueryResponse::Overview(
+        WebExplorerOverviewResponse {
+            ok: true,
+            observed_at_unix_ms: 2,
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            latest_height: 1,
+            committed_height: 1,
+            network_committed_height: 1,
+            last_block_hash: Some("hash-a".to_string()),
+            last_execution_block_hash: Some("hash-b".to_string()),
+            tracked_records: 0,
+            transfer_total: 0,
+            transfer_accepted: 0,
+            transfer_pending: 0,
+            transfer_confirmed: 0,
+            transfer_failed: 0,
+            transfer_timeout: 0,
+            error_code: None,
+            error: None,
+        },
+    )));
+
+    assert_eq!(app.explorer_panel_state.query_error, None);
+}
 
 #[test]
 fn resolve_explorer_my_account_candidate_prefers_transfer_sender() {
