@@ -98,7 +98,7 @@ M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段
   - AC-3: Player verbs include diagnose regional blocker, inspect quote, deploy, pay upkeep only while stocked, service repair/logistics, inspect receipt, reclaim, and fresh full-cost reinstall.
   - AC-4: The reachable core lifecycle covers blocker -> quote -> deploy -> measured service(s) -> stock zero -> service blocked -> upkeep rejected/no charge -> destructive reclaim -> optional fresh full-cost reinstall.
   - AC-5: State/economy rules cover install cost, upkeep, service radius, one depot per claim/location, supported resources, effect caps, degradation/grace, and funding provenance.
-  - AC-6: Failure/recovery covers unpaid upkeep, out of range, unsupported resource, missing regional blocker receipt, duplicate facility, insufficient funds, permission denial, and reclaim.
+  - AC-6: Current-slice failure/recovery covers unpaid upkeep, out of range, unsupported resource, an empty regional blocker causal reference, duplicate facility, insufficient funds, permission denial, and reclaim. The current runtime treats a non-empty `regional_blocker_receipt_id` as an opaque causal reference; it does not yet prove that the referenced repair/logistics receipt exists.
   - AC-7: Every applied service records module id/version/hash, schema version and proposal hash for replay/audit.
   - AC-8: QA smoke proves one repair/logistics action becomes measurably cheaper, faster, or less risky because of depot, and the player can identify remaining blocker.
   - AC-9: Install quote must include a minimal ROI strip: expected future blockers covered, break-even uses, upkeep horizon, low-use warning and recommendation reason; if the player can only see one before/after quote improvement, the depot is not yet a strategic facility choice.
@@ -107,7 +107,7 @@ M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段
   - AC-12: Applied receipts expose exact debit and inventory/throughput before/after. Reachable depletion is reported as insufficient inventory with reclaim/fresh reinstall or another action; throughput `16` is retained as a defense-in-depth ceiling/replay invariant, not an independently naturally reachable gameplay blocker or recovery loop. Independent preview-confirm concurrency and stale-preview recovery are not current acceptance.
   - AC-13: v2 MVP accepts exactly `supported_resource_kinds == ["data"]`; empty, non-Data, mixed, duplicate, or case-variant lists reject atomically without charging install cost or creating facility state.
   - AC-14: Every install quote distinguishes a forecast sufficient for a strategic recommendation from an insufficient/stale forecast. A sufficient forecast identifies its regional-pressure/blocker evidence and horizon; an insufficient forecast sets `low_use_warning=true`, gives an insufficiency reason, and must not represent `expected_future_blockers_covered` or `break_even_uses` as a recommendation to deploy. The quote remains inspectable and deployable when other rules allow it, preserving player choice without false certainty.
-  - Future follow-up, not current acceptance or current playability evidence: authorized refill, canonical epoch clock, throughput rollover/reset, and configurable commissioning/debit curves require gameplay/runtime joint design and their own acceptance/tests.
+  - Future follow-up, not current acceptance or current playability evidence: canonical repair/logistics receipt production and provenance validation (or an equivalent canonical regional-pressure evidence source), authorized refill, canonical epoch clock, throughput rollover/reset, and configurable commissioning/debit curves require gameplay/runtime joint design and their own acceptance/tests. Until a canonical evidence producer exists, tests and public claims must not describe a non-empty causal reference as an authenticated prior receipt.
 
 当前可用性与 release/public claim guard：上述 AC 与路线图定义目标合同和验收边界，不改变当前 stage 或 claim。只有同一新鲜候选具备适用的 runtime、WASM、Viewer/pure API、QA/playtest 及需要时 recovery/sync 证据，并经产品决策与 LiveOps 同步后，才可由根 `README.md` 评估或表达公开 claim；单项实现、topic 文档、历史证据或局部 green 均不能代签。
 - Non-Goals:
@@ -138,7 +138,7 @@ M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段
   - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - Edge Cases & Error Handling:
-  - Missing `regional_blocker_receipt_id`: install is refused; player receives blocker explaining required prior repair/logistics receipt.
+  - Empty `regional_blocker_receipt_id`: install is refused; player receives a blocker explaining that a prior repair/logistics causal reference is required. Unknown/non-empty provenance is not validated in the current slice because no canonical repair/logistics receipt producer or regional-pressure evidence ledger exists; authenticated provenance remains a future fail-closed gate.
   - Duplicate `owner_claim_id + location_id`: install is refused with existing depot pointer and inspect/reclaim option.
   - Unpaid upkeep while stocked: service is blocked or degraded; player can pay upkeep, reclaim, or choose another intervention. At stock zero, upkeep rejects and charges nothing.
   - Out of range: proposal returns not applicable; UI must show distance/radius explanation and next valid target when known.

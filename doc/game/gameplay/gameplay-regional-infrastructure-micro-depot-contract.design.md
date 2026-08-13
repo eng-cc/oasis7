@@ -61,7 +61,7 @@ WASM proposes, runtime validates / applies / signs.
 
 1. `first_capability_completed=yes`：玩家已完成 first capability，不再处于首局 trust/capability teaching loop。
 2. `stable_claim_available=yes`：玩家拥有可操作 agent claim，且 claim / agent 与目标区域存在合理关系。
-3. `regional_blocker_receipt_id` 或等价区域压力证据已存在，证明玩家见过 repair / logistics blocker，而不是被强行引入设施系统。
+3. 目标态要求 `regional_blocker_receipt_id` 或等价的 canonical 区域压力证据已存在，证明玩家见过 repair / logistics blocker，而不是被强行引入设施系统。当前 first slice 尚无 canonical repair/logistics receipt producer 或 regional-pressure evidence ledger，因此只携带 opaque causal reference，不能把非空字符串宣称为已认证 receipt。
 4. `regional_specialist_lane_state=active_or_eligible`：玩家已进入或可进入 `regional specialist / limited-scope regional influence`。
 5. 玩家已能读懂 claim/upkeep、repair/logistics blocker、before/after quote 和 receipt surface。
 6. 当前区域存在重复或高价值 blocker，例如 `supply_missing`、`route_blocked`、repair 等待过长或 logistics quote 风险过高。
@@ -72,7 +72,7 @@ WASM proposes, runtime validates / applies / signs.
 
 当前内核 first slice 的硬约束：
 
-- `InstallMicroDepot` 必须携带 `regional_blocker_receipt_id`，它代表前置 repair / logistics blocker 闭环产出的 receipt；没有这个 receipt，runtime 直接拒绝创建。
+- `InstallMicroDepot` 当前必须携带非空 `regional_blocker_receipt_id` 作为前置 repair / logistics blocker 的 opaque causal reference；空值由 runtime 直接拒绝。真实 receipt 的存在性、agent/location/action provenance 校验必须等 canonical producer 或等价 canonical regional-pressure evidence source 落地后再启用 fail-closed gate；当前 slice 不得把非空引用表述为已完成认证。
 - 同一 `owner_claim_id + location_id` 只能存在一个 `micro_depot`，避免把它变成自由堆叠建造物。
 - 安装会扣固定 `Data` 成本，upkeep 会扣固定 `Data` 成本；数值先作为 kernel 常量落地，后续再迁入平衡表。
 - 服务动作必须由 depot owner agent 提交；非 owner 不能触发服务，也不能消耗 owner 资源。
