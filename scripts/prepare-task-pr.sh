@@ -1196,9 +1196,11 @@ if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
-  for role in "${REVIEW_MANUAL_ROLES[@]}"; do
-    ROLE_SELECTOR_ARGS+=(--manual-role "$role")
-  done
+  if [[ "${#REVIEW_MANUAL_ROLES[@]}" -gt 0 ]]; then
+    for role in "${REVIEW_MANUAL_ROLES[@]}"; do
+      ROLE_SELECTOR_ARGS+=(--manual-role "$role")
+    done
+  fi
   REVIEW_ROLE_SELECTION_JSON="$(python3 "$ROOT_DIR/scripts/pm/review-role-selector.py" "${ROLE_SELECTOR_ARGS[@]}")" \
     || die "manual review role selection is required for change class: $REVIEW_CHANGE_CLASS"
   REQUIRED_REVIEW_ROLES="$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["roles"]))' "$REVIEW_ROLE_SELECTION_JSON")"

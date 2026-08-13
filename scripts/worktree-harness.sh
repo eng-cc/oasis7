@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
+source "$ROOT_DIR/scripts/viewer-dependency-preflight.sh"
 
 usage() {
   cat <<'USAGE'
@@ -185,6 +186,8 @@ case "$action" in
       echo "hint: use direct oasis7_viewer_live --no-llm only for observer/debug diagnostics outside the launcher stack" >&2
       exit 2
     fi
+
+    viewer_dependency_preflight "$ROOT_DIR" build
 
     if wh_pid_alive "$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)"; then
       echo "info: harness already running for $WORKTREE_ID"

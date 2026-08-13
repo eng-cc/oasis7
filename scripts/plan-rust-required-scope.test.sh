@@ -92,6 +92,17 @@ assert_key_equals "$config_output" run_rust_baseline true
 assert_key_equals "$config_output" needs_rust_toolchain true
 assert_key_equals "$config_output" needs_node true
 
+governance_helper_output="$(plan_for_paths \
+  scripts/prepare-task-pr.sh \
+  scripts/pm/patch-equivalence-receipt.sh \
+  scripts/pm/prepare-task-pr-review-risk.test.py)"
+assert_key_equals "$governance_helper_output" scope minimal
+assert_key_equals "$governance_helper_output" run_rust_baseline false
+assert_key_equals "$governance_helper_output" needs_rust_toolchain false
+assert_key_equals "$governance_helper_output" needs_node false
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/prepare-task-pr.sh"
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm/patch-equivalence-receipt.sh"
+
 unknown_output="$(plan_for_path unknown-unclassified-input.txt)"
 assert_key_equals "$unknown_output" scope full
 assert_reason_contains "$unknown_output" "unclassified_or_unresolvable:unknown-unclassified-input.txt"

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "ensure:dependencies": "bash ../../scripts/viewer-dependency-preflight.sh --root ../.. --purpose all",
     "test:ui": "vitest run",
     "test:ui:watch": "vitest",
     "test:feedback-contract": "node ./scripts/software-safe-feedback-contract.test.mjs",

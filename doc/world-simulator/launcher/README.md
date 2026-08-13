@@ -17,6 +17,7 @@
 - 当前页只承担 `launcher/` 子目录 landing page 职责，不复制完整长表。
 - `../README.md` 是 world-simulator 模块级 landing page，负责跨 `viewer / launcher / llm / kernel / scenario / m4` 分流。
 - GitHub task issue evidence 是 launcher 活跃任务、阻断和验证状态的唯一 mutable truth；`.pm/github-project-sync` 只作为 task_uid 到 issue/project item 的本地 mapping/archive 辅助。
+- Viewer 本地依赖由各仓库自有 build/test wrapper 在实际执行前按需检查；缺失依赖时只执行一次 `npm --prefix crates/oasis7_viewer ci`，随后重新校验。依赖已就绪时不安装；安装失败会立即报错。CI 仍由显式 job 负责依赖准备，不在 CI 命令中隐藏安装。
 - `../prd.index.md` 是 world-simulator 模块完整文件级索引，适合已知主题后按文件名查找。
 - 本页只维护簇级入口；当某个专题退化为历史执行证据时，继续让它通过 `../prd.index.md` 可检索，而不是回到默认首读路径。
 

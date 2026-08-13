@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+[[ -x "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" ]] || {
+  echo "patch-equivalence-receipt helper must be directly executable" >&2
+  exit 1
+}
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -34,7 +38,7 @@ git -C "$REPO" commit -qm squash-integration
 MAIN_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
 
 RECEIPT="$TMPDIR/patch-equivalence.json"
-bash "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
+"$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
   --branch-tip "$BRANCH_TIP" --main-commit "$MAIN_COMMIT" --main-parent "$MAIN_PARENT" \
   >"$RECEIPT"
 
@@ -52,7 +56,7 @@ PY
 
 # A squash commit that omits the task change must not attest.
 OMITTED_COMMIT="$MAIN_PARENT"
-if bash "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
+if "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
   --branch-tip "$BRANCH_TIP" --main-commit "$OMITTED_COMMIT" --main-parent "$BASE" \
   >"$TMPDIR/omitted.json" 2>"$TMPDIR/omitted.err"; then
   echo "expected omitted task change to fail patch equivalence" >&2
@@ -66,7 +70,7 @@ sed -i.bak 's/line-25/altered-line-25/' "$REPO/shared"
 rm "$REPO/shared.bak"
 git -C "$REPO" commit -qam altered-integration
 ALTERED_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
-if bash "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
+if "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$REPO" \
   --branch-tip "$BRANCH_TIP" --main-commit "$ALTERED_COMMIT" --main-parent "$MAIN_PARENT" \
   >"$TMPDIR/altered.json" 2>"$TMPDIR/altered.err"; then
   echo "expected altered task change to fail patch equivalence" >&2

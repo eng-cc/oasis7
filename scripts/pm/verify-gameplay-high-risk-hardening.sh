@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
+source "$ROOT_DIR/scripts/viewer-dependency-preflight.sh"
+viewer_dependency_preflight "$ROOT_DIR" test
 
 oasis7_cargo_dev test -p oasis7 \
   viewer::runtime_live::tests::snapshot_progress::compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedback \
