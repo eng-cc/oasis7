@@ -423,13 +423,13 @@ Runtime 必须：
 
 - `first_capability_completed=yes`
 - `stable_claim_available=yes`
-- `regional_blocker_receipt_id` 已存在，或有等价 regional pressure evidence
+- 当前 slice 提供非空 `regional_blocker_receipt_id` opaque causal reference；目标态改由已认证 receipt 或等价 canonical regional pressure evidence 满足
 - `regional_specialist_lane_state=active_or_eligible`
 - 玩家已能读懂 claim/upkeep、repair/logistics blocker、before/after quote 和 receipt surface
 
 ```text
 0-2 min after regional-specialist entry: player sees regional pressure card: repair target blocked by supply shortage
-2-4 min: player opens repair quote and sees high cost / high risk tied to an existing blocker receipt
+2-4 min: player opens repair quote and sees high cost / high risk tied to the current opaque blocker causal reference; this is not authenticated receipt-provenance evidence
 4-6 min: system suggests micro_depot; player reviews cost, upkeep, radius, expected effect and coarse ROI strip
 6-8 min: micro_depot.wasm proposal changes quote; runtime emits before / after preview
 8-10 min: player executes repair/logistics action and receives receipt
@@ -446,7 +446,7 @@ Runtime 必须：
 
 失败/防漂移条件：
 
-- 若测试、样本或文案在 first capability、稳定 claim、repair/logistics blocker receipt 或等价区域压力证据、regional specialist lane、claim/upkeep 与 repair/logistics blocker literacy 之前安排 depot 部署，标记 `micro_depot_phase_boundary_missing`。
+- 若测试、样本或文案在 first capability、稳定 claim、当前 opaque blocker causal reference（目标态为已认证 repair/logistics receipt 或等价 canonical 区域压力证据）、regional specialist lane、claim/upkeep 与 repair/logistics blocker literacy 之前安排 depot 部署，标记 `micro_depot_phase_boundary_missing`。
 - 若样本标题只写 `0-10 min` 而不写 `post-first-capability` 或 `regional-specialist`，同样标记 `micro_depot_phase_boundary_missing`，避免 QA / 实现把 depot 当成 early onboarding gate。
 
 ## 13. 风险
