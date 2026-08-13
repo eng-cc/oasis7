@@ -53,6 +53,10 @@
 
 当玩家提出当前未开放的过细动作时，产品体验必须给出可执行的 canonical 替代动作；没有安全替代时，必须说明边界和下一次可决策点，而不是伪造动作或只留下无解释的失败。具身或 block-editing 仅是未来候选：只有在强化本模块的间接控制主路线、具备对应专业域合同与验证，并经显式跨域决策后才可进入原型。
 
+canonical 替代不是对原请求的静默自动执行。存在一个或多个安全候选时，每个已发布候选至少说明目标与作用范围、主要成本、主要风险、预计后果、是否仍可撤回，以及为何推荐；这些信息是可比较的预览，不产生资源扣减、权限继承、排队、锁定或世界效果。玩家可以比较、确认、放弃或改道；当替代将引入原请求未包含的新资源承诺、新权限、控制权变化或不可逆后果时，必须由玩家或具备对应范围的有效 Agent 授权明确确认，并在提交时重新校验，不能仅凭原请求、Agent 计划、客户端缓存或推荐排序推定同意。
+
+替代动作只能继承原请求中仍有效且覆盖该替代目标、作用范围与后果的授权；超出部分必须取得新的明确授权。若候选已过期、授权或世界前置发生变化、玩家拒绝，或不存在安全候选，原请求与候选均保持无世界效果，并返回变化原因和下一次可决策点。并发确认、重连或重试至多产生一次 receipt 支持的结果；原请求、所选替代与最终结果之间保留可审计关联，但该关联不是重复执行或扩大权限的凭据。
+
 本产品层只定义上述玩家承诺和端到端边界；玩法动作粒度由 [`doc/game/prd.md`](../../game/prd.md) 与其核心玩法骨架拥有，物理/执行真值由 `world-runtime`，表现真值由 `world-simulator` 的对应专业域文档拥有。
 
 世界只有一条持续、权威的时间线和一套可测量的物理真值。厘米级距离、顺序、成本与持久化结果可以由工业、物流、治理等粗粒度子系统消费，也可以由 Viewer 做可读性抽象，但任何映射都必须确定、可追溯，不能因子系统分辨率或视觉夸张而改写权威结果。
@@ -132,7 +136,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 - SC-2：核心循环完整呈现行动接受、推进、阻塞、反馈和结果。
 - SC-3：FirstSessionLoop 之后存在可达的 PostOnboarding 目标、压力与承接。
 - SC-4：世界规则、资源消耗与玩家结果可映射到专业 PRD-ID 和验证证据。
-- SC-5：玩家的间接战略动作具备授权资源因果、权威校验和可审计后果，界面或接口可读 target/action/cost/blocker/result/next/recovery；涌现关系与组织不绕过权限、治理或 anti-abuse，未支持细粒度请求有 canonical 替代或安全停止。
+- SC-5：玩家的间接战略动作具备授权资源因果、权威校验和可审计后果，界面或接口可读 target/action/cost/blocker/result/next/recovery；涌现关系与组织不绕过权限、治理或 anti-abuse。未支持细粒度请求的单个或多个 canonical 替代可比较其目标/范围、成本、风险、预计后果、可撤回性与推荐理由；确认前无世界效果，新增承诺或不可逆后果必须明确授权，拒绝、过期、权限变化、重连或重试不会静默执行、继承越界权限或产生重复结果，没有安全替代时明确停止。
 - SC-6：代表性间接控制流程证明玩家意图进入 Agent/策略决策，经权威规则与资源校验产生世界后果，并返回可解释结果与可执行的打断、纠正、下一步或恢复动作；任一专业域的局部 green 不能替代组合闭环。
 - SC-7：同一物理行动在 gameplay、runtime、Agent 与 Viewer 的粗粒度/表现映射中保持距离、顺序、成本和持久化结果一致，不产生第二条时间线或表现层真值；权威时间线在没有直接玩家输入时仍按当前世界规则继续推进，不冻结具体 tick 时长。
 - SC-8：同一条代表性 Data 路径可端到端证明：预览不授予访问或收益；owner、recipient / 使用主体、purpose、scope 与授权状态可读；提交到结算之间授权过期、撤销、变更或无法证明有效时，未结算请求原子拒绝或保持可读待决，不产生 Data sink、访问收益或隐性义务，并提供重新授权或替代路径；有效结算只产生一次 receipt 支持的授权使用或转移。重试、重连、重复提交和历史 receipt 重放不产生第二次结果或复活失效授权，后续撤销不抹除既有合法结果的 provenance。具体许可状态机、时钟、结算规则、幂等实现与副作用矩阵由专业域拥有。
@@ -156,7 +160,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 | SC-2 | gameplay_designer | PRD-GAME-004 | `doc/game/prd.md` | micro-loop 端到端回归 | test_tier_required |
 | SC-3 | gameplay_designer | PRD-GAME-007 | `doc/game/prd.md` | PostOnboarding 转换与持续游玩证据 | test_tier_required |
 | SC-4 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到发布验收证据的追踪检查 | test_tier_required |
-| SC-5 | producer_system_designer | PRD-GAME-002 / PRD-GAME-004 / PRD-GAME-013 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md` | 授权资源因果、权威后果、玩家可读闭环、有限涌现与替代动作跨域审计 | test_tier_required |
+| SC-5 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-004 / PRD-GAME-013 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖单/多候选比较、确认前无效果、拒绝/过期/权限变化与重试不重复；`test_tier_full` 覆盖跨入口并发确认、授权收缩或替换、原请求到替代与唯一 receipt 的可审计关联 | test_tier_full |
 | SC-6 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md` | 玩家意图、Agent 决策、权威后果与打断/纠正/恢复组合证据，含正式玩家 surface 的 S6 交互闭环 | test_tier_required |
 | SC-7 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | 无玩家直接输入时的持续时间线，以及物理真值与粗粒度/表现映射一致性审计，含 S6 表现层核对 | test_tier_required |
 | SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Data 预览无效果、授权中途失效无 sink/收益、单次结算、retry/reconnect/replay 不重复、既有 provenance 保留与恢复路径证据，含结构化 pure API 和 S6 正式玩家 surface 的状态/原因/下一步可读性 | test_tier_required |
