@@ -118,3 +118,86 @@ fn social_links_have_a_stable_nonzero_raster_delta_without_hits() {
     assert_eq!(visible_image.as_raw(), repeated_image.as_raw());
     assert_eq!(hit_regions(&mut visible), baseline_hits);
 }
+
+#[test]
+fn directional_social_links_add_destination_chevrons_without_new_hit_regions() {
+    let mut state = social_state();
+    state.social_links[0].relation_kind = "supports".to_string();
+    let mut app = render_test_app(state);
+    let entities = social_entities(&mut app);
+    assert_eq!(
+        entities.len(),
+        5,
+        "line, endpoints, and two destination chevrons"
+    );
+    assert!(entities.contains_key(&(
+        "social_edge:7".to_string(),
+        SocialLinkPart::RelationMarkerUpper,
+    )));
+    assert!(entities.contains_key(&(
+        "social_edge:7".to_string(),
+        SocialLinkPart::RelationMarkerLower,
+    )));
+    let baseline_hits = hit_regions(&mut app);
+    app.update();
+    assert_eq!(social_entities(&mut app).len(), 5);
+    assert_eq!(hit_regions(&mut app), baseline_hits);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut neutral = social_state();
+        neutral.social_links[0].relation_kind = "ally".to_string();
+        runtime.render_state = Some(neutral);
+        runtime.render_version += 1;
+    }
+    app.update();
+    let neutral_entities = social_entities(&mut app);
+    assert_eq!(neutral_entities.len(), 3);
+    assert!(!neutral_entities.keys().any(|(_, part)| matches!(
+        part,
+        SocialLinkPart::RelationMarkerUpper | SocialLinkPart::RelationMarkerLower
+    )));
+
+    let mut supply = social_state();
+    supply.social_links[0].relation_kind = "supply".to_string();
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(supply);
+        runtime.render_version += 1;
+    }
+    app.update();
+    let supply_entities = social_entities(&mut app);
+    assert_eq!(supply_entities.len(), 5);
+    assert!(
+        supply_entities
+            .keys()
+            .any(|(_, part)| { *part == SocialLinkPart::RelationMarkerUpper })
+    );
+    assert!(
+        supply_entities
+            .keys()
+            .any(|(_, part)| { *part == SocialLinkPart::RelationMarkerLower })
+    );
+
+    let mut ally = social_state();
+    ally.social_links[0].relation_kind = "ally".to_string();
+    let mut ally_app = render_test_app(ally);
+    let (ally_image, ally_summary) = rasterize_pixel_regression(&mut ally_app);
+    let mut supports = social_state();
+    supports.social_links[0].relation_kind = "supports".to_string();
+    let mut supports_app = render_test_app(supports);
+    let (supports_image, supports_summary) = rasterize_pixel_regression(&mut supports_app);
+    let pixel_delta = ally_image
+        .pixels()
+        .zip(supports_image.pixels())
+        .filter(|(ally, supports)| ally != supports)
+        .count();
+    assert!(
+        pixel_delta > 0,
+        "directional relation markers must add a visible raster delta"
+    );
+    assert_ne!(
+        ally_summary.raw_rgba_fnv1a64, supports_summary.raw_rgba_fnv1a64,
+        "directional relation markers must change the deterministic raster signature"
+    );
+}
