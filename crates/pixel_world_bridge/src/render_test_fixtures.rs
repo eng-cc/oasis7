@@ -43,6 +43,7 @@ pub(super) fn sample_render_state_with_beacon_candidates(kind: &str, id: &str) -
         status_badges: vec![],
         position_source: AgentPositionSource::Snapshot,
         size_hint_px: Some(16.0),
+        power_state: None,
     });
     render_state
 }

@@ -105,6 +105,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             status_badges: vec!["position=location_derived".to_string()],
             position_source: AgentPositionSource::LocationDerived,
             size_hint_px: Some(16.0),
+            power_state: None,
         }],
         links: vec![],
         social_links: vec![],
@@ -359,6 +360,12 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("agent_core", sprite, transform)),
     );
+    let mut agent_power_query = world.query::<(&PixelWorldAgentPowerCue, &Sprite, &Transform)>();
+    layers.extend(
+        agent_power_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("agent_power_cue", sprite, transform)),
+    );
     let mut hotspot_query = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
     layers.extend(
         hotspot_query
@@ -427,6 +434,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "selected_agent_cue" => 12,
         "derived_position_cue" => 13,
         "missing_position_cue" => 16,
+        "agent_power_cue" => 18,
         "location_corner_frame" => 14,
         "social_link" => 17,
         _ => 0,
@@ -508,6 +516,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let selected_agent_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 12).count();
     let derived_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 13).count();
     let missing_position_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 16).count();
+    let agent_power_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 18).count();
     let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
     let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
     let fragment_layer = layers
@@ -543,6 +552,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         selected_agent_cue_pixels,
         derived_position_cue_pixels,
         missing_position_cue_pixels,
+        agent_power_cue_pixels,
         agent_pixels,
         agent_core_pixels,
         hotspot_pixels,

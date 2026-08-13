@@ -22,6 +22,11 @@ use module_visual_entities::{
 #[path = "render_agent_silhouette.rs"]
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
+#[path = "render_agent_power_cue.rs"]
+mod agent_power_cue;
+use agent_power_cue::{
+    PixelWorldAgentPowerCue, despawn_agent_power_cues, reconcile_agent_power_cues,
+};
 #[path = "render_agent_labels.rs"]
 mod agent_labels;
 use agent_labels::{AgentLabelQueries, despawn_agent_labels, reconcile_agent_labels};
@@ -775,6 +780,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
     agent_labels: AgentLabelQueries<'w, 's>,
     agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
+    agent_power_cues: Query<'w, 's, (Entity, &'static PixelWorldAgentPowerCue)>,
     derived_position_cues: Query<'w, 's, (Entity, &'static PixelWorldDerivedPositionCue)>,
     missing_position_cues: Query<'w, 's, (Entity, &'static PixelWorldMissingPositionCue)>,
     assignment_cues: Query<'w, 's, (Entity, &'static PixelWorldAssignmentCueVisual)>,
@@ -839,6 +845,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_agent_power_cues(&mut commands, &queries.agent_power_cues);
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -934,6 +941,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_agent_power_cues(&mut commands, &queries.agent_power_cues);
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -1075,6 +1083,14 @@ pub(crate) fn render_scene(
         &mut commands,
         &runtime,
         &queries.agent_silhouettes,
+        width,
+        height,
+        animation_ms,
+    );
+    reconcile_agent_power_cues(
+        &mut commands,
+        &runtime,
+        &queries.agent_power_cues,
         width,
         height,
         animation_ms,

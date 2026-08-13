@@ -15,6 +15,9 @@ mod agent_position_provenance_cue_tests;
 #[path = "render_agent_position_missing_cue_tests.rs"]
 mod agent_position_missing_cue_tests;
 
+#[path = "render_agent_power_cue_tests.rs"]
+mod agent_power_cue_tests;
+
 #[path = "render_assignment_cue_tests.rs"]
 mod assignment_cue_tests;
 

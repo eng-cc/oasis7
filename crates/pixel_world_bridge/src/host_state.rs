@@ -160,6 +160,16 @@ fn count_resource_entries(summary: &str) -> usize {
         .count()
 }
 
+fn agent_power_state(agent: &Value) -> Option<&'static str> {
+    match str_key(obj(agent, "power"), "state") {
+        Some("normal") => Some("normal"),
+        Some("low_power") => Some("low_power"),
+        Some("critical") => Some("critical"),
+        Some("shutdown") => Some("shutdown"),
+        _ => None,
+    }
+}
+
 fn fragment_blocks(location: &Value) -> &[Value] {
     obj(obj(obj(location, "fragment_profile"), "blocks"), "blocks")
         .as_array()
@@ -1026,6 +1036,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 resolve_agent_position(agent, selected, &location_by_id, &world_bounds);
             let resource_summary = resource_summary(obj(agent, "resources"));
             let resource_score = count_resource_entries(&resource_summary);
+            let power_state = agent_power_state(agent);
             let mut status_badges = Vec::new();
             if let Some(location_id) = str_key(agent, "location_id") {
                 status_badges.push(Value::String(format!("location={location_id}")));
@@ -1045,6 +1056,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 "resource_summary": resource_summary,
                 "resource_score": resource_score,
                 "status_badges": status_badges,
+                "power_state": power_state,
                 "size_hint_px": 12.0 + 10.0_f64.min(
                     (resource_score * 2) as f64
                     + if str_key(agent, "location_id").is_some() { 2.0 } else { 0.0 }

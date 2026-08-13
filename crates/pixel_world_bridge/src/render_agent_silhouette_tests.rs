@@ -42,6 +42,7 @@ fn agent_silhouettes_reconcile_once_per_eligible_agent_and_clean_up_stale_state(
         status_badges: vec![],
         position_source: AgentPositionSource::Snapshot,
         size_hint_px: Some(5.0),
+        power_state: None,
     });
     let mut app = render_test_app(state);
     let first = silhouette_entities(&mut app);
