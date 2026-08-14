@@ -11,8 +11,8 @@
     "owner": "repository_health_engineer",
     "reviewed_at": "2026-08-14",
     "expires": "2026-09-30",
-    "evidence_command": "./scripts/ci-rust-governance-report.sh --out-dir /tmp/oasis7-crypto-governance",
-    "evidence_report": "/tmp/oasis7-crypto-governance/duplicate-dependency-baseline.log",
+    "evidence_command": "./scripts/ci-rust-governance-report.sh --out-dir /tmp/oasis7-crypto-governance-final",
+    "evidence_report": "https://github.com/eng-cc/oasis7/issues/3235#issuecomment-5291435711",
     "burn_down_trigger": "Re-run the governance report at expiry or after a libp2p, aliyun-tablestore-rs, Wasmtime, tungstenite, or first-party crypto-major upgrade; remove each exception as soon as its old/new transitive closure converges.",
     "affected_crates": [
       "block-buffer",
