@@ -14233,12 +14233,23 @@ function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
     const boundAgentId = normalizedId2(state2.auth.boundAgentId);
     return Boolean(claimerAgentId && boundAgentId && claimerAgentId === boundAgentId);
   }
+  function slot1ClaimChoiceNeedsDefer(agentClaim) {
+    const choiceQuote = slot1ClaimChoiceQuote2(agentClaim);
+    const status = normalizedId2(choiceQuote?.status || choiceQuote?.choiceStatus);
+    const fallbackReason = normalizedId2(choiceQuote?.fallback_reason || choiceQuote?.fallbackReason);
+    const choiceClass = normalizedId2(
+      choiceQuote?.claim_choice_class || choiceQuote?.claimChoiceClass || choiceQuote?.recommended_claim_action || choiceQuote?.recommendedClaimAction
+    );
+    const rationaleMissing = status === "candidate_rationale_missing" || fallbackReason === "candidate_rationale_missing";
+    return rationaleMissing && choiceClass === "wait_or_fund_first";
+  }
   function buildAgentClaimAction2(agentClaim, targetAgentId) {
     const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
     const boundAgentId = normalizedId2(state2.auth.boundAgentId);
     const target = String(targetAgentId || "").trim();
     const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
     if (!claimerAgentId || !target || blockedReason || !boundAgentId || claimerAgentId !== boundAgentId) return null;
+    const disabledReason = slot1ClaimChoiceNeedsDefer(agentClaim) ? "candidate_rationale_missing" : null;
     return {
       actionId: "claim_agent",
       action_id: "claim_agent",
@@ -14250,8 +14261,8 @@ function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
       target_agent_id: target,
       actorAgentId: claimerAgentId,
       actor_agent_id: claimerAgentId,
-      disabledReason: null,
-      disabled_reason: null
+      disabledReason,
+      disabled_reason: disabledReason
     };
   }
   function hasExecutableAgentClaim2(snapshot, agentClaim) {
@@ -14262,7 +14273,7 @@ function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
   function hasAgentClaimSessionBoundary2(agentClaim) {
     return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
   }
-  return { agentBindingForId: agentBindingForId2, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction: buildAgentClaimAction2, buildAgentClaimTargets: buildAgentClaimTargets2, describeAgentSessionStatus: describeAgentSessionStatus2, hasAgentClaimSessionBoundary: hasAgentClaimSessionBoundary2, hasExecutableAgentClaim: hasExecutableAgentClaim2, normalizedId: normalizedId2, publishedClaimChoiceCandidates: publishedClaimChoiceCandidates2, slot1ClaimChoiceQuote: slot1ClaimChoiceQuote2 };
+  return { agentBindingForId: agentBindingForId2, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction: buildAgentClaimAction2, buildAgentClaimTargets: buildAgentClaimTargets2, describeAgentSessionStatus: describeAgentSessionStatus2, hasAgentClaimSessionBoundary: hasAgentClaimSessionBoundary2, hasExecutableAgentClaim: hasExecutableAgentClaim2, normalizedId: normalizedId2, publishedClaimChoiceCandidates: publishedClaimChoiceCandidates2, slot1ClaimChoiceNeedsDefer, slot1ClaimChoiceQuote: slot1ClaimChoiceQuote2 };
 }
 var _tmpl$$2 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=feedback-detail><strong></strong>: `), _tmpl$3$2 = /* @__PURE__ */ template(`<div class=event-card data-testid=claim-choice-rationale><div class=event-card__title><span>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--warn"></span></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$6$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent">`);
 function AgentClaimChoiceCard(props) {

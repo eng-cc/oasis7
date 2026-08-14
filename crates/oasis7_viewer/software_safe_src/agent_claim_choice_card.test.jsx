@@ -18,6 +18,33 @@ afterEach(() => {
 });
 
 describe("slot-1 claim choice card", () => {
+  it("blocks Claim Agent for missing rationale while keeping low-runway-only advice actionable", async () => {
+    const lowRunwaySnapshot = slot1CandidateRationaleSnapshot();
+    lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote = {
+      ...lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote,
+      low_runway_warning: true,
+      upkeep_runway_epochs: 1,
+      recommended_claim_action: "wait_or_fund_first",
+      blocked_reason: null,
+      slot_1_claim_choice_quote: {
+        ...lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote.slot_1_claim_choice_quote,
+        fallback_reason: "claim_funding_or_runway_insufficient",
+        claim_choice_class: "wait_or_fund_first",
+        recommended_claim_action: "wait_or_fund_first",
+      },
+    };
+    const advisoryApp = await renderViewerApp(lowRunwaySnapshot);
+    expect(within(advisoryApp.container.querySelector("#viewer-stage-panel")).getByRole("button", { name: "Claim Agent" })).toBeEnabled();
+    advisoryApp.dispose();
+
+    const blockedApp = await renderViewerApp(slot1CandidateClaimSnapshot());
+    dispose = blockedApp.dispose;
+    const stagePanel = blockedApp.container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Wait before confirming")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/No canonical route rationale is published, so no candidate is recommended/)).toBeInTheDocument();
+    expect(within(stagePanel).getByRole("button", { name: "Claim Agent" })).toBeDisabled();
+  });
+
   it("renders the localized English defer warning for exact-upfront zero-runway candidate facts", async () => {
     const app = await renderViewerApp(slot1CandidateClaimSnapshot());
     dispose = app.dispose;

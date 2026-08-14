@@ -325,7 +325,7 @@ fn build_slot_1_claim_choice_quote(
             Some("candidate_risk_detected"),
             "wait_or_fund_first",
         )
-    } else if complete_candidates.len() == 1 {
+    } else if rationale_candidates.len() == 1 && complete_candidates.len() == 1 {
         ("candidate_rationale_published", None, "claim_now_route_fit")
     } else {
         (

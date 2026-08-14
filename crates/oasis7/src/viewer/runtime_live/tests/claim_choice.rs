@@ -260,6 +260,67 @@ fn slot_1_claim_choice_complete_single_candidate_is_claim_now_route_fit() {
 }
 
 #[test]
+fn slot_1_claim_choice_complete_candidate_with_known_incomplete_alternative_needs_unique_rationale()
+{
+    let complete_modules = [
+        "m1.power.radiation_harvest",
+        "m1.power.storage",
+        "m1.sensor.basic",
+        "m1.mobility.basic",
+        "m1.memory.core",
+        "m1.storage.cargo",
+    ];
+    let known_incomplete_modules = [
+        "m1.power.radiation_harvest",
+        "m1.power.storage",
+        "m1.sensor.basic",
+        "m1.mobility.basic",
+    ];
+    let (mut server, _) = server_with_candidates(
+        &[
+            CandidateFixture {
+                id: "candidate-complete",
+                position: (10, 20, 30),
+                body_kind: "industrial_worker",
+                frame_kind: "standard_frame",
+                modules: &complete_modules,
+            },
+            CandidateFixture {
+                id: "candidate-known-incomplete",
+                position: (30, 20, 10),
+                body_kind: "industrial_worker",
+                frame_kind: "standard_frame",
+                modules: &known_incomplete_modules,
+            },
+        ],
+        400,
+        IndustryStage::Bootstrap,
+    );
+
+    let choice = claim_choice_json(&mut server);
+    assert_ne!(
+        choice["claim_choice_class"], "claim_now_route_fit",
+        "a complete candidate is not an immediate route fit when a known-incomplete alternative lacks unique rationale: {choice}"
+    );
+    assert_ne!(
+        choice["recommended_claim_action"], "claim_now_route_fit",
+        "the recommendation must not enable a blind immediate claim: {choice}"
+    );
+    for rationale_field in [
+        "candidate_starting_location",
+        "candidate_specialty_summary",
+        "first_industrial_goal_help",
+        "candidate_risk_summary",
+        "candidate_recommendation_reason",
+    ] {
+        assert!(
+            choice.get(rationale_field).is_none_or(Value::is_null),
+            "mixed complete/incomplete candidates must not publish a unique rationale field {rationale_field}: {choice}"
+        );
+    }
+}
+
+#[test]
 fn slot_1_claim_choice_compares_multiple_complete_candidates_without_ranking() {
     let modules_a = [
         "m1.power.radiation_harvest",
