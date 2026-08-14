@@ -105,9 +105,17 @@ def canonicalize_comparison_ref(root: Path, comparison_ref: str) -> str:
         )
         oid = result.stdout.strip()
         resolved[ref] = oid if result.returncode == 0 and HEAD_RE.fullmatch(oid) else None
-    if resolved[comparison_ref] is not None and resolved[comparison_ref] == resolved[remote_ref]:
-        return remote_ref
-    return comparison_ref
+    if resolved[comparison_ref] is None or resolved[remote_ref] is None:
+        raise ContractError(
+            f"cannot prove comparison ref {comparison_ref!r} matches remote tracking ref {remote_ref!r}; "
+            f"pass the available canonical comparison ref"
+        )
+    if resolved[comparison_ref] != resolved[remote_ref]:
+        raise ContractError(
+            f"comparison ref {comparison_ref!r} diverges from remote tracking ref {remote_ref!r}; "
+            f"pass the canonical comparison ref"
+        )
+    return remote_ref
 
 
 def resolve_comparison_ref(root: Path, comparison_ref: str, supplied_oid: str | None) -> str:

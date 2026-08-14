@@ -216,6 +216,29 @@ class ReviewPlanTests(unittest.TestCase):
         plan = json.loads(result.stdout)
         self.assertEqual("refs/remotes/origin/main", plan["comparison_ref"])
 
+    def test_divergent_shorthand_and_remote_refs_fail_closed(self) -> None:
+        self.git("checkout", "-b", "origin/main")
+        (self.root / "README").write_text("local shorthand\n", encoding="utf-8")
+        self.git("commit", "-am", "local shorthand ref")
+        self.git("checkout", "-b", "topic")
+        (self.root / "README").write_text("topic\n", encoding="utf-8")
+        self.git("commit", "-am", "topic head")
+        self.head = self.git("rev-parse", "HEAD")
+
+        out = self.root / "divergent-shorthand-plan.json"
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--comparison-ref", "origin/main",
+             "--out", str(out)],
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("comparison ref", result.stderr.lower())
+        self.assertFalse(out.exists())
+
     def test_divergent_comparison_fails_before_plan_creation(self) -> None:
         self.git("checkout", "-b", "topic")
         (self.root / "README").write_text("topic\n", encoding="utf-8")
