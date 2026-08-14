@@ -13,7 +13,6 @@ use oasis7::viewer::{
     ViewerStream, sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
     sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
 };
-use rand_core::OsRng;
 use serde_json::{Value, json};
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5023";

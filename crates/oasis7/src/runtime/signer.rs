@@ -1,7 +1,7 @@
 //! Receipt signing and verification.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use sha2::Sha256;

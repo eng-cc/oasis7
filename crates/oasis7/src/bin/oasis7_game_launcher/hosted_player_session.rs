@@ -1,5 +1,4 @@
 use super::hosted_access::{DeploymentMode, hosted_player_access_contract};
-use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
@@ -484,7 +483,7 @@ impl HostedPlayerSessionIssuer {
         let registration_grant = match registration_public_key {
             Some(public_key) => {
                 let mut nonce = [0_u8; 32];
-                OsRng.fill_bytes(&mut nonce);
+                fill_os_random(&mut nonce);
                 let issuer_private_key =
                     match std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
                     {
@@ -858,7 +857,7 @@ fn build_player_id(issued_at_unix_ms: u64, sequence: u64) -> String {
 
 fn build_release_token() -> String {
     let mut credential = [0_u8; 32];
-    OsRng.fill_bytes(&mut credential);
+    fill_os_random(&mut credential);
     hex::encode(credential)
 }
 
@@ -872,7 +871,7 @@ fn build_registration_grant(
         std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
             .map_err(|_| "hosted registration issuer private key is not configured".to_string())?;
     let mut nonce = [0_u8; 32];
-    OsRng.fill_bytes(&mut nonce);
+    fill_os_random(&mut nonce);
     oasis7::viewer::issue_hosted_registration_grant(
         player_id,
         public_key,
@@ -881,6 +880,10 @@ fn build_registration_grant(
         issued_at_unix_ms,
         issuer_private_key.as_str(),
     )
+}
+
+fn fill_os_random(destination: &mut [u8]) {
+    getrandom::fill(destination).expect("OS randomness unavailable");
 }
 
 fn release_token_digest(token: &str) -> String {

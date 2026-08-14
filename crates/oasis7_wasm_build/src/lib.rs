@@ -150,7 +150,7 @@ pub fn compute_source_hash(manifest_path: &Path, target: &str) -> Result<String,
         }
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn hash_metadata_lockfile(
@@ -401,7 +401,7 @@ fn canonical_or_original(path: &Path) -> PathBuf {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[derive(Debug, Deserialize)]

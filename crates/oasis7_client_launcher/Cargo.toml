@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-ed25519-dalek = "2"
+ed25519-dalek = "3"
 hex = "0.4"
 oasis7 = { version = "0.1.0", path = "../oasis7", default-features = false }
 oasis7_launcher_ui = { version = "0.1.0", path = "../oasis7_launcher_ui" }

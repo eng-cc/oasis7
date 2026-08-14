@@ -8,7 +8,6 @@ use super::{Level, emit_stderr_or_event};
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
-use rand_core::{OsRng, RngCore};
 use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
 #[cfg(test)]
@@ -833,7 +832,7 @@ fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
 
 fn random_otp_secret() -> [u8; 32] {
     let mut secret = [0u8; 32];
-    OsRng.fill_bytes(&mut secret);
+    fill_os_random(&mut secret);
     secret
 }
 
@@ -844,12 +843,16 @@ fn build_login_otp_code(
 ) -> String {
     loop {
         let mut bytes = [0u8; 4];
-        OsRng.fill_bytes(&mut bytes);
+        fill_os_random(&mut bytes);
         let code = format!("{:06}", u32::from_le_bytes(bytes) % 1_000_000);
         if code != "000000" && code != "123456" {
             return code;
         }
     }
+}
+
+fn fill_os_random(destination: &mut [u8]) {
+    getrandom::fill(destination).expect("OS randomness unavailable");
 }
 
 fn now_unix_ms() -> u64 {
