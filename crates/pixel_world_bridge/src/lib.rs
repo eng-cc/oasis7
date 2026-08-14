@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::time::Duration;
@@ -138,6 +138,25 @@ struct MicroDepotFacility {
     pos: Position,
     #[serde(default)]
     service_radius_cm: f64,
+    /// Monotonic snapshot revision for the facility inventory. This is
+    /// display provenance only; it never participates in renderer decisions.
+    #[allow(dead_code)]
+    #[serde(default, alias = "inventoryRevision")]
+    inventory_revision: u64,
+    /// Authoritative stock by resource kind. The renderer only uses the
+    /// positive total as a zero-stock guard; the published map remains
+    /// available to future presentation surfaces without inventing a capacity
+    /// denominator.
+    #[serde(default, alias = "availableUnitsByKind")]
+    available_units_by_kind: BTreeMap<String, i64>,
+    /// Current throughput window and its remaining/limit counters.
+    #[allow(dead_code)]
+    #[serde(default, alias = "throughputEpoch")]
+    throughput_epoch: u64,
+    #[serde(default, alias = "throughputRemainingUnits")]
+    throughput_remaining_units: i64,
+    #[serde(default, alias = "throughputLimitUnitsPerEpoch")]
+    throughput_limit_units_per_epoch: i64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

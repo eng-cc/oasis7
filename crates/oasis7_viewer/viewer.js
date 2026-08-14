@@ -9136,6 +9136,58 @@ function pixelWorldRecommendedTargetVisualFixture() {
   gameplay.recent_feedback = null;
   return fixture;
 }
+function microDepotStockRunwayLocation(id, name, xCm, yCm, material) {
+  return {
+    id,
+    name,
+    pos: { x_cm: xCm, y_cm: yCm, z_cm: 0 },
+    profile: { radius_cm: 55e3, radiation_emission_per_tick: 0, material },
+    resources: {}
+  };
+}
+function microDepotStockRunwayFacility(facilityId, locationId, inventoryRevision, throughputEpoch, throughputRemainingUnits) {
+  return {
+    facility_id: facilityId,
+    status: "active",
+    location_id: locationId,
+    service_radius_cm: 24e4,
+    inventory_revision: inventoryRevision,
+    available_units_by_kind: { data: throughputRemainingUnits },
+    throughput_epoch: throughputEpoch,
+    throughput_remaining_units: throughputRemainingUnits,
+    throughput_limit_units_per_epoch: 8
+  };
+}
+function pixelWorldMicroDepotStockRunwayVisualFixture() {
+  const fixture = pixelWorldSelectedBlockerVisualFixture();
+  fixture.model.locations["loc-depot-healthy"] = microDepotStockRunwayLocation(
+    "loc-depot-healthy",
+    "Healthy Depot",
+    46e5,
+    24e5,
+    "alloy"
+  );
+  fixture.model.locations["loc-depot-low"] = microDepotStockRunwayLocation(
+    "loc-depot-low",
+    "Low Depot",
+    48e5,
+    27e5,
+    "silicate"
+  );
+  fixture.model.locations["loc-depot-zero"] = microDepotStockRunwayLocation(
+    "loc-depot-zero",
+    "Zero Depot",
+    5e6,
+    3e6,
+    "alloy"
+  );
+  fixture.player_gameplay.micro_depot_facilities = [
+    microDepotStockRunwayFacility("depot-fixture-healthy", "loc-depot-healthy", 101, 17, 8),
+    microDepotStockRunwayFacility("depot-fixture-low", "loc-depot-low", 202, 17, 2),
+    microDepotStockRunwayFacility("depot-fixture-zero", "loc-depot-zero", 303, 17, 0)
+  ];
+  return fixture;
+}
 function pixelWorldModuleVisualEntitiesFixture() {
   const fixture = pixelWorldSelectedBlockerVisualFixture();
   fixture.model.module_visual_entities = {
@@ -9193,7 +9245,8 @@ function installPixelWorldVisualFixtureHook() {
     hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     recent_event_glyphs: () => clone(pixelWorldSelectedBlockerVisualFixture()),
     recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture()),
-    module_visual_entities: () => clone(pixelWorldModuleVisualEntitiesFixture())
+    module_visual_entities: () => clone(pixelWorldModuleVisualEntitiesFixture()),
+    micro_depot_stock_runway: () => clone(pixelWorldMicroDepotStockRunwayVisualFixture())
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
   const fixtureName = requestedVisualFixtureName();

@@ -146,6 +146,70 @@ export function pixelWorldRecommendedTargetVisualFixture() {
   return fixture;
 }
 
+function microDepotStockRunwayLocation(id, name, xCm, yCm, material) {
+  return {
+    id,
+    name,
+    pos: { x_cm: xCm, y_cm: yCm, z_cm: 0 },
+    profile: { radius_cm: 55_000, radiation_emission_per_tick: 0, material },
+    resources: {},
+  };
+}
+
+function microDepotStockRunwayFacility(
+  facilityId,
+  locationId,
+  inventoryRevision,
+  throughputEpoch,
+  throughputRemainingUnits,
+) {
+  return {
+    facility_id: facilityId,
+    status: "active",
+    location_id: locationId,
+    service_radius_cm: 240_000,
+    inventory_revision: inventoryRevision,
+    available_units_by_kind: { data: throughputRemainingUnits },
+    throughput_epoch: throughputEpoch,
+    throughput_remaining_units: throughputRemainingUnits,
+    throughput_limit_units_per_epoch: 8,
+  };
+}
+
+// Test-only fixture for headed stock-runway evidence. It intentionally clones
+// the selected-blocker world, then adds three independent depot anchors so the
+// renderer can be inspected without changing the production/runtime snapshot.
+export function pixelWorldMicroDepotStockRunwayVisualFixture() {
+  const fixture = pixelWorldSelectedBlockerVisualFixture();
+  fixture.model.locations["loc-depot-healthy"] = microDepotStockRunwayLocation(
+    "loc-depot-healthy",
+    "Healthy Depot",
+    4_600_000,
+    2_400_000,
+    "alloy",
+  );
+  fixture.model.locations["loc-depot-low"] = microDepotStockRunwayLocation(
+    "loc-depot-low",
+    "Low Depot",
+    4_800_000,
+    2_700_000,
+    "silicate",
+  );
+  fixture.model.locations["loc-depot-zero"] = microDepotStockRunwayLocation(
+    "loc-depot-zero",
+    "Zero Depot",
+    5_000_000,
+    3_000_000,
+    "alloy",
+  );
+  fixture.player_gameplay.micro_depot_facilities = [
+    microDepotStockRunwayFacility("depot-fixture-healthy", "loc-depot-healthy", 101, 17, 8),
+    microDepotStockRunwayFacility("depot-fixture-low", "loc-depot-low", 202, 17, 2),
+    microDepotStockRunwayFacility("depot-fixture-zero", "loc-depot-zero", 303, 17, 0),
+  ];
+  return fixture;
+}
+
 // Test-only visual fixture. The known co-anchored pair and unknown fallback
 // exercise the renderer's noninteractive module identity glyphs.
 export function pixelWorldModuleVisualEntitiesFixture() {
