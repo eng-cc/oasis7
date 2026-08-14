@@ -687,6 +687,9 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_f64(&mut hasher, location.size_hint_px.unwrap_or(0.0));
         location.marker_role.hash(&mut hasher);
         hash_f64(&mut hasher, location.marker_alpha.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            location.label.hash(&mut hasher);
+        }
         if include_resource_reports {
             location.resource_summary.hash(&mut hasher);
         }
