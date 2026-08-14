@@ -263,6 +263,20 @@ pub struct PlayerAgentClaimChoiceQuoteSnapshot {
     pub status: String,
     #[serde(default)]
     pub candidates: Vec<PlayerAgentClaimChoiceCandidateSnapshot>,
+    /// Canonical rationale for a uniquely complete slot-1 candidate.
+    ///
+    /// These fields are optional so snapshots written before the rationale
+    /// contract was available remain readable and continue to fail closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_starting_location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_specialty_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_industrial_goal_help: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_risk_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_recommendation_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     pub claim_choice_class: String,

@@ -1,5 +1,8 @@
 use crate::runtime::{
-    AgentClaimState, MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+    AgentClaimState, M1_BODY_MODULE_ID, M1_MEMORY_MODULE_ID, M1_MOBILITY_MODULE_ID,
+    M1_MOVE_RULE_MODULE_ID, M1_RADIATION_POWER_MODULE_ID, M1_SENSOR_MODULE_ID,
+    M1_STORAGE_CARGO_MODULE_ID, M1_STORAGE_POWER_MODULE_ID, M1_TRANSFER_RULE_MODULE_ID,
+    M1_VISIBILITY_RULE_MODULE_ID, MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     RestrictedStarterClaimGrantStatus, WorldState, agent_claim_cap_for_tier, agent_claim_quote,
     agent_claim_reputation_tier, auto_restricted_starter_claim_amount,
 };
@@ -116,8 +119,17 @@ pub(super) fn build_player_agent_claim_snapshot(
                 }
                 .to_string()
             });
-            let slot_1_claim_choice_quote = (quote.slot_index == 1)
-                .then(|| build_slot_1_claim_choice_quote(state, primary_agent_id));
+            let slot_1_claim_choice_quote = (quote.slot_index == 1).then(|| {
+                build_slot_1_claim_choice_quote(
+                    state,
+                    primary_agent_id,
+                    total_upfront_amount,
+                    eligible_claim_balance,
+                    upkeep_runway_epochs,
+                    quote.grace_epochs,
+                    blocked_reason.is_none(),
+                )
+            });
             Some(PlayerAgentClaimQuoteSnapshot {
                 slot_index: quote.slot_index,
                 reputation_tier: quote.reputation_tier,
@@ -226,12 +238,20 @@ pub(super) fn build_player_agent_claim_snapshot(
 fn build_slot_1_claim_choice_quote(
     state: &WorldState,
     primary_agent_id: &str,
+    total_upfront_amount: u64,
+    eligible_claim_balance: u64,
+    upkeep_runway_epochs: u64,
+    grace_epochs: u64,
+    claim_is_affordable: bool,
 ) -> PlayerAgentClaimChoiceQuoteSnapshot {
     let candidates = state
         .agents
         .iter()
-        .filter(|(agent_id, _)| {
-            agent_id.as_str() != primary_agent_id && !state.agent_claims.contains_key(*agent_id)
+        .filter(|(agent_id, cell)| {
+            agent_id.as_str() != primary_agent_id
+                && !state.agent_claims.contains_key(*agent_id)
+                && known_body_kind(cell.state.body.kind.as_str())
+                && known_frame_kind(cell.state.body_state.frame_kind.as_str())
         })
         .map(|(agent_id, cell)| {
             let mut installed_module_ids = cell
@@ -242,6 +262,7 @@ fn build_slot_1_claim_choice_quote(
                 .filter_map(|slot| slot.installed_module.clone())
                 .collect::<Vec<_>>();
             installed_module_ids.sort();
+            installed_module_ids.dedup();
 
             PlayerAgentClaimChoiceCandidateSnapshot {
                 agent_id: agent_id.clone(),
@@ -254,22 +275,259 @@ fn build_slot_1_claim_choice_quote(
             }
         })
         .collect::<Vec<_>>();
-    let status = if candidates.is_empty() {
-        "candidate_rationale_missing"
+    let mut candidates = candidates;
+    candidates.sort_by(|left, right| left.agent_id.cmp(&right.agent_id));
+
+    let has_unknown_candidate_input = candidates
+        .iter()
+        .any(|candidate| !candidate_inputs_known(state, candidate));
+    let rationale_candidates = candidates
+        .iter()
+        .filter(|candidate| candidate_inputs_known(state, candidate))
+        .collect::<Vec<_>>();
+    let complete_candidates = candidates
+        .iter()
+        .filter(|candidate| candidate_is_complete(state, candidate))
+        .collect::<Vec<_>>();
+    let unique_rationale_candidate =
+        (rationale_candidates.len() == 1).then(|| rationale_candidates[0]);
+    let unique_candidate_rationale = unique_rationale_candidate
+        .and_then(|candidate| build_candidate_rationale(state, candidate));
+    let candidate_has_high_risk = unique_candidate_rationale
+        .as_ref()
+        .is_some_and(|rationale| rationale.high_risk);
+
+    let rationale_available = !rationale_candidates.is_empty() && !has_unknown_candidate_input;
+    let has_funding_and_runway = claim_is_affordable
+        && eligible_claim_balance >= total_upfront_amount
+        && upkeep_runway_epochs >= grace_epochs;
+    let (status, fallback_reason, claim_choice_class) = if !rationale_available {
+        (
+            "candidate_rationale_missing",
+            Some("candidate_rationale_missing"),
+            "wait_or_fund_first",
+        )
+    } else if complete_candidates.is_empty() {
+        (
+            "candidate_rationale_published",
+            Some("candidate_capability_gap"),
+            "wait_or_fund_first",
+        )
+    } else if !has_funding_and_runway {
+        (
+            "candidate_rationale_published",
+            Some("claim_funding_or_runway_insufficient"),
+            "wait_or_fund_first",
+        )
+    } else if candidate_has_high_risk {
+        (
+            "candidate_rationale_published",
+            Some("candidate_risk_detected"),
+            "wait_or_fund_first",
+        )
+    } else if complete_candidates.len() == 1 {
+        ("candidate_rationale_published", None, "claim_now_route_fit")
     } else {
-        "candidate_facts_only"
+        (
+            "candidate_rationale_published",
+            None,
+            "compare_candidates_first",
+        )
     };
-    // Candidate facts are not a rationale or a ranking. Until the runtime can
-    // truthfully provide one, the nested choice package must not recommend a
-    // comparison even when the legacy top-level quote remains affordable.
-    let recommended_claim_action = "wait_or_fund_first".to_string();
+
+    let rationale = unique_candidate_rationale;
 
     PlayerAgentClaimChoiceQuoteSnapshot {
         status: status.to_string(),
         candidates,
-        fallback_reason: Some("candidate_rationale_missing".to_string()),
-        claim_choice_class: recommended_claim_action.clone(),
-        recommended_claim_action,
+        candidate_starting_location: rationale
+            .as_ref()
+            .map(|rationale| rationale.starting_location.clone()),
+        candidate_specialty_summary: rationale
+            .as_ref()
+            .map(|rationale| rationale.specialty_summary.clone()),
+        first_industrial_goal_help: rationale
+            .as_ref()
+            .map(|rationale| rationale.first_industrial_goal_help.clone()),
+        candidate_risk_summary: rationale
+            .as_ref()
+            .map(|rationale| rationale.risk_summary.clone()),
+        candidate_recommendation_reason: rationale
+            .as_ref()
+            .map(|rationale| rationale.recommendation_reason.clone()),
+        fallback_reason: fallback_reason.map(str::to_string),
+        claim_choice_class: claim_choice_class.to_string(),
+        recommended_claim_action: claim_choice_class.to_string(),
+    }
+}
+
+const KNOWN_BODY_KINDS: &[&str] = &["humanoid", "industrial_worker"];
+const KNOWN_FRAME_KINDS: &[&str] = &["light_frame", "standard_frame"];
+
+fn known_body_kind(body_kind: &str) -> bool {
+    KNOWN_BODY_KINDS.contains(&body_kind)
+}
+
+fn known_frame_kind(frame_kind: &str) -> bool {
+    KNOWN_FRAME_KINDS.contains(&frame_kind)
+}
+
+fn known_claim_module(module_id: &str) -> bool {
+    matches!(
+        module_id,
+        M1_BODY_MODULE_ID
+            | M1_MEMORY_MODULE_ID
+            | M1_MOBILITY_MODULE_ID
+            | M1_MOVE_RULE_MODULE_ID
+            | M1_TRANSFER_RULE_MODULE_ID
+            | M1_VISIBILITY_RULE_MODULE_ID
+            | M1_SENSOR_MODULE_ID
+            | M1_STORAGE_CARGO_MODULE_ID
+            | M1_RADIATION_POWER_MODULE_ID
+            | M1_STORAGE_POWER_MODULE_ID
+    )
+}
+
+fn candidate_is_complete(
+    state: &WorldState,
+    candidate: &PlayerAgentClaimChoiceCandidateSnapshot,
+) -> bool {
+    candidate_inputs_known(state, candidate)
+        && candidate
+            .installed_module_ids
+            .iter()
+            .any(|module_id| module_id == M1_RADIATION_POWER_MODULE_ID)
+        && candidate
+            .installed_module_ids
+            .iter()
+            .any(|module_id| module_id == M1_STORAGE_POWER_MODULE_ID)
+        && candidate
+            .installed_module_ids
+            .iter()
+            .any(|module_id| module_id == M1_SENSOR_MODULE_ID)
+        && candidate
+            .installed_module_ids
+            .iter()
+            .any(|module_id| module_id == M1_MOBILITY_MODULE_ID)
+        && candidate
+            .installed_module_ids
+            .iter()
+            .any(|module_id| module_id == M1_STORAGE_CARGO_MODULE_ID)
+}
+
+fn candidate_inputs_known(
+    state: &WorldState,
+    candidate: &PlayerAgentClaimChoiceCandidateSnapshot,
+) -> bool {
+    state.industry_progress.stage == crate::runtime::IndustryStage::Bootstrap
+        && known_body_kind(candidate.body_kind.as_str())
+        && known_frame_kind(candidate.frame_kind.as_str())
+        && !candidate.installed_module_ids.is_empty()
+        && candidate
+            .installed_module_ids
+            .iter()
+            .all(|module_id| known_claim_module(module_id.as_str()))
+}
+
+#[derive(Debug, Clone)]
+struct CandidateRationale {
+    starting_location: String,
+    specialty_summary: String,
+    first_industrial_goal_help: String,
+    risk_summary: String,
+    recommendation_reason: String,
+    high_risk: bool,
+}
+
+fn build_candidate_rationale(
+    state: &WorldState,
+    candidate: &PlayerAgentClaimChoiceCandidateSnapshot,
+) -> Option<CandidateRationale> {
+    if !candidate_inputs_known(state, candidate) {
+        return None;
+    }
+
+    let mut risks = Vec::new();
+    if !has_module(candidate, M1_RADIATION_POWER_MODULE_ID)
+        || !has_module(candidate, M1_STORAGE_POWER_MODULE_ID)
+    {
+        risks.push("energy capability is missing or not fully proven");
+    }
+    if !has_module(candidate, M1_SENSOR_MODULE_ID) {
+        risks.push("sensing/input discovery capability is missing");
+    }
+    if !has_module(candidate, M1_MOBILITY_MODULE_ID) {
+        risks.push("mobility/routing capability is missing");
+    }
+    if !has_module(candidate, M1_STORAGE_CARGO_MODULE_ID) {
+        risks.push("cargo/input carrying capability is missing");
+    }
+    if candidate.frame_kind == "light_frame" {
+        risks.push("light-frame operating pressure is present");
+    }
+    let high_risk = !risks.is_empty();
+    let risk_summary = if risks.is_empty() {
+        "No provable high-risk capability gap is present in the current canonical snapshot."
+            .to_string()
+    } else {
+        format!("Provable candidate risks: {}.", risks.join("; "))
+    };
+    let complete = candidate_is_complete(state, candidate);
+    let recommendation_reason = if complete && !high_risk {
+        "Exactly one complete candidate is known for the first industrial goal, with canonical energy, sensing, mobility, and cargo support.".to_string()
+    } else if complete {
+        "The candidate is complete, but its provable risk makes waiting or comparing safer than recommending immediate claim.".to_string()
+    } else {
+        "The first industrial goal is known, but canonical capability evidence is incomplete; wait for a supported route instead of inferring output.".to_string()
+    };
+    let first_industrial_goal_help = if complete {
+        "Supports the first industrial goal by covering energy, sensing, mobility, and cargo/input carrying; it does not guarantee output."
+            .to_string()
+    } else {
+        "The first industrial goal is known, but this candidate cannot yet prove complete energy, sensing, mobility, and cargo/input carrying support; no output is promised."
+            .to_string()
+    };
+
+    Some(CandidateRationale {
+        starting_location: format!(
+            "({}, {}, {}) cm",
+            candidate.location_x_cm, candidate.location_y_cm, candidate.location_z_cm
+        ),
+        specialty_summary: specialty_summary(candidate),
+        first_industrial_goal_help,
+        risk_summary,
+        recommendation_reason,
+        high_risk,
+    })
+}
+
+fn has_module(candidate: &PlayerAgentClaimChoiceCandidateSnapshot, module_id: &str) -> bool {
+    candidate
+        .installed_module_ids
+        .iter()
+        .any(|installed| installed == module_id)
+}
+
+fn specialty_summary(candidate: &PlayerAgentClaimChoiceCandidateSnapshot) -> String {
+    let mut specialties = Vec::new();
+    if has_module(candidate, M1_RADIATION_POWER_MODULE_ID)
+        || has_module(candidate, M1_STORAGE_POWER_MODULE_ID)
+    {
+        specialties.push("energy");
+    }
+    if has_module(candidate, M1_SENSOR_MODULE_ID) {
+        specialties.push("sensing/input discovery");
+    }
+    if has_module(candidate, M1_MOBILITY_MODULE_ID) {
+        specialties.push("mobility/routing");
+    }
+    if has_module(candidate, M1_STORAGE_CARGO_MODULE_ID) {
+        specialties.push("cargo/input carrying");
+    }
+    if specialties.is_empty() {
+        "No canonical industrial capability is proven.".to_string()
+    } else {
+        format!("Canonical specialties: {}.", specialties.join(", "))
     }
 }
 

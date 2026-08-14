@@ -20,6 +20,7 @@ mod background_play;
 mod chain_sync;
 pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
+mod claim_choice;
 mod claim_runway;
 mod fine_grain_translation;
 mod governance_vote_quote;
