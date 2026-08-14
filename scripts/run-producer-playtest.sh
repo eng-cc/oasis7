@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
-source "$ROOT_DIR/scripts/viewer-dependency-preflight.sh"
 
 BUNDLE_DIR=""
 PROFILE="release"
@@ -100,8 +99,6 @@ done
 [[ "$PROFILE" == "release" || "$PROFILE" == "dev" ]] || { echo "error: --profile must be release or dev" >&2; exit 2; }
 [[ -n "$SESSION_NAME" ]] || { echo "error: --session cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
-
-viewer_dependency_preflight "$ROOT_DIR" build
 
 if [[ -z "$BUNDLE_DIR" ]]; then
   BUNDLE_DIR="$(wh_default_producer_bundle_dir "$(wh_harness_root "$ROOT_DIR" "$(wh_worktree_id)")")"

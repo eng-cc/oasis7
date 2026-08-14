@@ -142,8 +142,6 @@ fi
 
 for wrapper in \
   scripts/build-viewer-software-safe.sh \
-  scripts/worktree-harness.sh \
-  scripts/run-producer-playtest.sh \
   scripts/viewer-performance-probe.sh \
   scripts/viewer-pixel-world-fragment-visual-smoke.sh \
   scripts/verify-gameplay-attraction-automation.sh \
@@ -153,6 +151,16 @@ for wrapper in \
     exit 1
   fi
 done
+for wrapper in scripts/worktree-harness.sh scripts/run-producer-playtest.sh; do
+  if grep -Fq 'viewer_dependency_preflight' "$ROOT_DIR/$wrapper"; then
+    echo "expected $wrapper to defer dependency ensure to the actual Viewer build authority" >&2
+    exit 1
+  fi
+done
+if [[ "$(grep -c 'viewer_dependency_preflight' "$ROOT_DIR/scripts/build-viewer-software-safe.sh")" != "1" ]]; then
+  echo "expected build-viewer-software-safe.sh to remain the single Viewer build ensure authority" >&2
+  exit 1
+fi
 if ! grep -Fq 'ensure:dependencies' "$ROOT_DIR/crates/oasis7_viewer/package.json"; then
   echo "expected Viewer package to expose an ensure-dependencies script" >&2
   exit 1

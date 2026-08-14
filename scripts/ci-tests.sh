@@ -192,6 +192,7 @@ run_newapi_bridge_service_accounting_tests() {
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
+  run ./scripts/viewer-dependency-preflight.test.sh
   viewer_dependency_preflight "$repo_root" test
   run npm --prefix crates/oasis7_viewer run test:frontend-structure
   run npm --prefix crates/oasis7_viewer run test:feedback-contract
