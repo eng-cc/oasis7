@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 
 use super::*;
 use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageHeadV1;
 use oasis7_proto::distributed_dht::DistributedDht;
 #[derive(Clone)]
 struct FirstReadyHeadCheckpointNetwork {
@@ -97,7 +98,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
                     reason: format!("decode checkpoint fetch request failed: {err}"),
                 })?;
             if request.height > 1 {
-                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None })
+                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None, lineage_envelope: None })
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode unavailable checkpoint response failed: {err}"),
                 });
@@ -127,73 +128,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
     }
 }
 
-struct CheckpointInstallingExecutionHook {
-    installed: Vec<u64>,
-}
-
-static CHECKPOINT_PROBE_NONCE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-pub(super) fn lock_checkpoint_probe_nonce() -> std::sync::MutexGuard<'static, ()> {
-    CHECKPOINT_PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-pub(super) struct CheckpointProbeNonceGuard;
-
-impl CheckpointProbeNonceGuard {
-    pub(super) fn install() -> Self {
-        // SAFETY: tests serialize access with CHECKPOINT_PROBE_NONCE_LOCK.
-        unsafe {
-            std::env::set_var(
-                "OASIS7_CHECKPOINT_PROBE_NONCE",
-                "probe-nonce-0123456789abcdef0123456789abcdef",
-            );
-        }
-        Self
-    }
-}
-
-impl Drop for CheckpointProbeNonceGuard {
-    fn drop(&mut self) {
-        // SAFETY: tests serialize access with CHECKPOINT_PROBE_NONCE_LOCK.
-        unsafe {
-            std::env::remove_var("OASIS7_CHECKPOINT_PROBE_NONCE");
-        }
-    }
-}
-
-impl NodeExecutionHook for CheckpointInstallingExecutionHook {
-    fn on_commit(
-        &mut self,
-        context: NodeExecutionCommitContext,
-    ) -> Result<NodeExecutionCommitResult, String> {
-        Err(format!(
-            "{} at height {}",
-            EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, context.height
-        ))
-    }
-
-    fn install_checkpoint_bundle(
-        &mut self,
-        context: NodeExecutionCheckpointInstallContext,
-        bundle: NodeExecutionCheckpointBundle,
-    ) -> Result<NodeExecutionCommitResult, String> {
-        if bundle.height != context.height
-            || bundle.execution_block_hash != context.execution_block_hash
-            || bundle.execution_state_root != context.execution_state_root
-        {
-            return Err("checkpoint bundle mismatch".to_string());
-        }
-        self.installed.push(context.height);
-        Ok(NodeExecutionCommitResult {
-            execution_height: context.height,
-            execution_block_hash: context.execution_block_hash,
-            execution_state_root: context.execution_state_root,
-        })
-    }
-}
+include!("tests_storage_replication_first_ready_checkpoint_support.rs");
 
 struct BootstrapBeforeIncrementalHook {
     installed: Vec<u64>,
@@ -1012,6 +947,20 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
         )
         .expect("build checkpoint only discoverable through peer-head lookup")
         .expect("checkpoint message");
+    let engine_a = PosNodeEngine::new(&config_a).expect("lineage authority engine");
+    super::storage_replication_live_retained_boundary_tests::attach_production_lineage_envelope(
+        &mut replication_a,
+        world_id,
+        checkpoint_height,
+        CheckpointLineageHeadV1 {
+            height: checkpoint_height,
+            block_hash: format!("block-{checkpoint_height}"),
+            state_root: checkpoint_state_root.clone(),
+            execution_block_hash: format!("exec-block-{checkpoint_height}"),
+            execution_state_root: checkpoint_state_root.clone(),
+        },
+        &[&engine_a],
+    );
     let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
     let checkpoint_fetch_available = Arc::new(AtomicBool::new(initial_checkpoint_fetch_available));
     let checkpoint_fetch_not_found = Arc::new(AtomicBool::new(initial_checkpoint_fetch_not_found));
@@ -1136,8 +1085,10 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
             *peer_head.lock().expect("publish delayed peer checkpoint head") =
                 high_peer_head;
         }
-        checkpoint_fetch_available.store(true, Ordering::SeqCst);
-        checkpoint_fetch_not_found.store(false, Ordering::SeqCst);
+        if !initial_checkpoint_fetch_not_found {
+            checkpoint_fetch_available.store(true, Ordering::SeqCst);
+            checkpoint_fetch_not_found.store(false, Ordering::SeqCst);
+        }
 
         engine_b
             .tick(
@@ -1154,6 +1105,19 @@ fn peer_head_checkpoint_before_height_one_with_stale_dht(
             .expect("peer-head checkpoint bootstrap must precede deferred height-one execution");
     }
 
+    if initial_checkpoint_fetch_not_found {
+        assert!(
+            execution_hook.installed.is_empty(),
+            "missing checkpoint closure must remain fail-closed: {:?}",
+            execution_hook.installed
+        );
+        assert!(execution_hook.incremental_commits.is_empty());
+        assert_eq!(engine_b.committed_height, 0);
+        assert_eq!(engine_b.replication_persisted_height, 0);
+        let _ = fs::remove_dir_all(&dir_a);
+        let _ = fs::remove_dir_all(&dir_b);
+        return;
+    }
     assert_eq!(execution_hook.installed, vec![checkpoint_height]);
     assert!(
         execution_hook.incremental_commits.is_empty(),

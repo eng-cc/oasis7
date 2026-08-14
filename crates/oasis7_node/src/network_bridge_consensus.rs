@@ -1,4 +1,5 @@
 use super::*;
+use crate::gossip_udp::GossipCheckpointLineageVoteMessage;
 
 pub(crate) struct ConsensusNetworkEndpoint {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
@@ -6,9 +7,11 @@ pub(crate) struct ConsensusNetworkEndpoint {
     proposal_topic: String,
     attestation_topic: String,
     commit_topic: String,
+    lineage_topic: String,
     proposal_subscription: Option<NetworkSubscription>,
     attestation_subscription: Option<NetworkSubscription>,
     commit_subscription: Option<NetworkSubscription>,
+    lineage_subscription: Option<NetworkSubscription>,
 }
 
 impl ConsensusNetworkEndpoint {
@@ -22,6 +25,7 @@ impl ConsensusNetworkEndpoint {
         let proposal_topic = registry.consensus_proposal_topic;
         let attestation_topic = registry.consensus_attestation_topic;
         let commit_topic = registry.consensus_commit_topic;
+        let lineage_topic = default_consensus_lineage_topic(world_id);
         let subscribe_topic = |topic: &str| -> Result<Option<NetworkSubscription>, NodeError> {
             if !subscribe {
                 return Ok(None);
@@ -45,6 +49,8 @@ impl ConsensusNetworkEndpoint {
             proposal_subscription: subscribe_topic(proposal_topic.as_str())?,
             attestation_subscription: subscribe_topic(attestation_topic.as_str())?,
             commit_subscription: subscribe_topic(commit_topic.as_str())?,
+            lineage_topic: lineage_topic.clone(),
+            lineage_subscription: subscribe_topic(lineage_topic.as_str())?,
         })
     }
     pub(crate) fn publish_proposal(
@@ -62,11 +68,21 @@ impl ConsensusNetworkEndpoint {
     pub(crate) fn publish_commit(&self, message: &GossipCommitMessage) -> Result<(), NodeError> {
         self.publish_json(self.commit_topic.as_str(), message)
     }
+    pub(crate) fn publish_checkpoint_lineage_vote(
+        &self,
+        message: &GossipCheckpointLineageVoteMessage,
+    ) -> Result<(), NodeError> {
+        self.publish_json(
+            self.lineage_topic.as_str(),
+            &GossipMessage::CheckpointLineageVote(message.clone()),
+        )
+    }
     pub(crate) fn drain_messages(&self) -> Result<Vec<GossipMessage>, NodeError> {
         let mut out = Vec::new();
         Self::drain_subscription(self.proposal_subscription.as_ref(), &mut out);
         Self::drain_subscription(self.attestation_subscription.as_ref(), &mut out);
         Self::drain_subscription(self.commit_subscription.as_ref(), &mut out);
+        Self::drain_subscription(self.lineage_subscription.as_ref(), &mut out);
         Ok(out)
     }
     pub(crate) fn allows_publish(&self) -> bool {
@@ -107,7 +123,8 @@ fn decode_consensus_message(payload: &[u8]) -> Option<GossipMessage> {
         match message {
             GossipMessage::Proposal(_)
             | GossipMessage::Attestation(_)
-            | GossipMessage::Commit(_) => return Some(message),
+            | GossipMessage::Commit(_)
+            | GossipMessage::CheckpointLineageVote(_) => return Some(message),
             GossipMessage::Hello(_) | GossipMessage::Replication(_) => {}
         }
     }

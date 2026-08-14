@@ -51,6 +51,7 @@ pub(crate) const DEFAULT_REPLICATION_TOPIC_PREFIX: &str = "aw";
 pub(crate) const DEFAULT_CONSENSUS_PROPOSAL_TOPIC_SUFFIX: &str = "consensus.proposal";
 pub(crate) const DEFAULT_CONSENSUS_ATTESTATION_TOPIC_SUFFIX: &str = "consensus.attestation";
 pub(crate) const DEFAULT_CONSENSUS_COMMIT_TOPIC_SUFFIX: &str = "consensus.commit";
+pub(crate) const DEFAULT_CONSENSUS_LINEAGE_TOPIC_SUFFIX: &str = "consensus.checkpoint_lineage";
 const FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS: u64 = 5_000;
 const FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES: usize = 64;
 pub(crate) const REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX: &str =
@@ -92,6 +93,13 @@ pub(crate) fn default_consensus_commit_topic(world_id: &str) -> String {
     format!(
         "{DEFAULT_REPLICATION_TOPIC_PREFIX}.{world_id}.{}",
         DEFAULT_CONSENSUS_COMMIT_TOPIC_SUFFIX
+    )
+}
+
+pub(crate) fn default_consensus_lineage_topic(world_id: &str) -> String {
+    format!(
+        "{DEFAULT_REPLICATION_TOPIC_PREFIX}.{world_id}.{}",
+        DEFAULT_CONSENSUS_LINEAGE_TOPIC_SUFFIX
     )
 }
 
@@ -642,6 +650,7 @@ impl ReplicationNetworkEndpoint {
                 FetchCommitResponse {
                     found: false,
                     message: None,
+                    lineage_envelope: None,
                 }
             }
         };

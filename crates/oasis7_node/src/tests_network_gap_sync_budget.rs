@@ -31,6 +31,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         serde_json::to_vec(&super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         })
         .map_err(|err| WorldError::DistributedValidationFailed {
             reason: format!("encode generic fetch commit response failed: {err}"),
@@ -62,6 +63,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
             super::replication::FetchCommitResponse {
                 found: false,
                 message: None,
+            lineage_envelope: None,
             }
         } else {
             self.response.clone()
@@ -108,6 +110,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         serde_json::to_vec(&super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         })
         .map_err(|err| WorldError::DistributedValidationFailed {
             reason: format!("encode generic fetch commit response failed: {err}"),
@@ -139,6 +142,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
             return serde_json::to_vec(&super::replication::FetchCommitResponse {
                 found: false,
                 message: None,
+            lineage_envelope: None,
             })
             .map_err(|err| WorldError::DistributedValidationFailed {
                 reason: format!("encode generic fetch commit response failed: {err}"),
@@ -154,6 +158,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         serde_json::to_vec(&super::replication::FetchCommitResponse {
             found: true,
             message: None,
+        lineage_envelope: None,
         })
         .map_err(|err| WorldError::DistributedValidationFailed {
             reason: format!("encode provider fetch commit response failed: {err}"),
@@ -185,6 +190,7 @@ fn gap_sync_fetch_commit_uses_cold_archive_request_budget() {
             response: super::replication::FetchCommitResponse {
                 found: true,
                 message: None,
+            lineage_envelope: None,
             },
             budgets: Arc::clone(&budgets),
         }),
@@ -244,6 +250,7 @@ fn gap_sync_fetch_commit_discards_an_unconsumed_prior_failure_snapshot() {
             response: super::replication::FetchCommitResponse {
                 found: true,
                 message: None,
+            lineage_envelope: None,
             },
             budgets,
         }),

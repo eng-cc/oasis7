@@ -50,7 +50,7 @@ pub(super) fn sign_replication_message(
     Ok(hex::encode(signature.to_bytes()))
 }
 
-pub(super) fn verify_replication_message_signature(
+pub(crate) fn verify_replication_message_signature(
     message: &GossipReplicationMessage,
 ) -> Result<(), NodeError> {
     let public_key_hex =

@@ -313,8 +313,9 @@ fn gap_sync_uses_high_checkpoint_when_network_lag_exceeds_poll_window() {
         )
         .expect("gap sync");
 
-    assert_eq!(engine_b.committed_height, high_height);
-    assert_eq!(engine_b.replication_persisted_height, high_height);
+    let retained_checkpoint_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+    assert_eq!(engine_b.committed_height, retained_checkpoint_height);
+    assert_eq!(engine_b.replication_persisted_height, retained_checkpoint_height);
     assert_eq!(engine_b.last_execution_height, 0);
     assert!(engine_b.last_execution_block_hash.is_none());
     assert!(engine_b.execution_binding_for_height(high_height).is_none());
@@ -322,14 +323,14 @@ fn gap_sync_uses_high_checkpoint_when_network_lag_exceeds_poll_window() {
         replication_b
             .latest_persisted_commit_height(world_id)
             .expect("persisted height after high checkpoint"),
-        high_height
+            retained_checkpoint_height
     );
     assert!(replication_b
         .load_commit_message_by_height(world_id, 1)
         .expect("load low height")
         .is_none());
     assert!(replication_b
-        .load_commit_message_by_height(world_id, high_height)
+        .load_commit_message_by_height(world_id, retained_checkpoint_height)
         .expect("load high checkpoint")
         .is_some());
 

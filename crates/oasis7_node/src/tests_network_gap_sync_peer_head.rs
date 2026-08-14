@@ -29,6 +29,7 @@ fn gap_sync_fetch_commit_records_peer_head_for_readiness() {
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
+                        lineage_envelope: None,
                     })
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch commit response failed: {err}"),

@@ -116,6 +116,7 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
+                        lineage_envelope: None,
                     })
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch commit response failed: {err}"),
@@ -305,6 +306,7 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
+                        lineage_envelope: None,
                     })
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch commit response failed: {err}"),

@@ -61,7 +61,13 @@ impl PosNodeEngine {
             )?;
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
+            self.ingest_consensus_network_messages(
+                endpoint,
+                node_id,
+                world_id,
+                current_slot,
+                replication.as_deref_mut(),
+            )?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
             let record_peer_heads_from_gap_sync = gossip.is_some() || consensus_network.is_some();
@@ -144,6 +150,13 @@ impl PosNodeEngine {
                 }
             }
         }
+        self.maybe_publish_local_checkpoint_lineage_vote(
+            consensus_network.as_deref(),
+            gossip,
+            node_id,
+            world_id,
+            replication.as_deref_mut(),
+        )?;
         if let Some(callback) = progress_callback.as_deref_mut() {
             let observed = self.idle_pending_decision()?;
             callback(self.snapshot_from_decision(&observed))?;
@@ -217,7 +230,9 @@ impl PosNodeEngine {
             let has_matching_remote_replication = match replication.as_deref() {
                 Some(replication_runtime) => replication_runtime
                     .load_commit_message_by_height(world_id, decision.height)?
-                    .and_then(|message| parse_replication_commit_payload(message.payload.as_slice()))
+                    .and_then(|message| {
+                        parse_replication_commit_payload(message.payload.as_slice())
+                    })
                     .is_some_and(|payload| {
                         payload.world_id == world_id
                             && payload.height == decision.height
@@ -332,9 +347,13 @@ impl PosNodeEngine {
             }
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            if let Err(err) =
-                self.ingest_consensus_network_messages(endpoint, world_id, current_slot)
-            {
+            if let Err(err) = self.ingest_consensus_network_messages(
+                endpoint,
+                node_id,
+                world_id,
+                current_slot,
+                replication.as_deref_mut(),
+            ) {
                 return Err(err);
             }
         }

@@ -8,6 +8,9 @@ pub(crate) use oasis7_consensus::node_consensus_message::{
     NodeGossipCommitMessage as GossipCommitMessage,
     NodeGossipProposalMessage as GossipProposalMessage,
 };
+use oasis7_proto::distributed_checkpoint_lineage::{
+    CheckpointLineageCheckpointV1, CheckpointLineageHeadV1, CheckpointLineageVoteV1,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::replication::GossipReplicationMessage;
@@ -23,7 +26,21 @@ pub(crate) enum GossipMessage {
     Commit(GossipCommitMessage),
     Proposal(GossipProposalMessage),
     Attestation(GossipAttestationMessage),
+    CheckpointLineageVote(GossipCheckpointLineageVoteMessage),
     Replication(GossipReplicationMessage),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GossipCheckpointLineageVoteMessage {
+    pub version: u8,
+    pub world_id: String,
+    pub round_id: String,
+    pub checkpoint: CheckpointLineageCheckpointV1,
+    pub head: CheckpointLineageHeadV1,
+    pub validator_set_hash: String,
+    pub total_stake: u64,
+    pub required_stake: u64,
+    pub vote: CheckpointLineageVoteV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,6 +152,13 @@ impl GossipEndpoint {
         message: &GossipAttestationMessage,
     ) -> Result<(), NodeError> {
         self.broadcast_message(GossipMessage::Attestation(message.clone()))
+    }
+
+    pub(crate) fn broadcast_checkpoint_lineage_vote(
+        &self,
+        message: &GossipCheckpointLineageVoteMessage,
+    ) -> Result<(), NodeError> {
+        self.broadcast_message(GossipMessage::CheckpointLineageVote(message.clone()))
     }
 
     pub(crate) fn broadcast_replication(
@@ -380,6 +404,7 @@ fn gossip_message_kind_label(message: &GossipMessage) -> &'static str {
         GossipMessage::Commit(_) => "commit",
         GossipMessage::Proposal(_) => "proposal",
         GossipMessage::Attestation(_) => "attestation",
+        GossipMessage::CheckpointLineageVote(_) => "checkpoint_lineage_vote",
         GossipMessage::Replication(_) => "replication",
     }
 }

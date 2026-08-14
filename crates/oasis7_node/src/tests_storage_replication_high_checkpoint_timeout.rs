@@ -410,6 +410,7 @@ fn encode_fetch_commit_response(
     serde_json::to_vec(&replication::FetchCommitResponse {
         found: message.is_some(),
         message,
+        lineage_envelope: None,
     })
     .map_err(|err| WorldError::DistributedValidationFailed {
         reason: format!("encode fetch-commit response failed: {err}"),

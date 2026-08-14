@@ -3,6 +3,10 @@ use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 
 use super::node_engine_core::InboundSlotWindow;
+use super::node_engine_network_hash::{
+    execution_error_is_peer_mismatch, peer_commit_heads_conflict,
+    validated_commits_share_identity_block_action,
+};
 use super::*;
 
 impl PosNodeEngine {
@@ -325,6 +329,19 @@ impl PosNodeEngine {
                     reason: format!("gap sync height {} payload decode failed", height),
                 }
             })?;
+        // The provider response sidecar is only a transport copy of the
+        // source-authored value embedded in the signed payload.  Never allow
+        // a route/provider to add, remove, or substitute lineage authority.
+        // This remains a consistency gate until the runtime validator has a
+        // trusted consensus-produced envelope to verify.
+        if fetch_commit.response.lineage_envelope.as_ref() != payload.lineage_envelope.as_ref() {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "gap sync height {} checkpoint lineage sidecar mismatch between response and signed payload",
+                    height
+                ),
+            });
+        }
         if payload.world_id != world_id {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -387,6 +404,7 @@ impl PosNodeEngine {
             &FetchCommitResponse {
                 found: true,
                 message: Some(message.clone()),
+                lineage_envelope: fetch_commit.response.lineage_envelope.clone(),
             },
         );
         Ok(GapSyncHeightOutcome::Synced {
@@ -921,9 +939,12 @@ impl PosNodeEngine {
     pub(super) fn ingest_consensus_network_messages(
         &mut self,
         endpoint: &ConsensusNetworkEndpoint,
+        node_id: &str,
         world_id: &str,
         current_slot: u64,
+        replication: Option<&mut ReplicationRuntime>,
     ) -> Result<(), NodeError> {
+        let mut replication = replication;
         let messages = endpoint.drain_messages()?;
         for message in messages {
             match message {
@@ -1004,6 +1025,14 @@ impl PosNodeEngine {
                         continue;
                     }
                     self.ingest_attestation_message(world_id, &attestation, current_slot)?;
+                }
+                GossipMessage::CheckpointLineageVote(vote) => {
+                    self.ingest_checkpoint_lineage_vote_message(
+                        node_id,
+                        world_id,
+                        &vote,
+                        replication.as_deref_mut(),
+                    )?;
                 }
                 GossipMessage::Replication(_) => {}
             }
@@ -1110,6 +1139,15 @@ impl PosNodeEngine {
                     self.ingest_attestation_message(world_id, &attestation, current_slot)?;
                     endpoint.remember_peer(from)?;
                 }
+                GossipMessage::CheckpointLineageVote(vote) => {
+                    self.ingest_checkpoint_lineage_vote_message(
+                        node_id,
+                        world_id,
+                        &vote,
+                        replication.as_deref_mut(),
+                    )?;
+                    endpoint.remember_peer(from)?;
+                }
                 GossipMessage::Replication(replication_msg) => {
                     if replication_msg.version != 1
                         || replication_msg.world_id != world_id
@@ -1130,68 +1168,4 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-
-    pub(super) fn compute_block_hash(
-        &self,
-        world_id: &str,
-        height: u64,
-        slot: u64,
-        epoch: u64,
-        proposer_id: &str,
-        parent_block_hash: &str,
-        action_root: &str,
-    ) -> Result<String, NodeError> {
-        let payload = (
-            1_u8,
-            world_id,
-            height,
-            slot,
-            epoch,
-            proposer_id,
-            parent_block_hash,
-            action_root,
-        );
-        let bytes = serde_cbor::to_vec(&payload).map_err(|err| NodeError::Consensus {
-            reason: format!("encode block hash payload failed: {err}"),
-        })?;
-        Ok(blake3_hex(bytes.as_slice()))
-    }
-}
-
-fn execution_error_is_peer_mismatch(err: &NodeError) -> bool {
-    matches!(
-        err,
-        NodeError::Execution { reason }
-            if reason.contains("execution hook returned peer mismatch")
-    )
-}
-
-fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHead) -> bool {
-    left.block_hash != right.block_hash
-        || matches!(
-            (&left.execution_block_hash, &right.execution_block_hash),
-            (Some(left), Some(right)) if left != right
-        )
-        || matches!(
-            (&left.execution_state_root, &right.execution_state_root),
-            (Some(left), Some(right)) if left != right
-        )
-        || (!left.action_root.is_empty()
-            && !right.action_root.is_empty()
-            && left.action_root != right.action_root)
-}
-
-fn validated_commits_share_identity_block_action(
-    left: &GossipCommitMessage,
-    right: &GossipCommitMessage,
-) -> bool {
-    left.world_id == right.world_id
-        && left.node_id == right.node_id
-        && left.player_id == right.player_id
-        && left.height == right.height
-        && left.slot == right.slot
-        && left.epoch == right.epoch
-        && left.block_hash == right.block_hash
-        && left.action_root == right.action_root
-        && left.actions == right.actions
 }

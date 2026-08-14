@@ -92,6 +92,7 @@ fn successor_probe_unsupported_fetch_commit_keeps_local_proposals_enabled() {
         generic_response: super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         },
         generic_unsupported: true,
         peer_responses: Arc::new(Mutex::new(HashMap::new())),
@@ -161,6 +162,7 @@ fn successor_probe_found_commit_missing_blob_does_not_enable_local_proposals() {
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
+                        lineage_envelope: None,
                     })
                     .map_err(|err| WorldError::DistributedValidationFailed {
                         reason: format!("encode fetch commit response failed: {err}"),

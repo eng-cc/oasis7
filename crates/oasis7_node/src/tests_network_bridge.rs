@@ -296,6 +296,7 @@ fn cacheable_fetch_commit_success_response_drops_payload_allocation() {
             public_key_hex: None,
             signature_hex: None,
         }),
+        lineage_envelope: None,
     };
 
     let cached = cacheable_fetch_commit_success_response(&response).expect("cached response");

@@ -1,4 +1,5 @@
 use super::GossipReplicationMessage;
+use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageEnvelopeV1;
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,6 +16,10 @@ pub(crate) struct FetchCommitRequest {
 pub(crate) struct FetchCommitResponse {
     pub found: bool,
     pub message: Option<GossipReplicationMessage>,
+    /// Immutable source-authority sidecar.  Providers may forward this value
+    /// unchanged, but must never synthesize, rewrite, or re-sign it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage_envelope: Option<CheckpointLineageEnvelopeV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

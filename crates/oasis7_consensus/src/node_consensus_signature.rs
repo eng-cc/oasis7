@@ -29,6 +29,11 @@ impl NodeConsensusMessageSigner {
             public_key_hex,
         })
     }
+
+    pub fn sign_domain_payload(&self, payload: &[u8]) -> String {
+        let signature: Signature = self.signing_key.sign(payload);
+        hex::encode(signature.to_bytes())
+    }
 }
 
 pub fn sign_commit_message(

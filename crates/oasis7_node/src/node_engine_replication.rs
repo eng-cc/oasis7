@@ -355,6 +355,13 @@ impl PosNodeEngine {
         let mut validated_messages = Vec::new();
         for message in messages {
             if message.node_id == node_id {
+                if parse_replication_commit_payload(message.payload.as_slice())
+                    .is_some_and(|payload| payload.execution_checkpoint.is_some())
+                {
+                    replication_runtime.persist_local_checkpoint_message_for_lineage(
+                        node_id, world_id, &message,
+                    )?;
+                }
                 continue;
             }
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
@@ -500,24 +507,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-    pub(super) fn sync_missing_replication_commits(
-        &mut self,
-        endpoint: &ReplicationNetworkEndpoint,
-        node_id: &str,
-        world_id: &str,
-        replication: Option<&mut ReplicationRuntime>,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
-    ) -> Result<(), NodeError> {
-        self.sync_missing_replication_commits_with_progress(
-            endpoint,
-            node_id,
-            world_id,
-            replication,
-            execution_hook,
-            None,
-            true,
-        )
-    }
     pub(super) fn try_sync_high_replication_checkpoint_boundary(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -532,6 +521,7 @@ impl PosNodeEngine {
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
     ) -> Result<bool, NodeError> {
+        replication_runtime.ensure_checkpoint_lineage_healthy()?;
         let fresh_execution_bootstrap = self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0;
@@ -567,11 +557,18 @@ impl PosNodeEngine {
         if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
         }
-        if fresh_execution_bootstrap
-            && expected_checkpoint_head.is_none()
-            && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
-        {
+        let unsigned_exact_head = expected_checkpoint_head.is_some_and(|expected_head| {
+            expected_head.signature.trim().is_empty() && checkpoint_height == expected_head.height
+        });
+        if unsigned_exact_head && payload.lineage_envelope.is_none() {
             return Ok(false);
+        }
+        if fresh_execution_bootstrap && expected_checkpoint_head.is_none() {
+            if payload.lineage_envelope.is_none()
+                && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
+            {
+                return Ok(false);
+            }
         }
         if let Some(expected_head) = expected_checkpoint_head {
             if Self::validate_world_head_checkpoint_payload(world_id, &payload, expected_head)
@@ -584,18 +581,22 @@ impl PosNodeEngine {
         let Some((block_hash, committed_at_ms)) = (if let Some(checkpoint_descriptor) =
             payload.execution_checkpoint.clone()
         {
+            if !self.validate_high_checkpoint_lineage_candidate(
+                world_id,
+                &payload,
+                &checkpoint_descriptor,
+                expected_checkpoint_head,
+                fresh_execution_bootstrap,
+                unsigned_exact_head,
+            ) {
+                return Ok(false);
+            }
             let Some(execution_block_hash) = payload.execution_block_hash.clone() else {
                 return Ok(false);
             };
             let Some(execution_state_root) = payload.execution_state_root.clone() else {
                 return Ok(false);
             };
-            if checkpoint_descriptor.height != payload.height
-                || checkpoint_descriptor.execution_block_hash != execution_block_hash
-                || checkpoint_descriptor.execution_state_root != execution_state_root
-            {
-                return Ok(false);
-            }
             let probe_nonce = std::env::var("OASIS7_CHECKPOINT_PROBE_NONCE").ok();
             if let Some(probe_nonce) = probe_nonce.as_deref() {
                 if !ReplicationRuntime::checkpoint_probe_nonce_is_valid(probe_nonce) {
