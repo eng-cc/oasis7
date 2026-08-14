@@ -165,28 +165,40 @@ impl PosNodeEngine {
             if let Some(cached_head) = self.cached_high_checkpoint_head(world_id) {
                 self.fresh_observer_checkpoint_low_head_confirmation = None;
                 self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
-                return match self.try_sync_high_replication_checkpoint_boundary(
-                    endpoint,
-                    node_id,
-                    world_id,
-                    replication_runtime,
-                    cached_head.height,
-                    0,
-                    Some(&cached_head),
-                    execution_hook,
-                    progress_callback,
-                ) {
-                    Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
-                    Ok(false) => {
-                        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
-                        Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending)
+                let mut retry_pending = false;
+                for checkpoint_candidate in
+                    Self::high_replication_checkpoint_candidates(cached_head.height, 0)
+                {
+                    let expected_candidate_head =
+                        (checkpoint_candidate == cached_head.height).then_some(&cached_head);
+                    match self.try_sync_high_replication_checkpoint_boundary(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        replication_runtime,
+                        checkpoint_candidate,
+                        0,
+                        expected_candidate_head,
+                        execution_hook,
+                        progress_callback,
+                    ) {
+                        Ok(true) => {
+                            return Ok(FreshObserverCheckpointBootstrap::Installed);
+                        }
+                        Ok(false) => {}
+                        Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                            retry_pending = true;
+                            self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                        }
+                        Err(err) => return Err(err),
                     }
-                    Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
-                        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
-                        Ok(FreshObserverCheckpointBootstrap::RetryPending)
-                    }
-                    Err(err) => Err(err),
-                };
+                }
+                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                return Ok(if retry_pending {
+                    FreshObserverCheckpointBootstrap::RetryPending
+                } else {
+                    FreshObserverCheckpointBootstrap::HighCheckpointPending
+                });
             }
             // Preserve the existing fail-closed hold for high heads that are
             // not trustworthy checkpoint candidates (for example, an unknown
@@ -230,33 +242,49 @@ impl PosNodeEngine {
         }
         self.fresh_observer_checkpoint_bootstrap_retry_pending = false;
         self.fresh_observer_checkpoint_low_head_confirmation = None;
-        match self.try_sync_high_replication_checkpoint_boundary(
-            endpoint,
-            node_id,
-            world_id,
-            replication_runtime,
-            advertised_head.height,
-            0,
-            Some(&advertised_head),
-            execution_hook,
-            progress_callback,
-        ) {
-            Ok(true) => Ok(FreshObserverCheckpointBootstrap::Installed),
-            // A high advertised head is evidence that replaying the height-one
-            // tail is unsafe until this observer has either installed the
-            // matching verified checkpoint or observed that head change. In
-            // particular, a bounded fetch probe can return `NotFound` while
-            // the connected peer is still becoming request-ready.
-            Ok(false) => {
-                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
-                Ok(FreshObserverCheckpointBootstrap::HighCheckpointPending)
+        // The advertised live head is not necessarily itself a retained
+        // checkpoint boundary (for example, head 52079 with the newest
+        // retained checkpoint at 52032). Probe the head first, then the
+        // bounded aligned candidates below it; each candidate must still
+        // return a descriptor whose height/hash/state binding matches that
+        // candidate before installation can proceed.
+        let mut retry_pending = false;
+        for checkpoint_candidate in
+            Self::high_replication_checkpoint_candidates(advertised_head.height, 0)
+        {
+            let expected_candidate_head =
+                (checkpoint_candidate == advertised_head.height).then_some(&advertised_head);
+            match self.try_sync_high_replication_checkpoint_boundary(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                checkpoint_candidate,
+                0,
+                expected_candidate_head,
+                execution_hook,
+                progress_callback,
+            ) {
+                Ok(true) => return Ok(FreshObserverCheckpointBootstrap::Installed),
+                // A high advertised head is evidence that replaying the
+                // height-one tail is unsafe until this observer has either
+                // installed a verified retained checkpoint or observed that
+                // head change. A non-boundary head is expected to return no
+                // descriptor; continue to the newest aligned candidate.
+                Ok(false) => {}
+                Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
+                    retry_pending = true;
+                    self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                }
+                Err(err) => return Err(err),
             }
-            Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
-                self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
-                Ok(FreshObserverCheckpointBootstrap::RetryPending)
-            }
-            Err(err) => Err(err),
         }
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+        Ok(if retry_pending {
+            FreshObserverCheckpointBootstrap::RetryPending
+        } else {
+            FreshObserverCheckpointBootstrap::HighCheckpointPending
+        })
     }
 
     pub(super) fn validate_world_head_checkpoint_payload(
@@ -285,6 +313,41 @@ impl PosNodeEngine {
             });
         }
         Ok(())
+    }
+
+    pub(super) fn authenticated_checkpoint_writer_has_supermajority_stake(
+        &self,
+        message: &replication::GossipReplicationMessage,
+    ) -> bool {
+        // The current replication/peer-head payloads do not carry a signed
+        // predecessor chain or a finality proof that could bind a retained
+        // checkpoint C below an authenticated live head H.  A matching writer
+        // key is therefore not sufficient lineage evidence: the writer could
+        // have signed a conflicting fork at C.  Keep the lower-candidate path
+        // fail-closed whenever any authenticated high peer head is present;
+        // the unsigned FetchHead fallback remains eligible only after the
+        // checkpoint writer itself passes the validator stake gate below.
+        if self.peer_heads.values().any(|head| {
+            head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                && head.public_key_hex.is_some()
+                && head.signature_hex.is_some()
+        }) {
+            return false;
+        }
+        let Some((validator_id, _public_key_hex)) = self
+            .validator_signers
+            .iter()
+            .find(|(_, public_key_hex)| *public_key_hex == &message.record.writer_id)
+        else {
+            return false;
+        };
+        let Some(stake) = self.validators.get(validator_id).copied() else {
+            return false;
+        };
+        if stake < self.required_stake {
+            return false;
+        }
+        true
     }
 
     pub(super) fn high_replication_checkpoint_candidates(

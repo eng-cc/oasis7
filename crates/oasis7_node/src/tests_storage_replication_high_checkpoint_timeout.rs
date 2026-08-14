@@ -588,6 +588,8 @@ fn provider_rate_limit_checkpoint_fixture(
 
 #[test]
 fn high_checkpoint_rate_limited_provider_falls_through_to_next_advertised_provider() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-provider-rate-limit-failover";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 246, 247);
     fixture.network.set_rate_limited_providers(&["provider-a"]);
@@ -627,6 +629,8 @@ fn high_checkpoint_rate_limited_provider_falls_through_to_next_advertised_provid
 
 #[test]
 fn high_checkpoint_stale_dht_provider_falls_through_to_connected_complete_peer() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-stale-dht-provider-failover";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 249, 250);
     fixture.dht.set_providers(&["provider-a"]);
@@ -663,6 +667,8 @@ fn high_checkpoint_stale_dht_provider_falls_through_to_connected_complete_peer()
 
 #[test]
 fn high_checkpoint_rate_limited_sole_dht_provider_falls_through_to_connected_complete_peer() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-rate-limited-sole-dht-provider-failover";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 250, 251);
     fixture.dht.set_providers(&["provider-a"]);
@@ -700,6 +706,8 @@ fn high_checkpoint_rate_limited_sole_dht_provider_falls_through_to_connected_com
 
 #[test]
 fn high_checkpoint_rate_limited_sole_dht_and_connected_peer_enters_cooldown() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-rate-limited-sole-dht-and-connected-peer";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 252, 253);
     fixture.dht.set_providers(&["provider-a"]);
@@ -744,6 +752,8 @@ fn high_checkpoint_rate_limited_sole_dht_and_connected_peer_enters_cooldown() {
 
 #[test]
 fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-no-complete-checkpoint-provider";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 251, 252);
     fixture.dht.set_providers(&["provider-a"]);
@@ -777,6 +787,8 @@ fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() 
 
 #[test]
 fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_blobs() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-provider-rate-limit-resume";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 248, 249);
     fixture
@@ -860,6 +872,8 @@ fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_
 
 #[test]
 fn observer_gap_sync_continues_checkpoint_candidates_after_protocol_omitted_timeout() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-timeout-then-checkpoint";
     let dir_a = temp_dir("gap-sync-timeout-then-checkpoint-a");
     let dir_b = temp_dir("gap-sync-timeout-then-checkpoint-b");
@@ -986,6 +1000,8 @@ fn observer_gap_sync_continues_checkpoint_candidates_after_protocol_omitted_time
 
 #[test]
 fn observer_gap_sync_uses_network_height_when_dht_head_lookup_times_out() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-dht-timeout-then-checkpoint";
     let dir_a = temp_dir("gap-sync-dht-timeout-then-checkpoint-a");
     let dir_b = temp_dir("gap-sync-dht-timeout-then-checkpoint-b");
