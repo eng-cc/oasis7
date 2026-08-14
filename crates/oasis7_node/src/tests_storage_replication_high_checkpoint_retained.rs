@@ -670,6 +670,8 @@ fn fetch_commit_handler_does_not_block_on_checkpoint_provider_publish() {
 
 #[test]
 fn observer_gap_sync_recovers_local_state_block_with_retained_checkpoint() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-retained-window-below-head";
     let dir_a = temp_dir("gap-sync-retained-window-below-head-a");
     let dir_b = temp_dir("gap-sync-retained-window-below-head-b");

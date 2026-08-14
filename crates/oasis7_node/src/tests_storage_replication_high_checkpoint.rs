@@ -121,6 +121,8 @@ fn committed_decision(height: u64, approved_stake: u64, required_stake: u64) -> 
 
 #[test]
 fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-exported-legacy-checkpoint";
     let dir_a = temp_dir("gap-sync-exported-legacy-checkpoint-a");
     let dir_b = temp_dir("gap-sync-exported-legacy-checkpoint-b");
@@ -249,6 +251,8 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
 
 #[test]
 fn observer_gap_sync_discovers_high_checkpoint_from_world_head() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-dht-head";
     let dir_a = temp_dir("gap-sync-dht-head-a");
     let dir_b = temp_dir("gap-sync-dht-head-b");
@@ -366,6 +370,8 @@ fn observer_gap_sync_discovers_high_checkpoint_from_world_head() {
 
 #[test]
 fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-peer-head";
     let dir_a = temp_dir("gap-sync-peer-head-a");
     let dir_b = temp_dir("gap-sync-peer-head-b");
@@ -597,6 +603,8 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
 
 #[test]
 fn observer_gap_sync_does_not_persist_sparse_execution_checkpoint_without_hook() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-checkpoint-no-hook";
     let dir_a = temp_dir("gap-sync-checkpoint-no-hook-a");
     let dir_b = temp_dir("gap-sync-checkpoint-no-hook-b");
@@ -702,6 +710,8 @@ fn observer_gap_sync_does_not_persist_sparse_execution_checkpoint_without_hook()
 
 #[test]
 fn observer_gap_sync_probes_checkpoint_boundary_below_non_checkpoint_head() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-boundary-below-head";
     let dir_a = temp_dir("gap-sync-boundary-below-head-a");
     let dir_b = temp_dir("gap-sync-boundary-below-head-b");
@@ -814,6 +824,8 @@ fn observer_gap_sync_probes_checkpoint_boundary_below_non_checkpoint_head() {
 
 #[test]
 fn observer_gap_sync_rejects_mismatched_world_head_checkpoint() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-dht-head-mismatch";
     let dir_a = temp_dir("gap-sync-dht-head-mismatch-a");
     let dir_b = temp_dir("gap-sync-dht-head-mismatch-b");
@@ -927,6 +939,8 @@ fn observer_gap_sync_rejects_mismatched_world_head_checkpoint() {
 
 #[test]
 fn high_checkpoint_gap_sync_does_not_skip_execution_history() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-high-checkpoint-execution-history";
     let dir_a = temp_dir("gap-sync-high-checkpoint-execution-history-a");
     let dir_b = temp_dir("gap-sync-high-checkpoint-execution-history-b");
@@ -1028,6 +1042,8 @@ fn high_checkpoint_gap_sync_does_not_skip_execution_history() {
 
 #[test]
 fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavailable() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-high-checkpoint";
     let dir_a = temp_dir("gap-sync-high-checkpoint-a");
     let dir_b = temp_dir("gap-sync-high-checkpoint-b");

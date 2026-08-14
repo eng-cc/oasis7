@@ -306,6 +306,7 @@ fn fresh_observer_installs_latest_retained_checkpoint_below_non_aligned_live_hea
 
 #[test]
 fn fresh_observer_rejects_lower_retained_checkpoint_without_head_lineage() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
     let world_id = "world-live-head-retained-fork-lineage-52079";
     let dir_a = temp_dir("live-head-retained-fork-lineage-a");
     let dir_b = temp_dir("live-head-retained-fork-lineage-b");
