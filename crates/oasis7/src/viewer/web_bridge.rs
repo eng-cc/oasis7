@@ -155,7 +155,7 @@ fn handle_ws_message(
             Ok(true)
         }
         Message::Binary(binary) => {
-            if let Ok(text) = String::from_utf8(binary) {
+            if let Ok(text) = String::from_utf8(binary.to_vec()) {
                 upstream_writer.write_all(text.as_bytes())?;
                 upstream_writer.write_all(b"\n")?;
                 upstream_writer.flush()?;
@@ -510,7 +510,7 @@ mod tests {
             let url = format!("ws://{ws_addr}");
             let (mut client, _) = connect(url.as_str()).expect("connect ws client");
             client
-                .send(Message::Text(payload))
+                .send(Message::Text(payload.into()))
                 .expect("send ws payload");
             client.close(None).expect("close ws client");
         });
