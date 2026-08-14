@@ -91,6 +91,25 @@ def run_json(command: list[str]) -> dict[str, Any]:
     return value
 
 
+def canonicalize_comparison_ref(root: Path, comparison_ref: str) -> str:
+    """Persist remote shorthand only when it names the same tracking ref."""
+    if comparison_ref.startswith("refs/") or "/" not in comparison_ref:
+        return comparison_ref
+    remote_ref = f"refs/remotes/{comparison_ref}"
+    resolved: dict[str, str | None] = {}
+    for ref in (comparison_ref, remote_ref):
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            text=True,
+            capture_output=True,
+        )
+        oid = result.stdout.strip()
+        resolved[ref] = oid if result.returncode == 0 and HEAD_RE.fullmatch(oid) else None
+    if resolved[comparison_ref] is not None and resolved[comparison_ref] == resolved[remote_ref]:
+        return remote_ref
+    return comparison_ref
+
+
 def resolve_comparison_ref(root: Path, comparison_ref: str, supplied_oid: str | None) -> str:
     result = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--verify", f"{comparison_ref}^{{commit}}"],
@@ -320,6 +339,7 @@ def main() -> int:
         if args.comparison_oid is not None and not HEAD_RE.fullmatch(args.comparison_oid):
             raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
         root = Path(args.root).resolve()
+        comparison_ref = canonicalize_comparison_ref(root, args.comparison_ref)
         if receipt_comparison_oid is not None:
             if args.comparison_oid is not None and args.comparison_oid != receipt_comparison_oid:
                 raise ContractError(
@@ -327,14 +347,14 @@ def main() -> int:
                 )
             comparison_oid = receipt_comparison_oid
         else:
-            comparison_oid = resolve_comparison_ref(root, args.comparison_ref, args.comparison_oid)
+            comparison_oid = resolve_comparison_ref(root, comparison_ref, args.comparison_oid)
         require_comparison_ancestor(root, comparison_oid, args.head)
         roles = selector_roles(args)
-        slices = expected_slices(args.task_uid, args.head, evidence_digest, args.comparison_ref, comparison_oid, roles)
+        slices = expected_slices(args.task_uid, args.head, evidence_digest, comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, evidence_digest, slices)
         epoch = str(batch["epoch"])
         identity = plan_identity(args.task_uid, args.head, evidence_digest,
-                                 args.comparison_ref, comparison_oid, roles, slices)
+                                 comparison_ref, comparison_oid, roles, slices)
         plan_path = (Path(args.out).resolve() if args.out else
                      root / ".pm" / "scratch" / args.task_uid / "review-plans" / f"{epoch}.json")
         if plan_path.exists():

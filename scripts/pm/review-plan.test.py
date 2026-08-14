@@ -201,6 +201,21 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertFalse(drifted["reused"])
         self.assertNotEqual(first["epoch"], drifted["epoch"])
 
+    def test_shorthand_remote_comparison_ref_is_canonicalized_for_pr_helpers(self) -> None:
+        shorthand = "origin/main"
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--comparison-ref", shorthand,
+             "--comparison-oid", self.comparison_oid,
+             "--out", str(self.root / "shorthand-comparison-plan.json")],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual("refs/remotes/origin/main", plan["comparison_ref"])
+
     def test_divergent_comparison_fails_before_plan_creation(self) -> None:
         self.git("checkout", "-b", "topic")
         (self.root / "README").write_text("topic\n", encoding="utf-8")
