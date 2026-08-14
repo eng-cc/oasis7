@@ -334,6 +334,21 @@ impl PosNodeEngine {
         }) {
             return false;
         }
+        if self
+            .latest_validated_peer_commit
+            .as_ref()
+            .is_some_and(|commit| {
+                commit.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                    && commit.public_key_hex.is_some()
+                    && commit.signature_hex.is_some()
+                    && self
+                        .validator_id_for_peer_head(commit.node_id.as_str())
+                        .map(|validator_id| !self.quarantined_validators.contains(&validator_id))
+                        .unwrap_or(false)
+            })
+        {
+            return false;
+        }
         let Some((validator_id, _public_key_hex)) = self
             .validator_signers
             .iter()

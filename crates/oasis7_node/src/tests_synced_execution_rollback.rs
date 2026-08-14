@@ -56,6 +56,7 @@ fn synced_replication_commit_rolls_back_execution_on_apply_error() {
         execution_block_hash: Some("peer-exec-block-8".to_string()),
         execution_state_root: Some("peer-exec-state-8".to_string()),
         execution_checkpoint: None,
+    lineage_envelope: None,
     };
     let commits = Arc::new(Mutex::new(Vec::new()));
     let restores = Arc::new(Mutex::new(Vec::new()));

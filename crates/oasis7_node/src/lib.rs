@@ -56,9 +56,12 @@ mod network_error_classification;
 mod node_engine_core;
 mod node_engine_gap_sync_outcome;
 mod node_engine_network;
+mod node_engine_network_hash;
+mod node_engine_peer_types;
 mod node_engine_replication;
 mod node_engine_replication_checkpoint;
 mod node_engine_replication_checkpoint_fetch;
+mod node_engine_replication_lineage;
 mod node_engine_replication_local_state_block;
 mod node_engine_replication_pending_checkpoint_receipt;
 mod node_engine_replication_provider_route;
@@ -74,6 +77,7 @@ mod pos_validation;
 mod provider_publication_queue;
 mod replica_maintenance_support;
 mod replication;
+mod replication_checkpoint_lineage;
 mod replication_fetch_handler_support;
 mod replication_probe_gate;
 mod replication_state_reconcile;
@@ -145,6 +149,7 @@ use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,
 };
 use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
+use node_engine_peer_types::{ConsensusMisbehaviorEvidence, PeerCommittedHead};
 use node_runtime_core::RuntimeState;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
@@ -909,9 +914,20 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                             }
                         }
                     }
+                    let lineage_envelope = message
+                        .as_ref()
+                        .map(|message| {
+                            replication_checkpoint_lineage::lineage_envelope_from_payload(
+                                message.payload.as_slice(),
+                            )
+                        })
+                        .transpose()
+                        .map_err(network_internal_error)?
+                        .flatten();
                     let response = FetchCommitResponse {
                         found: message.is_some(),
                         message,
+                        lineage_envelope,
                     };
                     serde_json::to_vec(&response).map_err(|err| {
                         network_internal_error(NodeError::Replication {
@@ -1128,9 +1144,11 @@ struct PosNodeEngine {
     replicate_local_commits: bool,
     require_peer_execution_hashes: bool,
     consensus_signer: Option<NodeConsensusMessageSigner>,
+    consensus_signer_public_key: Option<String>,
     enforce_consensus_signature: bool,
     peer_heads: BTreeMap<String, PeerCommittedHead>,
     latest_validated_peer_commit: Option<GossipCommitMessage>,
+    lineage_state: replication_checkpoint_lineage::CheckpointLineageState,
     misbehavior_evidence: BTreeMap<String, ConsensusMisbehaviorEvidence>,
     quarantined_validators: BTreeSet<String>,
     last_committed_at_ms: Option<i64>,
@@ -1152,43 +1170,6 @@ struct PosNodeEngine {
 
 type PendingProposal = NodePosPendingProposal<NodeConsensusAction, PosConsensusStatus>;
 type PosDecision = NodePosDecision<NodeConsensusAction, PosConsensusStatus>;
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PeerCommittedHead {
-    height: u64,
-    block_hash: String,
-    committed_at_ms: i64,
-    observed_at_ms: i64,
-    execution_block_hash: Option<String>,
-    execution_state_root: Option<String>,
-    action_root: String,
-    public_key_hex: Option<String>,
-    signature_hex: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ConsensusMisbehaviorEvidence {
-    kind: String,
-    validator_id: String,
-    node_id: String,
-    height: u64,
-    observed_at_ms: i64,
-    first_block_hash: String,
-    second_block_hash: String,
-    first_execution_block_hash: Option<String>,
-    second_execution_block_hash: Option<String>,
-    first_execution_state_root: Option<String>,
-    second_execution_state_root: Option<String>,
-    first_action_root: String,
-    second_action_root: String,
-    first_public_key_hex: Option<String>,
-    second_public_key_hex: Option<String>,
-    first_signature_hex: Option<String>,
-    second_signature_hex: Option<String>,
-    slashable_stake: u64,
-    total_stake: u64,
-    validator_stake_root: String,
-    quarantined: bool,
-}
 
 #[cfg(test)]
 mod tests;

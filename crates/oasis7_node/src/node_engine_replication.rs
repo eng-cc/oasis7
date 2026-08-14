@@ -9,6 +9,7 @@ use super::node_engine_storage_challenge::{
 use super::*;
 use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 use crate::node_engine_replication_checkpoint::FreshObserverCheckpointBootstrap;
+use crate::replication_checkpoint_lineage::verify_checkpoint_lineage_for_descriptor;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
@@ -500,24 +501,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-    pub(super) fn sync_missing_replication_commits(
-        &mut self,
-        endpoint: &ReplicationNetworkEndpoint,
-        node_id: &str,
-        world_id: &str,
-        replication: Option<&mut ReplicationRuntime>,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
-    ) -> Result<(), NodeError> {
-        self.sync_missing_replication_commits_with_progress(
-            endpoint,
-            node_id,
-            world_id,
-            replication,
-            execution_hook,
-            None,
-            true,
-        )
-    }
     pub(super) fn try_sync_high_replication_checkpoint_boundary(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -567,11 +550,12 @@ impl PosNodeEngine {
         if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
         }
-        if fresh_execution_bootstrap
-            && expected_checkpoint_head.is_none()
-            && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
-        {
-            return Ok(false);
+        if fresh_execution_bootstrap && expected_checkpoint_head.is_none() {
+            if payload.lineage_envelope.is_none()
+                && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
+            {
+                return Ok(false);
+            }
         }
         if let Some(expected_head) = expected_checkpoint_head {
             if Self::validate_world_head_checkpoint_payload(world_id, &payload, expected_head)
@@ -595,6 +579,32 @@ impl PosNodeEngine {
                 || checkpoint_descriptor.execution_state_root != execution_state_root
             {
                 return Ok(false);
+            }
+            if fresh_execution_bootstrap && expected_checkpoint_head.is_none() {
+                if let Some(envelope) = payload.lineage_envelope.as_ref() {
+                    let Some(expected_lineage_head) =
+                        self.authenticated_lineage_head_for(&envelope.head)
+                    else {
+                        return Ok(false);
+                    };
+                    if verify_checkpoint_lineage_for_descriptor(
+                        envelope,
+                        world_id,
+                        &payload,
+                        &checkpoint_descriptor,
+                        &expected_lineage_head,
+                        &self.validators,
+                        &self.validator_signers,
+                        self.validator_set_hash.as_str(),
+                        self.total_stake,
+                        self.required_stake,
+                        &self.quarantined_validators,
+                    )
+                    .is_err()
+                    {
+                        return Ok(false);
+                    }
+                }
             }
             let probe_nonce = std::env::var("OASIS7_CHECKPOINT_PROBE_NONCE").ok();
             if let Some(probe_nonce) = probe_nonce.as_deref() {

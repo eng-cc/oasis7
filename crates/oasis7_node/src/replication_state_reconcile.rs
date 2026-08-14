@@ -1,4 +1,5 @@
 use super::*;
+use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageEnvelopeV1;
 
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct ReplicationCommitPayloadView {
@@ -30,6 +31,8 @@ pub(super) struct ReplicationCommitPayload {
     pub(super) execution_state_root: Option<String>,
     #[serde(default)]
     pub(super) execution_checkpoint: Option<NodeExecutionCheckpointDescriptor>,
+    #[serde(default)]
+    pub(super) lineage_envelope: Option<CheckpointLineageEnvelopeV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

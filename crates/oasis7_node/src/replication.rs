@@ -8,6 +8,7 @@ use oasis7_distfs::{
     SingleWriterReplicationGuard, apply_replication_record, blake3_hex,
     build_replication_record_with_epoch,
 };
+use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageEnvelopeV1;
 use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,6 +27,8 @@ pub(crate) const REPLICATION_FETCH_COMMIT_PROTOCOL: &str =
 pub(crate) const REPLICATION_FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
 pub(crate) const REPLICATION_GET_HEAD_PROTOCOL: &str =
     "/aw/node/replication/fetch-commit/head/1.0.0";
+#[path = "replication/checkpoint_lineage_runtime.rs"]
+mod checkpoint_lineage_runtime;
 #[path = "replication/checkpoint_probe_receipt.rs"]
 mod checkpoint_probe_receipt;
 mod commit_retention;
@@ -57,6 +60,7 @@ use self::support::{
 pub(crate) use self::support::{
     load_blob_from_root, load_blob_range_from_root, load_commit_message_from_root,
 };
+use crate::replication_checkpoint_lineage::checkpoint_lineage_cache_key;
 pub(crate) use replication_fetch::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse,
 };
@@ -463,6 +467,10 @@ struct ReplicatedCommitPayload {
     execution_state_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     execution_checkpoint: Option<NodeExecutionCheckpointDescriptor>,
+    /// Source-authored quorum sidecar. It is part of the signed payload and
+    /// may only be forwarded unchanged after independent authority checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lineage_envelope: Option<CheckpointLineageEnvelopeV1>,
 }
 
 #[derive(Debug, Serialize)]
@@ -618,6 +626,7 @@ impl ReplicationRuntime {
             execution_block_hash: execution_block_hash.map(str::to_string),
             execution_state_root: execution_state_root.map(str::to_string),
             execution_checkpoint,
+            lineage_envelope: None,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(|err| NodeError::Replication {
             reason: format!("serialize local replication payload failed: {}", err),
@@ -980,14 +989,6 @@ impl ReplicationRuntime {
         Ok(freed)
     }
 
-    pub(crate) fn load_commit_message_by_height(
-        &self,
-        world_id: &str,
-        height: u64,
-    ) -> Result<Option<GossipReplicationMessage>, NodeError> {
-        load_commit_message_from_root(self.config.root_dir.as_path(), world_id, height)
-    }
-
     pub(crate) fn latest_persisted_commit_height(&self, world_id: &str) -> Result<u64, NodeError> {
         let hot_height = build_commit_message_retention_plan(
             self.config.root_dir.as_path(),
@@ -1013,10 +1014,6 @@ impl ReplicationRuntime {
             candidate -= 1;
         }
         Ok(0)
-    }
-
-    pub(crate) fn writer_last_replicated_height(&self) -> u64 {
-        self.writer_state.last_replicated_height
     }
 
     pub(crate) fn load_blob_by_hash(

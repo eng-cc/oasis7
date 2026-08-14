@@ -283,3 +283,73 @@ fn testnet_250_connected_quorum_without_commit_publication_does_not_create_autho
     assert_eq!(snapshot.consensus.network_committed_height, 0);
     assert_eq!(snapshot.consensus.committed_height, 0);
 }
+
+#[test]
+fn delayed_checkpoint_lineage_vote_is_ingested_for_later_head_quorum() {
+    // C is retained before H arrives.  Once the authenticated H is known,
+    // validator votes must have a typed gossip lane; a provider/route must not
+    // synthesize the envelope from the checkpoint manifest.
+    let world_id = "world-lineage-vote-delayed-head";
+    let socket_a = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind vote sender");
+    let socket_b = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind vote receiver");
+    let addr_a = socket_a.local_addr().expect("sender address");
+    let addr_b = socket_b.local_addr().expect("receiver address");
+    drop(socket_a);
+    drop(socket_b);
+    let receiver = GossipEndpoint::bind(&NodeGossipConfig {
+        bind_addr: addr_b,
+        peers: Vec::new(),
+        max_dynamic_peers: 8,
+        dynamic_peer_ttl_ms: 60_000,
+    })
+    .expect("lineage vote receiver");
+    let sender = std::net::UdpSocket::bind(addr_a).expect("lineage vote sender socket");
+    let vote = serde_json::json!({
+        "kind": "checkpoint_lineage_vote",
+        "version": 1,
+        "world_id": world_id,
+        "round_id": "checkpoint-lineage-round-52032",
+        "checkpoint": {
+            "height": 52032,
+            "block_hash": "checkpoint-block-52032",
+            "state_root": "execution-state-52032",
+            "execution_block_hash": "execution-block-52032",
+            "execution_state_root": "execution-state-52032",
+            "descriptor_digest": "descriptor-52032",
+            "manifest_size": 128,
+        },
+        "head": {
+            "height": 52079,
+            "block_hash": "head-block-52079",
+            "state_root": "head-execution-state-52079",
+            "execution_block_hash": "head-execution-block-52079",
+            "execution_state_root": "head-execution-state-52079",
+        },
+        "validator_set_hash": "validator-set-252",
+        "total_stake": 100,
+        "required_stake": 67,
+        "vote": {
+            "validator_id": "node-a",
+            "signature_scheme": "ed25519",
+            "signature_evidence_hash": "evidence-52032-52079-node-a",
+            "signature_hex": "signed-vote-node-a",
+        },
+    });
+    sender
+        .send_to(
+            serde_json::to_vec(&vote)
+                .expect("encode delayed lineage vote")
+                .as_slice(),
+            addr_b,
+        )
+        .expect("send delayed lineage vote");
+    thread::sleep(Duration::from_millis(20));
+    let received = receiver
+        .drain_messages()
+        .expect("drain delayed lineage votes");
+    assert_eq!(
+        received.len(),
+        1,
+        "typed validator lineage vote must reach ingestion before H→C quorum aggregation; received={received:?}"
+    );
+}

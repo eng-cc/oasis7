@@ -97,7 +97,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
                     reason: format!("decode checkpoint fetch request failed: {err}"),
                 })?;
             if request.height > 1 {
-                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None })
+                return serde_json::to_vec(&super::replication::FetchCommitResponse { found: false, message: None, lineage_envelope: None })
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode unavailable checkpoint response failed: {err}"),
                 });

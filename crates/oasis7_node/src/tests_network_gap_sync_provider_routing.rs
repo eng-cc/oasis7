@@ -158,6 +158,7 @@ fn gap_sync_fetch_commit_caps_peer_route_sweep_after_generic_not_found() {
         generic_response: super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         },
         generic_unsupported: false,
         peer_responses,
@@ -274,6 +275,7 @@ fn fresh_checkpoint_fetch_prioritizes_static_validators_after_peer_head_discover
     let successful_response = Arc::new(Mutex::new(super::replication::FetchCommitResponse {
         found: false,
         message: None,
+    lineage_envelope: None,
     }));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
@@ -298,6 +300,7 @@ fn fresh_checkpoint_fetch_prioritizes_static_validators_after_peer_head_discover
         .expect("install signed validator response") = super::replication::FetchCommitResponse {
         found: true,
         message: Some(message),
+        lineage_envelope: None,
     };
     let request = signed_fetch_commit_request_for_test(world_id, 1, 209);
 
@@ -433,6 +436,7 @@ fn runtime_network_replication_gap_sync_prefers_dht_blob_providers() {
                 let response = super::replication::FetchCommitResponse {
                     found: commit_map.contains_key(&request.height),
                     message: commit_map.get(&request.height).cloned(),
+                    lineage_envelope: None,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
                     WorldError::DistributedValidationFailed {
@@ -575,6 +579,7 @@ fn runtime_network_replication_gap_sync_blocks_without_generic_fallback_after_pr
                 let response = super::replication::FetchCommitResponse {
                     found: commit_map.contains_key(&request.height),
                     message: commit_map.get(&request.height).cloned(),
+                    lineage_envelope: None,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
                     WorldError::DistributedValidationFailed {
@@ -740,6 +745,7 @@ fn runtime_network_replication_gap_sync_blocks_without_generic_fallback_after_pr
                 let response = super::replication::FetchCommitResponse {
                     found: commit_map.contains_key(&request.height),
                     message: commit_map.get(&request.height).cloned(),
+                    lineage_envelope: None,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
                     WorldError::DistributedValidationFailed {

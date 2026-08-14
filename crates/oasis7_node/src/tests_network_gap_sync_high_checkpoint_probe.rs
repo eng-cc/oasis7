@@ -23,6 +23,7 @@ fn high_checkpoint_probe_uses_single_fetch_commit_probe_for_not_found_candidate(
         generic_response: super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         },
         generic_unsupported: false,
         peer_responses,

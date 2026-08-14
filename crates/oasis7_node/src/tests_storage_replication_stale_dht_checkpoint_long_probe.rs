@@ -84,6 +84,7 @@ fn fresh_observer_package_probe_does_not_reenter_height_one_after_300s_without_c
                 serde_json::to_vec(&super::replication::FetchCommitResponse {
                     found: false,
                     message: None,
+                lineage_envelope: None,
                 })
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!("encode absent checkpoint response failed: {err}"),
@@ -238,6 +239,7 @@ fn testnet_249_low_world_connected_transport_without_high_evidence_completes_con
             serde_json::to_vec(&super::replication::FetchCommitResponse {
                 found: false,
                 message: None,
+            lineage_envelope: None,
             })
             .map_err(|err| WorldError::DistributedValidationFailed {
                 reason: format!("encode absent checkpoint response failed: {err}"),

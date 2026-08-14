@@ -81,6 +81,7 @@ fn runtime_network_replication_gap_sync_not_found_is_non_fatal() {
                 let response = super::replication::FetchCommitResponse {
                     found: false,
                     message: None,
+                lineage_envelope: None,
                 };
                 serde_json::to_vec(&response).map_err(|err| {
                     WorldError::DistributedValidationFailed {

@@ -649,6 +649,7 @@ fn synced_non_sequencer_commit_does_not_create_binding_without_local_execution()
         execution_block_hash: Some("exec-block-8".to_string()),
         execution_state_root: Some("exec-state-8".to_string()),
         execution_checkpoint: None,
+    lineage_envelope: None,
     };
     let mut hook = GapWaitingExecutionHook;
 
@@ -680,6 +681,7 @@ fn synced_replication_commit_executes_with_payload_node_id() {
         execution_block_hash: Some("exec-block-1".to_string()),
         execution_state_root: Some("exec-state-1".to_string()),
         execution_checkpoint: None,
+    lineage_envelope: None,
     };
     let contexts = Arc::new(Mutex::new(Vec::new()));
     let mut hook = RecordingExecutionHook {
@@ -817,6 +819,7 @@ fn synced_replication_commit_rolls_back_execution_on_peer_hash_mismatch() {
         execution_block_hash: Some("peer-exec-block-8".to_string()),
         execution_state_root: Some("peer-exec-state-8".to_string()),
         execution_checkpoint: None,
+    lineage_envelope: None,
     };
     let restores = Arc::new(Mutex::new(Vec::new()));
     let mut hook = MismatchingRollbackExecutionHook {
@@ -874,6 +877,7 @@ fn synced_replication_commit_rolls_back_execution_when_peer_hashes_missing_after
         execution_block_hash: None,
         execution_state_root: None,
         execution_checkpoint: None,
+    lineage_envelope: None,
     };
     let restores = Arc::new(Mutex::new(Vec::new()));
     let mut hook = MismatchingRollbackExecutionHook {

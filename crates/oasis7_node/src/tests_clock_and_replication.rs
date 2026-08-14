@@ -475,6 +475,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         serde_json::to_vec(&super::replication::FetchCommitResponse {
             found: false,
             message: None,
+        lineage_envelope: None,
         })
         .map_err(|err| WorldError::DistributedValidationFailed {
             reason: format!("encode fetch commit response failed: {err}"),

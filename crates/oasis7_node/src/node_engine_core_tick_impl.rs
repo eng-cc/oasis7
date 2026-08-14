@@ -61,7 +61,13 @@ impl PosNodeEngine {
             )?;
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
+            self.ingest_consensus_network_messages(
+                endpoint,
+                node_id,
+                world_id,
+                current_slot,
+                replication.as_deref_mut(),
+            )?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
             let record_peer_heads_from_gap_sync = gossip.is_some() || consensus_network.is_some();
@@ -332,8 +338,13 @@ impl PosNodeEngine {
             }
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            if let Err(err) =
-                self.ingest_consensus_network_messages(endpoint, world_id, current_slot)
+            if let Err(err) = self.ingest_consensus_network_messages(
+                endpoint,
+                node_id,
+                world_id,
+                current_slot,
+                replication.as_deref_mut(),
+            )
             {
                 return Err(err);
             }
