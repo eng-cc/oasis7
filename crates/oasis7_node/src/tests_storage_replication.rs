@@ -10,6 +10,8 @@ mod storage_replication_high_checkpoint_tests;
 mod storage_replication_first_ready_checkpoint_tests;
 #[path = "tests_storage_replication_high_checkpoint_retained.rs"]
 mod storage_replication_high_checkpoint_retained_tests;
+#[path = "tests_storage_replication_live_retained_boundary.rs"]
+mod storage_replication_live_retained_boundary_tests;
 #[path = "tests_storage_replication_high_checkpoint_timeout.rs"]
 mod storage_replication_high_checkpoint_timeout_tests;
 #[path = "tests_storage_replication_peer_head.rs"]
