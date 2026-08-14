@@ -8,7 +8,7 @@ license = "MIT"
 oasis7_wasm_abi = { version = "0.1.0", path = "../oasis7_wasm_abi" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
-sha2 = "0.10"
+sha2 = "0.11"
 
 wasmtime = { version = "47.0.3", optional = true }
 

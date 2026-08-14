@@ -216,7 +216,10 @@ fn decode_private_key_hex(private_key_hex: &str) -> Result<[u8; 32], String> {
 }
 
 pub(super) fn keygen_output() -> Result<Value, String> {
-    let signing_key = SigningKey::generate(&mut OsRng);
+    let mut private_key_bytes = [0_u8; 32];
+    getrandom::fill(&mut private_key_bytes)
+        .map_err(|err| format!("generate signing key failed: {err}"))?;
+    let signing_key = SigningKey::from_bytes(&private_key_bytes);
     let public_key = hex::encode(signing_key.verifying_key().to_bytes());
     let private_key = hex::encode(signing_key.to_bytes());
     Ok(json!({

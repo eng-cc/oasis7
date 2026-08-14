@@ -212,7 +212,10 @@ fn ensure_node_keypair_in_config_unlocked(path: &Path) -> Result<NodeKeypairConf
             }
         }
         _ => {
-            let signing_key = SigningKey::generate(&mut rand_core::OsRng);
+            let mut private_key_bytes = [0_u8; 32];
+            getrandom::fill(&mut private_key_bytes)
+                .map_err(|err| format!("generate node signing key failed: {err}"))?;
+            let signing_key = SigningKey::from_bytes(&private_key_bytes);
             let private_key_hex = hex::encode(signing_key.to_bytes());
             let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
             node_table.insert(

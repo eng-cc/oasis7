@@ -104,7 +104,7 @@ fn parse_manifest_line(line: &str) -> Result<Option<(String, Vec<String>)>, Stri
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn run() -> Result<(), String> {

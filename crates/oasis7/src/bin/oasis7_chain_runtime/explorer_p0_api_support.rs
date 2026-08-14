@@ -19,7 +19,7 @@ pub(super) fn build_tx_hash(
     hasher.update([0]);
     hasher.update(amount.to_be_bytes());
     hasher.update(nonce.to_be_bytes());
-    format!("0x{:x}", hasher.finalize())
+    format!("0x{}", hex::encode(hasher.finalize()))
 }
 
 pub(super) fn lock_store() -> std::sync::MutexGuard<'static, ExplorerStore> {

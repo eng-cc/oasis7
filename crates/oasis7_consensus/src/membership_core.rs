@@ -13,7 +13,7 @@ use super::signature::ED25519_SIGNATURE_V1_PREFIX;
 use super::tiered_file_log;
 pub(super) use super::util::to_canonical_cbor;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use oasis7_distfs::LocalCasStore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;

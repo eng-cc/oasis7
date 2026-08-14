@@ -936,7 +936,9 @@ fn node_network_policy_rejects_incompatible_runtime_role_combo() {
 
 #[test]
 fn build_node_replication_config_uses_storage_profile_budget() {
-    let signing_key = SigningKey::generate(&mut rand_core::OsRng);
+    let mut private_key_bytes = [0_u8; 32];
+    getrandom::fill(&mut private_key_bytes).expect("OS randomness unavailable");
+    let signing_key = SigningKey::from_bytes(&private_key_bytes);
     let keypair = node_keypair_config::NodeKeypairConfig {
         private_key_hex: hex::encode(signing_key.to_bytes()),
         public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
