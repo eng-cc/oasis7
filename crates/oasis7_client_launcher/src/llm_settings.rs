@@ -367,15 +367,9 @@ fn load_llm_settings_from_config(path: &Path) -> Result<LlmSettingsDraft, String
         return Ok(LlmSettingsDraft::default());
     }
 
-    let value: toml::Value = raw.parse().map_err(|err| {
+    let table: toml::value::Table = toml::from_str(raw.as_str()).map_err(|err| {
         format!(
             "parse config `{}` as TOML failed: {err}",
-            path.to_string_lossy()
-        )
-    })?;
-    let table = value.as_table().ok_or_else(|| {
-        format!(
-            "config `{}` root must be TOML table",
             path.to_string_lossy()
         )
     })?;
@@ -432,15 +426,9 @@ fn load_or_init_root_table(path: &Path) -> Result<toml::value::Table, String> {
         return Ok(toml::value::Table::new());
     }
 
-    let parsed: toml::Value = raw.parse().map_err(|err| {
+    toml::from_str(raw.as_str()).map_err(|err| {
         format!(
             "parse config `{}` as TOML failed: {err}",
-            path.to_string_lossy()
-        )
-    })?;
-    parsed.as_table().cloned().ok_or_else(|| {
-        format!(
-            "config `{}` root must be TOML table",
             path.to_string_lossy()
         )
     })
@@ -517,7 +505,7 @@ timeout_ms = 8000
         save_llm_settings_to_config(path.as_path(), &draft).expect("save settings");
 
         let raw = fs::read_to_string(&path).expect("read config");
-        let value: toml::Value = raw.parse().expect("parse toml");
+        let value: toml::Value = toml::from_str(raw.as_str()).expect("parse toml");
         let llm = value
             .get("llm")
             .and_then(toml::Value::as_table)
@@ -571,7 +559,7 @@ model = "model-a"
         save_llm_settings_to_config(path.as_path(), &draft).expect("save settings");
 
         let raw = fs::read_to_string(&path).expect("read config");
-        let value: toml::Value = raw.parse().expect("parse toml");
+        let value: toml::Value = toml::from_str(raw.as_str()).expect("parse toml");
         let llm = value
             .get("llm")
             .and_then(toml::Value::as_table)
