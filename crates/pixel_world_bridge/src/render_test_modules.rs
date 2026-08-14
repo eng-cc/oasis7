@@ -42,6 +42,9 @@ mod location_corner_frame_raster_tests;
 #[path = "render_location_resource_cue_tests.rs"]
 mod location_resource_cue_tests;
 
+#[path = "render_location_labels_tests.rs"]
+mod location_labels_tests;
+
 #[path = "render_selected_agent_cue_tests.rs"]
 mod selected_agent_cue_tests;
 

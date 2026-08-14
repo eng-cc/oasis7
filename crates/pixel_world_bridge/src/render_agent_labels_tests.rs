@@ -25,11 +25,13 @@ fn agent_with_label(id: &str, label: &str, pos: Position) -> Agent {
 
 fn rendered_texts(app: &mut App) -> Vec<String> {
     let world = app.world_mut();
-    let mut labels = world.query::<(&Text2d, &TextFont)>();
+    let mut labels = world.query::<(&Text2d, &TextFont, &Transform)>();
     let mut texts = labels
         .iter(world)
-        .filter(|(_, font)| font.font_size == FontSize::Px(10.0))
-        .map(|(text, _)| text.0.clone())
+        .filter(|(_, font, transform)| {
+            font.font_size == FontSize::Px(10.0) && transform.translation.z > 3.0
+        })
+        .map(|(text, _, _)| text.0.clone())
         .collect::<Vec<_>>();
     texts.sort();
     texts
