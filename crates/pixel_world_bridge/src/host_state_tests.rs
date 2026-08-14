@@ -357,6 +357,52 @@ fn rust_host_state_projects_viewer_normalized_micro_depot_facilities_and_prefers
 }
 
 #[test]
+fn rust_host_state_preserves_micro_depot_stock_runway_fields_with_legacy_defaults() {
+    let mut input = sample_input();
+    input["gameplay"]["micro_depot_facilities"] = json!([
+        {
+            "facility_id": "depot-stocked",
+            "status": "active",
+            "location_id": "loc-0",
+            "inventory_revision": 7,
+            "available_units_by_kind": { "data": 8 },
+            "throughput_epoch": 2,
+            "throughput_remaining_units": 14,
+            "throughput_limit_units_per_epoch": 16
+        },
+        {
+            "facility_id": "depot-legacy",
+            "status": "active",
+            "location_id": "loc-0"
+        }
+    ]);
+
+    let projected = build_render_state(&input);
+    let facilities = projected["micro_depot_facilities"]
+        .as_array()
+        .expect("micro-depot projection must be an array");
+    let stocked = facilities
+        .iter()
+        .find(|facility| facility["facility_id"] == "depot-stocked")
+        .expect("stocked depot projection");
+    assert_eq!(stocked["inventory_revision"], 7);
+    assert_eq!(stocked["available_units_by_kind"], json!({ "data": 8 }));
+    assert_eq!(stocked["throughput_epoch"], 2);
+    assert_eq!(stocked["throughput_remaining_units"], 14);
+    assert_eq!(stocked["throughput_limit_units_per_epoch"], 16);
+
+    let legacy = facilities
+        .iter()
+        .find(|facility| facility["facility_id"] == "depot-legacy")
+        .expect("legacy depot projection");
+    assert_eq!(legacy["inventory_revision"], 0);
+    assert_eq!(legacy["available_units_by_kind"], json!({}));
+    assert_eq!(legacy["throughput_epoch"], 0);
+    assert_eq!(legacy["throughput_remaining_units"], 0);
+    assert_eq!(legacy["throughput_limit_units_per_epoch"], 0);
+}
+
+#[test]
 fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_display() {
     let blocked = build_render_state(&sample_input());
     assert_eq!(

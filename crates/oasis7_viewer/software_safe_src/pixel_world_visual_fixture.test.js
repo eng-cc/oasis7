@@ -55,6 +55,55 @@ describe("pixel world visual fixtures", () => {
     ).toBe(240_000);
   });
 
+  it("registers a spatially distinct healthy/low/zero Micro Depot stock-runway fixture", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=micro_depot_stock_runway");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("micro_depot_stock_runway");
+    const fixture = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.micro_depot_stock_runway();
+    const facilities = fixture.player_gameplay.micro_depot_facilities;
+
+    expect(facilities).toHaveLength(3);
+    expect(new Set(facilities.map((facility) => facility.facility_id)).size).toBe(3);
+    expect(facilities.map((facility) => ({
+      inventoryRevision: facility.inventory_revision,
+      remaining: facility.available_units_by_kind?.data,
+      epoch: facility.throughput_epoch,
+      throughputRemaining: facility.throughput_remaining_units,
+      throughputLimit: facility.throughput_limit_units_per_epoch,
+    }))).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        inventoryRevision: expect.any(Number),
+        remaining: 8,
+        epoch: expect.any(Number),
+        throughputRemaining: 8,
+        throughputLimit: 8,
+      }),
+      expect.objectContaining({
+        inventoryRevision: expect.any(Number),
+        remaining: 2,
+        epoch: expect.any(Number),
+        throughputRemaining: 2,
+        throughputLimit: 8,
+      }),
+      expect.objectContaining({
+        inventoryRevision: expect.any(Number),
+        remaining: 0,
+        epoch: expect.any(Number),
+        throughputRemaining: 0,
+        throughputLimit: 8,
+      }),
+    ]));
+
+    const anchors = facilities.map((facility) => {
+      const location = fixture.model.locations[facility.location_id];
+      expect(location).toEqual(expect.objectContaining({
+        pos: expect.objectContaining({ x_cm: expect.any(Number), y_cm: expect.any(Number) }),
+      }));
+      return `${location.pos.x_cm}:${location.pos.y_cm}`;
+    });
+    expect(new Set(anchors).size).toBe(3);
+  });
+
   it("injects the two player-visible recent-event kinds only for the glyph visual fixture", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=recent_event_glyphs");
 

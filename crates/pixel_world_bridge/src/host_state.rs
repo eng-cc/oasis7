@@ -1,5 +1,7 @@
 use serde_json::{Map, Value, json};
 
+#[path = "host_micro_depot_projection.rs"]
+mod micro_depot_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
 
@@ -310,7 +312,7 @@ fn build_micro_depot_facilities(
                 }),
                 world_bounds,
             )?;
-            Some(json!({
+            let mut projection = json!({
                 "id": format!("micro_depot:{facility_id}"),
                 "facility_id": facility_id,
                 "location_id": location_id,
@@ -321,7 +323,12 @@ fn build_micro_depot_facilities(
                     "service_radius_cm",
                     number_key(facility, "serviceRadiusCm", 0.0),
                 ),
-            }))
+            });
+            projection
+                .as_object_mut()
+                .expect("micro-depot projection object")
+                .extend(micro_depot_projection::fields(facility));
+            Some(projection)
         })
         .collect();
     facilities.sort_by(|left, right| str_key(left, "id").cmp(&str_key(right, "id")));

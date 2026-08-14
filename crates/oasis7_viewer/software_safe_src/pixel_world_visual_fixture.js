@@ -1,5 +1,6 @@
 import * as core from "./legacy_core.js";
 import {
+  pixelWorldMicroDepotStockRunwayVisualFixture,
   pixelWorldRecommendedTargetVisualFixture,
   pixelWorldSelectedBlockerVisualFixture,
   pixelWorldModuleVisualEntitiesFixture,
@@ -40,6 +41,7 @@ export function installPixelWorldVisualFixtureHook() {
     recent_event_glyphs: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
     module_visual_entities: () => core.clone(pixelWorldModuleVisualEntitiesFixture()),
+    micro_depot_stock_runway: () => core.clone(pixelWorldMicroDepotStockRunwayVisualFixture()),
   };
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
