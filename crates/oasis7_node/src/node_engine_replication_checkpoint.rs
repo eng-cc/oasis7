@@ -337,8 +337,8 @@ impl PosNodeEngine {
         {
             return false;
         }
-        if !(fresh_execution_bootstrap
-            && (expected_checkpoint_head.is_none() || unsigned_exact_head))
+        if !(unsigned_exact_head
+            || (fresh_execution_bootstrap && expected_checkpoint_head.is_none()))
         {
             return true;
         }

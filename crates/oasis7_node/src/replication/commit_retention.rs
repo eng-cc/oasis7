@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::NodeError;
 
 use super::{COMMIT_MESSAGE_DIR, write_json_compact};
+use super::{GossipReplicationMessage, ReplicatedCommitPayload};
 
 const COMMIT_MESSAGE_PACK_HEIGHT_SPAN: u64 = 256;
 const COMMIT_MESSAGE_PACK_ENTRY_LEN_BYTES: u64 = 8;
@@ -133,9 +134,13 @@ pub(super) fn build_commit_message_retention_plan(
     let retained_hot_window = u64::try_from(hot_window_heights.max(1)).unwrap_or(u64::MAX);
     let hot_window_start_height =
         latest_height.saturating_sub(retained_hot_window.saturating_sub(1));
+    let retained_checkpoint_heights =
+        retained_checkpoint_message_heights(&hot_commit_files, hot_window_heights)?;
     let offload_candidates = hot_commit_files
         .into_iter()
-        .filter(|(height, _)| *height < hot_window_start_height)
+        .filter(|(height, _)| {
+            *height < hot_window_start_height && !retained_checkpoint_heights.contains(height)
+        })
         .map(|(height, path)| CommitMessageOffloadCandidate { height, path })
         .collect();
 
@@ -146,6 +151,33 @@ pub(super) fn build_commit_message_retention_plan(
         },
         offload_candidates,
     })
+}
+
+fn retained_checkpoint_message_heights(
+    hot_commit_files: &[(u64, PathBuf)],
+    hot_window_heights: usize,
+) -> Result<BTreeSet<u64>, NodeError> {
+    let mut checkpoint_heights = BTreeSet::new();
+    for (height, path) in hot_commit_files {
+        let bytes = fs::read(path).map_err(|err| NodeError::Replication {
+            reason: format!("read {} failed: {err}", path.display()),
+        })?;
+        let Ok(message) = serde_json::from_slice::<GossipReplicationMessage>(&bytes) else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_slice::<ReplicatedCommitPayload>(&message.payload)
+        else {
+            continue;
+        };
+        if payload.height == *height && payload.execution_checkpoint.is_some() {
+            checkpoint_heights.insert(*height);
+        }
+    }
+    Ok(checkpoint_heights
+        .into_iter()
+        .rev()
+        .take(hot_window_heights.max(1))
+        .collect())
 }
 
 pub(super) fn resolve_commit_message_readback_source(

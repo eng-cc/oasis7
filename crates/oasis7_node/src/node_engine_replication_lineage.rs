@@ -163,6 +163,7 @@ impl PosNodeEngine {
         let Some(replication) = replication else {
             return Ok(());
         };
+        replication.ensure_checkpoint_lineage_healthy()?;
         let Some(head_commit) = self.latest_validated_peer_commit.clone() else {
             return Ok(());
         };
@@ -190,6 +191,12 @@ impl PosNodeEngine {
                 continue;
             };
             if message.public_key_hex.is_none() || message.signature_hex.is_none() {
+                continue;
+            }
+            if crate::replication::verify_replication_message_signature(&message).is_err()
+                || oasis7_distfs::blake3_hex(message.payload.as_slice())
+                    != message.record.content_hash
+            {
                 continue;
             }
             let Some(source_validator) = self.validator_id_for_peer_head(message.node_id.as_str())
@@ -309,6 +316,9 @@ impl PosNodeEngine {
         message: &GossipCheckpointLineageVoteMessage,
         mut replication: Option<&mut ReplicationRuntime>,
     ) -> Result<(), NodeError> {
+        if let Some(replication_runtime) = replication.as_deref_mut() {
+            replication_runtime.ensure_checkpoint_lineage_healthy()?;
+        }
         if message.version != 1 || message.world_id != world_id {
             return Ok(());
         }

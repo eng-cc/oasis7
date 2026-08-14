@@ -1,4 +1,6 @@
 use super::*;
+#[path = "checkpoint_lineage_retention.rs"]
+mod checkpoint_lineage_retention;
 use oasis7_proto::distributed_checkpoint_lineage::checkpoint_lineage_descriptor_digest;
 
 impl ReplicationRuntime {
@@ -8,6 +10,7 @@ impl ReplicationRuntime {
         world_id: &str,
         message: &GossipReplicationMessage,
     ) -> Result<(), NodeError> {
+        self.ensure_checkpoint_lineage_healthy()?;
         if message.node_id != node_id
             || message.world_id != world_id
             || message.record.world_id != world_id
@@ -65,7 +68,8 @@ impl ReplicationRuntime {
                 ),
             })?;
         }
-        write_json_compact(path.as_path(), message)
+        write_json_compact(path.as_path(), message)?;
+        self.reconcile_checkpoint_lineage_retention()
     }
 
     pub(crate) fn load_checkpoint_lineage_source_message_by_height(
@@ -119,6 +123,7 @@ impl ReplicationRuntime {
         &self,
         envelope: &CheckpointLineageEnvelopeV1,
     ) -> Result<String, NodeError> {
+        self.ensure_checkpoint_lineage_healthy()?;
         envelope
             .validate_contract()
             .map_err(|reason| NodeError::Replication { reason })?;
@@ -133,6 +138,7 @@ impl ReplicationRuntime {
         })?;
         let path = root.join(format!("{key}.json"));
         write_json_compact(path.as_path(), envelope)?;
+        self.reconcile_checkpoint_lineage_retention()?;
         Ok(key)
     }
 
@@ -190,6 +196,7 @@ impl ReplicationRuntime {
         world_id: &str,
         envelope: &CheckpointLineageEnvelopeV1,
     ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+        self.ensure_checkpoint_lineage_healthy()?;
         envelope
             .validate_contract()
             .map_err(|reason| NodeError::Replication { reason })?;
@@ -319,6 +326,7 @@ impl ReplicationRuntime {
         } else {
             self.persist_commit_message(payload.height, &amended)?;
         }
+        self.reconcile_checkpoint_lineage_retention()?;
         Ok(Some(amended))
     }
 }

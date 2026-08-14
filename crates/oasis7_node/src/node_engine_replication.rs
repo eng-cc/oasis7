@@ -521,6 +521,7 @@ impl PosNodeEngine {
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
     ) -> Result<bool, NodeError> {
+        replication_runtime.ensure_checkpoint_lineage_healthy()?;
         let fresh_execution_bootstrap = self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0;

@@ -54,11 +54,11 @@ use self::support::{
     normalize_replication_public_key_hex_for_config,
     normalize_replication_public_key_hex_for_request, sign_fetch_blob_request,
     sign_fetch_commit_request, sign_replication_message, signing_key_from_hex,
-    verify_replication_message_signature, verify_signed_fetch_request, write_json_compact,
-    write_json_pretty,
+    verify_signed_fetch_request, write_json_compact, write_json_pretty,
 };
 pub(crate) use self::support::{
     load_blob_from_root, load_blob_range_from_root, load_commit_message_from_root,
+    verify_replication_message_signature,
 };
 use crate::replication_checkpoint_lineage::checkpoint_lineage_cache_key;
 pub(crate) use replication_fetch::{
@@ -528,7 +528,7 @@ impl ReplicationRuntime {
                 seeded_writer_epoch(signer.as_ref().map(|signer| signer.public_key_hex.as_str()));
         }
 
-        Ok(Self {
+        let runtime = Self {
             config: config.clone(),
             store: LocalCasStore::new(config.store_root()),
             guard,
@@ -537,7 +537,9 @@ impl ReplicationRuntime {
             enforce_signature: config.enforce_signature || signer.is_some(),
             remote_writer_allowlist: config.remote_writer_allowlist().clone(),
             signer,
-        })
+        };
+        runtime.reconcile_checkpoint_lineage_retention()?;
+        Ok(runtime)
     }
 
     #[cfg(test)]
