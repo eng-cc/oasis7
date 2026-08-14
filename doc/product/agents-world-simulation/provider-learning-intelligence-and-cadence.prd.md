@@ -42,7 +42,7 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 
 训练/认证的历史连续性不等于当前能力仍然有效。对玩家可见的产品结果至少要能区分：当前证据支持的有效范围、正在复核或重训的范围、已降级到较窄范围，以及已失效或被撤销的范围；这些是可读的能力结果，不冻结 profile 字段或专业状态机。
 
-- 复核或重训进行中时，只有专业 authority 明确仍有效的既有范围可以继续被使用；不得借未完成的训练、模型切换、模块上传或历史认证扩大范围、取得额外 action slot，或把原本受限的能力表达为已恢复。若既有范围也无法证明仍有效，相关新行动必须进入 blocked、Wait 或明确的低风险替代路径；低风险替代只能同时满足当前 profile 的 guardrails、合法 catalog 与预授权 scope，任一条件无法证明时只能 Wait 或拒绝，不得临时生成或扩大替代。
+- 复核或重训进行中时，只有专业 authority 明确仍有效的既有范围可以继续被使用；不得借未完成的训练、模型切换、模块上传或历史认证扩大范围、取得额外 action slot，或把原本受限的能力表达为已恢复。若既有范围也无法证明仍有效，相关新行动必须进入 blocked、Wait 或明确的低风险替代路径；低风险替代只能同时满足当前 profile 的 guardrails、合法 catalog 与当前仍有效且预授权的 capability scope，任一条件无法证明时只能 Wait 或拒绝，不得临时生成或扩大替代。
 - 认证到期、被撤销、证据失败或重训未通过时，依赖该能力且尚未产生 committed 世界效果的请求必须按当前范围重新评估、拒绝、过期、暂停或要求重新确认；不得静默沿用旧能力、自动迁移到新 profile 或让重连/重试恢复旧权限。即使后续训练/认证成功，原先暂停或待决的 capability-dependent request 也不得静默自动恢复；必须由玩家/owner 在当前有效范围内明确重新确认，或以新请求重新提交并保留与原请求的可读关联。已 committed 的结果、责任与训练/认证 provenance 保持可查询，不因能力失效被追溯抹除。
 - 新的训练/认证结果只有在其证据明确支持的范围内恢复或扩大能力；“训练完成”、本地文件存在、provider 可连接或界面显示成功都不能单独证明世界能力已恢复。恢复前后，玩家必须能读到当前范围、证据新鲜度/状态、受影响的行动类别、主要原因与重新评估、等待、降级或重新授权中的适用下一步。
 
@@ -81,7 +81,7 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 - `provider_pause_rechecks_pending_request`：暂停阻止新提交；既有未 committed 请求按当时范围重新评估，并留下继续、拒绝、过期、取消或重新确认的真实结果。
 - `provider_revocation_rejects_old_request_or_receipt`：撤销后旧请求和历史 receipt 不能作为新提交或重新执行输入，既有 committed 结果仍可查询。
 - `provider_transition_preserves_slot_fairness`：对相同 eligible actor、场景和 slot 输入，暂停、撤销、恢复或重新确认不改变 slot 数量或排序；新请求仅从正常权威路径进入。
-- `capability_retraining_scope_transition`：能力在复核/重训、到期/撤销或失败期间只能按当前有效范围继续，或进入明确 blocked/Wait/低风险替代；未 committed 请求按当前范围重新评估，已 committed 结果与 provenance 保留；新的训练/认证结果只恢复其证据明确支持的范围，且不自动获得额外 slot。
+- `capability_retraining_scope_transition`：能力在复核/重训、到期/撤销或失败期间只能按当前有效范围继续，或进入明确 blocked/Wait/低风险替代；guardrail 缺失、catalog 非法、fallback 过期或超出当前有效范围时必须 Wait/拒绝，不产生世界效果或额外 slot，并读出原因与当前有效范围；后续训练成功不得自动恢复旧待决请求，必须当前 scope 明确重新确认或新 linked request，且不产生重复/第二次世界效果；未 committed 请求按当前范围重新评估，已 committed 结果与 provenance 保留；新的训练/认证结果只恢复其证据明确支持的范围。
 
 ### 5.1 验收追踪
 
@@ -91,7 +91,7 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 | PL-3 | producer_system_designer / agent_engineer / wasm_platform_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 训练/认证/模块/重训的 provenance、成本、撤销和历史连续性证据 | test_tier_full |
 | PL-4 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 私有/安全披露/公共 baseline、freshness/uncertainty 和刷新/纠正组合证据 | test_tier_required |
 | PL-5 | producer_system_designer / agent_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Local Provider/social-fact/industry 现状与长期专题 claim 分离审计 | test_tier_required |
-| PL-6 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 复核/重训、到期/撤销/失败期间的能力范围、待决请求再评估、已结算 provenance 连续性、恢复范围与 slot 公平的组合证据；正式 surface 可读当前范围、状态、原因与下一步 | test_tier_full |
+| PL-6 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 复核/重训、到期/撤销/失败期间的能力范围、待决请求再评估、已结算 provenance 连续性、恢复范围与 slot 公平的组合证据；后续训练成功不自动恢复旧待决请求，须当前 scope 重新确认或新 linked request 且无重复/第二次世界效果；guardrail 缺失、catalog 非法、fallback 过期/越界时 Wait/拒绝、无世界效果/额外 slot，并可读原因与当前有效范围 | test_tier_full |
 
 ## 6. Non-Goals
 
