@@ -49,6 +49,18 @@ assert_reason_contains() {
   fi
 }
 
+assert_reason_absent() {
+  local output="$1"
+  local unexpected="$2"
+  local actual
+  actual="$(value_for_key "$output" reason_summary)"
+  if [[ "$actual" == *"$unexpected"* ]]; then
+    echo "expected reason_summary not to contain $unexpected, got $actual" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+}
+
 assert_key_matches() {
   local output="$1"
   local key="$2"
@@ -91,6 +103,69 @@ assert_key_equals "$config_output" scope full
 assert_key_equals "$config_output" run_rust_baseline true
 assert_key_equals "$config_output" needs_rust_toolchain true
 assert_key_equals "$config_output" needs_node true
+
+governance_helper_output="$(plan_for_paths \
+  scripts/prepare-task-pr.sh \
+  scripts/pm/patch-equivalence-receipt.sh \
+  scripts/pm/patch-equivalence-receipt.test.sh \
+  scripts/pm/prepare-task-pr-review-risk.test.py \
+  scripts/plan-rust-required-scope.test.sh)"
+assert_key_equals "$governance_helper_output" scope minimal
+assert_key_equals "$governance_helper_output" run_rust_baseline false
+assert_key_equals "$governance_helper_output" needs_rust_toolchain false
+assert_key_equals "$governance_helper_output" needs_node false
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/prepare-task-pr.sh"
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm/patch-equivalence-receipt.sh"
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm/patch-equivalence-receipt.test.sh"
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
+assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
+
+viewer_web_wrapper_output="$(plan_for_paths \
+  scripts/build-viewer-software-safe.sh \
+  scripts/viewer-dependency-preflight.sh \
+  scripts/viewer-dependency-preflight.test.sh \
+  scripts/viewer-pixel-world-fragment-visual-smoke.sh)"
+assert_key_equals "$viewer_web_wrapper_output" scope targeted
+assert_key_equals "$viewer_web_wrapper_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_web_wrapper_output" run_viewer_wasm_check true
+assert_key_equals "$viewer_web_wrapper_output" run_launcher_web_build false
+assert_key_equals "$viewer_web_wrapper_output" run_oasis7_required_tests false
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/build-viewer-software-safe.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.test.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-pixel-world-fragment-visual-smoke.sh"
+assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:"
+
+viewer_launcher_wrapper_output="$(plan_for_paths \
+  scripts/run-producer-playtest.sh \
+  scripts/worktree-harness.sh)"
+assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
+assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
+assert_key_equals "$viewer_launcher_wrapper_output" run_launcher_web_build true
+assert_key_equals "$viewer_launcher_wrapper_output" needs_trunk true
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
+assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
+
+viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"
+assert_key_equals "$viewer_gameplay_hardening_output" scope targeted
+assert_key_equals "$viewer_gameplay_hardening_output" run_oasis7_required_tests true
+assert_key_equals "$viewer_gameplay_hardening_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_gameplay_hardening_output" run_viewer_wasm_check true
+assert_key_equals "$viewer_gameplay_hardening_output" run_pixel_world_bridge_lib_tests false
+assert_reason_contains "$viewer_gameplay_hardening_output" "viewer_gameplay_verification:scripts/pm/verify-gameplay-high-risk-hardening.sh"
+assert_reason_absent "$viewer_gameplay_hardening_output" "unclassified_or_unresolvable:"
+
+viewer_attraction_verification_output="$(plan_for_path scripts/verify-gameplay-attraction-automation.sh)"
+assert_key_equals "$viewer_attraction_verification_output" scope targeted
+assert_key_equals "$viewer_attraction_verification_output" run_oasis7_required_tests true
+assert_key_equals "$viewer_attraction_verification_output" run_viewer_contract_tests true
+assert_key_equals "$viewer_attraction_verification_output" run_viewer_wasm_check true
+assert_key_equals "$viewer_attraction_verification_output" run_pixel_world_bridge_lib_tests true
+assert_key_equals "$viewer_attraction_verification_output" run_pixel_world_bridge_wasm_check true
+assert_reason_contains "$viewer_attraction_verification_output" "viewer_attraction_verification:scripts/verify-gameplay-attraction-automation.sh"
+assert_reason_absent "$viewer_attraction_verification_output" "unclassified_or_unresolvable:"
 
 unknown_output="$(plan_for_path unknown-unclassified-input.txt)"
 assert_key_equals "$unknown_output" scope full

@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/scripts/cargo-dev-lib.sh"
+source "$repo_root/scripts/viewer-dependency-preflight.sh"
 
 usage() {
   cat <<'USAGE'
@@ -90,6 +91,8 @@ done
   echo "error: --startup-timeout must be a positive integer" >&2
   exit 2
 }
+
+viewer_dependency_preflight "$repo_root" test
 
 stamp=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
 run_id="task-game-076-${tier}-${stamp}"

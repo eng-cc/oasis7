@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/viewer-dependency-preflight.sh"
 
 tier="${1:-}"
 
@@ -191,6 +192,8 @@ run_newapi_bridge_service_accounting_tests() {
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
+  run ./scripts/viewer-dependency-preflight.test.sh
+  viewer_dependency_preflight "$repo_root" test
   run npm --prefix crates/oasis7_viewer run test:frontend-structure
   run npm --prefix crates/oasis7_viewer run test:feedback-contract
   run node crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs

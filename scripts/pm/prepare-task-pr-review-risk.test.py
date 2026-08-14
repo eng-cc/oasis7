@@ -41,11 +41,27 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertIn('REVIEW_MANUAL_ROLES=()', source)
         self.assertIn('--review-manual-role) REVIEW_MANUAL_ROLES+=("${2:-}"); shift 2 ;;', source)
         self.assertIn(
-            'for role in "${REVIEW_MANUAL_ROLES[@]}"; do\n'
-            '    ROLE_SELECTOR_ARGS+=(--manual-role "$role")\n'
-            '  done',
+            '    for role in "${REVIEW_MANUAL_ROLES[@]}"; do\n'
+            '      ROLE_SELECTOR_ARGS+=(--manual-role "$role")\n'
+            '    done',
             source,
         )
+
+    def test_prepare_task_pr_guards_empty_manual_roles_for_bash_32(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        self.assertIn(
+            '  if [[ "${#REVIEW_MANUAL_ROLES[@]}" -gt 0 ]]; then\n'
+            '    for role in "${REVIEW_MANUAL_ROLES[@]}"; do\n'
+            '      ROLE_SELECTOR_ARGS+=(--manual-role "$role")\n'
+            '    done\n'
+            '  fi',
+            source,
+            "empty arrays must not expand under Bash 3.2 set -u",
+        )
+
+    def test_patch_equivalence_helper_is_directly_invocable(self):
+        helper = ROOT / "scripts/pm/patch-equivalence-receipt.sh"
+        self.assertTrue(helper.stat().st_mode & 0o111, "receipt helper should support its documented direct invocation")
 
     def test_prepare_task_pr_requires_review_packet_comparison_oid(self):
         source = PREPARE.read_text(encoding="utf-8")
