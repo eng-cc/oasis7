@@ -10,7 +10,7 @@
 
 ## 迁移状态
 
-本页保留完整历史语义和验收，不能作为大世界基础设施的 active authority、路线图或验收入口。原第 2–3 节的唯一权威历史、确定性结果、checkpoint/replay/state-sync 与恢复语义，已分别映射到 [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md) 的 DC-1/DC-2 和 [`确定性世界执行`](deterministic-world-execution.prd.md) 的 DE-1/DE-3；其实现/证据仍由 P2P/runtime authority 拥有。原第 4–6 节的玩家治理、惩罚/申诉、危机处置和经济/发行产品语义尚未被接收模块吸收，仍是待迁移语义，接收 authority 为 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)。在该 owner 回填语义、验收和活跃引用前不得删除本页。
+本页保留完整历史语义和验收，不能作为大世界基础设施的 active authority、路线图或验收入口。原第 2–3 节的唯一权威历史、确定性结果、checkpoint/replay/state-sync 与恢复语义，已分别映射到 [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md) 的 DC-1/DC-2 和 [`确定性世界执行`](deterministic-world-execution.prd.md) 的 DE-1/DE-3；其实现/证据仍由 P2P/runtime authority 拥有。原第 5 节的系统性危机 containment、同一世界恢复项目与无选择性 bailout 语义，已由 [`区域冲突、软赛季与可恢复损失`](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md) 第 6 节和 AC-6/AC-7 接收。原第 4–6 节其余玩家治理、惩罚/申诉和长期经济/发行产品语义尚未被接收模块完整吸收，仍是待迁移语义，接收 authority 为 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)。在对应 owner 回填剩余语义、验收和活跃引用前不得删除本页。
 
 
 本文是长期产品分册，承载统一持久世界在分布式运行、治理变化、故障与恢复中的产品承诺。它不定义证书字段、共识算法、拓扑、阈值、测试命令、运行手册或历史候选结论。

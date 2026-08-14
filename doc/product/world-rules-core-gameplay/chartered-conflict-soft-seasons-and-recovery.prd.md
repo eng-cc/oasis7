@@ -46,6 +46,14 @@
 - 玩家、Agent、组织和区域可提出或参与恢复项目，重新建立服务、物流、能力或受损公共条件。项目结果留在同一审计世界中，接受同一资源、资格、治理和反滥用边界。
 - 不存在选择性 admin bailout：恢复支持必须按预先公开、可审计且可复核的规则提供，不能以身份、关系或临时运营裁量抹去已确认的竞争/经济因果。
 
+### 6.1 恢复项目生命周期与结果边界
+
+- 恢复项目遵循 `containment -> recovery_open -> recovery_in_progress -> recovery_completed | recovery_expired | recovery_blocked` 的产品生命周期。每次转换必须由当时的权威世界事实、项目作用域、资格、资源、治理与反滥用条件共同决定，并以可重放 receipt 或等价权威结果证明；本状态名不冻结 runtime schema。
+- 项目开放时必须让受影响主体读到触发事实、目标与作用域、受影响对象、准入和退出条件、所需贡献、里程碑、截止或复核边界、申诉入口，以及失败、到期或阻断后的常态下一步。项目范围不能在参与后静默扩大。
+- 玩家、Agent、组织或区域可以查看符合资格的项目并提交有界贡献；只有里程碑 receipt 确认后，贡献才产生该项目声明范围内的一次世界效果。提交、排队、在途、本地缓存或客户端显示成功都不等于贡献已生效、损失已恢复或补偿已取得。
+- 专业合同可以允许尚未生效的贡献撤回、改投或重新提交，但必须明确其资源、顺位和机会成本后果。授权、政策、资格或作用域变化后，旧待决请求只能明确继续、拒绝、到期、保持待决或由主体重新显式提交，不得静默迁移到新授权或新项目。
+- 恢复项目不得跳过 containment，不得越过未授权区域、未参与者保护或既有权利边界，也不得制造免费资源、资格、债务豁免、永久特权或 admin bailout。未确认贡献不能追溯改写既有损失、责任与历史；项目关闭后仍保留贡献来源、结果、申诉与 receipt 历史，重连、重试或跨入口重放不能重复生效。
+
 ## 7. 范围与权威边界
 
 产品层定义 `宣战/参战登记 -> 有界离线防御 -> 冲突窗口 -> 占领或实体提取 -> 冻结结果与可恢复损失 -> 软赛季刷新或系统恢复项目` 的玩家和制度语义。
@@ -60,6 +68,7 @@
 - AC-4：损失与重建样例同时说明被毁资产、保留身份/历史、所需世界内重建投入和 repair/rebuild/pivot 等恢复选择；不把 chassis 破坏写成身份删除或免费即时复原。
 - AC-5：相邻软赛季样例证明竞争/公共项目/排行榜或部分区域权利可刷新，同时保持同一世界时间线、身份、核心能力和历史因果。
 - AC-6：系统性危机样例以 containment 和玩家/Agent 恢复项目限制扩散、保留审计和申诉；不产生 reset、历史重写或选择性 bailout。
+- AC-7：代表性危机包含至少两个作用域不同的恢复项目，证明开放、推进、完成、到期与阻断结果可读；同一贡献在重连、重试或跨入口后至多产生一次权威效果，授权、政策、资格或范围变化不会让待决请求静默越界，未参与或不合格主体不会取得恢复效果，失败项目仍提供 repair、rebuild、pivot、申诉或其他适用的常态下一步。
 
 ## 9. 验收追踪
 
@@ -68,7 +77,7 @@
 | AC-1 / AC-3 | gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 宣战、参战范围、占领/hold、战利品提取/目的地存储和时间窗口结算的组合证据 | test_tier_full |
 | AC-2 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 防御 envelope、到期/撤销、阻断/升级与正式玩家 surface 可读性证据 | test_tier_required |
 | AC-4 | gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 资产损失、身份连续、重建约束与恢复选择的组合证据 | test_tier_full |
-| AC-5 / AC-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 软赛季刷新、同一时间线、containment、恢复项目、审计/申诉与无 reset/bailout 负例 | test_tier_full |
+| AC-5 / AC-6 / AC-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 软赛季刷新、同一时间线、containment、恢复项目生命周期、贡献单次生效、范围变化、非参与者保护、失败下一步、审计/申诉与无 reset/bailout 负例 | test_tier_full |
 
 ## 10. Non-Goals
 
