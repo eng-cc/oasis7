@@ -8,6 +8,14 @@ on:
         required: false
         default: ""
         type: string
+      metric_target:
+        description: "Rust package compile surface to measure"
+        required: true
+        default: launcher
+        type: choice
+        options:
+          - launcher
+          - oasis7_node_no_default_features
       max_package_count_regression_pct:
         description: "Allowed package closure regression percentage"
         required: false
@@ -84,7 +92,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: compile-metrics-${{ runner.os }}-launcher-v1
+          shared-key: compile-metrics-${{ runner.os }}-rust-surface-v2
           cache-on-failure: true
 
       - name: Resolve baseline ref
@@ -96,17 +104,37 @@ jobs:
           echo "baseline_ref=${baseline_ref}" >> "${GITHUB_OUTPUT}"
           echo "baseline_ref=${baseline_ref}"
 
-      - name: Measure launcher compile metrics
+      - name: Measure selected Rust compile metrics
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "output/compile-metrics/${{ matrix.platform }}"
+          package=""
+          binary=""
+          extra_args=()
+          case "${{ inputs.metric_target }}" in
+            launcher)
+              package="oasis7_client_launcher"
+              binary="oasis7_client_launcher"
+              ;;
+            oasis7_node_no_default_features)
+              package="oasis7_node"
+              extra_args+=(--check-only --no-default-features)
+              ;;
+            *)
+              echo "error: unsupported metric target: ${{ inputs.metric_target }}" >&2
+              exit 2
+              ;;
+          esac
           cmd=(
             ./scripts/ci-compile-metrics.sh
-            --package oasis7_client_launcher
-            --binary oasis7_client_launcher
+            --package "${package}"
             --out-dir "output/compile-metrics/${{ matrix.platform }}"
           )
+          if [[ -n "${binary}" ]]; then
+            cmd+=(--binary "${binary}")
+          fi
+          cmd+=("${extra_args[@]}")
           if [[ -n "${{ steps.baseline.outputs.baseline_ref }}" ]]; then
             cmd+=(--baseline-ref "${{ steps.baseline.outputs.baseline_ref }}")
           fi
@@ -143,10 +171,14 @@ jobs:
           cmd=(
             python3 ./scripts/ci-compile-metrics-gate.py
             --comparison "output/compile-metrics/${{ matrix.platform }}/comparison.json" \
-            --max-package-count-regression-pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}" \
-            --max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}" \
-            --require-wasmtime-absent
+            --max-package-count-regression-pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}"
           )
+          if [[ "${{ inputs.metric_target }}" == "launcher" ]]; then
+            cmd+=(
+              --max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}"
+              --require-wasmtime-absent
+            )
+          fi
           if [[ -n "${MAX_CARGO_CHECK_REGRESSION_PCT}" ]]; then
             cmd+=(--max-cargo-check-regression-pct "${MAX_CARGO_CHECK_REGRESSION_PCT}")
           fi

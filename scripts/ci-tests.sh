@@ -248,6 +248,7 @@ run_required_gate_checks() {
   run bash ./scripts/ci-tests-argument-contract.test.sh
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
   run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
+  run bash ./scripts/ci-compile-metrics-contract.test.sh
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
