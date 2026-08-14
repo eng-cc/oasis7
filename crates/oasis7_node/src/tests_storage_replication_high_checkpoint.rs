@@ -470,6 +470,8 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
 
 #[test]
 fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_missing() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-execution-checkpoint";
     let dir_a = temp_dir("gap-sync-execution-checkpoint-a");
     let dir_b = temp_dir("gap-sync-execution-checkpoint-b");

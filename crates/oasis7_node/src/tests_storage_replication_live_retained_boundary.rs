@@ -1,7 +1,10 @@
 use std::fs;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
 use super::*;
+use super::storage_replication_first_ready_checkpoint_tests::{
+    lock_checkpoint_probe_nonce, CheckpointProbeNonceGuard,
+};
 
 #[derive(Clone)]
 struct AdvertisedHeadRetainedCheckpointNetwork {
@@ -139,39 +142,10 @@ fn committed_decision_with_block_hash(height: u64, block_hash: &str) -> PosDecis
     }
 }
 
-static PROBE_NONCE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-struct ProbeNonceGuard;
-
-impl ProbeNonceGuard {
-    fn install() -> Self {
-        // SAFETY: this test holds PROBE_NONCE_LOCK for its full duration.
-        unsafe {
-            std::env::set_var(
-                "OASIS7_CHECKPOINT_PROBE_NONCE",
-                "retained-boundary-probe-nonce-0123456789abcdef0123456789abcdef",
-            );
-        }
-        Self
-    }
-}
-
-impl Drop for ProbeNonceGuard {
-    fn drop(&mut self) {
-        // SAFETY: this test holds PROBE_NONCE_LOCK for its full duration.
-        unsafe {
-            std::env::remove_var("OASIS7_CHECKPOINT_PROBE_NONCE");
-        }
-    }
-}
-
 #[test]
 fn fresh_observer_installs_latest_retained_checkpoint_below_non_aligned_live_head() {
-    let _nonce_lock = PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _probe_nonce = ProbeNonceGuard::install();
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
     let world_id = "world-live-head-retained-boundary-52079";
     let dir_a = temp_dir("live-head-retained-boundary-a");
     let dir_b = temp_dir("live-head-retained-boundary-b");
@@ -309,7 +283,10 @@ fn fresh_observer_installs_latest_retained_checkpoint_below_non_aligned_live_hea
     )
     .expect("decode retained checkpoint closure receipt");
     assert_eq!(receipt["height"], checkpoint_height);
-    assert_eq!(receipt["probe_nonce"], "retained-boundary-probe-nonce-0123456789abcdef0123456789abcdef");
+    assert_eq!(
+        receipt["probe_nonce"],
+        "probe-nonce-0123456789abcdef0123456789abcdef"
+    );
     assert!(
         receipt["fetch_observations"]
             .as_array()
@@ -329,11 +306,6 @@ fn fresh_observer_installs_latest_retained_checkpoint_below_non_aligned_live_hea
 
 #[test]
 fn fresh_observer_rejects_lower_retained_checkpoint_without_head_lineage() {
-    let _nonce_lock = PROBE_NONCE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _probe_nonce = ProbeNonceGuard::install();
     let world_id = "world-live-head-retained-fork-lineage-52079";
     let dir_a = temp_dir("live-head-retained-fork-lineage-a");
     let dir_b = temp_dir("live-head-retained-fork-lineage-b");

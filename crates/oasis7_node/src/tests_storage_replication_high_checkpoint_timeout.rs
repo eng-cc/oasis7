@@ -777,6 +777,8 @@ fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() 
 
 #[test]
 fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_blobs() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-provider-rate-limit-resume";
     let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 248, 249);
     fixture

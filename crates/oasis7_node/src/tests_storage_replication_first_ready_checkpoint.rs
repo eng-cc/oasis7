@@ -133,17 +133,17 @@ struct CheckpointInstallingExecutionHook {
 
 static CHECKPOINT_PROBE_NONCE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-fn lock_checkpoint_probe_nonce() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn lock_checkpoint_probe_nonce() -> std::sync::MutexGuard<'static, ()> {
     CHECKPOINT_PROBE_NONCE_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-struct CheckpointProbeNonceGuard;
+pub(super) struct CheckpointProbeNonceGuard;
 
 impl CheckpointProbeNonceGuard {
-    fn install() -> Self {
+    pub(super) fn install() -> Self {
         // SAFETY: tests serialize access with CHECKPOINT_PROBE_NONCE_LOCK.
         unsafe {
             std::env::set_var(
