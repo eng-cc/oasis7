@@ -9,6 +9,7 @@ real_git="$(command -v git)"
 
 fixture_repo="$tmp_dir/repo"
 mkdir -p "$fixture_repo/tools/valid_tool/src"
+mkdir -p "$fixture_repo/crates/oasis7_builtin_wasm_modules/valid_module/src"
 cd "$fixture_repo"
 git init -q
 git config user.email "test@example.invalid"
@@ -26,7 +27,25 @@ cat >tools/valid_tool/src/main.rs <<'RS'
 fn main() {}
 RS
 env -u RUSTC_WRAPPER cargo generate-lockfile --manifest-path tools/valid_tool/Cargo.toml
-git add tools/valid_tool/Cargo.toml tools/valid_tool/Cargo.lock tools/valid_tool/src/main.rs
+cat >crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml <<'TOML'
+[package]
+name = "valid_module"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[workspace]
+TOML
+cat >crates/oasis7_builtin_wasm_modules/valid_module/src/lib.rs <<'RS'
+pub fn valid() {}
+RS
+env -u RUSTC_WRAPPER cargo generate-lockfile \
+  --manifest-path crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml
+git add tools/valid_tool/Cargo.toml tools/valid_tool/Cargo.lock tools/valid_tool/src/main.rs \
+  crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml \
+  crates/oasis7_builtin_wasm_modules/valid_module/Cargo.lock \
+  crates/oasis7_builtin_wasm_modules/valid_module/src/lib.rs
 git commit -q -m "valid tool"
 
 valid_out="$tmp_dir/valid.out"
@@ -47,7 +66,7 @@ OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
   OASIS7_GIT_CALL_LOG="$tmp_dir/git-calls.log" \
   PATH="$fake_bin:$PATH" \
   "$script_path" >"$valid_out"
-grep -q "ok: standalone tool lockfiles are locked and manifest-consistent (1 manifests)" "$valid_out"
+grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$valid_out"
 test "$(grep -c "^git ls-files " "$tmp_dir/git-calls.log")" -eq 1
 
 mkdir -p tools/missing_lock/src
@@ -77,6 +96,6 @@ if OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" "$script_path" >"$tmp_dir/or
   echo "expected orphan lockfile to fail" >&2
   exit 1
 fi
-grep -q "standalone tool manifest missing for lockfile: tools/orphan_lock/Cargo.lock" "$tmp_dir/orphan-lock.out"
+grep -q "standalone manifest missing for lockfile: tools/orphan_lock/Cargo.lock" "$tmp_dir/orphan-lock.out"
 
 echo "check-standalone-tool-lockfiles.test: OK"

@@ -39,14 +39,14 @@ futures-util = "0.3"
 hmac = "0.12"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "rustls"], default-features = false }
 tokio = { version = "1", features = ["rt", "time"] }
-toml = "0.8"
+toml = "0.9.12"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-tungstenite = "0.21"
+tungstenite = "0.30.0"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
