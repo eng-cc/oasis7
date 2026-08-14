@@ -540,6 +540,7 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
     let world_id = "world-live-probe-height-one-reentry-after-retry";
     let dir_a = temp_dir("live-probe-height-one-reentry-after-retry-a");
     let dir_b = temp_dir("live-probe-height-one-reentry-after-retry-b");
+    let dir_c = temp_dir("live-probe-height-one-reentry-after-retry-c");
     let (_, public_key_a) = deterministic_keypair_hex(192);
     let (_, public_key_b) = deterministic_keypair_hex(193);
     let pos_config = signed_pos_config_with_signer_seeds(
@@ -563,8 +564,13 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
     let replication_config_b = signed_replication_config(dir_b.clone(), 193)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
+    let replication_config_c = signed_replication_config(dir_c.clone(), 193)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist c")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist c");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
         .with_pos_config(pos_config.clone())
@@ -572,10 +578,15 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
         .with_replication(replication_config_a.clone());
     let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
         .expect("config b")
-        .with_pos_config(pos_config)
+        .with_pos_config(pos_config.clone())
         .expect("pos config b")
         .with_require_execution_on_commit(true)
         .with_replication(replication_config_b.clone());
+    let config_c = NodeConfig::new("node-c", world_id, NodeRole::Sequencer)
+        .expect("config c")
+        .with_pos_config(pos_config)
+        .expect("pos config c")
+        .with_replication(replication_config_c);
     let checkpoint_height = 41_620;
     let checkpoint_block_hash = format!("exec-block-{checkpoint_height}");
     let checkpoint_state_root = format!("exec-state-{checkpoint_height}");
@@ -609,6 +620,21 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
         )
         .expect("build high checkpoint closure")
         .expect("high checkpoint message");
+    let engine_a = PosNodeEngine::new(&config_a).expect("node-a lineage authority engine");
+    let engine_c = PosNodeEngine::new(&config_c).expect("node-c lineage authority engine");
+    super::storage_replication_live_retained_boundary_tests::attach_production_lineage_envelope(
+        &mut replication_a,
+        world_id,
+        checkpoint_height,
+        CheckpointLineageHeadV1 {
+            height: checkpoint_height,
+            block_hash: format!("block-{checkpoint_height}"),
+            state_root: checkpoint_state_root.clone(),
+            execution_block_hash: checkpoint_block_hash.clone(),
+            execution_state_root: checkpoint_state_root.clone(),
+        },
+        &[&engine_a, &engine_c],
+    );
     let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
     let head = Arc::new(Mutex::new(super::replication::FetchHeadResponse {
         found: true,
@@ -749,6 +775,7 @@ fn fresh_observer_does_not_reenter_height_one_after_high_checkpoint_retry_become
     assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
+    let _ = fs::remove_dir_all(&dir_c);
 }
 
 struct PackageProbeHeightOneFailureHook {

@@ -72,7 +72,10 @@ impl ConsensusNetworkEndpoint {
         &self,
         message: &GossipCheckpointLineageVoteMessage,
     ) -> Result<(), NodeError> {
-        self.publish_json(self.lineage_topic.as_str(), message)
+        self.publish_json(
+            self.lineage_topic.as_str(),
+            &GossipMessage::CheckpointLineageVote(message.clone()),
+        )
     }
     pub(crate) fn drain_messages(&self) -> Result<Vec<GossipMessage>, NodeError> {
         let mut out = Vec::new();

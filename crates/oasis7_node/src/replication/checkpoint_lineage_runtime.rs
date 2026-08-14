@@ -1,6 +1,108 @@
 use super::*;
+use oasis7_proto::distributed_checkpoint_lineage::checkpoint_lineage_descriptor_digest;
 
 impl ReplicationRuntime {
+    pub(crate) fn persist_local_checkpoint_message_for_lineage(
+        &self,
+        node_id: &str,
+        world_id: &str,
+        message: &GossipReplicationMessage,
+    ) -> Result<(), NodeError> {
+        if message.node_id != node_id
+            || message.world_id != world_id
+            || message.record.world_id != world_id
+        {
+            return Ok(());
+        }
+        let Some(signer) = self.signer.as_ref() else {
+            return Ok(());
+        };
+        if message.record.writer_id != signer.public_key_hex
+            || message.public_key_hex.as_deref() != Some(signer.public_key_hex.as_str())
+            || message.signature_hex.is_none()
+        {
+            return Ok(());
+        }
+        let payload = serde_json::from_slice::<ReplicatedCommitPayload>(message.payload.as_slice())
+            .map_err(|err| NodeError::Replication {
+                reason: format!("decode local checkpoint lineage payload failed: {err}"),
+            })?;
+        if payload.world_id != world_id
+            || payload.node_id != node_id
+            || payload.execution_checkpoint.is_none()
+        {
+            return Ok(());
+        }
+        verify_replication_message_signature(message)?;
+        if oasis7_distfs::blake3_hex(message.payload.as_slice()) != message.record.content_hash {
+            return Err(NodeError::Replication {
+                reason: "local checkpoint lineage payload hash mismatch".to_string(),
+            });
+        }
+        let path = self
+            .config
+            .root_dir
+            .join("checkpoint-lineage")
+            .join(format!("source-{}.json", payload.height));
+        if let Some(existing) =
+            self.load_checkpoint_lineage_source_message_by_height(world_id, payload.height)?
+        {
+            if existing.record.content_hash != message.record.content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "local checkpoint lineage message conflict at height {}",
+                        payload.height
+                    ),
+                });
+            }
+            return Ok(());
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|err| NodeError::Replication {
+                reason: format!(
+                    "create checkpoint lineage source cache {} failed: {err}",
+                    parent.display()
+                ),
+            })?;
+        }
+        write_json_compact(path.as_path(), message)
+    }
+
+    pub(crate) fn load_checkpoint_lineage_source_message_by_height(
+        &self,
+        world_id: &str,
+        height: u64,
+    ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+        if height == 0 {
+            return Ok(None);
+        }
+        let path = self
+            .config
+            .root_dir
+            .join("checkpoint-lineage")
+            .join(format!("source-{height}.json"));
+        if !path.exists() {
+            return Ok(None);
+        }
+        let bytes = fs::read(path.as_path()).map_err(|err| NodeError::Replication {
+            reason: format!(
+                "read checkpoint lineage source cache {} failed: {err}",
+                path.display()
+            ),
+        })?;
+        let message = serde_json::from_slice::<GossipReplicationMessage>(bytes.as_slice())
+            .map_err(|err| NodeError::Replication {
+                reason: format!(
+                    "decode checkpoint lineage source cache {} failed: {err}",
+                    path.display()
+                ),
+            })?;
+        if message.world_id != world_id {
+            return Ok(None);
+        }
+        Ok(Some(message))
+    }
+
     pub(crate) fn writer_last_replicated_height(&self) -> u64 {
         self.writer_state.last_replicated_height
     }
@@ -88,12 +190,22 @@ impl ReplicationRuntime {
         world_id: &str,
         envelope: &CheckpointLineageEnvelopeV1,
     ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+        envelope
+            .validate_contract()
+            .map_err(|reason| NodeError::Replication { reason })?;
         let Some(signer) = self.signer.clone() else {
             return Ok(None);
         };
-        let Some(message) =
+        let (message, source_cache_only) = if let Some(message) =
             self.load_commit_message_by_height(world_id, envelope.checkpoint.height)?
-        else {
+        {
+            (message, false)
+        } else if let Some(message) = self.load_checkpoint_lineage_source_message_by_height(
+            world_id,
+            envelope.checkpoint.height,
+        )? {
+            (message, true)
+        } else {
             return Ok(None);
         };
         if message.node_id != node_id
@@ -130,6 +242,32 @@ impl ReplicationRuntime {
                 != payload.execution_block_hash.clone().unwrap_or_default()
             || descriptor.execution_state_root
                 != payload.execution_state_root.clone().unwrap_or_default()
+        {
+            return Ok(None);
+        }
+        let descriptor_digest = checkpoint_lineage_descriptor_digest(
+            world_id,
+            descriptor.height,
+            payload.block_hash.as_str(),
+            descriptor.execution_block_hash.as_str(),
+            descriptor.execution_state_root.as_str(),
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+            &descriptor
+                .blobs
+                .iter()
+                .map(|blob| (blob.content_hash.clone(), blob.size_bytes))
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|reason| NodeError::Replication { reason })?;
+        let checkpoint = &envelope.checkpoint;
+        if checkpoint.height != descriptor.height
+            || checkpoint.block_hash != payload.block_hash
+            || checkpoint.state_root != descriptor.execution_state_root
+            || checkpoint.execution_block_hash != descriptor.execution_block_hash
+            || checkpoint.execution_state_root != descriptor.execution_state_root
+            || checkpoint.descriptor_digest != descriptor_digest
+            || checkpoint.manifest_size != descriptor.manifest_size_bytes
         {
             return Ok(None);
         }
@@ -171,7 +309,16 @@ impl ReplicationRuntime {
         self.writer_state.last_replicated_height =
             self.writer_state.last_replicated_height.max(payload.height);
         self.persist_state(node_id)?;
-        self.persist_commit_message(payload.height, &amended)?;
+        if source_cache_only {
+            let source_path = self
+                .config
+                .root_dir
+                .join("checkpoint-lineage")
+                .join(format!("source-{}.json", payload.height));
+            write_json_compact(source_path.as_path(), &amended)?;
+        } else {
+            self.persist_commit_message(payload.height, &amended)?;
+        }
         Ok(Some(amended))
     }
 }

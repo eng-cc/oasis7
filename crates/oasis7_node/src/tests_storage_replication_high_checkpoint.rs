@@ -1,5 +1,6 @@
 use super::*;
 use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageHeadV1;
 use oasis7_proto::distributed_dht::DistributedDht;
 
 struct GapWaitingExecutionHook;
@@ -75,7 +76,7 @@ impl NodeExecutionHook for CheckpointExportingExecutionHook {
     }
 }
 
-fn test_execution_checkpoint_bundle(
+pub(crate) fn test_execution_checkpoint_bundle(
     height: u64,
     execution_block_hash: &str,
     execution_state_root: &str,
@@ -225,20 +226,21 @@ fn observer_gap_sync_installs_exported_checkpoint_for_legacy_commit_payload() {
         installed: Vec::new(),
     };
 
-    engine_b
-        .sync_missing_replication_commits(
-            &endpoint_b,
-            "node-b",
-            world_id,
-            Some(&mut replication_b),
-            Some(&mut install_hook),
-        )
-        .expect("install exported legacy checkpoint");
-
-    assert_eq!(install_hook.installed, vec![high_height]);
-    assert_eq!(engine_b.committed_height, high_height);
-    assert_eq!(engine_b.replication_persisted_height, high_height);
-    assert_eq!(engine_b.last_execution_height, high_height);
+    let result = engine_b.sync_missing_replication_commits(
+        &endpoint_b,
+        "node-b",
+        world_id,
+        Some(&mut replication_b),
+        Some(&mut install_hook),
+    );
+    assert!(
+        result.is_err(),
+        "provider-exported legacy payload without source lineage must fail closed: {result:?}"
+    );
+    assert!(install_hook.installed.is_empty());
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(engine_b.last_execution_height, 0);
     assert!(replication_b
         .load_commit_message_by_height(world_id, 1)
         .expect("load low height")
@@ -273,7 +275,7 @@ fn observer_gap_sync_discovers_high_checkpoint_from_world_head() {
     let replication_config_b = signed_replication_config(dir_b.clone(), 215)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
@@ -340,7 +342,6 @@ fn observer_gap_sync_discovers_high_checkpoint_from_world_head() {
         ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
             .expect("runtime b");
     let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
-
     engine_b
         .sync_missing_replication_commits(
             &endpoint_b,
@@ -392,7 +393,7 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
     let replication_config_b = signed_replication_config(dir_b.clone(), 217)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
@@ -410,14 +411,24 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
             .expect("runtime a");
     for height in 1..=3 {
         let decision = committed_decision(height, 100, 67);
+        let execution_block_hash = format!("exec-block-{height}");
+        let execution_state_root = format!("exec-state-{height}");
+        let checkpoint = (height == 3).then(|| {
+            test_execution_checkpoint_bundle(
+                height,
+                execution_block_hash.as_str(),
+                execution_state_root.as_str(),
+            )
+        });
         replication_a
-            .build_local_commit_message(
+            .build_local_commit_message_with_checkpoint(
                 "node-a",
                 world_id,
                 2_700 + i64::try_from(height).expect("height fits i64"),
                 &decision,
-                Some(format!("exec-block-{height}").as_str()),
-                Some(format!("exec-state-{height}").as_str()),
+                Some(execution_block_hash.as_str()),
+                Some(execution_state_root.as_str()),
+                checkpoint,
             )
             .expect("build local message")
             .expect("message");
@@ -446,7 +457,6 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
         ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
             .expect("runtime b");
     let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
-
     engine_b
         .sync_missing_replication_commits(
             &endpoint_b,
@@ -457,18 +467,19 @@ fn observer_gap_sync_discovers_high_checkpoint_from_peer_world_head_request() {
         )
         .expect("peer-head high checkpoint sync");
 
-    assert_eq!(engine_b.network_committed_height, 3);
-    assert_eq!(engine_b.committed_height, 3);
-    assert_eq!(engine_b.replication_persisted_height, 3);
+    assert_eq!(engine_b.network_committed_height, 0);
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
     assert!(replication_b
         .load_commit_message_by_height(world_id, 1)
         .expect("load low height")
         .is_none());
     assert!(replication_b
         .load_commit_message_by_height(world_id, 3)
-        .expect("load high checkpoint")
-        .is_some());
-    assert_eq!(engine_b.last_replication_gap_sync_blocked_height, None);
+        .expect("load unsigned high checkpoint")
+        .is_none());
+    assert_eq!(engine_b.next_height, 1);
+    assert_eq!(engine_b.last_replication_gap_sync_blocked_height, Some(1));
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
@@ -498,7 +509,7 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
     let replication_config_b = signed_replication_config(dir_b.clone(), 225)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
@@ -538,6 +549,20 @@ fn observer_gap_sync_installs_execution_checkpoint_bundle_when_low_history_is_mi
             queued_low_message = Some(message);
         }
     }
+    let engine_a = PosNodeEngine::new(&config_a).expect("lineage authority engine");
+    super::storage_replication_live_retained_boundary_tests::attach_production_lineage_envelope(
+        &mut replication_a,
+        world_id,
+        3,
+        CheckpointLineageHeadV1 {
+            height: 3,
+            block_hash: "block-3".to_string(),
+            state_root: "exec-state-3".to_string(),
+            execution_block_hash: "exec-block-3".to_string(),
+            execution_state_root: "exec-state-3".to_string(),
+        },
+        &[&engine_a],
+    );
     std::fs::remove_file(dir_a.join("replication_commit_messages/00000000000000000001.json"))
         .expect("remove low commit 1");
     std::fs::remove_file(dir_a.join("replication_commit_messages/00000000000000000002.json"))
@@ -625,7 +650,7 @@ fn observer_gap_sync_does_not_persist_sparse_execution_checkpoint_without_hook()
     let replication_config_b = signed_replication_config(dir_b.clone(), 245)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
@@ -1069,7 +1094,7 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
     let replication_config_b = signed_replication_config(dir_b.clone(), 165)
         .with_remote_writer_allowlist(vec![public_key_a.clone()])
         .expect("allowlist b")
-        .with_fetch_requester_allowlist(vec![public_key_a])
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
         .expect("fetch allowlist b");
     let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
         .expect("config a")
@@ -1086,8 +1111,6 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
         ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
             .expect("runtime a");
     for height in 1..=3 {
-        let execution_block_hash = format!("execution-block-{height}");
-        let execution_state_root = format!("execution-state-{height}");
         let decision = committed_decision(height, 60, 40);
         replication_a
             .build_local_commit_message(
@@ -1095,13 +1118,12 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
                 world_id,
                 2_000 + i64::try_from(height).expect("height fits i64"),
                 &decision,
-                Some(execution_block_hash.as_str()),
-                Some(execution_state_root.as_str()),
+                Some(format!("execution-block-{height}").as_str()),
+                Some(format!("execution-state-{height}").as_str()),
             )
             .expect("build local message")
             .expect("message");
     }
-
     let network_impl = Arc::new(TestInMemoryNetwork::default());
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
@@ -1147,15 +1169,15 @@ fn observer_gap_sync_bootstraps_from_high_checkpoint_when_low_commits_are_unavai
     );
     assert!(replication_b
         .load_commit_message_by_height(world_id, 3)
-        .expect("load checkpoint commit")
-        .is_some());
-    assert_eq!(engine_b.committed_height, 3);
-    assert_eq!(engine_b.replication_persisted_height, 3);
-    assert_eq!(engine_b.next_height, 4);
+        .expect("load unsigned checkpoint candidate")
+        .is_none());
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(engine_b.next_height, 1);
     assert_eq!(engine_b.last_execution_height, 0);
     assert!(engine_b.last_execution_block_hash.is_none());
     assert!(engine_b.execution_binding_for_height(3).is_none());
-    assert_eq!(engine_b.last_replication_gap_sync_blocked_height, None);
+    assert_eq!(engine_b.last_replication_gap_sync_blocked_height, Some(1));
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);

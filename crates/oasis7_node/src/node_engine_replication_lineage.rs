@@ -8,7 +8,8 @@ use crate::replication_checkpoint_lineage::{
 use oasis7_proto::distributed_checkpoint_lineage::{
     CHECKPOINT_LINEAGE_CLAIM_BOUNDARY_V1, CHECKPOINT_LINEAGE_ENVELOPE_SCHEMA_V1,
     CheckpointLineageCheckpointV1, CheckpointLineageEnvelopeV1, CheckpointLineageHeadV1,
-    CheckpointLineageVoteV1, checkpoint_lineage_vote_signing_payload,
+    CheckpointLineageVoteV1, checkpoint_lineage_descriptor_digest,
+    checkpoint_lineage_vote_signing_payload,
 };
 
 impl PosNodeEngine {
@@ -146,6 +147,159 @@ impl PosNodeEngine {
             required_stake: envelope.required_stake,
             vote,
         })
+    }
+
+    pub(super) fn maybe_publish_local_checkpoint_lineage_vote(
+        &mut self,
+        consensus_endpoint: Option<&ConsensusNetworkEndpoint>,
+        gossip_endpoint: Option<&GossipEndpoint>,
+        node_id: &str,
+        world_id: &str,
+        replication: Option<&mut ReplicationRuntime>,
+    ) -> Result<(), NodeError> {
+        if !self.replicate_local_commits || self.local_validator_id != node_id {
+            return Ok(());
+        }
+        let Some(replication) = replication else {
+            return Ok(());
+        };
+        let Some(head_commit) = self.latest_validated_peer_commit.clone() else {
+            return Ok(());
+        };
+        if head_commit.world_id != world_id
+            || head_commit.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+            || head_commit.public_key_hex.is_none()
+            || head_commit.signature_hex.is_none()
+        {
+            return Ok(());
+        }
+        let Some(head) = lineage_head_from_commit(&head_commit) else {
+            return Ok(());
+        };
+
+        for checkpoint_height in Self::high_replication_checkpoint_candidates(head.height, 0) {
+            let Some(message) = replication
+                .load_commit_message_by_height(world_id, checkpoint_height)?
+                .or(
+                    replication.load_checkpoint_lineage_source_message_by_height(
+                        world_id,
+                        checkpoint_height,
+                    )?,
+                )
+            else {
+                continue;
+            };
+            if message.public_key_hex.is_none() || message.signature_hex.is_none() {
+                continue;
+            }
+            let Some(source_validator) = self.validator_id_for_peer_head(message.node_id.as_str())
+            else {
+                continue;
+            };
+            if self.quarantined_validators.contains(&source_validator) {
+                continue;
+            }
+            let Some(payload) = parse_replication_commit_payload(message.payload.as_slice()) else {
+                continue;
+            };
+            let Some(descriptor) = payload.execution_checkpoint.as_ref() else {
+                continue;
+            };
+            if payload.world_id != world_id
+                || descriptor.height != payload.height
+                || descriptor.height == 0
+                || descriptor.height > head.height
+                || payload.execution_block_hash.as_deref()
+                    != Some(descriptor.execution_block_hash.as_str())
+                || payload.execution_state_root.as_deref()
+                    != Some(descriptor.execution_state_root.as_str())
+            {
+                continue;
+            }
+            if payload.lineage_envelope.as_ref().is_some_and(|envelope| {
+                envelope.head.height == head.height
+                    && envelope.head.block_hash == head.block_hash
+                    && envelope.head.execution_block_hash == head.execution_block_hash
+                    && envelope.head.execution_state_root == head.execution_state_root
+            }) {
+                return Ok(());
+            }
+            let descriptor_digest = checkpoint_lineage_descriptor_digest(
+                world_id,
+                descriptor.height,
+                payload.block_hash.as_str(),
+                descriptor.execution_block_hash.as_str(),
+                descriptor.execution_state_root.as_str(),
+                descriptor.manifest_ref.as_str(),
+                descriptor.manifest_size_bytes,
+                &descriptor
+                    .blobs
+                    .iter()
+                    .map(|blob| (blob.content_hash.clone(), blob.size_bytes))
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|reason| NodeError::Replication { reason })?;
+            let checkpoint = CheckpointLineageCheckpointV1 {
+                height: descriptor.height,
+                block_hash: payload.block_hash.clone(),
+                state_root: descriptor.execution_state_root.clone(),
+                execution_block_hash: descriptor.execution_block_hash.clone(),
+                execution_state_root: descriptor.execution_state_root.clone(),
+                descriptor_digest,
+                manifest_size: descriptor.manifest_size_bytes,
+            };
+            let round_id = format!(
+                "checkpoint-lineage-v1:{}:{}:{}:{}",
+                checkpoint.height, head.height, checkpoint.block_hash, head.block_hash
+            );
+            let vote_message = self.build_local_checkpoint_lineage_vote(
+                world_id,
+                checkpoint.clone(),
+                head.clone(),
+                round_id.clone(),
+            )?;
+            let envelope = CheckpointLineageEnvelopeV1 {
+                schema_version: CHECKPOINT_LINEAGE_ENVELOPE_SCHEMA_V1,
+                claim_boundary: CHECKPOINT_LINEAGE_CLAIM_BOUNDARY_V1.to_string(),
+                world_id: world_id.to_string(),
+                checkpoint,
+                head: head.clone(),
+                validator_set_hash: self.validator_set_hash.clone(),
+                total_stake: self.total_stake,
+                required_stake: self.required_stake,
+                round_id,
+                votes: vec![vote_message.vote.clone()],
+            };
+            let key = checkpoint_lineage_cache_key(&envelope)
+                .map_err(|reason| NodeError::Replication { reason })?;
+            if self
+                .lineage_state
+                .votes
+                .get(&key)
+                .is_some_and(|votes| votes.contains_key(self.local_validator_id.as_str()))
+            {
+                return Ok(());
+            }
+
+            if let Some(endpoint) = consensus_endpoint {
+                if !endpoint.allows_publish() {
+                    return Ok(());
+                }
+                endpoint.publish_checkpoint_lineage_vote(&vote_message)?;
+            } else if let Some(endpoint) = gossip_endpoint {
+                endpoint.broadcast_checkpoint_lineage_vote(&vote_message)?;
+            } else {
+                return Ok(());
+            }
+            self.ingest_checkpoint_lineage_vote_message(
+                node_id,
+                world_id,
+                &vote_message,
+                Some(replication),
+            )?;
+            return Ok(());
+        }
+        Ok(())
     }
 
     pub(super) fn ingest_checkpoint_lineage_vote_message(

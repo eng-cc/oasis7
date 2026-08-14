@@ -1,4 +1,5 @@
 use super::*;
+use crate::replication_checkpoint_lineage::verify_checkpoint_lineage_for_descriptor;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
@@ -313,6 +314,70 @@ impl PosNodeEngine {
             });
         }
         Ok(())
+    }
+
+    pub(super) fn validate_high_checkpoint_lineage_candidate(
+        &self,
+        world_id: &str,
+        payload: &ReplicationCommitPayload,
+        checkpoint_descriptor: &NodeExecutionCheckpointDescriptor,
+        expected_checkpoint_head: Option<&WorldHeadAnnounce>,
+        fresh_execution_bootstrap: bool,
+        unsigned_exact_head: bool,
+    ) -> bool {
+        let Some(execution_block_hash) = payload.execution_block_hash.as_ref() else {
+            return false;
+        };
+        let Some(execution_state_root) = payload.execution_state_root.as_ref() else {
+            return false;
+        };
+        if checkpoint_descriptor.height != payload.height
+            || checkpoint_descriptor.execution_block_hash != *execution_block_hash
+            || checkpoint_descriptor.execution_state_root != *execution_state_root
+        {
+            return false;
+        }
+        if !(fresh_execution_bootstrap
+            && (expected_checkpoint_head.is_none() || unsigned_exact_head))
+        {
+            return true;
+        }
+        let Some(envelope) = payload.lineage_envelope.as_ref() else {
+            return true;
+        };
+        let expected_lineage_head = if unsigned_exact_head {
+            let Some(expected_head) = expected_checkpoint_head else {
+                return false;
+            };
+            if envelope.world_id != expected_head.world_id
+                || envelope.head.height != expected_head.height
+                || envelope.head.block_hash != expected_head.block_hash
+                || envelope.head.state_root != expected_head.state_root
+            {
+                return false;
+            }
+            envelope.head.clone()
+        } else {
+            let Some(expected_lineage_head) = self.authenticated_lineage_head_for(&envelope.head)
+            else {
+                return false;
+            };
+            expected_lineage_head
+        };
+        verify_checkpoint_lineage_for_descriptor(
+            envelope,
+            world_id,
+            payload,
+            checkpoint_descriptor,
+            &expected_lineage_head,
+            &self.validators,
+            &self.validator_signers,
+            self.validator_set_hash.as_str(),
+            self.total_stake,
+            self.required_stake,
+            &self.quarantined_validators,
+        )
+        .is_ok()
     }
 
     pub(super) fn authenticated_checkpoint_writer_has_supermajority_stake(

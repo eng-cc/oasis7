@@ -557,7 +557,7 @@ fn lineage_checkpoint_bundle(
     }
 }
 
-fn production_lineage_envelope(
+pub(crate) fn production_lineage_envelope(
     world_id: &str,
     head: &GossipCommitMessage,
     payload: &super::replication_state_reconcile::ReplicationCommitPayload,
@@ -633,6 +633,93 @@ fn production_lineage_envelope(
         round_id,
         votes: vec![vote_a, vote_c],
     }
+}
+
+/// Attach a production-shaped lineage sidecar to a locally persisted checkpoint
+/// message.  The broad replication fixtures intentionally build their source
+/// payloads through `ReplicationRuntime`; this helper keeps the test authority
+/// path identical to production (canonical descriptor digest, configured
+/// validator signatures, and source-side re-sign) instead of mutating JSON.
+pub(crate) fn attach_production_lineage_envelope(
+    replication: &mut ReplicationRuntime,
+    world_id: &str,
+    checkpoint_height: u64,
+    head: CheckpointLineageHeadV1,
+    engines: &[&PosNodeEngine],
+) -> CheckpointLineageEnvelopeV1 {
+    let source = replication
+        .load_commit_message_by_height(world_id, checkpoint_height)
+        .expect("load persisted checkpoint source")
+        .expect("checkpoint source message");
+    let payload = super::replication_state_reconcile::parse_replication_commit_payload(
+        source.payload.as_slice(),
+    )
+    .expect("decode checkpoint source payload");
+    let descriptor = payload
+        .execution_checkpoint
+        .as_ref()
+        .expect("checkpoint descriptor for lineage sidecar");
+    let descriptor_digest = checkpoint_lineage_descriptor_digest(
+        world_id,
+        descriptor.height,
+        payload.block_hash.as_str(),
+        descriptor.execution_block_hash.as_str(),
+        descriptor.execution_state_root.as_str(),
+        descriptor.manifest_ref.as_str(),
+        descriptor.manifest_size_bytes,
+        &descriptor
+            .blobs
+            .iter()
+            .map(|blob| (blob.content_hash.clone(), blob.size_bytes))
+            .collect::<Vec<_>>(),
+    )
+    .expect("production descriptor digest");
+    let checkpoint = CheckpointLineageCheckpointV1 {
+        height: descriptor.height,
+        block_hash: payload.block_hash.clone(),
+        state_root: descriptor.execution_state_root.clone(),
+        execution_block_hash: descriptor.execution_block_hash.clone(),
+        execution_state_root: descriptor.execution_state_root.clone(),
+        descriptor_digest,
+        manifest_size: descriptor.manifest_size_bytes,
+    };
+    let round_id = format!("checkpoint-lineage-test-round-{}", checkpoint.height);
+    let votes = engines
+        .iter()
+        .map(|engine| {
+            engine
+                .build_local_checkpoint_lineage_vote(
+                    world_id,
+                    checkpoint.clone(),
+                    head.clone(),
+                    round_id.clone(),
+                )
+                .expect("configured validator lineage vote")
+                .vote
+        })
+        .collect::<Vec<_>>();
+    let authority = engines.first().expect("lineage authority engine");
+    let envelope = CheckpointLineageEnvelopeV1 {
+        schema_version: CHECKPOINT_LINEAGE_ENVELOPE_SCHEMA_V1,
+        claim_boundary: CHECKPOINT_LINEAGE_CLAIM_BOUNDARY_V1.to_string(),
+        world_id: world_id.to_string(),
+        checkpoint,
+        head,
+        validator_set_hash: authority.validator_set_hash.clone(),
+        total_stake: authority.total_stake,
+        required_stake: authority.required_stake,
+        round_id,
+        votes,
+    };
+    replication
+        .attach_checkpoint_lineage_envelope(
+            source.node_id.as_str(),
+            world_id,
+            &envelope,
+        )
+        .expect("attach production lineage sidecar")
+        .expect("source lineage sidecar attached");
+    envelope
 }
 
 #[derive(Debug)]
@@ -765,20 +852,35 @@ fn run_authenticated_head_lineage_case(divergent: bool) -> LineageProbeResult {
         &engine_c,
         divergent,
     );
-    let checkpoint_message = replication_a
-        .attach_checkpoint_lineage_envelope("node-a", world_id, &lineage_envelope)
-        .expect("attach source lineage sidecar")
-        .expect("source lineage sidecar message");
-    let attached_payload =
-        super::replication_state_reconcile::parse_replication_commit_payload(
-            checkpoint_message.payload.as_slice(),
-        )
-        .expect("parse amended source checkpoint payload");
-    assert_eq!(
-        attached_payload.lineage_envelope.as_ref(),
-        Some(&lineage_envelope),
-        "source signed replication payload must carry the production lineage sidecar"
-    );
+    let checkpoint_message = if divergent {
+        let attach_result = replication_a
+            .attach_checkpoint_lineage_envelope("node-a", world_id, &lineage_envelope)
+            .expect("source divergent lineage gate");
+        assert!(
+            attach_result.is_none(),
+            "source must reject divergent C before re-signing"
+        );
+        replication_a
+            .load_commit_message_by_height(world_id, checkpoint_height)
+            .expect("inspect rejected divergent source checkpoint")
+            .expect("divergent source checkpoint remains persisted")
+    } else {
+        let checkpoint_message = replication_a
+            .attach_checkpoint_lineage_envelope("node-a", world_id, &lineage_envelope)
+            .expect("attach source lineage sidecar")
+            .expect("source lineage sidecar message");
+        let attached_payload =
+            super::replication_state_reconcile::parse_replication_commit_payload(
+                checkpoint_message.payload.as_slice(),
+            )
+            .expect("parse amended source checkpoint payload");
+        assert_eq!(
+            attached_payload.lineage_envelope.as_ref(),
+            Some(&lineage_envelope),
+            "source signed replication payload must carry the production lineage sidecar"
+        );
+        checkpoint_message
+    };
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = Arc::new(AdvertisedHeadRetainedCheckpointNetwork {
@@ -825,11 +927,18 @@ fn run_authenticated_head_lineage_case(divergent: bool) -> LineageProbeResult {
     let fetch_response: super::replication::FetchCommitResponse =
         serde_json::from_slice(fetch_response_payload.as_slice())
             .expect("decode source sidecar response");
-    assert_eq!(
-        fetch_response.lineage_envelope.as_ref(),
-        Some(&lineage_envelope),
-        "fetch-commit response must expose the source-authored lineage sidecar"
-    );
+    if divergent {
+        assert!(
+            fetch_response.lineage_envelope.is_none(),
+            "rejected divergent source must not expose a lineage sidecar"
+        );
+    } else {
+        assert_eq!(
+            fetch_response.lineage_envelope.as_ref(),
+            Some(&lineage_envelope),
+            "fetch-commit response must expose the source-authored lineage sidecar"
+        );
+    }
     let mut engine_b = PosNodeEngine::new(&config_b).expect("lineage observer engine");
     engine_b.observe_peer_commit_message(&head);
     assert!(engine_b.latest_validated_peer_commit.is_some());
@@ -902,3 +1011,6 @@ fn authenticated_head_accepts_checkpoint_with_quorum_signed_lineage_envelope() {
     assert_eq!(result.committed_height, 52_032);
     assert!(result.receipt_exists);
 }
+
+#[path = "tests_checkpoint_lineage_authority.rs"]
+mod checkpoint_lineage_authority_tests;

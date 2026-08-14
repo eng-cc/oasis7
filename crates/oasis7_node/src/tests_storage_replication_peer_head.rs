@@ -587,8 +587,13 @@ fn observer_gap_sync_continues_peer_world_head_probe_after_peer_without_head() {
         )
         .expect("peer-head retry high checkpoint sync");
 
-    assert_eq!(engine_b.network_committed_height, 3);
-    assert_eq!(engine_b.committed_height, 3);
+    assert_eq!(engine_b.network_committed_height, 0);
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 3)
+        .expect("load unsigned peer-head candidate")
+        .is_none());
     assert_eq!(
         provider_attempts
             .lock()
