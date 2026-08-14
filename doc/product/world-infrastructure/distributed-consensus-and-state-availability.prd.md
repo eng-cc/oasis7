@@ -6,7 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）。
 
 本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。
 
@@ -38,6 +38,8 @@
 - **陈旧/追赶中**：副本能证明自己属于同一世界，但其 head 或可用性材料落后于当前权威，或 freshness 尚未证明。只读内容必须标记陈旧/追赶中及最后可信边界；不能把陈旧状态用于声称当前权限、价格、容量、治理结果或行动成功。依赖新鲜条件的 intent 只能等待重新验证、重新评估或被 fail closed。
 - **不可用/隔离**：`world_id`、checkpoint、hash/root、canonical 连续性或证明材料缺失、冲突、回退或指向其他世界。消费者只能看到最后一个已验证 receipt（如有）及“原世界不可用/待恢复”说明；不得把缓存、部分快照、替代 endpoint 或本地开发世界表述为当前世界，也不得接受新的权威 intent。
 
+“已验证可服务”还必须满足当前 governing runtime manifest/version 的 compatibility declaration 已能对应到 committed/finality-verified canonical execution block，且 head continuity 单调可验证；客户端提交的 version 不能自行选择世界规则。manifest、compatibility 或 head continuity 证据缺失、冲突、未知或非单调时，不得保持可服务语义，必须降级为已验证只读或不可用/隔离，并原子拒绝或保留无效果待决；每个受影响新 intent 的 committed receipt 必须为 `0`。版本激活与 governing version 的具体边界见[`确定性世界执行`](deterministic-world-execution.prd.md)第 2.2 节及其 DE-1/DE-4。
+
 每次从一种语义降级或恢复到另一种语义，正式消费者都必须能读到当前状态、影响的操作范围、最后可信边界（若可提供）、主要 blocker 和真实下一步（等待、重新验证、重新进入、重新规划或安全返回）。状态变化不能依靠页面刷新、进程存活、重连成功、历史提交回执或本地缓存静默升级；恢复只读、恢复可服务和恢复受阻的组合闸门仍以本模块根 PRD 的同名语义为准。
 
 以下边界必须保持一致：
@@ -47,7 +49,9 @@
 - 两个候选 snapshot/checkpoint 互相冲突时必须隔离并报告冲突，不得在产品层合并、择一或把其中一个当作新世界；同一 `world_id` 的已确认 receipt 仍保持原历史。
 - 重连、重复提交和跨入口重试都要重新评估当前等级。缓存的“已发送/处理中”只保留请求关联，不产生第二次世界效果，也不能把无效果 pending 表述为已结算。
 
-本节定义的是跨消费者的产品结果与反馈语义；证明格式、freshness 计算、服务闸门、pending 持久化、去重、错误码和 UI/API 表达分别由 P2P、runtime、Viewer/入口与 testing 专业权威拥有。
+本节定义的是跨消费者的产品结果与反馈语义，具体合同按以下入口分工：P2P 负责共识最终性、证明与 freshness；world-runtime 负责版本化执行 manifest/compatibility、head continuity、服务闸门、pending 持久化、去重与 receipt；world-simulator 负责消费者/Viewer/入口的状态与 UI/API 反馈投影；testing 负责组合矩阵、验证命令与证据。产品层不复制这些专业字段、错误码或实现。
+
+Compatibility declaration 只证明客户端能理解当前 manifest，不能选择或锁定 governing version；manifest 缺失、冲突或无法与当前 committed/finality-verified block 对账时，前述可服务语义不成立。
 
 ## 5. 当前与目标的分离
 
@@ -59,7 +63,7 @@
 - DC-2：分区、重启、落后追赶、恢复和 pruning 样例证明相同 `world_id` 的唯一顺序、可重建性与 state-root 一致；不满足证据时停止服务或投票。
 - DC-3：验证者注册/轮换、网络暴露和服务角色不扩大非权威节点的共识权限。
 - DC-4：BFT 实现样例证明超过三分之二活动质押预提交形成可验证 commit certificate，且 equivocation、缺证、错误验证者集合和 round 故障均不得推进权威历史。
-- DC-5：同一候选至少覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”以及证明冲突进入“不可用/隔离”的转换；仅在已验证可服务时接受新的权威 intent，其他等级下新 intent 的 committed receipt 数为 `0`。陈旧内容带有最后可信边界与 blocker，不被表述为当前权限、价格或成功；冲突/替代世界不被当作原世界恢复；重连、重复提交和跨入口重试不产生第二次世界效果。正式消费者能读到当前等级、受影响操作与真实下一步。测试层级：`test_tier_full`。
+- DC-5：同一候选至少覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”以及证明冲突进入“不可用/隔离”的转换；仅在已验证可服务且当前 governing manifest/compatibility 与单调 head continuity 证据均成立时接受新的权威 intent，其他等级或版本/连续性证据缺失、冲突时新 intent 的 committed receipt 数为 `0`。陈旧内容带有最后可信边界与 blocker，不被表述为当前权限、价格或成功；冲突/替代世界不被当作原世界恢复；重连、重复提交和跨入口重试不产生第二次世界效果。正式消费者能读到当前等级、受影响操作与真实下一步。测试层级：`test_tier_full`。证据必须追踪根产品 PRD 的 SC-7 恢复闸门，并在同一候选的 [`Game World State Sync and Commit Closure` 计划](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md) 与 [`state-sync closure evidence packet` 模板](../../testing/templates/state-sync-closure-evidence-packet-template.md) 中呈现状态转换、manifest/head 负例、每个 intent 的 receipt `0/1` 与消费者 blocker/next-step 反馈。
 
 ## 7. Non-Goals
 
