@@ -567,6 +567,12 @@ impl PosNodeEngine {
         if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
         }
+        if fresh_execution_bootstrap
+            && expected_checkpoint_head.is_none()
+            && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
+        {
+            return Ok(false);
+        }
         if let Some(expected_head) = expected_checkpoint_head {
             if Self::validate_world_head_checkpoint_payload(world_id, &payload, expected_head)
                 .is_err()
@@ -713,6 +719,7 @@ impl PosNodeEngine {
         }
         Ok(true)
     }
+
     pub(super) fn sync_missing_replication_commits_with_progress(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,

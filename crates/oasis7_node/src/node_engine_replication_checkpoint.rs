@@ -315,6 +315,41 @@ impl PosNodeEngine {
         Ok(())
     }
 
+    pub(super) fn authenticated_checkpoint_writer_has_supermajority_stake(
+        &self,
+        message: &replication::GossipReplicationMessage,
+    ) -> bool {
+        // The current replication/peer-head payloads do not carry a signed
+        // predecessor chain or a finality proof that could bind a retained
+        // checkpoint C below an authenticated live head H.  A matching writer
+        // key is therefore not sufficient lineage evidence: the writer could
+        // have signed a conflicting fork at C.  Keep the lower-candidate path
+        // fail-closed whenever any authenticated high peer head is present;
+        // the unsigned FetchHead fallback remains eligible only after the
+        // checkpoint writer itself passes the validator stake gate below.
+        if self.peer_heads.values().any(|head| {
+            head.height >= REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+                && head.public_key_hex.is_some()
+                && head.signature_hex.is_some()
+        }) {
+            return false;
+        }
+        let Some((validator_id, _public_key_hex)) = self
+            .validator_signers
+            .iter()
+            .find(|(_, public_key_hex)| *public_key_hex == &message.record.writer_id)
+        else {
+            return false;
+        };
+        let Some(stake) = self.validators.get(validator_id).copied() else {
+            return false;
+        };
+        if stake < self.required_stake {
+            return false;
+        }
+        true
+    }
+
     pub(super) fn high_replication_checkpoint_candidates(
         advertised_network_height: u64,
         blocked_height: u64,

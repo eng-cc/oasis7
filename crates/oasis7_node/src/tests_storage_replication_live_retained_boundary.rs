@@ -119,13 +119,17 @@ fn retained_boundary_bundle(
 }
 
 fn committed_decision(height: u64) -> PosDecision {
+    committed_decision_with_block_hash(height, format!("block-{height}").as_str())
+}
+
+fn committed_decision_with_block_hash(height: u64, block_hash: &str) -> PosDecision {
     PosDecision {
         height,
         slot: height,
         epoch: 0,
         proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Committed,
-        block_hash: format!("block-{height}"),
+        block_hash: block_hash.to_string(),
         action_root: empty_action_root(),
         committed_actions: Vec::new(),
         approved_stake: 100,
@@ -319,6 +323,186 @@ fn fresh_observer_installs_latest_retained_checkpoint_below_non_aligned_live_hea
             .is_none(),
         "height-one tail must not be persisted before retained checkpoint closure"
     );
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn fresh_observer_rejects_lower_retained_checkpoint_without_head_lineage() {
+    let _nonce_lock = PROBE_NONCE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _probe_nonce = ProbeNonceGuard::install();
+    let world_id = "world-live-head-retained-fork-lineage-52079";
+    let dir_a = temp_dir("live-head-retained-fork-lineage-a");
+    let dir_b = temp_dir("live-head-retained-fork-lineage-b");
+    let (_, public_key_a) = deterministic_keypair_hex(210);
+    let (_, public_key_b) = deterministic_keypair_hex(211);
+    let (_, public_key_c) = deterministic_keypair_hex(212);
+    let advertised_height = 52_079;
+    let checkpoint_height = 52_032;
+    let advertised_block_hash = "fork-chain-head-52079";
+    let checkpoint_block_hash = "other-chain-retained-52032";
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![
+            PosValidator {
+                validator_id: "node-a".to_string(),
+                stake: 60,
+            },
+            PosValidator {
+                validator_id: "node-c".to_string(),
+                stake: 40,
+            },
+        ],
+        &[("node-a", 210), ("node-c", 212)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 210)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 211)
+        .with_remote_writer_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone(), public_key_c.clone()])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let height_one = replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            52_080,
+            &committed_decision(1),
+            Some("other-chain-exec-block-1"),
+            Some("other-chain-exec-state-1"),
+        )
+        .expect("build height-one tail")
+        .expect("height-one tail message");
+    let checkpoint_state_root = "other-chain-state-52032";
+    let checkpoint_message = replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            52_032,
+            &committed_decision_with_block_hash(checkpoint_height, checkpoint_block_hash),
+            Some("other-chain-exec-block-52032"),
+            Some(checkpoint_state_root),
+            Some(retained_boundary_bundle(
+                checkpoint_height,
+                "other-chain-exec-block-52032",
+                checkpoint_state_root,
+            )),
+        )
+        .expect("build forked retained checkpoint")
+        .expect("forked retained checkpoint message");
+    assert!(checkpoint_message.public_key_hex.is_some());
+    assert!(checkpoint_message.signature_hex.is_some());
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(AdvertisedHeadRetainedCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        advertised_head: super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: advertised_height,
+                block_hash: advertised_block_hash.to_string(),
+                state_root: "fork-chain-state-52079".to_string(),
+                timestamp_ms: 52_079,
+            }),
+        },
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register forked checkpoint provider");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let mut endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    for (node_id, public_key_hex) in [("node-a", public_key_a), ("node-c", public_key_c)] {
+        engine_b.peer_heads.insert(
+            node_id.to_string(),
+            PeerCommittedHead {
+                height: advertised_height,
+                block_hash: advertised_block_hash.to_string(),
+                committed_at_ms: 52_079,
+                observed_at_ms: 52_080,
+                execution_block_hash: Some("fork-chain-exec-block-52079".to_string()),
+                execution_state_root: Some("fork-chain-exec-state-52079".to_string()),
+                action_root: empty_action_root(),
+                public_key_hex: Some(public_key_hex),
+                signature_hex: Some(format!("signed-{node_id}-{advertised_height}")),
+            },
+        );
+    }
+    assert_eq!(engine_b.peer_heads.len(), 2);
+    assert!(engine_b
+        .peer_heads
+        .values()
+        .all(|head| head.public_key_hex.is_some() && head.signature_hex.is_some()));
+    assert_eq!(endpoint_b.connected_peer_ids(), vec!["node-a"]);
+    let mut execution_hook = RetainedBoundaryExecutionHook {
+        installed: Vec::new(),
+        incremental_commits: Vec::new(),
+    };
+    endpoint_b
+        .publish_replication(&height_one)
+        .expect("publish height-one tail before lineage preflight");
+    endpoint_b
+        .publish_replication(&checkpoint_message)
+        .expect("publish forked retained checkpoint provider message");
+
+    let result = engine_b.tick(
+        "node-b",
+        world_id,
+        52_100,
+        None,
+        Some(&mut replication_b),
+        Some(&mut endpoint_b),
+        None,
+        Vec::new(),
+        Some(&mut execution_hook),
+    );
+    assert!(
+        result.is_ok(),
+        "forked lower checkpoint must fail closed before height-one execution: result={result:?} installed={:?} incremental={:?}",
+        execution_hook.installed,
+        execution_hook.incremental_commits
+    );
+    assert!(
+        execution_hook.installed.is_empty(),
+        "checkpoint C must not install when signed head H has no same-chain lineage: installed={:?}",
+        execution_hook.installed
+    );
+    assert!(execution_hook.incremental_commits.is_empty());
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert!(!dir_b
+        .join("checkpoint-verification")
+        .join(format!("{checkpoint_height}.json"))
+        .exists());
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
