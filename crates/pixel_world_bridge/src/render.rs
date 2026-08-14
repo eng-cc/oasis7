@@ -63,6 +63,9 @@ use selected_agent_cue::{
 #[path = "render_selected_location_cue.rs"]
 mod selected_location_cue;
 use selected_location_cue::{PixelWorldSelectedLocationCue, reconcile_selected_location_cues};
+#[path = "render_location_labels.rs"]
+mod location_labels;
+use location_labels::{LocationLabelQueries, despawn_location_labels, reconcile_location_labels};
 #[path = "render_location_corner_frame.rs"]
 mod location_corner_frame;
 use location_corner_frame::{PixelWorldLocationCornerFrame, reconcile_location_corner_frames};
@@ -773,6 +776,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     module_visual_entities: Query<'w, 's, (Entity, &'static PixelWorldModuleVisualEntity)>,
     module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
+    location_labels: LocationLabelQueries<'w, 's>,
     location_resource_cues: Query<'w, 's, (Entity, &'static PixelWorldLocationResourceCue)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     location_corner_frames: Query<'w, 's, (Entity, &'static PixelWorldLocationCornerFrame)>,
@@ -808,6 +812,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_location_labels(&mut commands, &queries.location_labels);
         despawn(&mut commands, &queries.location_resource_cues);
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
         for (entity, _) in queries.fragment_insets.iter() {
@@ -904,6 +909,7 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.location_corner_frames.iter() {
             commands.entity(entity).despawn();
         }
+        despawn_location_labels(&mut commands, &queries.location_labels);
         despawn(&mut commands, &queries.location_resource_cues);
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
         for (entity, _) in queries.fragment_insets.iter() {
@@ -1033,6 +1039,13 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    reconcile_location_labels(
+        &mut commands,
+        &runtime,
+        &queries.location_labels,
+        width,
+        height,
     );
     reconcile_location_corner_frames(
         &mut commands,

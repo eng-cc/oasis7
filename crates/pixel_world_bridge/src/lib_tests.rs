@@ -294,6 +294,55 @@ fn agent_label_changes_the_render_content_signature() {
 }
 
 #[test]
+fn location_label_changes_trigger_reactive_reconcile_without_camera_reset() {
+    let original = sample_render_state_for_camera("location");
+    let initial_signature = render_content_signature(Some(&original));
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(original.clone()),
+        render_version: 1,
+        render_content_signature: initial_signature,
+        reactive_scheduling: true,
+        camera: CameraState {
+            zoom: 2.25,
+            pan_x_px: 42.0,
+            pan_y_px: -18.0,
+        },
+        camera_fit_version: 7,
+        last_canvas_size: Some((960, 540)),
+        camera_user_override: true,
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+
+    let mut renamed = original;
+    renamed.locations[0].label = "Renamed Fragment Field Anchor".to_string();
+    let next_signature = render_content_signature(Some(&renamed));
+    assert_ne!(
+        next_signature, initial_signature,
+        "a player-visible Location label must invalidate reactive rendering"
+    );
+
+    apply_external_render_snapshot(
+        &mut runtime,
+        true,
+        RenderSnapshot::Changed {
+            version: 2,
+            state: Some(renamed),
+        },
+    );
+
+    assert_eq!(runtime.render_version, 2);
+    assert_eq!(runtime.render_content_signature, next_signature);
+    assert!(runtime.needs_reconcile);
+    assert!(runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 7);
+    assert_eq!(runtime.last_canvas_size, Some((960, 540)));
+    assert!(!runtime.hit_regions_dirty);
+    assert_eq!(runtime.pending_focus_target, None);
+}
+
+#[test]
 fn agent_position_source_changes_trigger_reactive_reconcile_without_camera_reset() {
     let mut missing = sample_render_state_for_camera("agent");
     missing.agents[0].position_source = AgentPositionSource::Missing;
