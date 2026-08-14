@@ -1328,6 +1328,11 @@ grep -F 'already MERGED; reconcile task truth' "$TMPDIR/merged.err" >/dev/null
 if grep -F "pr create --base main --head $SMOKE_BRANCH" "$merged_log" >/dev/null; then
   echo "MERGED exact PR unexpectedly created replacement" >&2; exit 1
 fi
+if grep -Eq '(^|[[:space:]])push([[:space:]]|$)' "$merged_git_log"; then
+  echo "MERGED exact PR must not push the branch before reconciliation" >&2
+  cat "$merged_git_log" >&2
+  exit 1
+fi
 reset_project_mapping_after_record_pr
 
 bad_body_file="$TMPDIR/bad-pr-body.md"
