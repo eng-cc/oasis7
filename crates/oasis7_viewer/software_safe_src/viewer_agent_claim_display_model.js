@@ -107,18 +107,34 @@ export function createViewerAgentClaimDisplayModel({ state, tr }) {
     return Boolean(claimerAgentId && boundAgentId && claimerAgentId === boundAgentId);
   }
 
+  function slot1ClaimChoiceNeedsDefer(agentClaim) {
+    const choiceQuote = slot1ClaimChoiceQuote(agentClaim);
+    const status = normalizedId(choiceQuote?.status || choiceQuote?.choiceStatus);
+    const fallbackReason = normalizedId(choiceQuote?.fallback_reason || choiceQuote?.fallbackReason);
+    const choiceClass = normalizedId(
+      choiceQuote?.claim_choice_class
+        || choiceQuote?.claimChoiceClass
+        || choiceQuote?.recommended_claim_action
+        || choiceQuote?.recommendedClaimAction,
+    );
+    const rationaleMissing = status === "candidate_rationale_missing"
+      || fallbackReason === "candidate_rationale_missing";
+    return rationaleMissing && choiceClass === "wait_or_fund_first";
+  }
+
   function buildAgentClaimAction(agentClaim, targetAgentId) {
     const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
     const boundAgentId = normalizedId(state.auth.boundAgentId);
     const target = String(targetAgentId || "").trim();
     const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
     if (!claimerAgentId || !target || blockedReason || !boundAgentId || claimerAgentId !== boundAgentId) return null;
+    const disabledReason = slot1ClaimChoiceNeedsDefer(agentClaim) ? "candidate_rationale_missing" : null;
     return {
       actionId: "claim_agent", action_id: "claim_agent", label: "Claim Agent",
       protocolAction: "gameplay_action.submit", protocol_action: "gameplay_action.submit",
       executeKind: "claim_agent", targetAgentId: target, target_agent_id: target,
       actorAgentId: claimerAgentId, actor_agent_id: claimerAgentId,
-      disabledReason: null, disabled_reason: null,
+      disabledReason, disabled_reason: disabledReason,
     };
   }
 
@@ -132,5 +148,5 @@ export function createViewerAgentClaimDisplayModel({ state, tr }) {
     return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
   }
 
-  return { agentBindingForId, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction, buildAgentClaimTargets, describeAgentSessionStatus, hasAgentClaimSessionBoundary, hasExecutableAgentClaim, normalizedId, publishedClaimChoiceCandidates, slot1ClaimChoiceQuote };
+  return { agentBindingForId, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction, buildAgentClaimTargets, describeAgentSessionStatus, hasAgentClaimSessionBoundary, hasExecutableAgentClaim, normalizedId, publishedClaimChoiceCandidates, slot1ClaimChoiceNeedsDefer, slot1ClaimChoiceQuote };
 }

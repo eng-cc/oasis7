@@ -34,6 +34,19 @@ export function AgentClaimChoiceCard(props) {
   const choiceClassLabel = () => choiceClass() === "wait_or_fund_first"
     ? tr("等待或先补足条件", "Wait or resolve prerequisites first")
     : null;
+  const rationaleField = (snakeCase, camelCase) => choiceQuote()?.[snakeCase] ?? choiceQuote()?.[camelCase] ?? null;
+  const startingLocation = () => rationaleField("candidate_starting_location", "candidateStartingLocation");
+  const specialtySummary = () => rationaleField("candidate_specialty_summary", "candidateSpecialtySummary");
+  const firstIndustrialGoalHelp = () => rationaleField("first_industrial_goal_help", "firstIndustrialGoalHelp");
+  const riskSummary = () => rationaleField("candidate_risk_summary", "candidateRiskSummary");
+  const recommendationReason = () => rationaleField("candidate_recommendation_reason", "candidateRecommendationReason");
+  const hasPublishedRationale = () => [
+    startingLocation(),
+    specialtySummary(),
+    firstIndustrialGoalHelp(),
+    riskSummary(),
+    recommendationReason(),
+  ].some((value) => value !== null && value !== undefined && String(value).trim() !== "");
 
   return (
     <>
@@ -66,6 +79,38 @@ export function AgentClaimChoiceCard(props) {
               </div>
             )}
           </For>
+        </div>
+      </Show>
+      <Show when={hasPublishedRationale()}>
+        <div class="event-card" data-testid="claim-choice-rationale">
+          <div class="event-card__title">
+            <span>{tr("候选路线理由", "Candidate route rationale")}</span>
+          </div>
+          <Show when={startingLocation()}>
+            <div class="feedback-detail">
+              <strong>{tr("起始位置", "Starting location")}</strong>: {startingLocation()}
+            </div>
+          </Show>
+          <Show when={specialtySummary()}>
+            <div class="feedback-detail">
+              <strong>{tr("专长 / 能力", "Specialty / capabilities")}</strong>: {specialtySummary()}
+            </div>
+          </Show>
+          <Show when={firstIndustrialGoalHelp()}>
+            <div class="feedback-detail">
+              <strong>{tr("首个工业目标帮助", "First industrial goal help")}</strong>: {firstIndustrialGoalHelp()}
+            </div>
+          </Show>
+          <Show when={riskSummary()}>
+            <div class="feedback-detail">
+              <strong>{tr("候选风险", "Candidate risk")}</strong>: {riskSummary()}
+            </div>
+          </Show>
+          <Show when={recommendationReason()}>
+            <div class="feedback-detail">
+              <strong>{tr("推荐理由", "Recommendation reason")}</strong>: {recommendationReason()}
+            </div>
+          </Show>
         </div>
       </Show>
       <Show when={isRationaleMissingDefer()}>

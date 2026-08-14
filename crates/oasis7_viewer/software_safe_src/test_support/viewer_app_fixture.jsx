@@ -84,6 +84,35 @@ export function slot1CandidateClaimSnapshot() {
   });
 }
 
+export function slot1CandidateRationaleSnapshot() {
+  const base = slot1CandidateClaimSnapshot();
+  const quote = base.player_gameplay.agent_claim.next_claim_quote;
+  return {
+    ...base,
+    player_gameplay: {
+      ...base.player_gameplay,
+      agent_claim: {
+        ...base.player_gameplay.agent_claim,
+        next_claim_quote: {
+          ...quote,
+          slot_1_claim_choice_quote: {
+            ...quote.slot_1_claim_choice_quote,
+            status: "candidate_rationale_published",
+            candidate_starting_location: "(10, 20, 30) cm",
+            candidate_specialty_summary: "Canonical specialties: energy, sensing/input discovery, mobility/routing, cargo/input carrying.",
+            first_industrial_goal_help: "Supports the first industrial goal without guaranteeing output.",
+            candidate_risk_summary: "No provable high-risk capability gap is present in the current canonical snapshot.",
+            candidate_recommendation_reason: "Exactly one complete candidate is known for the first industrial goal.",
+            fallback_reason: null,
+            claim_choice_class: "claim_now_route_fit",
+            recommended_claim_action: "claim_now_route_fit",
+          },
+        },
+      },
+    },
+  };
+}
+
 export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en") {
   window.history.replaceState({}, "", `/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=${locale}`);
   window.localStorage.clear();

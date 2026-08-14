@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { within } from "@solidjs/testing-library";
-import { renderViewerApp, slot1CandidateClaimSnapshot } from "./test_support/viewer_app_fixture.jsx";
+import {
+  renderViewerApp,
+  slot1CandidateClaimSnapshot,
+  slot1CandidateRationaleSnapshot,
+} from "./test_support/viewer_app_fixture.jsx";
 
 vi.mock("./pixel_world_host.jsx", () => ({
   PixelWorldHost: () => <div data-testid="pixel-world-host" />,
@@ -14,6 +18,33 @@ afterEach(() => {
 });
 
 describe("slot-1 claim choice card", () => {
+  it("blocks Claim Agent for missing rationale while keeping low-runway-only advice actionable", async () => {
+    const lowRunwaySnapshot = slot1CandidateRationaleSnapshot();
+    lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote = {
+      ...lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote,
+      low_runway_warning: true,
+      upkeep_runway_epochs: 1,
+      recommended_claim_action: "wait_or_fund_first",
+      blocked_reason: null,
+      slot_1_claim_choice_quote: {
+        ...lowRunwaySnapshot.player_gameplay.agent_claim.next_claim_quote.slot_1_claim_choice_quote,
+        fallback_reason: "claim_funding_or_runway_insufficient",
+        claim_choice_class: "wait_or_fund_first",
+        recommended_claim_action: "wait_or_fund_first",
+      },
+    };
+    const advisoryApp = await renderViewerApp(lowRunwaySnapshot);
+    expect(within(advisoryApp.container.querySelector("#viewer-stage-panel")).getByRole("button", { name: "Claim Agent" })).toBeEnabled();
+    advisoryApp.dispose();
+
+    const blockedApp = await renderViewerApp(slot1CandidateClaimSnapshot());
+    dispose = blockedApp.dispose;
+    const stagePanel = blockedApp.container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Wait before confirming")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/No canonical route rationale is published, so no candidate is recommended/)).toBeInTheDocument();
+    expect(within(stagePanel).getByRole("button", { name: "Claim Agent" })).toBeDisabled();
+  });
+
   it("renders the localized English defer warning for exact-upfront zero-runway candidate facts", async () => {
     const app = await renderViewerApp(slot1CandidateClaimSnapshot());
     dispose = app.dispose;
@@ -49,5 +80,25 @@ describe("slot-1 claim choice card", () => {
     expect(stagePanel.textContent).not.toContain("wait_or_fund_first");
     expect(within(stagePanel).queryByLabelText("Target Agent")).not.toBeInTheDocument();
     expect(within(stagePanel).queryByRole("button", { name: "Claim Agent" })).not.toBeInTheDocument();
+  });
+
+  it("renders all canonical candidate rationale fields without deriving a recommendation", async () => {
+    const app = await renderViewerApp(slot1CandidateRationaleSnapshot());
+    dispose = app.dispose;
+    const stagePanel = app.container.querySelector("#viewer-stage-panel");
+    const rationale = within(stagePanel).getByTestId("claim-choice-rationale");
+
+    expect(within(rationale).getByText("Starting location")).toBeInTheDocument();
+    expect(within(rationale).getByText(/\(10, 20, 30\) cm/)).toBeInTheDocument();
+    expect(within(rationale).getByText("Specialty / capabilities")).toBeInTheDocument();
+    expect(within(rationale).getByText(/Canonical specialties: energy/)).toBeInTheDocument();
+    expect(within(rationale).getByText("First industrial goal help")).toBeInTheDocument();
+    expect(within(rationale).getByText(/Supports the first industrial goal without guaranteeing output/)).toBeInTheDocument();
+    expect(within(rationale).getByText("Candidate risk")).toBeInTheDocument();
+    expect(within(rationale).getByText(/No provable high-risk capability gap/)).toBeInTheDocument();
+    expect(within(rationale).getByText("Recommendation reason")).toBeInTheDocument();
+    expect(within(rationale).getByText(/Exactly one complete candidate is known/)).toBeInTheDocument();
+    expect(stagePanel.textContent).not.toContain("rank");
+    expect(stagePanel.textContent).not.toContain("score");
   });
 });
