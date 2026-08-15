@@ -653,12 +653,13 @@ impl PosNodeEngine {
         block_hash: String,
         committed_at_ms: i64,
     ) -> Result<(), NodeError> {
-        self.replication_persisted_height = self.replication_persisted_height.max(height);
         if height <= self.committed_height {
             return Ok(());
         }
         let next_synced_height =
             checked_replication_successor(height, "height", "recording synced replication height")?;
+        self.clear_pending_action_reservation()?;
+        self.replication_persisted_height = self.replication_persisted_height.max(height);
         self.committed_height = height;
         self.network_committed_height = self.network_committed_height.max(height);
         self.last_committed_at_ms = Some(committed_at_ms);
@@ -689,6 +690,7 @@ impl PosNodeEngine {
             "height",
             "rolling back to replicated commit boundary",
         )?;
+        self.clear_pending_action_reservation()?;
         self.committed_height = height;
         self.network_committed_height = self.network_committed_height.min(height);
         self.replication_persisted_height = self.replication_persisted_height.min(height);
@@ -778,6 +780,11 @@ impl PosNodeEngine {
                 return Ok(());
             }
         }
+        let proposal_action_bytes =
+            match self.validate_inbound_proposal_actions(message.actions.as_slice()) {
+                Ok(bytes) => bytes,
+                Err(_) => return Ok(()),
+            };
         if validate_consensus_action_root(message.action_root.as_str(), message.actions.as_slice())
             .is_err()
         {
@@ -798,11 +805,6 @@ impl PosNodeEngine {
             rejected_stake: 0,
             status: PosConsensusStatus::Pending,
         };
-        // A higher proposal implies its predecessor chain must already exist remotely,
-        // so replication gap sync should backfill up to height-1 before this proposal commits.
-        self.network_committed_height = self
-            .network_committed_height
-            .max(proposal.height.saturating_sub(1));
         self.insert_attestation(
             &mut proposal,
             &message.proposer_id,
@@ -821,8 +823,20 @@ impl PosNodeEngine {
                 "ingesting proposal message",
             )?;
         }
+        if self
+            .adjust_pending_proposal_reservation(proposal_action_bytes)
+            .is_err()
+        {
+            return Ok(());
+        }
+        // A higher proposal implies its predecessor chain must already exist remotely,
+        // so replication gap sync should backfill up to height-1 before this proposal commits.
+        self.network_committed_height = self
+            .network_committed_height
+            .max(proposal.height.saturating_sub(1));
         self.next_height = next_height;
         self.next_slot = next_slot;
+        self.set_pending_action_reservation(proposal_action_bytes);
         self.pending = Some(proposal);
         Ok(())
     }

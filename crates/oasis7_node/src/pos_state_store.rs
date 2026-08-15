@@ -235,8 +235,8 @@ impl PosNodeEngine {
             restored_last_observed_tick = wall_clock_tick;
         }
 
+        self.clear_pending_state_reservations()?;
         self.pending = None;
-        self.pending_consensus_actions.clear();
         self.committed_height = committed_height;
         self.network_committed_height = restored_network_committed_height;
         // Peer heads are intentionally memory-only. A zero-height observer

@@ -198,9 +198,12 @@ impl PosNodeEngine {
             execution_bindings: BTreeMap::new(),
             pending_consensus_actions: BTreeMap::new(),
             max_pending_consensus_actions: config.max_engine_pending_consensus_actions,
+            max_consensus_action_payload_bytes: config.max_consensus_action_payload_bytes,
             pending_consensus_action_queue_bytes,
             max_pending_consensus_action_queue_bytes: config
                 .max_pending_consensus_action_queue_bytes,
+            pending_consensus_action_reservation_bytes: 0,
+            pending_consensus_action_reservation_owned: false,
         })
     }
 
@@ -393,7 +396,7 @@ impl PosNodeEngine {
             }
         };
 
-        core_propose_next_head(
+        let result = core_propose_next_head(
             &self.validators,
             self.total_stake,
             self.required_stake,
@@ -407,16 +410,31 @@ impl PosNodeEngine {
             committed_actions,
             node_id,
             now_ms,
-        )
-        .map_err(|err| {
-            if self.pending.is_none() {
-                release_action_payload_bytes(
-                    &self.pending_consensus_action_queue_bytes,
-                    committed_action_bytes,
-                );
+        );
+        match result {
+            Ok(decision) => {
+                if self.pending.is_some() {
+                    self.set_pending_action_reservation(committed_action_bytes);
+                } else {
+                    release_action_payload_bytes(
+                        &self.pending_consensus_action_queue_bytes,
+                        committed_action_bytes,
+                    );
+                }
+                Ok(decision)
             }
-            node_pos_error(err)
-        })
+            Err(err) => {
+                if self.pending.is_none() {
+                    release_action_payload_bytes(
+                        &self.pending_consensus_action_queue_bytes,
+                        committed_action_bytes,
+                    );
+                } else {
+                    self.set_pending_action_reservation(committed_action_bytes);
+                }
+                Err(node_pos_error(err))
+            }
+        }
     }
 
     fn drain_proposable_consensus_actions(
@@ -505,33 +523,21 @@ impl PosNodeEngine {
         match decision.status {
             PosConsensusStatus::Pending => {}
             PosConsensusStatus::Committed => {
-                let proposal_payload_bytes = self
-                    .pending
-                    .as_ref()
-                    .map(|proposal| total_action_payload_bytes(proposal.committed_actions.iter()))
-                    .unwrap_or(0);
                 let next_height = checked_consensus_successor(
                     decision.height,
                     "decision.height",
                     "applying committed decision",
                 )?;
+                self.clear_pending_action_reservation()?;
                 self.committed_height = decision.height;
                 self.network_committed_height = self.network_committed_height.max(decision.height);
                 self.last_committed_block_hash = Some(decision.block_hash.clone());
                 self.next_height = next_height;
                 self.pending = None;
-                release_action_payload_bytes(
-                    &self.pending_consensus_action_queue_bytes,
-                    proposal_payload_bytes,
-                );
             }
             PosConsensusStatus::Rejected => {
-                let proposal_payload_bytes = self
-                    .pending
-                    .as_ref()
-                    .map(|proposal| total_action_payload_bytes(proposal.committed_actions.iter()))
-                    .unwrap_or(0);
-                let incoming_already_reserved = self.pending.is_some();
+                let proposal_payload_bytes = self.pending_action_reservation_bytes();
+                let incoming_already_reserved = proposal_payload_bytes > 0;
                 let next_height = checked_consensus_successor(
                     decision.height,
                     "decision.height",
@@ -552,6 +558,8 @@ impl PosNodeEngine {
                             self.max_pending_consensus_action_queue_bytes,
                             proposal_payload_bytes,
                         ) {
+                            self.pending_consensus_action_reservation_bytes = 0;
+                            self.pending_consensus_action_reservation_owned = false;
                             self.pending = None;
                             return NodeError::Consensus {
                                 reason: format!(
@@ -569,6 +577,8 @@ impl PosNodeEngine {
                     }
                 })?;
                 self.next_height = next_height;
+                self.pending_consensus_action_reservation_bytes = 0;
+                self.pending_consensus_action_reservation_owned = false;
                 self.pending = None;
             }
         }

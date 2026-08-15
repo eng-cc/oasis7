@@ -57,6 +57,7 @@ mod node_engine_gap_sync_outcome;
 mod node_engine_network;
 mod node_engine_network_hash;
 mod node_engine_peer_types;
+mod node_engine_proposal_reservation;
 mod node_engine_replication;
 mod node_engine_replication_checkpoint;
 mod node_engine_replication_checkpoint_fetch;
@@ -1176,8 +1177,11 @@ struct PosNodeEngine {
     execution_bindings: BTreeMap<u64, (String, String)>,
     pending_consensus_actions: BTreeMap<u64, NodeConsensusAction>,
     max_pending_consensus_actions: usize,
+    max_consensus_action_payload_bytes: usize,
     pending_consensus_action_queue_bytes: Arc<AtomicUsize>,
     max_pending_consensus_action_queue_bytes: usize,
+    pending_consensus_action_reservation_bytes: usize,
+    pending_consensus_action_reservation_owned: bool,
 }
 
 type PendingProposal = NodePosPendingProposal<NodeConsensusAction, PosConsensusStatus>;
