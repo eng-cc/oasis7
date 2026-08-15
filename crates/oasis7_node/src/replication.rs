@@ -32,6 +32,8 @@ mod checkpoint_lineage_runtime;
 #[path = "replication/checkpoint_probe_receipt.rs"]
 mod checkpoint_probe_receipt;
 mod commit_retention;
+#[path = "replication/latest_head_index.rs"]
+mod latest_head_index;
 #[path = "replication_checkpoint.rs"]
 mod replication_checkpoint;
 #[path = "replication_fetch.rs"]
@@ -47,6 +49,10 @@ use self::commit_retention::{
     CommitMessageColdEntry, build_commit_message_retention_plan, has_commit_message_cold_index,
     load_commit_message_cold_index_from_root, prune_unreferenced_commit_message_pack_files,
     write_commit_message_cold_index_to_root, write_commit_message_pack_entry,
+};
+pub(crate) use self::latest_head_index::load_latest_commit_message_from_root;
+use self::latest_head_index::{
+    finalize_latest_commit_head_persist, prepare_latest_commit_head_persist,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,
@@ -66,35 +72,6 @@ pub(crate) use replication_fetch::{
 };
 pub(crate) use replication_head::{FetchHeadRequest, FetchHeadResponse, ReplicationHeadSummary};
 
-pub(crate) fn load_latest_commit_message_from_root(
-    root_dir: &Path,
-    world_id: &str,
-    max_hot_commit_messages: usize,
-) -> Result<Option<GossipReplicationMessage>, NodeError> {
-    let hot_height = build_commit_message_retention_plan(root_dir, max_hot_commit_messages)?
-        .hot_window
-        .latest_height
-        .unwrap_or(0);
-    if hot_height > 0 {
-        if let Some(message) = load_commit_message_from_root(root_dir, world_id, hot_height)? {
-            return Ok(Some(message));
-        }
-    }
-    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
-        .by_height
-        .keys()
-        .next_back()
-        .copied()
-        .unwrap_or(0);
-    let mut candidate = hot_height.saturating_sub(1).max(cold_height);
-    while candidate > 0 {
-        if let Some(message) = load_commit_message_from_root(root_dir, world_id, candidate)? {
-            return Ok(Some(message));
-        }
-        candidate -= 1;
-    }
-    Ok(None)
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeReplicationConfig {
     pub root_dir: PathBuf,
@@ -871,8 +848,21 @@ impl ReplicationRuntime {
         height: u64,
         message: &GossipReplicationMessage,
     ) -> Result<(), NodeError> {
+        let (next_index, current_index) = prepare_latest_commit_head_persist(
+            self.config.root_dir.as_path(),
+            height,
+            message,
+            self.signer
+                .as_ref()
+                .map(|signer| signer.public_key_hex.as_str()),
+        )?;
         write_json_compact(self.config.commit_message_path(height).as_path(), message)?;
-        self.prune_hot_commit_messages()
+        self.prune_hot_commit_messages()?;
+        finalize_latest_commit_head_persist(
+            self.config.root_dir.as_path(),
+            &next_index,
+            current_index.as_ref(),
+        )
     }
 
     fn prune_hot_commit_messages(&self) -> Result<(), NodeError> {
