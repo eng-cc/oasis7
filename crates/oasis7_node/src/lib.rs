@@ -9,7 +9,6 @@ pub use oasis7_consensus::node_consensus_action::NodeConsensusAction;
 use oasis7_consensus::node_consensus_action::{
     compute_consensus_action_root as core_compute_consensus_action_root,
     drain_ordered_consensus_actions as core_drain_ordered_consensus_actions,
-    merge_pending_consensus_actions as core_merge_pending_consensus_actions,
     validate_consensus_action_root as core_validate_consensus_action_root,
 };
 use oasis7_consensus::node_consensus_error::NodeConsensusError;
@@ -91,10 +90,10 @@ pub use consensus_support::compute_consensus_action_root;
 use consensus_support::{
     checked_consensus_successor, checked_replication_successor, dequeue_pending_consensus_actions,
     drain_ordered_consensus_actions, merge_pending_consensus_actions_with_budget,
-    node_consensus_error, node_pos_error, release_action_payload_bytes, sign_attestation_message,
-    sign_commit_message, sign_proposal_message, validate_consensus_action_root,
-    verify_attestation_message_signature, verify_commit_message_signature,
-    verify_proposal_message_signature,
+    node_consensus_error, node_pos_error, release_action_payload_bytes,
+    reserve_action_payload_bytes, sign_attestation_message, sign_commit_message,
+    sign_proposal_message, validate_consensus_action_root, verify_attestation_message_signature,
+    verify_commit_message_signature, verify_proposal_message_signature,
 };
 pub use error::NodeError;
 pub use execution_hook::{
@@ -1188,8 +1187,6 @@ type PosDecision = NodePosDecision<NodeConsensusAction, PosConsensusStatus>;
 mod tests;
 #[cfg(test)]
 mod tests_action_payload;
-#[cfg(test)]
-mod tests_action_payload_byte_budget;
 #[cfg(test)]
 mod tests_gossip_player;
 #[cfg(test)]

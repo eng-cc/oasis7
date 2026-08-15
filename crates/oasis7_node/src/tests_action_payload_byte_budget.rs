@@ -1,4 +1,6 @@
 use super::*;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -160,5 +162,208 @@ fn runtime_retained_committed_batches_enforce_aggregate_payload_byte_budget() {
     assert!(
         retained_payload_bytes <= RETAINED_BYTE_BUDGET,
         "retained committed payload bytes exceeded budget: bytes={retained_payload_bytes} budget={RETAINED_BYTE_BUDGET}"
+    );
+}
+
+#[test]
+fn pending_proposal_handoff_keeps_aggregate_reservation_until_payload_drop() {
+    const ACTION_BYTES: usize = 16;
+    const QUEUE_BYTE_BUDGET: usize = ACTION_BYTES;
+    let config = NodeConfig::new(
+        "node-pending-handoff-byte-budget",
+        "world-pending-handoff-byte-budget",
+        NodeRole::Observer,
+    )
+    .expect("config")
+    .with_max_engine_pending_consensus_actions(8)
+    .expect("engine action count")
+    .with_max_consensus_action_payload_bytes(ACTION_BYTES)
+    .expect("per-action payload limit")
+    .with_max_pending_consensus_action_queue_bytes(QUEUE_BYTE_BUDGET)
+    .expect("aggregate byte budget");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let action =
+        NodeConsensusAction::from_payload(1, config.player_id.clone(), accepted_action_payload())
+            .expect("action");
+    merge_pending_consensus_actions_with_budget(
+        &mut engine.pending_consensus_actions,
+        vec![action.clone()],
+        engine.max_pending_consensus_actions,
+        engine.pending_consensus_action_queue_bytes.as_ref(),
+        engine.max_pending_consensus_action_queue_bytes,
+        false,
+    )
+    .expect("initial action reservation");
+
+    let committed_actions = engine
+        .drain_proposable_consensus_actions(1)
+        .expect("proposal handoff");
+    assert_eq!(committed_actions, vec![action.clone()]);
+    engine.pending = Some(PendingProposal {
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        opened_at_ms: 1,
+        proposer_id: config.node_id.clone(),
+        block_hash: "pending-byte-budget-block".to_string(),
+        action_root: compute_consensus_action_root(&committed_actions).expect("action root"),
+        committed_actions,
+        attestations: BTreeMap::new(),
+        approved_stake: 0,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Pending,
+    });
+
+    let next =
+        NodeConsensusAction::from_payload(2, config.player_id.clone(), accepted_action_payload())
+            .expect("next action");
+    let err = merge_pending_consensus_actions_with_budget(
+        &mut engine.pending_consensus_actions,
+        vec![next],
+        engine.max_pending_consensus_actions,
+        engine.pending_consensus_action_queue_bytes.as_ref(),
+        engine.max_pending_consensus_action_queue_bytes,
+        false,
+    )
+    .expect_err("pending proposal payload must remain charged until dropped");
+    assert!(
+        err.to_string().contains("byte budget"),
+        "unexpected handoff rejection: {err}"
+    );
+    assert_eq!(
+        engine
+            .pending_consensus_action_queue_bytes
+            .load(Ordering::Acquire),
+        ACTION_BYTES,
+        "proposal handoff must retain the aggregate reservation"
+    );
+}
+
+#[test]
+fn pending_merge_conflict_rolls_back_map_and_reservation_atomically() {
+    const ACTION_BYTES: usize = 16;
+    let config = NodeConfig::new(
+        "node-atomic-merge-byte-budget",
+        "world-atomic-merge-byte-budget",
+        NodeRole::Observer,
+    )
+    .expect("config")
+    .with_max_engine_pending_consensus_actions(8)
+    .expect("engine action count")
+    .with_max_consensus_action_payload_bytes(ACTION_BYTES)
+    .expect("per-action payload limit");
+    let mut pending = BTreeMap::new();
+    let existing =
+        NodeConsensusAction::from_payload(1, config.player_id.clone(), vec![0x11; ACTION_BYTES])
+            .expect("existing action");
+    pending.insert(existing.action_id, existing.clone());
+    let queue_bytes = AtomicUsize::new(ACTION_BYTES);
+    let new_action =
+        NodeConsensusAction::from_payload(2, config.player_id.clone(), vec![0x22; ACTION_BYTES])
+            .expect("new action");
+    let conflicting =
+        NodeConsensusAction::from_payload(1, config.player_id, vec![0x33; ACTION_BYTES])
+            .expect("conflicting action");
+
+    let err = merge_pending_consensus_actions_with_budget(
+        &mut pending,
+        vec![new_action, conflicting],
+        8,
+        &queue_bytes,
+        ACTION_BYTES * 3,
+        false,
+    )
+    .expect_err("conflicting merge must fail");
+    assert!(
+        err.to_string().contains("conflicting consensus action"),
+        "unexpected conflict error: {err}"
+    );
+    assert_eq!(
+        pending,
+        BTreeMap::from([(existing.action_id, existing)]),
+        "failed merge must not leave a partially inserted action"
+    );
+    assert_eq!(
+        queue_bytes.load(Ordering::Acquire),
+        ACTION_BYTES,
+        "failed merge must restore the pre-merge reservation"
+    );
+}
+
+#[test]
+fn incoming_reserved_validation_failure_releases_reserved_bytes() {
+    const ACTION_BYTES: usize = 16;
+    let config = NodeConfig::new(
+        "node-validation-reservation-byte-budget",
+        "world-validation-reservation-byte-budget",
+        NodeRole::Observer,
+    )
+    .expect("config");
+    let mut malformed =
+        NodeConsensusAction::from_payload(1, config.player_id, vec![0x44; ACTION_BYTES])
+            .expect("action");
+    malformed.payload_hash = "tampered-payload-hash".to_string();
+    let mut pending = BTreeMap::new();
+    let queue_bytes = AtomicUsize::new(ACTION_BYTES);
+
+    let err = merge_pending_consensus_actions_with_budget(
+        &mut pending,
+        vec![malformed],
+        8,
+        &queue_bytes,
+        ACTION_BYTES * 2,
+        true,
+    )
+    .expect_err("malformed pre-reserved action must fail validation");
+    assert!(
+        err.to_string().contains("payload hash mismatch"),
+        "unexpected validation error: {err}"
+    );
+    assert_eq!(
+        queue_bytes.load(Ordering::Acquire),
+        0,
+        "validation failure must release incoming_already_reserved bytes"
+    );
+    assert!(
+        pending.is_empty(),
+        "invalid action must not enter pending map"
+    );
+}
+
+#[test]
+fn incoming_reserved_byte_budget_failure_releases_reserved_bytes() {
+    const ACTION_BYTES: usize = 16;
+    let config = NodeConfig::new(
+        "node-byte-budget-reservation-failure",
+        "world-byte-budget-reservation-failure",
+        NodeRole::Observer,
+    )
+    .expect("config");
+    let action = NodeConsensusAction::from_payload(1, config.player_id, vec![0x55; ACTION_BYTES])
+        .expect("action");
+    let mut pending = BTreeMap::new();
+    let queue_bytes = AtomicUsize::new(ACTION_BYTES);
+
+    let err = merge_pending_consensus_actions_with_budget(
+        &mut pending,
+        vec![action],
+        8,
+        &queue_bytes,
+        ACTION_BYTES / 2,
+        true,
+    )
+    .expect_err("invalid pre-reserved byte budget must fail closed");
+    assert!(
+        err.to_string().contains("reservation invalid"),
+        "unexpected reservation error: {err}"
+    );
+    assert_eq!(
+        queue_bytes.load(Ordering::Acquire),
+        0,
+        "byte-budget failure must release incoming_already_reserved bytes"
+    );
+    assert!(
+        pending.is_empty(),
+        "failed reservation must not mutate pending map"
     );
 }

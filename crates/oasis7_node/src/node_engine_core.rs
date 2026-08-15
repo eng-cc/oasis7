@@ -2,6 +2,10 @@ use super::*;
 use crate::node_engine_slashing::{build_validator_stake_proof_chain, evidence_hash};
 use crate::node_engine_transfer_filter::should_drop_transfer_action_before_proposal;
 
+#[cfg(test)]
+#[path = "tests_action_payload_byte_budget.rs"]
+mod tests_action_payload_byte_budget;
+
 const GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS: i64 = 5_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -355,12 +359,22 @@ impl PosNodeEngine {
             return self.idle_pending_decision();
         }
         let committed_actions = self.drain_proposable_consensus_actions(now_ms)?;
-        let action_root = compute_consensus_action_root(committed_actions.as_slice())?;
+        let committed_action_bytes = total_action_payload_bytes(committed_actions.iter());
+        let action_root = match compute_consensus_action_root(committed_actions.as_slice()) {
+            Ok(action_root) => action_root,
+            Err(err) => {
+                release_action_payload_bytes(
+                    &self.pending_consensus_action_queue_bytes,
+                    committed_action_bytes,
+                );
+                return Err(err);
+            }
+        };
         let parent_block_hash = self
             .last_committed_block_hash
             .as_deref()
             .unwrap_or("genesis");
-        let block_hash = self.compute_block_hash(
+        let block_hash = match self.compute_block_hash(
             world_id,
             self.next_height,
             slot,
@@ -368,7 +382,16 @@ impl PosNodeEngine {
             proposer_id.as_str(),
             parent_block_hash,
             action_root.as_str(),
-        )?;
+        ) {
+            Ok(block_hash) => block_hash,
+            Err(err) => {
+                release_action_payload_bytes(
+                    &self.pending_consensus_action_queue_bytes,
+                    committed_action_bytes,
+                );
+                return Err(err);
+            }
+        };
 
         core_propose_next_head(
             &self.validators,
@@ -385,7 +408,15 @@ impl PosNodeEngine {
             node_id,
             now_ms,
         )
-        .map_err(node_pos_error)
+        .map_err(|err| {
+            if self.pending.is_none() {
+                release_action_payload_bytes(
+                    &self.pending_consensus_action_queue_bytes,
+                    committed_action_bytes,
+                );
+            }
+            node_pos_error(err)
+        })
     }
 
     fn drain_proposable_consensus_actions(
@@ -396,17 +427,28 @@ impl PosNodeEngine {
         let queued_payload_bytes = queued.iter().fold(0usize, |total, action| {
             total.saturating_add(action.payload_cbor.len())
         });
+        let mut filtered = Vec::with_capacity(queued.len());
+        let mut dropped_payload_bytes = 0usize;
+        for action in queued {
+            match should_drop_transfer_action_before_proposal(&action, now_ms) {
+                Ok(true) => {
+                    dropped_payload_bytes =
+                        dropped_payload_bytes.saturating_add(action.payload_cbor.len());
+                }
+                Ok(false) => filtered.push(action),
+                Err(err) => {
+                    release_action_payload_bytes(
+                        &self.pending_consensus_action_queue_bytes,
+                        queued_payload_bytes,
+                    );
+                    return Err(err);
+                }
+            }
+        }
         release_action_payload_bytes(
             &self.pending_consensus_action_queue_bytes,
-            queued_payload_bytes,
+            dropped_payload_bytes,
         );
-        let mut filtered = Vec::with_capacity(queued.len());
-        for action in queued {
-            if should_drop_transfer_action_before_proposal(&action, now_ms)? {
-                continue;
-            }
-            filtered.push(action);
-        }
         Ok(filtered)
     }
 
@@ -463,6 +505,11 @@ impl PosNodeEngine {
         match decision.status {
             PosConsensusStatus::Pending => {}
             PosConsensusStatus::Committed => {
+                let proposal_payload_bytes = self
+                    .pending
+                    .as_ref()
+                    .map(|proposal| total_action_payload_bytes(proposal.committed_actions.iter()))
+                    .unwrap_or(0);
                 let next_height = checked_consensus_successor(
                     decision.height,
                     "decision.height",
@@ -473,8 +520,18 @@ impl PosNodeEngine {
                 self.last_committed_block_hash = Some(decision.block_hash.clone());
                 self.next_height = next_height;
                 self.pending = None;
+                release_action_payload_bytes(
+                    &self.pending_consensus_action_queue_bytes,
+                    proposal_payload_bytes,
+                );
             }
             PosConsensusStatus::Rejected => {
+                let proposal_payload_bytes = self
+                    .pending
+                    .as_ref()
+                    .map(|proposal| total_action_payload_bytes(proposal.committed_actions.iter()))
+                    .unwrap_or(0);
+                let incoming_already_reserved = self.pending.is_some();
                 let next_height = checked_consensus_successor(
                     decision.height,
                     "decision.height",
@@ -486,13 +543,30 @@ impl PosNodeEngine {
                     self.max_pending_consensus_actions,
                     &self.pending_consensus_action_queue_bytes,
                     self.max_pending_consensus_action_queue_bytes,
-                    false,
+                    incoming_already_reserved,
                 )
-                .map_err(|err| NodeError::Consensus {
-                    reason: format!(
-                        "requeue rejected consensus actions failed at height {}: {}",
-                        decision.height, err
-                    ),
+                .map_err(|err| {
+                    if incoming_already_reserved {
+                        if let Err(recovery_err) = reserve_action_payload_bytes(
+                            &self.pending_consensus_action_queue_bytes,
+                            self.max_pending_consensus_action_queue_bytes,
+                            proposal_payload_bytes,
+                        ) {
+                            self.pending = None;
+                            return NodeError::Consensus {
+                                reason: format!(
+                                    "requeue rejected consensus actions failed at height {} and proposal reservation could not be restored: {}; original error: {}",
+                                    decision.height, recovery_err, err
+                                ),
+                            };
+                        }
+                    }
+                    NodeError::Consensus {
+                        reason: format!(
+                            "requeue rejected consensus actions failed at height {}: {}",
+                            decision.height, err
+                        ),
+                    }
                 })?;
                 self.next_height = next_height;
                 self.pending = None;
