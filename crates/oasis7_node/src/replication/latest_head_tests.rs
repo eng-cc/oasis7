@@ -206,3 +206,74 @@ fn startup_reconstructs_missing_world_index_in_shared_replication_root() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn startup_reconciliation_does_not_parse_unrelated_retained_payload() {
+    let dir = temp_dir("latest-head-startup-bounded-unrelated-payload");
+    let world_id = "world-latest-head-startup-bounded";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(4096)
+        .expect("hot cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("initial runtime");
+    let latest = signed_remote_message(161, world_id, "node-b", 4096);
+    runtime
+        .persist_commit_message(4096, &latest)
+        .expect("persist indexed latest commit");
+
+    // This lower retained slot is not the indexed head and is deliberately
+    // unrelated/malformed. Startup recovery must use the durable head index
+    // rather than parsing every retained payload on the request-critical path.
+    std::fs::write(
+        config.commit_message_path(4095),
+        b"malformed unrelated retained payload",
+    )
+    .expect("write unrelated retained payload");
+
+    let restarted = ReplicationRuntime::new(&config, "node-a");
+    assert!(
+        restarted.is_ok(),
+        "startup should not parse unrelated retained payloads when the indexed head is valid: {restarted:?}"
+    );
+    let head = load_latest_commit_message_from_root(&dir, world_id, 4096)
+        .expect("indexed head lookup")
+        .expect("indexed latest commit");
+    assert_eq!(head.record.sequence, 4096);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn startup_reconstructs_missing_lower_world_index_when_other_world_covers_latest() {
+    let dir = temp_dir("latest-head-startup-shared-root-lower-world");
+    let world_a = "world-latest-head-shared-root-global-latest";
+    let world_b = "world-latest-head-shared-root-lower-world";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(4096)
+        .expect("hot cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("initial runtime");
+    runtime
+        .persist_commit_message(1, &signed_remote_message(171, world_b, "node-b", 1))
+        .expect("persist lower world commit");
+    runtime
+        .persist_commit_message(2, &signed_remote_message(172, world_a, "node-b", 2))
+        .expect("persist global latest world commit");
+
+    let index_dir = dir.join("replication_commit_heads");
+    let world_b_index_path = index_dir.join(format!(
+        "{}.json",
+        oasis7_distfs::blake3_hex(world_b.as_bytes())
+    ));
+    std::fs::remove_file(&world_b_index_path).expect("remove lower-world index");
+
+    let _restarted = ReplicationRuntime::new(&config, "node-a").expect("restart runtime");
+    assert!(
+        world_b_index_path.exists(),
+        "startup must reconstruct the missing lower-world index even when another world covers the global latest height"
+    );
+    let world_b_head = load_latest_commit_message_from_root(&dir, world_b, 4096)
+        .expect("lower-world FetchHead")
+        .expect("lower-world latest commit");
+    assert_eq!(world_b_head.record.sequence, 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

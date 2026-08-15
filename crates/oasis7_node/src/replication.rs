@@ -54,7 +54,7 @@ use self::commit_retention::{
 };
 use self::latest_head_index::{
     finalize_latest_commit_head_persist, prepare_latest_commit_head_persist,
-    reconcile_latest_commit_head_indexes,
+    reconcile_latest_commit_head_indexes, record_latest_commit_world_inventory,
 };
 pub(crate) use self::latest_head_index::{
     load_latest_commit_head_index_height_from_root, load_latest_commit_message_from_root,
@@ -831,7 +831,8 @@ impl ReplicationRuntime {
             self.config.root_dir.as_path(),
             &next_index,
             current_index.as_ref(),
-        )
+        )?;
+        record_latest_commit_world_inventory(self.config.root_dir.as_path(), &next_index)
     }
 
     fn prune_hot_commit_messages(&self) -> Result<(), NodeError> {
