@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use oasis7_distfs::blake3_hex;
+use serde::{Deserialize, Serialize};
 
 use super::commit_retention::{
     LatestCommitHeadIndex, hot_commit_message_heights_from_root,
@@ -15,6 +16,24 @@ use super::{
     load_commit_message_from_root, load_commit_message_record_from_root,
     verify_replication_message_signature,
 };
+
+const LATEST_COMMIT_WORLD_INVENTORY_SCHEMA: u8 = 1;
+const LATEST_COMMIT_WORLD_INVENTORY_FILE: &str = "replication_commit_worlds.json";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LatestCommitWorldInventory {
+    schema: u8,
+    worlds: BTreeMap<String, LatestCommitHeadIndex>,
+}
+
+impl Default for LatestCommitWorldInventory {
+    fn default() -> Self {
+        Self {
+            schema: LATEST_COMMIT_WORLD_INVENTORY_SCHEMA,
+            worlds: BTreeMap::new(),
+        }
+    }
+}
 
 pub(crate) fn load_latest_commit_message_from_root(
     root_dir: &Path,
@@ -100,18 +119,79 @@ pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<()
         }
     }
 
+    let mut inventory = load_latest_commit_world_inventory(root_dir)?;
+    let mut inventory_changed = false;
+    for (world_id, candidate) in inventory.worlds.clone() {
+        if world_id != candidate.world_id {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "latest commit world inventory key/world mismatch: {}",
+                    world_id
+                ),
+            });
+        }
+        match current_by_world.get(world_id.as_str()) {
+            Some(current) if current.height > candidate.height => {}
+            Some(current)
+                if current.height == candidate.height
+                    && current.record_content_hash == candidate.record_content_hash
+                    && current.message_hash == candidate.message_hash => {}
+            Some(current) if current.height == candidate.height => {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "latest commit head conflict with world inventory world={} height={}",
+                        world_id, candidate.height
+                    ),
+                });
+            }
+            _ => {
+                load_indexed_latest_commit_message(root_dir, world_id.as_str(), &candidate)?;
+                write_latest_commit_head_index_to_root(root_dir, &candidate)?;
+                current_by_world.insert(world_id, candidate);
+            }
+        }
+    }
+
+    for (world_id, current) in &current_by_world {
+        match inventory.worlds.get(world_id) {
+            Some(existing)
+                if existing.height > current.height
+                    || (existing.height == current.height
+                        && existing.record_content_hash == current.record_content_hash
+                        && existing.message_hash == current.message_hash) => {}
+            Some(existing) if existing.height == current.height => {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "latest commit head conflict with current index world={} height={}",
+                        world_id, current.height
+                    ),
+                });
+            }
+            _ => {
+                inventory.worlds.insert(world_id.clone(), current.clone());
+                inventory_changed = true;
+            }
+        }
+    }
+
     // Existing indexes are the durable authority for their worlds. Only parse
     // the newest filename/cold-index candidate when metadata proves that the
     // indexes do not already cover the global newest height. This keeps startup
     // recovery bounded and avoids parsing unrelated retained payloads after a
     // valid indexed head has already been persisted.
     let Some(latest_metadata_height) = latest_metadata_height else {
+        if inventory_changed {
+            write_latest_commit_world_inventory(root_dir, &inventory)?;
+        }
         return Ok(());
     };
     let indexes_cover_latest = current_by_world
         .values()
         .any(|index| index.height == latest_metadata_height);
     if indexes_cover_latest {
+        if inventory_changed {
+            write_latest_commit_world_inventory(root_dir, &inventory)?;
+        }
         return Ok(());
     }
 
@@ -156,8 +236,80 @@ pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<()
             _ => {}
         }
         write_latest_commit_head_index_to_root(root_dir, &candidate)?;
+        inventory.worlds.insert(world_id, candidate);
+        inventory_changed = true;
+    }
+    if inventory_changed {
+        write_latest_commit_world_inventory(root_dir, &inventory)?;
     }
     Ok(())
+}
+
+pub(super) fn record_latest_commit_world_inventory(
+    root_dir: &Path,
+    index: &LatestCommitHeadIndex,
+) -> Result<(), NodeError> {
+    let mut inventory = load_latest_commit_world_inventory(root_dir)?;
+    match inventory.worlds.get(index.world_id.as_str()) {
+        Some(existing) if existing.height > index.height => return Ok(()),
+        Some(existing)
+            if existing.height == index.height
+                && existing.record_content_hash == index.record_content_hash
+                && existing.message_hash == index.message_hash =>
+        {
+            return Ok(());
+        }
+        _ => {}
+    }
+    inventory
+        .worlds
+        .insert(index.world_id.clone(), index.clone());
+    write_latest_commit_world_inventory(root_dir, &inventory)
+}
+
+fn load_latest_commit_world_inventory(
+    root_dir: &Path,
+) -> Result<LatestCommitWorldInventory, NodeError> {
+    let path = root_dir.join(LATEST_COMMIT_WORLD_INVENTORY_FILE);
+    if !path.exists() {
+        return Ok(LatestCommitWorldInventory::default());
+    }
+    let inventory = super::load_json_or_default::<LatestCommitWorldInventory>(path.as_path())?;
+    if inventory.schema != LATEST_COMMIT_WORLD_INVENTORY_SCHEMA {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "invalid latest commit world inventory schema: {}",
+                path.display()
+            ),
+        });
+    }
+    for (world_id, index) in &inventory.worlds {
+        if world_id.is_empty()
+            || world_id != &index.world_id
+            || index.schema != 1
+            || index.height == 0
+            || index.record_content_hash.is_empty()
+            || index.message_hash.is_empty()
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "invalid latest commit world inventory entry: {}",
+                    path.display()
+                ),
+            });
+        }
+    }
+    Ok(inventory)
+}
+
+fn write_latest_commit_world_inventory(
+    root_dir: &Path,
+    inventory: &LatestCommitWorldInventory,
+) -> Result<(), NodeError> {
+    super::write_json_compact(
+        root_dir.join(LATEST_COMMIT_WORLD_INVENTORY_FILE).as_path(),
+        inventory,
+    )
 }
 
 fn latest_commit_head_index_path_for_world(root_dir: &Path, world_id: &str) -> PathBuf {
