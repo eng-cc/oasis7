@@ -56,6 +56,30 @@ fn test_execution_checkpoint_bundle(
     }
 }
 
+struct BoundaryCheckpointExportHook {
+    bundle: NodeExecutionCheckpointBundle,
+}
+
+impl NodeExecutionHook for BoundaryCheckpointExportHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+
+    fn export_checkpoint_bundle(
+        &mut self,
+        height: u64,
+    ) -> Result<Option<NodeExecutionCheckpointBundle>, String> {
+        Ok((self.bundle.height == height).then(|| self.bundle.clone()))
+    }
+}
+
 #[test]
 fn high_replication_checkpoint_candidates_cover_release_default_retained_window() {
     let candidates = PosNodeEngine::high_replication_checkpoint_candidates(16_715, 0);
@@ -111,6 +135,74 @@ fn high_replication_checkpoint_candidates_include_latest_aligned_checkpoint_afte
         latest_index < older_index,
         "the latest completed checkpoint must precede older fallbacks; candidates={candidates:?}"
     );
+}
+
+#[test]
+fn fetch_commit_boundary_does_not_rescan_unrelated_retained_records_per_request() {
+    let world_id = "world-fetch-commit-boundary-no-rescan";
+    let dir = temp_dir("fetch-commit-boundary-no-rescan");
+    let replication_config = signed_replication_config(dir.clone(), 249);
+    let mut replication =
+        ReplicationRuntime::new(&replication_config, "node-storage").expect("runtime");
+    let boundary_height = 64;
+    let decision = PosDecision {
+        height: boundary_height,
+        slot: boundary_height,
+        epoch: 0,
+        proposer_id: "node-storage".to_string(),
+        status: PosConsensusStatus::Committed,
+        block_hash: format!("block-{boundary_height}"),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let message = replication
+        .build_local_commit_message(
+            "node-storage",
+            world_id,
+            8_064,
+            &decision,
+            Some("exec-block-64"),
+            Some("exec-state-64"),
+        )
+        .expect("build boundary message")
+        .expect("boundary message");
+    let unrelated_path = dir
+        .join("replication_commit_messages")
+        .join(format!("{:020}.json", 1));
+    std::fs::write(&unrelated_path, b"unreadable-retained-record")
+        .expect("write unrelated unreadable retained record");
+    let execution_hook: Arc<Mutex<Box<dyn NodeExecutionHook>>> = Arc::new(Mutex::new(Box::new(
+        BoundaryCheckpointExportHook {
+            bundle: test_execution_checkpoint_bundle(
+                boundary_height,
+                "exec-block-64",
+                "exec-state-64",
+            ),
+        },
+    )));
+
+    let served = attach_checkpoint_for_fetch_commit_if_boundary(
+        Some(message),
+        Some(&execution_hook),
+        dir.as_path(),
+        world_id,
+        "node-storage",
+        &replication_config,
+        boundary_height,
+    )
+    .expect("boundary FetchCommit should not rescan unrelated retained records")
+    .expect("boundary FetchCommit message");
+    let payload = parse_replication_commit_payload(served.payload.as_slice())
+        .expect("served boundary payload");
+    assert!(
+        payload.execution_checkpoint.is_some(),
+        "valid boundary response must retain its exported checkpoint"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

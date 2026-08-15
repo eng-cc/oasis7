@@ -47,6 +47,13 @@ pub(crate) fn load_latest_commit_message_from_root(
     Ok(Some(message))
 }
 
+pub(crate) fn load_latest_commit_head_index_height_from_root(
+    root_dir: &Path,
+    world_id: &str,
+) -> Result<Option<u64>, NodeError> {
+    Ok(load_latest_commit_head_index_from_root(root_dir, world_id)?.map(|index| index.height))
+}
+
 pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<(), NodeError> {
     let index_dir = latest_commit_head_index_directory_from_root(root_dir);
     let mut heights = hot_commit_message_heights_from_root(root_dir)?

@@ -42,6 +42,8 @@ mod replication_fetch;
 mod replication_head;
 #[path = "replication_sampling.rs"]
 mod replication_sampling;
+#[path = "replication/runtime_init.rs"]
+mod runtime_init;
 #[path = "replication_support.rs"]
 mod support;
 
@@ -50,10 +52,12 @@ use self::commit_retention::{
     load_commit_message_cold_index_from_root, prune_unreferenced_commit_message_pack_files,
     write_commit_message_cold_index_to_root, write_commit_message_pack_entry,
 };
-pub(crate) use self::latest_head_index::load_latest_commit_message_from_root;
 use self::latest_head_index::{
     finalize_latest_commit_head_persist, prepare_latest_commit_head_persist,
     reconcile_latest_commit_head_indexes,
+};
+pub(crate) use self::latest_head_index::{
+    load_latest_commit_head_index_height_from_root, load_latest_commit_message_from_root,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,
@@ -478,44 +482,7 @@ struct FetchBlobRequestSigningPayload<'a> {
 
 impl ReplicationRuntime {
     pub(crate) fn new(config: &NodeReplicationConfig, node_id: &str) -> Result<Self, NodeError> {
-        fs::create_dir_all(&config.root_dir).map_err(|err| NodeError::Replication {
-            reason: format!(
-                "create replication root {} failed: {}",
-                config.root_dir.display(),
-                err
-            ),
-        })?;
-
-        let guard = load_json_or_default::<SingleWriterReplicationGuard>(
-            config.guard_state_path().as_path(),
-        )?;
-        let remote_guards = load_json_or_default::<BTreeMap<String, SingleWriterReplicationGuard>>(
-            config.remote_guard_state_path().as_path(),
-        )?;
-        let signer = config.signing_keypair()?;
-        let mut writer_state =
-            load_json_or_default::<LocalWriterState>(config.writer_state_path(node_id).as_path())?;
-        if writer_state.writer_epoch == 0 {
-            writer_state.writer_epoch = DEFAULT_WRITER_EPOCH;
-        }
-        if writer_state.last_sequence == 0
-            && writer_state.last_replicated_height == 0
-            && writer_state.writer_epoch == DEFAULT_WRITER_EPOCH
-        {
-            writer_state.writer_epoch =
-                seeded_writer_epoch(signer.as_ref().map(|signer| signer.public_key_hex.as_str()));
-        }
-
-        let runtime = Self {
-            config: config.clone(),
-            store: LocalCasStore::new(config.store_root()),
-            guard,
-            remote_guards,
-            writer_state,
-            enforce_signature: config.enforce_signature || signer.is_some(),
-            remote_writer_allowlist: config.remote_writer_allowlist().clone(),
-            signer,
-        };
+        let runtime = Self::from_config(config, node_id)?;
         reconcile_latest_commit_head_indexes(config.root_dir.as_path())?;
         runtime.reconcile_checkpoint_lineage_retention()?;
         Ok(runtime)
