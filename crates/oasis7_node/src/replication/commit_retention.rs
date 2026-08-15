@@ -46,9 +46,12 @@ impl Default for LatestCommitHeadIndex {
 }
 
 pub(super) fn latest_commit_head_index_path_from_root(root_dir: &Path, world_id: &str) -> PathBuf {
-    root_dir
-        .join(LATEST_COMMIT_HEAD_INDEX_DIR)
+    latest_commit_head_index_directory_from_root(root_dir)
         .join(format!("{}.json", blake3_hex(world_id.as_bytes())))
+}
+
+pub(super) fn latest_commit_head_index_directory_from_root(root_dir: &Path) -> PathBuf {
+    root_dir.join(LATEST_COMMIT_HEAD_INDEX_DIR)
 }
 
 pub(super) fn load_latest_commit_head_index_from_root(

@@ -56,3 +56,53 @@ fn latest_commit_head_does_not_read_stale_hot_files() {
         assert_eq!(latest.record.sequence, 4096);
     }
 }
+
+#[test]
+fn startup_reconciles_stale_latest_head_index_before_fetch_head() {
+    let dir = temp_dir("latest-head-stale-index-recovery");
+    let world_id = "world-latest-head-stale-index-recovery";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(4096)
+        .expect("hot cap");
+    let first_path = config.commit_message_path(1);
+    let commit_dir = first_path.parent().expect("commit directory");
+    std::fs::create_dir_all(commit_dir).expect("create commit directory");
+    let first = signed_remote_message(131, world_id, "node-b", 1);
+    let first_bytes = serde_json::to_vec(&first).expect("encode first commit");
+    std::fs::write(config.commit_message_path(1), &first_bytes).expect("write first commit");
+    let index_dir = dir.join("replication_commit_heads");
+    std::fs::create_dir_all(&index_dir).expect("create latest-head index directory");
+    let index_path = index_dir.join(format!(
+        "{}.json",
+        oasis7_distfs::blake3_hex(world_id.as_bytes())
+    ));
+    let stale_index = serde_json::json!({
+        "schema": 1,
+        "world_id": world_id,
+        "height": 1,
+        "record_content_hash": first.record.content_hash,
+        "message_hash": oasis7_distfs::blake3_hex(&first_bytes),
+    });
+    std::fs::write(
+        &index_path,
+        serde_json::to_vec(&stale_index).expect("encode stale index"),
+    )
+    .expect("write stale index");
+    let second = signed_remote_message(132, world_id, "node-b", 2);
+    std::fs::write(
+        config.commit_message_path(2),
+        serde_json::to_vec(&second).expect("encode newer commit"),
+    )
+    .expect("persist newer commit mirror");
+
+    let restarted = ReplicationRuntime::new(&config, "node-a").expect("restart runtime");
+    let fetch_head = load_latest_commit_message_from_root(&dir, world_id, 4096);
+    drop(restarted);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let fetch_head = fetch_head
+        .expect("FetchHead latest lookup should reconcile stale index")
+        .expect("newest commit");
+    assert_eq!(fetch_head.record.sequence, 2);
+}

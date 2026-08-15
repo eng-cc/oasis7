@@ -53,6 +53,7 @@ use self::commit_retention::{
 pub(crate) use self::latest_head_index::load_latest_commit_message_from_root;
 use self::latest_head_index::{
     finalize_latest_commit_head_persist, prepare_latest_commit_head_persist,
+    reconcile_latest_commit_head_indexes,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,
@@ -515,6 +516,7 @@ impl ReplicationRuntime {
             remote_writer_allowlist: config.remote_writer_allowlist().clone(),
             signer,
         };
+        reconcile_latest_commit_head_indexes(config.root_dir.as_path())?;
         runtime.reconcile_checkpoint_lineage_retention()?;
         Ok(runtime)
     }

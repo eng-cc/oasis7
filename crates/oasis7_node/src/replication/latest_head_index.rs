@@ -1,11 +1,12 @@
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use oasis7_distfs::blake3_hex;
 
 use super::commit_retention::{
-    LatestCommitHeadIndex, latest_hot_commit_message_height_from_root,
-    load_commit_message_cold_index_from_root, load_latest_commit_head_index_from_root,
-    write_latest_commit_head_index_to_root,
+    LatestCommitHeadIndex, latest_commit_head_index_directory_from_root,
+    latest_hot_commit_message_height_from_root, load_commit_message_cold_index_from_root,
+    load_latest_commit_head_index_from_root, write_latest_commit_head_index_to_root,
 };
 use super::{
     COMMIT_FILE_PREFIX, GossipReplicationMessage, NodeError, load_commit_message_from_root,
@@ -41,6 +42,100 @@ pub(crate) fn load_latest_commit_message_from_root(
     let index = latest_commit_head_index_for_message(candidate, &message)?;
     write_latest_commit_head_index_to_root(root_dir, &index)?;
     Ok(Some(message))
+}
+
+pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<(), NodeError> {
+    let index_dir = latest_commit_head_index_directory_from_root(root_dir);
+    if !index_dir.exists() {
+        return Ok(());
+    }
+    let hot_height = latest_hot_commit_message_height_from_root(root_dir)?.unwrap_or(0);
+    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
+        .by_height
+        .keys()
+        .next_back()
+        .copied()
+        .unwrap_or(0);
+    let newest_metadata_height = hot_height.max(cold_height);
+    let entries = fs::read_dir(index_dir.as_path()).map_err(|err| NodeError::Replication {
+        reason: format!("list latest commit head indexes failed: {err}"),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|err| NodeError::Replication {
+            reason: format!("read latest commit head index entry failed: {err}"),
+        })?;
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let index = load_index_from_path(path.as_path())?;
+        let expected_path =
+            latest_commit_head_index_path_for_world(root_dir, index.world_id.as_str());
+        if path != expected_path {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "latest commit head index filename/world mismatch: {}",
+                    path.display()
+                ),
+            });
+        }
+
+        // Validate the existing index before considering promotion. A corrupt
+        // current index must never be hidden by a newer candidate.
+        load_indexed_latest_commit_message(root_dir, index.world_id.as_str(), &index)?;
+        if newest_metadata_height <= index.height {
+            continue;
+        }
+
+        // Roots are normally one-world, but shared test/maintenance roots can
+        // contain other worlds. A newer filename belonging to another world is
+        // not evidence against this world's current head.
+        let Some(candidate) = load_commit_message_from_root(
+            root_dir,
+            index.world_id.as_str(),
+            newest_metadata_height,
+        )?
+        else {
+            continue;
+        };
+        let next_index = latest_commit_head_index_for_message(newest_metadata_height, &candidate)?;
+        load_indexed_latest_commit_message(root_dir, index.world_id.as_str(), &next_index)?;
+        write_latest_commit_head_index_to_root(root_dir, &next_index)?;
+    }
+    Ok(())
+}
+
+fn latest_commit_head_index_path_for_world(root_dir: &Path, world_id: &str) -> PathBuf {
+    latest_commit_head_index_directory_from_root(root_dir)
+        .join(format!("{}.json", blake3_hex(world_id.as_bytes())))
+}
+
+fn load_index_from_path(path: &Path) -> Result<LatestCommitHeadIndex, NodeError> {
+    let bytes = fs::read(path).map_err(|err| NodeError::Replication {
+        reason: format!(
+            "read latest commit head index {} failed: {err}",
+            path.display()
+        ),
+    })?;
+    let index = serde_json::from_slice::<LatestCommitHeadIndex>(&bytes).map_err(|err| {
+        NodeError::Replication {
+            reason: format!(
+                "parse latest commit head index {} failed: {err}",
+                path.display()
+            ),
+        }
+    })?;
+    if index.schema != 1
+        || index.world_id.is_empty()
+        || index.height == 0
+        || index.record_content_hash.is_empty()
+        || index.message_hash.is_empty()
+    {
+        return Err(NodeError::Replication {
+            reason: format!("invalid latest commit head index: {}", path.display()),
+        });
+    }
+    Ok(index)
 }
 
 fn load_indexed_latest_commit_message(
