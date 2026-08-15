@@ -73,6 +73,48 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供第二 Viewer 跳转，也不再承担退役视觉专项工具职责。
 
+### Terminal shell target versus current operation
+- 终端 shell 的 Player/Director、`World / Targets / Command`、Search/Quote、
+  Action Receipt 与 pending World Feed 目标契约，以
+  `viewer-gameplay-release-experience-overhaul.prd.md` 为准；本手册不把目标路线写成
+  已发货能力。
+- 当前操作仍以现有页面为准：Targets 使用 `#entity-search` 过滤/导航，Command/Chat
+  通过当前 contextual surface 进入，Recent Events/Feedback 仍按现名显示。Focus/
+  right-panel hooks 是实现基线/债务，不是用户可选择的第二产品模式。
+- World Feed 的未来 anchor 为 `#viewer-world-feed`，在 Viewer 实现与 QA 验收前不得
+  作为可操作入口或 Action Receipt 替代；queued/accepted 也不等于完成。
+
+### Terminal shell target playbook (future implementation)
+This section is a handoff for the later Viewer slice, not a statement that the
+target shell is currently available.
+
+1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
+   Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
+   Command` route.
+2. Search remains inside Targets and only filters the authoritative visible list.
+   Selecting a target recenters/highlights and opens context; it never executes.
+   Quote is reached from contextual Command, not a peer rail item.
+3. Action Receipt is the only player-causality surface. `accepted`/`queued` is
+   waiting, not completion; no receipt is shown explicitly as `No action receipt yet`.
+4. World Feed is a future `world_feed/v1` ambient projection. Its identity/dedup key
+   is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and a nullable
+   `receipt_ref` is valid only when runtime supplies explicit causal identity.
+5. Director is a capability-gated secondary Diagnostics/operator action, ephemeral to
+   the tab. Invalid/stale/revoked/unauthorized entry returns to Player, sanitizes
+   Director surfaces, preserves world/selection, and explains recovery.
+6. Escape closes the local surface/drawer first, then Focus; while IME composition
+   is active it must not close the Viewer surface. Closing returns focus to the invoker.
+7. Target Director controls use `#viewer-director-entry` and `#viewer-director-exit`;
+   they are future source anchors, not current operator commands. Fresh load, reload,
+   and new tab remain Player; denied/stale/revoked capability fails closed to Player.
+
+### Target QA evidence checklist
+The implementation owner must supply headed evidence for desktop and 390x844 mobile
+shell hierarchy, Director allowed/denied/stale/revoked entry, duplicate-ID/anchor
+checks, keyboard/IME/Escape focus return, receipt states, feed loading/empty/replay/
+gap/unavailable/reorg recovery, and English/Chinese long-text overflow. This manual
+does not fabricate screenshots or convert the target into current capability.
+
 ### 当前 Agent Chat 与高级 Prompt 设置
 
 - Chat 和 Prompt 控制只对当前账号已绑定/权威认领且当前可控制的 Agent 开放；选中共享世界中的其他 Agent 不会授予控制权。无可控制 Agent 时，页面保持 blocked，并引导先认领 Agent 或等待 binding sync。

@@ -6,7 +6,7 @@
   - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md`
-- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文继续拥有 HUD/DTO、renderer 信息架构、测试与历史实现证据。
+- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文拥有 PixelWorld 的 HUD/DTO、renderer 信息架构与验证映射，不替代终端 shell PRD。
 
 审计轮次: 1
 
@@ -48,9 +48,14 @@
 ## 4. Technical Specifications
 
 ## 接口 / 数据
-- 输入：现有 `WorldSnapshot.player_gameplay`、`model.agents`、`model.locations`、fragment blocks 与 recent events。
+- 输入：现有 `WorldSnapshot.player_gameplay`、`model.agents`、`model.locations`、
+  fragment blocks；Action Receipt 使用 `player_gameplay.recent_feedback` 等权威因果
+  字段。未来 World Feed 则单独使用 runtime 持久化 `WorldEvent` journal 的有序投影；
+  当前 `state.recentEvents` 只是非契约 ambient preview，二者不得混用。
 - 输出：Pixel-world host render state 新增 `commercial_surface`；WASM bridge 继续消费原有 `world_bounds / fragment_terrain / locations / agents / links / visual_hotspots / selection`。
-- 兼容：没有 gameplay summary 时，HUD 使用 agents/routes/fragments 的静态世界读数，不阻断 renderer mount/update。
+- 兼容：没有 gameplay summary 时，仅 `world_read`/ambient diagnostics 可以显示
+  agents/routes/fragments 的静态世界读数以避免阻断 renderer mount/update；不得由这些
+  计数合成 objective、next action、player leverage、blocker、Action Receipt 或玩家进度。
 
 ### 4.1 Commercial Surface DTO
 - `objective`: 当前目标标题与描述。
@@ -59,6 +64,57 @@
 - `player_leverage`: execution state、accepted intent summary、world change/effect detail。
 - `blocker`: blocker label/detail。
 - `world_read`: agents/routes/fragments/hotspots 的可扫描计数。
+
+### 4.1.1 Action Receipt DTO/state mapping
+`commercial_surface.action_receipt` is the only player-causality projection. It is
+derived from the authoritative runtime `player_gameplay.recent_feedback`,
+`execution_state`, `causality_kind/detail`, `last_world_change`, and the local
+gameplay-action feedback only while awaiting the runtime projection:
+
+| DTO field | Source mapping | Player meaning |
+| --- | --- | --- |
+| `present`, `state`, `confidence` | feedback presence + `stage`/`execution_state` | whether a causal receipt exists; no receipt is explicit |
+| `title`, `summary`, `detail` | `action`, `effect`, `reason`, `hint`, `last_world_change` | what was attempted, changed, blocked, or what to do next |
+| `target_agent_id`, `effect_kind` | intent/action target, `causality_kind` | selected causal subject and effect class |
+| `delta_logical_time`, `delta_event_seq` | `recent_feedback.delta_*` | committed world evidence, not a forecast |
+
+`accepted/submitted/queued/ack` are pending and must not render completion;
+`completed_advanced` is progress, while `completed_no_progress` remains a
+no-progress/blocker result. `blocked` and `rejected` retain their reason and
+recovery path. When no authoritative feedback exists, render
+`No action receipt yet`; do not promote Recent Events/World Feed into a receipt.
+
+### 4.1.2 World Feed pending contract
+World Feed is a future Viewer projection owned by `viewer_engineer`, sourced from
+the ordered persisted runtime `WorldEvent` journal projection confirmed by
+`runtime_engineer`. Current `state.recentEvents` is only a non-contract ambient
+preview; `player_gameplay.recent_feedback` remains the causal Action Receipt
+source. Current Recent Events/Feedback keep their names and are not silently renamed.
+Reserve future anchor `#viewer-world-feed` only when implemented. Acceptance:
+ambient events are visually separate from receipts; pending stages never imply
+success; empty/loading/unavailable states explain cause and next step; desktop,
+mobile, keyboard, CJK and long labels remain readable without overflow.
+
+### 4.1.3 World Feed v1 additive schema (pending)
+The schema is a Viewer/runtime handoff only; no field below is a claim about the
+current snapshot or current page implementation.
+
+| Field | Required contract |
+| --- | --- |
+| `schema_version` | literal `world_feed/v1`; unknown versions fail closed to unavailable |
+| `world_id` | canonical world identity and cursor scope |
+| `reorg_epoch` | history epoch; epoch changes invalidate prior cursor |
+| `cursor` | opaque resume token bound to world/epoch and last `event_seq` |
+| `events[]` | ascending source order; dedup key `(world_id,reorg_epoch,event_seq)` |
+| `event_seq` | monotonic within the world/epoch |
+| `kind`, `summary`, `detail` | ambient presentation fields; never causal proof |
+| `receipt_ref` | nullable only when runtime supplies explicit causal identity; never infer from time/text/delta |
+| `status` | `loading`, `ready`, `empty`, `replay`, `gap`, `unavailable` |
+
+On gap/reorg, the consumer must perform cursor-aware recovery and snapshot reload;
+it must not silently splice events. `accepted`, `submitted`, `queued`, and `ack`
+remain pending in the receipt contract. The World Feed never replaces
+`commercial_surface.action_receipt`.
 
 ### 4.2 UI Layering
 - Stage summary: `World Command Board` / `世界指挥棋盘`。
@@ -84,6 +140,17 @@
 - 当前数据里设施/生产线语义不足，第一期只能用 gameplay summary 和 agent-location routes 表达商业闭环。
 - HUD 如果继续堆 renderer badges，会退回 debug dashboard；本轮通过默认折叠诊断控制。
 - 后续若要展示设施、生产、库存流，需要另开 runtime/viewer 协议扩展任务。
+
+### Terminal implementation slices and evidence
+PixelWorld participates in slices 3 (console/receipt), 5 (separate World Feed), and
+6 (headed QA) of the terminal handoff. Its focused acceptance evidence is:
+
+| Check | Expected evidence | Not satisfied by |
+| --- | --- | --- |
+| board/HUD | objective, next move, leverage remain readable above terrain/diagnostics | ambient counts or a mock screenshot |
+| receipt | no-receipt, queued, advanced, no-progress, blocked states map to authoritative fields | Recent Events text |
+| feed | v1 order, dedup, cursor, gap/reorg reload, distinct loading/empty/unavailable | local time sorting or text matching |
+| responsive | desktop + 390x844, keyboard, CJK/long text, no overflow | unit/DOM structure alone |
 
 ## 6. Acceptance Criteria
 - AC-1: `buildPixelWorldRenderState` 返回 `commercial_surface`，并可在无 runtime 协议扩展时从现有 snapshot 派生。

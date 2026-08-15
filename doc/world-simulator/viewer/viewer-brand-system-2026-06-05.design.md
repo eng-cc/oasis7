@@ -44,7 +44,15 @@ Every Viewer first screen must answer:
 If a screenshot cannot answer these, the brand system has failed even when the
 colors are correct.
 
-### 2.3 Voice and Labels
+### 2.3 Terminal shell brand summary
+The paired [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gameplay-release-experience-overhaul.prd.md)
+is the single terminal shell authority. The brand contribution is visual: keep
+the world board first, use a quiet dock and on-demand console, keep command and
+Action Receipt legible, and demote diagnostics. World Feed is pending and must
+remain visually distinct from causality when implemented. Current focus/right-
+panel hooks and `#entity-search` are implementation references, not brand modes.
+
+### 2.4 Voice and Labels
 Player-facing copy uses action verbs and concrete state. Diagnostics may use
 technical labels, but they must be visually demoted and grouped under explicit
 diagnostic surfaces.
@@ -55,6 +63,37 @@ Preferred label forms:
 - `Action Receipt`, not `Latest Event`.
 - `Renderer Unavailable`, not silent degradation.
 - `position=location_derived`, not hidden inferred coordinate.
+
+### 2.5 Bilingual terminal copy matrix (target)
+The matrix fixes short, action-oriented labels for both locales. It is a visual
+copy contract, not proof that the labels are currently shipped.
+
+| Surface/state | English | 简体中文 | Usage rule |
+| --- | --- | --- | --- |
+| primary rail | `World` / `Targets` / `Command` | `世界` / `目标` / `指令` | keep as three primary routes |
+| secondary rail | `More` / `Diagnostics` | `更多` / `诊断` | Diagnostics stays secondary |
+| target filter | `Search targets` | `搜索目标` | filters current Targets only; never executes |
+| objective | `Objective` | `当前目标` | one concise goal line |
+| next action | `Next Move` | `下一步` | route to Command; do not promise execution |
+| leverage | `Player Leverage` | `玩家杠杆` | only authoritative projection |
+| selection | `Selected` / `Current Target` | `已选中` / `当前目标` | selection recenters/highlights only |
+| command surface | `Command` / `Context` | `指令` / `上下文` | command/chat before details |
+| quote | `Quote` | `报价` | contextual Command route, not a rail item |
+| receipt | `Action Receipt` | `行动回执` | sole player-causality surface |
+| no receipt | `No action receipt yet` | `尚无行动回执` | explicit, muted, never omitted |
+| pending | `Waiting for world confirmation` | `等待世界确认` | accepted/queued is not completion |
+| completed | `Completed` | `已完成` | only with authoritative receipt |
+| no progress | `Completed with no progress` | `已完成但没有推进` | keep blocker/recovery visible |
+| blocked | `Blocked` / `Reason` / `Next` | `受阻` / `原因` / `下一步` | reason and recovery together |
+| world feed | `World Feed` | `世界动态` | ambient context; never replaces receipt |
+| feed loading/empty | `Loading world feed` / `No world events yet` | `正在加载世界动态` / `暂无世界事件` | distinct loading and empty states |
+| feed recovery | `Replay required` / `World feed unavailable` | `需要重放` / `世界动态不可用` | gap/reorg/unavailable copy is explicit |
+| director entry | `Open operator diagnostics` | `打开操作员诊断` | capability-gated, ephemeral secondary action |
+| director recovery | `Return to Player` / `Diagnostics access unavailable` | `返回玩家模式` / `诊断权限不可用` | fail closed and explain recovery |
+| renderer | `Renderer Unavailable` | `渲染器不可用` | visible near affected board |
+
+Copy must wrap before shrinking the board, preserve visible text equivalents for
+icons, and avoid raw enum/state identifiers in Player-facing surfaces.
 
 ## 3. Token Taxonomy
 Tokens are semantic roles. Implementation variables may alias existing CSS
@@ -188,6 +227,15 @@ Blocking findings:
 - derived position without source label;
 - color-only critical state;
 - focusable product control with no visible focus style.
+
+### 6.1 Terminal acceptance rows
+| Row | Target state | Desktop/mobile and input | Acceptance evidence |
+| --- | --- | --- | --- |
+| terminal shell | Player first load | desktop + 390x844 | stage/HUD/board/receipt hierarchy screenshot |
+| Director boundary | allowed and denied/stale/revoked | fresh tab/reload | sanitized fail-closed state; no persistence |
+| focus contract | console, drawer, Focus presentation | keyboard + IME | Escape priority and invoker focus return |
+| feed contract | loading, empty, replay, gap, unavailable, reorg | desktop/mobile | distinct copy, cursor recovery, no receipt inference |
+| bilingual density | matrix labels + long text | `locale=en|zh` | no clipping/overflow and readable primary actions |
 
 ## 7. Current Implementation Hooks
 Current implementation anchors for this brand system:

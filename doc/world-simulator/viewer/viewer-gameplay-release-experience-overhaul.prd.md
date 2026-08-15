@@ -16,9 +16,63 @@
 - 提升新玩家可上手性：进入后快速知道“当前目标”和“下一步动作”。
 - 增强情绪反馈：关键事件必须有可感知的视觉/文本反馈。
 
+## 1.1 Terminal Viewer Authority (2026-08-14)
+本节是 Viewer-domain 的终端 shell 目标 authority；上游产品语义仍以
+[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)
+为准。本节描述目标契约，不声称 Player shell、World Feed 或 Director 路径已经发货。
+
+- **Player shell（默认）**：全舞台世界棋盘、紧凑且只读的权威 HUD、低存在感
+  的边缘 dock，以及按需打开的 contextual console。世界是首屏最大视觉主体。
+- **Director（显式选择）**：仅供操作员/调试使用的模式，可保留密集的三列工具，
+  但只改变可见性和工具密度，不改变玩法语义、进度或回执因果。
+- **Dock 路由**：`World / Targets / Command` 是主路径；`Search` 是 Targets
+  dock 内的 `#entity-search` 兼容过滤能力，`Diagnostics` 为次级路径。
+  Search 只过滤当前权威列表中的可见目标，不执行动作，也不声称提供独立快照查询。
+  选择对象只负责居中、高亮并打开上下文，不能直接执行动作。
+- **Contextual console**：打开后的顺序固定为 primary command/chat、selected
+  context、gameplay details、diagnostics/raw state。它是按需展开的行动/解释层，
+  不是常驻的监控面板。
+- **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed 是待实现
+  的环境上下文投影，不能暗示玩家成功，也不能替代缺失的 receipt。HUD 只能格式化
+  权威的 commercial/runtime projection，不得合成进度、指标、阻塞、receipt 或动作可行性。
+- **跨屏与可访问性**：桌面、平板、移动端保持同一概念路径；键盘焦点、关闭/
+  `Escape`、CJK 和长文本必须可读且无横向溢出。空、不可用和加载状态必须诚实地
+  给出原因与下一步。
+
+### Staged implementation boundary
+1. 先统一 Player shell、dock、console、HUD、receipt/feed 的文档契约与稳定锚点。
+2. 再由 `viewer_engineer` 在不新增协议字段的前提下收敛默认可见性和响应式布局。
+3. 最后由 `qa_engineer` 以真实桌面/移动截图、键盘/长文本和空/不可用状态验证；本
+   PRD 不把文档决定当作运行时或发行放行证明。
+
+### Current implementation boundary
+- 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
+  为实现入口；它们是实现基线/债务，不是另一个产品模式。
+- 当前反馈投影是 `player_gameplay.recent_feedback`、本地 gameplay feedback、
+  `last_world_change` 与页面的 Recent Events/Feedback；这些尚未形成已发货的
+  `World Feed` DTO、owner、稳定 anchor 或验收合同。
+- Quote 是 Command/Console 的上下文只读/行动路线，不是与 World/Targets/Command
+  并列的 dock route。任何 rail 暴露均属于实现债务，不能写成终端 IA。
+
+### Director entry and failure contract (target)
+- 每次 fresh load、reload、new tab 或新 session 都进入 Player；Director 不是可持久化
+  的偏好，也不是另一个默认入口。
+- Director 只能从 Player 的次级 `Diagnostics`/operator action 显式触发，并且必须通过
+  capability gate。目标 source anchor 固定为 `#viewer-director-entry`，退出 anchor
+  固定为 `#viewer-director-exit`；只有 source JSX 与测试落地后才可声明它们存在。
+  授权结果只改变可见性和工具密度，不改变 command、auth、ownership、
+  runtime、world progress 或 receipt 因果。
+- capability 缺失、entry 过期、被撤销、未授权或状态不再匹配时，入口 fail closed 回到
+  Player；Director surfaces 必须被清理，world/selection 保持不变，并说明恢复动作。
+- 该合同是文档目标，不声称当前页面已有 Director mode、持久化 token 或 operator
+  surface；实现与权限验证属于后续 `viewer_engineer`/runtime/QA slices。
+
 ## 2. User Experience & Functionality
+以下条目均为终态实现目标，不是当前页面已发货能力或验收结论：
+
 - 修改 `crates/oasis7_viewer` 的默认 UI 行为与展示优先级。
-- 引入面向玩家的体验模式（Player）与保留调试能力的模式（Director）。
+- 将 world-first Player shell 作为唯一默认入口，并提供 capability-gated Director
+  可见性边界。
 - 优化默认模块可见性、默认面板状态、入口可发现性、基础提示层。
 - 在不改协议字段的前提下，重排现有状态信息在 UI 中的展示方式。
 
@@ -32,62 +86,138 @@
 
 ## 4. Technical Specifications
 
-### 环境变量与模式解析
-- 新增环境变量：`OASIS7_VIEWER_EXPERIENCE_MODE`
-  - `player`：默认玩家模式（世界优先、面板默认隐藏）。
-  - `director`：导演/调试模式（保持现有可观测能力）。
-- 未设置或非法值时，默认 `player`。
-
-### 运行时资源
-- 新增资源：`ViewerExperienceMode`（Player/Director）。
-- 新增启动策略：按模式覆盖以下默认状态。
-  - `RightPanelLayoutState`（是否默认隐藏面板、顶部折叠）。
-  - `RightPanelModuleVisibilityState`（默认模块集合）。
+### 实现映射（目标，不是现有协议声明）
+- 不新增 runtime snapshot 或网络协议字段；Viewer 只格式化现有权威 projection。
+- Player/Director 是目标可见性语义，不要求当前运行时存在同名 mode resource/env。
+- 既有 focus/right-panel 状态和 generated Web hooks 可作为迁移实现，但不能被文档
+  当作已收敛的终端产品边界。
 
 ### UI 结构约束
 - Player 模式默认：
-  - 右侧主面板隐藏。
-  - 保留单点“打开面板”入口。
-  - 打开后仅显示轻量模块（总览优先，技术模块按需展开）。
-- Director 模式默认：
-  - 保持现有调试导向行为。
+  - 世界舞台占据首屏，HUD 保持紧凑且只读。
+  - 边缘 dock 保留单点入口，主路径为 `World / Targets / Command`，
+    Targets 内的 Search 与次级 `Diagnostics` 按需打开。
+  - contextual console 打开后按 primary command/chat、selected context、
+    gameplay details、diagnostics/raw state 排列。
+- Director 模式（显式选择）：
+  - 仅在显式选择后进入，允许密集工具视图；不改变玩法语义或进度。
+
+### 因果、数据与反馈约束
+- HUD 的目标、下一步、阻塞、进度和指标必须来自权威 commercial/runtime
+  projection；UI 只能格式化，不得从 ambient activity 推断玩家进展。
+- `Action Receipt` 必须表达 action、result、reason、next；没有 receipt 时显示
+  明确的 `No action receipt yet`，不得用 World Feed 冒充。
+- World Feed（pending）可以呈现环境变化和最近上下文，但不能宣称玩家动作已成功。
+- Search、Targets 和选择态都是导航/定位能力；它们不会执行动作，执行只发生在
+  contextual console 的已授权 command/chat 路径。
+- Receipt 的最小映射为 `action`, `stage/state`, `effect`, `reason`, `hint/next`,
+  `delta_logical_time`, `delta_event_seq`；`accepted/submitted/queued/ack` 只能
+  呈现等待后续 world delta，`completed_advanced` 才能表达推进，`completed_no_progress`
+  仍是无进展阻塞语义。
+
+### World Feed（pending implementation contract）
+- **Owner**：`viewer_engineer` 负责 Viewer projection/anchor；`runtime_engineer`
+  负责确认 recent-event source；`qa_engineer` 负责验收，不在本 PRD 中替代它们。
+- **Source**：未来从 canonical recent-event projection（当前输入为
+  runtime 持久化 `WorldEvent` journal 的有序投影）映射。当前页面的
+  `state.recentEvents` 只能视为非契约 ambient preview；
+  `player_gameplay.recent_feedback` 专属于 Action Receipt 因果投影，不是 Feed
+  source。在 DTO 与 source 冻结前，当前 Recent Events/Feedback 仍按现名显示。
+- **Future anchor**：`#viewer-world-feed`，仅在实现落地后启用；不得把当前页面元素
+  伪装成该 anchor。
+- **Acceptance**：环境上下文与 Action Receipt 分离；queued/accepted 不显示成功；
+  无事件、加载、不可用状态说明原因与下一步；桌面/移动/键盘/CJK/长文本无溢出。
+
+#### World Feed v1 additive envelope (pending runtime/viewer contract)
+The feed is an additive projection named `world_feed/v1`; it does not rename the
+current Recent Events/Feedback fields until its separate Viewer/runtime slice ships.
+
+| Field | Contract | Player-facing rule |
+| --- | --- | --- |
+| `schema_version` | literal `world_feed/v1` | unknown versions render unavailable, never guessed |
+| `world_id` | canonical world identity | part of event identity and cursor scope |
+| `reorg_epoch` | monotonically versioned world-history epoch | epoch changes invalidate the prior cursor |
+| `cursor` | opaque resume position carrying `world_id`, `reorg_epoch`, and last `event_seq` | request/replay recovery is cursor-aware; no wall-clock seek |
+| `events[]` | source-ordered event projections | ascending `event_seq`; duplicate identity is dropped |
+| `event_seq` | monotonic sequence within `(world_id, reorg_epoch)` | identity key is `(world_id,reorg_epoch,event_seq)` |
+| `kind`, `summary`, `detail` | canonical event presentation fields | ambient context only; text cannot create causality |
+| `receipt_ref` | nullable explicit runtime causal identity (the player-facing receipt link) | only render when runtime supplies the reference; never infer from time/text/delta |
+| `status` | `loading`, `ready`, `empty`, `replay`, `gap`, or `unavailable` | each state has distinct copy and recovery route |
+
+`gap` or `reorg` responses require cursor-aware recovery and snapshot reload; they
+must not be rendered as a contiguous event stream. `loading`, `empty`, `replay`, and
+`unavailable` remain distinct, and `accepted`/`queued` feed entries never imply a
+completed action. Action Receipt remains the sole player-causality surface.
 
 ### 可发现性增强
 - 为关键入口增加显式提示文案（例如：快捷键提示、模式提示）。
 - 不依赖用户阅读手册即可发现“如何打开面板”和“如何聚焦对象”。
 
 ## 5. Risks & Roadmap
-- [x] M1：文档与任务拆解完成（设计文档 + GitHub Issue/Project task truth）。
-- [x] M2：体验模式框架落地（资源、环境变量、默认策略切换）。
-- [x] M3：Player 模式默认降噪落地（默认隐藏面板 + 轻量默认模块）。
-- [x] M4：入口可发现性与基础提示完成（面板入口提示、模式提示）。
-- [x] M5：测试回归、项目文档状态回写、devlog 收口。
+- M1（目标）：冻结 shell/dock/console/HUD/receipt/feed 文档契约和稳定锚点。
+- M2（目标）：Viewer 在既有 projection 上收敛 Player 默认可见性与响应式布局。
+- M3（目标）：真实桌面/移动/键盘/空态截图与语义测试完成；未完成前不宣称发行放行。
 
-## 验收指标
+### Ordered implementation slices (handoff)
+The following order is frozen for implementation planning; each slice must preserve
+the target/current boundary above and may not hand-author generated artifacts.
+
+| Order | Slice | Owner handoff | Exit evidence |
+| --- | --- | --- | --- |
+| 1 | Stable anchors and duplicate-ID tests | `viewer_engineer` | source JSX anchors, compatibility assertions, no generated-file edits |
+| 2 | Player shell layout and sticky rail | `viewer_engineer` + visual review | desktop/mobile IA screenshots and route smoke |
+| 3 | Contextual console and Action Receipt | `viewer_engineer` + `runtime_engineer` | command/receipt states; queued != complete; no-receipt state |
+| 4 | Focus, keyboard, IME, Escape and a11y | `viewer_engineer` + `qa_engineer` | focus-return, Escape priority, CJK/long-text/no-overflow evidence |
+| 5 | Separate World Feed v1 projection | `runtime_engineer` + `viewer_engineer` | schema/source/order/dedup/cursor/reorg evidence and receipt-link tests |
+| 6 | Headed desktop/mobile QA | `qa_engineer` | fresh screenshots, DOM/keyboard smoke, explicit residual-risk verdict |
+
+### Terminal shell QA evidence matrix (target gate)
+No row below is evidence that the target has shipped; it is the minimum evidence
+required after the corresponding implementation slice.
+
+| ID | Surface/state | Viewports/input | Required proof | Owner |
+| --- | --- | --- | --- | --- |
+| IA-01 | Player default | desktop 1280px+ | stage/HUD/board/receipt dominate; quiet dock; no three-column default | viewer + visual |
+| IA-02 | sticky rail | 390x844 and tablet | `World / Targets / Command`; Search nested in Targets; More contains Diagnostics | viewer + visual |
+| DIR-01 | Director allowed | fresh Player -> explicit Diagnostics action | capability-gated, ephemeral, visibility/density only, world/selection preserved | producer + viewer |
+| DIR-02 | Director denied/stale/revoked | reload/new tab + denied entry | fail closed to Player, sanitized surfaces, recovery copy, no persistence | viewer + QA |
+| FOC-01 | drawers/console/focus | keyboard + screen reader semantics | local surface closes before Focus; invoker receives focus | viewer + QA |
+| FOC-02 | IME composition | CJK input | Escape does not cancel composition or close surface prematurely | viewer + QA |
+| REC-01 | receipt states | accepted/queued, advanced, no-progress, blocked | Action Receipt alone expresses causality; no ambient success | runtime + viewer + QA |
+| FED-01 | feed states | loading/empty/replay/gap/unavailable/reorg | schema/order/cursor/dedup and snapshot-reload recovery are distinct | runtime + viewer + QA |
+| TXT-01 | copy and density | `locale=en`, `locale=zh`, long labels | matrix copy fits, wraps, and has no horizontal overflow | visual + QA |
+
+## 目标验收指标（实现后）
+以下指标必须由后续 Viewer/runtime 实现与本页 terminal QA matrix 的真实证据证明；
+本次文档 slice 不把它们报告为当前已通过：
+
 - 默认启动时，世界画面可视占比显著提升（右侧大面板不再常驻）。
 - 新用户无需文档可在首屏找到“打开面板”入口。
 - Player 模式下首屏技术模块数量明显减少。
 - Director 模式仍可访问原有调试能力。
 
-### Technical Risks
+### 目标实现风险
 - 默认隐藏面板可能导致“信息不可见”感受上升。
   - 对策：提供显式入口按钮与清晰提示文案。
-- 双模式并行可能引入状态分歧。
-  - 对策：模式策略仅影响“默认值”，运行时状态保持统一数据结构。
+- Director 可见性边界可能引入状态分歧。
+  - 对策：Director 仅改变当前 tab 的工具密度与可见性；Player 始终是 fresh-load
+    默认，运行时状态保持统一权威数据结构。
 - 旧测试可能绑定既有默认 UI 行为。
   - 对策：补充模式相关测试并更新默认行为断言。
 
 ## 当前结论
-- 默认体验已切换至 `Player`：右侧面板默认隐藏，首屏世界视图占比显著提高。
-- 已保留 `Director` 路径：通过 `OASIS7_VIEWER_EXPERIENCE_MODE=director` 可回到调试导向默认值。
-- Web 闭环 smoke 已验证：
-  - `window.__AW_TEST__` 可用；
-  - `connectionStatus=connected`；
-  - `canvasCount=1`；
-  - console 无 error（仅浏览器 warning）。
+- **目标**：Player shell 默认、Director 显式 opt-in、Search 属于 Targets、Quote 属于
+  Command/Console、Action Receipt 与 pending World Feed 分离。
+- **当前**：实现仍保留 focus/right-panel hooks、`#entity-search` 过滤和 Recent
+  Events/Feedback；这些不构成终端 shell 已发货证明。
+- 真实浏览器、移动/键盘/长文本和空/不可用状态验证属于后续 Viewer/QA slice；本 PRD
+  不承载旧的完成态或 Web smoke 结论。
 
 ## Phase 8~10 增量记录（ROUND-002 物理合并）
-- 原阶段文档已合并并删除，以下记录用于追溯。
+- 原阶段文档已合并并删除，以下段落仅为历史实施证据摘要，不是当前运行时、
+  shell、mode/env、layout、receipt 或发行状态 authority。当前真值只读本文
+  `Terminal Viewer Authority`、`Current implementation boundary` 与 GitHub task
+  evidence；其中的旧状态名和截图/测试记录不得外推为已发货终端契约。
 
 ### Phase 8：信息分层减负与焦点收敛
 
@@ -115,7 +245,7 @@
 
 ##### 复用状态
 - `PlayerOnboardingState`：用于判定当前步骤是否仍需展示新手引导。
-- `RightPanelLayoutState`：用于判定面板隐藏/展开，并驱动 HUD 密度切换。
+- 历史实现状态 `RightPanelLayoutState`：曾用于判定面板隐藏/展开并驱动 HUD 密度；不属于当前 authority。
 - `PlayerGuideProgressSnapshot` 与 `PlayerGuideStep`：用于任务目标与引导步骤一致化。
 
 ##### 新增/调整行为
@@ -186,8 +316,8 @@
 #### 4. Technical Specifications
 
 ##### 复用状态
-- `RightPanelLayoutState`：决定面板隐藏/展开状态，驱动“布局预设条显隐”和“任务 HUD 指挥动作”显隐。
-- `RightPanelModuleVisibilityState`：用于应用 Command 预设时切换 Chat/Timeline/Details 可见性。
+- 历史实现状态 `RightPanelLayoutState`：曾决定面板隐藏/展开和布局预设条显隐；不属于当前 authority。
+- 历史实现状态 `RightPanelModuleVisibilityState`：曾切换 Chat/Timeline/Details 可见性；不属于当前 authority。
 - `PlayerGuideStep` 与 `PlayerGuideProgressSnapshot`：维持任务目标与动作按钮的语义一致性。
 
 ##### 新增/调整行为
@@ -261,7 +391,7 @@
 
 ##### 复用状态
 - `ViewerState.events`：用于判定是否出现“执行反馈”。
-- `RightPanelLayoutState`：用于隐藏态/展开态的引导层级策略。
+- 历史实现状态 `RightPanelLayoutState`：曾用于隐藏态/展开态引导层级；不属于当前 authority。
 - `PlayerGuideStep` / `PlayerGuideProgressSnapshot`：维持教程步骤与任务 HUD 一致性。
 
 ##### 新增/调整行为
