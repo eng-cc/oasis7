@@ -7,6 +7,10 @@ use oasis7_proto::storage_cold_index::{
 };
 use std::path::PathBuf;
 
+#[cfg(unix)]
+#[path = "latest_head_tests.rs"]
+mod latest_head_tests;
+
 fn temp_dir(prefix: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)

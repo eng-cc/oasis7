@@ -4,7 +4,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use oasis7_distfs::{FileStore as _, LocalCasStore};
+use oasis7_distfs::{FileStore as _, LocalCasStore, blake3_hex};
 use oasis7_proto::storage_cold_index::{
     STORAGE_COLD_INDEX_KEY_KIND_HEIGHT, STORAGE_COLD_INDEX_MANIFEST_FILE,
     STORAGE_COLD_INDEX_SEGMENTS_DIR, STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
@@ -21,6 +21,98 @@ use super::{GossipReplicationMessage, ReplicatedCommitPayload};
 const COMMIT_MESSAGE_PACK_HEIGHT_SPAN: u64 = 256;
 const COMMIT_MESSAGE_PACK_ENTRY_LEN_BYTES: u64 = 8;
 const MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES: u64 = 256 * 1024;
+const LATEST_COMMIT_HEAD_INDEX_SCHEMA: u8 = 1;
+const LATEST_COMMIT_HEAD_INDEX_DIR: &str = "replication_commit_heads";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct LatestCommitHeadIndex {
+    pub(super) schema: u8,
+    pub(super) world_id: String,
+    pub(super) height: u64,
+    pub(super) record_content_hash: String,
+    pub(super) message_hash: String,
+}
+
+impl Default for LatestCommitHeadIndex {
+    fn default() -> Self {
+        Self {
+            schema: 0,
+            world_id: String::new(),
+            height: 0,
+            record_content_hash: String::new(),
+            message_hash: String::new(),
+        }
+    }
+}
+
+pub(super) fn latest_commit_head_index_path_from_root(root_dir: &Path, world_id: &str) -> PathBuf {
+    latest_commit_head_index_directory_from_root(root_dir)
+        .join(format!("{}.json", blake3_hex(world_id.as_bytes())))
+}
+
+pub(super) fn latest_commit_head_index_directory_from_root(root_dir: &Path) -> PathBuf {
+    root_dir.join(LATEST_COMMIT_HEAD_INDEX_DIR)
+}
+
+pub(super) fn load_latest_commit_head_index_from_root(
+    root_dir: &Path,
+    world_id: &str,
+) -> Result<Option<LatestCommitHeadIndex>, NodeError> {
+    let path = latest_commit_head_index_path_from_root(root_dir, world_id);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let index = load_json_or_default::<LatestCommitHeadIndex>(path.as_path())?;
+    if index.schema != LATEST_COMMIT_HEAD_INDEX_SCHEMA
+        || index.world_id != world_id
+        || index.height == 0
+        || index.record_content_hash.is_empty()
+        || index.message_hash.is_empty()
+    {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "invalid latest commit head index for world={world_id}: {}",
+                path.display()
+            ),
+        });
+    }
+    Ok(Some(index))
+}
+
+pub(super) fn write_latest_commit_head_index_to_root(
+    root_dir: &Path,
+    index: &LatestCommitHeadIndex,
+) -> Result<(), NodeError> {
+    if index.schema != LATEST_COMMIT_HEAD_INDEX_SCHEMA
+        || index.world_id.is_empty()
+        || index.height == 0
+        || index.record_content_hash.is_empty()
+        || index.message_hash.is_empty()
+    {
+        return Err(NodeError::Replication {
+            reason: "refusing to persist invalid latest commit head index".to_string(),
+        });
+    }
+    write_json_compact(
+        latest_commit_head_index_path_from_root(root_dir, index.world_id.as_str()).as_path(),
+        index,
+    )
+}
+
+pub(super) fn latest_hot_commit_message_height_from_root(
+    root_dir: &Path,
+) -> Result<Option<u64>, NodeError> {
+    Ok(list_hot_commit_message_files(root_dir)?
+        .last()
+        .map(|(height, _)| *height))
+}
+
+pub(super) fn hot_commit_message_heights_from_root(root_dir: &Path) -> Result<Vec<u64>, NodeError> {
+    Ok(list_hot_commit_message_files(root_dir)?
+        .into_iter()
+        .map(|(height, _)| height)
+        .collect())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct CommitMessagePackRef {

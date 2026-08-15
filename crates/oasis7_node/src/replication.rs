@@ -32,6 +32,8 @@ mod checkpoint_lineage_runtime;
 #[path = "replication/checkpoint_probe_receipt.rs"]
 mod checkpoint_probe_receipt;
 mod commit_retention;
+#[path = "replication/latest_head_index.rs"]
+mod latest_head_index;
 #[path = "replication_checkpoint.rs"]
 mod replication_checkpoint;
 #[path = "replication_fetch.rs"]
@@ -40,6 +42,8 @@ mod replication_fetch;
 mod replication_head;
 #[path = "replication_sampling.rs"]
 mod replication_sampling;
+#[path = "replication/runtime_init.rs"]
+mod runtime_init;
 #[path = "replication_support.rs"]
 mod support;
 
@@ -47,6 +51,13 @@ use self::commit_retention::{
     CommitMessageColdEntry, build_commit_message_retention_plan, has_commit_message_cold_index,
     load_commit_message_cold_index_from_root, prune_unreferenced_commit_message_pack_files,
     write_commit_message_cold_index_to_root, write_commit_message_pack_entry,
+};
+use self::latest_head_index::{
+    finalize_latest_commit_head_persist, prepare_latest_commit_head_persist,
+    reconcile_latest_commit_head_indexes,
+};
+pub(crate) use self::latest_head_index::{
+    load_latest_commit_head_index_height_from_root, load_latest_commit_message_from_root,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,
@@ -58,7 +69,7 @@ use self::support::{
 };
 pub(crate) use self::support::{
     load_blob_from_root, load_blob_range_from_root, load_commit_message_from_root,
-    verify_replication_message_signature,
+    load_commit_message_record_from_root, verify_replication_message_signature,
 };
 use crate::replication_checkpoint_lineage::checkpoint_lineage_cache_key;
 pub(crate) use replication_fetch::{
@@ -66,35 +77,6 @@ pub(crate) use replication_fetch::{
 };
 pub(crate) use replication_head::{FetchHeadRequest, FetchHeadResponse, ReplicationHeadSummary};
 
-pub(crate) fn load_latest_commit_message_from_root(
-    root_dir: &Path,
-    world_id: &str,
-    max_hot_commit_messages: usize,
-) -> Result<Option<GossipReplicationMessage>, NodeError> {
-    let hot_height = build_commit_message_retention_plan(root_dir, max_hot_commit_messages)?
-        .hot_window
-        .latest_height
-        .unwrap_or(0);
-    if hot_height > 0 {
-        if let Some(message) = load_commit_message_from_root(root_dir, world_id, hot_height)? {
-            return Ok(Some(message));
-        }
-    }
-    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
-        .by_height
-        .keys()
-        .next_back()
-        .copied()
-        .unwrap_or(0);
-    let mut candidate = hot_height.saturating_sub(1).max(cold_height);
-    while candidate > 0 {
-        if let Some(message) = load_commit_message_from_root(root_dir, world_id, candidate)? {
-            return Ok(Some(message));
-        }
-        candidate -= 1;
-    }
-    Ok(None)
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeReplicationConfig {
     pub root_dir: PathBuf,
@@ -500,44 +482,8 @@ struct FetchBlobRequestSigningPayload<'a> {
 
 impl ReplicationRuntime {
     pub(crate) fn new(config: &NodeReplicationConfig, node_id: &str) -> Result<Self, NodeError> {
-        fs::create_dir_all(&config.root_dir).map_err(|err| NodeError::Replication {
-            reason: format!(
-                "create replication root {} failed: {}",
-                config.root_dir.display(),
-                err
-            ),
-        })?;
-
-        let guard = load_json_or_default::<SingleWriterReplicationGuard>(
-            config.guard_state_path().as_path(),
-        )?;
-        let remote_guards = load_json_or_default::<BTreeMap<String, SingleWriterReplicationGuard>>(
-            config.remote_guard_state_path().as_path(),
-        )?;
-        let signer = config.signing_keypair()?;
-        let mut writer_state =
-            load_json_or_default::<LocalWriterState>(config.writer_state_path(node_id).as_path())?;
-        if writer_state.writer_epoch == 0 {
-            writer_state.writer_epoch = DEFAULT_WRITER_EPOCH;
-        }
-        if writer_state.last_sequence == 0
-            && writer_state.last_replicated_height == 0
-            && writer_state.writer_epoch == DEFAULT_WRITER_EPOCH
-        {
-            writer_state.writer_epoch =
-                seeded_writer_epoch(signer.as_ref().map(|signer| signer.public_key_hex.as_str()));
-        }
-
-        let runtime = Self {
-            config: config.clone(),
-            store: LocalCasStore::new(config.store_root()),
-            guard,
-            remote_guards,
-            writer_state,
-            enforce_signature: config.enforce_signature || signer.is_some(),
-            remote_writer_allowlist: config.remote_writer_allowlist().clone(),
-            signer,
-        };
+        let runtime = Self::from_config(config, node_id)?;
+        reconcile_latest_commit_head_indexes(config.root_dir.as_path())?;
         runtime.reconcile_checkpoint_lineage_retention()?;
         Ok(runtime)
     }
@@ -871,8 +817,21 @@ impl ReplicationRuntime {
         height: u64,
         message: &GossipReplicationMessage,
     ) -> Result<(), NodeError> {
+        let (next_index, current_index) = prepare_latest_commit_head_persist(
+            self.config.root_dir.as_path(),
+            height,
+            message,
+            self.signer
+                .as_ref()
+                .map(|signer| signer.public_key_hex.as_str()),
+        )?;
         write_json_compact(self.config.commit_message_path(height).as_path(), message)?;
-        self.prune_hot_commit_messages()
+        self.prune_hot_commit_messages()?;
+        finalize_latest_commit_head_persist(
+            self.config.root_dir.as_path(),
+            &next_index,
+            current_index.as_ref(),
+        )
     }
 
     fn prune_hot_commit_messages(&self) -> Result<(), NodeError> {
