@@ -17,6 +17,8 @@ Required:
 
 Options:
   --binary <name>           Release binary name to size-check. Defaults to package.
+  --check-only              Measure package closure and cargo check only (for libraries).
+  --no-default-features     Measure the package with Cargo default features disabled.
   --baseline-ref <ref>      Optional git ref/SHA to compare against.
   -h, --help                Show this help.
 
@@ -33,6 +35,8 @@ package_name=""
 binary_name=""
 baseline_ref=""
 out_dir=""
+check_only=false
+no_default_features=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,6 +47,14 @@ while [[ $# -gt 0 ]]; do
     --binary)
       binary_name="${2:-}"
       shift 2
+      ;;
+    --check-only)
+      check_only=true
+      shift
+      ;;
+    --no-default-features)
+      no_default_features=true
+      shift
       ;;
     --baseline-ref)
       baseline_ref="${2:-}"
@@ -70,7 +82,7 @@ if [[ -z "$package_name" || -z "$out_dir" ]]; then
   exit 2
 fi
 
-if [[ -z "$binary_name" ]]; then
+if [[ -z "$binary_name" && "$check_only" != true ]]; then
   binary_name="$package_name"
 fi
 
@@ -175,15 +187,19 @@ measure_checkout() {
   mkdir -p "$check_target" "$release_target" "$cargo_home"
 
   local package_count
+  local tree_args=(cargo tree -p "$package_name")
+  if [[ "$no_default_features" == true ]]; then
+    tree_args+=(--no-default-features)
+  fi
   package_count=$(
     cd "$checkout_path"
-    cargo tree -p "$package_name" --prefix none | sort -u | wc -l | tr -d '[:space:]'
+    "${tree_args[@]}" --prefix none | sort -u | wc -l | tr -d '[:space:]'
   )
 
   local wasmtime_present="false"
   if (
     cd "$checkout_path"
-    cargo tree -p "$package_name" -i wasmtime >/dev/null 2>&1
+    "${tree_args[@]}" -i wasmtime >/dev/null 2>&1
   ); then
     wasmtime_present="true"
   fi
@@ -191,12 +207,16 @@ measure_checkout() {
   local wasm_executor_present="false"
   if (
     cd "$checkout_path"
-    cargo tree -p "$package_name" -i oasis7_wasm_executor >/dev/null 2>&1
+    "${tree_args[@]}" -i oasis7_wasm_executor >/dev/null 2>&1
   ); then
     wasm_executor_present="true"
   fi
 
   local check_seconds
+  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check -p "$package_name")
+  if [[ "$no_default_features" == true ]]; then
+    cargo_check_args+=(--no-default-features)
+  fi
   (
     cd "$checkout_path"
     export CARGO_HOME="$cargo_home"
@@ -208,28 +228,30 @@ measure_checkout() {
       "$check_target" \
       "$cargo_home" \
       "$out_dir/logs/${label}-cargo-check.log" \
-      env -u RUSTC_WRAPPER cargo check -p "$package_name"
+      "${cargo_check_args[@]}"
   )
 
-  local release_seconds
-  release_seconds=$(
-    measure_command_seconds \
-      "$checkout_path" \
-      "$release_target" \
-      "$cargo_home" \
-      "$out_dir/logs/${label}-cargo-build-release.log" \
-      env -u RUSTC_WRAPPER cargo build -p "$package_name" --release --bin "$binary_name"
-  )
+  local release_seconds=""
+  local binary_bytes=""
+  if [[ "$check_only" != true ]]; then
+    release_seconds=$(
+      measure_command_seconds \
+        "$checkout_path" \
+        "$release_target" \
+        "$cargo_home" \
+        "$out_dir/logs/${label}-cargo-build-release.log" \
+        env -u RUSTC_WRAPPER cargo build -p "$package_name" --release --bin "$binary_name"
+    )
 
-  local binary_path
-  binary_path=$(resolve_binary_path "$release_target/release" "$binary_name")
-  local binary_bytes
-  binary_bytes=$(python3 - "$binary_path" <<'PY'
+    local binary_path
+    binary_path=$(resolve_binary_path "$release_target/release" "$binary_name")
+    binary_bytes=$(python3 - "$binary_path" <<'PY'
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).stat().st_size)
 PY
-)
+    )
+  fi
 
   python3 - "$result_path" <<'PY' \
     "$label" \
@@ -241,7 +263,9 @@ PY
     "$wasm_executor_present" \
     "$check_seconds" \
     "$release_seconds" \
-    "$binary_bytes"
+    "$binary_bytes" \
+    "$check_only" \
+    "$no_default_features"
 import json
 import sys
 
@@ -250,13 +274,15 @@ payload = {
     "label": sys.argv[2],
     "checkout_path": sys.argv[3],
     "package": sys.argv[4],
-    "binary": sys.argv[5],
+    "binary": sys.argv[5] or None,
     "package_count": int(sys.argv[6]),
     "wasmtime_present": sys.argv[7] == "true",
     "wasm_executor_present": sys.argv[8] == "true",
     "cargo_check_seconds": float(sys.argv[9]),
-    "cargo_build_release_seconds": float(sys.argv[10]),
-    "release_binary_bytes": int(sys.argv[11]),
+    "cargo_build_release_seconds": float(sys.argv[10]) if sys.argv[10] else None,
+    "release_binary_bytes": int(sys.argv[11]) if sys.argv[11] else None,
+    "check_only": sys.argv[12] == "true",
+    "no_default_features": sys.argv[13] == "true",
 }
 with open(out_path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -346,6 +372,8 @@ if baseline is not None:
     ):
         current_value = current[key]
         baseline_value = baseline[key]
+        if current_value is None or baseline_value is None:
+            continue
         metric_rows.append(
             {
                 "metric": key,
@@ -364,13 +392,18 @@ with comparison_path.open("w", encoding="utf-8") as handle:
 lines: list[str] = []
 lines.append(f"# Compile Metrics: {current['package']}")
 lines.append("")
-lines.append(f"- Binary: `{current['binary']}`")
+if current["binary"] is None:
+    lines.append("- Binary: `not measured (check-only package)`")
+else:
+    lines.append(f"- Binary: `{current['binary']}`")
 lines.append(f"- Current package closure count: `{current['package_count']}`")
 lines.append(f"- Current `wasmtime` present: `{str(current['wasmtime_present']).lower()}`")
 lines.append(f"- Current `oasis7_wasm_executor` present: `{str(current['wasm_executor_present']).lower()}`")
 lines.append(f"- Current cold `cargo check` seconds: `{fmt_num(current['cargo_check_seconds'])}`")
-lines.append(f"- Current cold `cargo build --release` seconds: `{fmt_num(current['cargo_build_release_seconds'])}`")
-lines.append(f"- Current release binary bytes: `{fmt_int(current['release_binary_bytes'])}`")
+if current["cargo_build_release_seconds"] is not None:
+    lines.append(f"- Current cold `cargo build --release` seconds: `{fmt_num(current['cargo_build_release_seconds'])}`")
+if current["release_binary_bytes"] is not None:
+    lines.append(f"- Current release binary bytes: `{fmt_int(current['release_binary_bytes'])}`")
 
 if baseline is None:
     lines.append("")
