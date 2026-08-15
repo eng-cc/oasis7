@@ -29,6 +29,10 @@ const DEFAULT_MAX_PENDING_CONSENSUS_ACTIONS: usize = 4096;
 const DEFAULT_MAX_ENGINE_PENDING_CONSENSUS_ACTIONS: usize = 4096;
 const DEFAULT_MAX_CONSENSUS_ACTION_PAYLOAD_BYTES: usize = 256 * 1024;
 const DEFAULT_MAX_COMMITTED_ACTION_BATCHES: usize = 4096;
+// Keep raw action retention below 96 MiB on the constrained public-testnet
+// hosts while leaving headroom for execution snapshots and allocator peaks.
+const DEFAULT_MAX_PENDING_CONSENSUS_ACTION_QUEUE_BYTES: usize = 64 * 1024 * 1024;
+const DEFAULT_MAX_COMMITTED_ACTION_BATCH_BYTES: usize = 32 * 1024 * 1024;
 const DEFAULT_MAX_DYNAMIC_GOSSIP_PEERS: usize = 1024;
 const DEFAULT_DYNAMIC_GOSSIP_PEER_TTL_MS: i64 = 10 * 60 * 1000;
 const DEFAULT_REPLICA_MAINTENANCE_MAX_CONTENT_HASH_SAMPLES: usize = 128;
@@ -593,6 +597,8 @@ pub struct NodeConfig {
     pub max_engine_pending_consensus_actions: usize,
     pub max_consensus_action_payload_bytes: usize,
     pub max_committed_action_batches: usize,
+    pub max_pending_consensus_action_queue_bytes: usize,
+    pub max_committed_action_batch_bytes: usize,
     pub max_dynamic_gossip_peers: usize,
     pub dynamic_gossip_peer_ttl_ms: i64,
     pub main_token_controller_binding: NodeMainTokenControllerBindingConfig,
@@ -729,6 +735,9 @@ impl NodeConfig {
             max_engine_pending_consensus_actions: DEFAULT_MAX_ENGINE_PENDING_CONSENSUS_ACTIONS,
             max_consensus_action_payload_bytes: DEFAULT_MAX_CONSENSUS_ACTION_PAYLOAD_BYTES,
             max_committed_action_batches: DEFAULT_MAX_COMMITTED_ACTION_BATCHES,
+            max_pending_consensus_action_queue_bytes:
+                DEFAULT_MAX_PENDING_CONSENSUS_ACTION_QUEUE_BYTES,
+            max_committed_action_batch_bytes: DEFAULT_MAX_COMMITTED_ACTION_BATCH_BYTES,
             max_dynamic_gossip_peers: DEFAULT_MAX_DYNAMIC_GOSSIP_PEERS,
             dynamic_gossip_peer_ttl_ms: DEFAULT_DYNAMIC_GOSSIP_PEER_TTL_MS,
             main_token_controller_binding: NodeMainTokenControllerBindingConfig::default(),

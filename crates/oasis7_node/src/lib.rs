@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
@@ -68,6 +68,7 @@ mod node_engine_replication_provider_route;
 mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_engine_transfer_filter;
+mod node_runtime_batch_retention;
 mod node_runtime_core;
 mod node_runtime_lifecycle;
 mod pos_engine_gossip;
@@ -83,15 +84,17 @@ mod replication_probe_gate;
 mod replication_state_reconcile;
 mod runtime_util;
 mod types;
+mod types_action_budgets;
 mod types_consensus;
 
 pub use consensus_support::compute_consensus_action_root;
 use consensus_support::{
     checked_consensus_successor, checked_replication_successor, dequeue_pending_consensus_actions,
-    drain_ordered_consensus_actions, merge_pending_consensus_actions, node_consensus_error,
-    node_pos_error, sign_attestation_message, sign_commit_message, sign_proposal_message,
-    validate_consensus_action_root, verify_attestation_message_signature,
-    verify_commit_message_signature, verify_proposal_message_signature,
+    drain_ordered_consensus_actions, merge_pending_consensus_actions_with_budget,
+    node_consensus_error, node_pos_error, release_action_payload_bytes, sign_attestation_message,
+    sign_commit_message, sign_proposal_message, validate_consensus_action_root,
+    verify_attestation_message_signature, verify_commit_message_signature,
+    verify_proposal_message_signature,
 };
 pub use error::NodeError;
 pub use execution_hook::{
@@ -116,6 +119,7 @@ pub use libp2p_replication_network_wasm::{
     Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
+use node_runtime_batch_retention::{action_payload_bytes, push_committed_action_batch};
 #[cfg(feature = "libp2p")]
 pub use oasis7_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
@@ -239,6 +243,7 @@ pub struct NodeRuntime {
     replica_maintenance_dht:
         Option<Arc<dyn proto_dht::DistributedDht<ProtoWorldError> + Send + Sync>>,
     pending_consensus_actions: Arc<Mutex<Vec<NodeConsensusAction>>>,
+    pending_consensus_action_queue_bytes: Arc<AtomicUsize>,
     committed_action_batches: Arc<(Mutex<Vec<NodeCommittedActionBatch>>, Condvar)>,
     running: Arc<AtomicBool>,
     state: Arc<Mutex<RuntimeState>>,
@@ -273,11 +278,20 @@ impl NodeCommittedActionBatchesHandle {
 
 impl NodeRuntime {
     pub fn start(&mut self) -> Result<(), NodeError> {
+        let pending_consensus_actions = self
+            .pending_consensus_actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if self.running.swap(true, Ordering::SeqCst) {
+            drop(pending_consensus_actions);
             return Err(NodeError::AlreadyRunning {
                 node_id: self.config.node_id.clone(),
             });
         }
+        let pending_bytes = action_payload_bytes(pending_consensus_actions.iter());
+        self.pending_consensus_action_queue_bytes
+            .store(pending_bytes, Ordering::Release);
+        drop(pending_consensus_actions);
 
         {
             let mut state = lock_state(&self.state);
@@ -294,7 +308,10 @@ impl NodeRuntime {
             committed_signal.notify_all();
         }
 
-        let mut engine = match PosNodeEngine::new(&self.config) {
+        let mut engine = match PosNodeEngine::new_with_pending_consensus_action_queue_bytes(
+            &self.config,
+            Arc::clone(&self.pending_consensus_action_queue_bytes),
+        ) {
             Ok(engine) => engine,
             Err(err) => {
                 self.running.store(false, Ordering::SeqCst);
@@ -537,6 +554,7 @@ impl NodeRuntime {
         let node_id = self.config.node_id.clone();
         let world_id = self.config.world_id.clone();
         let max_committed_action_batches = self.config.max_committed_action_batches.max(1);
+        let max_committed_action_batch_bytes = self.config.max_committed_action_batch_bytes;
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
         let worker = self
@@ -601,6 +619,7 @@ impl NodeRuntime {
                                             replication_network.as_mut(),
                                             consensus_network.as_mut(),
                                             queued_actions,
+                                            true,
                                             Some(hook.as_mut()),
                                             Some(&mut publish_progress),
                                         )
@@ -628,6 +647,7 @@ impl NodeRuntime {
                                     replication_network.as_mut(),
                                     consensus_network.as_mut(),
                                     queued_actions,
+                                    true,
                                     None,
                                     Some(&mut publish_progress),
                                 )
@@ -672,18 +692,12 @@ impl NodeRuntime {
                                         }
                                     }
                                     if let Some(batch) = tick.committed_action_batch {
-                                        let (committed_lock, committed_signal) =
-                                            &*committed_action_batches;
-                                        let mut committed = committed_lock
-                                            .lock()
-                                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                                        let retained = max_committed_action_batches - 1;
-                                        if committed.len() > retained {
-                                            let overflow = committed.len() - retained;
-                                            committed.drain(..overflow);
-                                        }
-                                        committed.push(batch);
-                                        committed_signal.notify_all();
+                                        push_committed_action_batch(
+                                            &committed_action_batches,
+                                            batch,
+                                            max_committed_action_batches,
+                                            max_committed_action_batch_bytes,
+                                        );
                                     }
                                     if let Some(store) = pos_state_store.as_ref() {
                                         if let Err(err) = store.save_engine_state(&engine) {
@@ -742,10 +756,7 @@ impl NodeRuntime {
         snapshot
             .consensus
             .pending_consensus_actions
-            .submit_buffer_payload_bytes = pending_submit_buffer
-            .iter()
-            .map(|action| action.payload_cbor.len())
-            .sum();
+            .submit_buffer_payload_bytes = action_payload_bytes(pending_submit_buffer.iter());
         snapshot
             .consensus
             .pending_consensus_actions
@@ -1166,6 +1177,8 @@ struct PosNodeEngine {
     execution_bindings: BTreeMap<u64, (String, String)>,
     pending_consensus_actions: BTreeMap<u64, NodeConsensusAction>,
     max_pending_consensus_actions: usize,
+    pending_consensus_action_queue_bytes: Arc<AtomicUsize>,
+    max_pending_consensus_action_queue_bytes: usize,
 }
 
 type PendingProposal = NodePosPendingProposal<NodeConsensusAction, PosConsensusStatus>;
@@ -1175,6 +1188,8 @@ type PosDecision = NodePosDecision<NodeConsensusAction, PosConsensusStatus>;
 mod tests;
 #[cfg(test)]
 mod tests_action_payload;
+#[cfg(test)]
+mod tests_action_payload_byte_budget;
 #[cfg(test)]
 mod tests_gossip_player;
 #[cfg(test)]

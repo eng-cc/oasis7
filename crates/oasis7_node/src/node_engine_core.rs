@@ -19,6 +19,13 @@ struct ObservedPosTick {
 
 impl PosNodeEngine {
     pub(super) fn new(config: &NodeConfig) -> Result<Self, NodeError> {
+        Self::new_with_pending_consensus_action_queue_bytes(config, Arc::new(AtomicUsize::new(0)))
+    }
+
+    pub(super) fn new_with_pending_consensus_action_queue_bytes(
+        config: &NodeConfig,
+        pending_consensus_action_queue_bytes: Arc<AtomicUsize>,
+    ) -> Result<Self, NodeError> {
         let (validators, validator_players, validator_signers, total_stake, required_stake) =
             validated_pos_state(&config.pos_config)?;
         let (validator_set_hash, validator_stake_root, validator_stake_proofs) =
@@ -187,6 +194,9 @@ impl PosNodeEngine {
             execution_bindings: BTreeMap::new(),
             pending_consensus_actions: BTreeMap::new(),
             max_pending_consensus_actions: config.max_engine_pending_consensus_actions,
+            pending_consensus_action_queue_bytes,
+            max_pending_consensus_action_queue_bytes: config
+                .max_pending_consensus_action_queue_bytes,
         })
     }
 
@@ -383,6 +393,13 @@ impl PosNodeEngine {
         now_ms: i64,
     ) -> Result<Vec<NodeConsensusAction>, NodeError> {
         let queued = drain_ordered_consensus_actions(&mut self.pending_consensus_actions);
+        let queued_payload_bytes = queued.iter().fold(0usize, |total, action| {
+            total.saturating_add(action.payload_cbor.len())
+        });
+        release_action_payload_bytes(
+            &self.pending_consensus_action_queue_bytes,
+            queued_payload_bytes,
+        );
         let mut filtered = Vec::with_capacity(queued.len());
         for action in queued {
             if should_drop_transfer_action_before_proposal(&action, now_ms)? {
@@ -463,10 +480,13 @@ impl PosNodeEngine {
                     "decision.height",
                     "applying rejected decision",
                 )?;
-                merge_pending_consensus_actions(
+                merge_pending_consensus_actions_with_budget(
                     &mut self.pending_consensus_actions,
                     decision.committed_actions.clone(),
                     self.max_pending_consensus_actions,
+                    &self.pending_consensus_action_queue_bytes,
+                    self.max_pending_consensus_action_queue_bytes,
+                    false,
                 )
                 .map_err(|err| NodeError::Consensus {
                     reason: format!(
