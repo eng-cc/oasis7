@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -56,15 +56,17 @@ pub(crate) fn load_latest_commit_head_index_height_from_root(
 
 pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<(), NodeError> {
     let index_dir = latest_commit_head_index_directory_from_root(root_dir);
-    let mut heights = hot_commit_message_heights_from_root(root_dir)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let cold_height = load_commit_message_cold_index_from_root(root_dir)?
+    let hot_heights = hot_commit_message_heights_from_root(root_dir)?;
+    let cold_heights = load_commit_message_cold_index_from_root(root_dir)?
         .by_height
         .keys()
         .copied()
         .collect::<Vec<_>>();
-    heights.extend(cold_height);
+    let latest_metadata_height = hot_heights
+        .iter()
+        .copied()
+        .chain(cold_heights.iter().copied())
+        .max();
 
     let mut current_by_world = BTreeMap::<String, LatestCommitHeadIndex>::new();
     if index_dir.exists() {
@@ -98,31 +100,40 @@ pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<()
         }
     }
 
-    let mut newest_by_world = BTreeMap::<String, LatestCommitHeadIndex>::new();
-    for height in heights {
-        let Some(message) = load_commit_message_record_from_root(root_dir, height)? else {
-            continue;
-        };
-        if message.version != REPLICATION_VERSION
-            || message.world_id.is_empty()
-            || message.record.world_id != message.world_id
-        {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "invalid commit message world/version binding at height {}",
-                    height
-                ),
-            });
-        }
-        let candidate = latest_commit_head_index_for_message(height, &message)?;
-        load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), &candidate)?;
-        match newest_by_world.get(message.world_id.as_str()) {
-            Some(existing) if existing.height >= candidate.height => {}
-            _ => {
-                newest_by_world.insert(message.world_id, candidate);
-            }
-        }
+    // Existing indexes are the durable authority for their worlds. Only parse
+    // the newest filename/cold-index candidate when metadata proves that the
+    // indexes do not already cover the global newest height. This keeps startup
+    // recovery bounded and avoids parsing unrelated retained payloads after a
+    // valid indexed head has already been persisted.
+    let Some(latest_metadata_height) = latest_metadata_height else {
+        return Ok(());
+    };
+    let indexes_cover_latest = current_by_world
+        .values()
+        .any(|index| index.height == latest_metadata_height);
+    if indexes_cover_latest {
+        return Ok(());
     }
+
+    let mut newest_by_world = BTreeMap::<String, LatestCommitHeadIndex>::new();
+    let Some(message) = load_commit_message_record_from_root(root_dir, latest_metadata_height)?
+    else {
+        return Ok(());
+    };
+    if message.version != REPLICATION_VERSION
+        || message.world_id.is_empty()
+        || message.record.world_id != message.world_id
+    {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "invalid commit message world/version binding at height {}",
+                latest_metadata_height
+            ),
+        });
+    }
+    let candidate = latest_commit_head_index_for_message(latest_metadata_height, &message)?;
+    load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), &candidate)?;
+    newest_by_world.insert(message.world_id, candidate);
 
     for (world_id, candidate) in newest_by_world {
         match current_by_world.get(world_id.as_str()) {

@@ -206,3 +206,38 @@ fn startup_reconstructs_missing_world_index_in_shared_replication_root() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn startup_reconciliation_does_not_parse_unrelated_retained_payload() {
+    let dir = temp_dir("latest-head-startup-bounded-unrelated-payload");
+    let world_id = "world-latest-head-startup-bounded";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(4096)
+        .expect("hot cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("initial runtime");
+    let latest = signed_remote_message(161, world_id, "node-b", 4096);
+    runtime
+        .persist_commit_message(4096, &latest)
+        .expect("persist indexed latest commit");
+
+    // This lower retained slot is not the indexed head and is deliberately
+    // unrelated/malformed. Startup recovery must use the durable head index
+    // rather than parsing every retained payload on the request-critical path.
+    std::fs::write(
+        config.commit_message_path(4095),
+        b"malformed unrelated retained payload",
+    )
+    .expect("write unrelated retained payload");
+
+    let restarted = ReplicationRuntime::new(&config, "node-a");
+    assert!(
+        restarted.is_ok(),
+        "startup should not parse unrelated retained payloads when the indexed head is valid: {restarted:?}"
+    );
+    let head = load_latest_commit_message_from_root(&dir, world_id, 4096)
+        .expect("indexed head lookup")
+        .expect("indexed latest commit");
+    assert_eq!(head.record.sequence, 4096);
+    let _ = std::fs::remove_dir_all(&dir);
+}
