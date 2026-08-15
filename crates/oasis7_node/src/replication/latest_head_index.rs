@@ -1,15 +1,18 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use oasis7_distfs::blake3_hex;
 
 use super::commit_retention::{
-    LatestCommitHeadIndex, latest_commit_head_index_directory_from_root,
-    latest_hot_commit_message_height_from_root, load_commit_message_cold_index_from_root,
-    load_latest_commit_head_index_from_root, write_latest_commit_head_index_to_root,
+    LatestCommitHeadIndex, hot_commit_message_heights_from_root,
+    latest_commit_head_index_directory_from_root, latest_hot_commit_message_height_from_root,
+    load_commit_message_cold_index_from_root, load_latest_commit_head_index_from_root,
+    write_latest_commit_head_index_to_root,
 };
 use super::{
-    COMMIT_FILE_PREFIX, GossipReplicationMessage, NodeError, load_commit_message_from_root,
+    COMMIT_FILE_PREFIX, GossipReplicationMessage, NodeError, REPLICATION_VERSION,
+    load_commit_message_from_root, load_commit_message_record_from_root,
     verify_replication_message_signature,
 };
 
@@ -46,61 +49,95 @@ pub(crate) fn load_latest_commit_message_from_root(
 
 pub(super) fn reconcile_latest_commit_head_indexes(root_dir: &Path) -> Result<(), NodeError> {
     let index_dir = latest_commit_head_index_directory_from_root(root_dir);
-    if !index_dir.exists() {
-        return Ok(());
-    }
-    let hot_height = latest_hot_commit_message_height_from_root(root_dir)?.unwrap_or(0);
+    let mut heights = hot_commit_message_heights_from_root(root_dir)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
     let cold_height = load_commit_message_cold_index_from_root(root_dir)?
         .by_height
         .keys()
-        .next_back()
         .copied()
-        .unwrap_or(0);
-    let newest_metadata_height = hot_height.max(cold_height);
-    let entries = fs::read_dir(index_dir.as_path()).map_err(|err| NodeError::Replication {
-        reason: format!("list latest commit head indexes failed: {err}"),
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|err| NodeError::Replication {
-            reason: format!("read latest commit head index entry failed: {err}"),
+        .collect::<Vec<_>>();
+    heights.extend(cold_height);
+
+    let mut current_by_world = BTreeMap::<String, LatestCommitHeadIndex>::new();
+    if index_dir.exists() {
+        let entries = fs::read_dir(index_dir.as_path()).map_err(|err| NodeError::Replication {
+            reason: format!("list latest commit head indexes failed: {err}"),
         })?;
-        let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("json") {
-            continue;
+        for entry in entries {
+            let entry = entry.map_err(|err| NodeError::Replication {
+                reason: format!("read latest commit head index entry failed: {err}"),
+            })?;
+            let path = entry.path();
+            if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let index = load_index_from_path(path.as_path())?;
+            let expected_path =
+                latest_commit_head_index_path_for_world(root_dir, index.world_id.as_str());
+            if path != expected_path {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "latest commit head index filename/world mismatch: {}",
+                        path.display()
+                    ),
+                });
+            }
+
+            // Validate every existing sidecar before considering promotion. A
+            // corrupt current index must never be hidden by a newer candidate.
+            load_indexed_latest_commit_message(root_dir, index.world_id.as_str(), &index)?;
+            current_by_world.insert(index.world_id.clone(), index);
         }
-        let index = load_index_from_path(path.as_path())?;
-        let expected_path =
-            latest_commit_head_index_path_for_world(root_dir, index.world_id.as_str());
-        if path != expected_path {
+    }
+
+    let mut newest_by_world = BTreeMap::<String, LatestCommitHeadIndex>::new();
+    for height in heights {
+        let Some(message) = load_commit_message_record_from_root(root_dir, height)? else {
+            continue;
+        };
+        if message.version != REPLICATION_VERSION
+            || message.world_id.is_empty()
+            || message.record.world_id != message.world_id
+        {
             return Err(NodeError::Replication {
                 reason: format!(
-                    "latest commit head index filename/world mismatch: {}",
-                    path.display()
+                    "invalid commit message world/version binding at height {}",
+                    height
                 ),
             });
         }
-
-        // Validate the existing index before considering promotion. A corrupt
-        // current index must never be hidden by a newer candidate.
-        load_indexed_latest_commit_message(root_dir, index.world_id.as_str(), &index)?;
-        if newest_metadata_height <= index.height {
-            continue;
+        let candidate = latest_commit_head_index_for_message(height, &message)?;
+        load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), &candidate)?;
+        match newest_by_world.get(message.world_id.as_str()) {
+            Some(existing) if existing.height >= candidate.height => {}
+            _ => {
+                newest_by_world.insert(message.world_id, candidate);
+            }
         }
+    }
 
-        // Roots are normally one-world, but shared test/maintenance roots can
-        // contain other worlds. A newer filename belonging to another world is
-        // not evidence against this world's current head.
-        let Some(candidate) = load_commit_message_from_root(
-            root_dir,
-            index.world_id.as_str(),
-            newest_metadata_height,
-        )?
-        else {
-            continue;
-        };
-        let next_index = latest_commit_head_index_for_message(newest_metadata_height, &candidate)?;
-        load_indexed_latest_commit_message(root_dir, index.world_id.as_str(), &next_index)?;
-        write_latest_commit_head_index_to_root(root_dir, &next_index)?;
+    for (world_id, candidate) in newest_by_world {
+        match current_by_world.get(world_id.as_str()) {
+            Some(current) if current.height > candidate.height => continue,
+            Some(current)
+                if current.height == candidate.height
+                    && current.record_content_hash == candidate.record_content_hash
+                    && current.message_hash == candidate.message_hash =>
+            {
+                continue;
+            }
+            Some(current) if current.height == candidate.height => {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "latest commit head conflict during startup reconciliation world={} height={}",
+                        world_id, candidate.height
+                    ),
+                });
+            }
+            _ => {}
+        }
+        write_latest_commit_head_index_to_root(root_dir, &candidate)?;
     }
     Ok(())
 }
@@ -227,10 +264,27 @@ pub(super) fn prepare_latest_commit_head_persist(
             .ok()
             .and_then(|payload| payload.lineage_envelope)
             .is_some();
-    if let Some(current) = current_index.as_ref() {
-        if height == current.height
-            && (current.record_content_hash != next_index.record_content_hash
-                || current.message_hash != next_index.message_hash)
+
+    // The index is a recovery accelerator, not the authority for deciding
+    // whether a height is already occupied. Legacy roots and interrupted
+    // writes can have a durable hot/cold message with no sidecar; inspect and
+    // fully validate that message before allowing any same-height write.
+    if let Some(existing) = load_commit_message_record_from_root(root_dir, height)? {
+        if existing.version != REPLICATION_VERSION
+            || existing.world_id != message.world_id
+            || existing.record.world_id != message.world_id
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "latest commit head conflict at world={} height={}",
+                    message.world_id, height
+                ),
+            });
+        }
+        let existing_index = latest_commit_head_index_for_message(height, &existing)?;
+        load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), &existing_index)?;
+        if (existing_index.record_content_hash != next_index.record_content_hash
+            || existing_index.message_hash != next_index.message_hash)
             && !allow_same_height_replacement
         {
             return Err(NodeError::Replication {
@@ -239,6 +293,22 @@ pub(super) fn prepare_latest_commit_head_persist(
                     message.world_id, height
                 ),
             });
+        }
+    }
+    if let Some(current) = current_index.as_ref() {
+        if height == current.height {
+            load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), current)?;
+            if (current.record_content_hash != next_index.record_content_hash
+                || current.message_hash != next_index.message_hash)
+                && !allow_same_height_replacement
+            {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "latest commit head conflict at world={} height={}",
+                        message.world_id, height
+                    ),
+                });
+            }
         }
     }
     Ok((next_index, current_index))

@@ -156,6 +156,22 @@ pub(crate) fn load_commit_message_from_root(
     world_id: &str,
     height: u64,
 ) -> Result<Option<GossipReplicationMessage>, NodeError> {
+    let Some(message) = load_commit_message_record_from_root(root_dir, height)? else {
+        return Ok(None);
+    };
+    if message.version != REPLICATION_VERSION
+        || message.world_id != world_id
+        || message.record.world_id != world_id
+    {
+        return Ok(None);
+    }
+    Ok(Some(message))
+}
+
+pub(crate) fn load_commit_message_record_from_root(
+    root_dir: &Path,
+    height: u64,
+) -> Result<Option<GossipReplicationMessage>, NodeError> {
     let Some(source) =
         super::commit_retention::resolve_commit_message_readback_source(root_dir, height)?
     else {
@@ -209,12 +225,6 @@ pub(crate) fn load_commit_message_from_root(
             })?
         }
     };
-    if message.version != REPLICATION_VERSION
-        || message.world_id != world_id
-        || message.record.world_id != world_id
-    {
-        return Ok(None);
-    }
     Ok(Some(message))
 }
 

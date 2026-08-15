@@ -107,6 +107,13 @@ pub(super) fn latest_hot_commit_message_height_from_root(
         .map(|(height, _)| *height))
 }
 
+pub(super) fn hot_commit_message_heights_from_root(root_dir: &Path) -> Result<Vec<u64>, NodeError> {
+    Ok(list_hot_commit_message_files(root_dir)?
+        .into_iter()
+        .map(|(height, _)| height)
+        .collect())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct CommitMessagePackRef {
     pub(super) segment_id: String,

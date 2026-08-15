@@ -65,7 +65,7 @@ use self::support::{
 };
 pub(crate) use self::support::{
     load_blob_from_root, load_blob_range_from_root, load_commit_message_from_root,
-    verify_replication_message_signature,
+    load_commit_message_record_from_root, verify_replication_message_signature,
 };
 use crate::replication_checkpoint_lineage::checkpoint_lineage_cache_key;
 pub(crate) use replication_fetch::{
