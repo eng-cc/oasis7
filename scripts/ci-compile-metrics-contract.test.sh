@@ -65,4 +65,17 @@ if rg -q 'build' "$tmp_dir/cargo.log"; then
   exit 1
 fi
 
+python3 - "$tmp_dir/cargo.log" <<'PY'
+from pathlib import Path
+import sys
+
+commands = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+measured = [command for command in commands if command.split(maxsplit=1)[0] in {"tree", "fetch", "check", "build"}]
+if not measured:
+    raise SystemExit("no cargo invocations recorded")
+unlocked = [command for command in measured if "--locked" not in command.split()]
+if unlocked:
+    raise SystemExit(f"unlocked cargo invocations: {unlocked}")
+PY
+
 echo "ci-compile-metrics-contract.test: OK"

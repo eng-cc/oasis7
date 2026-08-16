@@ -11,6 +11,9 @@ Usage: ./scripts/ci-compile-metrics.sh --package <cargo-package> --out-dir <dir>
 Measure isolated cargo compile metrics for the current checkout and optionally
 compare them with a baseline git ref on the same runner family.
 
+All Cargo invocations are lockfile-pinned so dependency resolution cannot
+silently change the compile surface being measured.
+
 Required:
   --package <name>          Cargo package to measure.
   --out-dir <dir>           Output directory for JSON/Markdown/log artifacts.
@@ -187,7 +190,7 @@ measure_checkout() {
   mkdir -p "$check_target" "$release_target" "$cargo_home"
 
   local package_count
-  local tree_args=(cargo tree -p "$package_name")
+  local tree_args=(cargo tree --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     tree_args+=(--no-default-features)
   fi
@@ -213,7 +216,7 @@ measure_checkout() {
   fi
 
   local check_seconds
-  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check -p "$package_name")
+  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     cargo_check_args+=(--no-default-features)
   fi
@@ -240,7 +243,7 @@ measure_checkout() {
         "$release_target" \
         "$cargo_home" \
         "$out_dir/logs/${label}-cargo-build-release.log" \
-        env -u RUSTC_WRAPPER cargo build -p "$package_name" --release --bin "$binary_name"
+        env -u RUSTC_WRAPPER cargo build --locked -p "$package_name" --release --bin "$binary_name"
     )
 
     local binary_path
