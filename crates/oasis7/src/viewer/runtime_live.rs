@@ -85,6 +85,7 @@ mod tests;
 mod transfer_material_quote;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
+mod world_feed;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
@@ -370,6 +371,27 @@ impl ViewerRuntimeLiveServer {
         self.config.hosted_public_join_mode
     }
 
+    /// Validate and consume a server-issued Director visibility grant.
+    ///
+    /// This is deliberately a read-only capability boundary. It does not alter the
+    /// command/auth paths, and consumed nonces live only in the current runtime process;
+    /// the grant itself is never persisted in a recovery generation.
+    pub fn consume_director_capability_grant(
+        &mut self,
+        grant: &crate::viewer::DirectorCapabilityGrant,
+        expected_server: &str,
+        required_signer_public_key: &str,
+        now_unix_ms: u64,
+    ) -> Result<(), String> {
+        self.session_policy
+            .validate_and_consume_director_capability_grant(
+                grant,
+                expected_server,
+                required_signer_public_key,
+                now_unix_ms,
+            )
+    }
+
     fn chain_link_enabled(&self) -> bool {
         self.config
             .chain_status_bind
@@ -595,6 +617,7 @@ impl ViewerRuntimeLiveServer {
                     | ViewerRequest::HelloV2 { .. }
                     | ViewerRequest::Subscribe { .. }
                     | ViewerRequest::RequestSnapshot
+                    | ViewerRequest::RequestWorldFeed { .. }
             )
         {
             return Err(ViewerRuntimeLiveServerError::Init(
@@ -724,6 +747,16 @@ impl ViewerRuntimeLiveServer {
                 }
                 session.initial_snapshot_sent = true;
                 self.enable_auto_play_for_session_if_available(session);
+            }
+            ViewerRequest::RequestWorldFeed { cursor, limit } => {
+                let feed = world_feed::build_world_feed(
+                    &self.config.world_id,
+                    self.reorg_epoch,
+                    self.world.journal(),
+                    cursor.as_deref(),
+                    limit,
+                );
+                send_response(writer, &ViewerResponse::WorldFeed { feed })?;
             }
             ViewerRequest::PlaybackControl { mode, request_id } => {
                 self.apply_control_mode(ViewerControl::from(mode), request_id, session, writer)?;

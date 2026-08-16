@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
+  mountError: null,
   mountCalls: 0,
   onEvent: null,
 }));
@@ -18,6 +19,9 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
       bridge: {
         mount() {
           runtimeMock.mountCalls += 1;
+          if (runtimeMock.mountError) {
+            throw runtimeMock.mountError;
+          }
           if (runtimeMock.deriveRenderState) {
             return {
               status: "ready",
@@ -422,6 +426,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
 
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
+  runtimeMock.mountError = null;
   runtimeMock.mountCalls = 0;
   runtimeMock.onEvent = null;
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
@@ -524,6 +529,27 @@ describe("pixel world host", () => {
     expect(runtimeMock.mountCalls).toBe(0);
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
     expect(core.state.lastError).toContain("pixel world Rust render-state derivation is unavailable");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("fails closed when the embedded WebGL2 mount rejects instead of exposing a ready canvas", async () => {
+    useTestRustRenderState();
+    runtimeMock.mountError = new Error("canvas.getContext() returned null; webgl2 not available");
+
+    const { core } = await renderPixelWorldHost();
+
+    await waitFor(() => {
+      expect(screen.getByText("Renderer Unavailable")).toBeInTheDocument();
+    });
+
+    expect(document.querySelector("[data-renderer-state='unavailable']")).toHaveTextContent(
+      /canvas\.getContext\(\) returned null; webgl2 not available/i,
+    );
+    expect(document.querySelector("[data-renderer-ready='true']")).toBeNull();
+    expect(document.querySelector("#pixel-world-embedded-runtime-canvas")).toBeNull();
+    expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable");
+    expect(core.state.pixelWorldFatal).toEqual(expect.objectContaining({
+      code: "pixel_world_webgl2_unavailable",
+    }));
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {

@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "1ad178cfc236e92aafb55ede75e0f158c8e58cdd11a4528e45d8ef22b022d322"
+      "content_sha256": "553e486e5787d8842edc3bbb8635792d45fadd0d11e4fa3a1be6da15bab7815c"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -6055,7 +6055,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/README.md",
-      "content_sha256": "d144437d57c905df75347f8d74bf7042987c4cc8d341f3a1cb829c33267e412e",
+      "content_sha256": "9f95a9b54ea6f87809b16749d3cfd877145da9ef619d7c50ebb79e060d9ba0d7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6083,7 +6083,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md",
-      "content_sha256": "3539659d6e5bb8bdc3bb5c55e128dc6a1f0687e44394ccfc5da68dc4cc74b483",
+      "content_sha256": "0a256caf0851038e871550cfd71cd4c2b94796c95bff3d9f95f1d8dc4a683d2d",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6237,7 +6237,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md",
-      "content_sha256": "5752759ff93edf5eafa6a3d2a05f11895202fafbf5109e32235a4be064a6c6f5",
+      "content_sha256": "2502b3618738f863cdce4b87a29ea075fdee536daf0271577ccbd4dce38b94fe",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6251,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "71c441f5a0a50db743991a0dfc616ee355373869bad32cbc52a542a3dea25f2d",
+      "content_sha256": "6ce75a6efcadf19880c4343f7d5cda222561ff249a16acd2b2413fde63314900",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6293,7 +6293,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "014b55dccee6d880a53988dd00ccddec6e10525a68116ab954cb0fe0ae9c5457",
+      "content_sha256": "0f629fef9cb8986746558a8f52630f1ab3a4586b6435376a5d359ab0a33ef5e6",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6363,7 +6363,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md",
-      "content_sha256": "381bdab26f469d3820a8f4bf54a8ff71b068b0f95e462c2406f763f6d40e8cac",
+      "content_sha256": "d60d32722daaada127049b0ec285bd526b3bbf820bcf5bb78769175051ad4507",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6447,7 +6447,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md",
-      "content_sha256": "417ea5fd000273f35a55ae5b8bc5d09d92dd416d52a20c541476198668058798",
+      "content_sha256": "5a781df1c57a2f2a9f2fb2c25864de53e531ad5f24bea96db74a2a4537ec2eb8",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6461,7 +6461,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md",
-      "content_sha256": "74dc90487724e601d2b5af94e4258478d50db89fed136b73fa4848e59d32807a",
+      "content_sha256": "d1bdf025ee537bc9eb0e6ba1e11b2bf562ae8a23c801f37c3ef844a012542286",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6503,7 +6503,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
-      "content_sha256": "4db352a78b378ca4b9b1f4b01e258e95af593fd56776ced7c50d02efddaee960",
+      "content_sha256": "b18a61ef8200ebee5194a8fc3b10e18ad248ed9b4a4d0fc3d077c7513f29d772",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

@@ -50,8 +50,8 @@
 ## 接口 / 数据
 - 输入：现有 `WorldSnapshot.player_gameplay`、`model.agents`、`model.locations`、
   fragment blocks；Action Receipt 使用 `player_gameplay.recent_feedback` 等权威因果
-  字段。未来 World Feed 则单独使用 runtime 持久化 `WorldEvent` journal 的有序投影；
-  当前 `state.recentEvents` 只是非契约 ambient preview，二者不得混用。
+  字段。World Feed v1 单独使用 runtime 持久化 `WorldEvent` journal 的有序投影；
+  当前 `state.recentEvents` 仍只是非契约 ambient preview，二者不得混用。
 - 输出：Pixel-world host render state 新增 `commercial_surface`；WASM bridge 继续消费原有 `world_bounds / fragment_terrain / locations / agents / links / visual_hotspots / selection`。
 - 兼容：没有 gameplay summary 时，仅 `world_read`/ambient diagnostics 可以显示
   agents/routes/fragments 的静态世界读数以避免阻断 renderer mount/update；不得由这些
@@ -84,20 +84,21 @@ no-progress/blocker result. `blocked` and `rejected` retain their reason and
 recovery path. When no authoritative feedback exists, render
 `No action receipt yet`; do not promote Recent Events/World Feed into a receipt.
 
-### 4.1.2 World Feed pending contract
-World Feed is a future Viewer projection owned by `viewer_engineer`, sourced from
-the ordered persisted runtime `WorldEvent` journal projection confirmed by
+### 4.1.2 World Feed v1 implementation contract
+World Feed is the implemented Viewer projection owned by `viewer_engineer`, sourced
+from the ordered persisted runtime `WorldEvent` journal projection confirmed by
 `runtime_engineer`. Current `state.recentEvents` is only a non-contract ambient
 preview; `player_gameplay.recent_feedback` remains the causal Action Receipt
 source. Current Recent Events/Feedback keep their names and are not silently renamed.
-Reserve future anchor `#viewer-world-feed` only when implemented. Acceptance:
-ambient events are visually separate from receipts; pending stages never imply
-success; empty/loading/unavailable states explain cause and next step; desktop,
-mobile, keyboard, CJK and long labels remain readable without overflow.
+The stable anchor is `#viewer-world-feed`. Acceptance: ambient events are visually
+separate from receipts; pending stages never imply success; empty/loading/unavailable
+states explain cause and next step; gap/reorg triggers authoritative snapshot reload;
+desktop, mobile, keyboard, CJK and long labels remain readable without overflow.
 
-### 4.1.3 World Feed v1 additive schema (pending)
-The schema is a Viewer/runtime handoff only; no field below is a claim about the
-current snapshot or current page implementation.
+### 4.1.3 World Feed v1 additive schema (implemented)
+The schema is the current Viewer/runtime contract. It does not turn ambient events
+into action causality, and current runtime projections intentionally emit a nullable
+`receipt_ref` with `null` when no explicit identity exists.
 
 | Field | Required contract |
 | --- | --- |
@@ -108,7 +109,7 @@ current snapshot or current page implementation.
 | `events[]` | ascending source order; dedup key `(world_id,reorg_epoch,event_seq)` |
 | `event_seq` | monotonic within the world/epoch |
 | `kind`, `summary`, `detail` | ambient presentation fields; never causal proof |
-| `receipt_ref` | nullable only when runtime supplies explicit causal identity; never infer from time/text/delta |
+| `receipt_ref` | nullable; render only when runtime supplies explicit causal identity; never infer from time/text/delta |
 | `status` | `loading`, `ready`, `empty`, `replay`, `gap`, `unavailable` |
 
 On gap/reorg, the consumer must perform cursor-aware recovery and snapshot reload;

@@ -54,6 +54,36 @@ pub struct HostedStrongAuthGrant {
     pub signer_public_key: String,
     pub signature: String,
 }
+
+/// Ephemeral, read-only capability for opening the Viewer Director diagnostics surface.
+///
+/// This grant is intentionally separate from player command/auth proofs.  It does not
+/// authorize gameplay, ownership, prompt control, or any other mutation; it only binds a
+/// short-lived diagnostics visibility decision to a server session epoch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectorCapabilityGrant {
+    pub version: u8,
+    pub action: String,
+    pub audience: String,
+    pub scope: String,
+    pub player_id: String,
+    pub player_public_key: String,
+    pub server: String,
+    pub session_epoch: u64,
+    pub nonce: String,
+    pub issued_at_unix_ms: u64,
+    pub expires_at_unix_ms: u64,
+    pub signer_public_key: String,
+    pub signature: String,
+}
+
+pub const DIRECTOR_CAPABILITY_GRANT_VERSION: u8 = 1;
+pub const DIRECTOR_CAPABILITY_DOMAIN: &str = "awdirectorgrant:v1";
+pub const DIRECTOR_CAPABILITY_ACTION: &str = "director_open";
+pub const DIRECTOR_CAPABILITY_AUDIENCE: &str = "viewer_director";
+pub const DIRECTOR_CAPABILITY_SCOPE: &str = "diagnostics_read";
+pub const DIRECTOR_CAPABILITY_SIGNATURE_V1_PREFIX: &str = "awdirectorgrant:v1:";
+pub const DIRECTOR_CAPABILITY_MAX_TTL_MS: u64 = 60_000;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewerRequest {
@@ -73,6 +103,11 @@ pub enum ViewerRequest {
         event_kinds: Vec<ViewerEventKind>,
     },
     RequestSnapshot,
+    RequestWorldFeed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
     PlaybackControl {
         mode: PlaybackControl,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -599,6 +634,59 @@ pub enum ViewerControl {
     Seek { tick: u64 },
 }
 
+pub const WORLD_FEED_SCHEMA_VERSION: &str = "world_feed/v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFeedStatus {
+    Loading,
+    Ready,
+    Empty,
+    Replay,
+    Gap,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFeedGapReason {
+    CursorGap,
+    ReorgEpochChanged,
+    CursorInvalid,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFeedUnavailableReason {
+    SourceUnavailable,
+    SchemaUnsupported,
+    PermissionDenied,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFeedEvent {
+    pub event_seq: u64,
+    pub kind: String,
+    pub summary: String,
+    pub detail: String,
+    pub receipt_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFeedEnvelope {
+    pub schema_version: String,
+    pub world_id: String,
+    pub reorg_epoch: u64,
+    pub cursor: String,
+    pub events: Vec<WorldFeedEvent>,
+    pub status: WorldFeedStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_reason: Option<WorldFeedGapReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<WorldFeedUnavailableReason>,
+    pub snapshot_reload_required: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
@@ -620,6 +708,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     Event {
         event: Event,
+    },
+    WorldFeed {
+        feed: WorldFeedEnvelope,
     },
     AuthoritativeBatch {
         batch: AuthoritativeBatchFinality,
@@ -1168,6 +1259,94 @@ mod tests {
             u64,
         > = serde_json::from_str(&json).expect("deserialize response");
         assert_eq!(parsed, response);
+    }
+
+    #[test]
+    fn world_feed_v1_round_trip_preserves_cursor_and_gap_contract() {
+        let request_json = serde_json::json!({
+            "type": "request_world_feed",
+            "cursor": "opaque-cursor",
+            "limit": 25
+        });
+        let request: ViewerRequest =
+            serde_json::from_value(request_json.clone()).expect("decode world feed request");
+        assert_eq!(
+            serde_json::to_value(request).expect("encode request"),
+            request_json
+        );
+
+        let response_json = serde_json::json!({
+            "type": "world_feed",
+            "feed": {
+                "schema_version": "world_feed/v1",
+                "world_id": "world-1",
+                "reorg_epoch": 3,
+                "cursor": "next-cursor",
+                "events": [],
+                "status": "gap",
+                "gap_reason": "reorg_epoch_changed",
+                "snapshot_reload_required": true
+            }
+        });
+        let response: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(response_json.clone()).expect("decode world feed response");
+        assert_eq!(
+            serde_json::to_value(response).expect("encode response"),
+            response_json
+        );
+    }
+
+    #[test]
+    fn world_feed_v1_event_keeps_explicit_receipt_reference_nullable() {
+        let response_json = serde_json::json!({
+            "type": "world_feed",
+            "feed": {
+                "schema_version": "world_feed/v1",
+                "world_id": "world-1",
+                "reorg_epoch": 0,
+                "cursor": "cursor-7",
+                "events": [{
+                    "event_seq": 7,
+                    "kind": "domain",
+                    "summary": "Domain event",
+                    "detail": "{}",
+                    "receipt_ref": null
+                }],
+                "status": "ready",
+                "snapshot_reload_required": false
+            }
+        });
+        let response: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(response_json.clone()).expect("decode world feed response");
+        assert_eq!(
+            serde_json::to_value(response).expect("encode response"),
+            response_json
+        );
+    }
+
+    #[test]
+    fn director_capability_grant_round_trip_preserves_signed_scope() {
+        let grant_json = serde_json::json!({
+            "version": 1,
+            "action": "director_open",
+            "audience": "viewer_director",
+            "scope": "diagnostics_read",
+            "player_id": "player-1",
+            "player_public_key": "11".repeat(32),
+            "server": "viewer-live-1",
+            "session_epoch": 4,
+            "nonce": "director-nonce-1",
+            "issued_at_unix_ms": 1000,
+            "expires_at_unix_ms": 2000,
+            "signer_public_key": "22".repeat(32),
+            "signature": "awdirectorgrant:v1:33".to_string() + &"33".repeat(63),
+        });
+        let grant: DirectorCapabilityGrant =
+            serde_json::from_value(grant_json.clone()).expect("decode director grant");
+        assert_eq!(
+            serde_json::to_value(grant).expect("encode director grant"),
+            grant_json
+        );
     }
 }
 

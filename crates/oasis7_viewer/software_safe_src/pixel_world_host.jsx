@@ -474,15 +474,14 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
         };
       }
       const mountedRenderState = derived.renderState;
-      const result = bridge.mount(canvas, mountedRenderState);
-      return {
-        status: result?.status || "ready",
-        selection: mountedRenderState.selection,
-        fatal: result?.fatal || null,
-        renderState: mountedRenderState,
-        runtimeSource,
-        runtimeModuleUrl,
-      };
+      try {
+        const result = await bridge.mount(canvas, mountedRenderState);
+        return { status: result?.status || "ready", selection: mountedRenderState.selection, fatal: result?.fatal || null, renderState: mountedRenderState, runtimeSource, runtimeModuleUrl };
+      } catch (error) {
+        const fatal = { code: "pixel_world_webgl2_unavailable", message: error instanceof Error ? error.message : String(error || "embedded WebGL2 renderer mount failed") };
+        onFatal?.(fatal);
+        return { status: "unavailable", selection: null, fatal, renderState: null, runtimeSource, runtimeModuleUrl };
+      }
     },
     update(renderInput) {
       const derived = deriveRenderStateOrUnavailable(renderInput);

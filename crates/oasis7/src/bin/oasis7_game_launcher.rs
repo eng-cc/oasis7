@@ -19,6 +19,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{Level, error, info};
 #[path = "oasis7_game_launcher/cli.rs"]
 mod cli;
+#[path = "oasis7_game_launcher/director_capability.rs"]
+mod director_capability;
 #[path = "../hosted_access.rs"]
 mod hosted_access;
 #[path = "oasis7_game_launcher/hosted_account_identity.rs"]

@@ -1,3 +1,4 @@
+use super::director_capability::{DIRECTOR_CAPABILITY_ROUTE, director_capability_unavailable};
 use super::hosted_account_identity::{
     HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, HOSTED_ACCOUNT_LOGIN_START_ROUTE,
     HostedAccountIdentityBroker, HostedAccountLoginCompleteResponse,
@@ -93,13 +94,15 @@ pub(super) fn handle_http_connection(
     let is_login_complete_route = path_only == HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE;
     let is_strong_auth_grant_route = path_only == HOSTED_STRONG_AUTH_GRANT_ROUTE
         || path_only == HOSTED_PROMPT_CONTROL_STRONG_AUTH_GRANT_ROUTE;
+    let is_director_capability_route = path_only == DIRECTOR_CAPABILITY_ROUTE;
     let is_hosted_player_route = is_admission_route
         || is_refresh_route
         || is_issue_route
         || is_release_route
         || is_login_start_route
         || is_login_complete_route
-        || is_strong_auth_grant_route;
+        || is_strong_auth_grant_route
+        || is_director_capability_route;
     let post_only_route = is_issue_route
         || is_release_route
         || is_refresh_route
@@ -242,6 +245,12 @@ pub(super) fn handle_http_connection(
         )?;
         write_json_response(&mut stream, 200, &response, head_only)
             .map_err(|err| format!("failed to write hosted strong-auth grant response: {err}"))?;
+        return Ok(());
+    }
+    if is_director_capability_route {
+        let response = director_capability_status(deployment_mode, hosted_session_issuer)?;
+        write_json_response(&mut stream, 200, &response, head_only)
+            .map_err(|err| format!("failed to write Director capability status response: {err}"))?;
         return Ok(());
     }
 
@@ -438,6 +447,19 @@ fn issue_strong_auth_grant(
         action_id,
         approval_code,
         release_token,
+        &mut issuer,
+    ))
+}
+
+fn director_capability_status(
+    deployment_mode: DeploymentMode,
+    hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+) -> Result<super::director_capability::DirectorCapabilityResponse, String> {
+    let mut issuer = hosted_session_issuer
+        .lock()
+        .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
+    Ok(director_capability_unavailable(
+        deployment_mode,
         &mut issuer,
     ))
 }

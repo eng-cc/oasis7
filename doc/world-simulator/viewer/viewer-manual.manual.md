@@ -75,18 +75,23 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 ### Terminal shell target versus current operation
 - 终端 shell 的 Player/Director、`World / Targets / Command`、Search/Quote、
-  Action Receipt 与 pending World Feed 产品契约，以
+  Action Receipt 与 World Feed v1 产品契约，以
   `viewer-gameplay-release-experience-overhaul.prd.md` 为准。
 - 当前任务分支的 Player 操作路线已经是 stage-first：Targets 继续使用
   `#entity-search` 过滤/导航，Targets 与 Command/Chat 通过按需 drawer 进入，
   Diagnostics 保持次级，Recent Events/Feedback 仍按现名显示。Focus hooks 只服务
-  Player 沉浸呈现，不是第二产品模式；这不代表 Director 或 World Feed 已发货。
-- World Feed 的未来 anchor 为 `#viewer-world-feed`，在 Viewer 实现与 QA 验收前不得
-  作为可操作入口或 Action Receipt 替代；queued/accepted 也不等于完成。
+  Player 沉浸呈现，不是第二产品模式。World Feed v1 已有 runtime transport、状态机
+  与 `#viewer-world-feed` panel，但仍是只读环境上下文，不是 Action Receipt 替代。
+- Director 的 `#viewer-director-entry` / `#viewer-director-exit`、Viewer 状态机与
+  `/api/public/director/capability` fail-closed endpoint 已实现。当前 endpoint 在没有
+  可信 issuer 绑定 live `session_epoch` 时返回 `director_capability_unavailable`，
+  因此生产环境成功进入仍是 `capability_blocked`；queued/accepted 也不等于完成。
 
 ### Terminal Player shell playbook
-This section describes the implemented Player-shell route in the current task
-branch. It is not a release claim; Director and World Feed remain future slices.
+This section describes the implemented Player-shell, World Feed, and Director
+security-boundary routes in the current task branch. It is not a release claim:
+World Feed has no inferred receipt links, and production Director success remains
+blocked until a trusted issuer is available.
 
 1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
    Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
@@ -96,24 +101,35 @@ branch. It is not a release claim; Director and World Feed remain future slices.
    Quote is reached from contextual Command, not a peer rail item.
 3. Action Receipt is the only player-causality surface. `accepted`/`queued` is
    waiting, not completion; no receipt is shown explicitly as `No action receipt yet`.
-4. World Feed is a future `world_feed/v1` ambient projection. Its identity/dedup key
-   is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and a nullable
-   `receipt_ref` is valid only when runtime supplies explicit causal identity.
+4. World Feed is the implemented `world_feed/v1` ambient projection. Its identity/dedup
+   key is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and the current
+   runtime emits nullable `receipt_ref=null`; a link is rendered only when runtime
+   supplies explicit causal identity.
 5. Director is a capability-gated secondary Diagnostics/operator action, ephemeral to
-   the tab. Invalid/stale/revoked/unauthorized entry returns to Player, sanitizes
-   Director surfaces, preserves world/selection, and explains recovery.
+   the tab. The server validates a short-lived `director_open` grant; invalid/stale/
+   revoked/unauthorized/unavailable entry returns to Player, sanitizes Director
+   surfaces, preserves world/selection, and explains recovery. No trusted issuer is
+   currently wired, so the successful production path remains `capability_blocked`.
 6. Escape closes the local surface/drawer first, then Focus; while IME composition
    is active it must not close the Viewer surface. Closing returns focus to the invoker.
 7. Target Director controls use `#viewer-director-entry` and `#viewer-director-exit`;
-   they are future source anchors, not current operator commands. Fresh load, reload,
-   and new tab remain Player; denied/stale/revoked capability fails closed to Player.
+   these source anchors are implemented but do not persist capability. Fresh load,
+   reload, and new tab remain Player; denied/stale/revoked/unavailable capability fails
+   closed to Player.
+
+8. The canonical pixel renderer is the WebGL2 runtime. GPU-enabled environments have a
+   `ready` path; when WebGL2 is unavailable (including `canvas.getContext("webgl2")`
+   returning null), the page exposes `Renderer Unavailable` with a diagnostic reason and
+   does not present a false ready canvas.
 
 ### Target QA evidence checklist
 The implementation owner must supply headed evidence for desktop and 390x844 mobile
-shell hierarchy, Director allowed/denied/stale/revoked entry, duplicate-ID/anchor
+shell hierarchy, Director allowed/denied/stale/revoked entry (the allowed path is
+currently blocked by the missing trusted issuer), duplicate-ID/anchor
 checks, keyboard/IME/Escape focus return, receipt states, feed loading/empty/replay/
-gap/unavailable/reorg recovery, and English/Chinese long-text overflow. This manual
-does not fabricate screenshots or convert the target into current capability.
+gap/unavailable/reorg recovery, and English/Chinese long-text overflow. Source/package
+tests now cover the World Feed and fail-closed Director boundary; this manual does not
+turn those tests into issuer-backed production access or a release claim.
 
 ### 当前 Agent Chat 与高级 Prompt 设置
 

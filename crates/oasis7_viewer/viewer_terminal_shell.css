@@ -112,6 +112,115 @@
   opacity: 1;
 }
 
+.panel--world-feed {
+  margin-top: 12px;
+  border-top: 1px solid rgba(152, 177, 150, 0.18);
+  background: rgba(9, 13, 11, 0.38);
+}
+
+.world-feed__body {
+  display: grid;
+  gap: 10px;
+}
+
+.world-feed__status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.world-feed__notice,
+.world-feed__empty,
+.world-feed__event {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.world-feed__notice {
+  color: var(--muted-strong);
+}
+
+.world-feed__events {
+  display: grid;
+  gap: 8px;
+}
+
+.world-feed__event {
+  border-left: 2px solid rgba(152, 177, 150, 0.42);
+  background: rgba(15, 21, 17, 0.42);
+}
+
+.world-feed__receipt-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.world-feed__receipt-link:hover,
+.world-feed__receipt-link:focus-visible {
+  color: var(--text);
+}
+
+.world-feed__empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .panel--world-feed {
+    margin-top: 8px;
+  }
+
+  .world-feed__event {
+    padding: 10px;
+  }
+}
+
+.director-surface {
+  position: fixed;
+  inset: 24px 24px 24px auto;
+  z-index: 35;
+  width: min(560px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.52);
+}
+
+.director-entry-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(152, 177, 150, 0.18);
+  border-radius: 12px;
+  background: rgba(9, 13, 11, 0.52);
+}
+
+.director-density-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.director-density-list {
+  display: grid;
+  gap: 6px;
+}
+
+.director-density-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(152, 177, 150, 0.12);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1240px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
@@ -134,5 +243,15 @@
   .secondary-viewer-nav {
     justify-content: flex-start;
     margin: -4px 0 8px 8px;
+  }
+
+  .director-surface {
+    inset: 82px 12px 72px;
+    width: auto;
+    max-width: calc(100% - 24px);
+  }
+
+  .director-density-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

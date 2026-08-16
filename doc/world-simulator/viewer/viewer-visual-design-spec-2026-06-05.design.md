@@ -97,8 +97,9 @@ This visual specification contributes only the visual reading order and review
 criteria below; it does not duplicate the terminal contract or claim it shipped.
 
 Visual acceptance keeps the world board first, command/receipt legible within one
-step, diagnostics demoted, and World Feed (when implemented) visually separate
-from Action Receipt. Focus/right-panel hooks and `#entity-search` remain current
+step, diagnostics demoted, and the implemented World Feed v1 visually separate
+from Action Receipt. Its `receipt_ref` is rendered only for explicit runtime
+identity. Focus/right-panel hooks and `#entity-search` remain current
 implementation references, not product modes. Responsive, keyboard, CJK,
 long-text, empty and unavailable checks remain mandatory downstream evidence.
 

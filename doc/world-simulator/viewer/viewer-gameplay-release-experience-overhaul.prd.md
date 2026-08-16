@@ -17,14 +17,19 @@
 - 增强情绪反馈：关键事件必须有可感知的视觉/文本反馈。
 
 ## 1.1 Terminal Viewer Authority (2026-08-14)
-本节是 Viewer-domain 的终端 shell 目标 authority；上游产品语义仍以
+本节是 Viewer-domain 的终端 shell authority；上游产品语义仍以
 [`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)
-为准。本节描述目标契约，不声称 Player shell、World Feed 或 Director 路径已经发货。
+为准。本节同时记录终态契约与 task #3248 epoch 2 的实现边界；它不是发行放行结论。
+Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 fail-closed
+边界已经落地；真实受信 issuer 尚未接入，因此生产环境的 Director 成功进入仍为
+`capability_blocked`。
 
 - **Player shell（默认）**：全舞台世界棋盘、紧凑且只读的权威 HUD、低存在感
   的边缘 dock，以及按需打开的 contextual console。世界是首屏最大视觉主体。
 - **Director（显式选择）**：仅供操作员/调试使用的模式，可保留密集的三列工具，
-  但只改变可见性和工具密度，不改变玩法语义、进度或回执因果。
+  但只改变可见性和工具密度，不改变玩法语义、进度或回执因果。入口先请求
+  `/api/public/director/capability`，只有服务端返回可验证、短时 grant 才开放；端点
+  当前在无可信 issuer 时明确返回不可用。
 - **Dock 路由**：`World / Targets / Command` 是主路径；`Search` 是 Targets
   dock 内的 `#entity-search` 兼容过滤能力，`Diagnostics` 为次级路径。
   Search 只过滤当前权威列表中的可见目标，不执行动作，也不声称提供独立快照查询。
@@ -32,7 +37,7 @@
 - **Contextual console**：打开后的顺序固定为 primary command/chat、selected
   context、gameplay details、diagnostics/raw state。它是按需展开的行动/解释层，
   不是常驻的监控面板。
-- **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed 是待实现
+- **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed v1 是已实现
   的环境上下文投影，不能暗示玩家成功，也不能替代缺失的 receipt。HUD 只能格式化
   权威的 commercial/runtime projection，不得合成进度、指标、阻塞、receipt 或动作可行性。
 - **跨屏与可访问性**：桌面、平板、移动端保持同一概念路径；键盘焦点、关闭/
@@ -48,27 +53,39 @@
 ### Current implementation boundary
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
-- 当前反馈投影是 `player_gameplay.recent_feedback`、本地 gameplay feedback、
-  `last_world_change` 与页面的 Recent Events/Feedback；这些尚未形成已发货的
-  `World Feed` DTO、owner、稳定 anchor 或验收合同。
+- 当前反馈投影仍包括 `player_gameplay.recent_feedback`、本地 gameplay feedback、
+  `last_world_change` 与页面的 Recent Events/Feedback；Action Receipt 继续只读这些
+  因果字段。独立的 `world_feed/v1` 已由 runtime journal → Viewer transport/panel
+  实现，稳定 anchor 为 `#viewer-world-feed`；两类投影不得混用，`receipt_ref` 没有
+  runtime 明确因果身份时保持 `null`，绝不从文本、时间或 delta 推断。
+- Director 的 Viewer state machine、`#viewer-director-entry` / `#viewer-director-exit`
+  anchors、服务端验证入口与 runtime fail-closed 校验已经实现。当前 launcher 端点
+  会返回明确的 `director_capability_unavailable`，因为尚无可信 issuer 能绑定当前
+  `session_epoch`；这属于能力阻断，不是安全边界缺失。
+- WebGL2 runtime 已纳入 canonical build/dist。GPU 可用环境有 `ready` 证据；GPU
+  不可用或 `canvas.getContext("webgl2")` 失败时，页面明确进入 `Renderer Unavailable`
+  状态并保留可诊断原因，不把空白画布当作成功。
 - Quote 是 Command/Console 的上下文只读/行动路线，不是与 World/Targets/Command
   并列的 dock route。任何 rail 暴露均属于实现债务，不能写成终端 IA。
 
-### Director entry and failure contract (target)
+### Director entry and failure contract (implemented boundary; issuer blocked)
 - 每次 fresh load、reload、new tab 或新 session 都进入 Player；Director 不是可持久化
   的偏好，也不是另一个默认入口。
 - Director 只能从 Player 的次级 `Diagnostics`/operator action 显式触发，并且必须通过
-  capability gate。目标 source anchor 固定为 `#viewer-director-entry`，退出 anchor
-  固定为 `#viewer-director-exit`；只有 source JSX 与测试落地后才可声明它们存在。
-  授权结果只改变可见性和工具密度，不改变 command、auth、ownership、
+  capability gate。source anchors 固定为 `#viewer-director-entry` 与
+  `#viewer-director-exit`；服务端必须返回带 `server_validated=true`、短 TTL、匹配
+  `director_open/viewer_director/diagnostics_read` 的签名 grant。授权结果只改变可见性和工具密度，不改变 command、auth、ownership、
   runtime、world progress 或 receipt 因果。
 - capability 缺失、entry 过期、被撤销、未授权或状态不再匹配时，入口 fail closed 回到
   Player；Director surfaces 必须被清理，world/selection 保持不变，并说明恢复动作。
-- 该合同是文档目标，不声称当前页面已有 Director mode、持久化 token 或 operator
-  surface；实现与权限验证属于后续 `viewer_engineer`/runtime/QA slices。
+- 当前 Viewer mode、endpoint 与 verifier 已实现；grant 仍不持久化。未授权、过期、撤销、
+  会话失效或 endpoint unavailable 时，UI 必须停留 Player 并清理 Director surface。
+  生产成功进入需要可信 operator issuer，现阶段仍为 `capability_blocked`；这不是
+  本地 mock 可替代的 release evidence。
 
 ## 2. User Experience & Functionality
-以下条目均为终态实现目标，不是当前页面已发货能力或验收结论：
+以下条目定义终态实现约束；已落地切片以 `Current implementation boundary` 和当前任务证据为准，
+不把局部实现等同于完整发行验收：
 
 - 修改 `crates/oasis7_viewer` 的默认 UI 行为与展示优先级。
 - 将 world-first Player shell 作为唯一默认入口，并提供 capability-gated Director
@@ -107,7 +124,8 @@
   projection；UI 只能格式化，不得从 ambient activity 推断玩家进展。
 - `Action Receipt` 必须表达 action、result、reason、next；没有 receipt 时显示
   明确的 `No action receipt yet`，不得用 World Feed 冒充。
-- World Feed（pending）可以呈现环境变化和最近上下文，但不能宣称玩家动作已成功。
+- World Feed v1 可以呈现环境变化和最近上下文，但不能宣称玩家动作已成功；
+  当前 runtime 未提供显式因果身份时 `receipt_ref` 保持 `null`。
 - Search、Targets 和选择态都是导航/定位能力；它们不会执行动作，执行只发生在
   contextual console 的已授权 command/chat 路径。
 - Receipt 的最小映射为 `action`, `stage/state`, `effect`, `reason`, `hint/next`,
@@ -115,22 +133,24 @@
   呈现等待后续 world delta，`completed_advanced` 才能表达推进，`completed_no_progress`
   仍是无进展阻塞语义。
 
-### World Feed（pending implementation contract）
-- **Owner**：`viewer_engineer` 负责 Viewer projection/anchor；`runtime_engineer`
-  负责确认 recent-event source；`qa_engineer` 负责验收，不在本 PRD 中替代它们。
-- **Source**：未来从 canonical recent-event projection（当前输入为
-  runtime 持久化 `WorldEvent` journal 的有序投影）映射。当前页面的
-  `state.recentEvents` 只能视为非契约 ambient preview；
-  `player_gameplay.recent_feedback` 专属于 Action Receipt 因果投影，不是 Feed
-  source。在 DTO 与 source 冻结前，当前 Recent Events/Feedback 仍按现名显示。
-- **Future anchor**：`#viewer-world-feed`，仅在实现落地后启用；不得把当前页面元素
-  伪装成该 anchor。
-- **Acceptance**：环境上下文与 Action Receipt 分离；queued/accepted 不显示成功；
-  无事件、加载、不可用状态说明原因与下一步；桌面/移动/键盘/CJK/长文本无溢出。
+### World Feed v1 implementation contract
+- **Owner**：`runtime_engineer` owns the journal projection and cursor/reorg truth;
+  `viewer_engineer` owns Viewer transport/state/panel and `#viewer-world-feed`;
+  `qa_engineer` owns cross-surface acceptance.
+- **Source**：runtime `WorldEvent` journal is projected in ascending
+  `(world_id,reorg_epoch,event_seq)` order and requested through
+  `request_world_feed`. `state.recentEvents` remains non-contract ambient preview;
+  `player_gameplay.recent_feedback` remains exclusive to Action Receipt.
+- **Stable anchor**：`#viewer-world-feed` is implemented in source and generated
+  output. The panel is read-only ambient context and never an Action Receipt substitute.
+- **Acceptance**：environment context and Action Receipt stay separate; queued/accepted
+  never display success; empty/loading/replay/gap/unavailable remain distinct; gap/reorg
+  requires authoritative snapshot reload; desktop/mobile/keyboard/CJK/long text remain
+  readable without overflow.
 
-#### World Feed v1 additive envelope (pending runtime/viewer contract)
+#### World Feed v1 additive envelope (implemented runtime/viewer contract)
 The feed is an additive projection named `world_feed/v1`; it does not rename the
-current Recent Events/Feedback fields until its separate Viewer/runtime slice ships.
+current Recent Events/Feedback fields, which remain separate compatibility projections.
 
 | Field | Contract | Player-facing rule |
 | --- | --- | --- |
@@ -141,7 +161,7 @@ current Recent Events/Feedback fields until its separate Viewer/runtime slice sh
 | `events[]` | source-ordered event projections | ascending `event_seq`; duplicate identity is dropped |
 | `event_seq` | monotonic sequence within `(world_id, reorg_epoch)` | identity key is `(world_id,reorg_epoch,event_seq)` |
 | `kind`, `summary`, `detail` | canonical event presentation fields | ambient context only; text cannot create causality |
-| `receipt_ref` | nullable explicit runtime causal identity (the player-facing receipt link) | only render when runtime supplies the reference; never infer from time/text/delta |
+| `receipt_ref` | nullable explicit runtime causal identity (the player-facing receipt link) | current runtime projection emits `null`; render a link only when an explicit identity is supplied; never infer from time/text/delta |
 | `status` | `loading`, `ready`, `empty`, `replay`, `gap`, or `unavailable` | each state has distinct copy and recovery route |
 
 `gap` or `reorg` responses require cursor-aware recovery and snapshot reload; they
@@ -168,8 +188,8 @@ the target/current boundary above and may not hand-author generated artifacts.
 | 2 | Player shell layout and sticky rail | `viewer_engineer` + visual review | desktop/mobile IA screenshots and route smoke |
 | 3 | Contextual console and Action Receipt | `viewer_engineer` + `runtime_engineer` | command/receipt states; queued != complete; no-receipt state |
 | 4 | Focus, keyboard, IME, Escape and a11y | `viewer_engineer` + `qa_engineer` | focus-return, Escape priority, CJK/long-text/no-overflow evidence |
-| 5 | Separate World Feed v1 projection | `runtime_engineer` + `viewer_engineer` | schema/source/order/dedup/cursor/reorg evidence and receipt-link tests |
-| 6 | Headed desktop/mobile QA | `qa_engineer` | fresh screenshots, DOM/keyboard smoke, explicit residual-risk verdict |
+| 5 | Separate World Feed v1 projection | `runtime_engineer` + `viewer_engineer` | implemented schema/source/order/dedup/cursor/reorg tests; `receipt_ref` remains explicit/null-safe |
+| 6 | Headed desktop/mobile QA | `qa_engineer` | fresh screenshots, DOM/keyboard smoke, explicit residual-risk verdict; release evidence remains outstanding |
 
 ### Terminal shell QA evidence matrix (target gate)
 No row below is evidence that the target has shipped; it is the minimum evidence
@@ -207,14 +227,18 @@ required after the corresponding implementation slice.
 
 ## 当前结论
 - **目标**：Player shell 默认、Director 显式 opt-in、Search 属于 Targets、Quote 属于
-  Command/Console、Action Receipt 与 pending World Feed 分离。
+  Command/Console、Action Receipt 与 World Feed v1 分离。
 - **当前源码候选**：task #3248 epoch 2 已将 Player Web shell 收敛为 stage-first
   单列、`World / Targets / Command` 主导航、按需 Targets/Command drawer、次级
   Diagnostics、默认折叠 Gameplay Details，以及 drawer/Focus 的 Escape、IME 与焦点返回
-  合同；`#entity-search` 与现有 Recent Events/Feedback 语义保持不变。
-- 以上只描述当前任务分支的实现边界，不是正式发行结论。Director capability gate 与
-  World Feed DTO/anchor 仍未实现；完整 renderer/Focus headed 证据和 release judgment
-  仍由后续 Viewer/runtime/QA slice 提供。
+  合同；`#entity-search` 与现有 Recent Events/Feedback 语义保持不变。该分支同时包含
+  `world_feed/v1` runtime/Viewer projection、`#viewer-world-feed` panel，以及 Director
+  server-verifier/state-machine/fail-closed endpoint。
+- 以上只描述当前任务分支的实现边界，不是正式发行结论。Director 真实可信 issuer
+  尚未接入，成功生产入口仍为 `capability_blocked`；GPU-enabled WebGL2 ready 与
+  GPU-disabled explicit unavailable 均已有证据，但完整 headed renderer/Focus QA、
+  issuer-backed Director allowed path 和 release judgment 仍由后续 Viewer/runtime/QA
+  evidence 提供。
 
 ## Phase 8~10 增量记录（ROUND-002 物理合并）
 - 原阶段文档已合并并删除，以下段落仅为历史实施证据摘要，不是当前运行时、

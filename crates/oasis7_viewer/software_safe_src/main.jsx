@@ -2,8 +2,9 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid
 import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
-import { PixelWorldHost } from "./pixel_world_host.jsx";
+import { PixelWorldHost } from "./pixel_world_host.jsx"; import { WorldFeedSurface } from "./world_feed_integration.jsx";
 import { MobileJumpRail, SecondaryViewerNavigation, focusViewerAnchor, installViewerRouteController } from "./viewer_navigation.jsx";
+import { DirectorEntryCard, DirectorSurface } from "./director_surface.jsx"; import { createViewerDirectorSession } from "./director_viewer_integration.js";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
@@ -39,7 +40,6 @@ function buildViewerEntryUrls(locale) {
     softwareSafeUrl: softwareSafeUrl.toString(),
   };
 }
-
 function Badge(props) {
   return <span class={props.class ?? "badge"}>{props.children}</span>;
 }
@@ -2379,7 +2379,7 @@ function TargetsPanel() {
   );
 }
 
-function WorldSummaryPanel() {
+function WorldSummaryPanel(props = {}) {
   observeViewerStateRevision();
   const locale = () => uiLocale();
   const state = core.state;
@@ -3021,6 +3021,7 @@ function WorldSummaryPanel() {
           </div>
         </summary>
         <div class="panel__body stack">
+          <DirectorEntryCard controller={props.directorController} locale={locale} onRequest={props.onRequestDirector} />
           <div class="badge-row">
             <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
             <Badge>{`entryReason=${state.viewerReason || "-"}`}</Badge>
@@ -3820,6 +3821,8 @@ function DetailsPanel() {
 function AppShell() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
+  const directorSession = createViewerDirectorSession({ core, fetchImpl: window.fetch?.bind(window) });
+  createEffect(() => { observeViewerStateRevision(); directorSession.observeRuntime(); });
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
   onMount(() => onCleanup(installViewerRouteController()));
@@ -3861,13 +3864,14 @@ function AppShell() {
         <div class="panel__body panel__body--stage">
           <div class="stack">
             <Show when={diagnosticsVisualFixture()}>
-              <WorldSummaryPanel />
+              <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
             <WorldStageHero />
             <PixelWorldHost locale={locale()} />
             <Show when={!diagnosticsVisualFixture()}>
-              <WorldSummaryPanel />
+              <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
+            <WorldFeedSurface core={core} locale={locale} tr={tr} onReloadSnapshot={() => core.reloadWorldFeedFromAuthoritativeSnapshot()} />
           </div>
         </div>
       </section>
@@ -3894,6 +3898,7 @@ function AppShell() {
           <DetailsPanel />
         </div>
       </section>
+      <DirectorSurface controller={directorSession.controller} core={core} locale={locale} />
     </>
   );
 }

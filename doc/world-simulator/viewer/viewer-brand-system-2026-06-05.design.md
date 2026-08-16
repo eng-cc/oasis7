@@ -48,8 +48,8 @@ colors are correct.
 The paired [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gameplay-release-experience-overhaul.prd.md)
 is the single terminal shell authority. The brand contribution is visual: keep
 the world board first, use a quiet dock and on-demand console, keep command and
-Action Receipt legible, and demote diagnostics. World Feed is pending and must
-remain visually distinct from causality when implemented. Current focus/right-
+Action Receipt legible, and demote diagnostics. The implemented World Feed v1 must
+remain visually distinct from causality. Current focus/right-
 panel hooks and `#entity-search` are implementation references, not brand modes.
 
 ### 2.4 Voice and Labels
@@ -86,9 +86,9 @@ copy contract, not proof that the labels are currently shipped.
 | no progress | `Completed with no progress` | `已完成但没有推进` | keep blocker/recovery visible |
 | blocked | `Blocked` / `Reason` / `Next` | `受阻` / `原因` / `下一步` | reason and recovery together |
 | world feed | `World Feed` | `世界动态` | ambient context; never replaces receipt |
-| feed loading/empty | `Loading world feed` / `No world events yet` | `正在加载世界动态` / `暂无世界事件` | distinct loading and empty states |
+| feed loading/empty | `Loading world feed` / `No world events yet` | `正在加载世界动态` / `暂无世界事件` | distinct loading and empty states; `world_feed/v1` only |
 | feed recovery | `Replay required` / `World feed unavailable` | `需要重放` / `世界动态不可用` | gap/reorg/unavailable copy is explicit |
-| director entry | `Open operator diagnostics` | `打开操作员诊断` | capability-gated, ephemeral secondary action |
+| director entry | `Open operator diagnostics` | `打开操作员诊断` | server-validated capability-gated, ephemeral secondary action; unavailable is fail-closed |
 | director recovery | `Return to Player` / `Diagnostics access unavailable` | `返回玩家模式` / `诊断权限不可用` | fail closed and explain recovery |
 | renderer | `Renderer Unavailable` | `渲染器不可用` | visible near affected board |
 

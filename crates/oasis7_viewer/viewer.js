@@ -4426,6 +4426,239 @@ function createMutable(state2, options) {
   const wrappedStore = wrap(unwrappedStore);
   return wrappedStore;
 }
+const WORLD_FEED_SCHEMA_VERSION = "world_feed/v1";
+const FEED_STATUSES = /* @__PURE__ */ new Set([
+  "loading",
+  "ready",
+  "empty",
+  "replay",
+  "gap",
+  "unavailable"
+]);
+const GAP_REASONS = /* @__PURE__ */ new Set(["cursor_gap", "reorg_epoch_changed", "cursor_invalid"]);
+const UNAVAILABLE_REASONS = /* @__PURE__ */ new Set(["source_unavailable", "schema_unsupported", "permission_denied"]);
+function createInitialWorldFeedState() {
+  return {
+    status: "loading",
+    schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+    worldId: null,
+    reorgEpoch: null,
+    cursor: null,
+    events: [],
+    stale: false,
+    gapReason: null,
+    unavailableReason: null,
+    snapshotReloadRequired: false,
+    requestInFlight: false,
+    requestCursor: null,
+    requestLimit: 50,
+    dedupedCount: 0,
+    lastError: null
+  };
+}
+function requestWorldFeedState(previous, { cursor = null, limit = 50 } = {}) {
+  const state2 = previous || createInitialWorldFeedState();
+  return {
+    ...state2,
+    status: "loading",
+    requestInFlight: true,
+    requestCursor: cursor == null ? null : String(cursor),
+    requestLimit: normalizeLimit(limit),
+    lastError: null
+  };
+}
+function worldFeedEventIdentity(worldId, reorgEpoch, eventSeq) {
+  return `${String(worldId)}|${String(reorgEpoch)}|${String(eventSeq)}`;
+}
+function normalizeLimit(limit) {
+  const value2 = Number(limit);
+  if (!Number.isInteger(value2) || value2 <= 0) {
+    return 50;
+  }
+  return Math.min(value2, 200);
+}
+function normalizeUnsignedInteger(value2) {
+  if (typeof value2 === "number") {
+    return Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
+  }
+  if (typeof value2 === "bigint") {
+    return value2 >= 0n ? value2.toString() : null;
+  }
+  const text2 = String(value2 ?? "").trim();
+  return /^\d+$/.test(text2) ? text2 : null;
+}
+function normalizeEvent(event) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  const eventSeq = normalizeUnsignedInteger(event.event_seq);
+  const kind = String(event.kind ?? "").trim();
+  const summary = String(event.summary ?? "").trim();
+  const detail = String(event.detail ?? "");
+  if (!eventSeq || !kind || !summary) {
+    return null;
+  }
+  if (event.receipt_ref != null && typeof event.receipt_ref !== "string") {
+    return null;
+  }
+  return {
+    event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
+    kind,
+    summary,
+    detail,
+    receipt_ref: event.receipt_ref == null ? null : event.receipt_ref
+  };
+}
+function invalidState(previous, reason, error, { requiresSnapshotReload = true } = {}) {
+  return {
+    ...previous,
+    status: "unavailable",
+    stale: true,
+    unavailableReason: reason,
+    gapReason: null,
+    snapshotReloadRequired: requiresSnapshotReload,
+    requestInFlight: false,
+    lastError: error || null
+  };
+}
+function normalizeEnvelope(feed) {
+  if (!feed || typeof feed !== "object") {
+    return { error: "world feed response is missing" };
+  }
+  if (feed.schema_version !== WORLD_FEED_SCHEMA_VERSION) {
+    return { unsupportedSchema: true };
+  }
+  const worldId = String(feed.world_id ?? "").trim();
+  const reorgEpoch = normalizeUnsignedInteger(feed.reorg_epoch);
+  const cursor = feed.cursor == null ? "" : String(feed.cursor);
+  const status = String(feed.status ?? "").trim().toLowerCase();
+  if (!worldId || !reorgEpoch || !FEED_STATUSES.has(status) || !Array.isArray(feed.events)) {
+    return { error: "world feed response is invalid" };
+  }
+  const gapReason = feed.gap_reason == null ? null : String(feed.gap_reason).trim().toLowerCase();
+  if (gapReason != null && !GAP_REASONS.has(gapReason)) {
+    return { error: "world feed gap reason is invalid" };
+  }
+  const unavailableReason = feed.unavailable_reason == null ? null : String(feed.unavailable_reason).trim().toLowerCase();
+  if (unavailableReason != null && !UNAVAILABLE_REASONS.has(unavailableReason)) {
+    return { error: "world feed unavailable reason is invalid" };
+  }
+  const events = feed.events.map(normalizeEvent);
+  if (events.some((event) => event == null)) {
+    return { error: "world feed contains an invalid event" };
+  }
+  return {
+    worldId,
+    reorgEpoch,
+    cursor,
+    status,
+    events,
+    gapReason,
+    unavailableReason,
+    snapshotReloadRequired: feed.snapshot_reload_required === true
+  };
+}
+function consumeWorldFeed(previous, feed) {
+  const state2 = previous || createInitialWorldFeedState();
+  const envelope = normalizeEnvelope(feed);
+  if (envelope.unsupportedSchema) {
+    return {
+      state: invalidState(state2, "schema_unsupported", "unsupported world feed schema", {
+        requiresSnapshotReload: false
+      }),
+      requiresSnapshotReload: false
+    };
+  }
+  if (envelope.error) {
+    return {
+      state: invalidState(state2, "source_unavailable", envelope.error),
+      requiresSnapshotReload: true
+    };
+  }
+  const {
+    worldId,
+    reorgEpoch,
+    cursor,
+    status,
+    events,
+    gapReason,
+    unavailableReason,
+    snapshotReloadRequired
+  } = envelope;
+  const requiresSnapshotReload = snapshotReloadRequired || status === "gap" || status === "unavailable";
+  const stale = requiresSnapshotReload || status === "gap";
+  if (status === "gap") {
+    return {
+      state: {
+        ...state2,
+        status,
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        stale: true,
+        gapReason: gapReason || "cursor_invalid",
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        lastError: null
+      },
+      requiresSnapshotReload: true
+    };
+  }
+  if (status === "unavailable") {
+    return {
+      state: {
+        ...state2,
+        status,
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        stale,
+        gapReason: null,
+        unavailableReason: unavailableReason || "source_unavailable",
+        snapshotReloadRequired,
+        requestInFlight: false,
+        lastError: null
+      },
+      requiresSnapshotReload
+    };
+  }
+  const sameScope = state2.worldId === worldId && String(state2.reorgEpoch) === String(reorgEpoch);
+  const existing = sameScope ? state2.events : [];
+  const seen = new Set(existing.map((event) => worldFeedEventIdentity(worldId, reorgEpoch, event.event_seq)));
+  const appended = [];
+  let dedupedCount = 0;
+  for (const event of events) {
+    const identity = worldFeedEventIdentity(worldId, reorgEpoch, event.event_seq);
+    if (seen.has(identity)) {
+      dedupedCount += 1;
+      continue;
+    }
+    seen.add(identity);
+    appended.push(event);
+  }
+  return {
+    state: {
+      ...state2,
+      status,
+      schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+      worldId,
+      reorgEpoch,
+      cursor,
+      events: [...existing, ...appended],
+      stale,
+      gapReason: null,
+      unavailableReason: null,
+      snapshotReloadRequired,
+      requestInFlight: false,
+      dedupedCount,
+      lastError: null
+    },
+    requiresSnapshotReload
+  };
+}
 function createSoftwareSafeState() {
   return createMutable({
     uiLocale: "en",
@@ -4489,6 +4722,7 @@ function createSoftwareSafeState() {
     },
     snapshot: null,
     metrics: null,
+    worldFeed: createInitialWorldFeedState(),
     hostedAccess: null,
     hostedAdmission: null,
     recentEvents: [],
@@ -4547,6 +4781,47 @@ function createSoftwareSafeState() {
     },
     selectedSearch: ""
   });
+}
+function createWorldFeedTransport({ getSocket, getState: getState2, render: render2, requestSnapshot, sendJson: sendJson2 }) {
+  function requestWorldFeed2({ cursor = getState2().worldFeed?.cursor || null, limit = 50 } = {}) {
+    const state2 = getState2();
+    state2.worldFeed = requestWorldFeedState(state2.worldFeed, { cursor, limit });
+    const socket2 = getSocket();
+    if (!socket2 || socket2.readyState !== WebSocket.OPEN) {
+      render2();
+      return false;
+    }
+    sendJson2({
+      type: "request_world_feed",
+      cursor: cursor == null ? null : String(cursor),
+      limit
+    });
+    render2();
+    return true;
+  }
+  function handleWorldFeed(feed) {
+    const state2 = getState2();
+    const consumed = consumeWorldFeed(state2.worldFeed, feed);
+    state2.worldFeed = consumed.state;
+    if (consumed.requiresSnapshotReload) {
+      requestSnapshot();
+    }
+  }
+  function refreshAfterSnapshot() {
+    if (getState2().worldFeed?.snapshotReloadRequired) {
+      requestWorldFeed2({ cursor: null });
+    }
+  }
+  function reloadWorldFeedFromAuthoritativeSnapshot2() {
+    requestSnapshot();
+    return true;
+  }
+  return {
+    handleWorldFeed,
+    refreshAfterSnapshot,
+    reloadWorldFeedFromAuthoritativeSnapshot: reloadWorldFeedFromAuthoritativeSnapshot2,
+    requestWorldFeed: requestWorldFeed2
+  };
 }
 const ED25519_PKCS8_PREFIX = new Uint8Array([
   48,
@@ -4759,6 +5034,9 @@ const elements = {};
 let renderHook = () => {
 };
 let bootstrapped = false;
+const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
+const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args);
+const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
 const HELLO_ACK_TIMEOUT_MS = 2e3;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1e3;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
@@ -5155,12 +5433,12 @@ function getState() {
   };
 }
 function reportFatalError(message, source = "runtime") {
-  const text = `${source}: ${String(message || "unknown runtime error")}`.trim();
-  if (state.lastError !== text) {
+  const text2 = `${source}: ${String(message || "unknown runtime error")}`.trim();
+  if (state.lastError !== text2) {
     state.errorCount += 1;
   }
   state.connectionStatus = "error";
-  state.lastError = text;
+  state.lastError = text2;
   render();
 }
 function parseSelectionPayload(payload) {
@@ -5717,6 +5995,7 @@ function scheduleHelloAckTimeout(targetSocket) {
 }
 function sendInitialSnapshotRequest() {
   sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
+  worldFeedTransport.requestWorldFeed({ cursor: null });
   sendJson({ type: "request_snapshot" });
 }
 function scheduleInitialSnapshotRetry() {
@@ -5944,6 +6223,7 @@ function handleSnapshot(snapshot) {
   if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
     clearFirstAgentClaimAutoAdvanceTimers();
   }
+  worldFeedTransport.refreshAfterSnapshot();
 }
 function normalizedGameplayActions(snapshot = state.snapshot) {
   const actions = snapshot?.player_gameplay?.available_actions || snapshot?.player_gameplay?.availableActions || [];
@@ -6090,14 +6370,14 @@ function handleMetrics(time, metrics) {
   state.tick = state.logicalTime;
 }
 function clipTraceText(value2, limit = 480) {
-  const text = String(value2 || "").trim();
-  if (!text) {
+  const text2 = String(value2 || "").trim();
+  if (!text2) {
     return null;
   }
-  if (text.length <= limit) {
-    return text;
+  if (text2.length <= limit) {
+    return text2;
   }
-  return `${text.slice(0, limit)}…`;
+  return `${text2.slice(0, limit)}…`;
 }
 function snapshotDecisionTrace(trace) {
   if (!trace || typeof trace !== "object") {
@@ -7046,12 +7326,12 @@ function markCurrentGameplayActionFeedbackError(error, effect = "gameplay action
   state.lastGameplayActionFeedback = feedback;
 }
 function markPendingSemanticRebind(message) {
-  const text = String(message).trim();
+  const text2 = String(message).trim();
   for (const feedback of [state.lastChatFeedback, state.lastPromptFeedback]) {
     if (!feedback || feedback.stage !== "registering") {
       continue;
     }
-    feedback.effect = text;
+    feedback.effect = text2;
     feedback.reason = null;
   }
 }
@@ -7862,6 +8142,9 @@ function handleViewerMessage(message) {
       break;
     case "snapshot":
       handleSnapshot(message.snapshot);
+      break;
+    case "world_feed":
+      worldFeedTransport.handleWorldFeed(message.feed);
       break;
     case "event": {
       addRecentEvent(message.event);
@@ -8694,6 +8977,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   pushChatHistory,
   refreshHostedAdmissionState,
   registerPlayerSessionForTest,
+  reloadWorldFeedFromAuthoritativeSnapshot,
   renderDetails,
   renderInteractionPanel,
   renderLists,
@@ -8710,6 +8994,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   requestScheduleRecipeQuote,
   requestTransferMaterialQuote,
   requestWarDeclarationQuote,
+  requestWorldFeed,
   resourceSummary: resourceSummary$1,
   retryHostedPlayerIdentityIssue,
   runSteps,
@@ -8738,7 +9023,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   toggleViewerLocale,
   updatePixelWorldRuntimeMeta
 }, Symbol.toStringTag, { value: "Module" }));
-var _tmpl$$k = /* @__PURE__ */ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`), _tmpl$2$k = /* @__PURE__ */ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
+var _tmpl$$m = /* @__PURE__ */ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`), _tmpl$2$m = /* @__PURE__ */ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
 const ZH_VALUE_MAP = {
   chat_purpose: {
     "Start a first conversation with your claimed Agent.": "与已认领的 Agent 开始第一次对话。"
@@ -8769,13 +9054,13 @@ function FirstChatUnlockPreview(props) {
   const fields = () => [["chat_purpose", tr2("目的", "Purpose")], ["immediate_playable_help", tr2("即时帮助", "Immediate help")], ["first_question_or_action_hint", tr2("先试试", "Try first")], ["resource_boundary", tr2("资源边界", "Resource boundary")], ["defer_effect", tr2("如果等待", "If you wait")], ["recommended_unlock_action", tr2("建议操作", "Recommended action")]];
   const value2 = (field) => field === "recommended_unlock_action" ? recommendedActionValue(props.preview[field], locale()) : previewValue(field, props.preview[field], locale());
   return (() => {
-    var _el$ = _tmpl$$k();
+    var _el$ = _tmpl$$m();
     insert(_el$, createComponent(For, {
       get each() {
         return fields();
       },
       children: ([field, label]) => (() => {
-        var _el$2 = _tmpl$2$k(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
+        var _el$2 = _tmpl$2$m(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
         setAttribute(_el$2, "data-preview-field", field);
         insert(_el$3, label);
         className(_el$4, field === "chat_purpose" ? "feedback-summary" : "feedback-detail");
@@ -9405,7 +9690,7 @@ function installPixelWorldRenderDtoProbe(fixtureName, getRenderState, onCleanup2
     delete window.__OASIS7_PIXEL_WORLD_RENDER_DTO__;
   });
 }
-var _tmpl$$j = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$j = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$h = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$f = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$e = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$8 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$5 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$2 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__hotspot-tooltip data-hotspot-tooltip role=status>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$19$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$23$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button id=viewer-focus-exit type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$30$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$31$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$33$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$34$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$35$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$36$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$41$1 = /* @__PURE__ */ template(`<div id=viewer-command-console class="pixel-world-focus-command-surface stack">`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$46$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$47$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$48$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details id=viewer-focus-command-drawer class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$51$1 = /* @__PURE__ */ template(`<details id=viewer-focus-diagnostics-drawer class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$53$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
+var _tmpl$$l = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$l = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$j = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$g = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$f = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$9 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$6 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$3 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__hotspot-tooltip data-hotspot-tooltip role=status>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$15$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$16$1 = /* @__PURE__ */ template(`<span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$18$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$19$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$23$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button id=viewer-focus-exit type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$30$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$31$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$33$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$34$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$35$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$36$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$41$1 = /* @__PURE__ */ template(`<div id=viewer-command-console class="pixel-world-focus-command-surface stack">`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$46$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$47$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$48$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details id=viewer-focus-command-drawer class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$51$1 = /* @__PURE__ */ template(`<details id=viewer-focus-diagnostics-drawer class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$53$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -9603,12 +9888,12 @@ function PixelWorldHostVisualLayer(props) {
   if (!props.enabled) {
     return [];
   }
-  return [_tmpl$$j(), _tmpl$2$j(), _tmpl$3$h(), createComponent(For, {
+  return [_tmpl$$l(), _tmpl$2$l(), _tmpl$3$j(), createComponent(For, {
     get each() {
       return visualState().fragmentTerrain.slice(0, 96);
     },
     children: (patch, index) => (() => {
-      var _el$4 = _tmpl$4$f();
+      var _el$4 = _tmpl$4$g();
       createRenderEffect((_p$) => {
         var _v$ = patch.dominant_compound, _v$2 = fragmentTerrainStyle(patch, visualState().worldBounds, index()), _v$3 = `${patch.location_id}:${patch.dominant_compound}`;
         _v$ !== _p$.e && setAttribute(_el$4, "data-compound", _p$.e = _v$);
@@ -9627,7 +9912,7 @@ function PixelWorldHostVisualLayer(props) {
       return visualState().links.slice(0, 10);
     },
     children: (link, index) => [(() => {
-      var _el$5 = _tmpl$5$e();
+      var _el$5 = _tmpl$5$f();
       createRenderEffect((_p$) => {
         var _v$4 = link.kind, _v$5 = routeStyle(link, visualState().worldBounds, index()), _v$6 = `${link.kind}:${link.id}`;
         _v$4 !== _p$.e && setAttribute(_el$5, "data-route-kind", _p$.e = _v$4);
@@ -9641,7 +9926,7 @@ function PixelWorldHostVisualLayer(props) {
       });
       return _el$5;
     })(), (() => {
-      var _el$6 = _tmpl$6$8();
+      var _el$6 = _tmpl$6$9();
       createRenderEffect((_p$) => {
         var _v$7 = link.kind, _v$8 = routeWaypointStyle(link, visualState().worldBounds, index(), "mid"), _v$9 = `${link.kind}:waypoint`;
         _v$7 !== _p$.e && setAttribute(_el$6, "data-route-kind", _p$.e = _v$7);
@@ -9655,7 +9940,7 @@ function PixelWorldHostVisualLayer(props) {
       });
       return _el$6;
     })(), (() => {
-      var _el$7 = _tmpl$7$5();
+      var _el$7 = _tmpl$7$6();
       createRenderEffect((_p$) => {
         var _v$0 = link.kind, _v$1 = routeWaypointStyle(link, visualState().worldBounds, index(), "to"), _v$10 = `${link.kind}:target`;
         _v$0 !== _p$.e && setAttribute(_el$7, "data-route-kind", _p$.e = _v$0);
@@ -9674,7 +9959,7 @@ function PixelWorldHostVisualLayer(props) {
       return visualState().visualHotspots.slice(0, 8);
     },
     children: (hotspot, index) => (() => {
-      var _el$8 = _tmpl$8$2(), _el$9 = _el$8.firstChild;
+      var _el$8 = _tmpl$8$3(), _el$9 = _el$8.firstChild;
       insert(_el$9, (() => {
         var _c$ = memo(() => hotspot.kind === "blocker");
         return () => _c$() ? "!" : hotspot.kind === "goal" ? "G" : "i";
@@ -9911,15 +10196,31 @@ function createPixelWorldHostAdapter({
         };
       }
       const mountedRenderState = derived.renderState;
-      const result = bridge.mount(canvas, mountedRenderState);
-      return {
-        status: result?.status || "ready",
-        selection: mountedRenderState.selection,
-        fatal: result?.fatal || null,
-        renderState: mountedRenderState,
-        runtimeSource,
-        runtimeModuleUrl
-      };
+      try {
+        const result = await bridge.mount(canvas, mountedRenderState);
+        return {
+          status: result?.status || "ready",
+          selection: mountedRenderState.selection,
+          fatal: result?.fatal || null,
+          renderState: mountedRenderState,
+          runtimeSource,
+          runtimeModuleUrl
+        };
+      } catch (error) {
+        const fatal = {
+          code: "pixel_world_webgl2_unavailable",
+          message: error instanceof Error ? error.message : String(error || "embedded WebGL2 renderer mount failed")
+        };
+        onFatal?.(fatal);
+        return {
+          status: "unavailable",
+          selection: null,
+          fatal,
+          renderState: null,
+          runtimeSource,
+          runtimeModuleUrl
+        };
+      }
     },
     update(renderInput) {
       const derived = deriveRenderStateOrUnavailable(renderInput);
@@ -11299,7 +11600,172 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$$i = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$i = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><a class=secondary-viewer-nav__link href=#viewer-diagnostics-panel>`);
+var _tmpl$$k = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$2$k = /* @__PURE__ */ template(`<div class="feedback-detail world-feed__notice">`), _tmpl$3$i = /* @__PURE__ */ template(`<div class="toolbar world-feed__recovery"><button type=button data-world-feed-action=reload-authoritative-snapshot>`), _tmpl$4$f = /* @__PURE__ */ template(`<div class="event-list world-feed__events"data-world-feed-events=true>`), _tmpl$5$e = /* @__PURE__ */ template(`<section id=viewer-world-feed class="panel panel--world-feed"data-viewer-surface=world-feed aria-live=polite><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class="panel__body world-feed__body"><div class=world-feed__status-row><span>`), _tmpl$6$8 = /* @__PURE__ */ template(`<div class=world-feed__empty data-world-feed-empty=true>`), _tmpl$7$5 = /* @__PURE__ */ template(`<a class=world-feed__receipt-link href=#viewer-action-receipt>`), _tmpl$8$2 = /* @__PURE__ */ template(`<article class="event-card world-feed__event"><div class=event-card__header><div class=event-card__title></div><span class=badge></span></div><div class=event-card__meta>`);
+function readFeed(props) {
+  return typeof props.feed === "function" ? props.feed() : props.feed || {};
+}
+function statusCopy(locale, tr2, status) {
+  const copy = {
+    loading: ["正在加载世界动态…", "Loading world activity…"],
+    ready: ["环境上下文已更新", "Ambient context updated"],
+    empty: ["暂无世界动态", "No world activity yet"],
+    replay: ["回放上下文", "Replay context"],
+    gap: ["世界动态已过期", "World activity is stale"],
+    unavailable: ["世界动态不可用", "World activity unavailable"]
+  }[status] || ["世界动态不可用", "World activity unavailable"];
+  return tr2(locale, copy[0], copy[1]);
+}
+function statusBadgeClass(status) {
+  if (status === "ready") return "badge badge--accent";
+  if (status === "replay") return "badge badge--accent";
+  if (status === "gap" || status === "unavailable") return "badge badge--warn";
+  return "badge";
+}
+function reasonCopy(locale, tr2, feed) {
+  if (feed.status === "gap") {
+    const reason = String(feed.gapReason || "cursor_invalid").replace(/_/g, " ");
+    return tr2(locale, `游标或历史分叉不连续（${reason}）。已停止追加，必须重新加载权威快照。`, `The cursor or history is discontinuous (${reason}). Appending stopped; reload the authoritative snapshot.`);
+  }
+  if (feed.status === "unavailable") {
+    const reason = String(feed.unavailableReason || "source_unavailable").replace(/_/g, " ");
+    return tr2(locale, `运行时没有提供可验证的 World Feed（${reason}）。`, `The runtime did not provide a verifiable World Feed (${reason}).`);
+  }
+  if (feed.status === "replay") {
+    return tr2(locale, "这是游标回放上下文，不代表玩家动作成功。", "This is cursor replay context; it does not prove a player action succeeded.");
+  }
+  if (feed.status === "ready") {
+    return tr2(locale, "环境动态仅作上下文呈现；因果仍以 Action Receipt 为准。", "Ambient activity is context only; Action Receipt remains the causal source.");
+  }
+  return null;
+}
+function eventDetail(event, locale, tr2) {
+  return tr2(locale, `${event.kind} · ${event.detail || "无额外详情"}`, `${event.kind} · ${event.detail || "No additional detail"}`);
+}
+function WorldFeedPanel(props) {
+  const locale = () => typeof props.locale === "function" ? props.locale() : props.locale || "en";
+  const tr2 = (localeValue, zh, en) => typeof props.tr === "function" ? props.tr(localeValue, zh, en) : en;
+  const feed = () => readFeed(props);
+  const presentationEvents = () => [...feed().events || []].reverse();
+  const status = () => String(feed().status || "unavailable");
+  const statusLabel = () => statusCopy(locale(), tr2, status());
+  const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
+  return (() => {
+    var _el$ = _tmpl$5$e(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling, _el$5 = _el$4.nextSibling, _el$6 = _el$2.nextSibling, _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild;
+    insert(_el$3, () => tr2(locale(), "环境上下文", "Ambient Context"));
+    insert(_el$4, () => tr2(locale(), "World Feed", "World Feed"));
+    insert(_el$5, () => tr2(locale(), "只读的运行时环境投影；不会替代 Action Receipt，也不会证明玩家动作成功。", "Read-only runtime context; it never replaces Action Receipt or proves a player action succeeded."));
+    insert(_el$8, statusLabel);
+    insert(_el$7, createComponent(Show, {
+      get when() {
+        return feed().worldId;
+      },
+      get children() {
+        var _el$9 = _tmpl$$k();
+        insert(_el$9, () => `world=${feed().worldId}`);
+        return _el$9;
+      }
+    }), null);
+    insert(_el$7, createComponent(Show, {
+      get when() {
+        return feed().reorgEpoch != null;
+      },
+      get children() {
+        var _el$0 = _tmpl$$k();
+        insert(_el$0, () => `epoch=${feed().reorgEpoch}`);
+        return _el$0;
+      }
+    }), null);
+    insert(_el$6, createComponent(Show, {
+      get when() {
+        return reasonCopy(locale(), tr2, feed());
+      },
+      get children() {
+        var _el$1 = _tmpl$2$k();
+        insert(_el$1, () => reasonCopy(locale(), tr2, feed()));
+        return _el$1;
+      }
+    }), null);
+    insert(_el$6, createComponent(Show, {
+      get when() {
+        return shouldReload();
+      },
+      get children() {
+        var _el$10 = _tmpl$3$i(), _el$11 = _el$10.firstChild;
+        _el$11.$$click = () => props.onReloadSnapshot?.();
+        insert(_el$11, () => tr2(locale(), "重新加载权威快照", "Reload authoritative snapshot"));
+        return _el$10;
+      }
+    }), null);
+    insert(_el$6, createComponent(Show, {
+      get when() {
+        return presentationEvents().length > 0;
+      },
+      get fallback() {
+        return (() => {
+          var _el$13 = _tmpl$6$8();
+          insert(_el$13, (() => {
+            var _c$ = memo(() => status() === "loading");
+            return () => _c$() ? tr2(locale(), "正在等待 world_feed/v1 响应…", "Waiting for a world_feed/v1 response…") : memo(() => status() === "empty")() ? tr2(locale(), "权威运行时暂未发布事件。", "The authoritative runtime has not published events yet.") : tr2(locale(), "没有可显示的环境事件。", "No ambient events are available to display.");
+          })());
+          return _el$13;
+        })();
+      },
+      get children() {
+        var _el$12 = _tmpl$4$f();
+        insert(_el$12, createComponent(For, {
+          get each() {
+            return presentationEvents();
+          },
+          children: (event) => (() => {
+            var _el$14 = _tmpl$8$2(), _el$15 = _el$14.firstChild, _el$16 = _el$15.firstChild, _el$17 = _el$16.nextSibling, _el$18 = _el$15.nextSibling;
+            insert(_el$16, () => event.summary);
+            insert(_el$17, () => `#${event.event_seq}`);
+            insert(_el$18, () => eventDetail(event, locale(), tr2));
+            insert(_el$14, createComponent(Show, {
+              get when() {
+                return event.receipt_ref != null;
+              },
+              get children() {
+                var _el$19 = _tmpl$7$5();
+                insert(_el$19, () => tr2(locale(), `查看明确回执 ${event.receipt_ref}`, `View explicit receipt ${event.receipt_ref}`));
+                createRenderEffect(() => setAttribute(_el$19, "data-world-feed-receipt-ref", event.receipt_ref));
+                return _el$19;
+              }
+            }), null);
+            createRenderEffect(() => setAttribute(_el$14, "data-world-feed-event", event.event_seq));
+            return _el$14;
+          })()
+        }));
+        return _el$12;
+      }
+    }), null);
+    createRenderEffect((_p$) => {
+      var _v$ = status(), _v$2 = statusBadgeClass(status());
+      _v$ !== _p$.e && setAttribute(_el$, "data-world-feed-status", _p$.e = _v$);
+      _v$2 !== _p$.t && className(_el$8, _p$.t = _v$2);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0
+    });
+    return _el$;
+  })();
+}
+delegateEvents(["click"]);
+function WorldFeedSurface({
+  core: core2,
+  locale,
+  tr: tr2,
+  onReloadSnapshot
+}) {
+  return createComponent(WorldFeedPanel, {
+    feed: () => core2.state.worldFeed,
+    locale,
+    tr: tr2,
+    onReloadSnapshot
+  });
+}
+var _tmpl$$j = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$j = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><a class=secondary-viewer-nav__link href=#viewer-diagnostics-panel>`);
 function focusViewerTarget(href) {
   const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
   if (!target) {
@@ -11340,7 +11806,7 @@ function MobileJumpRail(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
   return (() => {
-    var _el$ = _tmpl$$i(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling;
+    var _el$ = _tmpl$$j(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling;
     _el$2.$$click = focusViewerAnchor;
     insert(_el$2, () => translate("世界", "World"));
     _el$3.$$click = focusViewerAnchor;
@@ -11355,7 +11821,7 @@ function SecondaryViewerNavigation(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
   return (() => {
-    var _el$5 = _tmpl$2$i(), _el$6 = _el$5.firstChild;
+    var _el$5 = _tmpl$2$j(), _el$6 = _el$5.firstChild;
     _el$6.$$click = focusViewerAnchor;
     insert(_el$6, () => translate("诊断", "Diagnostics"));
     createRenderEffect(() => setAttribute(_el$5, "aria-label", translate("次级查看入口", "Secondary viewer navigation")));
@@ -11363,6 +11829,387 @@ function SecondaryViewerNavigation(props) {
   })();
 }
 delegateEvents(["click"]);
+var _tmpl$$i = /* @__PURE__ */ template(`<section id=viewer-director-panel class="panel director-surface"data-viewer-surface=director data-director-mode=active tabindex=-1 aria-labelledby=viewer-director-title><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title id=viewer-director-title></div><div class=panel__meta-copy></div><button id=viewer-director-exit type=button class=panel__route-close></button></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--good">server_validated</span><span class=badge></span><span class=badge></span></div><div class=director-density-grid><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div></div><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class=feedback-detail></div><div class=director-density-list>`), _tmpl$2$i = /* @__PURE__ */ template(`<div class=director-density-list__row><span></span><span class="badge badge--diagnostic">`), _tmpl$3$h = /* @__PURE__ */ template(`<div class=director-entry-card><div class=panel__title></div><div class=feedback-detail></div><div class=toolbar><button id=viewer-director-entry type=button class="button button--secondary">`);
+function text(locale, zh, en) {
+  return String(locale || "en").toLowerCase().startsWith("zh") ? zh : en;
+}
+function directorRecoveryText(locale, state2) {
+  const reason = state2?.reason;
+  if (state2?.status === "pending") {
+    return text(locale, "正在向服务器核验 Director 权限…", "Validating the Director capability with the server…");
+  }
+  if (reason === "not_authorized") {
+    return text(locale, "当前账号没有 Director 权限。请通过受支持的操作员入口恢复。", "This account is not authorized for Director. Recover through the supported operator entry point.");
+  }
+  if (reason === "reconnect_required") {
+    return text(locale, "连接或会话需要恢复；已回到 Player。世界与当前选择保持不变。", "The connection or session needs recovery; Player mode is restored. The world and current selection are unchanged.");
+  }
+  if (reason === "revoked") {
+    return text(locale, "Director 权限已失效；已清除本地 Director 视图。请恢复受支持的操作员会话。", "The Director capability is no longer valid; the local Director view was cleared. Recover a supported operator session.");
+  }
+  if (reason === "expired") {
+    return text(locale, "Director 权限已过期；已回到 Player。请重新请求服务器核验。", "The Director capability expired; Player mode is restored. Request server validation again.");
+  }
+  if (reason === "player_exit") {
+    return text(locale, "已退出 Director；世界状态与当前选择保持不变。", "Director exited; world state and current selection are unchanged.");
+  }
+  if (state2?.status === "denied") {
+    return text(locale, "服务器没有授予 Director 权限。当前仍保持 Player。", "The server did not grant Director. Player mode remains active.");
+  }
+  if (state2?.status === "unavailable") {
+    return text(locale, "Director 权限服务暂不可用。当前仍保持 Player，请稍后重试。", "The Director capability service is unavailable. Player mode remains active; try again later.");
+  }
+  return text(locale, "Director 仅在服务器明确核验成功后临时开放。", "Director opens only after explicit server validation.");
+}
+function readSnapshot(core2) {
+  const snapshot = core2?.state?.snapshot;
+  const model = snapshot?.model || {};
+  const selectedKind = String(core2?.state?.selectedKind || "").trim();
+  const selectedId = String(core2?.state?.selectedId || "").trim();
+  return {
+    worldId: String(core2?.state?.worldId || "").trim() || "-",
+    logicalTime: Number(snapshot?.time ?? core2?.state?.logicalTime ?? 0),
+    eventSeq: Number(core2?.state?.eventSeq || 0),
+    agents: Object.keys(model.agents || {}).length,
+    locations: Object.keys(model.locations || {}).length,
+    events: Array.isArray(core2?.state?.recentEvents) ? core2.state.recentEvents.length : 0,
+    selected: selectedKind && selectedId ? `${selectedKind}:${selectedId}` : "-"
+  };
+}
+function DirectorSurface(props) {
+  const locale = () => props.locale?.() || props.locale || "en";
+  const [revision, setRevision] = createSignal(0);
+  onMount(() => {
+    const unsubscribe = props.controller?.subscribe?.(() => setRevision((value2) => value2 + 1));
+    if (typeof unsubscribe === "function") onCleanup(unsubscribe);
+  });
+  const state2 = () => {
+    revision();
+    return props.controller?.getState?.() || {
+      mode: "player",
+      status: "idle",
+      capability: null
+    };
+  };
+  const snapshot = () => readSnapshot(props.core);
+  const exit = () => {
+    props.controller?.exit?.();
+    window.location.hash = "#viewer-stage-panel";
+    document.getElementById("viewer-stage-panel")?.focus();
+  };
+  return createComponent(Show, {
+    get when() {
+      return state2().mode === "director";
+    },
+    get children() {
+      var _el$ = _tmpl$$i(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling, _el$8 = _el$7.firstChild, _el$9 = _el$8.firstChild, _el$0 = _el$9.nextSibling, _el$1 = _el$0.nextSibling, _el$10 = _el$8.nextSibling, _el$11 = _el$10.firstChild, _el$12 = _el$11.firstChild, _el$13 = _el$12.nextSibling, _el$14 = _el$11.nextSibling, _el$15 = _el$14.firstChild, _el$16 = _el$15.nextSibling, _el$17 = _el$14.nextSibling, _el$18 = _el$17.firstChild, _el$19 = _el$18.nextSibling, _el$20 = _el$17.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$10.nextSibling, _el$24 = _el$23.firstChild, _el$25 = _el$24.nextSibling, _el$26 = _el$25.nextSibling, _el$27 = _el$23.nextSibling, _el$28 = _el$27.nextSibling;
+      insert(_el$3, () => text(locale(), "服务器核验视图", "Server-validated visibility"));
+      insert(_el$4, () => text(locale(), "Director", "Director"));
+      insert(_el$5, () => text(locale(), "仅提高世界可见密度；不增加命令、进度推进或本地持久化。", "Visibility density only; no commands, progress changes, or local persistence."));
+      _el$6.$$click = exit;
+      insert(_el$6, () => text(locale(), "退出 Director", "Exit Director"));
+      insert(_el$0, () => state2().capability?.issuer || "-");
+      insert(_el$1, (() => {
+        var _c$ = memo(() => !!state2().capability?.expiresAtUnixMs);
+        return () => _c$() ? `expires=${state2().capability.expiresAtUnixMs}` : "expires=-";
+      })());
+      insert(_el$12, () => text(locale(), "世界", "World"));
+      insert(_el$13, () => snapshot().worldId);
+      insert(_el$15, () => text(locale(), "逻辑时间", "Logical Time"));
+      insert(_el$16, () => snapshot().logicalTime);
+      insert(_el$18, () => text(locale(), "事件序号", "Event Sequence"));
+      insert(_el$19, () => snapshot().eventSeq);
+      insert(_el$21, () => text(locale(), "当前选择", "Current Selection"));
+      insert(_el$22, () => snapshot().selected);
+      insert(_el$24, () => `agents=${snapshot().agents}`);
+      insert(_el$25, () => `locations=${snapshot().locations}`);
+      insert(_el$26, () => `recentEvents=${snapshot().events}`);
+      insert(_el$27, () => text(locale(), "此视图只读，退出或权限失效不会清空世界快照或当前选择。", "This view is read-only; exit or capability loss does not clear the world snapshot or current selection."));
+      insert(_el$28, createComponent(For, {
+        get each() {
+          return [text(locale(), "世界快照", "World snapshot"), text(locale(), "空间对象密度", "Spatial entity density"), text(locale(), "最近事件窗口", "Recent event window")];
+        },
+        children: (label) => (() => {
+          var _el$29 = _tmpl$2$i(), _el$30 = _el$29.firstChild, _el$31 = _el$30.nextSibling;
+          insert(_el$30, label);
+          insert(_el$31, () => text(locale(), "只读", "read-only"));
+          return _el$29;
+        })()
+      }));
+      createRenderEffect((_p$) => {
+        var _v$ = text(locale(), "Director 权限状态", "Director capability status"), _v$2 = text(locale(), "Director 可见性摘要", "Director visibility summary");
+        _v$ !== _p$.e && setAttribute(_el$8, "aria-label", _p$.e = _v$);
+        _v$2 !== _p$.t && setAttribute(_el$28, "aria-label", _p$.t = _v$2);
+        return _p$;
+      }, {
+        e: void 0,
+        t: void 0
+      });
+      return _el$;
+    }
+  });
+}
+function DirectorEntryCard(props) {
+  const locale = () => props.locale?.() || props.locale || "en";
+  const [revision, setRevision] = createSignal(0);
+  onMount(() => {
+    const unsubscribe = props.controller?.subscribe?.(() => setRevision((value2) => value2 + 1));
+    if (typeof unsubscribe === "function") onCleanup(unsubscribe);
+  });
+  const state2 = () => {
+    revision();
+    return props.controller?.getState?.() || {
+      mode: "player",
+      status: "idle"
+    };
+  };
+  return (() => {
+    var _el$32 = _tmpl$3$h(), _el$33 = _el$32.firstChild, _el$34 = _el$33.nextSibling, _el$35 = _el$34.nextSibling, _el$36 = _el$35.firstChild;
+    insert(_el$33, () => text(locale(), "Director 可见性", "Director Visibility"));
+    insert(_el$34, () => directorRecoveryText(locale(), state2()));
+    _el$36.$$click = () => props.onRequest?.();
+    insert(_el$36, (() => {
+      var _c$2 = memo(() => state2().status === "pending");
+      return () => _c$2() ? text(locale(), "正在核验…", "Validating…") : text(locale(), "打开 Director", "Open Director");
+    })());
+    createRenderEffect((_p$) => {
+      var _v$3 = state2().status || "idle", _v$4 = state2().status === "pending";
+      _v$3 !== _p$.e && setAttribute(_el$32, "data-director-status", _p$.e = _v$3);
+      _v$4 !== _p$.t && (_el$36.disabled = _p$.t = _v$4);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0
+    });
+    return _el$32;
+  })();
+}
+delegateEvents(["click"]);
+const DIRECTOR_CAPABILITY_ENDPOINT = "/api/public/director/capability";
+const DIRECTOR_CAPABILITY_MAX_CLOCK_SKEW_MS = 3e4;
+const DIRECTOR_CAPABILITY_MAX_TTL_MS = 6e4;
+const DIRECTOR_GRANT_VERSION = 1;
+const DIRECTOR_GRANT_ACTION = "director_open";
+const DIRECTOR_GRANT_AUDIENCE = "viewer_director";
+const DIRECTOR_GRANT_SCOPE = "diagnostics_read";
+const DIRECTOR_GRANT_SIGNATURE_PREFIX = "awdirectorgrant:v1:";
+const SAFE_REASONS = Object.freeze({
+  denied: "not_authorized",
+  unavailable: "unavailable",
+  invalid: "invalid_server_response",
+  expired: "expired",
+  revoked: "revoked",
+  reconnect: "reconnect_required",
+  exited: "player_exit"
+});
+function finiteUnixMs(value2) {
+  const numeric = Number(value2);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+function safeErrorCode(payload) {
+  const value2 = String(payload?.error_code || "").trim().toLowerCase();
+  return value2 === "director_not_authorized" || value2 === "director_denied" ? SAFE_REASONS.denied : SAFE_REASONS.unavailable;
+}
+function clonePublicCapability(capability) {
+  if (!capability) {
+    return null;
+  }
+  return {
+    name: "director",
+    visibility: "dense",
+    issuer: capability.issuer,
+    issuedAtUnixMs: capability.issuedAtUnixMs,
+    expiresAtUnixMs: capability.expiresAtUnixMs
+  };
+}
+function validateDirectorCapabilityResponse(payload, now = Date.now()) {
+  if (!payload || typeof payload !== "object" || payload.ok !== true || payload.server_validated !== true) {
+    return { ok: false, reason: safeErrorCode(payload) };
+  }
+  const raw2 = payload.grant;
+  if (!raw2 || typeof raw2 !== "object" || raw2.version !== DIRECTOR_GRANT_VERSION || raw2.action !== DIRECTOR_GRANT_ACTION || raw2.audience !== DIRECTOR_GRANT_AUDIENCE || raw2.scope !== DIRECTOR_GRANT_SCOPE) {
+    return { ok: false, reason: SAFE_REASONS.invalid };
+  }
+  const issuer = String(raw2.server || "").trim();
+  const token = String(raw2.signature || "").trim();
+  const playerId = String(raw2.player_id || "").trim();
+  const playerPublicKey = String(raw2.player_public_key || "").trim();
+  const nonce = String(raw2.nonce || "").trim();
+  const signerPublicKey = String(raw2.signer_public_key || "").trim();
+  const issuedAtUnixMs = finiteUnixMs(raw2.issued_at_unix_ms);
+  const expiresAtUnixMs = finiteUnixMs(raw2.expires_at_unix_ms);
+  const currentUnixMs = finiteUnixMs(now) || Date.now();
+  const sessionEpoch = Number(raw2.session_epoch);
+  if (!issuer || !token.startsWith(DIRECTOR_GRANT_SIGNATURE_PREFIX) || !playerId || !playerPublicKey || !nonce || !signerPublicKey || !Number.isSafeInteger(sessionEpoch) || sessionEpoch <= 0 || !issuedAtUnixMs || !expiresAtUnixMs) {
+    return { ok: false, reason: SAFE_REASONS.invalid };
+  }
+  if (issuedAtUnixMs > currentUnixMs + DIRECTOR_CAPABILITY_MAX_CLOCK_SKEW_MS || expiresAtUnixMs <= currentUnixMs) {
+    return { ok: false, reason: expiresAtUnixMs <= currentUnixMs ? SAFE_REASONS.expired : SAFE_REASONS.invalid };
+  }
+  if (expiresAtUnixMs <= issuedAtUnixMs || expiresAtUnixMs - issuedAtUnixMs > DIRECTOR_CAPABILITY_MAX_TTL_MS) {
+    return { ok: false, reason: SAFE_REASONS.invalid };
+  }
+  return {
+    ok: true,
+    capability: {
+      ...clonePublicCapability({ issuer, issuedAtUnixMs, expiresAtUnixMs }),
+      token
+    }
+  };
+}
+function createDirectorCapabilityApiAdapter({
+  fetchImpl = globalThis.fetch,
+  endpoint = DIRECTOR_CAPABILITY_ENDPOINT
+} = {}) {
+  return {
+    async requestCapability(context = {}) {
+      if (typeof fetchImpl !== "function") {
+        return { ok: false, error_code: "director_capability_unavailable" };
+      }
+      try {
+        const response = await fetchImpl(endpoint, {
+          method: "GET",
+          cache: "no-store",
+          headers: { Accept: "application/json" }
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          return { ok: false, error_code: response.status === 401 || response.status === 403 ? "director_not_authorized" : "director_capability_unavailable" };
+        }
+        return payload && typeof payload === "object" ? payload : { ok: false, error_code: "director_capability_unavailable" };
+      } catch (_) {
+        return { ok: false, error_code: "director_capability_unavailable" };
+      }
+    }
+  };
+}
+function initialState() {
+  return { mode: "player", status: "idle", capability: null, reason: null };
+}
+function createDirectorCapabilityController({ adapter, now = Date.now, onChange = () => {
+} } = {}) {
+  const capabilityAdapter = adapter || createDirectorCapabilityApiAdapter();
+  let current = initialState();
+  let sequence = 0;
+  let expiryTimer = null;
+  const listeners = /* @__PURE__ */ new Set();
+  function clearExpiryTimer() {
+    if (expiryTimer != null && typeof window !== "undefined" && typeof window.clearTimeout === "function") {
+      window.clearTimeout(expiryTimer);
+    }
+    expiryTimer = null;
+  }
+  function publish(next) {
+    current = next;
+    onChange(current);
+    listeners.forEach((listener) => listener(current));
+    return current;
+  }
+  function downgrade(status, reason = status) {
+    sequence += 1;
+    clearExpiryTimer();
+    return publish({ mode: "player", status, capability: null, reason });
+  }
+  function scheduleExpiry(capability, requestSequence) {
+    clearExpiryTimer();
+    const delay = Math.max(0, capability.expiresAtUnixMs - Number(now()));
+    if (typeof window === "undefined" || typeof window.setTimeout !== "function") {
+      return;
+    }
+    expiryTimer = window.setTimeout(() => {
+      if (requestSequence === sequence && current.mode === "director") {
+        downgrade("expired", SAFE_REASONS.expired);
+      }
+    }, delay);
+  }
+  async function request(context = {}) {
+    if (current.status === "pending") {
+      return current;
+    }
+    const requestSequence = ++sequence;
+    clearExpiryTimer();
+    publish({ mode: "player", status: "pending", capability: null, reason: null });
+    try {
+      const response = await capabilityAdapter.requestCapability(context);
+      if (requestSequence !== sequence) {
+        return current;
+      }
+      const validated = validateDirectorCapabilityResponse(response, Number(now()));
+      if (!validated.ok) {
+        return publish({ mode: "player", status: validated.reason === SAFE_REASONS.denied ? "denied" : "unavailable", capability: null, reason: validated.reason });
+      }
+      const capability = validated.capability;
+      const next = publish({ mode: "director", status: "active", capability: clonePublicCapability(capability), reason: null });
+      scheduleExpiry(capability, requestSequence);
+      return next;
+    } catch (_) {
+      if (requestSequence !== sequence) {
+        return current;
+      }
+      return publish({ mode: "player", status: "unavailable", capability: null, reason: SAFE_REASONS.unavailable });
+    }
+  }
+  function observeRuntime(runtime = {}) {
+    if (current.mode !== "director") {
+      return current;
+    }
+    const disconnected = ["disconnected", "error"].includes(String(runtime.connectionStatus || "").trim().toLowerCase());
+    const unavailableAuth = runtime.authAvailable === false;
+    const runtimeStatus = String(runtime.authRuntimeStatus || "").trim().toLowerCase();
+    if (runtime.authRevokeReason || runtime.authRevokedBy || ["revoked", "disconnected", "error"].includes(runtimeStatus)) {
+      return downgrade("revoked", SAFE_REASONS.revoked);
+    }
+    if (disconnected || unavailableAuth || runtimeStatus === "probing") {
+      return downgrade("reconnect_required", SAFE_REASONS.reconnect);
+    }
+    return current;
+  }
+  function exit() {
+    return downgrade("exited", SAFE_REASONS.exited);
+  }
+  return {
+    getState: () => ({
+      mode: current.mode,
+      status: current.status,
+      capability: clonePublicCapability(current.capability),
+      reason: current.reason
+    }),
+    request,
+    observeRuntime,
+    exit,
+    subscribe(listener) {
+      if (typeof listener !== "function") return () => {
+      };
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
+}
+function createViewerDirectorSession({ core: core2, onChange, fetchImpl } = {}) {
+  const controller = createDirectorCapabilityController({
+    adapter: createDirectorCapabilityApiAdapter({ fetchImpl }),
+    onChange
+  });
+  return {
+    controller,
+    request: async () => {
+      window.location.hash = "#viewer-director-entry";
+      const result = await controller.request({ worldId: core2?.state?.worldId });
+      if (result.mode === "director") {
+        window.location.hash = "#viewer-director-panel";
+        queueMicrotask(() => document.getElementById("viewer-director-panel")?.focus());
+      }
+      return result;
+    },
+    observeRuntime: () => controller.observeRuntime({
+      connectionStatus: core2?.state?.connectionStatus,
+      authAvailable: core2?.state?.auth?.available,
+      authRuntimeStatus: core2?.state?.auth?.runtimeStatus,
+      authRevokeReason: core2?.state?.auth?.revokeReason,
+      authRevokedBy: core2?.state?.auth?.revokedBy
+    })
+  };
+}
 var _tmpl$$h = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$h = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--empty">`), _tmpl$3$g = /* @__PURE__ */ template(`<div class="feedback-detail micro-depot-facilities__state-cue micro-depot-facilities__state-cue--unpaid">`), _tmpl$4$e = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5$d = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$6$7 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class="metric micro-depot-facilities__metric--primary"><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div></div><details class=micro-depot-facilities__technical-evidence data-testid=micro-depot-technical-evidence><summary></summary><div class="summary-grid micro-depot-facilities__technical-grid"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$7$4 = /* @__PURE__ */ template(`<span class="badge micro-depot-facilities__availability-badge"data-action-availability=published>`);
 function isRecord(value2) {
   return value2 != null && typeof value2 === "object" && !Array.isArray(value2);
@@ -11530,7 +12377,7 @@ function RecoveryMetric(props) {
 function RecoveryOptionComparisonPanel(props) {
   const continuation = () => props.continuation || {};
   const options = () => continuation().recoveryOptionComparisons || [];
-  const text = (zh, en) => props.tr(props.locale, zh, en);
+  const text2 = (zh, en) => props.tr(props.locale, zh, en);
   return createComponent(Show, {
     get when() {
       return options().length > 0;
@@ -11538,10 +12385,10 @@ function RecoveryOptionComparisonPanel(props) {
     get fallback() {
       return createComponent(RecoveryMetric, {
         get label() {
-          return text("恢复选项", "Recovery Options");
+          return text2("恢复选项", "Recovery Options");
         },
         get value() {
-          return continuation().recoveryOptions || text("待发布", "not published");
+          return continuation().recoveryOptions || text2("待发布", "not published");
         }
       });
     },
@@ -11556,7 +12403,7 @@ function RecoveryOptionComparisonPanel(props) {
           insert(_el$7, () => recoveryOptionDisplayLabel("kind", option.kind, props.locale, props.tr));
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
-              return text("时间", "Time");
+              return text2("时间", "Time");
             },
             get value() {
               return recoveryOptionDisplayLabel("time", option.timeClass, props.locale, props.tr);
@@ -11564,7 +12411,7 @@ function RecoveryOptionComparisonPanel(props) {
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
-              return text("资源", "Resources");
+              return text2("资源", "Resources");
             },
             get value() {
               return recoveryOptionDisplayLabel("resource", option.resourceClass, props.locale, props.tr);
@@ -11572,7 +12419,7 @@ function RecoveryOptionComparisonPanel(props) {
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
-              return text("风险", "Risk");
+              return text2("风险", "Risk");
             },
             get value() {
               return recoveryOptionDisplayLabel("risk", option.riskClass, props.locale, props.tr);
@@ -11580,7 +12427,7 @@ function RecoveryOptionComparisonPanel(props) {
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
-              return text("保留收益", "Retains");
+              return text2("保留收益", "Retains");
             },
             get value() {
               return option.retainedBenefit;
@@ -11588,7 +12435,7 @@ function RecoveryOptionComparisonPanel(props) {
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
-              return text("推荐原因", "Why");
+              return text2("推荐原因", "Why");
             },
             get value() {
               return option.recommendationReason;
@@ -11626,7 +12473,7 @@ function Detail$1(props) {
 function FallbackTradeoffPanel(props) {
   const options = () => props.options || [];
   const handoff = () => props.noSafeFallbackHandoff || null;
-  const text = (zh, en) => props.tr(props.locale, zh, en);
+  const text2 = (zh, en) => props.tr(props.locale, zh, en);
   const requiredNextDecision = () => {
     const value2 = handoff()?.requiredNextDecisionActionId || handoff()?.requiredNextDecisionClass;
     return value2 ? humanize(value2) : null;
@@ -11637,8 +12484,8 @@ function FallbackTradeoffPanel(props) {
     },
     get children() {
       var _el$4 = _tmpl$3$e(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling;
-      insert(_el$6, () => text("恢复选项", "Recovery choices"));
-      insert(_el$7, () => text("比较后再执行推荐动作", "Compare before using the recommended action"));
+      insert(_el$6, () => text2("恢复选项", "Recovery choices"));
+      insert(_el$7, () => text2("比较后再执行推荐动作", "Compare before using the recommended action"));
       insert(_el$8, createComponent(For, {
         get each() {
           return options();
@@ -11648,7 +12495,7 @@ function FallbackTradeoffPanel(props) {
           insert(_el$14, () => fallbackTradeoffLabel(option.valueClass, props.locale, props.tr));
           insert(_el$16, (() => {
             var _c$ = memo(() => !!option.available);
-            return () => _c$() ? text("可用", "Available") : text("不可用", "Unavailable");
+            return () => _c$() ? text2("可用", "Available") : text2("不可用", "Unavailable");
           })());
           insert(_el$15, createComponent(Show, {
             get when() {
@@ -11656,13 +12503,13 @@ function FallbackTradeoffPanel(props) {
             },
             get children() {
               var _el$17 = _tmpl$4$d();
-              insert(_el$17, () => text("推荐", "Recommended"));
+              insert(_el$17, () => text2("推荐", "Recommended"));
               return _el$17;
             }
           }), null);
           insert(_el$18, createComponent(Detail$1, {
             get label() {
-              return text("原因", "Reason");
+              return text2("原因", "Reason");
             },
             get value() {
               return option.reason;
@@ -11670,7 +12517,7 @@ function FallbackTradeoffPanel(props) {
           }), null);
           insert(_el$18, createComponent(Detail$1, {
             get label() {
-              return text("保留", "Keeps");
+              return text2("保留", "Keeps");
             },
             get value() {
               return option.progressKept;
@@ -11678,7 +12525,7 @@ function FallbackTradeoffPanel(props) {
           }), null);
           insert(_el$18, createComponent(Detail$1, {
             get label() {
-              return text("成本", "Cost");
+              return text2("成本", "Cost");
             },
             get value() {
               return option.cost;
@@ -11686,7 +12533,7 @@ function FallbackTradeoffPanel(props) {
           }), null);
           insert(_el$18, createComponent(Detail$1, {
             get label() {
-              return text("机会成本", "Opportunity cost");
+              return text2("机会成本", "Opportunity cost");
             },
             get value() {
               return option.opportunityCost;
@@ -11712,11 +12559,11 @@ function FallbackTradeoffPanel(props) {
         },
         get children() {
           var _el$9 = _tmpl$2$f(), _el$0 = _el$9.firstChild, _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling, _el$11 = _el$0.nextSibling;
-          insert(_el$1, () => text("没有安全恢复选项", "No safe fallback"));
-          insert(_el$10, () => text("需要新的决定", "New decision required"));
+          insert(_el$1, () => text2("没有安全恢复选项", "No safe fallback"));
+          insert(_el$10, () => text2("需要新的决定", "New decision required"));
           insert(_el$11, createComponent(Detail$1, {
             get label() {
-              return text("原因", "Reason");
+              return text2("原因", "Reason");
             },
             get value() {
               return handoff().reason;
@@ -11729,7 +12576,7 @@ function FallbackTradeoffPanel(props) {
             get children() {
               return createComponent(Detail$1, {
                 get label() {
-                  return text("所需下一决定", "Required next decision");
+                  return text2("所需下一决定", "Required next decision");
                 },
                 get value() {
                   return requiredNextDecision();
@@ -11760,17 +12607,17 @@ function Detail(props) {
 function WaitResolutionQuoteCard(props) {
   if (!props.quote) return null;
   const locale = () => props.locale;
-  const text = (zh, en) => props.tr(locale(), zh, en);
+  const text2 = (zh, en) => props.tr(locale(), zh, en);
   const safeToWait = props.quote.safe_to_wait === true || props.quote.safeToWait === true;
   return (() => {
     var _el$4 = _tmpl$2$e(), _el$5 = _el$4.firstChild, _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling, _el$8 = _el$5.nextSibling, _el$9 = _el$8.nextSibling;
-    insert(_el$6, () => text("等待结果说明", "Wait resolution"));
+    insert(_el$6, () => text2("等待结果说明", "Wait resolution"));
     className(_el$7, safeToWait ? "badge badge--good" : "badge badge--warn");
-    insert(_el$7, () => safeToWait ? text("可以等待", "Safe to wait") : text("不要等待", "Do not wait"));
-    insert(_el$8, () => safeToWait ? text("运行时说明等待是安全的；在复查点确认预期变化。", "The runtime says waiting is safe; confirm the expected change at the recheck point.") : text("运行时说明等待并不安全；请比较恢复选项后再决定。", "The runtime says waiting is not safe; compare the recovery choices before deciding."));
+    insert(_el$7, () => safeToWait ? text2("可以等待", "Safe to wait") : text2("不要等待", "Do not wait"));
+    insert(_el$8, () => safeToWait ? text2("运行时说明等待是安全的；在复查点确认预期变化。", "The runtime says waiting is safe; confirm the expected change at the recheck point.") : text2("运行时说明等待并不安全；请比较恢复选项后再决定。", "The runtime says waiting is not safe; compare the recovery choices before deciding."));
     insert(_el$9, createComponent(Detail, {
       get label() {
-        return text("触发条件", "Trigger");
+        return text2("触发条件", "Trigger");
       },
       get value() {
         return quoteField(props.quote, "resolution_trigger", "resolutionTrigger");
@@ -11778,7 +12625,7 @@ function WaitResolutionQuoteCard(props) {
     }), null);
     insert(_el$9, createComponent(Detail, {
       get label() {
-        return text("复查点", "Recheck");
+        return text2("复查点", "Recheck");
       },
       get value() {
         return quoteField(props.quote, "recheck_tick_or_event", "recheckTickOrEvent");
@@ -11786,7 +12633,7 @@ function WaitResolutionQuoteCard(props) {
     }), null);
     insert(_el$9, createComponent(Detail, {
       get label() {
-        return text("预期变化", "Expected change");
+        return text2("预期变化", "Expected change");
       },
       get value() {
         return quoteField(props.quote, "expected_change", "expectedChange");
@@ -11794,7 +12641,7 @@ function WaitResolutionQuoteCard(props) {
     }), null);
     insert(_el$9, createComponent(Detail, {
       get label() {
-        return text("未解决风险", "Unresolved risk");
+        return text2("未解决风险", "Unresolved risk");
       },
       get value() {
         return quoteField(props.quote, "unresolved_risk", "unresolvedRisk");
@@ -11802,7 +12649,7 @@ function WaitResolutionQuoteCard(props) {
     }), null);
     insert(_el$9, createComponent(Detail, {
       get label() {
-        return text("替代解锁条件", "Alternative unlock");
+        return text2("替代解锁条件", "Alternative unlock");
       },
       get value() {
         return quoteField(props.quote, "alternative_unlock_condition", "alternativeUnlockCondition");
@@ -17226,7 +18073,7 @@ function TargetsPanel() {
     return _el$190;
   })();
 }
-function WorldSummaryPanel() {
+function WorldSummaryPanel(props = {}) {
   observeViewerStateRevision();
   const locale = () => uiLocale();
   const state$1 = state;
@@ -18426,6 +19273,15 @@ function WorldSummaryPanel() {
         children: label
       })
     }));
+    insert(_el$231, createComponent(DirectorEntryCard, {
+      get controller() {
+        return props.directorController;
+      },
+      locale,
+      get onRequest() {
+        return props.onRequestDirector;
+      }
+    }), _el$232);
     insert(_el$232, createComponent(Badge, {
       get children() {
         return `ws=${state$1.wsUrl || "-"}`;
@@ -19770,6 +20626,14 @@ function DetailsPanel() {
 function AppShell() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
+  const directorSession = createViewerDirectorSession({
+    core,
+    fetchImpl: window.fetch?.bind(window)
+  });
+  createEffect(() => {
+    observeViewerStateRevision();
+    directorSession.observeRuntime();
+  });
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(buildGameplaySummary(locale()));
   onMount(() => onCleanup(installViewerRouteController()));
@@ -19804,7 +20668,14 @@ function AppShell() {
         return diagnosticsVisualFixture();
       },
       get children() {
-        return createComponent(WorldSummaryPanel, {});
+        return createComponent(WorldSummaryPanel, {
+          get directorController() {
+            return directorSession.controller;
+          },
+          get onRequestDirector() {
+            return directorSession.request;
+          }
+        });
       }
     }), null);
     insert(_el$365, createComponent(WorldStageHero, {}), null);
@@ -19818,8 +20689,21 @@ function AppShell() {
         return !diagnosticsVisualFixture();
       },
       get children() {
-        return createComponent(WorldSummaryPanel, {});
+        return createComponent(WorldSummaryPanel, {
+          get directorController() {
+            return directorSession.controller;
+          },
+          get onRequestDirector() {
+            return directorSession.request;
+          }
+        });
       }
+    }), null);
+    insert(_el$365, createComponent(WorldFeedSurface, {
+      core,
+      locale,
+      tr,
+      onReloadSnapshot: () => reloadWorldFeedFromAuthoritativeSnapshot()
     }), null);
     createRenderEffect((_p$) => {
       var _v$82 = starterOcGateOpen() ? "true" : void 0, _v$83 = starterOcGateOpen() ? true : void 0;
@@ -19849,7 +20733,13 @@ function AppShell() {
       t: void 0
     });
     return _el$366;
-  })()];
+  })(), createComponent(DirectorSurface, {
+    get controller() {
+      return directorSession.controller;
+    },
+    core,
+    locale
+  })];
 }
 function viewerVisualFixtureNameFromQuery() {
   return viewerTestApiEnabled() ? String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim() || null : null;

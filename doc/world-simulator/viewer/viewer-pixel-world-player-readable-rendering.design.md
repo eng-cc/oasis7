@@ -4,10 +4,11 @@
 - 历史任务追溯: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## Current State
-- `pixel_world_host.jsx` 已从 snapshot 派生 world bounds、locations、fragment terrain、agents、links、hotspots 和 selection。
+- `pixel_world_host.jsx` 已从 snapshot 派生 world bounds、locations、fragment terrain、agents、links、hotspots 和 selection，并挂载 World Feed/Director 终态面板。
 - `pixel_world_bridge` 已按 grid -> fragments -> links -> locations -> agents -> hotspots 渲染主要层级。
 - PixelWorldHost 仍保留 focus/right-panel 兼容 hooks；`#entity-search` 是当前
-  Targets 过滤入口。Recent Events/Feedback 是现有反馈投影，尚不是 World Feed。
+  Targets 过滤入口。Recent Events/Feedback 是现有反馈投影，独立 `world_feed/v1`
+  由 runtime journal 提供并通过 `#viewer-world-feed` 呈现。
 
 ## Design Decision
 - 把 pixel-world 主舞台定位成低保真商业游戏棋盘，而不是 renderer status panel。
@@ -68,13 +69,13 @@ no-progress result. Missing authoritative feedback renders `No action receipt ye
 ## Terminal shell relationship
 Pixel World is the world-board implementation surface for the target shell defined
 by [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gameplay-release-experience-overhaul.prd.md).
-That PRD owns Player/Director, dock, console, Search/Quote, World Feed pending
+That PRD owns Player/Director, dock, console, Search/Quote, World Feed v1
 status, and responsive/accessibility authority. This design owns only board/HUD
 mapping and its receipt rendering; it does not define a second mode or a release
 claim.
 
-## World Feed visual handoff (pending)
-When the separate `world_feed/v1` slice lands, render it as an ambient band below
+## World Feed visual handoff (implemented)
+Render the `world_feed/v1` projection as an ambient band below
 the Action Receipt or inside the contextual console; never style it as a success
 receipt. The renderer consumes source-ordered events keyed by
 `(world_id,reorg_epoch,event_seq)`, deduplicates by that identity, and exposes the
@@ -89,9 +90,10 @@ cursor/recovery state without sorting by local time.
 | `gap`/reorg | warning state | reload cursor/snapshot; never splice unknown events |
 | `unavailable` | honest unavailable state | explain next recovery action |
 
-Current Recent Events/Feedback retain their names until this projection and its
-Viewer/runtime/QA evidence exist. `#viewer-world-feed` remains a future source-JSX
-anchor and must not be fabricated in generated bundles.
+Current Recent Events/Feedback retain their names; they are not silently renamed by
+the new projection. `#viewer-world-feed` is a source and generated-output anchor.
+Runtime currently emits `receipt_ref=null`; a receipt link is rendered only for an
+explicit runtime causal identity. Gap/reorg still requires snapshot reload.
 
 ## Verification
 - Host unit test checks `commercial_surface` shape and active agent resolution.
@@ -102,7 +104,8 @@ anchor and must not be fabricated in generated bundles.
 Focused visual evidence after implementation must include: desktop/mobile board
 hierarchy; receipt versus ambient feed separation; unavailable/blocked/no-receipt
 states; CJK/long labels; keyboard focus and Escape return. This design slice has no
-browser or screenshot evidence because it changes documentation only.
+browser or screenshot evidence in this design file; task evidence records GPU-enabled
+WebGL2 ready and GPU-disabled explicit unavailable fallback separately.
 
 ## Follow-up Brainstorm
 - `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md` defines the next design direction after this first commercial HUD slice.

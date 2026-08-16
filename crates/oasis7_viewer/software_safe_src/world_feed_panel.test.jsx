@@ -1,0 +1,53 @@
+import { render, screen } from "@solidjs/testing-library";
+import { describe, expect, it } from "vitest";
+import { WorldFeedPanel } from "./world_feed_panel.jsx";
+
+const tr = (_locale, zh, en) => en;
+
+describe("WorldFeedPanel", () => {
+  it("keeps an explicit contextual surface for every protocol state", () => {
+    const { container } = render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "gap",
+          events: [],
+          worldId: "world-a",
+          reorgEpoch: 4,
+          gapReason: "reorg_epoch_changed",
+          snapshotReloadRequired: true,
+          stale: true,
+        })}
+        locale={() => "en"}
+        tr={tr}
+        onReloadSnapshot={() => {}}
+      />
+    ));
+    expect(container.querySelector("#viewer-world-feed")).toBeTruthy();
+    expect(screen.getByText("World activity is stale")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reload authoritative snapshot/i })).toBeInTheDocument();
+  });
+
+  it("renders events as ambient context and links only explicit receipt refs", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [
+            { event_seq: 7, kind: "resource_change", summary: "Ore changed", detail: "ore +1", receipt_ref: null },
+            { event_seq: 8, kind: "agent_spoke", summary: "Agent spoke", detail: "hello", receipt_ref: "receipt-8" },
+          ],
+          worldId: "world-a",
+          reorgEpoch: 1,
+          stale: false,
+        })}
+        locale={() => "en"}
+        tr={tr}
+        onReloadSnapshot={() => {}}
+      />
+    ));
+    expect(screen.getByText("World Feed")).toBeInTheDocument();
+    expect(screen.getByText("Ore changed")).toBeInTheDocument();
+    expect(screen.getByText("Agent spoke")).toBeInTheDocument();
+    expect(document.querySelectorAll("a[data-world-feed-receipt-ref]")).toHaveLength(1);
+  });
+});

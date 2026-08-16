@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use super::super::auth::verify_director_capability_grant;
+use super::super::protocol::DirectorCapabilityGrant;
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,9 @@ pub(super) struct RuntimeSessionPolicy {
     active_pubkey_by_player: BTreeMap<String, String>,
     revoked_pubkeys_by_player: BTreeMap<String, BTreeSet<String>>,
     session_epoch_by_player: BTreeMap<String, u64>,
+    /// Director grant nonces are intentionally process-local and are never persisted.
+    #[serde(skip)]
+    consumed_director_capability_nonces: BTreeSet<String>,
 }
 
 impl RuntimeSessionPolicy {
@@ -154,6 +159,36 @@ impl RuntimeSessionPolicy {
             }
         }
         Ok(self.session_epoch(player_id))
+    }
+
+    pub(super) fn validate_and_consume_director_capability_grant(
+        &mut self,
+        grant: &DirectorCapabilityGrant,
+        expected_server: &str,
+        required_signer_public_key: &str,
+        now_unix_ms: u64,
+    ) -> Result<(), String> {
+        let session_epoch = self.validate_known_session_key(
+            grant.player_id.as_str(),
+            grant.player_public_key.as_str(),
+        )?;
+        verify_director_capability_grant(
+            grant,
+            grant.player_id.as_str(),
+            grant.player_public_key.as_str(),
+            expected_server,
+            session_epoch,
+            required_signer_public_key,
+            now_unix_ms,
+        )?;
+        let nonce_key = format!("{}:{}", grant.player_id.trim(), grant.nonce.trim());
+        if nonce_key.ends_with(':') || grant.nonce.trim().is_empty() {
+            return Err("director capability grant nonce is empty".to_string());
+        }
+        if !self.consumed_director_capability_nonces.insert(nonce_key) {
+            return Err("director capability grant nonce replay".to_string());
+        }
+        Ok(())
     }
 
     pub(super) fn revoke_session(

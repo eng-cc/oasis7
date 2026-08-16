@@ -1,0 +1,88 @@
+import { describe, expect, it } from "vitest";
+import {
+  createInitialWorldFeedState,
+  consumeWorldFeed,
+  requestWorldFeedState,
+} from "./world_feed_state.js";
+
+function feed(overrides = {}) {
+  return {
+    schema_version: "world_feed/v1",
+    world_id: "world-a",
+    reorg_epoch: 2,
+    cursor: "wf1.cursor-2",
+    status: "ready",
+    events: [
+      {
+        event_seq: 2,
+        kind: "resource_change",
+        summary: "Resource changed",
+        detail: "ore +1",
+        receipt_ref: null,
+      },
+      {
+        event_seq: 1,
+        kind: "agent_spoke",
+        summary: "Agent spoke",
+        detail: "hello",
+        receipt_ref: "receipt-1",
+      },
+    ],
+    gap_reason: null,
+    unavailable_reason: null,
+    snapshot_reload_required: false,
+    ...overrides,
+  };
+}
+
+describe("World Feed v1 state", () => {
+  it("starts in an explicit loading state and records a request", () => {
+    const initial = createInitialWorldFeedState();
+    expect(initial.status).toBe("loading");
+    expect(initial.events).toEqual([]);
+    expect(requestWorldFeedState(initial, { cursor: null, limit: 50 })).toMatchObject({
+      status: "loading",
+      requestInFlight: true,
+      cursor: null,
+    });
+  });
+
+  it("consumes source order, appends by world/epoch/seq identity, and preserves null receipts", () => {
+    const initial = createInitialWorldFeedState();
+    const first = consumeWorldFeed(initial, feed());
+    expect(first.state.status).toBe("ready");
+    expect(first.state.events.map((event) => event.event_seq)).toEqual([2, 1]);
+    expect(first.state.events[0].receipt_ref).toBeNull();
+    const replay = consumeWorldFeed(first.state, feed({ status: "replay", cursor: "wf1.cursor-3" }));
+    expect(replay.state.events).toHaveLength(2);
+    expect(replay.state.events.map((event) => event.event_seq)).toEqual([2, 1]);
+    expect(replay.state.dedupedCount).toBe(2);
+  });
+
+  it("stops appending on gap/reorg and requires authoritative snapshot reload", () => {
+    const initial = createInitialWorldFeedState();
+    const first = consumeWorldFeed(initial, feed()).state;
+    const gap = consumeWorldFeed(first, feed({
+      status: "gap",
+      events: [{ event_seq: 3, kind: "unknown", summary: "must not append", detail: "", receipt_ref: null }],
+      gap_reason: "reorg_epoch_changed",
+      snapshot_reload_required: true,
+    }));
+    expect(gap.state.status).toBe("gap");
+    expect(gap.state.stale).toBe(true);
+    expect(gap.state.events).toHaveLength(2);
+    expect(gap.requiresSnapshotReload).toBe(true);
+  });
+
+  it("fails closed for unsupported schema and unknown statuses without splicing events", () => {
+    const initial = createInitialWorldFeedState();
+    const unsupported = consumeWorldFeed(initial, feed({ schema_version: "world_feed/v9" }));
+    expect(unsupported.state.status).toBe("unavailable");
+    expect(unsupported.state.unavailableReason).toBe("schema_unsupported");
+    expect(unsupported.state.events).toEqual([]);
+    const invalid = consumeWorldFeed(initial, feed({ status: "mystery" }));
+    expect(invalid.state.status).toBe("unavailable");
+    expect(invalid.state.unavailableReason).toBe("source_unavailable");
+    expect(invalid.state.events).toEqual([]);
+  });
+});

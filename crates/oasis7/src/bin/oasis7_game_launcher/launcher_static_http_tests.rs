@@ -100,3 +100,48 @@ fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
     );
     let _ = fs::remove_dir_all(temp_dir);
 }
+
+#[test]
+fn director_capability_endpoint_reports_explicit_unavailable_state() {
+    let temp_dir = make_temp_dir("director_capability_unavailable");
+    fs::write(temp_dir.join("index.html"), b"ok").expect("write index");
+    let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
+    let port = probe.local_addr().expect("probe addr").port();
+    drop(probe);
+    let mut server = start_static_http_server(
+        DeploymentMode::HostedPublicJoin,
+        "127.0.0.1:0",
+        "127.0.0.1",
+        port,
+        temp_dir.as_path(),
+        None,
+    )
+    .expect("start static HTTP server");
+
+    let mut response = Vec::new();
+    for _ in 0..50 {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(mut stream) => {
+                stream
+                    .write_all(
+                        b"GET /api/public/director/capability HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+                    )
+                    .expect("write request");
+                stream.read_to_end(&mut response).expect("read response");
+                break;
+            }
+            Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+    stop_static_http_server(&mut server);
+
+    let body = String::from_utf8_lossy(&response);
+    assert!(body.starts_with("HTTP/1.1 200 OK"), "{body}");
+    assert!(body.contains("director_capability_unavailable"), "{body}");
+    assert!(body.contains("\"availability\":\"unavailable\""), "{body}");
+    assert!(
+        !body.contains("\"grant\":"),
+        "unavailable endpoint must not issue a grant: {body}"
+    );
+    let _ = fs::remove_dir_all(temp_dir);
+}

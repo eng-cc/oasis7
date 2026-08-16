@@ -62,7 +62,9 @@ Player layout uses one world-first stage with a quiet edge dock:
 - contextual console: opens on demand in the order primary command/chat, selected
   context, gameplay details, diagnostics/raw state;
 - Director-only layout: a dense three-column tool arrangement may be exposed when
-  explicitly selected, without changing any product or gameplay semantics.
+  explicitly selected through the server-validated capability boundary, without
+  changing any product or gameplay semantics. The local endpoint fails closed when
+  no trusted issuer can bind the grant to the live session epoch.
 
 Targets, details, and diagnostics remain reachable routes, not equal-weight
 columns competing with the Player stage.
@@ -182,7 +184,9 @@ operator action; it is never the fresh-load layout:
 ```
 
 Target source anchors are `#viewer-director-entry` and `#viewer-director-exit`.
-They remain absent until source JSX and tests implement the capability-gated flow.
+They are implemented source anchors; the flow remains fail-closed until the server
+returns a valid short-lived grant, and the current issuer gap keeps production entry
+`capability_blocked`.
 
 ### 2.7 Interaction state machine and focus contract
 The implementation must preserve these transitions; labels may be localized but
@@ -299,9 +303,9 @@ Design contract:
 - no-receipt is a real state, not an absence of UI;
 - blocked/rejected states use warning or danger language plus recovery route;
 - completed states can be positive but must not imply unsupported causality.
-- World Feed is pending implementation: future Viewer owner `viewer_engineer`,
-  source the ordered persisted runtime `WorldEvent` journal projection, future
-  anchor `#viewer-world-feed`, and acceptance that it remains ambient, never
+- World Feed v1 is implemented: Viewer owner `viewer_engineer`, source the ordered
+  persisted runtime `WorldEvent` journal projection, stable anchor `#viewer-world-feed`,
+  and acceptance that it remains ambient, never
   replaces a missing receipt, and exposes honest empty/loading/unavailable states.
   Current `state.recentEvents` is only a non-contract ambient preview;
   `player_gameplay.recent_feedback` remains exclusive to Action Receipt. Current
@@ -475,12 +479,12 @@ JSX, with one unique ID each; generated bundles are never hand-edited.
 | `.mobile-rail` | sticky World/Targets/Command rail | retain class; add source button labels | 390x844 keyboard/tap route |
 | `.pixel-world-action-receipt` | causal receipt | retain class; add `#viewer-action-receipt` only in source JSX if needed | no World Feed substitution |
 | `.pixel-world-host--focus` / focus HUD/drawer hooks | Player immersive presentation | classify as implementation substrate, not separate mode | Focus close/Escape/focus-return tests |
-| *(new)* `#viewer-director-entry` / `#viewer-director-exit` | capability-gated Director transition | add only in source JSX with permission and focus-return handling | fresh-load Player, denied/stale/revoked, reload and exit tests |
-| *(new)* | World Feed | reserve `#viewer-world-feed` for the separate implementation slice | absent until DTO/source/QA are ready |
+| `#viewer-director-entry` / `#viewer-director-exit` | capability-gated Director transition | retain source anchors; server-validated short-lived grant and focus-return handling | fresh-load Player, denied/stale/revoked/unavailable, reload and exit tests |
+| `#viewer-world-feed` | World Feed v1 ambient projection | retain implemented panel; runtime journal source, cursor/reorg recovery, explicit/null-safe receipt refs | schema/order/dedup/gap/reload tests; no Action Receipt substitution |
 
-Anchor migration is a compatibility plan, not permission to claim the new IDs
-exist today. `#viewer-world-feed`, console, receipt, and focus-control/drawer
-anchors remain pending until source JSX and tests land.
+These anchors are now implemented in source and generated output. They remain
+compatibility surfaces: Director grant state is ephemeral, and World Feed links are
+rendered only for explicit runtime `receipt_ref` values (current runtime uses `null`).
 
 ## 5. Image2 Target Usage
 The Image2 target is binding as a direction for:
@@ -585,8 +589,9 @@ keeps feed/runtime work separate from the initial IA migration.
    and render explicit no-receipt/pending/blocked/completed Action Receipt states.
 4. **Focus/a11y** — implement local-drawer-first Escape, IME protection, focus return,
    keyboard names, CJK/long-text wrapping and no-overflow checks.
-5. **Separate World Feed** — consume only the additive `world_feed/v1` projection;
-   preserve Recent Events/Feedback names until runtime/source/QA contracts pass.
+5. **Separate World Feed** — consume only the implemented additive `world_feed/v1`
+   projection; preserve Recent Events/Feedback names and explicit/null-safe
+   `receipt_ref` semantics.
 6. **Headed QA** — run desktop/mobile/keyboard/locale/state evidence and record
    residual risk; no screenshot-only preview substitutes for interaction smoke.
 
@@ -625,8 +630,9 @@ Recommended screenshot scenarios:
 
 These remain acceptance inputs for `qa_engineer`. Task #3248 epoch 2 now has
 source/package tests plus external-Chrome desktop/mobile Player-shell evidence;
-that checkpoint does not pre-fill release, Director, World Feed, or full renderer
-rows.
+World Feed schema/transport/state and Director fail-closed boundary are implemented,
+while issuer-backed Director allowed entry and full headed renderer/Focus release
+rows remain outstanding.
 
 ## 8. Residual Risks and Role Handoffs
 - Task #3248 epoch 2 removes Quote from the peer rail, defaults Gameplay Details
@@ -634,8 +640,13 @@ rows.
   Diagnostics, and guarantees route/Focus drawer Escape, IME suppression, and
   invoker focus return in source and packaged Web tests. Quote remains contextual
   Command content only when its real surface exists.
-- No shipped World Feed DTO or `#viewer-world-feed` anchor exists yet; the v1 schema,
-  cursor/reorg recovery, and nullable `receipt_ref` require runtime/viewer/QA slices.
+- World Feed v1 DTO, cursor/reorg recovery, and `#viewer-world-feed` anchor are shipped
+  in runtime/viewer code; current projections keep `receipt_ref=null` unless runtime
+  supplies explicit causal identity. Cross-surface headed QA remains required.
+- Director verifier/state machine and fail-closed endpoint are shipped, but the trusted
+  operator issuer is not wired; successful production entry remains `capability_blocked`.
+- WebGL2 has GPU-enabled `ready` evidence and GPU-disabled explicit `Renderer Unavailable`
+  fallback evidence; this does not replace full renderer/release judgment.
 - `viewer_engineer`: decide whether Next Move can directly execute a published
   action or should remain an anchor to `#viewer-details-panel`; validate DOM,
   renderer, responsive, and implementation feasibility.

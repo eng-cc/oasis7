@@ -16,6 +16,7 @@
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-control-plane-split-live-playback.prd.md`；操作、进程与 runtime-live 观测边界读 `viewer-manual.manual.md`，Agent/provider 语义读 `../llm/decision-provider-contract.prd.md`
 - 想先理解 Agent 对话、预设/草稿、Prompt/目标调整与反馈恢复的产品语义：读 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 及其配对产品设计；当前 surface、协议、操作边界与自动化合同继续读 `viewer-manual.manual.md` 和 `viewer-web-semantic-test-api.prd.md`
 - 想确认 Viewer terminal shell 的目标与 current-vs-target 边界：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
+- 终态实现状态：`world_feed/v1` runtime/Viewer projection 与 `#viewer-world-feed` 已落地；Director verifier/state machine 与 `/api/public/director/capability` fail-closed boundary 已落地，但可信 issuer 缺失时生产成功进入仍为 `capability_blocked`。WebGL2 在 GPU-enabled 环境走 `ready`，GPU-disabled 环境明确显示 `Renderer Unavailable`；具体操作与证据边界读 `viewer-manual.manual.md`。
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
