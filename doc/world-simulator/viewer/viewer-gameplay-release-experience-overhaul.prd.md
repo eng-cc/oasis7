@@ -208,10 +208,13 @@ required after the corresponding implementation slice.
 ## 当前结论
 - **目标**：Player shell 默认、Director 显式 opt-in、Search 属于 Targets、Quote 属于
   Command/Console、Action Receipt 与 pending World Feed 分离。
-- **当前**：实现仍保留 focus/right-panel hooks、`#entity-search` 过滤和 Recent
-  Events/Feedback；这些不构成终端 shell 已发货证明。
-- 真实浏览器、移动/键盘/长文本和空/不可用状态验证属于后续 Viewer/QA slice；本 PRD
-  不承载旧的完成态或 Web smoke 结论。
+- **当前源码候选**：task #3248 epoch 2 已将 Player Web shell 收敛为 stage-first
+  单列、`World / Targets / Command` 主导航、按需 Targets/Command drawer、次级
+  Diagnostics、默认折叠 Gameplay Details，以及 drawer/Focus 的 Escape、IME 与焦点返回
+  合同；`#entity-search` 与现有 Recent Events/Feedback 语义保持不变。
+- 以上只描述当前任务分支的实现边界，不是正式发行结论。Director capability gate 与
+  World Feed DTO/anchor 仍未实现；完整 renderer/Focus headed 证据和 release judgment
+  仍由后续 Viewer/runtime/QA slice 提供。
 
 ## Phase 8~10 增量记录（ROUND-002 物理合并）
 - 原阶段文档已合并并删除，以下段落仅为历史实施证据摘要，不是当前运行时、

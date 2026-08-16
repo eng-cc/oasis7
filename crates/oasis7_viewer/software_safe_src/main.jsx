@@ -3,6 +3,7 @@ import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
+import { MobileJumpRail, SecondaryViewerNavigation, focusViewerAnchor, installViewerRouteController } from "./viewer_navigation.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
@@ -24,10 +25,6 @@ function observeViewerStateRevision() {
   viewerStateRevision();
 }
 function uiLocale() { return core.state.uiLocale; }
-function focusViewerAnchor(event) {
-  const href = event.currentTarget.getAttribute("href"); const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
-  if (!target) return; event.preventDefault(); target.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" }); window.history.replaceState(null, "", href);
-}
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
 }
@@ -2206,21 +2203,6 @@ function WorldStageHero() {
   );
 }
 
-function MobileJumpRail() {
-  const locale = () => uiLocale();
-  return (
-    <nav class="mobile-rail" aria-label={tr(locale(), "主入口分区导航", "Primary entry section navigation")}>
-      <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
-      <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
-      <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
-      <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
-        {tr(locale(), "诊断", "Diagnostics")}
-      </a>
-      <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
-    </nav>
-  );
-}
-
 function TargetsPanel() {
   observeViewerStateRevision();
   const lists = () => core.modelLists();
@@ -2452,7 +2434,7 @@ function WorldSummaryPanel() {
           <StarterOcOnboardingPanel gameplay={gameplaySummary()} locale={locale()} />
         </CalloutCard>
       </Show>
-      <details class="gameplay-details-surface" id="viewer-gameplay-details" open>
+      <details class="gameplay-details-surface" id="viewer-gameplay-details">
       <summary class="gameplay-details-surface__summary">
         <div class="diagnostic-surface__title">
           <span>{tr(locale(), "玩法明细", "Gameplay Details")}</span>
@@ -3840,14 +3822,18 @@ function AppShell() {
   const locale = () => uiLocale();
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
+  onMount(() => onCleanup(installViewerRouteController()));
   return (
     <>
-      <MobileJumpRail />
+      <MobileJumpRail locale={locale} tr={tr} />
+      <SecondaryViewerNavigation locale={locale} tr={tr} />
       <HostedLoginGate />
       <StarterOcRequiredGate />
       <section
         class="panel panel--targets"
         id="viewer-targets-panel"
+        data-viewer-route-panel="targets"
+        tabIndex="-1"
         data-viewer-surface="targets"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3856,6 +3842,9 @@ function AppShell() {
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
           <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div>
+          <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
+            {tr(locale(), "返回世界", "Back to World")}
+          </a>
         </div>
         <div class="panel__body">
           <TargetsPanel />
@@ -3864,6 +3853,7 @@ function AppShell() {
       <section
         class="panel panel--stage"
         id="viewer-stage-panel"
+        tabIndex="-1"
         data-viewer-surface="stage"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3884,6 +3874,8 @@ function AppShell() {
       <section
         class="panel panel--details"
         id="viewer-details-panel"
+        data-viewer-route-panel="command"
+        tabIndex="-1"
         data-viewer-surface="command"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3894,6 +3886,9 @@ function AppShell() {
           <div class="panel__meta-copy">
             {tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
           </div>
+          <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
+            {tr(locale(), "返回世界", "Back to World")}
+          </a>
         </div>
         <div class="panel__body">
           <DetailsPanel />

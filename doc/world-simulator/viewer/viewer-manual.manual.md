@@ -75,18 +75,18 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 ### Terminal shell target versus current operation
 - 终端 shell 的 Player/Director、`World / Targets / Command`、Search/Quote、
-  Action Receipt 与 pending World Feed 目标契约，以
-  `viewer-gameplay-release-experience-overhaul.prd.md` 为准；本手册不把目标路线写成
-  已发货能力。
-- 当前操作仍以现有页面为准：Targets 使用 `#entity-search` 过滤/导航，Command/Chat
-  通过当前 contextual surface 进入，Recent Events/Feedback 仍按现名显示。Focus/
-  right-panel hooks 是实现基线/债务，不是用户可选择的第二产品模式。
+  Action Receipt 与 pending World Feed 产品契约，以
+  `viewer-gameplay-release-experience-overhaul.prd.md` 为准。
+- 当前任务分支的 Player 操作路线已经是 stage-first：Targets 继续使用
+  `#entity-search` 过滤/导航，Targets 与 Command/Chat 通过按需 drawer 进入，
+  Diagnostics 保持次级，Recent Events/Feedback 仍按现名显示。Focus hooks 只服务
+  Player 沉浸呈现，不是第二产品模式；这不代表 Director 或 World Feed 已发货。
 - World Feed 的未来 anchor 为 `#viewer-world-feed`，在 Viewer 实现与 QA 验收前不得
   作为可操作入口或 Action Receipt 替代；queued/accepted 也不等于完成。
 
-### Terminal shell target playbook (future implementation)
-This section is a handoff for the later Viewer slice, not a statement that the
-target shell is currently available.
+### Terminal Player shell playbook
+This section describes the implemented Player-shell route in the current task
+branch. It is not a release claim; Director and World Feed remain future slices.
 
 1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
    Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /

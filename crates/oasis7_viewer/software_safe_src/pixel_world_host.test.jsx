@@ -765,6 +765,137 @@ describe("pixel world host", () => {
     expect(receipt.textContent).not.toContain("agent=agent-0");
   });
 
+  it("publishes the stable Action Receipt anchor for the player-causality surface", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(noReceiptSnapshot());
+
+    await waitFor(() => {
+      expect(screen.getByText("No action receipt yet")).toBeInTheDocument();
+    });
+
+    expect(document.querySelectorAll("#viewer-action-receipt")).toHaveLength(1);
+    expect(document.querySelector("#viewer-action-receipt")).toHaveClass("pixel-world-action-receipt");
+  });
+
+  it("publishes stable Focus exit, command-console, and drawer anchors", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
+    });
+
+    expect(document.querySelector("#viewer-focus-exit")).toBeInTheDocument();
+    expect(document.querySelector("#viewer-focus-command-drawer")).toBeInTheDocument();
+    expect(document.querySelector("#viewer-focus-diagnostics-drawer")).toBeInTheDocument();
+    expect(document.querySelector("#viewer-command-console")).toBeInTheDocument();
+    expect(document.querySelector("#viewer-command-console").closest("#viewer-focus-command-drawer")).toBeTruthy();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("closes an open local Focus drawer before exiting Focus and restores the drawer invoker", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const commandInvoker = screen.getByRole("button", { name: "Command & Target" });
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    commandInvoker.focus();
+    commandInvoker.click();
+    expect(commandDrawer).toHaveProperty("open", true);
+
+    commandInvoker.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(commandDrawer).toHaveProperty("open", false);
+    expect(document.activeElement).toBe(commandInvoker);
+
+    commandInvoker.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "false");
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not close a local Focus drawer when Escape is consumed by an IME composition", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    const commandInvoker = screen.getByRole("button", { name: "Command & Target" });
+    commandInvoker.focus();
+    commandInvoker.click();
+    expect(commandDrawer).toHaveProperty("open", true);
+
+    commandInvoker.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      isComposing: true,
+      bubbles: true,
+    }));
+
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(commandDrawer).toHaveProperty("open", true);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("returns keyboard focus to the World Focus invoker after Focus exits", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    const focusInvoker = screen.getByRole("button", { name: "Enter World Focus" });
+    focusInvoker.focus();
+    focusInvoker.click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const exitButton = screen.getByRole("button", { name: "Leave Focus · Esc" });
+    exitButton.focus();
+    exitButton.click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "false");
+    });
+    expect(document.activeElement).toBe(focusInvoker);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("keeps secondary focus controls in a collapsed native mobile disclosure without changing their actions", async () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
@@ -794,10 +925,17 @@ describe("pixel world host", () => {
     expect(moreControls).toContainElement(screen.getByRole("button", { name: "Leave Focus · Esc" }));
 
     screen.getByRole("button", { name: "World Status" }).click();
-    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
+    const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
+    expect(diagnosticsDrawer).toHaveProperty("open", true);
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(host).toHaveAttribute("data-world-focus", "false");
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(diagnosticsDrawer).toHaveProperty("open", false);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "false");
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("offers an app-level world focus mode with command and diagnostics drawers", async () => {
@@ -935,7 +1073,13 @@ describe("pixel world host", () => {
     expect(diagnosticsDrawer).toHaveTextContent("runtime=test_rust_runtime");
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(host).toHaveAttribute("data-world-focus", "false");
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(diagnosticsDrawer).toHaveProperty("open", false);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "false");
+    });
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);

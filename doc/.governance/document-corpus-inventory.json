@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "a1e02963364c13b4d31d9acd7e167ec790f221a9cf1079d01ffff25293d12996"
+      "content_sha256": "1ad178cfc236e92aafb55ede75e0f158c8e58cdd11a4528e45d8ef22b022d322"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -6251,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "e0cd7460c2e0c03e6cdd5b9c5a33e367eeb703bcc39cad1c2c7852f0b6e072f9",
+      "content_sha256": "71c441f5a0a50db743991a0dfc616ee355373869bad32cbc52a542a3dea25f2d",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6293,7 +6293,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "1ec869425fbec68b8e2bc1929f952c357334e992e7607d7d08dea591937d5b45",
+      "content_sha256": "014b55dccee6d880a53988dd00ccddec6e10525a68116ab954cb0fe0ae9c5457",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6363,7 +6363,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md",
-      "content_sha256": "ad4e4d2b97c3caf6de0185742470b7807232c6dc941902340c86311ed96d8e78",
+      "content_sha256": "381bdab26f469d3820a8f4bf54a8ff71b068b0f95e462c2406f763f6d40e8cac",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

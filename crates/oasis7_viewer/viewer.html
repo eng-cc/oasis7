@@ -102,7 +102,7 @@
       }
       .shell {
         display: grid;
-        grid-template-columns: minmax(220px, 260px) minmax(560px, 1fr) minmax(280px, 330px);
+        grid-template-columns: minmax(200px, 240px) minmax(640px, 1fr) minmax(260px, 300px);
         grid-template-areas: "targets stage details";
         gap: var(--space-panel-gap);
         min-height: calc(100vh - 48px);
@@ -2038,11 +2038,6 @@
         background: rgba(255, 255, 255, 0.04);
         font-size: 13px;
       }
-      .mobile-rail__link--diagnostics {
-        color: var(--muted);
-        border-color: rgba(152, 177, 150, 0.14);
-        background: rgba(255, 255, 255, 0.02);
-      }
       .pixel-world-canvas {
         position: relative;
         min-height: clamp(430px, 52vh, 680px);
@@ -2834,6 +2829,7 @@
         .pixel-world-command-cell--next:active { transform: none; }
       }
     </style>
+    <link rel="stylesheet" href="./viewer_terminal_shell.css" />
   </head>
   <body>
     <div id="app" class="shell" aria-live="polite"></div>

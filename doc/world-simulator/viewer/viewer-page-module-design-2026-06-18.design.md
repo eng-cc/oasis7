@@ -623,15 +623,17 @@ Recommended screenshot scenarios:
 | QA-COPY | English/Chinese/long labels | `locale=en|zh` screenshots or overflow probe | clipped primary action, raw enum, or unreadable CJK |
 | QA-RENDER | renderer unavailable | explicit unavailable state screenshot | blank board or diagnostics-only explanation |
 
-These are acceptance inputs for `qa_engineer`; this documentation slice ran no
-browser or screenshot validation and does not pre-fill any evidence row.
+These remain acceptance inputs for `qa_engineer`. Task #3248 epoch 2 now has
+source/package tests plus external-Chrome desktop/mobile Player-shell evidence;
+that checkpoint does not pre-fill release, Director, World Feed, or full renderer
+rows.
 
 ## 8. Residual Risks and Role Handoffs
-- Current implementation follow-ups from the Viewer handoff must remain explicit:
-  mobile may still expose Quote as a peer rail item, the conditional
-  `#viewer-refine-quote-panel` can no-op, Gameplay Details may be open by default,
-  and current Escape handling does not yet guarantee local-drawer close or invoker
-  focus return. These are implementation debts, not reasons to reopen the terminal IA.
+- Task #3248 epoch 2 removes Quote from the peer rail, defaults Gameplay Details
+  closed, ships stage-first Targets/Command drawers, opens/focuses secondary
+  Diagnostics, and guarantees route/Focus drawer Escape, IME suppression, and
+  invoker focus return in source and packaged Web tests. Quote remains contextual
+  Command content only when its real surface exists.
 - No shipped World Feed DTO or `#viewer-world-feed` anchor exists yet; the v1 schema,
   cursor/reorg recovery, and nullable `receipt_ref` require runtime/viewer/QA slices.
 - `viewer_engineer`: decide whether Next Move can directly execute a published

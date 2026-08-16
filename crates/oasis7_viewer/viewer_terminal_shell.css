@@ -1,0 +1,138 @@
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "rail"
+    "rail-tools"
+    "stage"
+    "targets"
+    "details";
+  overflow-x: hidden;
+}
+
+.mobile-rail {
+  display: flex;
+  grid-area: rail;
+  position: sticky;
+  top: 10px;
+  z-index: 25;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(9, 13, 11, 0.88);
+  border: 1px solid rgba(152, 177, 150, 0.18);
+  backdrop-filter: blur(10px);
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.mobile-rail__link {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.secondary-viewer-nav {
+  grid-area: rail-tools;
+}
+
+#viewer-targets-panel,
+#viewer-details-panel {
+  display: none;
+  position: fixed;
+  inset: 24px 24px 24px auto;
+  z-index: 30;
+  width: min(420px, calc(100vw - 48px));
+  max-width: min(420px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+}
+
+#viewer-targets-panel:target,
+#viewer-targets-panel[data-route-open="true"],
+#viewer-details-panel:target,
+#viewer-details-panel[data-route-open="true"] {
+  display: block;
+}
+
+#app[data-viewer-visual-fixture] .shell {
+  grid-template-columns: minmax(210px, 240px) minmax(470px, 1fr) minmax(280px, 340px);
+  grid-template-areas: "targets stage details";
+}
+
+#app[data-viewer-visual-fixture] #viewer-targets-panel,
+#app[data-viewer-visual-fixture] #viewer-details-panel {
+  display: block;
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.panel__route-close {
+  align-self: flex-start;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.panel__route-close:hover,
+.panel__route-close:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.secondary-viewer-nav {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 10px;
+}
+
+.secondary-viewer-nav__link {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  opacity: 0.82;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.secondary-viewer-nav__link:hover,
+.secondary-viewer-nav__link:focus-visible {
+  color: var(--text);
+  opacity: 1;
+}
+
+@media (max-width: 1240px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "rail"
+      "rail-tools"
+      "stage"
+      "targets"
+      "details";
+  }
+
+  #viewer-targets-panel,
+  #viewer-details-panel {
+    inset: 82px 12px 72px;
+    width: auto;
+    max-width: min(100%, 480px);
+    margin-inline: auto;
+  }
+
+  .secondary-viewer-nav {
+    justify-content: flex-start;
+    margin: -4px 0 8px 8px;
+  }
+}
