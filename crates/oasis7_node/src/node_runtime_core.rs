@@ -12,6 +12,7 @@ use oasis7_proto::world_error::WorldError as ProtoWorldError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
+use crate::consensus_support::reserve_action_payload_bytes;
 use crate::runtime_util::now_unix_ms;
 use crate::{
     NodeCommittedActionBatch, NodeCommittedActionBatchesHandle, NodeConfig, NodeConsensusAction,
@@ -259,6 +260,7 @@ impl NodeRuntime {
             consensus_progress_observer: None,
             consensus_progress_observer_dispatcher: None,
             pending_consensus_actions: Arc::new(Mutex::new(Vec::new())),
+            pending_consensus_action_queue_bytes: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             committed_action_batches: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             replica_maintenance_dht: None,
@@ -372,6 +374,11 @@ impl NodeRuntime {
                 ),
             });
         }
+        reserve_action_payload_bytes(
+            &self.pending_consensus_action_queue_bytes,
+            self.config.max_pending_consensus_action_queue_bytes,
+            action.payload_cbor.len(),
+        )?;
         pending.push(action);
         Ok(())
     }

@@ -121,6 +121,16 @@ impl NodeRuntime {
         self.shutdown_consensus_progress_observer();
         // Release sockets and flags even when the main worker panicked.
         self.gossip_endpoint = None;
+        let pending_bytes = self
+            .pending_consensus_actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .fold(0usize, |total, action| {
+                total.saturating_add(action.payload_cbor.len())
+            });
+        self.pending_consensus_action_queue_bytes
+            .store(pending_bytes, Ordering::Release);
         self.running.store(false, Ordering::SeqCst);
         join_result
     }
@@ -147,6 +157,16 @@ impl Drop for NodeRuntime {
             }
         }
         self.shutdown_consensus_progress_observer();
+        let pending_bytes = self
+            .pending_consensus_actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .fold(0usize, |total, action| {
+                total.saturating_add(action.payload_cbor.len())
+            });
+        self.pending_consensus_action_queue_bytes
+            .store(pending_bytes, Ordering::Release);
         self.running.store(false, Ordering::SeqCst);
     }
 }

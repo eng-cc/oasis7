@@ -20,6 +20,7 @@ impl PosNodeEngine {
             replication_network,
             consensus_network,
             queued_actions,
+            false,
             execution_hook,
             None,
         )
@@ -35,15 +36,19 @@ impl PosNodeEngine {
         replication_network: Option<&mut ReplicationNetworkEndpoint>,
         consensus_network: Option<&mut ConsensusNetworkEndpoint>,
         queued_actions: Vec<NodeConsensusAction>,
+        incoming_actions_already_reserved: bool,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
         mut progress_callback: Option<
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
     ) -> Result<NodeEngineTickResult, NodeError> {
-        merge_pending_consensus_actions(
+        merge_pending_consensus_actions_with_budget(
             &mut self.pending_consensus_actions,
             queued_actions,
             self.max_pending_consensus_actions,
+            &self.pending_consensus_action_queue_bytes,
+            self.max_pending_consensus_action_queue_bytes,
+            incoming_actions_already_reserved,
         )?;
 
         let observed_tick = self.observe_wall_clock_tick(now_ms)?;
