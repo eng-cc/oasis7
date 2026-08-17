@@ -11645,7 +11645,14 @@ function WorldFeedPanel(props) {
   const locale = () => typeof props.locale === "function" ? props.locale() : props.locale || "en";
   const tr2 = (localeValue, zh, en) => typeof props.tr === "function" ? props.tr(localeValue, zh, en) : en;
   const feed = () => readFeed(props);
-  const presentationEvents = () => [...feed().events || []].reverse();
+  const presentationEvents = () => [...feed().events || []].sort((left, right) => {
+    const leftSeq = Number(left?.event_seq);
+    const rightSeq = Number(right?.event_seq);
+    if (!Number.isFinite(leftSeq) || !Number.isFinite(rightSeq)) {
+      return 0;
+    }
+    return leftSeq - rightSeq;
+  });
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr2, status());
   const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
@@ -11765,7 +11772,7 @@ function WorldFeedSurface({
     onReloadSnapshot
   });
 }
-var _tmpl$$j = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$j = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><a class=secondary-viewer-nav__link href=#viewer-diagnostics-panel>`);
+var _tmpl$$j = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$j = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><span class=secondary-viewer-nav__more></span><a class=secondary-viewer-nav__link href=#viewer-diagnostics-panel>`);
 function focusViewerTarget(href) {
   const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
   if (!target) {
@@ -11829,9 +11836,10 @@ function SecondaryViewerNavigation(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
   return (() => {
-    var _el$5 = _tmpl$2$j(), _el$6 = _el$5.firstChild;
-    _el$6.$$click = focusViewerAnchor;
-    insert(_el$6, () => translate("诊断", "Diagnostics"));
+    var _el$5 = _tmpl$2$j(), _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling;
+    insert(_el$6, () => translate("更多", "More"));
+    _el$7.$$click = focusViewerAnchor;
+    insert(_el$7, () => translate("诊断", "Diagnostics"));
     createRenderEffect(() => setAttribute(_el$5, "aria-label", translate("次级查看入口", "Secondary viewer navigation")));
     return _el$5;
   })();

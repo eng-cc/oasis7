@@ -95,7 +95,9 @@ blocked until a trusted issuer is available.
 
 1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
    Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
-   Command` route.
+   Command` route. In fullscreen desktop the three HUD cards share one compact row;
+   on mobile Objective and Player Leverage share the first row and Next Move occupies
+   the second row. `More / Diagnostics` remains reachable as a secondary route.
 2. Search remains inside Targets and only filters the authoritative visible list.
    Selecting a target recenters/highlights and opens context; it never executes.
    Quote is reached from contextual Command, not a peer rail item.
@@ -104,7 +106,8 @@ blocked until a trusted issuer is available.
 4. World Feed is the implemented `world_feed/v1` ambient projection. Its identity/dedup
    key is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and the current
    runtime emits nullable `receipt_ref=null`; a link is rendered only when runtime
-   supplies explicit causal identity.
+   supplies explicit causal identity. In fullscreen Player it is a compact collapsed
+   top-right edge overlay/ambient chip that opens on demand, never a persistent column.
 5. Director is a capability-gated secondary Diagnostics/operator action, ephemeral to
    the tab. The server validates a short-lived `director_open` grant; invalid/stale/
    revoked/unauthorized/unavailable entry returns to Player, sanitizes Director

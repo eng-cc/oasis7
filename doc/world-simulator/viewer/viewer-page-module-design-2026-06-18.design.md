@@ -106,6 +106,12 @@ The page should behave as a command-table shell:
 The command band and receipt may bracket the board, but they must not compress
 the board into a secondary widget.
 
+The current fullscreen Player default renders the command strip as three compact
+cards on desktop (`Objective / Next Move / Player Leverage`). At mobile width,
+`Objective` and `Player Leverage` share the first compact row and `Next Move` spans
+the second row. `More / Diagnostics` remains a reachable secondary route rather
+than a competing primary column.
+
 ### 2.5 Responsive Route
 Player desktop, tablet, and mobile preserve one conceptual route: stage first,
 edge dock second, contextual console on demand. Director may use three columns
@@ -305,8 +311,10 @@ Design contract:
 - completed states can be positive but must not imply unsupported causality.
 - World Feed v1 is implemented: Viewer owner `viewer_engineer`, source the ordered
   persisted runtime `WorldEvent` journal projection, stable anchor `#viewer-world-feed`,
-  and acceptance that it remains ambient, never
-  replaces a missing receipt, and exposes honest empty/loading/unavailable states.
+  and acceptance that it remains ambient, never replaces a missing receipt, and
+  exposes honest empty/loading/unavailable states. In fullscreen Player it stays a
+  compact collapsed top-right edge overlay/ambient chip and opens on demand; it must
+  not become a persistent first-screen column.
   Current `state.recentEvents` is only a non-contract ambient preview;
   `player_gameplay.recent_feedback` remains exclusive to Action Receipt. Current
   Recent Events/Feedback are not silently renamed.

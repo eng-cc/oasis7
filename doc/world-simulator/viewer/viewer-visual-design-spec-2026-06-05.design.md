@@ -99,7 +99,8 @@ criteria below; it does not duplicate the terminal contract or claim it shipped.
 Visual acceptance keeps the world board first, command/receipt legible within one
 step, diagnostics demoted, and the implemented World Feed v1 visually separate
 from Action Receipt. Its `receipt_ref` is rendered only for explicit runtime
-identity. Focus/right-panel hooks and `#entity-search` remain current
+identity; in fullscreen Player it is a compact collapsed top-right edge overlay/
+ambient chip that opens on demand. Focus/right-panel hooks and `#entity-search` remain current
 implementation references, not product modes. Responsive, keyboard, CJK,
 long-text, empty and unavailable checks remain mandatory downstream evidence.
 
@@ -249,7 +250,9 @@ and three-column tools, but it still follows data honesty and hierarchy rules.
 Director is not the default and is not permission to make every surface equal.
 
 ### 8.3 HUD, Dock, and Contextual Console Hierarchy
-- HUD: objective, next action, player leverage, blocker, receipt.
+- HUD: desktop fullscreen uses compact `Objective / Next Move / Player Leverage`
+  cards in one row; mobile uses `Objective + Player Leverage` in the first compact
+  row and `Next Move` in the second row, with blocker/receipt kept readable.
 - Edge dock: `World / Targets / Command` first; Search remains inside Targets,
   while `Diagnostics` is secondary.
 - Contextual console: primary command/chat, selected target context, gameplay

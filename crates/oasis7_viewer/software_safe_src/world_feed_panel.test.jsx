@@ -50,4 +50,24 @@ describe("WorldFeedPanel", () => {
     expect(screen.getByText("Agent spoke")).toBeInTheDocument();
     expect(document.querySelectorAll("a[data-world-feed-receipt-ref]")).toHaveLength(1);
   });
+
+  it("presents World Feed events in ascending event sequence order", () => {
+    const { container } = render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [
+            { event_seq: 7, kind: "resource_change", summary: "Older event", detail: "ore +1", receipt_ref: null },
+            { event_seq: 8, kind: "agent_spoke", summary: "Newer event", detail: "hello", receipt_ref: null },
+          ],
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+    expect(Array.from(container.querySelectorAll("[data-world-feed-event]"), (event) => event.getAttribute("data-world-feed-event"))).toEqual([
+      "7",
+      "8",
+    ]);
+  });
 });

@@ -73,6 +73,17 @@ describe("fullscreen map shell contract", () => {
     }
   });
 
+  it("does not let visual fixtures override the responsive command-band layout", async () => {
+    const { viewerHtml, compatHtml } = await readViewerHtml();
+    for (const html of [viewerHtml, compatHtml]) {
+      const fixtureCommandRules = cssRules(
+        html,
+        /#app\[data-viewer-visual-fixture(?:=[^\]]+)?\][^{}]*\.pixel-world-command-strip/,
+      ).filter((rule) => /grid-template-columns\s*:/.test(rule.declarations));
+      expect(fixtureCommandRules).toEqual([]);
+    }
+  });
+
   it("keeps map HUD, next move, receipt, feed, and navigation in overlay layers", async () => {
     const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
     for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
@@ -117,6 +128,57 @@ describe("fullscreen map shell contract", () => {
         expect(/max-height\s*:/i.test(sheetDeclarations), routePanel).toBe(true);
       }
     }
+  });
+
+  it("keeps the desktop primary rail visible in the default fullscreen Player shell", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const navigationRule = findRule(terminalShellCss, /\[data-viewer-overlay=["']navigation["']\]/);
+    expect(navigationRule).not.toBeNull();
+    expect(hasDeclaration(navigationRule, "display", /flex|block|inline-flex/)).toBe(true);
+  });
+
+  it("keeps Objective and Player Leverage visible in the default fullscreen Player HUD", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+
+    for (const cellSelector of [
+      /\.pixel-world-command-cell--objective/,
+      /\.pixel-world-command-cell--leverage/,
+    ]) {
+      const hiddenRules = cssRules(terminalShellCss, cellSelector)
+        .filter((rule) => hasDeclaration(rule, "display", /none/));
+      expect(hiddenRules, `HUD cell is hidden: ${cellSelector}`).toEqual([]);
+    }
+  });
+
+  it("hides raw pixel readouts in default Player mode", async () => {
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
+    expect(viewerHtml).toMatch(/data-viewer-shell="player-fullscreen"/);
+    const readoutRule = findRule(
+      terminalShellCss,
+      /\[data-viewer-shell=["']player-fullscreen["']\][^{}]*\.pixel-world-readout/,
+    );
+    expect(readoutRule, "default Player shell must hide raw pixel readouts").not.toBeNull();
+    expect(hasDeclaration(readoutRule, "display", /none/)).toBe(true);
+  });
+
+  it("keeps a mobile More route for secondary Diagnostics without a narrow-screen hide rule", async () => {
+    const [navigationSource, terminalShellCss] = await Promise.all([
+      readFile("software_safe_src/viewer_navigation.jsx", "utf8"),
+      readFile("viewer_terminal_shell.css", "utf8"),
+    ]);
+    expect(navigationSource).toMatch(/More/);
+    expect(navigationSource).toMatch(/Diagnostics/);
+    expect(terminalShellCss).not.toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.secondary-viewer-nav\s*\{[^}]*display:\s*none/i,
+    );
+  });
+
+  it("keeps all three mobile HUD meanings visible without a scroll-only third card", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']next-move["']\][^{]*\{[^}]*grid-template-columns\s*:\s*repeat\(2/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next[^{]*\{[^}]*grid-column\s*:\s*1\s*\/\s*-1/i);
+    expect(mobileBlock).not.toMatch(/\[data-viewer-overlay=["']next-move["']\][^{]*\{[^}]*overflow\s*:\s*auto/i);
   });
 });
 

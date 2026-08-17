@@ -65,6 +65,10 @@ no-progress result. Missing authoritative feedback renders `No action receipt ye
 - `pixel-world-command-strip`: three compact status cells for objective, next move and player leverage.
 - `pixel-world-canvas`: terrain/routes/entities/callouts.
 - `pixel-world-render-diagnostics`: collapsed details with counts, renderer status, camera state, control buttons and raw DTO.
+- In the default fullscreen Player HUD, desktop keeps the command strip as three compact
+  cards in one row: `Objective`, `Next Move`, and `Player Leverage`. On mobile the
+  `Objective` and `Player Leverage` cards share the compact first row, while `Next Move`
+  occupies the second row. `More`/`Diagnostics` remains reachable as the secondary route.
 
 ## Terminal shell relationship
 Pixel World is the world-board implementation surface for the target shell defined
@@ -75,9 +79,11 @@ mapping and its receipt rendering; it does not define a second mode or a release
 claim.
 
 ## World Feed visual handoff (implemented)
-Render the `world_feed/v1` projection as an ambient band below
-the Action Receipt or inside the contextual console; never style it as a success
-receipt. The renderer consumes source-ordered events keyed by
+Render the `world_feed/v1` projection as a compact, collapsed top-right edge
+overlay/ambient chip in the fullscreen Player shell. It opens on demand into a
+bounded panel; responsive layouts may reposition it only to stay within the safe
+viewport. Never style it as a success receipt or make it a persistent first-screen
+column. The renderer consumes source-ordered events keyed by
 `(world_id,reorg_epoch,event_seq)`, deduplicates by that identity, and exposes the
 cursor/recovery state without sorting by local time.
 

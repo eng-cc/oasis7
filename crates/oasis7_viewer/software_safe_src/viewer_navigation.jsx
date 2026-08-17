@@ -57,6 +57,9 @@ function SecondaryViewerNavigation(props) {
   const translate = (zh, en) => props.tr(locale(), zh, en);
   return (
     <nav class="secondary-viewer-nav" aria-label={translate("次级查看入口", "Secondary viewer navigation")}>
+      <span class="secondary-viewer-nav__more">
+        {translate("更多", "More")}
+      </span>
       <a class="secondary-viewer-nav__link" href="#viewer-diagnostics-panel" onClick={focusViewerAnchor}>
         {translate("诊断", "Diagnostics")}
       </a>

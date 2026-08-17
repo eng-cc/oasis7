@@ -37,6 +37,9 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 - **Contextual console**：打开后的顺序固定为 primary command/chat、selected
   context、gameplay details、diagnostics/raw state。它是按需展开的行动/解释层，
   不是常驻的监控面板。
+- **Fullscreen HUD**：默认 Player 桌面以三个紧凑卡片并列呈现 `Objective`、
+  `Next Move`、`Player Leverage`；移动端将 `Objective` 与 `Player Leverage` 放在
+  第一紧凑行，`Next Move` 放在第二行。`More / Diagnostics` 保持可达的次级入口。
 - **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed v1 是已实现
   的环境上下文投影，不能暗示玩家成功，也不能替代缺失的 receipt。HUD 只能格式化
   权威的 commercial/runtime projection，不得合成进度、指标、阻塞、receipt 或动作可行性。
@@ -143,6 +146,10 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
   `player_gameplay.recent_feedback` remains exclusive to Action Receipt.
 - **Stable anchor**：`#viewer-world-feed` is implemented in source and generated
   output. The panel is read-only ambient context and never an Action Receipt substitute.
+- **Placement**：in the fullscreen Player default, the panel is a compact collapsed
+  top-right edge overlay/ambient chip and opens on demand. Responsive layouts may
+  reposition it only to remain inside the safe viewport; it must not become a persistent
+  first-screen column.
 - **Acceptance**：environment context and Action Receipt stay separate; queued/accepted
   never display success; empty/loading/replay/gap/unavailable remain distinct; gap/reorg
   requires authoritative snapshot reload; desktop/mobile/keyboard/CJK/long text remain

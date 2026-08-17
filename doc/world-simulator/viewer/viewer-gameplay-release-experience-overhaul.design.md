@@ -15,6 +15,9 @@
 - **信息层级**：`World / Targets / Command` 为主路径；`Search` 是 Targets 内的
   `#entity-search` 兼容过滤/导航能力，`Diagnostics` 次级；`Quote` 属于 Command/Console 上下文。
 - **反馈**：`Action Receipt` 负责玩家因果，已实现的 `world_feed/v1` 仅是环境上下文投影。
+- **Fullscreen HUD**：桌面默认以 `Objective / Next Move / Player Leverage` 三个紧凑卡片并列；
+  移动端为 `Objective + Player Leverage` 紧凑首行、`Next Move` 第二行，`More / Diagnostics`
+  仍从次级入口可达。
 
 ## 3. 当前实现与目标边界
 - 当前实现保留 focus/right-panel 兼容 hooks，且 `#entity-search` 仍是 Targets
@@ -60,4 +63,5 @@ World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedu
 `(world_id,reorg_epoch,event_seq)`，source order ascending；nullable receipt link
 只能来自显式 runtime causal identity，当前 runtime 明确保持 `receipt_ref=null`。
 loading、empty、replay、gap/reorg 和
-unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。
+unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fullscreen Player
+默认将其作为右上紧凑折叠 edge overlay/ambient chip，按需展开，不形成常驻列。

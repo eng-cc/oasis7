@@ -49,7 +49,10 @@ The paired [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gamepla
 is the single terminal shell authority. The brand contribution is visual: keep
 the world board first, use a quiet dock and on-demand console, keep command and
 Action Receipt legible, and demote diagnostics. The implemented World Feed v1 must
-remain visually distinct from causality. Current focus/right-
+remain visually distinct from causality and appear as a compact collapsed top-right
+edge overlay/ambient chip until explicitly opened. Desktop fullscreen HUD keeps
+Objective / Next Move / Player Leverage as compact cards; mobile groups Objective /
+Player Leverage first and places Next Move on the second row. Current focus/right-
 panel hooks and `#entity-search` are implementation references, not brand modes.
 
 ### 2.4 Voice and Labels

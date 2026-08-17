@@ -61,7 +61,16 @@ function WorldFeedPanel(props) {
   const locale = () => (typeof props.locale === "function" ? props.locale() : props.locale || "en");
   const tr = (localeValue, zh, en) => (typeof props.tr === "function" ? props.tr(localeValue, zh, en) : en);
   const feed = () => readFeed(props);
-  const presentationEvents = () => [...(feed().events || [])].reverse();
+  // Render the timeline in event-sequence order even when a replay or fixture
+  // provides events out of order. The copy keeps the runtime array immutable.
+  const presentationEvents = () => [...(feed().events || [])].sort((left, right) => {
+    const leftSeq = Number(left?.event_seq);
+    const rightSeq = Number(right?.event_seq);
+    if (!Number.isFinite(leftSeq) || !Number.isFinite(rightSeq)) {
+      return 0;
+    }
+    return leftSeq - rightSeq;
+  });
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr, status());
   const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");

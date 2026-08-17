@@ -139,8 +139,73 @@ fn player_facing_resource_summary(resource_summary: &str) -> String {
     let trimmed = resource_summary.trim();
     if trimmed.is_empty() || trimmed == "-" || is_empty_amounts_container(trimmed) {
         EMPTY_RESOURCE_READOUT.to_string()
+    } else if let Some(formatted) = format_structured_resource_summary(trimmed) {
+        formatted
     } else {
         resource_summary.to_string()
+    }
+}
+
+/// Convert the structured host projection (`kind:{"amount":..,"unit":..}`)
+/// into a compact player label. Invalid or incomplete projections deliberately
+/// return `None` so the existing bounded text fallback remains unchanged.
+fn format_structured_resource_summary(resource_summary: &str) -> Option<String> {
+    let (kind, payload) = resource_summary.split_once(':')?;
+    let kind = title_case_resource_kind(kind.trim())?;
+    let object = serde_json::from_str::<serde_json::Value>(payload.trim())
+        .ok()?
+        .as_object()?
+        .clone();
+    let amount = scalar_resource_value(object.get("amount")?)?;
+    let unit = object.get("unit")?.as_str()?.trim();
+    if unit.is_empty() {
+        return None;
+    }
+
+    let suffix = if unit == "%" {
+        format!("{amount}{unit}")
+    } else {
+        format!("{amount} {unit}")
+    };
+    Some(format!("{kind} {suffix}"))
+}
+
+fn scalar_resource_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        serde_json::Value::String(value) if !value.trim().is_empty() => {
+            Some(value.trim().to_string())
+        }
+        _ => None,
+    }
+}
+
+fn title_case_resource_kind(kind: &str) -> Option<String> {
+    let kind = kind.trim();
+    if kind.is_empty()
+        || !kind.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ' ')
+        })
+    {
+        return None;
+    }
+
+    let words = kind
+        .split(['-', '_', ' '])
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut characters = word.chars();
+            let first = characters.next()?.to_ascii_uppercase();
+            Some(format!(
+                "{first}{}",
+                characters.as_str().to_ascii_lowercase()
+            ))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if words.is_empty() {
+        None
+    } else {
+        Some(words.join(" "))
     }
 }
 
@@ -278,6 +343,15 @@ mod tests {
         assert_eq!(resource_readout_canvas_y(20.0, 390.0, false), 12.0);
         assert_eq!(resource_readout_canvas_y(380.0, 390.0, false), 318.0);
         assert_eq!(resource_readout_canvas_y(220.0, 390.0, false), 184.0);
+    }
+
+    #[test]
+    fn resource_readout_formats_structured_energy_without_exposing_raw_json() {
+        let display = player_facing_resource_summary(r#"energy:{"amount":72,"unit":"%"}"#);
+
+        assert_eq!(display, "Energy 72%");
+        assert!(!display.contains('{'));
+        assert!(!display.contains('"'));
     }
 
     #[test]
