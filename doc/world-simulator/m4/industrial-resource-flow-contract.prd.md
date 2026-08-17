@@ -1,6 +1,8 @@
 # M4 工业资源流转合同
 
 - 对应设计文档: `doc/world-simulator/m4/industrial-resource-flow-contract.design.md`
+- 专业 PRD-ID: `PRD-WORLD_SIMULATOR-047`
+- 上层产品映射: [`SC-21 多阶段工业流水线`](../../product/world-rules-core-gameplay/prd.md#5-done成功标准与验收)
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留 M4 资源流转和确定性报价合同。
 
 ## 1. Executive Summary
@@ -44,6 +46,16 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - `MaterialStack.kind` 是模块/domain 拥有的字符串材料标签，可以表达 `compound`、`hardware` 等工业材料；它不能扩展、伪装或自动映射为 simulator 内建 `ResourceKind`。内建资源仅有 `Electricity | Data`，模块资产的 manifest、hash、interface、capability、limits、owner 与安装/调用拒绝继续服从 WASM ABI/runtime authority。
 - `TransferMaterial` 的即时或在途结果必须保持守恒、确定性和可审计；其具体字段、事件顺序和 ABI 以 runtime/ABI 真值为准。
 
+### 多阶段批次、预留与背压合同（PRD-WORLD_SIMULATOR-047）
+
+- 每批中间品必须保留可回溯的来源阶段/边、父级 receipt、材料与规格/品质适用证据、数量及当前到达账本。下游只有在批次已经结算并到达、且按当前规则明确判为适用时才能消费；`待验证/证据不足` 与 `不适用` 都必须在下游 sink 或进度前 fail closed。材料名称、Agent 建议、Viewer 缓存或模块元数据不能替代适用性证据，也不能把未知批次推断、降级或混合成适用批次。
+- 中间品预留是权威、数量有界且绑定批次、阶段/边、消费主体与生命周期的 hold；报价、计划、上游已接受或加工中状态不构成预留。同一数量不得同时承诺给多个下游。预留过期、撤销或前置失效时，只能按适用合同释放、保持待决或原子拒绝，不能重复扣料、生成第二份库存或静默转成欠费/补贴。
+- 每条中间品边必须声明有限 buffer 与确定性的背压结果。下游不可用或 buffer 满时，只能保持尚未消费的上游投入、把已结算产出放入仍有容量的 buffer，或原子拒绝新的上游承诺；不得静默丢弃、瞬移、无限堆积、自动改道或伪造下游完成。overflow、返工、报废或 salvage 只有在对应专业合同存在时才能产生一次可审计结果，否则必须拒绝。
+- split、混批与 merge 必须逐输入批次重新校验适用性，并使用稳定、可复现的分配与齐套规则；专业合同必须明确采用“只消费适用数量并保留其余批次”还是“整笔原子拒绝”，不得依赖客户端/Agent 提交顺序、隐藏混合或表现层缓存。阶段、配方、设施或边变化后，未结算承诺按当前规则重新裁决，不能继承旧候选资格或稳定进度。
+- 跨阶段 lineage 必须在持久化、恢复与 replay 后仍能从子阶段承诺、边和中间品状态回溯到父级 receipt、预留、适用结论与实际损耗。重复提交、Agent 重试、重连或 replay 对每个阶段至多产生一次 sink 与产出，不能跳过未满足的前置，也不能把未知/不适用批次重试成适用。`PRD-WORLD_RUNTIME-001/019` 拥有执行顺序、事件/receipt、持久化、幂等与 replay/recovery；M4/domain 拥有批次、边、适用性和预留语义；game 拥有节奏、数值与机会成本。
+
+本合同只冻结多阶段资源流的确定性边界，不声明当前 runtime、Agent、Viewer 或 pure API 已实现该能力，也不冻结品质数值/公式、buffer 数字、runtime schema/枚举、图/队列算法或 UI 布局。
+
 ### 电力与设施
 
 - Owner-held electricity 是唯一当前口径：初始化清洗 Location electricity，运行时拒绝 Location 入账与已下线充放电路径。
@@ -70,3 +82,4 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - DRF-001: 当前工业资源流转不得恢复 `PowerStorage`、`DrawPower`、`StorePower` 或 Location electricity pool。
 - DRF-002: 四组历史三件套删除前，已将其现行语义、完成态 provenance、未收口 #2166 债务与相邻专业 authority 收敛到本三件套及引用入口。
 - DRF-003: 产品承诺与当前体验 verdict 不在本文新增；产品层和 QA 仍须以各自权威与 fresh evidence 为准。
+- DRF-004 / `PRD-WORLD_SIMULATOR-047`: `test_tier_required` 至少覆盖两阶段适用成功、未知/不适用拒绝、预留争用、buffer 满背压及根因/派生 blocker、重复提交/replay 单次效果；`test_tier_full` 覆盖不同规格批次的三阶段 split/merge、跨账本运输损耗、持久化/恢复/replay，以及 Viewer 与 pure API 的 lineage、守恒、适用结论和单次效果一致性。
