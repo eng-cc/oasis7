@@ -96,6 +96,80 @@ then
 fi
 grep -q "duplicate_dependency_entry_total grew beyond baseline" "$tmp_dir/growth.out"
 
+python3 - "$summary" "$tmp_dir/negative-summary.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["duplicate_dependency_entry_total"] = -1
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/negative-summary.json" >"$tmp_dir/negative-summary.out" 2>&1
+then
+  echo "expected negative aggregate duplicate count to fail" >&2
+  exit 1
+fi
+grep -q "summary duplicate_dependency_entry_total must be non-negative" "$tmp_dir/negative-summary.out"
+
+for fractional_value in -0.5 1.5; do
+  fractional_name="${fractional_value//-/negative-}"
+  python3 - "$summary" "$tmp_dir/fractional-$fractional_name.json" "$fractional_value" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["duplicate_dependency_entry_total"] = float(sys.argv[3])
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+  if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+    ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/fractional-$fractional_name.json" >"$tmp_dir/fractional-$fractional_name.out" 2>&1
+  then
+    echo "expected fractional duplicate count $fractional_value to fail" >&2
+    exit 1
+  fi
+  grep -q "summary duplicate_dependency_entry_total must be integer" "$tmp_dir/fractional-$fractional_name.out"
+done
+
+python3 - "$summary" "$tmp_dir/negative-crate.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+for key in ("duplicate_dependency_crates", "duplicate_dependency_top_crates"):
+    for entry in payload[key]:
+        if entry["crate"] == "hashbrown":
+            entry["duplicate_entries"] = -1
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/negative-crate.json" >"$tmp_dir/negative-crate.out" 2>&1
+then
+  echo "expected negative crate duplicate count to fail" >&2
+  exit 1
+fi
+grep -q "summary duplicate_dependency_crates duplicate_entries for hashbrown must be non-negative" "$tmp_dir/negative-crate.out"
+
+python3 - "$baseline" "$tmp_dir/negative-maxima-baseline.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["maxima"]["duplicate_dependency_entry_total"] = -1
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$tmp_dir/negative-maxima-baseline.json" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$summary" >"$tmp_dir/negative-maxima.out" 2>&1
+then
+  echo "expected negative duplicate baseline maximum to fail" >&2
+  exit 1
+fi
+grep -q "baseline maxima duplicate_dependency_entry_total must be non-negative" "$tmp_dir/negative-maxima.out"
+
 python3 - "$summary" "$tmp_dir/top-growth.json" <<'PY'
 from pathlib import Path
 import json

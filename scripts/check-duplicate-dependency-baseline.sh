@@ -62,6 +62,16 @@ def load_json(path: Path, label: str) -> dict:
         return {}
     return payload
 
+def parse_non_negative_int(raw: object, label: str) -> int | None:
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        failures.append(f"{label} must be integer")
+        return None
+    value = raw
+    if value < 0:
+        failures.append(f"{label} must be non-negative: {value}")
+        return None
+    return value
+
 summary = load_json(summary_path, "duplicate dependency summary")
 baseline = load_json(baseline_path, "duplicate dependency baseline")
 
@@ -104,11 +114,9 @@ for key in budget_keys:
     if key not in maxima:
         failures.append(f"baseline maxima missing key: {key}")
         continue
-    try:
-        actual = int(summary.get(key, -1))
-        maximum = int(maxima[key])
-    except (TypeError, ValueError):
-        failures.append(f"summary/baseline value must be integer for {key}")
+    actual = parse_non_negative_int(summary.get(key), f"summary {key}")
+    maximum = parse_non_negative_int(maxima[key], f"baseline maxima {key}")
+    if actual is None or maximum is None:
         continue
     if actual > maximum:
         failures.append(f"{key} grew beyond baseline: actual={actual} maximum={maximum}")
@@ -141,10 +149,11 @@ def parse_crate_entries(raw: object, key: str) -> list[tuple[str, int]]:
             failures.append(f"summary {key} repeats crate `{crate_name}`")
             continue
         seen.add(crate_name)
-        try:
-            duplicate_entries = int(entry.get("duplicate_entries", -1))
-        except (TypeError, ValueError):
-            failures.append(f"summary {key} duplicate_entries must be integer for {crate_name}")
+        duplicate_entries = parse_non_negative_int(
+            entry.get("duplicate_entries"),
+            f"summary {key} duplicate_entries for {crate_name}",
+        )
+        if duplicate_entries is None:
             continue
         parsed.append((crate_name, duplicate_entries))
     return parsed
@@ -172,10 +181,11 @@ for crate_name, actual in duplicate_crate_counts.items():
             "update crate_maxima only with repository-health review evidence"
         )
         continue
-    try:
-        maximum = int(crate_maxima[crate_name])
-    except (TypeError, ValueError):
-        failures.append(f"duplicate crate value must be integer for {crate_name}")
+    maximum = parse_non_negative_int(
+        crate_maxima[crate_name],
+        f"baseline crate_maxima value for {crate_name}",
+    )
+    if maximum is None:
         continue
     if actual > maximum:
         failures.append(
