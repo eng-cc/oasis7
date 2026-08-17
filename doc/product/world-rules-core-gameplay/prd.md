@@ -106,6 +106,16 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 以下边界必须可用同一条代表性工业/服务路径验收：报价后插入一个已接受动作，使资源余额、设施可用性、权限或电力状态中的至少一项改变；旧报价的后续提交要么在当前条件下只结算一次并提供 receipt，要么原子拒绝且保留原有余额/义务。玩家能够区分“资源余额仍可支付”与“运行 runway/停机风险”，并能读到变化原因与下一步；把报价缓存直接当作预留、把失败转为欠费，或在重试时产生第二次 sink，均为失败。
 
+#### 在途工业任务的承诺、中断与结算
+
+工业排程被接受后，不能继续沿用“报价可随时放弃”的语义，也不能把目标换向、停机或重连自动解释为取消。代表性配方任务必须让玩家在提交前读懂：接受时会消耗或占用的投入与能源、预期产出及副产物去向、形成结果所需的时间或阶段、是否存在取消/中止窗口，以及适用规则会保留、退回或损失什么。报价仍然只读；提交时只能原子拒绝且无新 sink，或创建一次可追溯的已接受工业承诺。
+
+已接受任务必须保持可区分的 `已接受/待开始 -> 已开始 -> 进行中 -> 已完成 / 被阻塞 / 已中止` 产品结果；`被阻塞` 是等待恢复、继续或按专业合同转为终止的可决策状态，不是隐含完成。若专业合同允许开始前释放、撤回或过期，也必须将其表达为未开始的终止结果，不能伪装成已中止的在制任务。这里的分类不冻结 runtime 枚举或 UI 字段，但任何专业实现都不能把“请求送达”“目标已换向”“设施暂不可用”或“客户端已断开”伪装成开始、完成或中止。目标换向、Agent 打断、维护/权限/设施状态变化、重连、重复提交与事件重放均不得静默迁移旧任务、再次扣料、复制产出/副产物，或同时生成退款与完成结果。
+
+取消或中止只在专业合同声明存在该能力时可用，并必须遵循当次任务适用的确定性处置规则：尚未开始的 hold 可以按规则释放；已经产生 sink、在制进度或世界效果的任务不得承诺全额自动退款。任何 salvage、部分返还、在制品保留、继续执行或安全停机都必须范围有界、只结算一次，并保留原投入、已发生结果和处置原因的 provenance；没有已实现且有证据的中止能力时，玩家只能看到真实可用的等待、修复、改道或重新规划路径，不能展示虚构的“取消”。
+
+中断后的玩家反馈至少回答：原任务及当前阶段、已经投入与仍被占用的价值、已形成或仍待形成的产出/副产物、保留与损失、对稳定产线候选进度的影响，以及当前真实可用的继续、等待、修复、改道、中止或重新规划动作。`game` 拥有这些选择的玩法取舍与平衡，`world-runtime` 拥有事件、状态、资源守恒、去重与 replay，Agent 拥有意图打断/换向的可解释 handoff，Viewer 与 pure API 拥有同一权威结果的表达，QA 拥有组合证据；产品层不规定取消 action、退款公式、队列算法、状态 schema 或 UI 布局。
+
 ### 世界宪法级产品不变量
 
 - 玩家通过目标、Agent、地点、设施、配方、关系与治理等受支持动作获得间接战略能动性；资源变化必须来自被授权的 source/sink 因果链，不能凭空生成或绕过成本。
@@ -151,6 +161,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 - SC-17：代表性共同决策样例证明普通治理只受理明示的政策、公共财库与既有 charter 日常事项；宪制、基本权利与系统安全事项被原子拒绝或路由到独立轨道，不产生部分世界效果。普通提案、财库、charter、技术升级、局部多数、历史声望与紧急状态均不能绕过保护底线；其他宪制变更只有在公开影响说明、延迟/复核、适用超多数、跨区域或受影响主体确认、独立审计与程序申诉全部成立时才生效。
 - SC-18：代表性区域设施与受治理扩展样例证明玩家只能在可读压力、条件报价、有限作用域和维护/耗尽/退役边界内取得区域 leverage；创作者提案只有经治理审查和权威生效后才成为世界能力。报价后状态变化、重复/过期/重连或跨入口重试只产生一次权威结果或原子拒绝，待决请求不会被表达为已生效。
 - SC-19：代表性系统性危机样例证明 containment 仅限制扩散并保护基本连续性；恢复项目在同一权威世界时间线内由玩家、Agent、组织或区域参与，并按既有资源、权限、治理、反滥用和申诉边界结算。不存在 reset、历史重写、跳过申诉或选择性 bailout；受影响主体可读触发事实、作用范围、当前限制、恢复/申诉路径与下一步。
+- SC-20：代表性工业任务证明报价无世界效果，提交只会原子拒绝或创建一次可追溯承诺；任务在完成、阻塞或中止时按适用专业规则守恒处置投入、在制进度、产出与副产物。目标换向、停机、权限变化、重连、重试与 replay 不会静默取消/迁移任务、重复 sink/产出或同时生成退款与完成结果；玩家能读懂保留、损失、稳定产线影响与真实可用的恢复/退出下一步。
 
 ### 5.1 验收追踪
 
@@ -175,6 +186,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 | SC-17 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通事项白名单、排除事项原子拒绝/独立路由、宪制条件全满足/缺失、防绕过与玩家可读 receipt 因果的组合证据 | test_tier_full |
 | SC-18 | producer_system_designer / gameplay_designer / runtime_engineer / wasm_platform_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-010 / PRD-P2P-002 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 区域设施生命周期、扩展治理准入、报价后状态变化、单次权威结果、待决表达与 replay/恢复身份一致性的组合证据 | test_tier_full |
 | SC-19 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-P2P-003 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | containment 与恢复项目在同一世界时间线中的组合证据；无 reset/历史重写/选择性 bailout，保留 appeal、replay/provenance，并区分正式玩家 surface 的 containment、恢复中、已恢复与 blocked；详细 AC-6/AC-7 与实现合同由上述权威维护 | test_tier_full |
+| SC-20 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-004 / PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 正常完成、提交前状态变化、开始前/后的适用中止或无中止能力、设施/维护/权限中断、目标换向、重连/重试/replay 的资源守恒与单次结算证据；Viewer 与 pure API 对任务阶段、投入/产出、保留/损失、稳定产线影响和下一步保持一致，Agent 打断保留旧意图 handoff | test_tier_full |
 
 ## 6. Non-Goals
 
