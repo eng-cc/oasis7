@@ -85,7 +85,11 @@ bounded panel; responsive layouts may reposition it only to stay within the safe
 viewport. Never style it as a success receipt or make it a persistent first-screen
 column. The renderer consumes source-ordered events keyed by
 `(world_id,reorg_epoch,event_seq)`, deduplicates by that identity, and exposes the
-cursor/recovery state without sorting by local time.
+cursor/recovery state without sorting by local time. On the wire,
+`reorg_epoch` and `event_seq` are exact non-negative decimal strings (Rust stores
+`u64`; legacy numeric input remains accepted); Viewer state uses an exact-decimal
+comparator and canonical ascending event order, never coercing them through
+JavaScript `Number`.
 
 | Feed state | Visual treatment | Recovery rule |
 | --- | --- | --- |

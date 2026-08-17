@@ -70,4 +70,25 @@ describe("WorldFeedPanel", () => {
       "8",
     ]);
   });
+
+  it("sorts exact decimal u64 sequences without Number precision loss", () => {
+    const { container } = render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [
+            { event_seq: "9007199254740993", kind: "newer", summary: "Newer exact event", detail: "", receipt_ref: null },
+            { event_seq: "9007199254740992", kind: "older", summary: "Older exact event", detail: "", receipt_ref: null },
+          ],
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    expect(Array.from(container.querySelectorAll("[data-world-feed-event]"), (event) => event.getAttribute("data-world-feed-event"))).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+    ]);
+  });
 });

@@ -6251,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "812786acef0e1e4eddb9beec058b72b1ecf00d84021baa4a2e6f7d93d96a1d94",
+      "content_sha256": "adc5744dd123e97c41bd117230c12dc968da76b3724a0c487c85565d67e29158",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6293,7 +6293,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "d81f92a77717c5b58ab56c6437c6c9c981791052bcecfecc14f5af345343e646",
+      "content_sha256": "eaf2ebbac8ea6f9ca91e8bc182f3bfe12a385915b25305ddc8190ac332139617",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6447,7 +6447,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md",
-      "content_sha256": "df9a66520e51213d03d48ed7a8a1bb722c3fe3a8c3a3de121ddb56498f859834",
+      "content_sha256": "4db46b03c0b8c7ba49789d33df22581c0b0f1969f0a0bdfe138342866cf8f1c1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

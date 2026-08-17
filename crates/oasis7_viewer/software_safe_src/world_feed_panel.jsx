@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import { compareUnsignedDecimal } from "./world_feed_state.js";
 
 function readFeed(props) {
   return typeof props.feed === "function" ? props.feed() : props.feed || {};
@@ -63,14 +64,9 @@ function WorldFeedPanel(props) {
   const feed = () => readFeed(props);
   // Render the timeline in event-sequence order even when a replay or fixture
   // provides events out of order. The copy keeps the runtime array immutable.
-  const presentationEvents = () => [...(feed().events || [])].sort((left, right) => {
-    const leftSeq = Number(left?.event_seq);
-    const rightSeq = Number(right?.event_seq);
-    if (!Number.isFinite(leftSeq) || !Number.isFinite(rightSeq)) {
-      return 0;
-    }
-    return leftSeq - rightSeq;
-  });
+  const presentationEvents = () => [...(feed().events || [])].sort(
+    (left, right) => compareUnsignedDecimal(left?.event_seq, right?.event_seq),
+  );
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr, status());
   const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");

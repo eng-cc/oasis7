@@ -47,15 +47,43 @@ describe("World Feed v1 state", () => {
     });
   });
 
-  it("consumes source order, appends by world/epoch/seq identity, and preserves null receipts", () => {
+  it("stores ascending source order, appends by world/epoch/seq identity, and preserves null receipts", () => {
     const initial = createInitialWorldFeedState();
     const first = consumeWorldFeed(initial, feed());
     expect(first.state.status).toBe("ready");
-    expect(first.state.events.map((event) => event.event_seq)).toEqual([2, 1]);
-    expect(first.state.events[0].receipt_ref).toBeNull();
+    expect(first.state.events.map((event) => event.event_seq)).toEqual([1, 2]);
+    expect(first.state.events.find((event) => event.event_seq === 2)?.receipt_ref).toBeNull();
     const replay = consumeWorldFeed(first.state, feed({ status: "replay", cursor: "wf1.cursor-3" }));
     expect(replay.state.events).toHaveLength(2);
-    expect(replay.state.events.map((event) => event.event_seq)).toEqual([2, 1]);
+    expect(replay.state.events.map((event) => event.event_seq)).toEqual([1, 2]);
+    expect(replay.state.dedupedCount).toBe(2);
+  });
+
+  it("stores an ascending exact decimal u64 sequence and deduplicates beyond MAX_SAFE_INTEGER", () => {
+    const initial = createInitialWorldFeedState();
+    const first = consumeWorldFeed(initial, feed({
+      events: [
+        { event_seq: "9007199254740993", kind: "newer", summary: "Newer event", detail: "", receipt_ref: null },
+        { event_seq: "9007199254740992", kind: "older", summary: "Older event", detail: "", receipt_ref: null },
+      ],
+    }));
+
+    expect(first.state.events.map((event) => event.event_seq)).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+    ]);
+
+    const replay = consumeWorldFeed(first.state, feed({
+      status: "replay",
+      events: [
+        { event_seq: "9007199254740993", kind: "newer", summary: "Newer event", detail: "", receipt_ref: null },
+        { event_seq: "9007199254740992", kind: "older", summary: "Older event", detail: "", receipt_ref: null },
+      ],
+    }));
+    expect(replay.state.events.map((event) => event.event_seq)).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+    ]);
     expect(replay.state.dedupedCount).toBe(2);
   });
 

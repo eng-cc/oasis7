@@ -4427,6 +4427,7 @@ function createMutable(state2, options) {
   return wrappedStore;
 }
 const WORLD_FEED_SCHEMA_VERSION = "world_feed/v1";
+const MAX_U64_DECIMAL = "18446744073709551615";
 const FEED_STATUSES = /* @__PURE__ */ new Set([
   "loading",
   "ready",
@@ -4478,14 +4479,33 @@ function normalizeLimit(limit) {
   return Math.min(value2, 200);
 }
 function normalizeUnsignedInteger(value2) {
+  let text2 = null;
   if (typeof value2 === "number") {
-    return Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
+    text2 = Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
+  } else if (typeof value2 === "bigint") {
+    text2 = value2 >= 0n ? value2.toString() : null;
+  } else {
+    text2 = String(value2 ?? "").trim();
   }
-  if (typeof value2 === "bigint") {
-    return value2 >= 0n ? value2.toString() : null;
+  if (!text2 || !/^\d+$/.test(text2)) {
+    return null;
   }
-  const text2 = String(value2 ?? "").trim();
-  return /^\d+$/.test(text2) ? text2 : null;
+  const canonical = text2.replace(/^0+(?=\d)/, "");
+  if (canonical.length > MAX_U64_DECIMAL.length || canonical.length === MAX_U64_DECIMAL.length && canonical > MAX_U64_DECIMAL) {
+    return null;
+  }
+  return canonical;
+}
+function compareUnsignedDecimal(left, right) {
+  const leftText = normalizeUnsignedInteger(left);
+  const rightText = normalizeUnsignedInteger(right);
+  if (leftText == null || rightText == null || leftText === rightText) {
+    return 0;
+  }
+  if (leftText.length !== rightText.length) {
+    return leftText.length - rightText.length;
+  }
+  return leftText < rightText ? -1 : 1;
 }
 function normalizeEvent(event) {
   if (!event || typeof event !== "object") {
@@ -4639,6 +4659,10 @@ function consumeWorldFeed(previous, feed) {
     seen.add(identity);
     appended.push(event);
   }
+  const combinedEvents = [...existing, ...appended];
+  const storedEvents = combinedEvents.slice().sort(
+    (left, right) => compareUnsignedDecimal(left.event_seq, right.event_seq)
+  );
   return {
     state: {
       ...state2,
@@ -4647,7 +4671,7 @@ function consumeWorldFeed(previous, feed) {
       worldId,
       reorgEpoch,
       cursor,
-      events: [...existing, ...appended],
+      events: storedEvents,
       stale,
       gapReason: null,
       unavailableReason: null,
@@ -11645,14 +11669,7 @@ function WorldFeedPanel(props) {
   const locale = () => typeof props.locale === "function" ? props.locale() : props.locale || "en";
   const tr2 = (localeValue, zh, en) => typeof props.tr === "function" ? props.tr(localeValue, zh, en) : en;
   const feed = () => readFeed(props);
-  const presentationEvents = () => [...feed().events || []].sort((left, right) => {
-    const leftSeq = Number(left?.event_seq);
-    const rightSeq = Number(right?.event_seq);
-    if (!Number.isFinite(leftSeq) || !Number.isFinite(rightSeq)) {
-      return 0;
-    }
-    return leftSeq - rightSeq;
-  });
+  const presentationEvents = () => [...feed().events || []].sort((left, right) => compareUnsignedDecimal(left?.event_seq, right?.event_seq));
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr2, status());
   const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
@@ -11772,7 +11789,7 @@ function WorldFeedSurface({
     onReloadSnapshot
   });
 }
-var _tmpl$$j = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$j = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><span class=secondary-viewer-nav__more></span><a class=secondary-viewer-nav__link href=#viewer-diagnostics-panel>`);
+var _tmpl$$j = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$2$j = /* @__PURE__ */ template(`<nav class=secondary-viewer-nav><button type=button class=secondary-viewer-nav__more aria-controls=viewer-diagnostics-panel>`);
 function focusViewerTarget(href) {
   const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
   if (!target) {
@@ -11800,10 +11817,16 @@ function focusViewerAnchor(event) {
 }
 function installViewerRouteController() {
   const handleKeyDown = (event) => {
-    if (event.key !== "Escape" || event.isComposing || document.body.classList.contains("pixel-world-focus-active") || !["#viewer-targets-panel", "#viewer-details-panel"].includes(window.location.hash)) {
+    if (event.key !== "Escape" || event.isComposing || document.body.classList.contains("pixel-world-focus-active") || !["#viewer-targets-panel", "#viewer-details-panel", "#viewer-diagnostics-panel"].includes(window.location.hash)) {
       return;
     }
     event.preventDefault();
+    if (window.location.hash === "#viewer-diagnostics-panel") {
+      const diagnostics = document.getElementById("viewer-diagnostics-panel");
+      if (diagnostics instanceof HTMLDetailsElement) {
+        diagnostics.open = false;
+      }
+    }
     focusViewerTarget("#viewer-stage-panel");
   };
   window.addEventListener("keydown", handleKeyDown);
@@ -11835,12 +11858,31 @@ function MobileJumpRail(props) {
 function SecondaryViewerNavigation(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
+  const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
+  const openDiagnostics = () => {
+    const target = focusViewerTarget("#viewer-diagnostics-panel");
+    setDiagnosticsOpen(Boolean(target?.open));
+  };
+  onMount(() => {
+    const diagnostics = document.getElementById("viewer-diagnostics-panel");
+    if (!diagnostics) return;
+    const update = () => setDiagnosticsOpen(diagnostics.open);
+    diagnostics.addEventListener("toggle", update);
+    onCleanup(() => diagnostics.removeEventListener("toggle", update));
+  });
   return (() => {
-    var _el$5 = _tmpl$2$j(), _el$6 = _el$5.firstChild, _el$7 = _el$6.nextSibling;
+    var _el$5 = _tmpl$2$j(), _el$6 = _el$5.firstChild;
+    _el$6.$$click = openDiagnostics;
     insert(_el$6, () => translate("更多", "More"));
-    _el$7.$$click = focusViewerAnchor;
-    insert(_el$7, () => translate("诊断", "Diagnostics"));
-    createRenderEffect(() => setAttribute(_el$5, "aria-label", translate("次级查看入口", "Secondary viewer navigation")));
+    createRenderEffect((_p$) => {
+      var _v$3 = translate("次级查看入口", "Secondary viewer navigation"), _v$4 = diagnosticsOpen();
+      _v$3 !== _p$.e && setAttribute(_el$5, "aria-label", _p$.e = _v$3);
+      _v$4 !== _p$.t && setAttribute(_el$6, "aria-expanded", _p$.t = _v$4);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0
+    });
     return _el$5;
   })();
 }
@@ -12201,10 +12243,25 @@ function createDirectorCapabilityController({ adapter, now = Date.now, onChange 
     }
   };
 }
+function restoreStageRoute() {
+  const hash = String(window.location.hash || "");
+  if (hash === "#viewer-director-entry" || hash === "#viewer-director-panel") {
+    window.location.hash = "#viewer-stage-panel";
+  }
+  document.getElementById("viewer-stage-panel")?.focus();
+}
 function createViewerDirectorSession({ core: core2, onChange, fetchImpl } = {}) {
+  let previousState = null;
   const controller = createDirectorCapabilityController({
     adapter: createDirectorCapabilityApiAdapter({ fetchImpl }),
-    onChange
+    onChange: (nextState) => {
+      const wasDirector = previousState?.mode === "director";
+      previousState = nextState;
+      onChange?.(nextState);
+      if (wasDirector && nextState?.mode === "player") {
+        restoreStageRoute();
+      }
+    }
   });
   return {
     controller,

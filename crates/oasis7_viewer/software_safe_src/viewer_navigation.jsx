@@ -1,3 +1,5 @@
+import { createSignal, onCleanup, onMount } from "solid-js";
+
 function focusViewerTarget(href) {
   const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
   if (!target) {
@@ -29,11 +31,17 @@ function installViewerRouteController() {
       event.key !== "Escape"
       || event.isComposing
       || document.body.classList.contains("pixel-world-focus-active")
-      || !["#viewer-targets-panel", "#viewer-details-panel"].includes(window.location.hash)
+      || !["#viewer-targets-panel", "#viewer-details-panel", "#viewer-diagnostics-panel"].includes(window.location.hash)
     ) {
       return;
     }
     event.preventDefault();
+    if (window.location.hash === "#viewer-diagnostics-panel") {
+      const diagnostics = document.getElementById("viewer-diagnostics-panel");
+      if (diagnostics instanceof HTMLDetailsElement) {
+        diagnostics.open = false;
+      }
+    }
     focusViewerTarget("#viewer-stage-panel");
   };
   window.addEventListener("keydown", handleKeyDown);
@@ -55,14 +63,29 @@ function MobileJumpRail(props) {
 function SecondaryViewerNavigation(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
+  const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
+  const openDiagnostics = () => {
+    const target = focusViewerTarget("#viewer-diagnostics-panel");
+    setDiagnosticsOpen(Boolean(target?.open));
+  };
+  onMount(() => {
+    const diagnostics = document.getElementById("viewer-diagnostics-panel");
+    if (!diagnostics) return;
+    const update = () => setDiagnosticsOpen(diagnostics.open);
+    diagnostics.addEventListener("toggle", update);
+    onCleanup(() => diagnostics.removeEventListener("toggle", update));
+  });
   return (
     <nav class="secondary-viewer-nav" aria-label={translate("次级查看入口", "Secondary viewer navigation")}>
-      <span class="secondary-viewer-nav__more">
+      <button
+        type="button"
+        class="secondary-viewer-nav__more"
+        aria-controls="viewer-diagnostics-panel"
+        aria-expanded={diagnosticsOpen()}
+        onClick={openDiagnostics}
+      >
         {translate("更多", "More")}
-      </span>
-      <a class="secondary-viewer-nav__link" href="#viewer-diagnostics-panel" onClick={focusViewerAnchor}>
-        {translate("诊断", "Diagnostics")}
-      </a>
+      </button>
     </nav>
   );
 }

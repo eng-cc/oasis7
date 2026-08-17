@@ -1,4 +1,5 @@
 export const WORLD_FEED_SCHEMA_VERSION = "world_feed/v1";
+const MAX_U64_DECIMAL = "18446744073709551615";
 
 const FEED_STATUSES = new Set([
   "loading",
@@ -57,14 +58,35 @@ function normalizeLimit(limit) {
 }
 
 function normalizeUnsignedInteger(value) {
+  let text = null;
   if (typeof value === "number") {
-    return Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
+    text = Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
+  } else if (typeof value === "bigint") {
+    text = value >= 0n ? value.toString() : null;
+  } else {
+    text = String(value ?? "").trim();
   }
-  if (typeof value === "bigint") {
-    return value >= 0n ? value.toString() : null;
+  if (!text || !/^\d+$/.test(text)) {
+    return null;
   }
-  const text = String(value ?? "").trim();
-  return /^\d+$/.test(text) ? text : null;
+  const canonical = text.replace(/^0+(?=\d)/, "");
+  if (canonical.length > MAX_U64_DECIMAL.length
+    || (canonical.length === MAX_U64_DECIMAL.length && canonical > MAX_U64_DECIMAL)) {
+    return null;
+  }
+  return canonical;
+}
+
+export function compareUnsignedDecimal(left, right) {
+  const leftText = normalizeUnsignedInteger(left);
+  const rightText = normalizeUnsignedInteger(right);
+  if (leftText == null || rightText == null || leftText === rightText) {
+    return 0;
+  }
+  if (leftText.length !== rightText.length) {
+    return leftText.length - rightText.length;
+  }
+  return leftText < rightText ? -1 : 1;
 }
 
 function normalizeEvent(event) {
@@ -226,6 +248,12 @@ export function consumeWorldFeed(previous, feed) {
     seen.add(identity);
     appended.push(event);
   }
+  const combinedEvents = [...existing, ...appended];
+  // Store the canonical timeline order for every payload shape. The comparator
+  // operates on decimal text so full u64 values never pass through JS Number.
+  const storedEvents = combinedEvents.slice().sort(
+    (left, right) => compareUnsignedDecimal(left.event_seq, right.event_seq),
+  );
   return {
     state: {
       ...state,
@@ -234,7 +262,7 @@ export function consumeWorldFeed(previous, feed) {
       worldId,
       reorgEpoch,
       cursor,
-      events: [...existing, ...appended],
+      events: storedEvents,
       stale,
       gapReason: null,
       unavailableReason: null,

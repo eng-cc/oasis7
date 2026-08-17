@@ -615,11 +615,27 @@ fn has_enabled_first_agent_claim(gameplay: &Value) -> bool {
         })
 }
 
+fn has_positive_world_delta(recent_feedback: &Value) -> bool {
+    ["deltaLogicalTime", "deltaEventSeq"]
+        .into_iter()
+        .any(|key| number(obj(recent_feedback, key), 0.0) > 0.0)
+}
+
+fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
+    matches!(
+        stage,
+        Some("accepted" | "submitted" | "queued" | "ack" | "registering" | "signing" | "sent")
+    )
+}
+
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
-    let has_world_delta = str_key(gameplay, "lastWorldChange").is_some()
-        || str_key(recent_feedback, "effect").is_some();
+    let receipt_stage =
+        str_key(gameplay, "executionState").or_else(|| str_key(recent_feedback, "stage"));
+    let has_world_delta = !is_pending_receipt_stage(receipt_stage)
+        && (str_key(gameplay, "lastWorldChange").is_some()
+            || has_positive_world_delta(recent_feedback));
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
         || str_key(gameplay, "acceptedIntentScope").is_some()
         || str_key(gameplay, "acceptedIntentTarget").is_some()
@@ -651,9 +667,7 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     }
     let present =
         has_world_delta || has_player_intent || str_key(recent_feedback, "reason").is_some();
-    let raw_state = str_key(gameplay, "executionState")
-        .or_else(|| str_key(recent_feedback, "stage"))
-        .unwrap_or("waiting_for_intent");
+    let raw_state = receipt_stage.unwrap_or("waiting_for_intent");
     let state = if present {
         raw_state
     } else {

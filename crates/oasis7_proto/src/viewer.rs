@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 mod rollback_v2;
 pub use rollback_v2::*;
 mod negotiation;
@@ -663,8 +663,59 @@ pub enum WorldFeedUnavailableReason {
     PermissionDenied,
 }
 
+fn serialize_u64_as_decimal_string<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&value.to_string())
+}
+
+fn deserialize_u64_from_decimal_string_or_number<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct U64DecimalVisitor;
+
+    impl<'de> de::Visitor<'de> for U64DecimalVisitor {
+        type Value = u64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an unsigned 64-bit integer or decimal string")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            u64::try_from(value).map_err(|_| E::custom("expected a non-negative integer"))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            value
+                .parse::<u64>()
+                .map_err(|_| E::custom("expected a decimal u64 string"))
+        }
+    }
+
+    deserializer.deserialize_any(U64DecimalVisitor)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldFeedEvent {
+    #[serde(
+        serialize_with = "serialize_u64_as_decimal_string",
+        deserialize_with = "deserialize_u64_from_decimal_string_or_number"
+    )]
     pub event_seq: u64,
     pub kind: String,
     pub summary: String,
@@ -676,6 +727,10 @@ pub struct WorldFeedEvent {
 pub struct WorldFeedEnvelope {
     pub schema_version: String,
     pub world_id: String,
+    #[serde(
+        serialize_with = "serialize_u64_as_decimal_string",
+        deserialize_with = "deserialize_u64_from_decimal_string_or_number"
+    )]
     pub reorg_epoch: u64,
     pub cursor: String,
     pub events: Vec<WorldFeedEvent>,
@@ -1275,7 +1330,7 @@ mod tests {
             request_json
         );
 
-        let response_json = serde_json::json!({
+        let legacy_response_json = serde_json::json!({
             "type": "world_feed",
             "feed": {
                 "schema_version": "world_feed/v1",
@@ -1289,16 +1344,14 @@ mod tests {
             }
         });
         let response: ViewerResponse<(), (), (), (), u64> =
-            serde_json::from_value(response_json.clone()).expect("decode world feed response");
-        assert_eq!(
-            serde_json::to_value(response).expect("encode response"),
-            response_json
-        );
+            serde_json::from_value(legacy_response_json).expect("decode world feed response");
+        let encoded = serde_json::to_value(response).expect("encode response");
+        assert_eq!(encoded["feed"]["reorg_epoch"], serde_json::json!("3"));
     }
 
     #[test]
     fn world_feed_v1_event_keeps_explicit_receipt_reference_nullable() {
-        let response_json = serde_json::json!({
+        let legacy_response_json = serde_json::json!({
             "type": "world_feed",
             "feed": {
                 "schema_version": "world_feed/v1",
@@ -1317,11 +1370,51 @@ mod tests {
             }
         });
         let response: ViewerResponse<(), (), (), (), u64> =
-            serde_json::from_value(response_json.clone()).expect("decode world feed response");
+            serde_json::from_value(legacy_response_json).expect("decode world feed response");
+        let encoded = serde_json::to_value(response).expect("encode response");
+        assert_eq!(encoded["feed"]["reorg_epoch"], serde_json::json!("0"));
         assert_eq!(
-            serde_json::to_value(response).expect("encode response"),
-            response_json
+            encoded["feed"]["events"][0]["event_seq"],
+            serde_json::json!("7")
         );
+        assert!(encoded["feed"]["events"][0]["receipt_ref"].is_null());
+    }
+
+    #[test]
+    fn world_feed_v1_u64_identifiers_serialize_as_exact_decimal_strings() {
+        let response = ViewerResponse::<(), (), (), (), u64>::WorldFeed {
+            feed: WorldFeedEnvelope {
+                schema_version: WORLD_FEED_SCHEMA_VERSION.to_string(),
+                world_id: "world-max".to_string(),
+                reorg_epoch: u64::MAX,
+                cursor: "cursor-max".to_string(),
+                events: vec![WorldFeedEvent {
+                    event_seq: u64::MAX,
+                    kind: "domain".to_string(),
+                    summary: "Max event sequence".to_string(),
+                    detail: "{}".to_string(),
+                    receipt_ref: None,
+                }],
+                status: WorldFeedStatus::Ready,
+                gap_reason: None,
+                unavailable_reason: None,
+                snapshot_reload_required: false,
+            },
+        };
+
+        let encoded = serde_json::to_value(&response).expect("encode max u64 feed");
+        assert_eq!(
+            encoded["feed"]["reorg_epoch"],
+            serde_json::json!(u64::MAX.to_string())
+        );
+        assert_eq!(
+            encoded["feed"]["events"][0]["event_seq"],
+            serde_json::json!(u64::MAX.to_string())
+        );
+
+        let parsed: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(encoded).expect("decode max u64 feed");
+        assert_eq!(parsed, response);
     }
 
     #[test]

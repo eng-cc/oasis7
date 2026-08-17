@@ -401,7 +401,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(nav).getByRole("link", { name: "World" })).toHaveAttribute("href", "#viewer-stage-panel");
     expect(within(nav).getByRole("link", { name: "Targets" })).toHaveAttribute("href", "#viewer-targets-panel");
     expect(within(nav).getByRole("link", { name: "Command" })).toHaveAttribute("href", "#viewer-details-panel");
-    expect(screen.getByRole("link", { name: "Diagnostics" })).toHaveAttribute("href", "#viewer-diagnostics-panel");
+    expect(screen.getByRole("button", { name: "More" })).toHaveAttribute("aria-controls", "viewer-diagnostics-panel");
 
     const targetsPanel = container.querySelector("#viewer-targets-panel");
     const stagePanel = container.querySelector("#viewer-stage-panel");

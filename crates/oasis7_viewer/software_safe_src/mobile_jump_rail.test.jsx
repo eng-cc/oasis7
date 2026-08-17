@@ -73,9 +73,9 @@ describe("mobile jump rail", () => {
     expect(within(nav).queryByRole("link", { name: "Quote" })).not.toBeInTheDocument();
 
     const secondaryNav = screen.getByRole("navigation", { name: /secondary viewer navigation/i });
-    expect(within(secondaryNav).getByRole("link", { name: "Diagnostics" })).toHaveAttribute(
-      "href",
-      "#viewer-diagnostics-panel",
+    expect(within(secondaryNav).getByRole("button", { name: "More" })).toHaveAttribute(
+      "aria-controls",
+      "viewer-diagnostics-panel",
     );
   });
 
@@ -111,12 +111,12 @@ describe("mobile jump rail", () => {
 
   it("opens and focuses the closed Diagnostics disclosure from secondary navigation", () => {
     const diagnosticsPanel = document.querySelector("#viewer-diagnostics-panel");
-    const diagnosticsLink = within(
+    const moreButton = within(
       screen.getByRole("navigation", { name: /secondary viewer navigation/i }),
-    ).getByRole("link", { name: "Diagnostics" });
+    ).getByRole("button", { name: "More" });
     expect(diagnosticsPanel).toHaveProperty("open", false);
 
-    fireEvent.click(diagnosticsLink);
+    fireEvent.click(moreButton);
 
     expect(window.location.hash).toBe("#viewer-diagnostics-panel");
     expect(diagnosticsPanel).toHaveProperty("open", true);
@@ -143,6 +143,28 @@ describe("mobile jump rail", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(window.location.hash).toBe("#viewer-stage-panel");
     expect(document.activeElement).toBe(stagePanel);
+  });
+
+  it("makes mobile More own an on-demand Diagnostics disclosure and restores stage focus on Escape", () => {
+    const secondaryNav = screen.getByRole("navigation", { name: /secondary viewer navigation/i });
+    const more = within(secondaryNav).getByRole("button", { name: "More" });
+    expect(more).toBeInTheDocument();
+    expect(within(secondaryNav).queryByRole("link", { name: "Diagnostics" })).not.toBeInTheDocument();
+
+    fireEvent.click(more);
+    const diagnostics = document.querySelector("#viewer-diagnostics-panel");
+    expect(diagnostics).toHaveProperty("open", true);
+    expect(window.location.hash).toBe("#viewer-diagnostics-panel");
+    expect(document.activeElement).toBe(diagnostics.querySelector("summary"));
+
+    fireEvent.keyDown(window, { key: "Escape", isComposing: true });
+    expect(window.location.hash).toBe("#viewer-diagnostics-panel");
+    expect(diagnostics).toHaveProperty("open", true);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(window.location.hash).toBe("#viewer-stage-panel");
+    expect(diagnostics).toHaveProperty("open", false);
+    expect(document.activeElement).toBe(document.querySelector("#viewer-stage-panel"));
   });
 
   it("defines a stage-first single-column shell and on-demand drawer CSS without horizontal overflow", async () => {

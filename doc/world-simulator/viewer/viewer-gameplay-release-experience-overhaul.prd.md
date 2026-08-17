@@ -163,13 +163,18 @@ current Recent Events/Feedback fields, which remain separate compatibility proje
 | --- | --- | --- |
 | `schema_version` | literal `world_feed/v1` | unknown versions render unavailable, never guessed |
 | `world_id` | canonical world identity | part of event identity and cursor scope |
-| `reorg_epoch` | monotonically versioned world-history epoch | epoch changes invalidate the prior cursor |
-| `cursor` | opaque resume position carrying `world_id`, `reorg_epoch`, and last `event_seq` | request/replay recovery is cursor-aware; no wall-clock seek |
-| `events[]` | source-ordered event projections | ascending `event_seq`; duplicate identity is dropped |
-| `event_seq` | monotonic sequence within `(world_id, reorg_epoch)` | identity key is `(world_id,reorg_epoch,event_seq)` |
+| `reorg_epoch` | exact non-negative decimal string on the wire (Rust `u64`; legacy numeric input accepted by the deserializer) | epoch changes invalidate the prior cursor |
+| `cursor` | opaque resume position carrying `world_id`, exact-decimal `reorg_epoch`, and last exact-decimal `event_seq` | request/replay recovery is cursor-aware; no wall-clock seek |
+| `events[]` | source-ordered event projections | canonical ascending `event_seq` by exact-decimal comparison; duplicate identity is dropped |
+| `event_seq` | exact non-negative decimal string on the wire (Rust `u64`; legacy numeric input accepted by the deserializer), monotonic within `(world_id, reorg_epoch)` | identity key is `(world_id,reorg_epoch,event_seq)` |
 | `kind`, `summary`, `detail` | canonical event presentation fields | ambient context only; text cannot create causality |
 | `receipt_ref` | nullable explicit runtime causal identity (the player-facing receipt link) | current runtime projection emits `null`; render a link only when an explicit identity is supplied; never infer from time/text/delta |
 | `status` | `loading`, `ready`, `empty`, `replay`, `gap`, or `unavailable` | each state has distinct copy and recovery route |
+
+The wire contract serializes `reorg_epoch` and `event_seq` as exact decimal strings
+to prevent JavaScript precision loss. Deserializers accept legacy numeric input for
+compatibility; Viewer state normalizes and compares the decimal strings exactly and
+presents canonical ascending event order.
 
 `gap` or `reorg` responses require cursor-aware recovery and snapshot reload; they
 must not be rendered as a contiguous event stream. `loading`, `empty`, `replay`, and

@@ -108,6 +108,9 @@ blocked until a trusted issuer is available.
    runtime emits nullable `receipt_ref=null`; a link is rendered only when runtime
    supplies explicit causal identity. In fullscreen Player it is a compact collapsed
    top-right edge overlay/ambient chip that opens on demand, never a persistent column.
+   Wire `reorg_epoch` and `event_seq` are exact decimal strings (legacy numeric input
+   remains accepted); the Viewer compares them exactly and presents canonical ascending
+   event order.
 5. Director is a capability-gated secondary Diagnostics/operator action, ephemeral to
    the tab. The server validates a short-lived `director_open` grant; invalid/stale/
    revoked/unauthorized/unavailable entry returns to Player, sanitizes Director
