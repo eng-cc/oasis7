@@ -35,6 +35,7 @@ FAKE_CARGO
 chmod +x "$fake_bin/cargo"
 
 out_dir="$tmp_dir/metrics"
+expected_commit_oid=$(git rev-parse HEAD)
 FAKE_CARGO_LOG="$tmp_dir/cargo.log" PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
@@ -42,7 +43,7 @@ FAKE_CARGO_LOG="$tmp_dir/cargo.log" PATH="$fake_bin:$PATH" \
     --check-only \
     --no-default-features
 
-python3 - "$out_dir/current.metrics.json" "$out_dir/comparison.json" "$out_dir/summary.md" <<'PY'
+python3 - "$out_dir/current.metrics.json" "$out_dir/comparison.json" "$out_dir/summary.md" "$expected_commit_oid" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -50,14 +51,19 @@ import sys
 metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 summary = Path(sys.argv[3]).read_text(encoding="utf-8")
+expected_commit_oid = sys.argv[4]
 assert metrics["package_count"] == 2
+assert metrics["commit_oid"] == expected_commit_oid
 assert metrics["binary"] is None
 assert metrics["check_only"] is True
 assert metrics["no_default_features"] is True
 assert metrics["cargo_build_release_seconds"] is None
 assert metrics["release_binary_bytes"] is None
 assert comparison["metric_rows"] == []
+assert comparison["current_commit_oid"] == expected_commit_oid
+assert comparison["baseline_commit_oid"] is None
 assert "not measured (check-only package)" in summary
+assert expected_commit_oid in summary
 PY
 
 if rg -q 'build' "$tmp_dir/cargo.log"; then
