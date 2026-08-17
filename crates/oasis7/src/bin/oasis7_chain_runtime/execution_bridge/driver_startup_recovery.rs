@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use oasis7::runtime::{
@@ -9,7 +10,8 @@ use oasis7::simulator::{
 };
 
 use super::checkpoint::{
-    execution_bridge_record_path, execution_checkpoint_root_dir, load_execution_bridge_record,
+    execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
+    execution_checkpoint_root_dir, load_execution_bridge_record,
     load_execution_checkpoint_manifest, persist_execution_bridge_record_only,
 };
 use super::driver::{ExecutionHashPayload, NodeRuntimeExecutionDriver};
@@ -22,7 +24,86 @@ use super::driver_persistence::{
     persist_execution_world_with_chain_resource_context,
 };
 use super::simulator_mirror::persist_simulator_execution_world;
-use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord, WorldHeadProofV1};
+use super::{
+    EXECUTION_BRIDGE_RECORD_SCHEMA_V3, EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2,
+    ExecutionBridgeRecord, ExecutionCheckpointManifest, WorldHeadProofV1,
+};
+
+fn hydrate_compacted_checkpoint_record(
+    records_dir: &Path,
+    record: &mut ExecutionBridgeRecord,
+) -> Result<(Option<ExecutionCheckpointManifest>, bool), String> {
+    if record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V3 {
+        return Ok((None, false));
+    }
+    let Some(checkpoint_ref) = record.checkpoint_ref.as_deref() else {
+        return Ok((None, false));
+    };
+    let expected_checkpoint_ref = execution_checkpoint_manifest_rel_path(record.height);
+    if checkpoint_ref != expected_checkpoint_ref {
+        return Err(format!(
+            "execution driver checkpoint manifest ref mismatch at height {}: expected={} actual={}",
+            record.height, expected_checkpoint_ref, checkpoint_ref
+        ));
+    }
+    let manifest = load_execution_checkpoint_manifest(
+        execution_checkpoint_root_dir(records_dir)
+            .join(checkpoint_ref)
+            .as_path(),
+    )?;
+    if manifest.world_id != record.world_id
+        || manifest.height != record.height
+        || manifest.execution_block_hash != record.execution_block_hash
+        || manifest.execution_state_root != record.execution_state_root
+    {
+        return Err(format!(
+            "execution driver checkpoint manifest identity mismatch at height {}",
+            record.height
+        ));
+    }
+    if manifest.schema_version < EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2
+        || manifest
+            .predecessor_execution_block_hash
+            .as_deref()
+            .is_none_or(str::is_empty)
+    {
+        return Err(format!(
+            "execution driver checkpoint manifest missing predecessor binding at height {}",
+            record.height
+        ));
+    }
+    let snapshot_ref = manifest
+        .snapshot_ref
+        .as_deref()
+        .unwrap_or(manifest.latest_state_ref.as_str());
+    let journal_ref = manifest
+        .journal_ref
+        .as_deref()
+        .filter(|reference| !reference.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "execution driver checkpoint manifest missing journal ref at height {}",
+                record.height
+            )
+        })?;
+    let refs_compacted = record.latest_state_ref.is_none()
+        && record.snapshot_ref.is_none()
+        && record.journal_ref.is_none();
+    if refs_compacted {
+        record.latest_state_ref = Some(manifest.latest_state_ref.clone());
+        record.snapshot_ref = Some(snapshot_ref.to_string());
+        record.journal_ref = Some(journal_ref.to_string());
+    } else if record.latest_state_ref.as_deref() != Some(manifest.latest_state_ref.as_str())
+        || record.snapshot_ref.as_deref() != Some(snapshot_ref)
+        || record.journal_ref.as_deref() != Some(journal_ref)
+    {
+        return Err(format!(
+            "execution driver checkpoint manifest refs mismatch at height {}",
+            record.height
+        ));
+    }
+    Ok((Some(manifest), refs_compacted))
+}
 
 impl NodeRuntimeExecutionDriver {
     fn recover_runtime_journal_from_loaded_world(
@@ -148,6 +229,7 @@ impl NodeRuntimeExecutionDriver {
         snapshot_bytes: &[u8],
         snapshot: &RuntimeSnapshot,
         journal: &RuntimeJournal,
+        checkpoint_manifest: Option<&ExecutionCheckpointManifest>,
         allow_legacy_cache_recovery: bool,
     ) -> Result<(), String> {
         if record.height == 0 || record.world_id.trim().is_empty() {
@@ -245,7 +327,19 @@ impl NodeRuntimeExecutionDriver {
                 ));
             }
         }
-        let previous_execution_block_hash = if checkpoint_install_record {
+        let previous_execution_block_hash = if let Some(manifest) = checkpoint_manifest {
+            manifest
+                .predecessor_execution_block_hash
+                .as_deref()
+                .filter(|hash| !hash.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "execution checkpoint manifest missing predecessor execution block hash at height {}",
+                        record.height
+                    )
+                })?
+                .to_string()
+        } else if checkpoint_install_record {
             let checkpoint_ref = record.checkpoint_ref.as_deref().ok_or_else(|| {
                 format!(
                     "execution checkpoint-install record missing checkpoint ref at height {}",
@@ -339,6 +433,8 @@ impl NodeRuntimeExecutionDriver {
                 target_height, expected_world_id, record.world_id
             ));
         }
+        let (checkpoint_manifest, record_was_compacted) =
+            hydrate_compacted_checkpoint_record(self.records_dir.as_path(), &mut record)?;
         let world_policy = self.execution_world.release_security_policy().clone();
         let snapshot_ref = record
             .recovery_snapshot_ref()
@@ -445,6 +541,7 @@ impl NodeRuntimeExecutionDriver {
             snapshot_bytes.as_slice(),
             &snapshot,
             &journal,
+            checkpoint_manifest.as_ref(),
             allow_legacy_cache_recovery,
         )?;
         let decode_ms = runtime_decode_started_at.elapsed();
@@ -559,7 +656,8 @@ impl NodeRuntimeExecutionDriver {
             Duration::default()
         };
 
-        if record.latest_state_ref.is_none()
+        if record_was_compacted
+            || record.latest_state_ref.is_none()
             || record.snapshot_ref.is_none()
             || record.journal_ref.is_none()
         {
