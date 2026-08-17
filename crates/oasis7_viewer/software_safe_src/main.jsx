@@ -2424,7 +2424,7 @@ function WorldSummaryPanel(props = {}) {
   ];
 
   return (
-    <>
+    <div data-viewer-overlay="world-summary">
       <Show when={!starterOcGateOpen() && starterOcAction(gameplaySummary())}>
         <CalloutCard
           title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
@@ -3273,7 +3273,7 @@ function WorldSummaryPanel(props = {}) {
       </details>
       </div>
       </details>
-    </>
+    </div>
   );
 }
 
@@ -3827,15 +3827,15 @@ function AppShell() {
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
   onMount(() => onCleanup(installViewerRouteController()));
   return (
-    <>
-      <MobileJumpRail locale={locale} tr={tr} />
+    <div class="viewer-shell" data-viewer-shell="player-fullscreen">
+      <MobileJumpRail locale={locale} tr={tr} data-viewer-overlay="navigation" />
       <SecondaryViewerNavigation locale={locale} tr={tr} />
       <HostedLoginGate />
       <StarterOcRequiredGate />
       <section
         class="panel panel--targets"
         id="viewer-targets-panel"
-        data-viewer-route-panel="targets"
+        data-viewer-route-panel="targets" data-viewer-overlay="targets"
         tabIndex="-1"
         data-viewer-surface="targets"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
@@ -3856,7 +3856,7 @@ function AppShell() {
       <section
         class="panel panel--stage"
         id="viewer-stage-panel"
-        tabIndex="-1"
+        tabIndex="-1" data-viewer-map-layer="base"
         data-viewer-surface="stage"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3878,7 +3878,7 @@ function AppShell() {
       <section
         class="panel panel--details"
         id="viewer-details-panel"
-        data-viewer-route-panel="command"
+        data-viewer-route-panel="command" data-viewer-overlay="command"
         tabIndex="-1"
         data-viewer-surface="command"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
@@ -3899,7 +3899,7 @@ function AppShell() {
         </div>
       </section>
       <DirectorSurface controller={directorSession.controller} core={core} locale={locale} />
-    </>
+    </div>
   );
 }
 

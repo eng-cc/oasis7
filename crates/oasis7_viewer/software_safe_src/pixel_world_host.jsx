@@ -648,7 +648,7 @@ function PixelWorldActionReceipt(props) {
   return (
     <div
       id={props.id}
-      class={`pixel-world-action-receipt ${props.class ?? ""}`}
+      class={`pixel-world-action-receipt ${props.class ?? ""}`} data-viewer-overlay="receipt"
       data-receipt-present={receipt().present ? "true" : "false"}
       data-receipt-state={receipt().state}
       data-receipt-confidence={receipt().confidence}
@@ -739,7 +739,7 @@ function PixelWorldCommercialHud(props) {
   return (
     <Show when={surface()}>
       <div
-        class="pixel-world-command-strip"
+        class="pixel-world-command-strip" data-viewer-overlay="next-move"
         data-active-agent={surface().active_agent_id || ""}
         data-leverage-state={surface().player_leverage.state}
       >
@@ -1446,6 +1446,7 @@ export function PixelWorldHost(props) {
   return (
     <div
       class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
+      data-viewer-overlay="world-hud"
       data-world-focus={focusMode() ? "true" : "false"}
       data-world-focus-maximized={focusMode() && maximized() ? "true" : "false"}
       data-visual-fixture={visualFixtureName || ""}

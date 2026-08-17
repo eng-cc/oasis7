@@ -67,20 +67,21 @@ function WorldFeedPanel(props) {
   const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
 
   return (
-    <section
+    <details
       id="viewer-world-feed"
       class="panel panel--world-feed"
+      data-viewer-overlay="feed"
       data-viewer-surface="world-feed"
       data-world-feed-status={status()}
       aria-live="polite"
     >
-      <div class="panel__header panel__header--stack">
+      <summary class="panel__header panel__header--stack world-feed__summary">
         <div class="panel__eyebrow">{tr(locale(), "环境上下文", "Ambient Context")}</div>
         <div class="panel__title">{tr(locale(), "World Feed", "World Feed")}</div>
         <div class="panel__meta-copy">
           {tr(locale(), "只读的运行时环境投影；不会替代 Action Receipt，也不会证明玩家动作成功。", "Read-only runtime context; it never replaces Action Receipt or proves a player action succeeded.")}
         </div>
-      </div>
+      </summary>
       <div class="panel__body world-feed__body">
         <div class="world-feed__status-row">
           <span class={statusBadgeClass(status())}>{statusLabel()}</span>
@@ -141,7 +142,7 @@ function WorldFeedPanel(props) {
           </div>
         </Show>
       </div>
-    </section>
+    </details>
   );
 }
 

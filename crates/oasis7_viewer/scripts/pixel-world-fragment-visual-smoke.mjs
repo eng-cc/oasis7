@@ -51,6 +51,8 @@ function contentType(pathname) {
     case ".js":
     case ".mjs":
       return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
     case ".wasm":
       return "application/wasm";
     case ".ico":
@@ -537,11 +539,13 @@ function actionReceiptProbeScript() {
         return current?.present === "true" && current?.confidence === "world_delta" ? current : null;
       });
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
-      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
+      const agentRect = await waitFor(() => {
+        const current = document.querySelector(".pixel-world-entity--agent");
+        const rect = current ? rectOf(current) : null;
+        return rect?.width > 0 && rect?.height > 0 ? rect : null;
+      });
       const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
-      const stage = fragments[0]?.closest(".pixel-world-canvas") || document.querySelector(".pixel-world-canvas");
-      const agent = stage?.querySelector(".pixel-world-entity--agent") || null;
       const blockerBadge = Array.from(document.querySelectorAll(".badge"))
         .map((element) => element.textContent.trim())
         .find((text) => text.startsWith("blocker=")) || null;
@@ -552,7 +556,7 @@ function actionReceiptProbeScript() {
         receipt,
         blockerBadge,
         fragmentCount: fragments.length,
-        agentRect: agent ? rectOf(agent) : null,
+        agentRect,
       });
     })()
   `;
@@ -614,9 +618,14 @@ function mobileActionReceiptProbeScript() {
       window.scrollBy(0, -8);
       await sleep(180);
 
+      const agentRect = await waitFor(() => {
+        const current = document.querySelector(".pixel-world-entity--agent");
+        const rect = current ? rectOf(current) : null;
+        return rect?.width > 0 && rect?.height > 0 ? rect : null;
+      });
+
       const receipt = receiptOf();
       const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
-      const agent = document.querySelector(".pixel-world-entity--agent");
       const viewport = {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -632,7 +641,7 @@ function mobileActionReceiptProbeScript() {
         horizontalOverflowPx,
         receipt,
         fragmentCount: fragments.length,
-        agentRect: agent ? rectOf(agent) : null,
+        agentRect,
         commandStripRect: rectOf(document.querySelector(".pixel-world-command-strip")),
       });
     })()

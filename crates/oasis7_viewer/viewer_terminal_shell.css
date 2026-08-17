@@ -1,54 +1,209 @@
+.viewer-shell {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
+  overflow: hidden;
+}
+
+body {
+  padding: 0;
+}
+
+/* Legacy selector kept as a stage-first compatibility alias; the mounted root is
+ * `.viewer-shell`, so this cannot reintroduce the former three-column layout. */
 .shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "rail"
-    "rail-tools"
-    "stage"
-    "targets"
-    "details";
-  overflow-x: hidden;
+  grid-template-areas: "stage";
+  min-height: 100dvh;
 }
 
-.mobile-rail {
-  display: flex;
-  grid-area: rail;
-  position: sticky;
-  top: 10px;
+#viewer-stage-panel[data-viewer-map-layer="base"] {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+#viewer-stage-panel[data-viewer-map-layer="base"] > .panel__body {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+#viewer-stage-panel[data-viewer-map-layer="base"] > .panel__body > .stack {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+}
+
+.panel--stage::before {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+[data-viewer-overlay="world-hud"] > .pixel-world-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__surface {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__overlay {
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-host__summary,
+[data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics,
+[data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
+  position: absolute;
+  z-index: 14;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-host__summary,
+[data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
+  top: 16px;
+  right: 120px;
+}
+
+[data-viewer-shell="player-fullscreen"] .stage-hero {
+  display: none;
+}
+
+[data-viewer-overlay="world-summary"] {
+  display: none;
+}
+
+[data-viewer-overlay="world-summary"]:has(#viewer-gameplay-details[open]) {
+  display: block;
+  position: fixed;
+  z-index: 50;
+  inset: 96px 24px 24px auto;
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+}
+
+[data-viewer-overlay="next-move"] {
+  position: absolute;
+  grid-template-columns: minmax(0, 1fr);
+  z-index: 24;
+  left: 16px;
+  right: auto;
+  bottom: 120px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: auto;
+}
+
+#app[data-viewer-visual-fixture] [data-viewer-overlay="next-move"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--objective,
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage,
+.pixel-world-canvas__callout--goal,
+.pixel-world-canvas__callout--blocker {
+  display: none;
+}
+
+[data-viewer-overlay="receipt"] {
+  position: absolute;
   z-index: 25;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px;
-  border-radius: 999px;
-  background: rgba(9, 13, 11, 0.88);
-  border: 1px solid rgba(152, 177, 150, 0.18);
-  backdrop-filter: blur(10px);
-  flex-wrap: wrap;
-  overflow: visible;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  pointer-events: auto;
 }
 
-.mobile-rail__link {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
+[data-viewer-overlay="feed"] {
+  position: absolute;
+  z-index: 26;
+  top: 72px;
+  right: 16px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="navigation"] {
+  position: fixed;
+  z-index: 40;
+  top: 16px;
+  left: 16px;
+  pointer-events: auto;
 }
 
 .secondary-viewer-nav {
-  grid-area: rail-tools;
+  position: fixed;
+  z-index: 40;
+  top: 16px;
+  right: 16px;
+  pointer-events: auto;
 }
 
-#viewer-targets-panel,
-#viewer-details-panel {
+[data-viewer-route-panel="targets"],
+[data-viewer-route-panel="command"] {
   display: none;
   position: fixed;
   inset: 24px 24px 24px auto;
-  z-index: 30;
+  z-index: 50;
   width: min(420px, calc(100vw - 48px));
   max-width: min(420px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   overflow-x: hidden;
   overflow-y: auto;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+}
+
+#viewer-targets-panel,
+#viewer-details-panel {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  max-width: min(420px, calc(100vw - 48px));
+  overflow-x: hidden;
 }
 
 #viewer-targets-panel:target,
@@ -58,20 +213,18 @@
   display: block;
 }
 
-#app[data-viewer-visual-fixture] .shell {
-  grid-template-columns: minmax(210px, 240px) minmax(470px, 1fr) minmax(280px, 340px);
-  grid-template-areas: "targets stage details";
+.mobile-rail__link,
+.secondary-viewer-nav__link {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
-#app[data-viewer-visual-fixture] #viewer-targets-panel,
-#app[data-viewer-visual-fixture] #viewer-details-panel {
+[data-viewer-route-panel="targets"]:target,
+[data-viewer-route-panel="targets"][data-route-open="true"],
+[data-viewer-route-panel="command"]:target,
+[data-viewer-route-panel="command"][data-route-open="true"] {
   display: block;
-  position: static;
-  width: auto;
-  max-width: none;
-  max-height: none;
-  overflow: hidden;
-  box-shadow: none;
 }
 
 .panel__route-close {
@@ -88,34 +241,33 @@
   text-decoration: underline;
 }
 
-.secondary-viewer-nav {
-  display: flex;
-  justify-content: flex-end;
-  margin: -8px 0 10px;
-}
-
-.secondary-viewer-nav__link {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  text-decoration: none;
-  opacity: 0.82;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.secondary-viewer-nav__link:hover,
-.secondary-viewer-nav__link:focus-visible {
-  color: var(--text);
-  opacity: 1;
-}
-
 .panel--world-feed {
-  margin-top: 12px;
+  margin-top: 0;
   border-top: 1px solid rgba(152, 177, 150, 0.18);
-  background: rgba(9, 13, 11, 0.38);
+  background: rgba(9, 13, 11, 0.82);
+}
+
+.world-feed__summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.world-feed__summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel--world-feed:not([open]) {
+  width: auto;
+  max-width: min(220px, calc(100vw - 32px));
+}
+
+.panel--world-feed:not([open]) .world-feed__summary {
+  padding: 10px 12px;
+}
+
+.panel--world-feed:not([open]) .panel__eyebrow,
+.panel--world-feed:not([open]) .panel__meta-copy {
+  display: none;
 }
 
 .world-feed__body {
@@ -169,20 +321,10 @@
   font-size: 13px;
 }
 
-@media (max-width: 640px) {
-  .panel--world-feed {
-    margin-top: 8px;
-  }
-
-  .world-feed__event {
-    padding: 10px;
-  }
-}
-
 .director-surface {
   position: fixed;
   inset: 24px 24px 24px auto;
-  z-index: 35;
+  z-index: 60;
   width: min(560px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 48px);
@@ -222,36 +364,137 @@
 }
 
 @media (max-width: 1240px) {
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "rail"
-      "rail-tools"
-      "stage"
-      "targets"
-      "details";
+  .viewer-shell {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  #viewer-stage-panel[data-viewer-map-layer="base"] {
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .pixel-world-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  [data-viewer-overlay="navigation"] {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+  }
+
+  .secondary-viewer-nav {
+    top: 10px;
+    right: 10px;
+  }
+
+  [data-viewer-overlay="next-move"] {
+    left: 10px;
+    right: auto;
+    bottom: 124px;
+    width: min(220px, calc(100vw - 20px));
+  }
+
+  [data-viewer-overlay="receipt"] {
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    max-height: 96px;
+    overflow: auto;
+  }
+
+  [data-viewer-overlay="feed"] {
+    top: 104px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(62dvh, 520px);
+  }
+
+  [data-viewer-overlay="world-summary"]:has(#viewer-gameplay-details[open]) {
+    inset: 82px 12px 72px;
+    width: auto;
+    max-height: calc(100dvh - 154px);
+  }
+
+  .pixel-world-command-cell--objective,
+  .pixel-world-command-cell--leverage {
+    display: none;
+  }
+
+  .pixel-world-command-cell--next .pixel-world-command-cell__detail {
+    display: none;
+  }
+
+  .pixel-world-command-cell--next .pixel-world-command-cell__value {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .pixel-world-action-receipt__detail,
+  .pixel-world-action-receipt__meta {
+    display: none;
+  }
+
+  [data-viewer-route-panel="targets"],
+  [data-viewer-route-panel="command"] {
+    inset: auto 12px 72px;
+    width: auto;
+    max-width: none;
+    max-height: min(72dvh, 560px);
+    margin-inline: 0;
+    border-radius: 12px;
   }
 
   #viewer-targets-panel,
   #viewer-details-panel {
-    inset: 82px 12px 72px;
+    inset: auto 12px 72px;
     width: auto;
-    max-width: min(100%, 480px);
-    margin-inline: auto;
-  }
-
-  .secondary-viewer-nav {
-    justify-content: flex-start;
-    margin: -4px 0 8px 8px;
+    max-width: none;
+    max-height: min(72dvh, 560px);
   }
 
   .director-surface {
     inset: 82px 12px 72px;
     width: auto;
     max-width: calc(100% - 24px);
+    max-height: calc(100dvh - 154px);
   }
 
   .director-density-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .secondary-viewer-nav {
+    display: none;
+  }
+
+  [data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
+    display: none;
+  }
+
+  [data-viewer-overlay="feed"] {
+    top: 104px;
+  }
+
+  .world-feed__event {
+    padding: 10px;
   }
 }

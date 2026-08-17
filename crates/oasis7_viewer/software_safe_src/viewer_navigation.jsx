@@ -44,7 +44,7 @@ function MobileJumpRail(props) {
   const locale = () => props.locale();
   const translate = (zh, en) => props.tr(locale(), zh, en);
   return (
-    <nav class="mobile-rail" aria-label={translate("主入口分区导航", "Primary entry section navigation")}>
+    <nav class="mobile-rail" data-viewer-overlay={props["data-viewer-overlay"] || "navigation"} aria-label={translate("主入口分区导航", "Primary entry section navigation")}>
       <a class="mobile-rail__link" href="#viewer-stage-panel" onClick={focusViewerAnchor}>{translate("世界", "World")}</a>
       <a class="mobile-rail__link" href="#viewer-targets-panel" onClick={focusViewerAnchor}>{translate("目标", "Targets")}</a>
       <a class="mobile-rail__link" href="#viewer-details-panel" onClick={focusViewerAnchor}>{translate("指令", "Command")}</a>

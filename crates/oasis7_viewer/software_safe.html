@@ -122,15 +122,6 @@
         --space-panel-gap: 10px;
         --space-stack-gap: 10px;
       }
-      #app[data-viewer-visual-fixture] .panel__header {
-        padding: 12px 14px;
-      }
-      #app[data-viewer-visual-fixture] .panel__body {
-        padding: 12px;
-      }
-      #app[data-viewer-visual-fixture] .panel--stage > .panel__body {
-        padding: 12px;
-      }
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .panel--stage > .panel__body,
       #app[data-viewer-visual-fixture="agent_chat_history"] .panel--stage > .panel__body {
         display: flex;
@@ -178,9 +169,6 @@
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .stage-hero .callout__body,
       #app[data-viewer-visual-fixture="agent_chat_history"] .stage-hero .callout__body {
         display: none;
-      }
-      #app[data-viewer-visual-fixture="agent_chat_history"] .shell {
-        grid-template-columns: minmax(210px, 240px) minmax(470px, 0.9fr) minmax(390px, 460px);
       }
       #app[data-viewer-visual-fixture="agent_chat_history"] .panel--details {
         border-color: rgba(141, 199, 170, 0.32);
@@ -2832,7 +2820,7 @@
     <link rel="stylesheet" href="./viewer_terminal_shell.css" />
   </head>
   <body>
-    <div id="app" class="shell" aria-live="polite"></div>
+    <div id="app" class="viewer-shell" data-viewer-shell="player-fullscreen" aria-live="polite"></div>
     <script type="module" src="./viewer.js"></script>
   </body>
 </html>
