@@ -63,11 +63,10 @@ def load_json(path: Path, label: str) -> dict:
     return payload
 
 def parse_non_negative_int(raw: object, label: str) -> int | None:
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
+    if isinstance(raw, bool) or not isinstance(raw, int):
         failures.append(f"{label} must be integer")
         return None
+    value = raw
     if value < 0:
         failures.append(f"{label} must be non-negative: {value}")
         return None

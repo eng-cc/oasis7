@@ -113,6 +113,26 @@ then
 fi
 grep -q "summary duplicate_dependency_entry_total must be non-negative" "$tmp_dir/negative-summary.out"
 
+for fractional_value in -0.5 1.5; do
+  fractional_name="${fractional_value//-/negative-}"
+  python3 - "$summary" "$tmp_dir/fractional-$fractional_name.json" "$fractional_value" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["duplicate_dependency_entry_total"] = float(sys.argv[3])
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+  if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+    ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/fractional-$fractional_name.json" >"$tmp_dir/fractional-$fractional_name.out" 2>&1
+  then
+    echo "expected fractional duplicate count $fractional_value to fail" >&2
+    exit 1
+  fi
+  grep -q "summary duplicate_dependency_entry_total must be integer" "$tmp_dir/fractional-$fractional_name.out"
+done
+
 python3 - "$summary" "$tmp_dir/negative-crate.json" <<'PY'
 from pathlib import Path
 import json
