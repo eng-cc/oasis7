@@ -167,6 +167,30 @@ describe("mobile jump rail", () => {
     expect(document.activeElement).toBe(document.querySelector("#viewer-stage-panel"));
   });
 
+  it("opens nested Diagnostics with its Gameplay Details ancestor and closes both on Escape", () => {
+    const secondaryNav = screen.getByRole("navigation", { name: /secondary viewer navigation/i });
+    const more = within(secondaryNav).getByRole("button", { name: "More" });
+    const gameplayDetails = document.querySelector("#viewer-gameplay-details");
+    const diagnostics = document.querySelector("#viewer-diagnostics-panel");
+    const stagePanel = document.querySelector("#viewer-stage-panel");
+
+    expect(gameplayDetails).toHaveProperty("open", false);
+    expect(diagnostics).toHaveProperty("open", false);
+
+    fireEvent.click(more);
+
+    expect(window.location.hash).toBe("#viewer-diagnostics-panel");
+    expect(gameplayDetails).toHaveProperty("open", true);
+    expect(diagnostics).toHaveProperty("open", true);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(window.location.hash).toBe("#viewer-stage-panel");
+    expect(gameplayDetails).toHaveProperty("open", false);
+    expect(diagnostics).toHaveProperty("open", false);
+    expect(document.activeElement).toBe(stagePanel);
+  });
+
   it("defines a stage-first single-column shell and on-demand drawer CSS without horizontal overflow", async () => {
     const css = await readFile("viewer_terminal_shell.css", "utf8");
 

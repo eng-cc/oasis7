@@ -11795,6 +11795,11 @@ function focusViewerTarget(href) {
   if (!target) {
     return null;
   }
+  let ancestor = target.parentElement?.closest("details");
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest("details");
+  }
   if (target instanceof HTMLDetailsElement) {
     target.open = true;
   }
@@ -11808,6 +11813,16 @@ function focusViewerTarget(href) {
   });
   return target;
 }
+function closeViewerDetails(target) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  let details = target instanceof HTMLDetailsElement ? target : target.closest("details");
+  while (details) {
+    details.open = false;
+    details = details.parentElement?.closest("details") || null;
+  }
+}
 function focusViewerAnchor(event) {
   const href = event.currentTarget.getAttribute("href");
   if (!focusViewerTarget(href)) {
@@ -11817,15 +11832,12 @@ function focusViewerAnchor(event) {
 }
 function installViewerRouteController() {
   const handleKeyDown = (event) => {
-    if (event.key !== "Escape" || event.isComposing || document.body.classList.contains("pixel-world-focus-active") || !["#viewer-targets-panel", "#viewer-details-panel", "#viewer-diagnostics-panel"].includes(window.location.hash)) {
+    if (event.key !== "Escape" || event.isComposing || event.keyCode === 229 || document.body.classList.contains("pixel-world-focus-active") || !["#viewer-targets-panel", "#viewer-details-panel", "#viewer-diagnostics-panel"].includes(window.location.hash)) {
       return;
     }
     event.preventDefault();
     if (window.location.hash === "#viewer-diagnostics-panel") {
-      const diagnostics = document.getElementById("viewer-diagnostics-panel");
-      if (diagnostics instanceof HTMLDetailsElement) {
-        diagnostics.open = false;
-      }
+      closeViewerDetails(document.getElementById("viewer-diagnostics-panel"));
     }
     focusViewerTarget("#viewer-stage-panel");
   };

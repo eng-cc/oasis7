@@ -5,6 +5,11 @@ function focusViewerTarget(href) {
   if (!target) {
     return null;
   }
+  let ancestor = target.parentElement?.closest("details");
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest("details");
+  }
   if (target instanceof HTMLDetailsElement) {
     target.open = true;
   }
@@ -15,6 +20,17 @@ function focusViewerTarget(href) {
   focusTarget.focus();
   target.scrollIntoView?.({ behavior: "auto", block: "start", inline: "nearest" });
   return target;
+}
+
+function closeViewerDetails(target) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  let details = target instanceof HTMLDetailsElement ? target : target.closest("details");
+  while (details) {
+    details.open = false;
+    details = details.parentElement?.closest("details") || null;
+  }
 }
 
 function focusViewerAnchor(event) {
@@ -30,6 +46,7 @@ function installViewerRouteController() {
     if (
       event.key !== "Escape"
       || event.isComposing
+      || event.keyCode === 229
       || document.body.classList.contains("pixel-world-focus-active")
       || !["#viewer-targets-panel", "#viewer-details-panel", "#viewer-diagnostics-panel"].includes(window.location.hash)
     ) {
@@ -37,10 +54,7 @@ function installViewerRouteController() {
     }
     event.preventDefault();
     if (window.location.hash === "#viewer-diagnostics-panel") {
-      const diagnostics = document.getElementById("viewer-diagnostics-panel");
-      if (diagnostics instanceof HTMLDetailsElement) {
-        diagnostics.open = false;
-      }
+      closeViewerDetails(document.getElementById("viewer-diagnostics-panel"));
     }
     focusViewerTarget("#viewer-stage-panel");
   };
