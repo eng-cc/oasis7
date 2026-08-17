@@ -25,6 +25,7 @@ Options for `up`:
   --no-llm                 Negative-path only; launcher boot will fail fast without LLM
   --bundle-mode            Build/reuse a worktree-local bundle and boot from it
   --source-mode            Boot directly from source (default)
+  --ready-timeout <secs>   Launcher readiness deadline (default: 180)
   --smoke-timeout <secs>   After boot, run a minimal agent-browser smoke within <secs>
 
 Options for `status`:
@@ -125,18 +126,54 @@ run_smoke() {
   smoke_dir="$ARTIFACT_DIR/smoke-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$smoke_dir"
 
-  ab_open "$BROWSER_SESSION" 0 "$viewer_url" >>"$smoke_dir/agent-browser.log" 2>&1
-  ab_cmd "$BROWSER_SESSION" wait --load networkidle >>"$smoke_dir/agent-browser.log" 2>&1 || true
-  state_raw=$(ab_eval "$BROWSER_SESSION" 'JSON.stringify(window.__AW_TEST__ ? window.__AW_TEST__.getState() : null)') || {
-    cat "$smoke_dir/agent-browser.log" >&2
-    exit 1
+  run_browser_operation() {
+    local phase=$1
+    shift
+    python3 "$ROOT_DIR/scripts/worktree-harness-deadline.py" \
+      --timeout "$timeout_secs" \
+      --phase "$phase" \
+      --log "$smoke_dir/agent-browser.log" \
+      -- "$@"
   }
+
+  smoke_failed() {
+    local phase=$1
+    wh_state_write "$STATE_FILE" "{\"last_smoke_dir\": $(json_quote "$smoke_dir"), \"last_smoke_ok\": false, \"last_smoke_timeout_secs\": $timeout_secs, \"last_smoke_error_phase\": $(json_quote "$phase")}"
+    echo "error: phase=$phase timeout_secs=$timeout_secs; smoke failed; artifacts=$smoke_dir" >&2
+    return 1
+  }
+
+  if ! run_browser_operation browser_open \
+    bash -c 'source "$1"; ab_open "$2" 0 "$3"' _ \
+    "$ROOT_DIR/scripts/agent-browser-lib.sh" "$BROWSER_SESSION" "$viewer_url" >/dev/null; then
+    smoke_failed browser_open
+    return 1
+  fi
+  if ! run_browser_operation browser_wait \
+    bash -c 'source "$1"; ab_cmd "$2" wait --load networkidle' _ \
+    "$ROOT_DIR/scripts/agent-browser-lib.sh" "$BROWSER_SESSION" >/dev/null; then
+    smoke_failed browser_wait
+    return 1
+  fi
+  if ! state_raw=$(run_browser_operation browser_eval \
+    bash -c 'source "$1"; ab_eval "$2" "$3"' _ \
+    "$ROOT_DIR/scripts/agent-browser-lib.sh" "$BROWSER_SESSION" \
+    'JSON.stringify(window.__AW_TEST__ ? window.__AW_TEST__.getState() : null)'); then
+    smoke_failed browser_eval
+    return 1
+  fi
   if [[ -z "$state_raw" || "$state_raw" == "null" ]]; then
     echo "error: worktree harness smoke failed; __AW_TEST__.getState() returned empty payload" >&2
-    exit 1
+    smoke_failed browser_eval
+    return 1
   fi
   json_to_file "$state_raw" "$smoke_dir/state.json"
-  ab_screenshot "$BROWSER_SESSION" "$smoke_dir/final.png" >>"$smoke_dir/agent-browser.log" 2>&1 || true
+  if ! run_browser_operation browser_screenshot \
+    bash -c 'source "$1"; ab_screenshot "$2" "$3"' _ \
+    "$ROOT_DIR/scripts/agent-browser-lib.sh" "$BROWSER_SESSION" "$smoke_dir/final.png" >/dev/null; then
+    smoke_failed browser_screenshot
+    return 1
+  fi
   wh_state_write "$STATE_FILE" "{\"last_smoke_dir\": $(json_quote "$smoke_dir"), \"last_smoke_ok\": true, \"last_smoke_timeout_secs\": $timeout_secs}"
   printf '%s\n' "$smoke_dir"
 }
@@ -145,6 +182,7 @@ case "$action" in
   up)
     ENABLE_LLM="1"
     BOOT_MODE="source"
+    READY_TIMEOUT=180
     SMOKE_TIMEOUT=0
     while [[ $# -gt 0 ]]; do
       case "$1" in
@@ -164,6 +202,10 @@ case "$action" in
           BOOT_MODE="source"
           shift
           ;;
+        --ready-timeout)
+          READY_TIMEOUT="${2:-}"
+          shift 2
+          ;;
         --smoke-timeout)
           SMOKE_TIMEOUT="${2:-}"
           shift 2
@@ -179,6 +221,7 @@ case "$action" in
           ;;
       esac
     done
+    [[ "$READY_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "error: --ready-timeout must be a non-negative integer" >&2; exit 2; }
     [[ "$SMOKE_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "error: --smoke-timeout must be a non-negative integer" >&2; exit 2; }
     if [[ "$ENABLE_LLM" != "1" ]]; then
       echo "error: worktree harness now boots through ./scripts/run-launcher-stack.sh and oasis7_game_launcher, both of which require active LLM access" >&2
@@ -271,10 +314,14 @@ PY
     HARNESS_PID=$!
     wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID}"
 
-    for _ in $(seq 1 180); do
+    ready_started_at=$(date +%s)
+    ready_deadline=$((ready_started_at + READY_TIMEOUT))
+    while :; do
       if ! wh_pid_alive "$HARNESS_PID"; then
-        echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2
+        echo "error: phase=launcher_readiness timeout_secs=$READY_TIMEOUT; run-launcher-stack.sh exited unexpectedly; artifacts=$STARTUP_LOG" >&2
         tail -n 120 "$STARTUP_LOG" >&2 || true
+        wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"readiness_phase\": \"launcher_readiness\", \"readiness_timeout_secs\": $READY_TIMEOUT}"
+        kill_recorded_processes
         exit 1
       fi
       if [[ -f "$META_FILE" ]]; then
@@ -283,14 +330,15 @@ PY
           break
         fi
       fi
+      if (( $(date +%s) >= ready_deadline )); then
+        echo "error: phase=launcher_readiness timeout_secs=$READY_TIMEOUT; deadline exceeded; artifacts=$STARTUP_LOG" >&2
+        tail -n 120 "$STARTUP_LOG" >&2 || true
+        wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"readiness_phase\": \"launcher_readiness\", \"readiness_timeout_secs\": $READY_TIMEOUT}"
+        kill_recorded_processes
+        exit 1
+      fi
       sleep 1
     done
-
-    if [[ ! -f "$META_FILE" ]] || [[ "$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)" != "1" ]]; then
-      echo "error: timed out waiting for worktree harness readiness" >&2
-      tail -n 120 "$STARTUP_LOG" >&2 || true
-      exit 1
-    fi
 
     viewer_url=$(wh_env_file_get "$META_FILE" GAME_URL)
     launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)

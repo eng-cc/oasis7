@@ -284,6 +284,76 @@ else:
 PY
 }
 
+bootstrap_journal_info() {
+  local task_uid_hint="${1:-}"
+  local journal_path_hint="${2:-}"
+  "$PYTHON_BIN" - "$TARGET_PATH" "$task_uid_hint" "$journal_path_hint" <<'PY'
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+import sys
+
+target = Path(sys.argv[1]).resolve()
+task_uid_hint = sys.argv[2]
+journal_path_hint = Path(sys.argv[3]).resolve() if sys.argv[3] else None
+journal_root = target / ".pm" / "scratch" / "bootstrap-journal"
+candidates = []
+for path in sorted(journal_root.glob("*.json")) if journal_root.is_dir() else []:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    task_uid = str(payload.get("task_uid") or "")
+    if payload.get("version") != 2 or not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        continue
+    resolved = path.resolve()
+    if journal_path_hint is not None and resolved != journal_path_hint:
+        continue
+    if task_uid_hint and task_uid != task_uid_hint:
+        continue
+    candidates.append((resolved, task_uid))
+
+if len(candidates) == 1:
+    path, task_uid = candidates[0]
+    print(json.dumps({"journal_path": str(path), "journal_version": 2, "task_uid": task_uid}))
+else:
+    print(json.dumps({"journal_path": "", "journal_version": None, "task_uid": task_uid_hint}))
+PY
+}
+
+emit_bootstrap_resume_contract() {
+  local next_action="$1"
+  shift
+  local journal_info
+  journal_info="$(bootstrap_journal_info "${PM_TASK_UID:-}" "${PM_BOOTSTRAP_JOURNAL_PATH:-}")"
+  local journal_uid
+  local journal_path
+  local journal_version
+  journal_uid="$(extract_json_field task_uid "$journal_info" 2>/dev/null || true)"
+  journal_path="$(extract_json_field journal_path "$journal_info" 2>/dev/null || true)"
+  journal_version="$(extract_json_field journal_version "$journal_info" 2>/dev/null || true)"
+  "$PYTHON_BIN" - "$next_action" "$journal_uid" "$journal_path" "$journal_version" "$@" <<'PY' >&2
+from __future__ import annotations
+
+import json
+import sys
+
+next_action, task_uid, journal_path, journal_version, *resume_argv = sys.argv[1:]
+payload = {
+    "schema": "oasis7.bootstrap_resume.v1",
+    "task_uid": task_uid,
+    "journal_path": journal_path,
+    "journal_version": int(journal_version) if journal_version else None,
+    "idempotent": True,
+    "next_action": next_action,
+    "resume_argv": resume_argv,
+}
+print("resume-bootstrap-json: " + json.dumps(payload, sort_keys=True, separators=(",", ":")))
+PY
+}
+
 MODULE_SLUG="$(slugify "$MODULE_INPUT")"
 TASK_SLUG="$(slugify "$TASK_INPUT")"
 [[ -n "$MODULE_SLUG" ]] || { echo "error: <module> becomes empty after slug normalization" >&2; exit 2; }
@@ -484,6 +554,7 @@ PM_TASK_JSON=""
 PM_TASK_UID=""
 PM_TASK_PATH=""
 PM_EXECUTION_LOG_PATH=""
+PM_BOOTSTRAP_JOURNAL_PATH=""
 PM_BOOTSTRAP_SNAPSHOT_PATH=""
 PM_BOOTSTRAP_SNAPSHOT_DIGEST=""
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
@@ -520,7 +591,16 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   BOOTSTRAP_STATUS=$?
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
+    PM_TASK_UID="$(extract_json_field task_uid "$PM_TASK_JSON" 2>/dev/null || true)"
+    PM_BOOTSTRAP_JOURNAL_PATH="$(extract_json_field bootstrap_journal "$PM_TASK_JSON" 2>/dev/null || true)"
+    PM_BOOTSTRAP_JOURNAL_INFO="$(bootstrap_journal_info "$PM_TASK_UID" "$PM_BOOTSTRAP_JOURNAL_PATH")"
+    PM_TASK_UID="$(extract_json_field task_uid "$PM_BOOTSTRAP_JOURNAL_INFO" 2>/dev/null || true)"
+    PM_BOOTSTRAP_JOURNAL_PATH="$(extract_json_field journal_path "$PM_BOOTSTRAP_JOURNAL_INFO" 2>/dev/null || true)"
     echo "error: failed to bootstrap GitHub-backed PM task; preserved worktree/branch because remote creation may have succeeded: $TARGET_PATH" >&2
+    emit_bootstrap_resume_contract "retry-post-create-bootstrap" \
+      "$TARGET_PATH/scripts/pm/resume-task-worktree-bootstrap.sh" \
+      --repo-root "$TARGET_PATH" --task-uid "$PM_TASK_UID" \
+      --owner-role "$PM_OWNER_ROLE" --json
     printf 'resume-bootstrap: cd %q &&' "$TARGET_PATH" >&2
     printf ' %q' "${NEW_TASK_CMD[@]}" >&2
     printf '\n' >&2
@@ -530,6 +610,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   PM_TASK_UID="$(extract_json_field task_uid "$PM_TASK_JSON")"
   PM_TASK_PATH="$(extract_json_field task_path "$PM_TASK_JSON")"
   PM_EXECUTION_LOG_PATH="$(extract_json_field execution_log_path "$PM_TASK_JSON")"
+  PM_BOOTSTRAP_JOURNAL_PATH="$(extract_json_field bootstrap_journal "$PM_TASK_JSON" 2>/dev/null || true)"
 
   set +e
   (
@@ -545,6 +626,10 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
     echo "error: failed to move/start bootstrapped GitHub-backed PM task; preserved worktree/branch for recovery: $TARGET_PATH" >&2
+    emit_bootstrap_resume_contract "retry-post-create-bootstrap" \
+      "$TARGET_PATH/scripts/pm/resume-task-worktree-bootstrap.sh" \
+      --repo-root "$TARGET_PATH" --task-uid "$PM_TASK_UID" \
+      --owner-role "$PM_OWNER_ROLE" --json
     echo "resume-bootstrap: cd '$TARGET_PATH' && ./scripts/pm/refresh-task-cache.sh --task-uid '$PM_TASK_UID' --json, then retry move-task/workflow-report/bootstrap-task-snapshot" >&2
     exit "$BOOTSTRAP_STATUS"
   fi

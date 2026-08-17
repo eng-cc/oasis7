@@ -1372,11 +1372,6 @@ CLEANUP_CMD_2=""
 PR_URL=""
 if [[ "$CREATE_PR" == "1" ]]; then
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
-  if [[ -z "$REMOTE_SOURCE_REF" ]]; then
-    git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"
-  elif [[ "$LOCAL_ONLY_COUNT" != "0" || "$REMOTE_ONLY_COUNT" != "0" ]]; then
-    git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
-  fi
   CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
   EXISTING_PR_JSON="$(gh pr list --state all --head "$SOURCE_BRANCH" --base "$BASE_BRANCH" --json url,headRefName,baseRefName,state,headRepository,headRepositoryOwner --limit 100)"
   PR_URL="$(python3 - "$SOURCE_BRANCH" "$BASE_BRANCH" "$CURRENT_REPO" "$EXISTING_PR_JSON" <<'PY'
@@ -1396,6 +1391,11 @@ if len(matches) > 1:
 print(matches[0]["url"] if matches else "")
 PY
 )"
+  if [[ -z "$REMOTE_SOURCE_REF" ]]; then
+    git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"
+  elif [[ "$LOCAL_ONLY_COUNT" != "0" || "$REMOTE_ONLY_COUNT" != "0" ]]; then
+    git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
+  fi
   if [[ -z "$PR_URL" ]]; then
     PR_URL="$("${CREATE_CMD[@]}")"
   fi
