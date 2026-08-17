@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -12,6 +13,18 @@ def load_comparison(path: Path) -> dict:
         return json.load(handle)
 
 
+def parse_regression_threshold(raw_value: str) -> float:
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(
+            "must be finite and non-negative"
+        )
+    return value
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Enforce compile-metrics regression thresholds from comparison.json."
@@ -19,25 +32,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--comparison", required=True, help="Path to comparison.json")
     parser.add_argument(
         "--max-package-count-regression-pct",
-        type=float,
+        type=parse_regression_threshold,
         default=None,
         help="Maximum allowed percentage increase in package closure count.",
     )
     parser.add_argument(
         "--max-cargo-check-regression-pct",
-        type=float,
+        type=parse_regression_threshold,
         default=None,
         help="Maximum allowed percentage increase in cold cargo check wall-clock time.",
     )
     parser.add_argument(
         "--max-cargo-build-release-regression-pct",
-        type=float,
+        type=parse_regression_threshold,
         default=None,
         help="Maximum allowed percentage increase in cold cargo build --release wall-clock time.",
     )
     parser.add_argument(
         "--max-release-binary-bytes-regression-pct",
-        type=float,
+        type=parse_regression_threshold,
         default=None,
         help="Maximum allowed percentage increase in release binary size.",
     )

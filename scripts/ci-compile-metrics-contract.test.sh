@@ -78,4 +78,71 @@ if unlocked:
     raise SystemExit(f"unlocked cargo invocations: {unlocked}")
 PY
 
+python3 - "$tmp_dir/comparison.json" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+comparison_path = Path(sys.argv[1])
+comparison_path.write_text(
+    json.dumps(
+        {
+            "current": {"wasmtime_present": False},
+            "baseline": {"package_count": 10},
+            "metric_rows": [
+                {
+                    "metric": "package_count",
+                    "baseline": 10,
+                    "current": 20,
+                    "delta": 10,
+                    "percent": 100.0,
+                }
+            ],
+        }
+    ),
+    encoding="utf-8",
+)
+
+for invalid in ("NaN", "inf", "-1"):
+    result = subprocess.run(
+        [
+            "python3",
+            "scripts/ci-compile-metrics-gate.py",
+            "--comparison",
+            str(comparison_path),
+            "--max-package-count-regression-pct",
+            invalid,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        raise SystemExit(f"invalid threshold accepted: {invalid}")
+    if "finite and non-negative" not in result.stderr:
+        raise SystemExit(
+            f"invalid threshold error omitted contract wording for {invalid}: "
+            f"{result.stderr!r}"
+        )
+
+passing = subprocess.run(
+    [
+        "python3",
+        "scripts/ci-compile-metrics-gate.py",
+        "--comparison",
+        str(comparison_path),
+        "--max-package-count-regression-pct",
+        "100",
+    ],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+if passing.returncode != 0:
+    raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
+
+print("ci-compile-metrics-gate threshold contract: OK")
+PY
+
 echo "ci-compile-metrics-contract.test: OK"
