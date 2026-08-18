@@ -118,6 +118,15 @@ bundle_dir="$TMP_DIR/bundle"
 make_bundle "$bundle_dir"
 failures=0
 
+# Build a separate malicious Debian fixture from the package root.  Real
+# dpkg-deb does not create the fallback `<package>.root` directory used by the
+# macOS shim, so mutating that path after the build is not portable.  Rebuild a
+# dedicated artifact with the symlink in its archive instead.
+unsafe_deb_package="$bundle_dir/oasis7-linux-x64-unsafe-link.deb"
+ln -s "$TMP_DIR" "$bundle_dir/deb-root/opt/oasis7/unsafe-link"
+dpkg-deb --build --root-owner-group "$bundle_dir/deb-root" "$unsafe_deb_package" >/dev/null
+rm "$bundle_dir/deb-root/opt/oasis7/unsafe-link"
+
 # The node upgrader must reject non-regular ops-tools members before creating a
 # release or touching systemd, just like fresh-host bootstrap.
 unsafe_ops_tar="$TMP_DIR/unsafe-ops-tools.tar.gz"
@@ -154,12 +163,11 @@ test ! -e "$unsafe_node/releases/0.0.0+unsafe-test"
 # ops-tool copy, release promotion, or service-manager call.
 unsafe_deb_node="$TMP_DIR/unsafe-deb-node"
 make_node_fixture "$unsafe_deb_node"
-ln -s "$TMP_DIR" "$bundle_dir/oasis7-linux-x64.deb.root/opt/oasis7/unsafe-link"
 set +e
 PATH="$TMP_DIR/fake-bin:$PATH" \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$unsafe_deb_node" \
-  --package-deb "$bundle_dir/oasis7-linux-x64.deb" \
+  --package-deb "$unsafe_deb_package" \
   --ops-tools-tar "$bundle_dir/oasis7-linux-x64-ops-tools.tar.gz" \
   --package-version 0.0.0+order-test \
   --commit abcdef1234567890abcdef1234567890abcdef12 \
@@ -167,7 +175,6 @@ PATH="$TMP_DIR/fake-bin:$PATH" \
   >"$TMP_DIR/unsafe-deb.out" 2>&1
 unsafe_deb_status=$?
 set -e
-rm "$bundle_dir/oasis7-linux-x64.deb.root/opt/oasis7/unsafe-link"
 test "$unsafe_deb_status" -ne 0
 grep -q 'symlink' "$TMP_DIR/unsafe-deb.out"
 test ! -e "$unsafe_deb_node/releases/0.0.0+order-test"
