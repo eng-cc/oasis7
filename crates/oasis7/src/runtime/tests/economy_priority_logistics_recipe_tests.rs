@@ -1093,4 +1093,3 @@ fn recipe_started_market_quote_uses_material_profile_transport_loss() {
 // authority selected in issue #3272.  They intentionally exercise public
 // actions/events instead of implementation maps so the runtime can choose its
 // reservation/index representation without weakening the behavioral gate.
-

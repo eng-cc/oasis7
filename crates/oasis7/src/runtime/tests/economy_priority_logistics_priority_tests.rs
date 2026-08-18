@@ -86,7 +86,6 @@ fn due_recipe_jobs_prioritize_survival_over_expansion() {
         ]
     );
 }
-
 #[test]
 fn bottleneck_pressure_bumps_recipe_completion_priority() {
     let mut world = World::new();
@@ -723,4 +722,3 @@ fn incompatible_or_unreachable_route_registration_and_use_are_rejected_without_m
     );
     assert_eq!(world.pending_material_transits_len(), pending_before);
 }
-
