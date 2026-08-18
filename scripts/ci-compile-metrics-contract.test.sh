@@ -13,6 +13,10 @@ cat >"$fake_bin/cargo" <<'FAKE_CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_CARGO_LOG:?}"
+printf '%s\n' "${CARGO_HOME:-<unset>}" >>"${FAKE_CARGO_HOME_LOG:?}"
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+  printf '%s\n' "$CARGO_TARGET_DIR" >>"${FAKE_CARGO_TARGET_LOG:?}"
+fi
 case "${1:-}" in
   tree)
     if [[ "$*" == *"-i wasmtime"* || "$*" == *"-i oasis7_wasm_executor"* ]]; then
@@ -34,9 +38,30 @@ esac
 FAKE_CARGO
 chmod +x "$fake_bin/cargo"
 
+cat >"$fake_bin/git" <<'FAKE_GIT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" ]]; then
+  printf '%s\n' "${FAKE_COMMIT_OID:?}"
+  exit 0
+fi
+if [[ "${1:-}" == "worktree" && "${2:-}" == "add" ]]; then
+  mkdir -p "${4:?}"
+  exit 0
+fi
+echo "unexpected git command: $*" >&2
+exit 1
+FAKE_GIT
+chmod +x "$fake_bin/git"
+
 out_dir="$tmp_dir/metrics"
 expected_commit_oid=$(git rev-parse HEAD)
-FAKE_CARGO_LOG="$tmp_dir/cargo.log" PATH="$fake_bin:$PATH" \
+FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
+FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
+FAKE_CARGO_TARGET_LOG="$tmp_dir/cargo-target.log" \
+FAKE_COMMIT_OID="$expected_commit_oid" \
+PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
     --out-dir "$out_dir" \
@@ -82,6 +107,35 @@ if not measured:
 unlocked = [command for command in measured if "--locked" not in command.split()]
 if unlocked:
     raise SystemExit(f"unlocked cargo invocations: {unlocked}")
+PY
+
+baseline_out_dir="$tmp_dir/metrics-with-baseline"
+baseline_cargo_home="$tmp_dir/shared-cargo-home"
+FAKE_CARGO_LOG="$tmp_dir/baseline-cargo.log" \
+FAKE_CARGO_HOME_LOG="$tmp_dir/baseline-cargo-home.log" \
+FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
+FAKE_COMMIT_OID="$expected_commit_oid" \
+CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
+  ./scripts/ci-compile-metrics.sh \
+    --package fake_library \
+    --out-dir "$baseline_out_dir" \
+    --check-only \
+    --baseline-ref HEAD
+
+python3 - "$tmp_dir/baseline-cargo-home.log" "$baseline_cargo_home" "$tmp_dir/baseline-cargo-target.log" <<'PY'
+from pathlib import Path
+import sys
+
+homes = [line for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if line]
+expected = str(Path(sys.argv[2]).expanduser().resolve())
+if not homes:
+    raise SystemExit("baseline run did not record any Cargo home paths")
+if set(homes) != {expected}:
+    raise SystemExit(f"compile metrics did not reuse caller Cargo home: {homes}")
+
+targets = [line for line in Path(sys.argv[3]).read_text(encoding="utf-8").splitlines() if line]
+if len(set(targets)) != 2:
+    raise SystemExit(f"current and baseline target directories were not isolated: {targets}")
 PY
 
 python3 - "$tmp_dir/comparison.json" <<'PY'
