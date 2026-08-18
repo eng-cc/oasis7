@@ -9,6 +9,7 @@ target, or observer is used.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -734,6 +735,166 @@ print(json.dumps({
             capture_output=True,
         )
         self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_runtime_verification_receipt_binds_peer_and_exact_raw_proof(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_runtime_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        public_key_hex = "9ea2a4ca4893c1d2fed7482510333464c28a0ddb9db497a1238edb71d4ba286b"
+        signature_hex = "22258b4742876b6a997c410b268547b8a40280acbc5ef2ad5a21a4ef034bc463fb728d31ab1ca549e9441c50cf4be587413ece9f9c68067770ce97712096b704"
+        claims = {
+            "schema_version": "oasis7.rebuild_status.v1",
+            "observed_at_unix_ms": 1,
+            "node_id": "sequencer-node",
+            "world_id": "",
+            "ok": True,
+            "liveness": {"running": True, "last_error": None},
+            "readiness": {"status": "ready", "failed_gates": []},
+            "heights": {"committed_height": 1, "network_committed_height": 1, "last_execution_height": 1},
+            "network_head": {
+                "source": "self",
+                "decision": "ready",
+                "height": 1,
+                "block_hash": "block",
+                "execution_block_hash": "execution-block",
+                "execution_state_root": "state-root",
+                "observed_peer_count": 0,
+                "fresh_peer_count": 0,
+            },
+            "checkpoint": None,
+            "local_peer_id": "peer-sequencer",
+            "connected_peers": [],
+            "connected_peer_count": 0,
+        }
+        claims_bytes = json.dumps(claims, ensure_ascii=True, separators=(",", ":")).encode()
+        self.assertEqual(hashlib.sha256(claims_bytes).hexdigest(), "5acd019055674e080903296b8af0583fec0c86d0243809af187bd2aa11155c76")
+        raw_proof = self.root / "raw-rebuild-proof.json"
+        raw_value = {
+            "schema_version": "oasis7.rebuild_status.v1",
+            "observed_at_unix_ms": 1,
+            "ok": True,
+            "liveness": {"running": True, "last_error": None},
+            "readiness": {"status": "ready", "failed_gates": []},
+            "heights": {"committed_height": 1, "network_committed_height": 1, "last_execution_height": 1},
+            "network_head": {
+                "source": "self",
+                "decision": "ready",
+                "height": 1,
+                "block_hash": "block",
+                "execution_block_hash": "execution-block",
+                "execution_state_root": "state-root",
+                "observed_peer_count": 0,
+                "fresh_peer_count": 0,
+            },
+            "checkpoint": None,
+            "local_peer_id": "peer-sequencer",
+            "connected_peers": [],
+            "connected_peer_count": 0,
+            "proof": {
+                "schema_version": "oasis7.rebuild_proof.v1",
+                "signer_id": "sequencer-node",
+                "signer_public_key_hex": public_key_hex,
+                "signed_payload_sha256": hashlib.sha256(claims_bytes).hexdigest(),
+                "signature_hex": signature_hex,
+            },
+        }
+        raw_proof.write_text(json.dumps(raw_value, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
+        receipt = self.root / "runtime-verification-receipt.json"
+        receipt_value = {
+            "schema_version": "oasis7.rebuild_proof_verification.v1",
+            "proof_schema_version": "oasis7.rebuild_proof.v1",
+            "signer_id": "sequencer-node",
+            "signer_public_key_hex": public_key_hex,
+            "signed_payload_sha256": hashlib.sha256(claims_bytes).hexdigest(),
+            "local_peer_id": "peer-sequencer",
+            "proof_sha256": sha256(raw_proof),
+            "verified": True,
+        }
+        receipt.write_text(json.dumps(receipt_value), encoding="utf-8")
+        verifier = self.root / "governed-runtime-verifier.py"
+        verifier.write_text(
+            "#!/usr/bin/env python3\nimport json\nprint(" + repr(json.dumps(receipt_value)) + ")\n",
+            encoding="utf-8",
+        )
+        verifier.chmod(0o755)
+        trusted_root = {"allowlist": [{"signer_id": "sequencer-node", "public_key_hex": public_key_hex}]}
+        summary = module.verify_signed_attestation(
+            receipt,
+            trusted_root,
+            "runtime receipt",
+            "sequencer-204",
+            raw_proof,
+            verifier,
+        )
+        self.assertEqual(summary["peer_id"], "peer-sequencer")
+        self.assertEqual(summary["proof_sha256"], sha256(raw_proof))
+        forged_verifier = self.root / "forged-runtime-verifier.py"
+        forged_receipt = dict(receipt_value)
+        forged_receipt["proof_sha256"] = "0" * 64
+        forged_verifier.write_text(
+            "#!/usr/bin/env python3\nimport json\nprint(" + repr(json.dumps(forged_receipt)) + ")\n",
+            encoding="utf-8",
+        )
+        forged_verifier.chmod(0o755)
+        with self.assertRaises(SystemExit):
+            module.verify_signed_attestation(
+                receipt,
+                trusted_root,
+                "runtime receipt",
+                "sequencer-204",
+                raw_proof,
+                forged_verifier,
+            )
+        other_raw_proof = self.root / "other-raw-rebuild-proof.json"
+        other_raw_proof.write_bytes(b"another canonical raw signed proof\n")
+        with self.assertRaises(SystemExit):
+            module.verify_signed_attestation(receipt, trusted_root, "runtime receipt", "sequencer-204", other_raw_proof)
+        raw_proof.write_bytes(b"different raw signed proof\n")
+        with self.assertRaises(SystemExit):
+            module.verify_signed_attestation(receipt, trusted_root, "runtime receipt", "sequencer-204", raw_proof)
+
+    def test_runtime_verification_receipt_rejects_unvalidated_raw_envelope(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_runtime_negative_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        raw_proof = self.root / "malformed-raw-rebuild-proof.json"
+        raw_proof.write_text(
+            json.dumps({
+                "schema_version": "oasis7.rebuild_status.v1",
+                "local_peer_id": "peer-sequencer",
+                "proof": {
+                    "schema_version": "oasis7.rebuild_proof.v1",
+                    "signer_id": "sequencer-node",
+                    "signer_public_key_hex": "a" * 64,
+                    "signed_payload_sha256": "b" * 64,
+                    "signature_hex": "c" * 128,
+                },
+            }),
+            encoding="utf-8",
+        )
+        receipt = self.root / "malformed-runtime-verification-receipt.json"
+        receipt.write_text(
+            json.dumps({
+                "schema_version": "oasis7.rebuild_proof_verification.v1",
+                "proof_schema_version": "oasis7.rebuild_proof.v1",
+                "signer_id": "sequencer-node",
+                "signer_public_key_hex": "a" * 64,
+                "signed_payload_sha256": "b" * 64,
+                "local_peer_id": "peer-sequencer",
+                "proof_sha256": sha256(raw_proof),
+                "verified": True,
+            }),
+            encoding="utf-8",
+        )
+        trust_root = {"allowlist": [{"signer_id": "sequencer-node", "public_key_hex": "a" * 64}]}
+        with self.assertRaises(SystemExit):
+            module.verify_signed_attestation(receipt, trust_root, "runtime receipt", "sequencer-204", raw_proof)
+        with self.assertRaises(SystemExit):
+            module.verify_signed_attestation(receipt, trust_root, "runtime receipt", "sequencer-204")
 
 
 if __name__ == "__main__":

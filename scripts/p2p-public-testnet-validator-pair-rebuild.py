@@ -377,7 +377,250 @@ def attestation_body(value: dict[str, Any]) -> bytes:
     return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
 
 
-def verify_signed_attestation(path: Path, trusted_root: dict[str, Any], label: str, expected_role: str | None = None) -> dict[str, Any]:
+def _require_object(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail(f"{label} must be an object")
+    return value
+
+
+def _require_exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        fail(f"{label} fields mismatch: missing={sorted(expected - actual)} extra={sorted(actual - expected)}")
+
+
+def _require_hex(value: Any, length: int, label: str) -> str:
+    if not isinstance(value, str) or len(value) != length or any(char not in "0123456789abcdefABCDEF" for char in value):
+        fail(f"{label} must be {length}-hex")
+    return value.lower()
+
+
+def _require_string(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{label} must be non-empty")
+    return value
+
+
+def _runtime_claim_bytes(raw: dict[str, Any], proof: dict[str, Any]) -> bytes:
+    _require_exact_keys(
+        raw,
+        {
+            "schema_version",
+            "observed_at_unix_ms",
+            "ok",
+            "liveness",
+            "readiness",
+            "heights",
+            "network_head",
+            "checkpoint",
+            "local_peer_id",
+            "connected_peers",
+            "connected_peer_count",
+            "proof",
+        },
+        "raw rebuild proof",
+    )
+    if raw.get("schema_version") != "oasis7.rebuild_status.v1":
+        fail("raw rebuild proof schema is unsupported")
+    if not isinstance(raw.get("observed_at_unix_ms"), int) or isinstance(raw["observed_at_unix_ms"], bool):
+        fail("raw rebuild proof observed_at_unix_ms must be an integer")
+    if not isinstance(raw.get("ok"), bool):
+        fail("raw rebuild proof ok must be boolean")
+    liveness = _require_object(raw["liveness"], "raw rebuild proof liveness")
+    _require_exact_keys(liveness, {"running", "last_error"}, "raw rebuild proof liveness")
+    if not isinstance(liveness.get("running"), bool) or (
+        liveness.get("last_error") is not None and not isinstance(liveness.get("last_error"), str)
+    ):
+        fail("raw rebuild proof liveness fields are malformed")
+    readiness = _require_object(raw["readiness"], "raw rebuild proof readiness")
+    _require_exact_keys(readiness, {"status", "failed_gates"}, "raw rebuild proof readiness")
+    if readiness.get("status") not in {"ready", "not_ready"} or not isinstance(readiness.get("failed_gates"), list) or not all(
+        isinstance(item, str) for item in readiness["failed_gates"]
+    ):
+        fail("raw rebuild proof readiness fields are malformed")
+    if raw["ok"] != (readiness["status"] == "ready"):
+        fail("raw rebuild proof ok/readiness mismatch")
+    heights = _require_object(raw["heights"], "raw rebuild proof heights")
+    _require_exact_keys(heights, {"committed_height", "network_committed_height", "last_execution_height"}, "raw rebuild proof heights")
+    if not all(isinstance(heights.get(key), int) and not isinstance(heights.get(key), bool) and heights[key] >= 0 for key in heights):
+        fail("raw rebuild proof heights are malformed")
+    network_head = _require_object(raw["network_head"], "raw rebuild proof network_head")
+    _require_exact_keys(
+        network_head,
+        {
+            "source",
+            "decision",
+            "height",
+            "block_hash",
+            "execution_block_hash",
+            "execution_state_root",
+            "observed_peer_count",
+            "fresh_peer_count",
+        },
+        "raw rebuild proof network_head",
+    )
+    if not isinstance(network_head.get("source"), str) or not isinstance(network_head.get("decision"), str):
+        fail("raw rebuild proof network_head source/decision are malformed")
+    for key in ("height", "observed_peer_count", "fresh_peer_count"):
+        if network_head.get(key) is not None and (
+            not isinstance(network_head[key], int) or isinstance(network_head[key], bool) or network_head[key] < 0
+        ):
+            fail(f"raw rebuild proof network_head {key} is malformed")
+    for key in ("block_hash", "execution_block_hash", "execution_state_root"):
+        if network_head.get(key) is not None and not isinstance(network_head[key], str):
+            fail(f"raw rebuild proof network_head {key} is malformed")
+    checkpoint = raw["checkpoint"]
+    if checkpoint is not None:
+        checkpoint = _require_object(checkpoint, "raw rebuild proof checkpoint")
+        _require_exact_keys(
+            checkpoint,
+            {"schema_version", "checkpoint_id", "world_id", "height", "execution_block_hash", "execution_state_root", "manifest_hash"},
+            "raw rebuild proof checkpoint",
+        )
+        if not isinstance(checkpoint.get("schema_version"), int) or isinstance(checkpoint["schema_version"], bool) or checkpoint["schema_version"] < 0:
+            fail("raw rebuild proof checkpoint schema_version is malformed")
+        for key in ("checkpoint_id", "world_id", "execution_block_hash", "execution_state_root", "manifest_hash"):
+            _require_string(checkpoint.get(key), f"raw rebuild proof checkpoint {key}")
+        if not isinstance(checkpoint.get("height"), int) or isinstance(checkpoint["height"], bool) or checkpoint["height"] < 0:
+            fail("raw rebuild proof checkpoint height is malformed")
+    local_peer_id = _require_string(raw.get("local_peer_id"), "raw rebuild proof local_peer_id")
+    connected_peers = raw.get("connected_peers")
+    if not isinstance(connected_peers, list) or len(connected_peers) > 64 or not all(isinstance(item, str) for item in connected_peers):
+        fail("raw rebuild proof connected_peers are malformed")
+    connected_peer_count = raw.get("connected_peer_count")
+    if not isinstance(connected_peer_count, int) or isinstance(connected_peer_count, bool) or connected_peer_count < len(connected_peers):
+        fail("raw rebuild proof connected_peer_count is malformed")
+    _require_exact_keys(
+        proof,
+        {"schema_version", "signer_id", "signer_public_key_hex", "signed_payload_sha256", "signature_hex"},
+        "raw rebuild proof envelope",
+    )
+    if proof.get("schema_version") != "oasis7.rebuild_proof.v1":
+        fail("raw rebuild proof envelope schema is unsupported")
+    signer_id = _require_string(proof.get("signer_id"), "raw rebuild proof signer_id")
+    signer_public_key_hex = _require_hex(proof.get("signer_public_key_hex"), 64, "raw rebuild proof signer_public_key_hex")
+    signed_payload_sha256 = _require_hex(proof.get("signed_payload_sha256"), 64, "raw rebuild proof signed_payload_sha256")
+    signature_hex = _require_hex(proof.get("signature_hex"), 128, "raw rebuild proof signature_hex")
+    ordered_claims = {
+        "schema_version": raw["schema_version"],
+        "observed_at_unix_ms": raw["observed_at_unix_ms"],
+        "node_id": signer_id,
+        "world_id": checkpoint["world_id"] if checkpoint is not None else "",
+        "ok": raw["ok"],
+        "liveness": {"running": liveness["running"], "last_error": liveness["last_error"]},
+        "readiness": {"status": readiness["status"], "failed_gates": readiness["failed_gates"]},
+        "heights": {
+            "committed_height": heights["committed_height"],
+            "network_committed_height": heights["network_committed_height"],
+            "last_execution_height": heights["last_execution_height"],
+        },
+        "network_head": {
+            "source": network_head["source"],
+            "decision": network_head["decision"],
+            "height": network_head["height"],
+            "block_hash": network_head["block_hash"],
+            "execution_block_hash": network_head["execution_block_hash"],
+            "execution_state_root": network_head["execution_state_root"],
+            "observed_peer_count": network_head["observed_peer_count"],
+            "fresh_peer_count": network_head["fresh_peer_count"],
+        },
+        "checkpoint": (
+            {
+                "schema_version": checkpoint["schema_version"],
+                "checkpoint_id": checkpoint["checkpoint_id"],
+                "world_id": checkpoint["world_id"],
+                "height": checkpoint["height"],
+                "execution_block_hash": checkpoint["execution_block_hash"],
+                "execution_state_root": checkpoint["execution_state_root"],
+                "manifest_hash": checkpoint["manifest_hash"],
+            }
+            if checkpoint is not None
+            else None
+        ),
+        "local_peer_id": local_peer_id,
+        "connected_peers": connected_peers,
+        "connected_peer_count": connected_peer_count,
+    }
+    claims = json.dumps(ordered_claims, ensure_ascii=True, separators=(",", ":")).encode()
+    actual_digest = hashlib.sha256(claims).hexdigest()
+    if signed_payload_sha256 != actual_digest:
+        fail("raw rebuild proof signed payload digest mismatch")
+    # The deployed Rust verifier performs the Ed25519 signature and trust-root
+    # check before emitting this receipt. The executor replays the canonical
+    # claim digest and binding here without depending on a host OpenSSL flavor.
+    return {
+        "signer_id": signer_id,
+        "signer_public_key_hex": signer_public_key_hex,
+        "signed_payload_sha256": signed_payload_sha256,
+        "local_peer_id": local_peer_id,
+        "signature_hex": signature_hex,
+    }
+
+
+def _run_governed_runtime_verifier(
+    verifier: Path,
+    raw_proof_path: Path,
+    expected: dict[str, Any],
+    expected_runtime: Path | None = None,
+) -> None:
+    if verifier.is_symlink() or not verifier.is_file() or not (verifier.stat().st_mode & 0o111):
+        fail("governed runtime verifier must be an executable regular file")
+    if expected_runtime is not None:
+        if sha256_file(verifier) != sha256_file(expected_runtime) or verifier.stat().st_size != expected_runtime.stat().st_size:
+            fail("governed runtime verifier identity differs from the verified package runtime")
+    try:
+        result = subprocess.run(
+            [
+                str(verifier),
+                "verify-rebuild-proof",
+                "--proof",
+                str(raw_proof_path),
+                "--trusted-signer-id",
+                str(expected["signer_id"]),
+                "--trusted-signer-public-key-hex",
+                str(expected["signer_public_key_hex"]),
+            ],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"governed runtime verifier failed: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail(f"governed runtime verifier rejected raw proof (exit {result.returncode})")
+    try:
+        observed = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        fail("governed runtime verifier must return one JSON receipt")
+    if not isinstance(observed, dict):
+        fail("governed runtime verifier receipt must be an object")
+    fields = {
+        "schema_version",
+        "proof_schema_version",
+        "signer_id",
+        "signer_public_key_hex",
+        "signed_payload_sha256",
+        "local_peer_id",
+        "proof_sha256",
+        "verified",
+    }
+    if set(observed) != fields:
+        fail("governed runtime verifier receipt fields mismatch")
+    for key, value in expected.items():
+        if observed.get(key) != value:
+            fail(f"governed runtime verifier receipt mismatch: {key}")
+
+
+def verify_signed_attestation(
+    path: Path,
+    trusted_root: dict[str, Any],
+    label: str,
+    expected_role: str | None = None,
+    expected_proof_path: Path | None = None,
+    expected_proof_verifier: Path | None = None,
+    expected_runtime: Path | None = None,
+) -> dict[str, Any]:
     value = load_json(path, label)
     if value.get("schema_version") == "oasis7.identity_receipt.v1":
         key_path = Path(str(value.get("key_path", "")))
@@ -402,15 +645,61 @@ def verify_signed_attestation(path: Path, trusted_root: dict[str, Any], label: s
         public_key_hex = value.get("signer_public_key_hex")
         if not isinstance(public_key_hex, str) or not any(entry.get("public_key_hex", "").lower() == public_key_hex.lower() for entry in trusted):
             fail(f"{label} runtime verifier signer is not trust-root bound")
+        local_peer_id = value.get("local_peer_id")
+        proof_sha256 = value.get("proof_sha256")
+        if not isinstance(local_peer_id, str) or not local_peer_id.strip():
+            fail(f"{label} runtime verifier peer binding is required")
+        if not isinstance(proof_sha256, str) or len(proof_sha256) != 64 or any(char not in "0123456789abcdefABCDEF" for char in proof_sha256):
+            fail(f"{label} runtime verifier proof digest is required")
+        if expected_proof_path is None:
+            fail(f"{label} raw signed proof path is required")
+        raw_proof_path = expected_proof_path.resolve()
+        if raw_proof_path.is_symlink() or not raw_proof_path.is_file():
+            fail(f"{label} raw signed proof must be a regular file")
+        if sha256_file(raw_proof_path) != proof_sha256.lower():
+            fail(f"{label} runtime verifier receipt is bound to a different raw proof")
+        raw_proof = load_json(raw_proof_path, f"{label} raw signed proof")
+        raw_summary = _runtime_claim_bytes(
+            raw_proof,
+            _require_object(raw_proof.get("proof"), f"{label} raw proof envelope"),
+        )
+        if raw_summary["signer_id"] != value.get("signer_id"):
+            fail(f"{label} runtime verifier signer does not match raw proof")
+        if raw_summary["signer_public_key_hex"] != public_key_hex.lower():
+            fail(f"{label} runtime verifier public key does not match raw proof")
+        if raw_summary["signed_payload_sha256"] != str(value.get("signed_payload_sha256", "")).lower():
+            fail(f"{label} runtime verifier payload digest does not match raw proof")
+        if raw_summary["local_peer_id"] != local_peer_id:
+            fail(f"{label} runtime verifier peer binding does not match raw proof")
+        if expected_proof_verifier is None:
+            fail(f"{label} governed runtime verifier path is required")
+        expected_receipt = {
+            "schema_version": "oasis7.rebuild_proof_verification.v1",
+            "proof_schema_version": "oasis7.rebuild_proof.v1",
+            "signer_id": value["signer_id"],
+            "signer_public_key_hex": public_key_hex.lower(),
+            "signed_payload_sha256": str(value.get("signed_payload_sha256", "")).lower(),
+            "local_peer_id": local_peer_id,
+            "proof_sha256": proof_sha256.lower(),
+            "verified": True,
+        }
+        _run_governed_runtime_verifier(
+            expected_proof_verifier,
+            raw_proof_path,
+            expected_receipt,
+            expected_runtime,
+        )
         return {
             "path": str(path.resolve()),
             "sha256": sha256_file(path),
             "schema_version": value["schema_version"],
             "role": expected_role,
-            "peer_id": value.get("local_peer_id"),
+            "peer_id": local_peer_id,
             "node_id": value.get("signer_id"),
             "signer_id": value["signer_id"],
             "public_key_hex": public_key_hex,
+            "proof_sha256": proof_sha256.lower(),
+            "signed_payload_sha256": value.get("signed_payload_sha256"),
         }
     if value.get("schema_version") not in {"oasis7.validator_identity_receipt.v1", "oasis7.validator_pair_rebuild_proof.v1"}:
         fail(f"{label} has unsupported schema")
@@ -469,7 +758,11 @@ def verify_signed_attestation(path: Path, trusted_root: dict[str, Any], label: s
     }
 
 
-def validate_signed_gates(args: argparse.Namespace, provenance_summary: dict[str, Any]) -> dict[str, Any]:
+def validate_signed_gates(
+    args: argparse.Namespace,
+    provenance_summary: dict[str, Any],
+    expected_runtime: Path | None = None,
+) -> dict[str, Any]:
     trusted_root = provenance_summary.get("trusted_root")
     if not isinstance(trusted_root, dict):
         fail("governed trusted signer root is required for signed identity gates")
@@ -505,7 +798,34 @@ def validate_signed_gates(args: argparse.Namespace, provenance_summary: dict[str
     for item in summaries:
         if not isinstance(item.get("peer_id"), str) or item["peer_id"] not in bootstrap_text:
             fail("identity receipt peer id is absent from governed bootstrap truth")
-    proof_summary = verify_signed_attestation(Path(args.sequencer_rebuild_proof).resolve(), trusted_root, "signed 204 rebuild proof", "sequencer-204")
+    raw_proof_path = Path(args.sequencer_rebuild_proof).resolve()
+    verification_path = (
+        Path(args.sequencer_rebuild_proof_verification).resolve()
+        if args.sequencer_rebuild_proof_verification
+        else None
+    )
+    proof_summary = verify_signed_attestation(
+        verification_path or raw_proof_path,
+        trusted_root,
+        "signed 204 rebuild proof",
+        "sequencer-204",
+        raw_proof_path if verification_path else None,
+        Path(args.sequencer_proof_verifier).resolve() if args.sequencer_proof_verifier else None,
+        expected_runtime,
+    )
+    if verification_path:
+        raw_proof = load_json(raw_proof_path, "raw signed 204 rebuild proof")
+        if raw_proof.get("schema_version") != "oasis7.rebuild_status.v1" or not isinstance(raw_proof.get("proof"), dict):
+            fail("raw signed 204 rebuild proof has unsupported schema")
+        raw_envelope = raw_proof["proof"]
+        if raw_envelope.get("signer_id") != proof_summary.get("signer_id"):
+            fail("runtime verifier signer does not match raw proof signer")
+        if raw_envelope.get("signer_public_key_hex", "").lower() != str(proof_summary.get("public_key_hex", "")).lower():
+            fail("runtime verifier public key does not match raw proof signer")
+        if raw_envelope.get("signed_payload_sha256") != proof_summary.get("signed_payload_sha256"):
+            fail("runtime verifier payload digest does not match raw proof")
+        if raw_proof.get("local_peer_id") != proof_summary.get("peer_id"):
+            fail("runtime verifier peer binding does not match raw proof")
     sequencer_identity = next(item for item in summaries if item.get("role") == "sequencer-204")
     if proof_summary.get("node_id") != sequencer_identity.get("node_id") or proof_summary.get("peer_id") != sequencer_identity.get("peer_id"):
         fail("signed 204 rebuild proof identity does not match sequencer identity receipt")
@@ -526,7 +846,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     capacity = load_json(Path(args.capacity_json).resolve(), "capacity evidence")
     package_bytes = package_size(package_dir)
     governed = provenance_summary["governed"]
-    signed_gates = validate_signed_gates(args, provenance_summary)
+    signed_gates = validate_signed_gates(args, provenance_summary, runtime_source)
     governed_bytes = sum(int(item.get("size_bytes", item.get("total_bytes", 0))) for item in governed.values())
     capacities: dict[str, Any] = {}
     for role, node in nodes.items():
@@ -578,6 +898,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "full_204_status_forbidden": True,
             "identity_receipts_path": str(Path(args.identity_receipts).resolve()) if args.identity_receipts else None,
             "sequencer_rebuild_proof_path": str(Path(args.sequencer_rebuild_proof).resolve()) if args.sequencer_rebuild_proof else None,
+            "sequencer_rebuild_proof_verification_path": str(Path(args.sequencer_rebuild_proof_verification).resolve()) if args.sequencer_rebuild_proof_verification else None,
+            "sequencer_proof_verifier_path": str(Path(args.sequencer_proof_verifier).resolve()) if args.sequencer_proof_verifier else None,
             **signed_gates,
         },
         "observer_gate": {
@@ -748,7 +1070,27 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         fail("host adapter receipt has no governed trust root")
     for value in identity_receipts:
         verify_signed_attestation(Path(value["path"]).resolve(), trusted_root, "host identity receipt", value.get("role"))
-    verify_signed_attestation(Path(proof["path"]).resolve(), trusted_root, "host signed 204 rebuild proof", "sequencer-204")
+    proof_path = Path(proof["path"]).resolve()
+    verification_path = (
+        Path(proof["verification_path"]).resolve()
+        if isinstance(proof.get("verification_path"), str)
+        else Path(plan["proof"]["sequencer_rebuild_proof_verification_path"]).resolve()
+        if plan.get("proof", {}).get("sequencer_rebuild_proof_verification_path")
+        else None
+    )
+    verify_signed_attestation(
+        verification_path or proof_path,
+        trusted_root,
+        "host signed 204 rebuild proof",
+        "sequencer-204",
+        proof_path if verification_path else None,
+        Path(plan["proof"]["sequencer_proof_verifier_path"]).resolve()
+        if verification_path and plan.get("proof", {}).get("sequencer_proof_verifier_path")
+        else None,
+        Path(plan["package"]["directory"]) / plan["package"]["runtime_relpath"]
+        if verification_path
+        else None,
+    )
     if receipt.get("sequencer_proof_url") != plan.get("proof", {}).get("sequencer_proof_url"):
         fail("host adapter proof endpoint binding mismatch")
     if plan.get("observer_gate", {}).get("status") != "hold":
@@ -974,6 +1316,8 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--observer-receipt")
     plan.add_argument("--identity-receipts", required=True)
     plan.add_argument("--sequencer-rebuild-proof", required=True)
+    plan.add_argument("--sequencer-rebuild-proof-verification")
+    plan.add_argument("--sequencer-proof-verifier")
     plan.add_argument("--out-dir")
     apply = sub.add_parser("apply")
     apply.add_argument("--transaction", required=True)

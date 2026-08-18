@@ -120,6 +120,7 @@
     "observer_mutation": false,
     "identity_receipts_ref": "",
     "sequencer_rebuild_proof_ref": "",
+    "sequencer_rebuild_proof_verification_ref": "",
     "nodes": {
       "storage-205": {
         "active": false,

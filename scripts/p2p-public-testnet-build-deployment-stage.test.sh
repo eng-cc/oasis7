@@ -215,7 +215,10 @@ tmp_root = Path(sys.argv[4])
 stage_evidence = Path(sys.argv[5])
 receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
 root = tmp_root
-receipt["signature"]["signature_ref"] = str(stage_evidence / "pair-signature.bin")
+# The collision receipt is re-signed below.  Keep its signature reference
+# pointed at that newly generated artifact; the staged public key remains the
+# same trusted key and was preserved by the first staging invocation.
+receipt["signature"]["signature_ref"] = str(signature_path)
 receipt["signature"]["public_key_ref"] = str(stage_evidence / "attestor-public.pem")
 for key, path in (("manifest", root / "collision-a" / "config.json"), ("genesis", root / "collision-b" / "config.json")):
     receipt["governed"][key].update({"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size})

@@ -2,6 +2,7 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot, ReplicationNetworkDebugSnapshot};
+use sha2::{Digest, Sha256};
 
 use super::execution_bridge::ExecutionCheckpointStatusEvidence;
 use super::feedback_submit_api::FeedbackSubmitSigner;
@@ -205,6 +206,81 @@ fn rebuild_proof_file_verifier_binds_expected_signer_and_public_key() {
     .expect_err("tampered signature must fail closed");
     assert!(err.contains("signature verification failed"), "{err}");
     let _ = fs::remove_file(path);
+}
+
+#[test]
+fn rebuild_proof_verification_receipt_binds_peer_and_exact_raw_proof_digest() {
+    let mut snapshot = snapshot();
+    snapshot.node_id = "sequencer-node".to_string();
+    let response =
+        build_rebuild_status_with_signer(snapshot, network(), None, 1_000, None, &signer())
+            .expect("bounded proof response");
+    let path = temp_proof_path();
+    let bytes = serde_json::to_vec(&response).expect("serialize proof response");
+    fs::write(&path, bytes.as_slice()).expect("write proof response");
+    let receipt = verify_rebuild_proof_file(
+        &path,
+        response.proof.signer_id.as_str(),
+        response.proof.signer_public_key_hex.as_str(),
+    )
+    .expect("trusted proof file verifies");
+    assert_eq!(receipt.local_peer_id, response.local_peer_id);
+    assert_eq!(
+        receipt.proof_sha256,
+        hex::encode(Sha256::digest(bytes.as_slice()))
+    );
+    assert_ne!(
+        receipt.proof_sha256,
+        hex::encode(Sha256::digest(b"different-proof"))
+    );
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn rebuild_proof_verification_receipt_rejects_tampered_or_wrong_raw_proof_binding() {
+    let response_a =
+        build_rebuild_status_with_signer(snapshot(), network(), None, 1_000, None, &signer())
+            .expect("first bounded proof response");
+    let response_b =
+        build_rebuild_status_with_signer(snapshot(), network(), None, 2_000, None, &signer())
+            .expect("second bounded proof response");
+    let path_a = temp_proof_path();
+    let path_b = temp_proof_path();
+    let bytes_a = serde_json::to_vec(&response_a).expect("serialize first proof");
+    let bytes_b = serde_json::to_vec(&response_b).expect("serialize second proof");
+    fs::write(&path_a, bytes_a.as_slice()).expect("write first proof");
+    fs::write(&path_b, bytes_b.as_slice()).expect("write second proof");
+    let receipt_a = verify_rebuild_proof_file(
+        &path_a,
+        response_a.proof.signer_id.as_str(),
+        response_a.proof.signer_public_key_hex.as_str(),
+    )
+    .expect("first proof verifies");
+    let receipt_b = verify_rebuild_proof_file(
+        &path_b,
+        response_b.proof.signer_id.as_str(),
+        response_b.proof.signer_public_key_hex.as_str(),
+    )
+    .expect("second proof verifies");
+    assert_ne!(receipt_a.proof_sha256, receipt_b.proof_sha256);
+    let tampered = String::from_utf8(bytes_b)
+        .expect("proof JSON is UTF-8")
+        .replace(
+            "\"observed_at_unix_ms\":2000",
+            "\"observed_at_unix_ms\":2001",
+        )
+        .into_bytes();
+    fs::write(&path_b, tampered).expect("write tampered second proof");
+    assert!(
+        verify_rebuild_proof_file(
+            &path_b,
+            response_b.proof.signer_id.as_str(),
+            response_b.proof.signer_public_key_hex.as_str(),
+        )
+        .is_err()
+    );
+    let _ = fs::remove_file(path_a);
+    let _ = fs::remove_file(path_b);
 }
 
 fn temp_proof_path() -> std::path::PathBuf {

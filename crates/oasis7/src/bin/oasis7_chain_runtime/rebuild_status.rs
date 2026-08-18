@@ -163,6 +163,8 @@ pub(super) struct RebuildProofVerificationReceipt {
     signer_id: String,
     signer_public_key_hex: String,
     signed_payload_sha256: String,
+    pub(super) local_peer_id: String,
+    pub(super) proof_sha256: String,
     verified: bool,
 }
 
@@ -451,6 +453,8 @@ pub(super) fn verify_rebuild_proof_file(
         signer_id: response.proof.signer_id,
         signer_public_key_hex: response.proof.signer_public_key_hex,
         signed_payload_sha256: response.proof.signed_payload_sha256,
+        local_peer_id: response.local_peer_id,
+        proof_sha256: hex::encode(Sha256::digest(bytes.as_slice())),
         verified: true,
     })
 }

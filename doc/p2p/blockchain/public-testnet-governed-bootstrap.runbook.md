@@ -85,14 +85,27 @@ The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
 `signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and
 `signature_hex`. Before a proof is projected into any legacy capture shape,
 the consumer must run an independent verifier over the complete response
-claims. The deployed runtime provides that bounded verifier:
+claims. The deployed runtime provides that bounded verifier, which writes a
+separate `oasis7.rebuild_proof_verification.v1` receipt:
 
 ```bash
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \
-  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key>
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 ```
+
+The verification receipt is valid only as a pair with the exact raw proof
+file passed to `--proof`; it is not a detached assertion that can be copied to
+another response. Its required fields are `schema_version`,
+`proof_schema_version`, `signer_id`, `signer_public_key_hex`,
+`signed_payload_sha256`, `local_peer_id`, `proof_sha256`, and `verified`.
+`proof_sha256` is the SHA-256 of the exact raw
+`oasis7.rebuild_status.v1` bytes, including their serialized whitespace, and
+`local_peer_id` must equal the top-level raw proof `local_peer_id`. Consumers
+must retain both files and pass both references to the governed pair executor;
+missing, tampered, or cross-paired raw proof/receipt files fail closed.
 
 The verifier rejects an unsupported schema, oversized/malformed document,
 digest or Ed25519 signature mismatch, and any signer-id/public-key mismatch.
@@ -412,6 +425,8 @@ python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
   --trust-root <governed-provenance-trust-root.json> \
   --identity-receipts <validator-identity-receipts.json> \
   --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
+  --sequencer-rebuild-proof-verification <signed-204-rebuild-proof-verification.json> \
+  --sequencer-proof-verifier <verified-runtime>/oasis7_chain_runtime \
   --consumer-impact-record <record.json> \
   --capacity-json <per-node-capacity.json> \
   --node storage-205=local:<stopped-node-root-205> \
@@ -428,6 +443,10 @@ transaction IDs and timestamps are assigned only after the plan is durably
 journaled. The transaction is fail-closed and records a complete stopped-state backup
 manifest before mutation. Mutation order is always `storage-205` then
 `sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
+`--sequencer-proof-verifier` must point to an executable regular file whose
+SHA-256 and size match the verified package runtime; the executor invokes that
+exact binary over the raw proof and compares its complete receipt before any
+host mutation.
 The host adapter is mandatory and phase-based: it must acknowledge `quiesce`,
 `backup`, `apply`, and `rollback` callbacks. Local restore is allowed only after
 the rollback callback proves services are quiesced; a failed callback or restore
@@ -867,7 +886,8 @@ ssh root@39.104.204.172 \
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \
-  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key>
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status'
 ```
 
