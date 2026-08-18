@@ -27,15 +27,15 @@ if [[ "$workflow_checkout_depth" != "1" ]]; then
   echo "compile metrics workflow must use a shallow current checkout" >&2
   exit 1
 fi
-if rg -q 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; then
+if grep -Eq 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must not request a full-history checkout" >&2
   exit 1
 fi
-if ! rg -q 'git fetch --no-tags --depth=1 origin "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
+if ! grep -Eq 'git fetch --no-tags --depth=1 origin "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1
 fi
-if ! rg -q "FETCH_HEAD\\^\\{commit\\}" .github/workflows/compile-metrics.yml; then
+if ! grep -Eq "FETCH_HEAD\\^\\{commit\\}" .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must resolve fetched baseline provenance" >&2
   exit 1
 fi
@@ -174,7 +174,7 @@ assert "not measured (check-only package)" in summary
 assert expected_commit_oid in summary
 PY
 
-if rg -q 'build' "$tmp_dir/cargo.log"; then
+if grep -Eq 'build' "$tmp_dir/cargo.log"; then
   echo "check-only compile metrics unexpectedly invoked cargo build" >&2
   exit 1
 fi
