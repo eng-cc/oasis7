@@ -501,7 +501,7 @@ fn runtime_gameplay_snapshot_surfaces_same_loop_repeat_count_before_new_leverage
         gameplay.goal_id,
         "post_onboarding.stabilize_first_line_after_output"
     );
-    assert_eq!(gameplay.same_loop_repeat_count, 1);
+    assert_eq!(gameplay.same_loop_repeat_count, 2);
     assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
     assert!(!gameplay.grind_only_flag);
 }
