@@ -18,8 +18,77 @@ if [[ "$workflow_toolchain_install" == *"--profile default"* ]]; then
   exit 1
 fi
 
+workflow_checkout_depth=$(awk '
+/^[[:space:]]*- uses: actions\/checkout@v6$/ { in_step=1; next }
+in_step && /^[[:space:]]*- name:/ { in_step=0 }
+in_step && /fetch-depth:/ { print $2; exit }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_checkout_depth" != "1" ]]; then
+  echo "compile metrics workflow must use a shallow current checkout" >&2
+  exit 1
+fi
+if rg -q 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must not request a full-history checkout" >&2
+  exit 1
+fi
+if ! rg -q 'git fetch --no-tags --depth=1 origin "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
+  exit 1
+fi
+if ! rg -q "FETCH_HEAD\\^\\{commit\\}" .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must resolve fetched baseline provenance" >&2
+  exit 1
+fi
+workflow_baseline_fetch_step=$(awk '
+/^[[:space:]]*- name: Fetch baseline ref$/ { in_step=1; next }
+in_step && /^[[:space:]]*- name:/ { exit }
+in_step { print }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_baseline_fetch_step" != *"if:"* || "$workflow_baseline_fetch_step" != *"baseline_ref !="* ]]; then
+  echo "baseline fetch must be conditional on a requested baseline ref" >&2
+  exit 1
+fi
+# These literals intentionally assert GitHub expressions instead of expanding
+# them as Bash variables.
+# shellcheck disable=SC2016
+if [[ "$workflow_baseline_fetch_step" != *'BASELINE_REF: ${{ inputs.baseline_ref }}'* ]]; then
+  echo "baseline fetch must pass the input through an environment variable" >&2
+  exit 1
+fi
+workflow_baseline_resolver_step=$(awk '
+/^[[:space:]]*- name: Resolve baseline ref$/ { in_step=1; next }
+in_step && /^[[:space:]]*- name:/ { exit }
+in_step { print }
+' .github/workflows/compile-metrics.yml)
+# shellcheck disable=SC2016
+if [[ "$workflow_baseline_resolver_step" != *'BASELINE_REF: ${{ inputs.baseline_ref }}'* ]]; then
+  echo "baseline resolver must pass the input through an environment variable" >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+if [[ "$workflow_baseline_resolver_step" != *'baseline_ref="${BASELINE_REF}"'* ]]; then
+  echo "baseline resolver must read the environment variable literally" >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+if [[ "$workflow_baseline_resolver_step" == *'baseline_ref="${{ inputs.baseline_ref }}"'* ]]; then
+  echo "baseline resolver must not interpolate workflow input into Bash" >&2
+  exit 1
+fi
+
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
+
+malicious_ref_marker="$tmp_dir/malicious-ref-marker"
+malicious_ref="evil\$(touch ${malicious_ref_marker})"
+resolved_malicious_ref=$(
+  BASELINE_REF="$malicious_ref" \
+    bash -c 'set -euo pipefail; baseline_ref="${BASELINE_REF}"; printf "%s" "$baseline_ref"'
+)
+if [[ "$resolved_malicious_ref" != "$malicious_ref" || -e "$malicious_ref_marker" ]]; then
+  echo "baseline resolver must preserve malicious-looking refs literally" >&2
+  exit 1
+fi
 
 fake_bin="$tmp_dir/bin"
 mkdir -p "$fake_bin"
