@@ -9365,7 +9365,7 @@ function createPixelWorldFocusController({
     setCommandDrawerOpen(false);
   }
   function handleKeyDown(event) {
-    if (event.key !== "Escape" || !focusMode() || event.isComposing) {
+    if (event.key !== "Escape" || !focusMode() || event.isComposing || event.keyCode === 229) {
       return;
     }
     event.preventDefault();
