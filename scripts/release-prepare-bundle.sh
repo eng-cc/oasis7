@@ -7,7 +7,7 @@ TARGET_TRIPLE="native"
 WEB_DIST=""
 WEB_LAUNCHER_DIST=""
 OUT_DIR=""
-PROFILE="release"
+PROFILE="packaging"
 
 usage() {
   cat <<'USAGE'
@@ -28,7 +28,7 @@ Options:
   --web-launcher-dist <path>
                          required: prebuilt launcher web dist directory
   --out-dir <path>       required: output root for prepared bundle directory
-  --profile <name>       cargo profile: release|dev (default: release)
+  --profile <name>       cargo profile: packaging|dev (default: packaging)
   -h, --help             show this help
 USAGE
 }
@@ -95,8 +95,8 @@ if [[ -z "${TARGET_TRIPLE}" ]]; then
   echo "error: --target-triple must not be empty" >&2
   exit 1
 fi
-if [[ "${PROFILE}" != "release" && "${PROFILE}" != "dev" ]]; then
-  echo "error: --profile must be release or dev" >&2
+if [[ "${PROFILE}" != "packaging" && "${PROFILE}" != "dev" ]]; then
+  echo "error: --profile must be packaging or dev" >&2
   exit 1
 fi
 

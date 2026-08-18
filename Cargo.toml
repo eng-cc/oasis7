@@ -18,11 +18,12 @@ members = [
 ]
 resolver = "2"
 
-[profile.release]
-# Keep release artifacts small without changing the panic strategy used by
-# runtime binaries. Symbol stripping reduces distribution size (and can reduce
-# postmortem symbolization), while thin LTO with one codegen unit keeps
-# cross-crate optimization effective without the full-LTO build-time cost.
+[profile.packaging]
+# Keep native distribution artifacts small without applying native-oriented
+# linker/codegen tuning to wasm32 builds. Trunk intentionally continues to use
+# Cargo's standard `release` profile so its wasm-opt feature validation sees
+# the toolchain's supported WebAssembly feature set.
+inherits = "release"
 strip = "symbols"
 lto = "thin"
 codegen-units = 1

@@ -471,7 +471,7 @@ jobs:
             --web-dist output/mainnet-packages/web-dist \
             --web-launcher-dist output/mainnet-packages/web-launcher-dist \
             --out-dir output/mainnet-packages/assets \
-            --profile release
+            --profile packaging
       - name: Validate bundle entrypoints
         shell: bash
         run: |
@@ -505,7 +505,7 @@ jobs:
             echo "repository=${GITHUB_REPOSITORY}"
             echo "release_tag=${{ needs.plan.outputs.ref }}"
             echo "commit=$(git rev-parse HEAD)"
-            echo "build_profile=release"
+            echo "build_profile=packaging"
             echo "package_scope=all_existing"
             echo "platform=${{ matrix.platform }}"
             echo "target_triple=${{ matrix.target_triple }}"

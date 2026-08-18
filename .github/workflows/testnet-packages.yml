@@ -11,10 +11,10 @@ on:
       build_profile:
         description: "Cargo profile for package binaries"
         required: true
-        default: release
+        default: packaging
         type: choice
         options:
-          - release
+          - packaging
           - dev
       package_scope:
         description: "Platform package set"

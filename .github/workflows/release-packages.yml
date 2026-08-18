@@ -417,7 +417,7 @@ jobs:
             --web-dist output/release/web-dist \
             --web-launcher-dist output/release/web-launcher-dist \
             --out-dir output/release/assets \
-            --profile release
+            --profile packaging
       - name: Package native installer
         shell: bash
         run: |

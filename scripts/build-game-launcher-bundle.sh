@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 OUT_DIR=""
 OPS_OUT_DIR=""
-PROFILE="release"
+PROFILE="packaging"
 TARGET_TRIPLE="native"
 WEB_DIST_SOURCE=""
 WEB_LAUNCHER_DIST_SOURCE=""
@@ -31,7 +31,7 @@ Build a distributable launcher bundle:
 Options:
   --out-dir <path>       output directory (default: output/release/game-launcher-<timestamp>)
   --ops-out-dir <path>   optional output directory for operator repair/governance tools
-  --profile <name>       cargo profile: release|dev (default: release)
+  --profile <name>       cargo profile: packaging|dev (default: packaging)
   --target-triple <id>   rust target triple (default: native)
   --web-dist <path>      use existing prebuilt viewer web dist instead of trunk build
   --web-launcher-dist <path>
@@ -200,8 +200,8 @@ if [[ -n "$WEB_LAUNCHER_DIST_SOURCE" && "$WEB_LAUNCHER_DIST_SOURCE" != /* ]]; th
   WEB_LAUNCHER_DIST_SOURCE="$ROOT_DIR/$WEB_LAUNCHER_DIST_SOURCE"
 fi
 
-if [[ "$PROFILE" != "release" && "$PROFILE" != "dev" ]]; then
-  echo "error: --profile must be release or dev" >&2
+if [[ "$PROFILE" != "packaging" && "$PROFILE" != "dev" ]]; then
+  echo "error: --profile must be packaging or dev" >&2
   exit 1
 fi
 if [[ -z "$TARGET_TRIPLE" ]]; then
@@ -274,10 +274,10 @@ BUNDLE_NATIVE_BUILD_ARGS=(
 if (( ${#CARGO_TARGET_ARGS[@]} > 0 )); then
   BUNDLE_NATIVE_BUILD_ARGS=("${CARGO_TARGET_ARGS[@]}" "${BUNDLE_NATIVE_BUILD_ARGS[@]}")
 fi
-if [[ "$PROFILE" == "release" ]]; then
-  run env -u RUSTC_WRAPPER cargo build --release "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
-else
+if [[ "$PROFILE" == "dev" ]]; then
   run env -u RUSTC_WRAPPER cargo build "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
+else
+  run env -u RUSTC_WRAPPER cargo build --profile "$PROFILE" "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
 fi
 
 LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$LAUNCHER_BIN_NAME"
@@ -335,10 +335,12 @@ else
 
   run rm -rf "$BUNDLE_WEB_LAUNCHER_DIR"
   run mkdir -p "$BUNDLE_WEB_LAUNCHER_DIR"
-  if [[ "$PROFILE" == "release" ]]; then
-    run bash -lc "cd '$ROOT_DIR/crates/oasis7_client_launcher' && env -u NO_COLOR trunk build --release --dist '$BUNDLE_WEB_LAUNCHER_DIR'"
-  else
+  if [[ "$PROFILE" == "dev" ]]; then
     run bash -lc "cd '$ROOT_DIR/crates/oasis7_client_launcher' && env -u NO_COLOR trunk build --dist '$BUNDLE_WEB_LAUNCHER_DIR'"
+  else
+    # The native bundle profile is intentionally not forwarded to Trunk.
+    # Trunk must use Cargo's standard release profile for wasm-opt validation.
+    run bash -lc "cd '$ROOT_DIR/crates/oasis7_client_launcher' && env -u NO_COLOR trunk build --release --dist '$BUNDLE_WEB_LAUNCHER_DIR'"
   fi
 fi
 

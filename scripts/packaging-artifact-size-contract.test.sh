@@ -112,28 +112,59 @@ require(
     "ops package must publish a manifest/checksum alongside its payload",
 )
 
-# 3. Release profile should strip symbols and use thin LTO/codegen tuning, but
-# retain normal unwind/panic diagnostics unless explicitly changed later.
+# 3. Native packaging gets size tuning through a dedicated profile inherited
+# from release. Keep those settings off the workspace release profile: Trunk's
+# launcher build uses standard release so wasm-opt validates the expected wasm
+# feature set instead of native-oriented profile output.
+packaging_profile = re.search(
+    r"(?ms)^\[profile\.packaging\]\s*(?P<body>.*?)(?=^\[|\Z)", root_cargo
+)
 release_profile = re.search(
     r"(?ms)^\[profile\.release\]\s*(?P<body>.*?)(?=^\[|\Z)", root_cargo
 )
-require(release_profile, "root Cargo.toml must define an explicit release profile")
-body = release_profile.group("body") if release_profile else ""
+require(packaging_profile, "root Cargo.toml must define a packaging profile")
+body = packaging_profile.group("body") if packaging_profile else ""
+release_body = release_profile.group("body") if release_profile else ""
+require(
+    re.search(r"(?m)^\s*inherits\s*=\s*[\"']release[\"']", body),
+    "packaging profile must inherit release",
+)
 require(
     re.search(r"(?m)^\s*strip\s*=\s*[\"']symbols[\"']", body),
-    "release profile must strip symbols",
+    "packaging profile must strip symbols",
 )
 require(
     re.search(r"(?m)^\s*lto\s*=\s*[\"']thin[\"']", body),
-    "release profile must enable thin LTO",
+    "packaging profile must enable thin LTO",
 )
 require(
     re.search(r"(?m)^\s*codegen-units\s*=\s*1\s*(?:#.*)?$", body),
-    "release profile must tune codegen-units to 1",
+    "packaging profile must tune codegen-units to 1",
 )
 require(
     not re.search(r"(?m)^\s*panic\s*=", body),
-    "release profile must not change panic strategy in this size-only slice",
+    "packaging profile must not change panic strategy in this size-only slice",
+)
+require(
+    not re.search(r"(?m)^\s*(?:strip|lto|codegen-units)\s*=", release_body),
+    "release profile must not carry native packaging tuning",
+)
+require(
+    not re.search(r"cargo\s+build\s+--release", build_bundle),
+    "native launcher packaging must use the dedicated Cargo profile",
+)
+require(
+    re.search(r"cargo\s+build\s+--profile\s+\"\$PROFILE\"", build_bundle),
+    "native launcher packaging must pass the selected Cargo profile",
+)
+require(
+    re.search(r"trunk\s+build\s+--release", build_bundle),
+    "launcher Trunk build must remain on Cargo's standard release profile",
+)
+require(
+    "release is a compatibility alias" not in build_bundle
+    and "release is a compatibility alias" not in prepare,
+    "native packaging scripts must not retain an obsolete release alias",
 )
 
 # 4. The large pixel-world bridge WASM is an optional, separately staged
