@@ -41,13 +41,13 @@ receipt="$TMP_DIR/bootstrap-receipt.json"
 mkdir -p "$bundle_dir/bin" "$ops_bundle_dir/bin" "$config_dir/doc/testing/evidence" "$world_dir/generated-scenario-world" "$systemd_dir" "$TMP_DIR/fake-bin"
 
 for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
-  cat >"$bundle_dir/bin/$binary" <<'SH'
+  cat >"$ops_bundle_dir/bin/$binary" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--help" ]]; then
   printf '%s\n' '--generated-world-dir'
 fi
 SH
-  chmod +x "$bundle_dir/bin/$binary"
+  chmod +x "$ops_bundle_dir/bin/$binary"
 done
 cat >"$bundle_dir/bin/oasis7_chain_runtime" <<'SH'
 #!/usr/bin/env bash
@@ -99,9 +99,6 @@ run_id=2737
 platform=linux-x64
 EOF
 (cd "$bundle_dir" && shasum -a 256 BUILDINFO "bin/oasis7_chain_runtime" >SHA256SUMS)
-cp -a "$bundle_dir/bin/oasis7_world_repair_rebuild" "$ops_bundle_dir/bin/"
-cp -a "$bundle_dir/bin/oasis7_governance_registry_import" "$ops_bundle_dir/bin/"
-cp -a "$bundle_dir/bin/oasis7_governance_registry_audit" "$ops_bundle_dir/bin/"
 printf '{"schema_version":"oasis7.ops-tools.v1"}\n' >"$ops_bundle_dir/.oasis7-ops-tools-manifest.json"
 (cd "$ops_bundle_dir" && shasum -a 256 bin/* >SHA256SUMS)
 tar -czf "$ops_tools_tar" -C "$TMP_DIR/bundle" oasis7-linux-x64-ops-tools

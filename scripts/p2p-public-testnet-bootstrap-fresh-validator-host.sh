@@ -147,9 +147,7 @@ verify_bundle() {
   python3 "$SCRIPT_DIR/p2p-verify-linux-package-bundle.py" \
     "$bundle_root" "$build_version" "$bundle_commit" "$build_run_id" \
     || die "bundle checksum verification failed (BUILDINFO/SHA256SUMS)"
-  for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
-    [[ -x "$bundle_root/bin/$binary" ]] || die "bundle missing required executable: $binary"
-  done
+  [[ -x "$bundle_root/bin/oasis7_chain_runtime" ]] || die "bundle missing required executable: oasis7_chain_runtime"
   grep -Eq '^commit=[0-9a-f]{40}$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing valid commit"
   grep -Eq '^package_version=.+$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing package_version"
   grep -Eq '^run_id=.+$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing run_id"
@@ -307,10 +305,14 @@ require_file "$ops_bundle_root/SHA256SUMS"
 for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
   [[ -x "$ops_bundle_root/bin/$binary" ]] || die "ops-tools archive missing executable: $binary"
 done
+require_dir "$bundle_root"
+verify_bundle "$bundle_root" "$config_dir"
 mkdir -p "$bundle_root/bin"
 cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
 require_dir "$bundle_root"
-verify_bundle "$bundle_root" "$config_dir"
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  [[ -x "$bundle_root/bin/$binary" ]] || die "bundle missing required executable: $binary"
+done
 
 # All failure-prone validation above occurs before the fresh root is created.
 mkdir -p "$stack_root/releases"

@@ -19,6 +19,7 @@ PY
 node_root="$TMP_DIR/node"
 bundle_root="$TMP_DIR/bundle/oasis7-linux-x64"
 package_deb="$TMP_DIR/oasis7-linux-x64.deb"
+unlisted_package_deb="$TMP_DIR/oasis7-linux-x64-unlisted.deb"
 ops_tools_tar="$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz"
 ops_bundle_root="$TMP_DIR/bundle/oasis7-linux-x64-ops-tools"
 package_version="0.0.0+testnet.test.abcdef123456"
@@ -132,6 +133,49 @@ Architecture: amd64
 Description: package node upgrade contract fixture
 EOF
 dpkg-deb --build --root-owner-group "$package_root" "$package_deb" >/dev/null
+
+# Build a package whose regular payload contains an extra file that is absent
+# from the embedded SHA256SUMS.  The upgrader must reject it before creating a
+# transaction snapshot or changing current.
+unlisted_package_root="$TMP_DIR/deb-root-unlisted"
+cp -a "$package_root" "$unlisted_package_root"
+printf 'unlisted payload\n' >"$unlisted_package_root/opt/oasis7/bin/UNLISTED"
+dpkg-deb --build --root-owner-group "$unlisted_package_root" "$unlisted_package_deb" >/dev/null
+
+before_bad_current=$(readlink "$node_root/current")
+set +e
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$node_root" \
+  --package-deb "$unlisted_package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "$package_version" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  >"$TMP_DIR/unlisted-upgrade.stdout" 2>"$TMP_DIR/unlisted-upgrade.stderr"
+unlisted_upgrade_status=$?
+set -e
+test "$unlisted_upgrade_status" -ne 0
+grep -q "SHA256SUMS does not cover bundle files: bin/UNLISTED" "$TMP_DIR/unlisted-upgrade.stderr"
+test "$(readlink "$node_root/current")" = "$before_bad_current"
+test ! -e "$node_root/releases/$package_version"
+
+# A traversal-like CLI value must be rejected before temporary/release/
+# rollback paths are constructed or package extraction is attempted.
+set +e
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$node_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "../../outside" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  >"$TMP_DIR/unsafe-version.stdout" 2>"$TMP_DIR/unsafe-version.stderr"
+unsafe_version_status=$?
+set -e
+test "$unsafe_version_status" -ne 0
+grep -q "safe single path token" "$TMP_DIR/unsafe-version.stderr"
+test "$(readlink "$node_root/current")" = "$before_bad_current"
+test ! -e "$TMP_DIR/outside"
 
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$node_root" \

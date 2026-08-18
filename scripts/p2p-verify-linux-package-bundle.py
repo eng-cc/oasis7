@@ -4,11 +4,18 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import stat
 import sys
 from pathlib import Path, PurePosixPath
 from typing import NoReturn
+
+
+# Match the release-name characters accepted by package-native-installer while
+# still requiring an ASCII alphanumeric first character.  ':' and '~' are
+# valid Debian release-name characters and remain safe on the Linux path.
+PACKAGE_VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+:~\-]*")
 
 
 def die(message: str) -> NoReturn:
@@ -29,6 +36,22 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_package_version(value: str, label: str = "package_version") -> str:
+    """Require the release version to remain one safe, portable path token."""
+    if (
+        not value
+        or not PACKAGE_VERSION_PATTERN.fullmatch(value)
+        or ".." in value
+        or value in {".", ".."}
+    ):
+        die(
+            f"{label} must be a safe single path token "
+            "(ASCII alphanumeric start; only release-name characters allowed; "
+            "no separators or dot traversal)"
+        )
+    return value
+
+
 def parse_buildinfo(path: Path) -> dict[str, str]:
     info: dict[str, str] = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -44,6 +67,7 @@ def parse_buildinfo(path: Path) -> dict[str, str]:
     for key in ("commit", "package_version", "run_id", "platform"):
         if not info.get(key):
             die(f"BUILDINFO missing {key}")
+    validate_package_version(info["package_version"], "BUILDINFO package_version")
     if info["platform"] != "linux-x64":
         die(f"BUILDINFO platform mismatch: {info['platform']!r}")
     if not re.fullmatch(r"[0-9a-fA-F]{40}", info["commit"]):
@@ -82,18 +106,51 @@ def verify_sums(root: Path, sums_path: Path) -> set[str]:
         actual = sha256(target)
         if actual.lower() != expected.lower():
             die(f"SHA256SUMS mismatch for {name}: expected {expected}, got {actual}")
-        if name in verified:
+        canonical_name = relative.as_posix()
+        if canonical_name in verified:
             die(f"SHA256SUMS contains duplicate entry: {name}")
-        verified.add(name)
+        verified.add(canonical_name)
     if not verified:
         die("SHA256SUMS is empty")
     return verified
+
+
+def regular_bundle_files(root: Path) -> set[str]:
+    """Return every regular player payload file except the checksum manifest."""
+    discovered: set[str] = set()
+
+    def walk_error(error: OSError) -> NoReturn:
+        die(f"cannot inspect bundle tree: {error}")
+
+    for directory, dirnames, filenames in os.walk(
+        root, followlinks=False, onerror=walk_error
+    ):
+        directory_path = Path(directory)
+        for dirname in list(dirnames):
+            child = directory_path / dirname
+            if child.is_symlink():
+                die(f"bundle contains symlink directory: {child}")
+            if not child.is_dir():
+                die(f"bundle contains non-directory member: {child}")
+        for filename in filenames:
+            child = directory_path / filename
+            relative = child.relative_to(root).as_posix()
+            if relative == "SHA256SUMS":
+                continue
+            if child.is_symlink():
+                die(f"bundle contains symlink file: {child}")
+            mode = child.lstat().st_mode
+            if not stat.S_ISREG(mode):
+                die(f"bundle contains non-regular member: {child}")
+            discovered.add(relative)
+    return discovered
 
 
 def verify_bundle(root: Path, expected_version: str, expected_commit: str, expected_run_id: str) -> dict[str, str]:
     if root.is_symlink() or not root.is_dir():
         die(f"package bundle must be a regular directory: {root}")
     root = root.resolve()
+    validate_package_version(expected_version, "CLI package_version")
     buildinfo = root / "BUILDINFO"
     sums = root / "SHA256SUMS"
     runtime = root / "bin/oasis7_chain_runtime"
@@ -112,6 +169,13 @@ def verify_bundle(root: Path, expected_version: str, expected_commit: str, expec
     missing = sorted(required - verified)
     if missing:
         die("SHA256SUMS does not cover required files: " + ", ".join(missing))
+    bundle_files = regular_bundle_files(root)
+    missing = sorted(bundle_files - verified)
+    if missing:
+        die("SHA256SUMS does not cover bundle files: " + ", ".join(missing))
+    unexpected = sorted(verified - bundle_files)
+    if unexpected:
+        die("SHA256SUMS contains entries outside the player bundle: " + ", ".join(unexpected))
     if not (runtime.lstat().st_mode & 0o111):
         die(f"runtime executable is not executable: {runtime}")
     return info

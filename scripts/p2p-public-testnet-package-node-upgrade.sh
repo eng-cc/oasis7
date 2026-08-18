@@ -59,6 +59,17 @@ require_non_empty() {
   [[ -n "$value" ]] || die "missing required option: $flag"
 }
 
+require_safe_package_version() {
+  local value=$1
+  # Keep the release name a single portable path component.  This validation
+  # must precede every release/tmp/rollback path interpolation below; the
+  # embedded BUILDINFO verifier applies the same rule to package-supplied
+  # provenance before bootstrap callers use that value as a release name.
+  if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9_.+:~-]*$ || "$value" == *..* ]]; then
+    die "--package-version must be a safe single path token (no separators or dot traversal): $value"
+  fi
+}
+
 abs_path() {
   python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$1"
 }
@@ -772,6 +783,7 @@ require_non_empty "--node-root" "$node_root"
 require_non_empty "--package-deb" "$package_deb"
 require_non_empty "--ops-tools-tar" "$ops_tools_tar"
 require_non_empty "--package-version" "$package_version"
+require_safe_package_version "$package_version"
 require_non_empty "--commit" "$commit"
 require_non_empty "--run-id" "$run_id"
 [[ -f "$package_deb" ]] || die "missing Debian package: $package_deb"
