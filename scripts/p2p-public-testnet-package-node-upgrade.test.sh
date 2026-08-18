@@ -67,6 +67,7 @@ workflow=Testnet Packages
 commit=$commit
 package_version=$package_version
 run_id=$run_id
+platform=linux-x64
 EOF
 (cd "$bundle_root" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
 printf 'runtime-v1\n' >"$node_root/releases/old/bin/oasis7_chain_runtime"
@@ -292,7 +293,7 @@ PATH="$TMP_DIR/fake-bin:$PATH" \
   --node-root "$orphan_node" \
   --package-deb "$package_deb" \
   --ops-tools-tar "$ops_tools_tar" \
-  --package-version "$package_version-orphan" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-orphan.service \
@@ -358,7 +359,7 @@ PATH="$TMP_DIR/fake-bin:$PATH" \
   --node-root "$blocked_post_restart_node" \
   --package-deb "$package_deb" \
   --ops-tools-tar "$ops_tools_tar" \
-  --package-version "$package_version-blocked-post-restart" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-blocked-post-restart.service \
@@ -433,7 +434,7 @@ for rollback_attempt in first second; do
     --node-root "$rollback_node" \
     --package-deb "$package_deb" \
     --ops-tools-tar "$ops_tools_tar" \
-    --package-version "$package_version-rollback" \
+    --package-version "$package_version" \
     --commit "$commit" \
     --run-id "$run_id" \
     --systemd-service oasis7-testnet-rollback.service \
@@ -525,7 +526,7 @@ PATH="$TMP_DIR/fake-bin:$PATH" \
   --node-root "$scanner_node" \
   --package-deb "$package_deb" \
   --ops-tools-tar "$ops_tools_tar" \
-  --package-version "$package_version-scanner" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-scanner.service \
@@ -535,6 +536,6 @@ scanner_status=$?
 set -e
 test "$scanner_status" -eq 0
 scanner_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$scanner_node_abs/current")
-test "$scanner_current" = "$scanner_node_abs/releases/$package_version-scanner"
+test "$scanner_current" = "$scanner_node_abs/releases/$package_version"
 
 echo "ok: package node upgrade pins current runtime hash into governed bootstrap bundle"

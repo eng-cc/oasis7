@@ -1700,7 +1700,7 @@ path.write_text(
 PY
 (
   cd "$cross_commit_package/macos"
-  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO oasis7-macos-arm64-ops-tools.tar.gz >macos-arm64-SHA256SUMS
 )
 if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$TMP_DIR/manifest.json" \
@@ -3275,7 +3275,7 @@ for symlink_kind in file directory; do
     >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
     echo "expected runtime-truth $symlink_kind symlink to fail before rollout generation" >&2
     package_contract_failed=1
-  elif ! grep -q 'Windows runtime truth tree contains symlink for generated_world_sidecar' \
+  elif ! grep -Eq 'Windows runtime truth tree contains symlink for generated_world_sidecar|package tree contains symlink' \
     "$symlink_out.stderr"; then
     echo "runtime-truth $symlink_kind symlink did not produce the stable containment diagnostic" >&2
     cat "$symlink_out.stderr" >&2
@@ -3308,7 +3308,7 @@ for governed_name in \
     >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
     echo "expected top-level governed symlink to fail before rollout generation: $governed_name" >&2
     package_contract_failed=1
-  elif ! grep -q 'Windows governed bootstrap artifact contains symlink component' \
+  elif ! grep -Eq 'Windows governed bootstrap artifact contains symlink component|package tree contains symlink' \
     "$symlink_out.stderr"; then
     echo "top-level governed symlink did not produce stable rejection: $governed_name" >&2
     cat "$symlink_out.stderr" >&2
@@ -3333,7 +3333,7 @@ if "$rollout_driver" \
   >"$ancestor_out.stdout" 2>"$ancestor_out.stderr"; then
   echo "expected governed ancestor symlink to fail before rollout generation" >&2
   package_contract_failed=1
-elif ! grep -Eq 'Windows governed bootstrap artifact contains symlink component|platform package path contains symlink component' \
+elif ! grep -Eq 'Windows governed bootstrap artifact contains symlink component|platform package path contains symlink component|package tree contains symlink' \
   "$ancestor_out.stderr"; then
   echo "governed ancestor symlink did not produce stable rejection" >&2
   cat "$ancestor_out.stderr" >&2
@@ -4263,7 +4263,7 @@ sed -i.bak "s/^commit=.*/commit=0000000000000000000000000000000000000000/" \
 rm "$bad_package_dir/windows/windows-x64-BUILDINFO.bak"
 (
   cd "$bad_package_dir/windows"
-  shasum -a 256 oasis7-windows-x64.exe windows-x64-BUILDINFO >windows-x64-SHA256SUMS
+  shasum -a 256 oasis7-windows-x64.exe windows-x64-BUILDINFO oasis7-windows-x64-ops-tools.tar.gz >windows-x64-SHA256SUMS
 )
 if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \

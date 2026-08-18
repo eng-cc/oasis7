@@ -52,7 +52,7 @@ mkdir -p \
   "$TMP_DIR/fake-bin"
 printf 'runtime-v2\n' >"$bundle_root/bin/oasis7_chain_runtime"
 chmod +x "$bundle_root/bin/oasis7_chain_runtime"
-printf 'commit=%s\npackage_version=%s\nrun_id=%s\n' "$commit" "$package_version" "$run_id" >"$bundle_root/BUILDINFO"
+printf 'commit=%s\npackage_version=%s\nrun_id=%s\nplatform=linux-x64\n' "$commit" "$package_version" "$run_id" >"$bundle_root/BUILDINFO"
 (cd "$bundle_root" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
 printf 'runtime-v1\n' >"$node_root/releases/old/bin/oasis7_chain_runtime"
 chmod +x "$node_root/releases/old/bin/oasis7_chain_runtime"

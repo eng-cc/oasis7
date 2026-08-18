@@ -131,6 +131,8 @@ safe_deb_extract() {
   local package=$1 destination=$2
   require_command dpkg-deb
   dpkg-deb --extract "$package" "$destination" || die "cannot extract Debian package"
+  python3 "$SCRIPT_DIR/p2p-safe-validate-deb-tree.py" "$destination" "opt/oasis7" \
+    || die "extracted Debian package failed the symlink/non-regular/path containment checks"
 }
 
 verify_bundle() {
@@ -138,15 +140,19 @@ verify_bundle() {
   require_file "$bundle_root/BUILDINFO"
   require_file "$bundle_root/SHA256SUMS"
   require_file "$bundle_root/bin/oasis7_chain_runtime"
-  (cd "$bundle_root" && shasum -a 256 -c SHA256SUMS) >/dev/null \
-    || die "bundle checksum verification failed"
+  local build_version build_run_id
+  build_version=$(sed -n 's/^package_version=//p' "$bundle_root/BUILDINFO" | head -n1)
+  build_run_id=$(sed -n 's/^run_id=//p' "$bundle_root/BUILDINFO" | head -n1)
+  bundle_commit=$(sed -n 's/^commit=//p' "$bundle_root/BUILDINFO" | head -n1)
+  python3 "$SCRIPT_DIR/p2p-verify-linux-package-bundle.py" \
+    "$bundle_root" "$build_version" "$bundle_commit" "$build_run_id" \
+    || die "bundle checksum verification failed (BUILDINFO/SHA256SUMS)"
   for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
     [[ -x "$bundle_root/bin/$binary" ]] || die "bundle missing required executable: $binary"
   done
   grep -Eq '^commit=[0-9a-f]{40}$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing valid commit"
   grep -Eq '^package_version=.+$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing package_version"
   grep -Eq '^run_id=.+$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing run_id"
-  bundle_commit=$(sed -n 's/^commit=//p' "$bundle_root/BUILDINFO" | head -n1)
   config_commit=$(jq -r '.git_commit // empty' "$config/public-testnet-governed-bootstrap-bundle-2026-06-06.json")
   [[ "$bundle_commit" == "$config_commit" ]] || die "BUILDINFO commit does not match governed config"
   runtime_sum=$(shasum -a 256 "$bundle_root/bin/oasis7_chain_runtime" | awk '{print $1}')

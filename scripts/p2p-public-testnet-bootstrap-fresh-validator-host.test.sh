@@ -96,8 +96,9 @@ cat >"$bundle_dir/BUILDINFO" <<EOF
 commit=abcdef1234567890abcdef1234567890abcdef12
 package_version=0.0.0+testnet.test.abcdef123456
 run_id=2737
+platform=linux-x64
 EOF
-(cd "$bundle_dir" && shasum -a 256 "bin/oasis7_chain_runtime" >SHA256SUMS)
+(cd "$bundle_dir" && shasum -a 256 BUILDINFO "bin/oasis7_chain_runtime" >SHA256SUMS)
 cp -a "$bundle_dir/bin/oasis7_world_repair_rebuild" "$ops_bundle_dir/bin/"
 cp -a "$bundle_dir/bin/oasis7_governance_registry_import" "$ops_bundle_dir/bin/"
 cp -a "$bundle_dir/bin/oasis7_governance_registry_audit" "$ops_bundle_dir/bin/"
@@ -105,6 +106,12 @@ printf '{"schema_version":"oasis7.ops-tools.v1"}\n' >"$ops_bundle_dir/.oasis7-op
 (cd "$ops_bundle_dir" && shasum -a 256 bin/* >SHA256SUMS)
 tar -czf "$ops_tools_tar" -C "$TMP_DIR/bundle" oasis7-linux-x64-ops-tools
 printf 'fixture-deb\n' >"$package_deb"
+# Native Debian installers expose launcher symlinks under /usr/bin.  The safe
+# extraction boundary must allow those package-owned links while still
+# rejecting symlinks inside the consumed /opt/oasis7 subtree.
+mkdir -p "$TMP_DIR/bundle/oasis7-linux-x64.deb.root/usr/bin"
+ln -s /opt/oasis7/run-client.sh \
+  "$TMP_DIR/bundle/oasis7-linux-x64.deb.root/usr/bin/oasis7-client"
 cat >"$TMP_DIR/fake-bin/dpkg-deb" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -242,6 +249,22 @@ expect_fail "unsafe member path" bootstrap_with \
   --receipt "$TMP_DIR/unsafe-traversal-receipt.json"
 test ! -e "$TMP_DIR/unsafe-traversal-root"
 
+# The Debian player tree is validated in full before any checksum or ops-tool
+# copy. A symlink hidden beside the runtime must therefore leave no bootstrap
+# root behind.
+ln -s "$TMP_DIR" "$bundle_dir/bin/unsafe-link"
+expect_fail "symlink" bootstrap_with \
+  --stack-root "$TMP_DIR/unsafe-deb-root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$world_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --receipt "$TMP_DIR/unsafe-deb-receipt.json"
+rm "$bundle_dir/bin/unsafe-link"
+test ! -e "$TMP_DIR/unsafe-deb-root"
+
 # Fail closed before mutation for package integrity and unsafe filesystem input.
 cp "$bundle_dir/BUILDINFO" "$TMP_DIR/valid-buildinfo"
 rm "$bundle_dir/BUILDINFO"
@@ -249,14 +272,14 @@ expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/absent-buildinfo-r
 mv "$TMP_DIR/valid-buildinfo" "$bundle_dir/BUILDINFO"
 
 # Recreate the valid bundle and corrupt its declared runtime checksum.
-printf 'commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\n' >"$bundle_dir/BUILDINFO"
+printf 'commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
 expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/mismatched-buildinfo-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-buildinfo-receipt.json"
 
-printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\n' >"$bundle_dir/BUILDINFO"
+printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
 printf '%064d  bin/oasis7_chain_runtime\n' 0 >"$bundle_dir/SHA256SUMS"
 expect_fail "checksum" bootstrap_with --stack-root "$TMP_DIR/mismatched-checksum-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-checksum-receipt.json"
-printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\n' >"$bundle_dir/BUILDINFO"
-(cd "$bundle_dir" && shasum -a 256 bin/oasis7_chain_runtime >SHA256SUMS)
+printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
+(cd "$bundle_dir" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
 
 mkdir -p "$TMP_DIR/non-empty-root"
 touch "$TMP_DIR/non-empty-root/sentinel"

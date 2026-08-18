@@ -62,7 +62,7 @@ make_bundle() {
   mkdir -p "$bundle_dir/oasis7-linux-x64/bin"
   printf 'runtime-v2\n' >"$bundle_dir/oasis7-linux-x64/bin/oasis7_chain_runtime"
   chmod +x "$bundle_dir/oasis7-linux-x64/bin/oasis7_chain_runtime"
-  printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+order-test\nrun_id=3191-order\n' \
+  printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+order-test\nrun_id=3191-order\nplatform=linux-x64\n' \
     >"$bundle_dir/oasis7-linux-x64/BUILDINFO"
   (cd "$bundle_dir/oasis7-linux-x64" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
   mkdir -p "$bundle_dir/oasis7-linux-x64-ops-tools/bin"
@@ -139,9 +139,9 @@ PATH="$TMP_DIR/fake-bin:$PATH" \
   --node-root "$unsafe_node" \
   --package-deb "$bundle_dir/oasis7-linux-x64.deb" \
   --ops-tools-tar "$unsafe_ops_tar" \
-  --package-version 0.0.0+unsafe-test \
+  --package-version 0.0.0+order-test \
   --commit abcdef1234567890abcdef1234567890abcdef12 \
-  --run-id 3191-unsafe \
+  --run-id 3191-order \
   >"$TMP_DIR/unsafe.out" 2>&1
 unsafe_status=$?
 set -e
@@ -149,6 +149,29 @@ test "$unsafe_status" -ne 0
 grep -q 'non-regular member' "$TMP_DIR/unsafe.out"
 test "$(readlink "$unsafe_node/current")" = "$unsafe_node/releases/old"
 test ! -e "$unsafe_node/releases/0.0.0+unsafe-test"
+
+# A package extraction containing a symlink must fail before any bundle hash,
+# ops-tool copy, release promotion, or service-manager call.
+unsafe_deb_node="$TMP_DIR/unsafe-deb-node"
+make_node_fixture "$unsafe_deb_node"
+ln -s "$TMP_DIR" "$bundle_dir/oasis7-linux-x64.deb.root/opt/oasis7/unsafe-link"
+set +e
+PATH="$TMP_DIR/fake-bin:$PATH" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$unsafe_deb_node" \
+  --package-deb "$bundle_dir/oasis7-linux-x64.deb" \
+  --ops-tools-tar "$bundle_dir/oasis7-linux-x64-ops-tools.tar.gz" \
+  --package-version 0.0.0+order-test \
+  --commit abcdef1234567890abcdef1234567890abcdef12 \
+  --run-id 3191-order \
+  >"$TMP_DIR/unsafe-deb.out" 2>&1
+unsafe_deb_status=$?
+set -e
+rm "$bundle_dir/oasis7-linux-x64.deb.root/opt/oasis7/unsafe-link"
+test "$unsafe_deb_status" -ne 0
+grep -q 'symlink' "$TMP_DIR/unsafe-deb.out"
+test ! -e "$unsafe_deb_node/releases/0.0.0+order-test"
+test ! -e "$unsafe_deb_node/package-upgrade-rollback"
 
 # RED 1: a service stop must only happen after a durable transaction snapshot
 # exists.  The current upgrader calls systemctl stop before create_transaction_snapshot.

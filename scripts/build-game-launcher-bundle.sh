@@ -30,7 +30,8 @@ Build a distributable launcher bundle:
 
 Options:
   --out-dir <path>       output directory (default: output/release/game-launcher-<timestamp>)
-  --ops-out-dir <path>   optional output directory for operator repair/governance tools
+  --ops-out-dir <path>   optional output directory for operator repair/governance tools;
+                         omitted by default from the player bundle
   --profile <name>       cargo profile: packaging|dev (default: packaging)
   --target-triple <id>   rust target triple (default: native)
   --web-dist <path>      use existing prebuilt viewer web dist instead of trunk build
@@ -250,7 +251,10 @@ BUNDLE_WEB_LAUNCHER_DIR="$OUT_DIR/web-launcher"
 if [[ -n "$OPS_OUT_DIR" ]]; then
   OPS_BIN_DIR="$OPS_OUT_DIR/bin"
 else
-  OPS_BIN_DIR="$BUNDLE_BIN_DIR"
+  # The default output is the player/runtime bundle. Operator repair and
+  # governance tools are intentionally omitted unless an explicit ops output
+  # directory is requested by the release packaging path.
+  OPS_BIN_DIR=""
 fi
 
 run mkdir -p "$BUNDLE_BIN_DIR" "$BUNDLE_WEB_DIR" "$BUNDLE_WEB_LAUNCHER_DIR"
@@ -305,9 +309,11 @@ replace_file "$WEB_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$WEB_LAUNCHER_BIN_NAME"
 replace_file "$LIVE_SRC" "$BUNDLE_BIN_DIR/$LIVE_BIN_NAME"
 replace_file "$CHAIN_SRC" "$BUNDLE_BIN_DIR/$CHAIN_BIN_NAME"
 replace_file "$CLIENT_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$CLIENT_LAUNCHER_BIN_NAME"
-replace_file "$WORLD_REPAIR_REBUILD_SRC" "$OPS_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
-replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
-replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  replace_file "$WORLD_REPAIR_REBUILD_SRC" "$OPS_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
+  replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
+  replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
+fi
 
 # 2) Prepare viewer web dist (viewer canonical static bundle, with software_safe compat alias).
 if [[ -n "$WEB_DIST_SOURCE" ]]; then

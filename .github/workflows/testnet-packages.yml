@@ -294,7 +294,8 @@ jobs:
             oasis7-windows-x64.exe \
             windows-x64-BUILDINFO \
             windows-x64-bundle-manifest.json \
-            windows-x64-entrypoint-validation.log; do
+            windows-x64-entrypoint-validation.log \
+            oasis7-windows-x64-ops-tools.tar.gz; do
             mv "${assets}/${file}" "${closure}/${file}"
           done
       - name: Generate checksums
@@ -335,12 +336,18 @@ jobs:
         run: |
           set -euo pipefail
           cd output/testnet-packages/assets
+          if [[ "${{ matrix.platform }}" == "windows-x64" ]]; then
+            cd windows-governed-closure
+          fi
           archive="oasis7-${{ matrix.platform }}-ops-tools.tar.gz"
           [[ -f "${archive}" ]] || { echo "error: missing ops-tools archive ${archive}" >&2; exit 1; }
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "${archive}" > "${{ matrix.platform }}-ops-tools-SHA256SUMS"
           else
             shasum -a 256 "${archive}" > "${{ matrix.platform }}-ops-tools-SHA256SUMS"
+          fi
+          if [[ "${{ matrix.platform }}" == "windows-x64" ]]; then
+            cp "${{ matrix.platform }}-ops-tools-SHA256SUMS" ../
           fi
       - name: Upload testnet package artifacts
         uses: actions/upload-artifact@v7

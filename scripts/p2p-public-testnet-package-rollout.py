@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -60,7 +61,11 @@ def sha256_file(path: Path) -> str:
 
 
 def verify_sha256sums(package_dir: Path, sums_path: Path) -> list[str]:
+    package_root = package_dir.resolve()
+    if sums_path.is_symlink() or not sums_path.is_file():
+        die(f"checksum manifest must be a regular non-symlink file: {sums_path}")
     verified: list[str] = []
+    seen: set[str] = set()
     for raw in sums_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
@@ -71,20 +76,38 @@ def verify_sha256sums(package_dir: Path, sums_path: Path) -> list[str]:
             if len(parts) != 2:
                 die(f"cannot parse checksum line in {sums_path}: {raw}")
             expected, name = parts
-        rel_name = name.lstrip("*")
-        target = package_dir / rel_name
-        if not target.is_file():
+        expected = expected.strip()
+        rel_name = name.lstrip("*").strip()
+        relative = PurePosixPath(rel_name.replace("\\", "/"))
+        if (
+            not re.fullmatch(r"[0-9a-fA-F]{64}", expected)
+            or not rel_name
+            or relative.is_absolute()
+            or any(part in ("", ".", "..") for part in relative.parts)
+        ):
+            die(f"checksum manifest contains unsafe entry in {sums_path}: {raw}")
+        target = package_root.joinpath(*relative.parts)
+        try:
+            target.resolve().relative_to(package_root)
+        except ValueError:
+            die(f"checksum target escapes package directory: {rel_name}")
+        if target.is_symlink() or not target.is_file() or not stat.S_ISREG(target.lstat().st_mode):
             die(f"checksum target missing: {target}")
         actual = sha256_file(target)
         if actual.lower() != expected.lower():
             die(f"checksum mismatch for {target}: expected {expected}, got {actual}")
+        if rel_name in seen:
+            die(f"checksum manifest contains duplicate entry: {rel_name}")
+        seen.add(rel_name)
         verified.append(rel_name)
+    if not verified:
+        die(f"checksum manifest is empty: {sums_path}")
     return verified
 
 
 def find_platform_dir(package_dir: Path, platform: str) -> Path:
     buildinfo = package_dir / f"{platform}-BUILDINFO"
-    if buildinfo.is_file():
+    if not buildinfo.is_symlink() and buildinfo.is_file() and stat.S_ISREG(buildinfo.lstat().st_mode):
         return package_dir
     for candidate in package_dir.rglob("*"):
         if not candidate.is_symlink():
@@ -111,7 +134,7 @@ def platform_asset(platform_dir: Path, platform: str) -> Path:
     if not name:
         die(f"unsupported platform: {platform}")
     asset = platform_dir / name
-    if not asset.is_file():
+    if asset.is_symlink() or not asset.is_file() or not stat.S_ISREG(asset.lstat().st_mode):
         die(f"missing {platform} asset: {asset}")
     return asset
 
@@ -129,7 +152,7 @@ def require_verified_files(platform: str, platform_dir: Path, buildinfo: Path, a
 
 def platform_ops_tools_asset(platform_dir: Path, platform: str) -> Path:
     asset = platform_dir / f"oasis7-{platform}-ops-tools.tar.gz"
-    if not asset.is_file():
+    if asset.is_symlink() or not asset.is_file() or not stat.S_ISREG(asset.lstat().st_mode):
         die(f"missing {platform} ops-tools asset: {asset}")
     return asset
 
@@ -137,7 +160,7 @@ def platform_ops_tools_asset(platform_dir: Path, platform: str) -> Path:
 def verify_ops_tools_contract(platform_dir: Path, platform: str) -> Path:
     asset = platform_ops_tools_asset(platform_dir, platform)
     sums = platform_dir / f"{platform}-ops-tools-SHA256SUMS"
-    if not sums.is_file():
+    if sums.is_symlink() or not sums.is_file() or not stat.S_ISREG(sums.lstat().st_mode):
         die(f"missing {platform} ops-tools checksum file: {sums}")
     verified = verify_sha256sums(platform_dir, sums)
     relative = asset.relative_to(platform_dir).as_posix()
@@ -345,6 +368,29 @@ def verify_package_trust(
     verified_files: dict[str, list[str]] = {}
     for platform in platforms:
         platform_dir = find_platform_dir(package_dir, platform)
+        platform_root = platform_dir.resolve()
+        if platform_dir.is_symlink() or not platform_dir.is_dir():
+            die(f"{platform} package directory must be a regular non-symlink directory: {platform_dir}")
+        for current, directories, files in os.walk(platform_dir, followlinks=False):
+            current_path = Path(current)
+            try:
+                current_path.resolve().relative_to(platform_root)
+            except ValueError:
+                die(f"{platform} package tree escapes its platform directory: {current_path}")
+            for name in directories + files:
+                path = current_path / name
+                if path.is_symlink():
+                    die(f"{platform} package tree contains symlink: {path}")
+                try:
+                    mode = path.lstat().st_mode
+                except OSError as error:
+                    die(f"cannot inspect {platform} package member {path}: {error}")
+                if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+                    die(f"{platform} package tree contains non-regular member: {path}")
+                try:
+                    path.resolve().relative_to(platform_root)
+                except ValueError:
+                    die(f"{platform} package member escapes its platform directory: {path}")
         buildinfo = platform_dir / f"{platform}-BUILDINFO"
         sums = platform_dir / f"{platform}-SHA256SUMS"
         if not sums.is_file():
@@ -352,7 +398,13 @@ def verify_package_trust(
         verified = verify_sha256sums(platform_dir, sums)
         asset = platform_asset(platform_dir, platform)
         require_verified_files(platform, platform_dir, buildinfo, asset, verified)
-        verify_ops_tools_contract(platform_dir, platform)
+        ops_asset = verify_ops_tools_contract(platform_dir, platform)
+        ops_relative = ops_asset.relative_to(platform_dir).as_posix()
+        if ops_relative not in set(verified):
+            die(
+                f"{platform} package checksum file does not cover its co-located ops-tools artifact: "
+                f"{ops_relative}"
+            )
         info = read_buildinfo(buildinfo)
         if platform == "macos-arm64":
             require_macos_arm64_metadata(info)

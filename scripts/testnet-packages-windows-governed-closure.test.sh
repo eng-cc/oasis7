@@ -40,6 +40,7 @@ for required_source in (
     "public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt",
     "generated-world",
     "doc/testing/evidence",
+    "oasis7-windows-x64-ops-tools.tar.gz",
 ):
     assert required_source in stage, (
         "Windows governed deployment closure stage omits required source: "
@@ -55,6 +56,14 @@ assert re.search(
     checksums,
 ), (
     "windows-x64-SHA256SUMS must recursively cover every governed evidence/world sidecar/provenance file"
+)
+
+ops_checksums = step_body("Generate ops package checksum")
+assert "windows-governed-closure" in ops_checksums, (
+    "Windows ops-tools checksum must be generated inside the governed package closure"
+)
+assert 'cp "${{ matrix.platform }}-ops-tools-SHA256SUMS" ../' in ops_checksums, (
+    "Windows ops-tools checksum sidecar must remain discoverable at the artifact root"
 )
 
 upload = step_body("Upload testnet package artifacts")

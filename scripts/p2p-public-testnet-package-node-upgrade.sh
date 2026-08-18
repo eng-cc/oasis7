@@ -42,6 +42,17 @@ safe_ops_tools_extract() {
     || die "cannot safely extract ops-tools archive"
 }
 
+safe_deb_extract() {
+  local package=$1 destination=$2
+  command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the Debian package"
+  dpkg-deb --extract "$package" "$destination" \
+    || die "cannot extract Debian package"
+  # No package member is hashed, copied, or executed until this complete
+  # physical-tree pass has rejected symlinks, special files, and path escapes.
+  python3 "$SCRIPT_DIR/p2p-safe-validate-deb-tree.py" "$destination" "opt/oasis7" \
+    || die "extracted Debian package failed the symlink/non-regular/path containment checks"
+}
+
 require_non_empty() {
   local flag=$1
   local value=$2
@@ -808,9 +819,15 @@ mkdir -p "$node_root/releases"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"
 command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the Debian package"
-dpkg-deb --extract "$package_deb" "$tmp_dir/deb-root"
+safe_deb_extract "$package_deb" "$tmp_dir/deb-root"
 bundle_root="$tmp_dir/deb-root/opt/oasis7"
 [[ -d "$bundle_root" ]] || die "Debian package missing /opt/oasis7 player bundle: $package_deb"
+# BUILDINFO and SHA256SUMS are embedded in the Debian payload.  Bind all three
+# CLI provenance fields before any ops-tool copy, transaction snapshot, or
+# deployment metadata write can occur.
+python3 "$SCRIPT_DIR/p2p-verify-linux-package-bundle.py" \
+  "$bundle_root" "$package_version" "$commit" "$run_id" \
+  || die "embedded Debian BUILDINFO/SHA256SUMS provenance verification failed"
 safe_ops_tools_extract "$ops_tools_tar" "$tmp_dir"
 ops_bundle_root="$tmp_dir/oasis7-linux-x64-ops-tools"
 [[ -f "$ops_bundle_root/.oasis7-ops-tools-manifest.json" ]] || die "ops-tools archive missing manifest"

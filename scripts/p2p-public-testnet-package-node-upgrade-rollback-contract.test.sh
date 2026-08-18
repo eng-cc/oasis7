@@ -28,6 +28,16 @@ make_bundle() {
   mkdir -p "$root/oasis7-linux-x64.deb.root/opt/oasis7/bin"
   printf 'runtime-new\n' >"$root/oasis7-linux-x64.deb.root/opt/oasis7/bin/oasis7_chain_runtime"
   chmod +x "$root/oasis7-linux-x64.deb.root/opt/oasis7/bin/oasis7_chain_runtime"
+  cat >"$root/oasis7-linux-x64.deb.root/opt/oasis7/BUILDINFO" <<'EOF'
+commit=abcdef1234567890abcdef1234567890abcdef12
+package_version=0.0.0+rollback-contract
+run_id=3191-rollback-contract
+platform=linux-x64
+EOF
+  (
+    cd "$root/oasis7-linux-x64.deb.root/opt/oasis7"
+    shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS
+  )
   printf 'deb-placeholder\n' >"$root/oasis7-linux-x64.deb"
   mkdir -p "$root/oasis7-linux-x64-ops-tools/bin"
   for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
