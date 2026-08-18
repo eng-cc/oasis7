@@ -11741,7 +11741,7 @@ function WorldFeedPanel(props) {
           var _el$15 = _tmpl$7$5();
           insert(_el$15, (() => {
             var _c$ = memo(() => status() === "loading");
-            return () => _c$() ? tr2(locale(), "正在等待 world_feed/v1 响应…", "Waiting for a world_feed/v1 response…") : memo(() => status() === "empty")() ? tr2(locale(), "权威运行时暂未发布事件。", "The authoritative runtime has not published events yet.") : memo(() => status() === "unavailable")() ? tr2(locale(), "重试 World Feed 以检查最新环境动态。", "Retry World Feed to check for the latest ambient activity.") : tr2(locale(), "没有可显示的环境事件。", "No ambient events are available to display.");
+            return () => _c$() ? tr2(locale(), "正在等待 world_feed/v1 响应…", "Waiting for a world_feed/v1 response…") : memo(() => status() === "empty")() ? tr2(locale(), "权威运行时尚未发布世界更新中的事件。此动态仅作上下文；请继续当前玩家目标，下一次权威世界更新后动态会刷新。", "No authoritative world update has published events yet. This feed is context only—continue your Player goal; the feed will update after the next authoritative world update.") : memo(() => status() === "unavailable")() ? tr2(locale(), "重试 World Feed 以检查最新环境动态。", "Retry World Feed to check for the latest ambient activity.") : tr2(locale(), "没有可显示的环境事件。", "No ambient events are available to display.");
           })());
           return _el$15;
         })();

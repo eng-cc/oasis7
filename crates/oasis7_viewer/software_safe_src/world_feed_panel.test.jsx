@@ -63,6 +63,21 @@ describe("WorldFeedPanel", () => {
     expect(screen.queryByRole("button", { name: /reload authoritative snapshot/i })).not.toBeInTheDocument();
   });
 
+  it("explains why an empty feed is expected and names the next authoritative signal", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({ status: "empty", events: [] })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    expect(screen.getByText("No world activity yet")).toBeInTheDocument();
+    expect(screen.getByText(
+      "No authoritative world update has published events yet. This feed is context only—continue your Player goal; the feed will update after the next authoritative world update.",
+    )).toBeInTheDocument();
+  });
+
   it("renders events as ambient context and links only explicit receipt refs", () => {
     render(() => (
       <WorldFeedPanel
