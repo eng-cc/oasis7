@@ -83,7 +83,7 @@
 | `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` | `doc/world-simulator/llm/provider-agent-dual-mode-contract.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | GitHub Issue / Project evidence |
+| `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`（`PRD-WORLD_SIMULATOR-047`） | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | GitHub Issue / Project evidence；上层产品映射 `doc/product/world-rules-core-gameplay/prd.md` SC-21 |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/scenario/chunked-fragment-generation.prd.md` | `doc/world-simulator/scenario/chunked-fragment-generation.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/scenario/scenario-files.prd.md` | `doc/world-simulator/scenario/scenario-files.design.md` | GitHub Issue / Project evidence |
