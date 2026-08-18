@@ -627,6 +627,18 @@ pub(super) fn process_discovered_peer_record(
     Ok(())
 }
 
+pub(super) fn peer_record_matches_target(
+    record: &SignedPeerRecord,
+    requested_peer_id: PeerId,
+) -> bool {
+    record
+        .record
+        .peer_id
+        .parse::<PeerId>()
+        .map(|record_peer_id| record_peer_id == requested_peer_id)
+        .unwrap_or(false)
+}
+
 pub(super) fn handle_request_response_request(
     request: &NetworkRequest,
     handlers: &HashMap<String, HandlerRegistration>,
@@ -793,7 +805,17 @@ pub(super) fn handle_peer_record_response(
     }
     match decode_optional_peer_record_response(payload) {
         Ok(Some(record)) => {
-            if let Err(err) = process_discovered_peer_record(
+            if !peer_record_matches_target(&record, requested_peer_id) {
+                push_bounded_clone(
+                    event_errors,
+                    format!(
+                        "libp2p peer record response target mismatch requested={requested_peer_id} actual={}",
+                        record.record.peer_id
+                    ),
+                    max_error_messages,
+                    "lock errors",
+                );
+            } else if let Err(err) = process_discovered_peer_record(
                 swarm,
                 discovered_peer_records,
                 known_transport_paths,
@@ -891,6 +913,17 @@ pub(super) fn handle_peer_record_outbound_failure(
     match kind {
         PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
             connected_peer_record_cooldowns.remove(&peer_id);
+            cached_peer_record_cooldowns.remove(&peer_id);
+            let _ = maybe_request_cached_peer_record(
+                swarm,
+                pending_peer_record_requests,
+                pending_cached_peer_records,
+                cached_peer_record_cooldowns,
+                traffic_metrics,
+                connected_peers,
+                peer_id,
+                local_peer_id,
+            );
         }
         PendingPeerRecordRequest::CachedPeerRecord {
             peer_id,

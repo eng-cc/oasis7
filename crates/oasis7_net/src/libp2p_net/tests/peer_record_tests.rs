@@ -348,6 +348,7 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
     let payload = to_canonical_cbor(&signed).expect("encode peer record");
     let key = dht_peer_record_key("world-a", signed.record.peer_id.as_str());
     let mut pending = PendingDhtQuery::GetPeerRecord {
+        peer_id: PeerId::from(keypair.public()),
         response: None,
         record: None,
         error: None,
@@ -366,4 +367,42 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
         panic!("unexpected query state");
     };
     assert_eq!(record, Some(signed));
+}
+
+#[test]
+fn dht_get_peer_record_rejects_signed_record_for_requested_target_mismatch() {
+    let wrong_keypair = Keypair::generate_ed25519();
+    let wrong_peer_id = PeerId::from(wrong_keypair.public());
+    let requested_peer_id = PeerId::random();
+    assert_ne!(wrong_peer_id, requested_peer_id);
+    let signed = super::signed_discovery_peer_record(
+        &wrong_keypair,
+        vec![crate::dht::PeerDiscoverySource::Dht],
+        77,
+    );
+    let payload = to_canonical_cbor(&signed).expect("encode peer record");
+    let key = dht_peer_record_key("world-a", requested_peer_id.to_string().as_str());
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut pending = PendingDhtQuery::GetPeerRecord {
+        peer_id: requested_peer_id,
+        response: Some(sender),
+        record: None,
+        error: None,
+    };
+    let result = kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(kad::PeerRecord {
+        peer: None,
+        record: kad::Record {
+            key: RecordKey::new(&key),
+            value: payload,
+            publisher: None,
+            expires: None,
+        },
+    })));
+    handle_dht_progress(&mut pending, result, true);
+    let response = receiver.recv().expect("command response");
+    assert!(response.is_err(), "mismatched record must fail closed");
+    let PendingDhtQuery::GetPeerRecord { record, .. } = pending else {
+        panic!("unexpected query state");
+    };
+    assert!(record.is_none(), "mismatched record must not be returned");
 }

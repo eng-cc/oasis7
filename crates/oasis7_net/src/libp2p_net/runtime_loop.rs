@@ -188,6 +188,7 @@ pub(super) enum Command {
     },
     GetPeerRecord {
         key: String,
+        peer_id: PeerId,
         response: CommandResponseSender<Option<SignedPeerRecord>>,
     },
     RefreshPeerDiscovery,
@@ -1029,16 +1030,16 @@ pub(super) fn handle_command(
             }
             CommandOutcome::Continue
         }
-        Some(Command::GetPeerRecord { key, response }) => {
+        Some(Command::GetPeerRecord {
+            key,
+            peer_id,
+            response,
+        }) => {
             let dht_key = RecordKey::new(&key);
             let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
             pending_dht.insert(
                 query_id,
-                PendingDhtQuery::GetPeerRecord {
-                    response: Some(response),
-                    record: None,
-                    error: None,
-                },
+                PendingDhtQuery::get_peer_record(peer_id, response),
             );
             CommandOutcome::Continue
         }
