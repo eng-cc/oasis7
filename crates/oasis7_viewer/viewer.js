@@ -4605,8 +4605,8 @@ function consumeWorldFeed(previous, feed) {
     unavailableReason,
     snapshotReloadRequired
   } = envelope;
-  const requiresSnapshotReload = snapshotReloadRequired || status === "gap" || status === "unavailable";
-  const stale = requiresSnapshotReload || status === "gap";
+  const requiresSnapshotReload = snapshotReloadRequired || status === "gap";
+  const stale = requiresSnapshotReload || status === "gap" || status === "unavailable";
   if (status === "gap") {
     return {
       state: {

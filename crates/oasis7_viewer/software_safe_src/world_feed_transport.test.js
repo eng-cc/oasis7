@@ -125,4 +125,28 @@ describe("World Feed transport", () => {
     expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
       .toBeGreaterThan(snapshotRequestsBeforeGap);
   });
+
+  it("does not request a snapshot loop for source unavailable", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed());
+    const snapshotsBeforeUnavailable = sentMessages.filter((message) => message.type === "request_snapshot").length;
+
+    sockets[0].receive(readyFeed({
+      status: "unavailable",
+      unavailable_reason: "source_unavailable",
+      snapshot_reload_required: false,
+      events: [],
+    }));
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "unavailable",
+      stale: true,
+      snapshotReloadRequired: false,
+    });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot")).toHaveLength(snapshotsBeforeUnavailable);
+  });
 });

@@ -193,8 +193,11 @@ export function consumeWorldFeed(previous, feed) {
     unavailableReason,
     snapshotReloadRequired,
   } = envelope;
-  const requiresSnapshotReload = snapshotReloadRequired || status === "gap" || status === "unavailable";
-  const stale = requiresSnapshotReload || status === "gap";
+  // The runtime contract reserves snapshot reload for continuity gaps. A
+  // source/schema/permission outage is unavailable, but reloading a snapshot
+  // cannot repair it and must not start a recovery loop.
+  const requiresSnapshotReload = snapshotReloadRequired || status === "gap";
+  const stale = requiresSnapshotReload || status === "gap" || status === "unavailable";
   if (status === "gap") {
     return {
       state: {

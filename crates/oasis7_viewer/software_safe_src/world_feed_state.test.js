@@ -59,6 +59,12 @@ describe("World Feed v1 state", () => {
     expect(replay.state.dedupedCount).toBe(2);
   });
 
+  it("accepts the initial runtime epoch zero", () => {
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({ reorg_epoch: 0 }));
+    expect(consumed.state).toMatchObject({ status: "ready", reorgEpoch: "0" });
+    expect(consumed.requiresSnapshotReload).toBe(false);
+  });
+
   it("stores an ascending exact decimal u64 sequence and deduplicates beyond MAX_SAFE_INTEGER", () => {
     const initial = createInitialWorldFeedState();
     const first = consumeWorldFeed(initial, feed({
@@ -112,5 +118,20 @@ describe("World Feed v1 state", () => {
     expect(invalid.state.status).toBe("unavailable");
     expect(invalid.state.unavailableReason).toBe("source_unavailable");
     expect(invalid.state.events).toEqual([]);
+  });
+
+  it("keeps unavailable distinct from a continuity gap", () => {
+    const unavailable = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      status: "unavailable",
+      unavailable_reason: "source_unavailable",
+      snapshot_reload_required: false,
+      events: [],
+    }));
+    expect(unavailable.state).toMatchObject({
+      status: "unavailable",
+      stale: true,
+      snapshotReloadRequired: false,
+    });
+    expect(unavailable.requiresSnapshotReload).toBe(false);
   });
 });
