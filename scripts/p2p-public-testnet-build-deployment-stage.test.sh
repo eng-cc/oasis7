@@ -129,6 +129,39 @@ grep -q 'triad-testnet-fourth-local' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map sidecar: `generated-world/generated-scenario-world`' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map provenance: `generated-world/world-generation-provenance.json`' "$TMP_DIR/stage/deployment-truth.md"
 
+# Optional pair provenance is absent in the first invocation above and must be
+# forwarded/validated when explicitly supplied in this second invocation.
+mkdir -p "$TMP_DIR/pair-package"
+cp "$TMP_DIR/oasis7_chain_runtime" "$TMP_DIR/pair-package/oasis7_chain_runtime"
+printf 'run_id=3218\ncommit=%s\npackage_version=0.0.0+testnet.261\n' \
+  0123456789abcdef0123456789abcdef01234567 >"$TMP_DIR/pair-package/BUILDINFO"
+pair_runtime_sha=$(shasum -a 256 "$TMP_DIR/pair-package/oasis7_chain_runtime" | awk '{print $1}')
+printf '%s  oasis7_chain_runtime\n' "$pair_runtime_sha" >"$TMP_DIR/pair-package/SHA256SUMS"
+python3 "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-provenance.py" create \
+  --package-dir "$TMP_DIR/pair-package" \
+  --manifest "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  --genesis "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json" \
+  --registry "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  --bootstrap "$TMP_DIR/bootstrap-peers.txt" \
+  --world "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json" \
+  --network-id oasis7-public-testnet-governed-20260606 \
+  --chain-id oasis7-public-testnet-governed-20260606 \
+  --output "$TMP_DIR/pair-provenance.json" \
+  --signer-id testnet-package-attestor \
+  --signature-ref fixture://signature \
+  --verified-signature >/dev/null
+
+"$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --validator-pair-provenance-ref "$TMP_DIR/pair-provenance.json" \
+  --out-dir "$TMP_DIR/stage-with-provenance" >/dev/null
+jq -e '.validator_pair_provenance.sha256 != null' \
+  "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
+grep -q 'Validator pair provenance:' "$TMP_DIR/stage-with-provenance/deployment-truth.md"
+
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \

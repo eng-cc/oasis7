@@ -25,6 +25,8 @@ Create options:
   --world-generation-provenance-ref <path>
                                       Generated map provenance path/ref
   --governance-manifest-ref <path>   Governance manifest path/ref (required)
+  --validator-pair-provenance-ref <path>
+                                      Signed package/world/node provenance receipt
   --evidence-ref <path>              Evidence path/ref; repeatable
   --note <text>                      Free-form note; repeatable
   --allow-dirty-worktree             Allow create on dirty git worktree
@@ -65,6 +67,7 @@ world_snapshot_ref=""
 generated_world_sidecar_ref=""
 world_generation_provenance_ref=""
 governance_manifest_ref=""
+validator_pair_provenance_ref=""
 allow_dirty_worktree=0
 check_git_head=0
 check_clean_worktree=0
@@ -103,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --governance-manifest-ref)
       governance_manifest_ref=${2:-}
+      shift 2
+      ;;
+    --validator-pair-provenance-ref)
+      validator_pair_provenance_ref=${2:-}
       shift 2
       ;;
     --evidence-ref)
@@ -390,6 +397,27 @@ for label in ("generated_world_sidecar", "world_generation_provenance"):
     if label in bundle:
         check_ref(label, bundle[label])
 
+pair_provenance = bundle.get("validator_pair_provenance")
+if pair_provenance is not None:
+    check_ref("validator_pair_provenance", pair_provenance)
+    provenance_path = pathlib.Path(pair_provenance["resolved_path"])
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"validator_pair_provenance unreadable: {error}")
+    if provenance.get("schema_version") != "oasis7.validator_pair_rebuild_provenance.v1":
+        raise SystemExit("validator_pair_provenance schema mismatch")
+    signature = provenance.get("signature")
+    if not isinstance(signature, dict) or signature.get("status") != "verified":
+        raise SystemExit("validator_pair_provenance requires a verified signature")
+    binding = provenance.get("binding_digest")
+    body = {key: value for key, value in provenance.items() if key != "binding_digest"}
+    actual_binding = hashlib.sha256(
+        json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if binding != actual_binding:
+        raise SystemExit("validator_pair_provenance binding_digest mismatch")
+
 for index, item in enumerate(bundle.get("evidence_refs", []), start=1):
     if "ref" not in item or "resolved_path" not in item:
         raise SystemExit(f"evidence_refs[{index}] missing ref or resolved_path")
@@ -453,6 +481,11 @@ case "$mode" in
       world_generation_provenance_meta=$(path_metadata_json "$world_generation_provenance_ref")
     fi
     governance_manifest_meta=$(path_metadata_json "$governance_manifest_ref")
+    validator_pair_provenance_meta="null"
+    if [[ -n "$validator_pair_provenance_ref" ]]; then
+      ensure_existing_path "--validator-pair-provenance-ref" "$validator_pair_provenance_ref"
+      validator_pair_provenance_meta=$(path_metadata_json "$validator_pair_provenance_ref")
+    fi
 
     evidence_json="[]"
     if [[ "${#evidence_refs[@]}" -gt 0 ]]; then
@@ -482,6 +515,7 @@ case "$mode" in
       --argjson generated_world_sidecar "$generated_world_sidecar_meta" \
       --argjson world_generation_provenance "$world_generation_provenance_meta" \
       --argjson governance_manifest "$governance_manifest_meta" \
+      --argjson validator_pair_provenance "$validator_pair_provenance_meta" \
       --argjson evidence_refs "$evidence_json" \
       --argjson notes "$notes_json" \
       '{
@@ -497,6 +531,7 @@ case "$mode" in
         generated_world_sidecar: $generated_world_sidecar,
         world_generation_provenance: $world_generation_provenance,
         governance_manifest: $governance_manifest,
+        validator_pair_provenance: $validator_pair_provenance,
         evidence_refs: $evidence_refs,
         notes: $notes
       } | with_entries(select(.value != null))' >"$bundle_path"

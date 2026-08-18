@@ -1,0 +1,86 @@
+{
+  "schema_version": "oasis7.validator_pair_rebuild_evidence.v1",
+  "task_id": "",
+  "transaction_ref": "",
+  "transaction_schema": "oasis7.validator_pair_rebuild_transaction.v1",
+  "package": {
+    "run_id": "",
+    "commit": "",
+    "package_version": "",
+    "runtime_sha256": "",
+    "runtime_size_bytes": 0,
+    "buildinfo_sha256": "",
+    "sha256sums_sha256": ""
+  },
+  "network": {
+    "network_id": "",
+    "chain_id": "",
+    "manifest_sha256": "",
+    "genesis_sha256": "",
+    "registry_sha256": "",
+    "bootstrap_sha256": "",
+    "world_sha256_tree": ""
+  },
+  "consumer_impact": {
+    "decision": "proceed",
+    "record_ref": "",
+    "outage_window": "",
+    "validators_already_stopped": false
+  },
+  "capacity": {
+    "storage-205": {
+      "free_bytes": 0,
+      "free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "same_filesystem": false,
+      "verified": false
+    },
+    "sequencer-204": {
+      "free_bytes": 0,
+      "free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "same_filesystem": false,
+      "verified": false
+    }
+  },
+  "mutation_order": ["storage-205", "sequencer-204"],
+  "startup_order": ["sequencer-204", "storage-205"],
+  "nodes": {
+    "storage-205": {
+      "backup_manifest_ref": "",
+      "backup_manifest_sha256": "",
+      "backup_verified": false,
+      "healthz": "",
+      "nrestarts": 0,
+      "oom_panic_or_segfault": false
+    },
+    "sequencer-204": {
+      "backup_manifest_ref": "",
+      "backup_manifest_sha256": "",
+      "backup_verified": false,
+      "bounded_proof_endpoint": "",
+      "full_chain_status_called": false,
+      "healthz": "",
+      "nrestarts": 0,
+      "oom_panic_or_segfault": false
+    }
+  },
+  "rollback": {
+    "strategy": "same-filesystem-full-snapshot",
+    "receipt_ref": "",
+    "verified": false
+  },
+  "observer_gate": {
+    "status": "hold",
+    "receipt_ref": "",
+    "required_before_observer_mutation": true
+  },
+  "signing": {
+    "status": "pending",
+    "signer_id": "",
+    "signature_ref": ""
+  },
+  "canonical_digest": ""
+}

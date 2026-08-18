@@ -384,6 +384,30 @@ fn handle_chain_status_connection(
             write_json_response(&mut stream, 200, b"{\"ok\":true}", head_only)
                 .map_err(|err| format!("failed to write /healthz response: {err}"))?;
         }
+        "/v1/chain/rebuild-proof" | "/v1/chain/rebuild-status" => {
+            let snapshot = runtime
+                .lock()
+                .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())?
+                .snapshot();
+            let network = replication_network.debug_snapshot();
+            let checkpoint =
+                super::execution_bridge::load_latest_execution_checkpoint_status_evidence(
+                    execution_records_dir,
+                )
+                .ok()
+                .flatten();
+            let payload = super::rebuild_status::build_rebuild_status_with_manifest(
+                snapshot,
+                network,
+                checkpoint,
+                now_unix_ms(),
+                loaded_network_tier_manifest,
+            );
+            let body = serde_json::to_vec_pretty(&payload)
+                .map_err(|err| format!("failed to encode rebuild proof payload: {err}"))?;
+            write_json_response(&mut stream, 200, body.as_slice(), head_only)
+                .map_err(|err| format!("failed to write rebuild proof response: {err}"))?;
+        }
         "/v1/chain/status" => {
             let (mut snapshot, udp_gossip_traffic) = runtime
                 .lock()

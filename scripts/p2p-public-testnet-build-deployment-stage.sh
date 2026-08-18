@@ -11,6 +11,7 @@ Usage:
     --storage-finality-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
+    [--validator-pair-provenance-ref <path>] \
     [--track public_testnet_rehearsal|staging|canary]
 
   ./scripts/p2p-public-testnet-build-deployment-stage.sh \
@@ -20,6 +21,7 @@ Usage:
     --storage-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
+    [--validator-pair-provenance-ref <path>] \
     [--track public_testnet_rehearsal|staging|canary]
 
 Description:
@@ -69,6 +71,7 @@ sequencer_public_key=""
 storage_public_key=""
 extra_validators=()
 out_dir=""
+validator_pair_provenance_ref=""
 
 base_genesis="doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
 base_manifest="doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
@@ -108,6 +111,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       out_dir=${2:-}
+      shift 2
+      ;;
+    --validator-pair-provenance-ref)
+      validator_pair_provenance_ref=${2:-}
       shift 2
       ;;
     --base-genesis)
@@ -159,6 +166,9 @@ require_file "$runtime_build_ref"
 require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  require_file "$validator_pair_provenance_ref"
+fi
 
 is_hex_32() {
   [[ "$1" =~ ^[0-9a-fA-F]{64}$ ]]
@@ -398,18 +408,33 @@ content = f"""# Deployment Truth
 path.write_text(content, encoding="utf-8")
 PY
 
-./scripts/release-candidate-bundle.sh create \
-  --bundle "$bundle_path" \
-  --candidate-id "$candidate_id" \
-  --track "$track" \
-  --runtime-build-ref "$runtime_build_ref" \
-  --world-snapshot-ref "$out_dir/generated-world/world" \
-  --generated-world-sidecar-ref "$out_dir/generated-world/generated-scenario-world" \
-  --world-generation-provenance-ref "$out_dir/generated-world/world-generation-provenance.json" \
-  --governance-manifest-ref "$registry_path" \
-  --evidence-ref "$deployment_truth_md" \
-  --note "Deployment-only bundle derived from current validator signer truth." \
-  --allow-dirty-worktree >/dev/null
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  provenance_copy="$out_dir/config/doc/testing/evidence/$(basename "$validator_pair_provenance_ref")"
+  if [[ "$(cd "$(dirname "$validator_pair_provenance_ref")" && pwd)/$(basename "$validator_pair_provenance_ref")" != "$provenance_copy" ]]; then
+    cp "$validator_pair_provenance_ref" "$provenance_copy"
+  fi
+  printf '%s\n' "- Validator pair provenance: \`$validator_pair_provenance_ref\`" >>"$deployment_truth_md"
+fi
+
+release_candidate_args=(
+  create
+  --bundle "$bundle_path"
+  --candidate-id "$candidate_id"
+  --track "$track"
+  --runtime-build-ref "$runtime_build_ref"
+  --world-snapshot-ref "$out_dir/generated-world/world"
+  --generated-world-sidecar-ref "$out_dir/generated-world/generated-scenario-world"
+  --world-generation-provenance-ref "$out_dir/generated-world/world-generation-provenance.json"
+  --governance-manifest-ref "$registry_path"
+  --evidence-ref "$deployment_truth_md"
+  --note "Deployment-only bundle derived from current validator signer truth."
+  --allow-dirty-worktree
+)
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  release_candidate_args+=(--validator-pair-provenance-ref "$validator_pair_provenance_ref")
+fi
+
+./scripts/release-candidate-bundle.sh "${release_candidate_args[@]}" >/dev/null
 cp "$bundle_path" "$out_dir/config/doc/testing/evidence/"
 
 ./scripts/release-candidate-bundle.sh validate --bundle "$bundle_path" >/dev/null

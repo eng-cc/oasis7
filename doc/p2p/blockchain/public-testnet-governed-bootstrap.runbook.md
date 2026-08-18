@@ -318,13 +318,43 @@ Next it boots out the original target. If bootout fails, it ensures the untouche
 
 Any post-promotion failure first preserves the failed active state under the attempt root for evidence. Rollback then replaces every active state path with its stopped pre-upgrade snapshot, restores runtime/config/`CURRENT_VERSION`/`DEPLOYED_BUILDINFO`, bootstraps the original domain, and verifies health. Rollback is idempotent and the attempt root is retained; EXIT cleanup only detaches and removes the explicit DMG mountpoint. During the bounded 120-second startup window, `network_head_available=false` and `consensus_peer_head_unavailable` are transient unready signals: the script keeps retrying, and persistent absence ends in `rollback "readiness_timeout"` without `state_sync_escalation_required=true`. Explicit `state_sync_fallback_required=true`, `authority_failure`, and `execution_driver_peer_mismatch` remain fatal authority signals; the status classifier scans the full alert array and fatal status error fields so a transient alert cannot mask a later fatal signal. An authority failure always rolls back and emits `state_sync_escalation_required=true`, even when failed-state capture or rollback itself cannot complete. It is not permission to restart repeatedly or to use validator data copying as recovery.
 
-The script validates package identity but does not add a signing/notarization requirement; release policy remains the authority if it already supplies one.
+The legacy package-upgrade script validates package identity but does not add a
+signing/notarization requirement. The canonical pair transaction below adds a
+verified detached provenance receipt; release policy remains the authority for
+any additional signing requirements.
 
 ## 9. Phase C - Clean Rebuild Validators
 ### Goal
 从零重建 validator pair。
 
 本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight，且不得在只 reset 一台 validator 后向任一 host staging。
+
+### C0.5 Canonical pair transaction (task #3318)
+
+新的受治理入口是 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 阶段不得建立 SSH、调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
+
+```bash
+python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
+  --package-dir <verified-package-dir> \
+  --provenance <verified-pair-provenance.json> \
+  --consumer-impact-record <record.json> \
+  --capacity-json <per-node-capacity.json> \
+  --node storage-205=local:<stopped-node-root-205> \
+  --node sequencer-204=local:<stopped-node-root-204> \
+  --sequencer-proof-url <bounded-proof-endpoint> \
+  --out-dir <transaction-dir>
+python3 scripts/p2p-public-testnet-validator-pair-rebuild.py apply \
+  --transaction <transaction-dir>/transaction.json
+```
+
+The transaction is fail-closed and records a complete stopped-state backup
+manifest before mutation. Mutation order is always `storage-205` then
+`sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
+Any failed identity, capacity, health, restart, OOM, panic or segfault gate
+must invoke the recorded same-filesystem snapshot rollback and retain the
+receipt. The pair executor never mutates an observer. A sequencer/204 proof
+must use a bounded endpoint; calling full `/v1/chain/status` on 204 is
+forbidden in this contract.
 
 ### C0. Consumer-impact record (hard gate)
 
@@ -393,23 +423,11 @@ reset 两台 validator 完成后，才把以下内容放到两台 host：
 - bootstrap peers
 - deployment-only bootstrap world
 
-建议直接使用标准重建脚本，而不是临时拼接远程命令。该脚本已经处理了一个真实踩过的流程坑：不能把同一条 tar 流连续喂给两个远端 `tar -xf -`，否则第二次解包只会读到 EOF 并报 `This does not look like a tar archive`。脚本会先把 world 解到 `staged-world/`，再在远端复制到 `data/execution-world/`：
-
-```bash
-./scripts/p2p-public-testnet-rebuild-validators.sh \
-  --config-dir .tmp/public-testnet-ci-rebuild-stage/config \
-  --world-dir .tmp/public-testnet-ci-rebuild-stage/generated-world-from-rotated-signers/world \
-  --consumer-impact-record .tmp/public-testnet-consumer-impact.json \
-  --sequencer-ssh-host root@39.104.204.172 \
-  --sequencer-sshpass-env PUBLIC_TESTNET_SEQUENCER_SSHPASS \
-  --sequencer-service oasis7-triad-sequencer.service \
-  --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
-  --storage-ssh-host root@39.104.205.67 \
-  --storage-sshpass-env PUBLIC_TESTNET_STORAGE_SSHPASS \
-  --storage-service oasis7-triad-storage.service \
-  --storage-status-url http://39.104.205.67:6632/v1/chain/status \
-  --out-dir .tmp/public-testnet-validator-rebuild
-```
+建议直接使用上面的 canonical pair transaction，而不是临时拼接远程命令。旧的
+`p2p-public-testnet-rebuild-validators.sh` 仍可用于历史审计，但不属于本
+contract：它的 sequencer 参数要求完整 `/v1/chain/status`，因此不得用于本轮
+204 rebuild。canonical executor 会先把 world/config 绑定写入每台节点的受治理
+staging，再依照显式 mutation/startup order 记录 receipt。
 
 两台 host 的 package、config 和 deployment-only world staging 都成功后，才进入启动步骤。
 
@@ -465,7 +483,10 @@ trap cleanup_upload_dir EXIT
 对两台 validator 分别检查：
 
 ```bash
-curl -s http://127.0.0.1:6631/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers,local_peer_id:.replication.local_peer_id}'
+# 204/sequencer: use healthz plus the runtime's bounded proof endpoint;
+# never request the full /v1/chain/status payload in the pair transaction.
+curl -s http://127.0.0.1:6631/healthz | jq '{ok,ready,running,last_error}'
+curl -s <sequencer-204-bounded-proof-endpoint> | jq '{schema_version,identity,committed_height,execution_height,signature}'
 curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers,local_peer_id:.replication.local_peer_id}'
 ```
 

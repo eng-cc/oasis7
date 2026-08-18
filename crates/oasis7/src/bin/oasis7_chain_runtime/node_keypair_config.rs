@@ -18,6 +18,71 @@ pub(super) struct NodeKeypairConfig {
 
 pub(super) const PROVISIONED_NODE_KEYPAIR_FILE: &str = "node-keypair.toml";
 
+/// Read an already provisioned identity without creating, repairing, or
+/// rewriting any file. Missing or weakly protected identities fail closed.
+pub(super) fn read_existing_node_keypair_in_secure_config_dir(
+    config_dir: &Path,
+) -> Result<(NodeKeypairConfig, PathBuf), String> {
+    if !config_dir.is_absolute() {
+        return Err("--config-dir must be an absolute path".to_string());
+    }
+    reject_symlink_path_components(config_dir)?;
+    let metadata = fs::metadata(config_dir).map_err(|err| {
+        format!(
+            "read config directory {} failed: {err}",
+            config_dir.display()
+        )
+    })?;
+    if !metadata.is_dir() {
+        return Err(format!(
+            "config directory {} is not a directory",
+            config_dir.display()
+        ));
+    }
+    require_exact_mode(config_dir, 0o700, "config directory")?;
+    let key_path = config_dir.join(PROVISIONED_NODE_KEYPAIR_FILE);
+    let metadata = fs::symlink_metadata(&key_path).map_err(|err| {
+        format!(
+            "read existing key config {} failed: {err}",
+            key_path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!(
+            "key config path {} must be a regular file",
+            key_path.display()
+        ));
+    }
+    require_exact_mode(&key_path, 0o600, "key config")?;
+    validate_complete_keypair_config(&key_path)?;
+    let table = load_config_table(&key_path)?;
+    let node = table
+        .get(NODE_TABLE_KEY)
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("key config {} missing [node] table", key_path.display()))?;
+    let private_key_hex = node
+        .get(NODE_PRIVATE_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("key config {} missing private key", key_path.display()))?
+        .to_string();
+    let public_key_hex = node
+        .get(NODE_PUBLIC_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("key config {} missing public key", key_path.display()))?
+        .to_string();
+    Ok((
+        NodeKeypairConfig {
+            private_key_hex,
+            public_key_hex,
+        },
+        key_path,
+    ))
+}
+
 /// Ensures the dedicated bootstrap key file exists without accepting a partial,
 /// redirected, or weakly protected pre-existing identity.
 pub(super) fn ensure_node_keypair_in_secure_config_dir(
