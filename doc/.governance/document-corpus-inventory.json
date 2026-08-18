@@ -581,7 +581,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-top-level-design.prd.md",
-      "content_sha256": "7e873768a00127d0ccecbab361d3f7f649436366099bce484ad072d5840f4165",
+      "content_sha256": "3b84de8f1e3fccbe59f6d3d7bf6d22e57eea1c16572ce3b07c36f726d59919b4",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -1967,7 +1967,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-      "content_sha256": "c22dfb3f284ec41b1481ffec5a48764ff5252babb5b164b50b610642d297b34f",
+      "content_sha256": "e62e60add1158a405c11988a29e0d1f513239a460cb6a48d652af54300770125",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1981,7 +1981,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md",
-      "content_sha256": "533d7b378c8d8d84fa56680f142e7e4af054bc5f9a63ecb5bb3aef1bb768d89b",
+      "content_sha256": "5838af0a6a531fcc65c65e5a4eab977f040082b6a9d4c3216ef19356dc415d78",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2079,7 +2079,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-learning-intelligence-and-cadence.prd.md",
-      "content_sha256": "b435bd53cfaf27c6011cc9783ce6e69524683d1d6d2b7aa0b1a44c460e99d5f9",
+      "content_sha256": "8315d81b380b3296a0902e8d4370cef0ec54aaf2c539de9a8900784f86e3927b",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2317,7 +2317,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md",
-      "content_sha256": "ff8cd12d1a1885565be115559b281be37fc5b499ea3913de060ab2398e91190a",
+      "content_sha256": "03f1985a58e5be06832e1a12ebd01883c616ff86f31491e86b87e55c5926ec75",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2457,7 +2457,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "b69499fa64c2453632e0a6ec9b2fdaaf6b8155b4de237ffdc5529cc83e891f78",
+      "content_sha256": "406e651905989f34bed1d98c78129c7659e93836f30c05335782bb0b502caf75",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
