@@ -121,7 +121,18 @@ case "${1:-}" in
     if [[ "$*" == *"-i wasmtime"* || "$*" == *"-i oasis7_wasm_executor"* ]]; then
       exit 1
     fi
-    printf 'fake-package\nfake-dependency\n'
+    case "${FAKE_CARGO_TREE_FIXTURE:-none}" in
+      all)
+        printf 'fake-package\nfake-dependency\nwasmtime v99.0.0\noasis7_wasm_executor v0.1.0\n'
+        ;;
+      none)
+        printf 'fake-package\nfake-dependency\n'
+        ;;
+      *)
+        echo "unexpected dependency-tree fixture: ${FAKE_CARGO_TREE_FIXTURE}" >&2
+        exit 1
+        ;;
+    esac
     ;;
   fetch|check)
     ;;
@@ -160,6 +171,7 @@ FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/cargo-target.log" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_CARGO_TREE_FIXTURE=all \
 PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
@@ -176,11 +188,13 @@ metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 summary = Path(sys.argv[3]).read_text(encoding="utf-8")
 expected_commit_oid = sys.argv[4]
-assert metrics["package_count"] == 2
+assert metrics["package_count"] == 4
 assert metrics["commit_oid"] == expected_commit_oid
 assert metrics["binary"] is None
 assert metrics["check_only"] is True
 assert metrics["no_default_features"] is True
+assert metrics["wasmtime_present"] is True
+assert metrics["wasm_executor_present"] is True
 assert metrics["cargo_build_release_seconds"] is None
 assert metrics["release_binary_bytes"] is None
 assert comparison["metric_rows"] == []
@@ -220,12 +234,23 @@ FAKE_CARGO_LOG="$tmp_dir/baseline-cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/baseline-cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_CARGO_TREE_FIXTURE=none \
 CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
     --out-dir "$baseline_out_dir" \
     --check-only \
     --baseline-ref HEAD
+
+python3 - "$baseline_out_dir/baseline.metrics.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert metrics["wasmtime_present"] is False
+assert metrics["wasm_executor_present"] is False
+PY
 
 python3 - "$tmp_dir/baseline-cargo-home.log" "$baseline_cargo_home" "$tmp_dir/baseline-cargo-target.log" <<'PY'
 from pathlib import Path
