@@ -50,15 +50,62 @@
 
 ### 2.2 Current operator inventory
 
-| node_id | role | host / lane | stack root | service manager | status endpoint |
+| node_id | role | host / lane | stack root | service manager | bounded evidence endpoint |
 | --- | --- | --- | --- | --- | --- |
-| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/status` |
+| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + `identity-receipt` |
 | `triad-testnet-storage` | validator / storage | `root@39.104.205.67` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-storage.service` | `http://127.0.0.1:6632/v1/chain/status` |
 | `triad-testnet-local` | observer | Linux LAN observer | `/opt/oasis7/p2p-testnet-local` | `oasis7-testnet-observer.service` | `http://127.0.0.1:6633/v1/chain/status` |
 | `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
 | `triad-testnet-fourth-local` | observer | macOS local observer | `$OASIS7_TESTNET_FOURTH_ROOT` | launchd `oasis7.testnet.fourth` | `http://127.0.0.1:19083/v1/chain/status` |
 
+The 204/sequencer row is intentionally not a full-status contract. Governed
+rebuild, rollout, and fleet evidence must use the signed
+`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` together
+with the read-only `oasis7.identity_receipt.v1` output. A 204
+`/v1/chain/status` request is forbidden in this runbook; it may only be used
+under a separately recorded local diagnostic exception that is not deployment
+or readiness evidence.
+
 Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
+
+### 2.2.1 Bounded 204 proof and identity contract
+
+The only 204 evidence accepted by this runbook is the pair below, captured in
+the same operator window:
+
+1. `/v1/chain/rebuild-proof` returns `oasis7.rebuild_status.v1` with the
+   bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,
+   `liveness`, `readiness`, `heights`, `network_head`, `checkpoint`,
+   `local_peer_id`, `connected_peers`, `connected_peer_count`, and `proof`.
+2. `identity-receipt` returns `oasis7.identity_receipt.v1` with only
+   `node_id`, derived `peer_id`, key path, key SHA-256, size, mode, uid, and
+   gid. It never emits private key bytes and never creates or repairs the key.
+
+The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
+`signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and
+`signature_hex`. Before a proof is projected into any legacy capture shape,
+the consumer must run an independent verifier over the complete response
+claims. The deployed runtime provides that bounded verifier:
+
+```bash
+<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
+  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
+  --trusted-signer-id <sequencer-node-id> \
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key>
+```
+
+The verifier rejects an unsupported schema, oversized/malformed document,
+digest or Ed25519 signature mismatch, and any signer-id/public-key mismatch.
+`<deployment-truth-rebuild-proof-signer-key>` is an allowlisted public key
+from the governed deployment registry/provenance, derived by the exact
+release contract for `<sequencer-node-id>-feedback-submit`; it must never be
+copied from the proof being verified. The expected signer id is the node id
+bound by deployment truth. The identity receipt is then checked separately
+against the same deployment truth for `peer_id`, root key SHA-256, mode, uid,
+and gid. A valid signature without this trust-root/allowlist binding is not
+readiness evidence and must fail closed. This envelope is a node-signed
+bounded status receipt, not validator-quorum finality or a replacement for
+`WorldHeadProofV1`.
 
 ### 2.3 Stack roots and deprecated bootstrap dirs
 
@@ -204,6 +251,11 @@ curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
 ssh root@39.104.204.172 \
   '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
   > .tmp/public-testnet-sequencer-204-identity-receipt.json
+<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
+  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
+  --trusted-signer-id <sequencer-node-id> \
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 jq '{node_id:.proof.signer_id,
     replication:{local_peer_id:.local_peer_id},
     consensus:{committed_height:.heights.committed_height,
@@ -297,7 +349,7 @@ manifest/bootstrap peer truth 刷新应写回 deployment artifact，例如：
 
 ```bash
 curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof | jq -r '.local_peer_id'
-curl -fsS http://39.104.205.67:6632/v1/chain/status | jq -r '.replication.local_peer_id'
+curl -fsS http://39.104.205.67:6632/v1/chain/rebuild-proof | jq -r '.replication.local_peer_id // .local_peer_id'
 $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
 ```
 
@@ -349,7 +401,7 @@ any additional signing requirements.
 
 本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight，且不得在只 reset 一台 validator 后向任一 host staging。
 
-### C0.5 Canonical pair transaction (task #3318)
+### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
 新的受治理入口是 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 阶段不得建立 SSH、调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
 
@@ -357,6 +409,9 @@ any additional signing requirements.
 python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
   --package-dir <verified-package-dir> \
   --provenance <verified-pair-provenance.json> \
+  --trust-root <governed-provenance-trust-root.json> \
+  --identity-receipts <validator-identity-receipts.json> \
+  --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
   --consumer-impact-record <record.json> \
   --capacity-json <per-node-capacity.json> \
   --node storage-205=local:<stopped-node-root-205> \
@@ -368,14 +423,22 @@ python3 scripts/p2p-public-testnet-validator-pair-rebuild.py apply \
   --host-adapter <governed-host-adapter>
 ```
 
-The transaction is fail-closed and records a complete stopped-state backup
+The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`); runtime
+transaction IDs and timestamps are assigned only after the plan is durably
+journaled. The transaction is fail-closed and records a complete stopped-state backup
 manifest before mutation. Mutation order is always `storage-205` then
 `sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
-The host adapter is mandatory: it must return one transaction-bound JSON receipt
+The host adapter is mandatory and phase-based: it must acknowledge `quiesce`,
+`backup`, `apply`, and `rollback` callbacks. Local restore is allowed only after
+the rollback callback proves services are quiesced; a failed callback or restore
+is durably recorded as `rollback_failed`. It must return one transaction-bound JSON receipt
 covering explicit active/running state, bounded healthz, role-specific listener identity
 (`6632/6832` for storage-205 and `6631/6831` for sequencer-204), `NRestarts=0`,
 no OOM/panic/segfault, exact package runtime hash/size, and the 204
-`full_chain_status_called=false` gate. Without that receipt the local executor
+`full_chain_status_called=false` gate. The receipt must consume cryptographically
+verified identity receipts and the signed 204 rebuild proof under the governed
+trust-root allowlist; host self-report alone is not evidence. The observer gate
+remains `hold` until provider closure is independently verified. Without that receipt the local executor
 must not mark the transaction `applied`.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate
 must invoke the recorded same-filesystem snapshot rollback and retain the
@@ -515,10 +578,11 @@ trap cleanup_upload_dir EXIT
 curl -s http://127.0.0.1:6631/healthz | jq '{ok,ready,running,last_error}'
 curl -fsS <sequencer-204-bounded-proof-endpoint> |
   jq '{schema_version,observed_at_unix_ms,ok,liveness,readiness,heights,network_head,checkpoint,local_peer_id,connected_peers,connected_peer_count,proof}'
-# The nested proof is an independently verifiable oasis7.rebuild_proof.v1
-# envelope (signer_id, signer_public_key_hex, signed_payload_sha256,
-# signature_hex). The governed consumer must verify its Ed25519 signature and
-# digest over the canonical bounded response claims before accepting it.
+# Save the complete response, run the deployed runtime verifier from section
+# 2.2.1 with the governed signer allowlist, and retain its
+# oasis7.rebuild_proof_verification.v1 receipt beside the response. Do not
+# accept a jq projection, an identity receipt, or the proof's self-declared
+# public key as the trust root.
 curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers,local_peer_id:.replication.local_peer_id}'
 ```
 
@@ -646,20 +710,31 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 8. `readiness.failed_gates`
 9. `consensus.network_head.decision`
 
-在作出 `Fleet healthy` 或 recovery update 结论前，使用 collector 生成唯一的 bounded same-window artifact；它会逐节点记录 UTC capture timestamp、全局 UTC start/finish timestamp 和 capture span，并在 span、head、readiness、failed gate、last error 或 network-head decision 不满足时 fail closed：
+在作出 `Fleet healthy` 或 recovery update 结论前，必须保留一个
+bounded same-window artifact。204 的输入先按 2.2.1 采集、独立验证并
+保留 proof/identity receipts：
 
 ```bash
-./scripts/p2p-public-testnet-fleet-health.py \
-  --managed-five-node \
-  --sequencer sequencer \
-  --node sequencer=http://39.104.204.172:6631/v1/chain/status \
-  --node storage=http://39.104.205.67:6632/v1/chain/status \
-  --node linux-lan-observer=http://<linux-lan-observer>:6633/v1/chain/status \
-  --node windows-observer=http://<windows-observer>:5121/v1/chain/status \
-  --node macos-observer=http://127.0.0.1:19083/v1/chain/status \
-  --max-capture-span-seconds 30 \
-  --output .tmp/public-testnet-fleet-health.json
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof.json
+ssh root@39.104.204.172 \
+  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
+  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
+  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
+  --trusted-signer-id <sequencer-node-id> \
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 ```
+
+The existing `p2p-public-testnet-fleet-health.py` collector is status-shaped
+and has no signed-proof input. Do not pass it a 204 `/v1/chain/status` URL or
+silently feed an unverified jq projection under the `sequencer` name. Until a
+proof-aware collector adapter is separately approved, its
+`--managed-five-node` closure must remain blocked after the independently
+verified 204 receipts are retained; storage and observer status samples may
+still be collected for non-204 diagnostics. A blocked collector is safer than
+claiming same-window fleet health from an unauthenticated 204 payload.
 
 `--managed-five-node` is mandatory for this deployment closure. It fail-closes unless the supplied identities are exactly `sequencer` (ECS 204 provider), `storage` (ECS 205 provider), `linux-lan-observer`, `windows-observer`, and `macos-observer`, once each. The collector without that flag remains only for explicitly non-closure diagnostics and cannot be used for a `Fleet healthy` or recovery conclusion.
 
@@ -745,10 +820,14 @@ Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
 ### Preflight
 For current five-node fleet preflight, first load each managed node's real env/deploy metadata and use its actual status bind. The legacy `.tmp/testnet-*-bootstrap/node.env` paths below are only valid when intentionally rebuilding those bootstrap staging directories.
 
+Complete the Phase A 204 proof, identity receipt, and independent verifier
+steps first. The preflight consumes the resulting bounded projection file;
+`--sequencer-status-url` must not point at the 204 full-status endpoint.
+
 ```bash
 ./scripts/p2p-public-testnet-preflight.sh \
   --bundle doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json \
-  --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
+  --sequencer-status-json .tmp/public-testnet-sequencer-204-capture.json \
   --sequencer-ip 39.104.204.172 \
   --sequencer-port 6831 \
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
@@ -780,25 +859,40 @@ rollback runtime 优先从唯一的 `backup-manifest.json` 或 `backup-provenanc
 
 ### Validator status
 ```bash
-ssh root@39.104.204.172 'curl -s http://127.0.0.1:6631/v1/chain/status'
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof.json
+ssh root@39.104.204.172 \
+  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
+  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
+  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
+  --trusted-signer-id <sequencer-node-id> \
+  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key>
 ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status'
 ```
 
 ### Current five-node status
 ```bash
-ssh root@39.104.204.172 'curl -fsS http://127.0.0.1:6631/v1/chain/status'
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof
 ssh root@39.104.205.67 'curl -fsS http://127.0.0.1:6632/v1/chain/status'
 ssh <linux-lan-observer> 'curl -fsS http://127.0.0.1:6633/v1/chain/status'
 ssh <windows-observer> 'powershell -NoProfile -Command "Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status | ConvertTo-Json -Compress -Depth 8"'
 curl -fsS http://127.0.0.1:19083/v1/chain/status
 ```
 
-For each output, record `CURRENT_VERSION`, runtime hash or artifact lineage, `running`, `last_error`, `readiness.status`, `readiness.failed_gates`, `consensus.committed_height`, `consensus.network_committed_height`, `consensus.last_execution_height`, and `consensus.network_head.decision`.
+For the 204 proof, record `schema_version`, `running`, `last_error`,
+`readiness.status`, `readiness.failed_gates`, the three fields under
+`heights`, `network_head.decision`, `checkpoint`, `local_peer_id`, and the
+`oasis7.rebuild_proof_verification.v1` receipt. Record the separate identity
+receipt's `peer_id`, key SHA-256, size, mode, uid, and gid. For storage and
+observers, record `CURRENT_VERSION`, runtime hash or artifact lineage,
+`running`, `last_error`, `readiness.status`, `readiness.failed_gates`, the
+consensus heights, and `consensus.network_head.decision`.
 
 ### Peer id truth
 ```bash
-curl -fsS http://39.104.204.172:6631/v1/chain/status | jq -r '.replication.local_peer_id'
-curl -fsS http://39.104.205.67:6632/v1/chain/status | jq -r '.replication.local_peer_id'
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof | jq -r '.local_peer_id'
+curl -fsS http://39.104.205.67:6632/v1/chain/rebuild-proof | jq -r '.replication.local_peer_id // .local_peer_id'
 cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
 ```
 

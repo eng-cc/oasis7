@@ -22,6 +22,8 @@ from typing import Any, NoReturn
 
 
 SCHEMA = "oasis7.validator_pair_rebuild_provenance.v1"
+TRUST_ROOT_SCHEMA = "oasis7.validator_pair_provenance_trust_root.v1"
+REQUIRED_GOVERNED_KEYS = {"manifest", "genesis", "registry", "bootstrap", "world"}
 HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 HEX40 = re.compile(r"^[0-9a-fA-F]{40}$")
 
@@ -138,6 +140,42 @@ def canonical_without_digest(payload: dict[str, Any]) -> bytes:
     return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def canonical_without_root_digest(payload: dict[str, Any]) -> bytes:
+    body = {key: value for key, value in payload.items() if key != "root_digest"}
+    return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def load_trust_root(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        die(f"trust root must be a regular file: {path}")
+    try:
+        root = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        die(f"cannot read trust root: {error}")
+    if not isinstance(root, dict) or root.get("schema_version") != TRUST_ROOT_SCHEMA:
+        die("unsupported trust root schema")
+    root_digest = root.get("root_digest")
+    if not isinstance(root_digest, str) or not HEX64.fullmatch(root_digest):
+        die("trust root root_digest must be 64-hex")
+    actual_digest = hashlib.sha256(canonical_without_root_digest(root)).hexdigest()
+    if root_digest.lower() != actual_digest:
+        die("trust root digest mismatch")
+    allowlist = root.get("allowlist")
+    if not isinstance(allowlist, list) or not allowlist:
+        die("trust root allowlist is required")
+    normalized: list[dict[str, str]] = []
+    for entry in allowlist:
+        if not isinstance(entry, dict):
+            die("trust root allowlist entry must be an object")
+        signer_id = entry.get("signer_id")
+        algorithm = entry.get("algorithm")
+        key_sha = entry.get("public_key_sha256")
+        if not isinstance(signer_id, str) or not signer_id.strip() or not isinstance(algorithm, str) or not algorithm.strip() or not isinstance(key_sha, str) or not HEX64.fullmatch(key_sha):
+            die("trust root allowlist entry is malformed")
+        normalized.append({"signer_id": signer_id, "algorithm": algorithm, "public_key_sha256": key_sha.lower()})
+    return {"schema_version": TRUST_ROOT_SCHEMA, "path": str(path.resolve()), "allowlist": normalized, "root_digest": root_digest.lower()}
+
+
 def receipt_file(receipt_path: Path, raw_path: Any, field: str) -> Path:
     if not isinstance(raw_path, str) or not raw_path.strip():
         die(f"signature.{field} must be a file path")
@@ -145,8 +183,17 @@ def receipt_file(receipt_path: Path, raw_path: Any, field: str) -> Path:
     if not path.is_absolute():
         path = receipt_path.parent / path
     elif not path.exists():
+        closure = receipt_path.with_name(receipt_path.name + ".closure.json")
+        if closure.is_file():
+            try:
+                mapping = json.loads(closure.read_text(encoding="utf-8")).get("mapping", {})
+            except (OSError, json.JSONDecodeError):
+                mapping = {}
+            mapped = mapping.get(str(raw_path))
+            if isinstance(mapped, str):
+                path = receipt_path.parent / mapped
         staged_fallback = receipt_path.parent / path.name
-        if staged_fallback.exists():
+        if not path.exists() and staged_fallback.exists():
             path = staged_fallback
     if path.is_symlink() or not path.is_file():
         die(f"signature.{field} missing or symlinked: {path}")
@@ -188,7 +235,7 @@ def verify_detached_signature(receipt_path: Path, receipt: dict[str, Any], signa
         die("detached signature verification failed")
 
 
-def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
+def validate_receipt(receipt_path: Path, package_dir: Path, trust_root_path: Path | None = None) -> dict[str, Any]:
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -210,6 +257,15 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
     if digest.lower() != actual_digest:
         die("binding_digest mismatch")
     verify_detached_signature(receipt_path, receipt, signature)
+    trust_root = load_trust_root(trust_root_path) if trust_root_path is not None else None
+    if trust_root is not None:
+        candidate = {
+            "signer_id": signature["signer_id"],
+            "algorithm": signature["algorithm"],
+            "public_key_sha256": str(signature.get("public_key_sha256", "")).lower(),
+        }
+        if candidate not in trust_root["allowlist"]:
+            die("signature signer is not in the governed trusted signer allowlist")
 
     package = receipt.get("package")
     if not isinstance(package, dict):
@@ -236,6 +292,10 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
     governed = receipt.get("governed")
     if not isinstance(governed, dict):
         die("governed binding is required")
+    if set(governed) != REQUIRED_GOVERNED_KEYS:
+        missing = sorted(REQUIRED_GOVERNED_KEYS - set(governed))
+        extra = sorted(set(governed) - REQUIRED_GOVERNED_KEYS)
+        die(f"governed keys must be exact; missing={missing} extra={extra}")
     for key, value in governed.items():
         if not isinstance(value, dict) or not isinstance(value.get("path"), str):
             die(f"governed.{key} is malformed")
@@ -243,8 +303,18 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
         if not path.is_absolute():
             path = receipt_path.parent / path
         elif not path.exists():
+            closure = receipt_path.with_name(receipt_path.name + ".closure.json")
+            mapping: dict[str, Any] = {}
+            if closure.is_file():
+                try:
+                    mapping = json.loads(closure.read_text(encoding="utf-8")).get("mapping", {})
+                except (OSError, json.JSONDecodeError):
+                    mapping = {}
+            mapped = mapping.get(value["path"])
+            if isinstance(mapped, str):
+                path = receipt_path.parent / mapped
             staged_fallback = receipt_path.parent / path.name
-            if staged_fallback.exists():
+            if not path.exists() and staged_fallback.exists():
                 path = staged_fallback
         actual = metadata(path, allow_directory=value.get("kind") == "directory")
         expected_sha = value.get("sha256") or value.get("sha256_tree")
@@ -259,6 +329,7 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
         "signature": {"signer_id": signature["signer_id"], "algorithm": signature["algorithm"]},
         "network_id": receipt["network_id"],
         "chain_id": receipt["chain_id"],
+        "trusted_root": trust_root,
     }
 
 
@@ -335,6 +406,7 @@ def parser() -> argparse.ArgumentParser:
     validate_parser = sub.add_parser("validate")
     validate_parser.add_argument("--provenance", required=True)
     validate_parser.add_argument("--package-dir", required=True)
+    validate_parser.add_argument("--trust-root")
     return root
 
 
@@ -342,7 +414,11 @@ def main() -> int:
     args = parser().parse_args()
     if args.mode == "create":
         return create(args)
-    summary = validate_receipt(Path(args.provenance).resolve(), Path(args.package_dir).resolve())
+    summary = validate_receipt(
+        Path(args.provenance).resolve(),
+        Path(args.package_dir).resolve(),
+        Path(args.trust_root).resolve() if args.trust_root else None,
+    )
     print(json.dumps(summary, ensure_ascii=True, sort_keys=True))
     return 0
 

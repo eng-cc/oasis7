@@ -1,9 +1,13 @@
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot, ReplicationNetworkDebugSnapshot};
 
 use super::execution_bridge::ExecutionCheckpointStatusEvidence;
 use super::feedback_submit_api::FeedbackSubmitSigner;
 use super::rebuild_status::{
     RebuildStatusResponse, build_rebuild_status_with_signer, verify_rebuild_proof,
+    verify_rebuild_proof_file,
 };
 
 #[test]
@@ -160,6 +164,55 @@ fn rebuild_status_accepts_retained_checkpoint_below_current_execution_head() {
         Some(42)
     );
     verify_rebuild_proof(&response).expect("retained-boundary proof verifies");
+}
+
+#[test]
+fn rebuild_proof_file_verifier_binds_expected_signer_and_public_key() {
+    let response =
+        build_rebuild_status_with_signer(snapshot(), network(), None, 1_000, None, &signer())
+            .expect("bounded proof response");
+    let path = temp_proof_path();
+    fs::write(
+        &path,
+        serde_json::to_vec(&response).expect("serialize proof response"),
+    )
+    .expect("write proof response");
+    verify_rebuild_proof_file(
+        &path,
+        response.proof.signer_id.as_str(),
+        response.proof.signer_public_key_hex.as_str(),
+    )
+    .expect("trusted proof file verifies");
+    let err = verify_rebuild_proof_file(
+        &path,
+        "unexpected-signer",
+        response.proof.signer_public_key_hex.as_str(),
+    )
+    .expect_err("unexpected signer must fail closed");
+    assert!(err.contains("trusted signer id mismatch"), "{err}");
+    let mut tampered = serde_json::to_value(&response).expect("serialize tampered proof");
+    tampered["proof"]["signature_hex"] = serde_json::Value::String("00".repeat(64));
+    fs::write(
+        &path,
+        serde_json::to_vec(&tampered).expect("serialize tampered proof value"),
+    )
+    .expect("write tampered proof");
+    let err = verify_rebuild_proof_file(
+        &path,
+        response.proof.signer_id.as_str(),
+        response.proof.signer_public_key_hex.as_str(),
+    )
+    .expect_err("tampered signature must fail closed");
+    assert!(err.contains("signature verification failed"), "{err}");
+    let _ = fs::remove_file(path);
+}
+
+fn temp_proof_path() -> std::path::PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("oasis7-rebuild-proof-{nonce}.json"))
 }
 
 fn snapshot() -> NodeSnapshot {

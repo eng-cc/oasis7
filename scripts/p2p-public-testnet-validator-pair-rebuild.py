@@ -23,12 +23,14 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
 from typing import Any, NoReturn
 
 
+PLAN_SCHEMA = "oasis7.validator_pair_rebuild_plan.v1"
 SCHEMA = "oasis7.validator_pair_rebuild_transaction.v1"
 MUTATION_ORDER = ["storage-205", "sequencer-204"]
 STARTUP_ORDER = ["sequencer-204", "storage-205"]
@@ -98,7 +100,7 @@ def path_kind(path: Path) -> str:
 
 
 def hash_tree(path: Path) -> tuple[str, int, int]:
-    """Hash a tree without following symlinks and return digest, bytes, files."""
+    """Hash a tree without following symlinks and count every inode entry."""
     digest = hashlib.sha256()
     total = 0
     count = 0
@@ -113,7 +115,16 @@ def hash_tree(path: Path) -> tuple[str, int, int]:
     for child in sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix()):
         rel = child.relative_to(path).as_posix()
         if child.is_symlink():
-            fail(f"governed tree contains symlink: {child}")
+            target = os.readlink(child)
+            digest.update(rel.encode("utf-8"))
+            digest.update(b"\0L\0")
+            digest.update(target.encode("utf-8"))
+            digest.update(b"\n")
+            count += 1
+        elif child.is_dir():
+            # Directory entries consume inodes even when empty.  Do not add
+            # them to the digest so governed-world file digests stay compatible.
+            count += 1
         elif child.is_file():
             child_sha = sha256_file(child)
             size = child.stat().st_size
@@ -220,6 +231,34 @@ def parse_node(raw: str) -> tuple[str, str, Path]:
     if not root.is_dir():
         fail(f"node root does not exist: {root}")
     return role, "local", root
+
+
+def validate_current_link(root: Path, role: str) -> None:
+    """Allow only the canonical root/current -> releases/<version> link."""
+    current = root / "current"
+    if not current.is_symlink():
+        return
+    target = os.readlink(current)
+    if os.path.isabs(target):
+        fail(f"{role} current symlink must be relative and canonical")
+    resolved = (current.parent / target).resolve()
+    releases_path = root / "releases"
+    if releases_path.is_symlink() or not releases_path.is_dir():
+        fail(f"{role} releases root must be a real directory")
+    releases = releases_path.resolve()
+    try:
+        resolved.relative_to(releases)
+    except ValueError:
+        fail(f"{role} current symlink escapes releases: {current} -> {target}")
+    if not resolved.is_dir():
+        fail(f"{role} current symlink target is not a release directory: {resolved}")
+
+
+def validate_node_symlinks(root: Path, role: str) -> None:
+    validate_current_link(root, role)
+    for item in root.rglob("*"):
+        if item.is_symlink() and item.relative_to(root).as_posix() != "current":
+            fail(f"{role} node root contains an unauthorized symlink: {item}")
 
 
 def parse_nodes(raw_nodes: list[str]) -> dict[str, dict[str, Any]]:
@@ -333,12 +372,118 @@ def reject_full_status(url: str | None, label: str) -> None:
         fail(f"204 {label} must use a bounded proof endpoint; full /v1/chain/status is forbidden")
 
 
+def attestation_body(value: dict[str, Any]) -> bytes:
+    body = {key: item for key, item in value.items() if key not in {"signature_ref", "public_key_ref"}}
+    return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+
+
+def verify_signed_attestation(path: Path, trusted_root: dict[str, Any], label: str, expected_role: str | None = None) -> dict[str, Any]:
+    value = load_json(path, label)
+    if value.get("schema_version") not in {"oasis7.validator_identity_receipt.v1", "oasis7.validator_pair_rebuild_proof.v1"}:
+        fail(f"{label} has unsupported schema")
+    if expected_role is not None and value.get("role") != expected_role:
+        fail(f"{label} role binding mismatch")
+    if value.get("trust_root_digest") != trusted_root.get("root_digest"):
+        fail(f"{label} trust-root binding mismatch")
+    signature_ref = value.get("signature_ref")
+    public_key_ref = value.get("public_key_ref")
+    signer_id = value.get("signer_id")
+    algorithm = value.get("algorithm")
+    if not all(isinstance(item, str) and item.strip() for item in (signature_ref, public_key_ref, signer_id, algorithm)):
+        fail(f"{label} signed identity fields are required")
+    signature_path = Path(signature_ref)
+    public_key_path = Path(public_key_ref)
+    if signature_path.is_symlink() or public_key_path.is_symlink() or not signature_path.is_file() or not public_key_path.is_file():
+        fail(f"{label} signature/public key refs must be regular files")
+    public_key_sha = sha256_file(public_key_path)
+    if value.get("public_key_sha256") != public_key_sha:
+        fail(f"{label} public key hash mismatch")
+    trusted = {tuple((entry.get(key) for key in ("signer_id", "algorithm", "public_key_sha256"))) for entry in trusted_root.get("allowlist", [])}
+    if (signer_id, algorithm, public_key_sha) not in trusted:
+        fail(f"{label} signer is not in the governed trusted signer allowlist")
+    with tempfile.TemporaryDirectory(prefix="oasis7-attestation-") as temp_dir:
+        payload_path = Path(temp_dir) / "payload"
+        payload_path.write_bytes(attestation_body(value))
+        try:
+            verify_command = (
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key_path), "-signature", str(signature_path), str(payload_path)]
+                if algorithm in {"openssl-rsa-sha256", "rsa-sha256"}
+                else ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key_path), "-sigfile", str(signature_path), "-rawin", "-in", str(payload_path)]
+                if algorithm in {"openssl-ed25519", "ed25519"}
+                else None
+            )
+            if verify_command is None:
+                fail(f"{label} unsupported signature algorithm")
+            result = subprocess.run(
+                verify_command,
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            fail(f"{label} signature verifier unavailable: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail(f"{label} detached signature verification failed")
+    return {
+        "path": str(path.resolve()),
+        "sha256": sha256_file(path),
+        "schema_version": value["schema_version"],
+        "role": value.get("role"),
+        "peer_id": value.get("peer_id"),
+        "node_id": value.get("node_id"),
+        "signer_id": signer_id,
+        "public_key_sha256": public_key_sha,
+    }
+
+
+def validate_signed_gates(args: argparse.Namespace, provenance_summary: dict[str, Any]) -> dict[str, Any]:
+    trusted_root = provenance_summary.get("trusted_root")
+    if not isinstance(trusted_root, dict):
+        fail("governed trusted signer root is required for signed identity gates")
+    if not args.identity_receipts or not args.sequencer_rebuild_proof:
+        fail("identity receipts and signed 204 rebuild proof are required")
+    identity_path = Path(args.identity_receipts).resolve()
+    identities = load_json(identity_path, "identity receipts")
+    raw_receipts = identities.get("receipts")
+    if not isinstance(raw_receipts, list) or len(raw_receipts) != 2:
+        fail("identity receipts must cover both validator roles")
+    summaries = []
+    for raw in raw_receipts:
+        receipt_path = Path(raw) if isinstance(raw, str) else None
+        if receipt_path is None:
+            fail("identity receipt path must be a string")
+        summaries.append(verify_signed_attestation(receipt_path.resolve(), trusted_root, "identity receipt"))
+    roles = {item.get("role") for item in summaries}
+    if roles != set(MUTATION_ORDER):
+        fail("identity receipts must cover storage-205 and sequencer-204")
+    registry_path = Path(provenance_summary["governed"]["registry"]["path"])
+    registry = load_json(registry_path, "governed validator registry")
+    registered_nodes = {
+        str(entry.get("node_id"))
+        for entry in registry.get("validators", [])
+        if isinstance(entry, dict) and isinstance(entry.get("node_id"), str)
+    }
+    identity_nodes = {item.get("node_id") for item in summaries}
+    if not registered_nodes or identity_nodes != registered_nodes:
+        fail("identity receipts do not match the governed validator registry")
+    bootstrap_path = Path(provenance_summary["governed"]["bootstrap"]["path"])
+    bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
+    for item in summaries:
+        if not isinstance(item.get("peer_id"), str) or item["peer_id"] not in bootstrap_text:
+            fail("identity receipt peer id is absent from governed bootstrap truth")
+    proof_summary = verify_signed_attestation(Path(args.sequencer_rebuild_proof).resolve(), trusted_root, "signed 204 rebuild proof", "sequencer-204")
+    sequencer_identity = next(item for item in summaries if item.get("role") == "sequencer-204")
+    if proof_summary.get("node_id") != sequencer_identity.get("node_id") or proof_summary.get("peer_id") != sequencer_identity.get("peer_id"):
+        fail("signed 204 rebuild proof identity does not match sequencer identity receipt")
+    return {"identity_receipts": summaries, "sequencer_rebuild_proof": proof_summary}
+
+
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     package_dir = Path(args.package_dir).resolve()
     provenance_path = Path(args.provenance).resolve()
     helper = load_provenance_helper()
     try:
-        provenance_summary = helper.validate_receipt(provenance_path, package_dir)
+        provenance_summary = helper.validate_receipt(provenance_path, package_dir, Path(args.trust_root).resolve())
     except SystemExit as error:
         fail(str(error).removeprefix("error: validator-pair provenance: "))
     runtime_source = helper.find_runtime(package_dir)
@@ -347,9 +492,11 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     capacity = load_json(Path(args.capacity_json).resolve(), "capacity evidence")
     package_bytes = package_size(package_dir)
     governed = provenance_summary["governed"]
+    signed_gates = validate_signed_gates(args, provenance_summary)
     governed_bytes = sum(int(item.get("size_bytes", item.get("total_bytes", 0))) for item in governed.values())
     capacities: dict[str, Any] = {}
     for role, node in nodes.items():
+        validate_node_symlinks(Path(node["root"]), role)
         for surface in RESET_SURFACES:
             if (Path(node["root"]) / surface).is_symlink():
                 fail(f"reset surface must not be a symlink: {role}/{surface}")
@@ -361,12 +508,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         capacities[role] = capacity_for(capacity, role, required, required_inodes)
     reject_full_status(args.sequencer_proof_url, "proof URL")
     reject_full_status(args.sequencer_health_url, "health URL")
-    txid = f"pair-rebuild-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:10]}"
     plan: dict[str, Any] = {
-        "schema_version": SCHEMA,
-        "transaction_id": txid,
+        "schema_version": PLAN_SCHEMA,
         "phase": "planned",
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "mutation_order": MUTATION_ORDER,
         "startup_order": STARTUP_ORDER,
         "package": {
@@ -383,6 +527,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "path": str(provenance_path),
             "binding_digest": provenance_summary["binding_digest"],
             "signature": provenance_summary["signature"],
+            "trusted_root": provenance_summary["trusted_root"],
         },
         "network": {
             "network_id": provenance_summary["network_id"],
@@ -397,6 +542,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "sequencer_health_url": args.sequencer_health_url,
             "sequencer_proof_url": args.sequencer_proof_url,
             "full_204_status_forbidden": True,
+            "identity_receipts_path": str(Path(args.identity_receipts).resolve()) if args.identity_receipts else None,
+            "sequencer_rebuild_proof_path": str(Path(args.sequencer_rebuild_proof).resolve()) if args.sequencer_rebuild_proof else None,
+            **signed_gates,
         },
         "observer_gate": {
             "status": "hold",
@@ -405,7 +553,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         },
         "rollback": {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True},
     }
-    plan["canonical_digest"] = canonical_digest(plan)
+    plan["plan_digest"] = hashlib.sha256(
+        json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     return plan
 
 
@@ -508,9 +658,11 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
     }
 
 
-def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
-    if receipt.get("schema_version") != "oasis7.validator_pair_rebuild_host_receipt.v1":
+def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
+    if receipt.get("schema_version") not in {"oasis7.validator_pair_rebuild_host_receipt.v1", "oasis7.validator_pair_rebuild_host_receipt.v2"}:
         fail("host adapter returned an unsupported receipt schema")
+    if receipt.get("phase") != phase:
+        fail(f"host adapter phase receipt mismatch: expected {phase}")
     if receipt.get("transaction_id") != plan.get("transaction_id"):
         fail("host adapter receipt transaction identity mismatch")
     if receipt.get("mutation_order") != MUTATION_ORDER or receipt.get("startup_order") != STARTUP_ORDER:
@@ -518,6 +670,22 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any]) -> dict
     nodes = receipt.get("nodes")
     if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
         fail("host adapter receipt must cover both validator roles")
+    if phase == "quiesce":
+        for role in MUTATION_ORDER:
+            value = nodes[role]
+            if value.get("active") is not False or value.get("running") is not False:
+                fail(f"host adapter quiesce gate failed for {role}")
+        return receipt
+    if phase == "backup":
+        for role in MUTATION_ORDER:
+            if nodes[role].get("backup_verified") is not True:
+                fail(f"host adapter backup gate failed for {role}")
+        return receipt
+    if phase == "rollback":
+        for role in MUTATION_ORDER:
+            if nodes[role].get("rollback_verified") is not True:
+                fail(f"host adapter rollback gate failed for {role}")
+        return receipt
     for role in MUTATION_ORDER:
         value = nodes[role]
         if not isinstance(value, dict):
@@ -537,16 +705,32 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any]) -> dict
             fail(f"host adapter listener identity mismatch for {role}")
         if role == "sequencer-204" and value.get("full_chain_status_called") is not False:
             fail("204 host adapter receipt must prove full /v1/chain/status was not called")
+    identity_receipts = receipt.get("identity_receipts")
+    proof = receipt.get("sequencer_rebuild_proof")
+    if not isinstance(identity_receipts, list) or not isinstance(proof, dict):
+        fail("host adapter must consume signed identity receipts and the signed 204 rebuild proof")
+    trusted_root = plan["provenance"].get("trusted_root")
+    if not isinstance(trusted_root, dict):
+        fail("host adapter receipt has no governed trust root")
+    for value in identity_receipts:
+        verify_signed_attestation(Path(value["path"]).resolve(), trusted_root, "host identity receipt", value.get("role"))
+    verify_signed_attestation(Path(proof["path"]).resolve(), trusted_root, "host signed 204 rebuild proof", "sequencer-204")
+    if receipt.get("sequencer_proof_url") != plan.get("proof", {}).get("sequencer_proof_url"):
+        fail("host adapter proof endpoint binding mismatch")
+    if plan.get("observer_gate", {}).get("status") != "hold":
+        fail("observer gate must remain hold during validator pair rebuild")
+    if receipt.get("observer_mutation") is not False:
+        fail("host adapter must prove observer_hold; observer mutation is forbidden")
     return receipt
 
 
-def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]) -> dict[str, Any]:
+def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any], phase: str) -> dict[str, Any]:
     if adapter.is_symlink() or not adapter.is_file():
         fail(f"host adapter must be a regular file: {adapter}")
     adapter = adapter.resolve()
     try:
         result = subprocess.run(
-            [str(adapter), "--transaction", str(transaction_path)],
+            [str(adapter), "--phase", phase, "--transaction", str(transaction_path)],
             check=False,
             text=True,
             capture_output=True,
@@ -562,7 +746,7 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
         fail("host adapter must return one JSON receipt on stdout")
     if not isinstance(receipt, dict):
         fail("host adapter receipt must be a JSON object")
-    return validate_host_receipt(receipt, plan)
+    return validate_host_receipt(receipt, plan, phase)
 
 
 def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> dict[str, Any]:
@@ -609,60 +793,89 @@ def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> d
 
 def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:
     plan = load_json(path, "transaction")
-    if plan.get("schema_version") != SCHEMA or plan.get("phase") != "planned":
-        fail("apply requires a planned validator-pair transaction")
-    if plan.get("canonical_digest") != canonical_digest(plan):
-        fail("transaction canonical digest mismatch")
+    if plan.get("schema_version") != PLAN_SCHEMA or plan.get("phase") != "planned":
+        fail("apply requires a planned validator-pair rebuild plan")
+    expected_plan_digest = hashlib.sha256(
+        json.dumps({key: value for key, value in plan.items() if key != "plan_digest"}, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if plan.get("plan_digest") != expected_plan_digest:
+        fail("plan digest mismatch")
     if host_adapter is None:
         fail("apply requires a governed host adapter for startup and health gates")
     helper = load_provenance_helper()
     package = plan.get("package")
     try:
-        helper.validate_receipt(Path(package["provenance"]), Path(package["directory"]))
+        helper.validate_receipt(Path(package["provenance"]), Path(package["directory"]), Path(plan["provenance"]["trusted_root"]["path"]))
     except SystemExit as error:
         fail(str(error).removeprefix("error: validator-pair provenance: "))
-    plan["capacity_apply"] = {
+    transaction: dict[str, Any] = dict(plan)
+    transaction["schema_version"] = SCHEMA
+    transaction["transaction_id"] = f"pair-rebuild-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:10]}"
+    transaction["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    transaction["phase"] = "prepared"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    transaction["capacity_apply"] = {
         role: refresh_capacity(Path(plan["nodes"][role]["root"]), plan["capacity"][role], role)
         for role in MUTATION_ORDER
     }
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
     backups: dict[str, Any] = {}
     staged: dict[str, Any] = {}
     try:
+        transaction["quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
+        transaction["phase"] = "quiesced"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
         for role in MUTATION_ORDER:
-            backups[role] = snapshot_node(plan["nodes"][role], plan["transaction_id"])
-            plan["nodes"][role]["backup"] = backups[role]
-        plan["backup"] = backups
+            backups[role] = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
+            transaction["nodes"][role]["backup"] = backups[role]
+        transaction["backup"] = backups
+        transaction["backup_receipt"] = run_host_adapter(host_adapter, path, transaction, "backup")
+        transaction["phase"] = "backed_up"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
         # Mutation is deliberately storage-205 then sequencer-204.
         for role in MUTATION_ORDER:
-            staged[role] = install_local(plan["nodes"][role], plan, backups[role])
-        plan["staged"] = staged
-        plan["host_receipt"] = run_host_adapter(host_adapter, path, plan)
-        plan["phase"] = "applied"
-        plan["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        plan["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
-        plan["canonical_digest"] = canonical_digest(plan)
-        write_json(path, plan)
-        return plan
+            staged[role] = install_local(transaction["nodes"][role], transaction, backups[role])
+        transaction["staged"] = staged
+        transaction["phase"] = "staged"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        transaction["host_receipt"] = run_host_adapter(host_adapter, path, transaction, "apply")
+        transaction["phase"] = "applied"
+        transaction["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        return transaction
     except BaseException as error:
-        plan["backup"] = backups
-        plan["staged"] = staged
-        plan["phase"] = "rollback_required"
-        plan["failure"] = str(error)
+        transaction["backup"] = backups
+        transaction["staged"] = staged
+        transaction["phase"] = "rollback_required"
+        transaction["failure"] = str(error)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
         rollback_errors: list[str] = []
+        try:
+            transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+        except BaseException as rollback_callback_error:
+            rollback_errors.append(f"host-adapter: {rollback_callback_error}")
         for role in reversed(MUTATION_ORDER):
             if role in backups:
                 try:
-                    restore_node(backups[role], plan.get("transaction_id"))
+                    restore_node(backups[role], transaction.get("transaction_id"))
                 except BaseException as rollback_error:
                     rollback_errors.append(f"{role}: {rollback_error}")
-        plan["phase"] = "rollback_failed" if rollback_errors else "rolled_back"
-        plan["rollback"] = {
+        transaction["phase"] = "rollback_failed" if rollback_errors else "rolled_back"
+        transaction["rollback"] = {
             "strategy": "same-filesystem-full-snapshot",
             "status": "failed" if rollback_errors else "verified",
             "errors": rollback_errors,
         }
-        plan["canonical_digest"] = canonical_digest(plan)
-        write_json(path, plan)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
         if rollback_errors:
             fail("rollback failed: " + "; ".join(rollback_errors))
         if isinstance(error, SystemExit):
@@ -670,7 +883,7 @@ def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str,
         fail(str(error))
 
 
-def rollback_transaction(path: Path) -> dict[str, Any]:
+def rollback_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:
     transaction = load_json(path, "transaction")
     if transaction.get("schema_version") != SCHEMA:
         fail("unsupported transaction schema")
@@ -679,17 +892,36 @@ def rollback_transaction(path: Path) -> dict[str, Any]:
     backups = transaction.get("backup")
     if not isinstance(backups, dict):
         fail("transaction does not contain full backup receipts")
-    results: dict[str, Any] = {}
-    for role in reversed(MUTATION_ORDER):
-        if role not in backups:
-            fail(f"backup missing for {role}")
-        results[role] = restore_node(backups[role], transaction.get("transaction_id"))
-    transaction["phase"] = "rolled_back"
-    transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "verified", "results": results}
-    transaction["rolled_back_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if host_adapter is None:
+        fail("rollback requires a governed host adapter quiesce/rollback callback")
+    transaction["phase"] = "rollback_required"
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
-    return transaction
+    try:
+        transaction["rollback_quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        results: dict[str, Any] = {}
+        for role in reversed(MUTATION_ORDER):
+            if role not in backups:
+                fail(f"backup missing for {role}")
+            results[role] = restore_node(backups[role], transaction.get("transaction_id"))
+        transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+        transaction["phase"] = "rolled_back"
+        transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "verified", "results": results}
+        transaction["rolled_back_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        return transaction
+    except BaseException as error:
+        transaction["phase"] = "rollback_failed"
+        transaction["failure"] = str(error)
+        transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "failed", "errors": [str(error)]}
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        if isinstance(error, SystemExit):
+            raise
+        fail(str(error))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -698,19 +930,23 @@ def parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan")
     plan.add_argument("--package-dir", required=True)
     plan.add_argument("--provenance", required=True)
+    plan.add_argument("--trust-root", required=True)
     plan.add_argument("--consumer-impact-record", required=True)
     plan.add_argument("--capacity-json", required=True)
     plan.add_argument("--node", action="append", required=True)
     plan.add_argument("--storage-health-url")
     plan.add_argument("--sequencer-health-url")
-    plan.add_argument("--sequencer-proof-url")
+    plan.add_argument("--sequencer-proof-url", required=True)
     plan.add_argument("--observer-receipt")
+    plan.add_argument("--identity-receipts", required=True)
+    plan.add_argument("--sequencer-rebuild-proof", required=True)
     plan.add_argument("--out-dir")
     apply = sub.add_parser("apply")
     apply.add_argument("--transaction", required=True)
     apply.add_argument("--host-adapter")
     rollback = sub.add_parser("rollback")
     rollback.add_argument("--transaction", required=True)
+    rollback.add_argument("--host-adapter", required=True)
     return root
 
 
@@ -725,7 +961,7 @@ def main() -> int:
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
         print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter), ensure_ascii=True, sort_keys=True))
     else:
-        print(json.dumps(rollback_transaction(Path(args.transaction).resolve()), ensure_ascii=True, sort_keys=True))
+        print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser()), ensure_ascii=True, sort_keys=True))
     return 0
 
 

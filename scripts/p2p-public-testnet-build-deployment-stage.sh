@@ -413,14 +413,17 @@ if [[ -n "$validator_pair_provenance_ref" ]]; then
   if [[ "$(cd "$(dirname "$validator_pair_provenance_ref")" && pwd)/$(basename "$validator_pair_provenance_ref")" != "$provenance_copy" ]]; then
     cp "$validator_pair_provenance_ref" "$provenance_copy"
   fi
-  python3 - "$validator_pair_provenance_ref" "$(dirname "$provenance_copy")" <<'PY'
+  python3 - "$validator_pair_provenance_ref" "$(dirname "$provenance_copy")" "$provenance_copy" <<'PY'
 import json
+import hashlib
+import os
 import shutil
 import sys
 from pathlib import Path
 
 receipt_path = Path(sys.argv[1]).resolve()
 evidence_dir = Path(sys.argv[2]).resolve()
+provenance_copy = Path(sys.argv[3]).resolve()
 receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
 refs = []
 signature = receipt.get("signature")
@@ -429,6 +432,23 @@ if isinstance(signature, dict):
 governed = receipt.get("governed")
 if isinstance(governed, dict):
     refs.extend(value.get("path") for value in governed.values() if isinstance(value, dict))
+closure_map = {}
+def content_digest(source: Path) -> str:
+    digest = hashlib.sha256()
+    if source.is_file():
+        digest.update(source.read_bytes())
+    elif source.is_dir():
+        for child in sorted(source.rglob("*"), key=lambda item: item.relative_to(source).as_posix()):
+            relative = child.relative_to(source).as_posix()
+            digest.update(relative.encode())
+            digest.update(b"\0")
+            if child.is_symlink():
+                digest.update(b"L\0" + os.readlink(child).encode())
+            elif child.is_file():
+                digest.update(b"F\0" + child.read_bytes())
+            else:
+                digest.update(b"D\0")
+    return digest.hexdigest()
 for raw in refs:
     if not isinstance(raw, str) or not raw.strip():
         continue
@@ -441,17 +461,31 @@ for raw in refs:
     destination = evidence_dir / source.name
     if destination.exists() or destination.is_symlink():
         if destination.resolve() == source:
+            closure_map[raw] = destination.name
             continue
         if destination.is_dir() and source.is_dir():
             shutil.copytree(source, destination, dirs_exist_ok=True)
         elif destination.is_file() and source.is_file() and destination.read_bytes() == source.read_bytes():
+            closure_map[raw] = destination.name
             continue
         else:
-            raise SystemExit(f"provenance closure basename collision: {destination}")
-    elif source.is_dir():
-        shutil.copytree(source, destination)
-    else:
-        shutil.copy2(source, destination)
+            digest = content_digest(source)[:16]
+            destination = evidence_dir / f"{digest}-{source.name}"
+            if destination.exists() and destination.is_file() and source.is_file() and destination.read_bytes() != source.read_bytes():
+                raise SystemExit(f"provenance closure deterministic collision: {destination}")
+    if not destination.exists() and not destination.is_symlink():
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+    closure_map[raw] = destination.name
+closure_path = Path(str(provenance_copy) + ".closure.json")
+closure_payload = {
+    "schema_version": "oasis7.validator_pair_provenance_closure.v1",
+    "receipt": provenance_copy.name,
+    "mapping": {key: closure_map[key] for key in sorted(closure_map)},
+}
+closure_path.write_text(json.dumps(closure_payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 PY
   printf '%s\n' "- Validator pair provenance: \`$provenance_copy\`" >>"$deployment_truth_md"
 fi

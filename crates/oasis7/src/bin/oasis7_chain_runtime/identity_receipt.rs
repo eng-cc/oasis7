@@ -12,6 +12,7 @@ pub(super) fn dispatch<'a>(mut args: impl Iterator<Item = &'a str>) -> Option<Re
     match args.next()? {
         "provision-identity" => Some(super::identity_provision::run(args)),
         "identity-receipt" => Some(run(args)),
+        "verify-rebuild-proof" => Some(super::rebuild_status::run_verify(args)),
         _ => None,
     }
 }

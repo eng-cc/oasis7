@@ -2,8 +2,8 @@
 """Contract tests for the governed validator pair rebuild executor.
 
 These tests intentionally exercise only local temporary roots.  They are the
-RED contract for task #3318; no live validator, SSH target, or observer is
-used.
+RED contract for task #3324 (predecessor task #3318); no live validator, SSH
+target, or observer is used.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import shutil
 from pathlib import Path
 
 
@@ -57,7 +58,7 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             "manifest.json": '{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606"}\n',
             "genesis.json": '{"world_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606"}\n',
             "registry.json": '{"validators":[{"node_id":"triad-testnet-sequencer"},{"node_id":"triad-testnet-storage"}]}\n',
-            "bootstrap.txt": "/ip4/127.0.0.1/tcp/6831/p2p/12D3KooWSequencer\n",
+            "bootstrap.txt": "/ip4/127.0.0.1/tcp/6831/p2p/peer-sequencer-204\n/ip4/127.0.0.1/tcp/6832/p2p/peer-storage-205\n",
             "world.json": '{"snapshot":true}\n',
         }.items():
             (self.governed / name).write_text(content, encoding="utf-8")
@@ -87,6 +88,43 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             stderr=subprocess.DEVNULL,
         )
         self._write_provenance()
+        self.trust_root = self.root / "provenance-trust-root.json"
+        trust_root = {
+            "schema_version": "oasis7.validator_pair_provenance_trust_root.v1",
+            "allowlist": [
+                {
+                    "signer_id": "testnet-package-attestor",
+                    "algorithm": "openssl-rsa-sha256",
+                    "public_key_sha256": sha256(self.public_key),
+                }
+            ],
+        }
+        trust_root["root_digest"] = canonical_digest(trust_root)
+        self.trust_root.write_text(json.dumps(trust_root, indent=2) + "\n", encoding="utf-8")
+        self.identity_receipts = self.root / "identity-receipts.json"
+        identity_paths = []
+        for role in ("storage-205", "sequencer-204"):
+            identity_path = self.root / f"identity-{role}.json"
+            signature_path = self.root / f"identity-{role}.sig"
+            self._write_attestation(
+                identity_path,
+                signature_path,
+                "oasis7.validator_identity_receipt.v1",
+                role,
+                f"peer-{role}",
+                node_id="triad-testnet-storage" if role == "storage-205" else "triad-testnet-sequencer",
+            )
+            identity_paths.append(str(identity_path))
+        self.identity_receipts.write_text(json.dumps({"receipts": identity_paths}, indent=2) + "\n", encoding="utf-8")
+        self.rebuild_proof = self.root / "sequencer-204-rebuild-proof.json"
+        self._write_attestation(
+            self.rebuild_proof,
+            self.root / "sequencer-204-rebuild-proof.sig",
+            "oasis7.validator_pair_rebuild_proof.v1",
+            "sequencer-204",
+            "peer-sequencer-204",
+            "triad-testnet-sequencer",
+        )
         self.impact = self.root / "consumer-impact.json"
         self.impact.write_text(
             json.dumps(
@@ -131,7 +169,7 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def _write_provenance(self, *, signature: bool = True) -> None:
+    def _write_provenance(self, *, signature: bool = True, extra_governed: Path | None = None) -> None:
         governed = {
             name: {"path": str(path), "sha256": sha256(path), "size_bytes": path.stat().st_size}
             for name, path in (
@@ -142,6 +180,12 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
                 ("world", self.governed / "world.json"),
             )
         }
+        if extra_governed is not None:
+            governed["unexpected"] = {
+                "path": str(extra_governed),
+                "sha256": sha256(extra_governed),
+                "size_bytes": extra_governed.stat().st_size,
+            }
         payload = {
             "schema_version": "oasis7.validator_pair_rebuild_provenance.v1",
             "network_id": "oasis7-public-testnet-governed-20260606",
@@ -176,20 +220,36 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             payload_path = self.root / "provenance-signing-payload.bin"
             payload_path.write_bytes(canonical.encode())
             subprocess.run(
-                [
-                    "openssl",
-                    "dgst",
-                    "-sha256",
-                    "-sign",
-                    str(self.signing_key),
-                    "-out",
-                    str(self.signature),
-                    str(payload_path),
-                ],
+                ["openssl", "dgst", "-sha256", "-sign", str(self.signing_key), "-out", str(self.signature), str(payload_path)],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+
+    def _write_attestation(self, path: Path, signature_path: Path, schema: str, role: str, peer_id: str, node_id: str) -> None:
+        value = {
+            "schema_version": schema,
+            "role": role,
+            "peer_id": peer_id,
+            "node_id": node_id,
+            "signer_id": "testnet-package-attestor",
+            "algorithm": "openssl-rsa-sha256",
+            "public_key_ref": str(self.public_key),
+            "public_key_sha256": sha256(self.public_key),
+            "signature_ref": str(signature_path),
+            "trust_root_digest": json.loads(self.trust_root.read_text(encoding="utf-8"))["root_digest"],
+        }
+        body = {key: item for key, item in value.items() if key not in {"signature_ref", "public_key_ref"}}
+        payload_path = path.with_suffix(path.suffix + ".payload")
+        payload_path.write_bytes(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode())
+        subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", str(self.signing_key), "-out", str(signature_path), str(payload_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        payload_path.unlink()
+        path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
     def _write_host_adapter(self) -> Path:
         adapter = self.root / "host-adapter.py"
@@ -200,25 +260,40 @@ import sys
 from pathlib import Path
 
 transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())
+phase = sys.argv[sys.argv.index('--phase') + 1]
 nodes = {}
 for role in transaction['mutation_order']:
-    nodes[role] = {
-        'active': True,
-        'running': True,
-        'healthz_ok': True,
-        'nrestarts': 0,
-        'oom_panic_segfault': False,
-        'runtime_sha256': transaction['package']['runtime_sha256'],
-        'runtime_size_bytes': transaction['package']['runtime_size_bytes'],
-        'listeners': ['6631', '6831'] if role == 'sequencer-204' else ['6632', '6832'],
-        'full_chain_status_called': False,
-    }
+    nodes[role] = {'active': phase == 'apply', 'running': phase == 'apply'}
+    if phase == 'quiesce':
+        nodes[role].update({'active': False, 'running': False})
+    elif phase == 'backup':
+        nodes[role].update({'backup_verified': True})
+    elif phase == 'rollback':
+        nodes[role].update({'rollback_verified': True})
+    else:
+        nodes[role].update({
+            'healthz_ok': True,
+            'nrestarts': 0,
+            'oom_panic_segfault': False,
+            'runtime_sha256': transaction['package']['runtime_sha256'],
+            'runtime_size_bytes': transaction['package']['runtime_size_bytes'],
+            'listeners': ['6631', '6831'] if role == 'sequencer-204' else ['6632', '6832'],
+            'full_chain_status_called': False,
+        })
+identity = json.loads(Path(transaction['proof']['identity_receipts_path']).read_text())
+identity_paths = identity['receipts']
+proof_path = transaction['proof']['sequencer_rebuild_proof_path']
 print(json.dumps({
-    'schema_version': 'oasis7.validator_pair_rebuild_host_receipt.v1',
+    'schema_version': 'oasis7.validator_pair_rebuild_host_receipt.v2',
+    'phase': phase,
     'transaction_id': transaction['transaction_id'],
     'mutation_order': transaction['mutation_order'],
     'startup_order': transaction['startup_order'],
     'nodes': nodes,
+    'observer_mutation': False,
+    'sequencer_proof_url': transaction['proof']['sequencer_proof_url'],
+    'identity_receipts': [{'path': path, 'role': json.loads(Path(path).read_text())['role']} for path in identity_paths] if phase == 'apply' else [],
+    'sequencer_rebuild_proof': {'path': proof_path, 'role': 'sequencer-204'} if phase == 'apply' else {},
 }))
 """,
             encoding="utf-8",
@@ -235,6 +310,14 @@ print(json.dumps({
             str(self.package),
             "--provenance",
             str(self.provenance),
+            "--trust-root",
+            str(self.trust_root),
+            "--identity-receipts",
+            str(self.identity_receipts),
+            "--sequencer-rebuild-proof",
+            str(self.rebuild_proof),
+            "--sequencer-proof-url",
+            "http://127.0.0.1:6631/v1/chain/rebuild-proof",
             "--consumer-impact-record",
             str(self.impact),
             "--capacity-json",
@@ -251,10 +334,25 @@ print(json.dumps({
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads(result.stdout)
-        self.assertEqual(receipt["schema_version"], "oasis7.validator_pair_rebuild_transaction.v1")
+        self.assertEqual(receipt["schema_version"], "oasis7.validator_pair_rebuild_plan.v1")
+        self.assertRegex(receipt["plan_digest"], r"^[0-9a-f]{64}$")
         self.assertEqual(receipt["mutation_order"], ["storage-205", "sequencer-204"])
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
+
+    def test_plan_digest_is_stable_and_runtime_transaction_metadata_is_separate(self) -> None:
+        first = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_receipt = json.loads(first.stdout)
+        second_out = self.root / "out-second"
+        second_args = [arg for arg in self._base_args() if arg not in ("--out-dir", str(self.out))]
+        second_args.extend(["--out-dir", str(second_out)])
+        second = subprocess.run(second_args, text=True, capture_output=True)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_receipt = json.loads(second.stdout)
+        self.assertEqual(first_receipt, second_receipt)
+        self.assertNotIn("transaction_id", first_receipt)
+        self.assertNotIn("created_at", first_receipt)
 
     def test_plan_rejects_full_status_url_for_204(self) -> None:
         result = subprocess.run(
@@ -264,6 +362,76 @@ print(json.dumps({
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("204", result.stderr)
+
+    def test_active_runbook_has_no_sequencer_full_status_command(self) -> None:
+        runbook = (ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md").read_text(encoding="utf-8")
+        self.assertNotIn("6631/v1/chain/status", runbook)
+        self.assertNotIn("39.104.204.172:6631/v1/chain/status", runbook)
+
+    def test_plan_rejects_untrusted_signer_even_when_detached_signature_is_valid(self) -> None:
+        receipt = json.loads(self.provenance.read_text(encoding="utf-8"))
+        receipt["signature"]["signer_id"] = "unlisted-attestor"
+        body = {key: value for key, value in receipt.items() if key != "binding_digest"}
+        receipt["binding_digest"] = hashlib.sha256(
+            json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        payload_path = self.root / "untrusted-signing-payload.bin"
+        payload_path.write_bytes(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode())
+        subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", str(self.signing_key), "-out", str(self.signature), str(payload_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.provenance.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("trusted signer", result.stderr.lower())
+
+    def test_plan_rejects_unexpected_governed_key(self) -> None:
+        extra = self.governed / "unexpected.json"
+        extra.write_text("{}\n", encoding="utf-8")
+        self._write_provenance(extra_governed=extra)
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("governed", result.stderr.lower())
+
+    def test_canonical_current_symlink_is_counted_and_accepted(self) -> None:
+        for role, node in self.nodes.items():
+            current = node / "current"
+            shutil_target = node / "releases" / "known"
+            shutil_target.mkdir(parents=True)
+            (shutil_target / "bin").mkdir()
+            (shutil_target / "bin" / "oasis7_chain_runtime").write_bytes(b"runtime-old\n")
+            shutil.rmtree(current)
+            current.symlink_to("releases/known", target_is_directory=True)
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_arbitrary_current_symlink_is_rejected(self) -> None:
+        current = self.nodes["storage-205"] / "current"
+        shutil.rmtree(current)
+        current.symlink_to(self.root / "package", target_is_directory=True)
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("current", result.stderr.lower())
+
+    def test_apply_requires_phase_callbacks_and_signed_identity_proof(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "apply", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["phase"], "applied")
+        self.assertIn("quiesce_receipt", receipt)
+        self.assertIn("backup_receipt", receipt)
+        self.assertIn("sequencer_rebuild_proof", receipt["host_receipt"])
 
     def test_plan_rejects_missing_signature_before_any_node_access(self) -> None:
         self._write_provenance(signature=False)
@@ -369,7 +537,9 @@ print(json.dumps({
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         transaction = json.loads(plan.stdout)
         transaction["capacity"]["storage-205"]["required_bytes"] = 10**30
-        transaction["canonical_digest"] = canonical_digest(transaction)
+        transaction["plan_digest"] = hashlib.sha256(
+            json.dumps({key: value for key, value in transaction.items() if key != "plan_digest"}, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
         plan_path = self.out / "transaction.json"
         plan_path.write_text(json.dumps(transaction), encoding="utf-8")
         result = subprocess.run(
@@ -393,35 +563,7 @@ print(json.dumps({
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
-        subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(self._write_host_adapter()),
-            ],
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        self.assertNotEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / json.loads(plan.stdout)["transaction_id"] / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
-        result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path)],
-            text=True,
-            capture_output=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        receipt = json.loads(result.stdout)
-        self.assertEqual(receipt["phase"], "rolled_back")
-        self.assertEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / json.loads(plan.stdout)["transaction_id"] / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
-
-    def test_rollback_rejects_tampered_backup_manifest(self) -> None:
-        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
-        plan_path = self.out / "transaction.json"
-        plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
         applied = subprocess.run(
             [
                 sys.executable,
@@ -430,7 +572,39 @@ print(json.dumps({
                 "--transaction",
                 str(plan_path),
                 "--host-adapter",
-                str(self._write_host_adapter()),
+                str(adapter),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        applied_receipt = json.loads(applied.stdout)
+        transaction_id = applied_receipt["transaction_id"]
+        self.assertNotEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / transaction_id / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["phase"], "rolled_back")
+        self.assertEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / transaction_id / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
+
+    def test_rollback_rejects_tampered_backup_manifest(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
+        applied = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
             ],
             text=True,
             capture_output=True,
@@ -440,7 +614,7 @@ print(json.dumps({
         manifest = Path(transaction["backup"]["storage-205"]["manifest"])
         manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path)],
+            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
             text=True,
             capture_output=True,
         )

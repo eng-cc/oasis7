@@ -1,7 +1,10 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7_node::{NodeSnapshot, ReplicationNetworkDebugSnapshot};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::execution_bridge::ExecutionCheckpointStatusEvidence;
@@ -9,6 +12,7 @@ use super::feedback_submit_api::FeedbackSubmitSigner;
 
 const MAX_CONNECTED_PEER_IDS: usize = 64;
 const MAX_ERROR_BYTES: usize = 512;
+const MAX_REBUILD_PROOF_FILE_BYTES: u64 = 512 * 1024;
 const REBUILD_PROOF_SCHEMA: &str = "oasis7.rebuild_proof.v1";
 
 #[derive(Debug, Serialize)]
@@ -76,6 +80,90 @@ pub(super) struct RebuildProofEnvelope {
     pub(super) signer_public_key_hex: String,
     pub(super) signed_payload_sha256: String,
     pub(super) signature_hex: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildStatusWire {
+    schema_version: String,
+    observed_at_unix_ms: i64,
+    ok: bool,
+    liveness: RebuildLivenessWire,
+    readiness: RebuildReadinessWire,
+    heights: RebuildHeightsWire,
+    network_head: RebuildNetworkHeadWire,
+    checkpoint: Option<RebuildCheckpointWire>,
+    local_peer_id: String,
+    connected_peers: Vec<String>,
+    connected_peer_count: usize,
+    proof: RebuildProofEnvelopeWire,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildLivenessWire {
+    running: bool,
+    last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildReadinessWire {
+    status: String,
+    failed_gates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildHeightsWire {
+    committed_height: u64,
+    network_committed_height: u64,
+    last_execution_height: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildNetworkHeadWire {
+    source: String,
+    decision: String,
+    height: Option<u64>,
+    block_hash: Option<String>,
+    execution_block_hash: Option<String>,
+    execution_state_root: Option<String>,
+    observed_peer_count: usize,
+    fresh_peer_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildCheckpointWire {
+    schema_version: u32,
+    checkpoint_id: String,
+    world_id: String,
+    height: u64,
+    execution_block_hash: String,
+    execution_state_root: String,
+    manifest_hash: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RebuildProofEnvelopeWire {
+    schema_version: String,
+    signer_id: String,
+    signer_public_key_hex: String,
+    signed_payload_sha256: String,
+    signature_hex: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct RebuildProofVerificationReceipt {
+    schema_version: &'static str,
+    proof_schema_version: &'static str,
+    signer_id: String,
+    signer_public_key_hex: String,
+    signed_payload_sha256: String,
+    verified: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -294,4 +382,202 @@ pub(super) fn verify_rebuild_proof(response: &RebuildStatusResponse) -> Result<(
         .map_err(|err| format!("rebuild proof public key is invalid: {err}"))?
         .verify(claims.as_slice(), &Signature::from_bytes(&signature_array))
         .map_err(|err| format!("rebuild proof signature verification failed: {err}"))
+}
+
+/// Verify a bounded proof file independently of the HTTP producer. The
+/// expected signer values are deployment-truth inputs; they are never taken
+/// from the proof itself.
+pub(super) fn verify_rebuild_proof_file(
+    path: &Path,
+    trusted_signer_id: &str,
+    trusted_public_key_hex: &str,
+) -> Result<RebuildProofVerificationReceipt, String> {
+    if trusted_signer_id.trim().is_empty() {
+        return Err("trusted signer id cannot be empty".to_string());
+    }
+    let trusted_public_key_hex = trusted_public_key_hex.trim().to_ascii_lowercase();
+    if trusted_public_key_hex.len() != 64
+        || !trusted_public_key_hex
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err("trusted signer public key must be 32-byte hex".to_string());
+    }
+    let metadata = fs::metadata(path).map_err(|err| {
+        format!(
+            "read rebuild proof metadata {} failed: {err}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "rebuild proof path {} is not a file",
+            path.display()
+        ));
+    }
+    if metadata.len() > MAX_REBUILD_PROOF_FILE_BYTES {
+        return Err(format!(
+            "rebuild proof file {} exceeds {} bytes",
+            path.display(),
+            MAX_REBUILD_PROOF_FILE_BYTES
+        ));
+    }
+    let bytes = fs::read(path)
+        .map_err(|err| format!("read rebuild proof {} failed: {err}", path.display()))?;
+    if bytes.len() as u64 > MAX_REBUILD_PROOF_FILE_BYTES {
+        return Err(format!(
+            "rebuild proof file {} exceeds {} bytes",
+            path.display(),
+            MAX_REBUILD_PROOF_FILE_BYTES
+        ));
+    }
+    let wire: RebuildStatusWire = serde_json::from_slice(bytes.as_slice())
+        .map_err(|err| format!("parse rebuild proof {} failed: {err}", path.display()))?;
+    let response = wire.into_response()?;
+    if response.proof.signer_id != trusted_signer_id.trim() {
+        return Err(format!(
+            "trusted signer id mismatch: expected {}, got {}",
+            trusted_signer_id.trim(),
+            response.proof.signer_id
+        ));
+    }
+    if response.proof.signer_public_key_hex != trusted_public_key_hex {
+        return Err("trusted signer public key mismatch".to_string());
+    }
+    verify_rebuild_proof(&response)?;
+    Ok(RebuildProofVerificationReceipt {
+        schema_version: "oasis7.rebuild_proof_verification.v1",
+        proof_schema_version: REBUILD_PROOF_SCHEMA,
+        signer_id: response.proof.signer_id,
+        signer_public_key_hex: response.proof.signer_public_key_hex,
+        signed_payload_sha256: response.proof.signed_payload_sha256,
+        verified: true,
+    })
+}
+
+pub(super) fn run_verify<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<(), String> {
+    let mut proof_path = None;
+    let mut trusted_signer_id = None;
+    let mut trusted_public_key_hex = None;
+    while let Some(arg) = args.next() {
+        match arg {
+            "--proof" => proof_path = Some(required_verify_value(&mut args, "--proof")?),
+            "--trusted-signer-id" => {
+                trusted_signer_id = Some(required_verify_value(&mut args, "--trusted-signer-id")?)
+            }
+            "--trusted-signer-public-key-hex" => {
+                trusted_public_key_hex = Some(required_verify_value(
+                    &mut args,
+                    "--trusted-signer-public-key-hex",
+                )?)
+            }
+            "-h" | "--help" => return Err(verify_help()),
+            _ => return Err(format!("unknown verify-rebuild-proof option: {arg}")),
+        }
+    }
+    let proof_path = PathBuf::from(
+        proof_path.ok_or_else(|| "verify-rebuild-proof requires --proof".to_string())?,
+    );
+    let trusted_signer_id = trusted_signer_id
+        .ok_or_else(|| "verify-rebuild-proof requires --trusted-signer-id".to_string())?;
+    let trusted_public_key_hex = trusted_public_key_hex.ok_or_else(|| {
+        "verify-rebuild-proof requires --trusted-signer-public-key-hex".to_string()
+    })?;
+    let receipt = verify_rebuild_proof_file(
+        proof_path.as_path(),
+        trusted_signer_id.as_str(),
+        trusted_public_key_hex.as_str(),
+    )?;
+    println!(
+        "{}",
+        serde_json::to_string(&receipt)
+            .map_err(|err| format!("serialize rebuild proof verification receipt failed: {err}"))?
+    );
+    Ok(())
+}
+
+fn required_verify_value<'a>(
+    args: &mut impl Iterator<Item = &'a str>,
+    option: &str,
+) -> Result<String, String> {
+    args.next()
+        .map(str::to_owned)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("{option} requires a non-empty value"))
+}
+
+fn verify_help() -> String {
+    "Usage: oasis7_chain_runtime verify-rebuild-proof --proof <path> --trusted-signer-id <id> --trusted-signer-public-key-hex <64-hex>".to_string()
+}
+
+impl RebuildStatusWire {
+    fn into_response(self) -> Result<RebuildStatusResponse, String> {
+        if self.schema_version != "oasis7.rebuild_status.v1" {
+            return Err("unsupported rebuild status schema".to_string());
+        }
+        if self.proof.schema_version != REBUILD_PROOF_SCHEMA {
+            return Err("unsupported rebuild proof schema".to_string());
+        }
+        if self.connected_peers.len() > MAX_CONNECTED_PEER_IDS {
+            return Err("rebuild proof connected peer list exceeds bound".to_string());
+        }
+        let readiness_status = match self.readiness.status.as_str() {
+            "ready" => "ready",
+            "not_ready" => "not_ready",
+            _ => return Err("rebuild proof readiness status is invalid".to_string()),
+        };
+        if self.ok != (readiness_status == "ready") {
+            return Err("rebuild proof ok/readiness status mismatch".to_string());
+        }
+        if self.connected_peer_count < self.connected_peers.len() {
+            return Err("rebuild proof connected peer count is below list length".to_string());
+        }
+        Ok(RebuildStatusResponse {
+            schema_version: "oasis7.rebuild_status.v1",
+            observed_at_unix_ms: self.observed_at_unix_ms,
+            ok: self.ok,
+            liveness: RebuildLiveness {
+                running: self.liveness.running,
+                last_error: self.liveness.last_error,
+            },
+            readiness: RebuildReadiness {
+                status: readiness_status,
+                failed_gates: self.readiness.failed_gates,
+            },
+            heights: RebuildHeights {
+                committed_height: self.heights.committed_height,
+                network_committed_height: self.heights.network_committed_height,
+                last_execution_height: self.heights.last_execution_height,
+            },
+            network_head: RebuildNetworkHead {
+                source: self.network_head.source,
+                decision: self.network_head.decision,
+                height: self.network_head.height,
+                block_hash: self.network_head.block_hash,
+                execution_block_hash: self.network_head.execution_block_hash,
+                execution_state_root: self.network_head.execution_state_root,
+                observed_peer_count: self.network_head.observed_peer_count,
+                fresh_peer_count: self.network_head.fresh_peer_count,
+            },
+            checkpoint: self.checkpoint.map(|checkpoint| RebuildCheckpoint {
+                schema_version: checkpoint.schema_version,
+                checkpoint_id: checkpoint.checkpoint_id,
+                world_id: checkpoint.world_id,
+                height: checkpoint.height,
+                execution_block_hash: checkpoint.execution_block_hash,
+                execution_state_root: checkpoint.execution_state_root,
+                manifest_hash: checkpoint.manifest_hash,
+            }),
+            local_peer_id: self.local_peer_id,
+            connected_peers: self.connected_peers,
+            connected_peer_count: self.connected_peer_count,
+            proof: RebuildProofEnvelope {
+                schema_version: REBUILD_PROOF_SCHEMA,
+                signer_id: self.proof.signer_id,
+                signer_public_key_hex: self.proof.signer_public_key_hex,
+                signed_payload_sha256: self.proof.signed_payload_sha256,
+                signature_hex: self.proof.signature_hex,
+            },
+        })
+    }
 }

@@ -195,6 +195,48 @@ rm -f "$TMP_DIR/pair-provenance.json" "$TMP_DIR/pair-signature.bin" "$TMP_DIR/at
 bash "$ROOT_DIR/scripts/release-candidate-bundle.sh" validate \
   --bundle "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 
+# Distinct governed refs with one basename must receive deterministic closure
+# names and remain cryptographically verifiable after the source tree leaves.
+mkdir -p "$TMP_DIR/collision-a" "$TMP_DIR/collision-b"
+printf 'manifest-a\n' >"$TMP_DIR/collision-a/config.json"
+printf 'genesis-b\n' >"$TMP_DIR/collision-b/config.json"
+cp "$TMP_DIR/stage-with-provenance/config/doc/testing/evidence/pair-provenance.json" "$TMP_DIR/collision-provenance.json"
+python3 - "$TMP_DIR/collision-provenance.json" "$TMP_DIR/attestor-key.pem" "$TMP_DIR/pair-signature.bin" "$TMP_DIR" "$TMP_DIR/stage-with-provenance/config/doc/testing/evidence" <<'PY'
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt_path = Path(sys.argv[1])
+private_key = sys.argv[2]
+signature_path = Path(sys.argv[3])
+tmp_root = Path(sys.argv[4])
+stage_evidence = Path(sys.argv[5])
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+root = tmp_root
+receipt["signature"]["signature_ref"] = str(stage_evidence / "pair-signature.bin")
+receipt["signature"]["public_key_ref"] = str(stage_evidence / "attestor-public.pem")
+for key, path in (("manifest", root / "collision-a" / "config.json"), ("genesis", root / "collision-b" / "config.json")):
+    receipt["governed"][key].update({"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size})
+body = {key: value for key, value in receipt.items() if key != "binding_digest"}
+receipt["binding_digest"] = hashlib.sha256(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+receipt_path.write_text(json.dumps(receipt, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+payload = receipt_path.with_suffix(".payload")
+payload.write_bytes(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode())
+subprocess.run(["openssl", "dgst", "-sha256", "-sign", private_key, "-out", str(signature_path), str(payload)], check=True)
+PY
+"$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --validator-pair-provenance-ref "$TMP_DIR/collision-provenance.json" \
+  --out-dir "$TMP_DIR/stage-collision" >/dev/null
+test -f "$TMP_DIR/stage-collision/config/doc/testing/evidence/collision-provenance.json.closure.json"
+collision_a=$(jq -r '.mapping[] | select(contains("config.json"))' "$TMP_DIR/stage-collision/config/doc/testing/evidence/collision-provenance.json.closure.json" | sort -u | wc -l | tr -d ' ')
+test "$collision_a" -ge 2
+
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
