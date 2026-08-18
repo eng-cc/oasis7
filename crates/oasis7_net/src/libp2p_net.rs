@@ -42,8 +42,9 @@ use discovery::{
     handle_rendezvous_discovered, handle_routing_updated, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
-    maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
-    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
+    maybe_request_connected_peer_record, peer_record_enables_rendezvous,
+    peer_record_matches_target, peer_record_world_id, process_discovered_peer_record,
+    publish_discovery_provider, start_peer_discovery_query,
 };
 use futures::{FutureExt, StreamExt, channel::mpsc};
 use inbound_dispatch::dispatch_inbound_request;
@@ -509,7 +510,24 @@ impl Libp2pNetwork {
                                                     pending_discovery_peer_records.remove(&peer_id);
                                                     match *result {
                                                         Ok(Some(record)) => {
-                                                            if let Err(err) = process_discovered_peer_record(
+                                                            if !peer_record_matches_target(&record, peer_id) {
+                                                                push_bounded_clone(
+                                                                    &event_errors,
+                                                                    format!("libp2p discovered peer record target mismatch requested={peer_id} actual={}", record.record.peer_id),
+                                                                    max_error_messages,
+                                                                    "lock errors",
+                                                                );
+                                                                maybe_request_cached_peer_record(
+                                                                    &mut swarm,
+                                                                    &mut pending_peer_record_requests,
+                                                                    &mut pending_cached_peer_records,
+                                                                    &mut cached_peer_record_cooldowns,
+                                                                    &event_traffic_metrics,
+                                                                    peers.as_slice(),
+                                                                    peer_id,
+                                                                    local_peer_id,
+                                                                );
+                                                            } else if let Err(err) = process_discovered_peer_record(
                                                                 &mut swarm,
                                                                 &mut discovered_peer_records,
                                                                 &mut known_transport_paths,
