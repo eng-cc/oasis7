@@ -8,7 +8,7 @@ FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "u
 PLAN_MARKER="oasis7-required-plan-v1"
 PLAN_ARTIFACT=PLAN_MARKER
 PLAN_MEMBER=f"{PLAN_MARKER}.json"
-RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_pixel_world_bridge_lib_tests","run_pixel_world_bridge_wasm_check","run_launcher_web_build","run_oasis7_workspace_support_crate_tests","run_rust_baseline")
+RUN_FIELDS=("run_oasis7_required_tests","run_consensus_tests","run_distfs_tests","run_oasis7_node_tests","run_oasis7_net_tests","run_oasis7_net_libp2p_tests","run_viewer_contract_tests","run_viewer_wasm_check","run_viewer_perf_smoke","run_pixel_world_bridge_lib_tests","run_pixel_world_bridge_wasm_check","run_launcher_web_build","run_oasis7_workspace_support_crate_tests","run_compile_metrics_contract_tests","run_rust_baseline")
 
 def canonical_planner(raw):
     required=("scope","selected_capabilities","reason_summary","changed_path_count","planner_config_sha256",*RUN_FIELDS)

@@ -38,6 +38,34 @@ open(os.environ['EVENTS'],'a').write('transition\n')
 print(json.dumps({'task_uid':'task_11111111111111111111111111111111','status':'done','issue_url':'x'}))
 EOF
 chmod +x "$F/scripts/pm/"*
+
+cat >"$T/outside-review-plan.json" <<JSON
+{"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":"$HEAD","roles":["qa_engineer"],"preflight":{"ledger_path":"slice-ledger.jsonl"}}
+JSON
+ln -s "$T/outside-review-plan.json" "$F/escaping-review-plan.json"
+
+assert_review_plan_path_rejected() {
+  local plan_ref="$1" slug="$2"
+  printf 'Pre-PR Local Role Review: passed\n- Source Head: %s\n- Review Plan: %s\n- Review Roles: stale_compatibility_role\n- Slice Ledger: n/a; derived from Review Plan\n' \
+    "$HEAD" "$plan_ref" >"$F/review-escape.md"
+  : >"$T/events"
+  set +e
+  (cd "$F"; EVENTS="$T/events" PM_ROOT_DIR="$F" \
+    ./scripts/pm/task-closeout.sh --role tpm \
+      --task-uid task_11111111111111111111111111111111 \
+      --to-status ready --claim-type ready_for_pr \
+      --verification-profile fixture_repository_state \
+      --review-packet-file "$F/review-escape.md" --json >/dev/null 2>"$T/$slug.err")
+  local rc=$?
+  set -e
+  [[ "$rc" != "0" ]] || { echo "expected escaping review plan to fail: $plan_ref" >&2; exit 1; }
+  [[ ! -s "$T/events" ]] || { echo "escaping review plan reached lifecycle mutation: $plan_ref" >&2; exit 1; }
+  grep -qi "escapes repository root" "$T/$slug.err"
+}
+
+assert_review_plan_path_rejected ../outside-review-plan.json traversal
+assert_review_plan_path_rejected escaping-review-plan.json symlink
+
 run_case() {
   local status=$1 kind=$2; : >"$T/events"; local args=()
   git -C "$F" reset --hard -q "$HEAD"

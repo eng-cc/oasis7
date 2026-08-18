@@ -224,6 +224,7 @@ run_hosted_account_local_smoke() {
 }
 
 run_oasis7_client_launcher_web_build() {
+  run ./scripts/worktree-harness-contract.test.sh
   run mkdir -p output/release/web-launcher-dist
   (
     cd crates/oasis7_client_launcher
@@ -234,6 +235,10 @@ run_oasis7_client_launcher_web_build() {
 run_codex_agent_config_validation() {
   run ./scripts/pm/validate-codex-agent-config.test.sh
   run ./scripts/pm/codex-role-fit-task-binding.test.sh
+}
+
+run_compile_metrics_contract_tests() {
+  run bash ./scripts/ci-compile-metrics-contract.test.sh
 }
 
 run_required_gate_checks() {
@@ -248,7 +253,7 @@ run_required_gate_checks() {
   run bash ./scripts/ci-tests-argument-contract.test.sh
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
   run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
-  run bash ./scripts/ci-compile-metrics-contract.test.sh
+  run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh

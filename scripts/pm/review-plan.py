@@ -365,21 +365,34 @@ def main() -> int:
                                  comparison_ref, comparison_oid, roles, slices)
         plan_path = (Path(args.out).resolve() if args.out else
                      root / ".pm" / "scratch" / args.task_uid / "review-plans" / f"{epoch}.json")
+        preflight_result: dict[str, object] | None = None
+        if args.preflight_dir:
+            batch_path = Path(str(batch["batch_path"])).resolve()
+            preflight_result = preflight(root, batch_path, Path(args.preflight_dir).resolve(), epoch,
+                                         args.task_uid, args.head, slices)
         if plan_path.exists():
             plan = load_json(plan_path)
             if plan.get("schema") != SCHEMA or {key: plan.get(key) for key in identity} != identity or plan.get("epoch") != epoch:
                 raise ContractError(f"existing review plan does not match immutable inputs: {plan_path}")
+            if preflight_result is not None:
+                recorded_preflight = plan.get("preflight")
+                if not isinstance(recorded_preflight, dict):
+                    raise ContractError(
+                        "existing review plan has no persisted preflight ledger; "
+                        "regenerate a new immutable review epoch with --preflight-dir"
+                    )
+                comparable = lambda value: {key: item for key, item in value.items() if key != "reused"}
+                if comparable(recorded_preflight) != comparable(preflight_result):
+                    raise ContractError("existing review plan preflight does not match its immutable artifacts")
             result: dict[str, object] = {**plan, "reused": True}
         else:
             batch_path = Path(str(batch["batch_path"])).resolve()
             result = {"schema": SCHEMA, **identity, "epoch": epoch,
                       "batch_path": str(batch_path), "collection_path": str(batch_path.with_name(f"{batch_path.stem}.collection.json")),
                       "packet_refs": packet_refs(args.task_uid, slices), "reused": batch_reused}
+            if preflight_result is not None:
+                result["preflight"] = preflight_result
             write_plan(plan_path, result)
-        if args.preflight_dir:
-            batch_path = Path(str(result["batch_path"])).resolve()
-            result["preflight"] = preflight(root, batch_path, Path(args.preflight_dir).resolve(), epoch,
-                                             args.task_uid, args.head, slices)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
     except ContractError as exc:

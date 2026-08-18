@@ -376,12 +376,49 @@ def evidence_body(task_uid: str, role: str, phase: str, fields: dict[str, Any]) 
     return "\n".join(lines) + "\n"
 
 
-def update_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
+def update_project_fields(
+    args: argparse.Namespace,
+    task: OrderedDict[str, Any],
+    project_item_id: str,
+    *,
+    require_lifecycle_projection: bool = False,
+) -> int:
     sync = load_sync_module()
     project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    if require_lifecycle_projection:
+        values = sync.project_field_values(task)
+        missing: list[str] = []
+        for field_name in ("Status", "PM Status", "Workflow Phase"):
+            value = str(values.get(field_name) or "")
+            field = fields.get(field_name)
+            if not field:
+                missing.append(f"{field_name}:missing_field")
+            elif not value:
+                missing.append(f"{field_name}:empty_value")
+            elif field_name in sync.SINGLE_SELECT_FIELDS and value not in (field.get("options_by_name") or {}):
+                missing.append(f"{field_name}:missing_option:{value}")
+        if missing:
+            die(
+                "project lifecycle projection is unavailable; refusing to leave local task truth ahead of GitHub Project: "
+                + ", ".join(missing)
+                + "; add the missing Project field/options, then rerun "
+                + f"./scripts/pm/refresh-task-cache.sh --task-uid {args.task_uid} --json and the same lifecycle command"
+            )
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
     if skipped:
         print(f"github-project-task: skipped fields: {', '.join(skipped)}", file=sys.stderr)
+    if require_lifecycle_projection:
+        unresolved = [
+            item for item in skipped
+            if item.split(":", 1)[0] in {"Status", "PM Status", "Workflow Phase"}
+            and not item.endswith(":unchanged")
+        ]
+        if unresolved:
+            die(
+                "project lifecycle projection was not fully updated; refusing local/Project phase drift: "
+                + ", ".join(unresolved)
+                + "; rerun the same lifecycle command after the Project fields are available"
+            )
     return int(updated)
 
 
@@ -798,7 +835,12 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     if args.to_status == "done":
         updated_fields = update_done_project_fields(args, task, str(record["project_item_id"]))
     elif record.get("project_item_id"):
-        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+        updated_fields = update_project_fields(
+            args,
+            task,
+            str(record["project_item_id"]),
+            require_lifecycle_projection=True,
+        )
     update_issue_body(args.repo, int(record["issue_number"]), task)
     record.setdefault("evidence_comments", []).append(comment_url)
     if record.get("_github_source") != "issue_search" or mapping_path.exists():
@@ -1028,7 +1070,15 @@ def command_record_pr(args: argparse.Namespace) -> int:
     updated_fields = 0
     if record.get("project_item_id"):
         if is_draft_candidate:
-            updated_fields = update_pr_project_field(args, task, str(record["project_item_id"]))
+            # A draft candidate owns the explicit committed/verification
+            # projection. Updating only the PR field left Project Workflow
+            # Phase at execution and forced a manual audit/repair retry.
+            updated_fields = update_project_fields(
+                args,
+                task,
+                str(record["project_item_id"]),
+                require_lifecycle_projection=True,
+            )
         else:
             updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
