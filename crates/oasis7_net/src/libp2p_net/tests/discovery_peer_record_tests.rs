@@ -403,6 +403,7 @@ fn maybe_request_connected_peer_record_respects_short_cooldown() {
         &traffic_metrics,
         target_peer_id,
         local_peer_id,
+        false,
     );
     assert!(requested);
     assert_eq!(pending_peer_record_requests.len(), 1);
@@ -418,6 +419,7 @@ fn maybe_request_connected_peer_record_respects_short_cooldown() {
         &traffic_metrics,
         target_peer_id,
         local_peer_id,
+        false,
     );
     assert!(!requested_during_cooldown);
     assert!(pending_peer_record_requests.is_empty());
@@ -432,6 +434,7 @@ fn maybe_request_connected_peer_record_respects_short_cooldown() {
         &traffic_metrics,
         target_peer_id,
         local_peer_id,
+        false,
     );
     assert!(requested_after_expiry);
     assert_eq!(pending_peer_record_requests.len(), 1);
@@ -666,6 +669,7 @@ fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
             &traffic_metrics,
             target_peer_id,
             local_peer_id,
+            false,
         )
     );
     assert!(!super::super::discovery::maybe_request_cached_peer_record(
@@ -730,6 +734,7 @@ fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
         &traffic_metrics,
         target_peer_id,
         local_peer_id,
+        false,
     );
     assert!(connected_requested);
     pending_peer_record_requests.clear();

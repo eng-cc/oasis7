@@ -38,7 +38,9 @@ fn assert_mismatched_peer_record_response_is_rejected(
     let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
     match &kind {
-        super::super::discovery::PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
+        super::super::discovery::PendingPeerRecordRequest::ConnectedPeerRecord {
+            peer_id, ..
+        } => {
             assert_eq!(*peer_id, target_peer_id);
             pending_connected_peer_records.insert(*peer_id);
         }
@@ -90,6 +92,7 @@ fn connected_peer_record_response_rejects_signed_record_for_wrong_target() {
     assert_mismatched_peer_record_response_is_rejected(
         super::super::discovery::PendingPeerRecordRequest::ConnectedPeerRecord {
             peer_id: target_peer_id,
+            target_owned_route_expected: false,
         },
         target_peer_id,
     );
@@ -134,6 +137,7 @@ fn connected_peer_record_outbound_failure_falls_back_via_another_connected_peer(
         &mut swarm,
         super::super::discovery::PendingPeerRecordRequest::ConnectedPeerRecord {
             peer_id: target_peer_id,
+            target_owned_route_expected: false,
         },
         &mut pending_peer_record_requests,
         &mut pending_connected_peer_records,
@@ -165,4 +169,71 @@ fn connected_peer_record_outbound_failure_falls_back_via_another_connected_peer(
             && *peer_id == target_peer_id
             && *tried_proxies == vec![fallback_proxy]
     ));
+}
+
+#[test]
+fn connected_peer_record_failure_prefers_target_owned_dht_route_over_cache_proxy() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        std::time::Duration::from_secs(30),
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let target_peer_id = PeerId::random();
+    let fallback_proxy = PeerId::random();
+    let local_peer_id = PeerId::random();
+    let mut pending_dht = HashMap::new();
+    let mut pending_discovery_peer_records = HashSet::new();
+    let discovered_peer_records = HashMap::new();
+    super::super::discovery::maybe_queue_discovery_peer_record(
+        &mut swarm,
+        &mut pending_dht,
+        &mut pending_discovery_peer_records,
+        &discovered_peer_records,
+        target_peer_id,
+        local_peer_id,
+        "world-a",
+    );
+    assert!(pending_discovery_peer_records.contains(&target_peer_id));
+    assert!(pending_dht.values().any(|query| matches!(
+        query,
+        super::super::kad_queries::PendingDhtQuery::DiscoverPeerRecord {
+            peer_id,
+            ..
+        } if *peer_id == target_peer_id
+    )));
+
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::from([target_peer_id]);
+    let mut connected_peer_record_cooldowns = HashMap::from([(target_peer_id, i64::MAX)]);
+    let mut pending_cached_peer_records = HashSet::new();
+    let mut cached_peer_record_cooldowns = HashMap::new();
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    super::super::discovery::handle_peer_record_outbound_failure(
+        &mut swarm,
+        super::super::discovery::PendingPeerRecordRequest::ConnectedPeerRecord {
+            peer_id: target_peer_id,
+            target_owned_route_expected: true,
+        },
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &[target_peer_id, fallback_proxy],
+        &traffic_metrics,
+        local_peer_id,
+    );
+
+    assert!(
+        pending_cached_peer_records.is_empty(),
+        "a pending target-owned DHT route must not be replaced by cache-only fallback"
+    );
+    assert!(pending_peer_record_requests.is_empty());
 }
