@@ -65,7 +65,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          # Current-only measurements never inspect repository history. Fetch a
+          # baseline explicitly below when one is requested instead of paying
+          # the full-history transfer cost on every run.
+          fetch-depth: 1
+
+      - name: Fetch baseline ref
+        if: ${{ inputs.baseline_ref != '' }}
+        shell: bash
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin -- "${BASELINE_REF}"
 
       - name: Install pinned Rust toolchain
         shell: bash
@@ -98,9 +110,16 @@ jobs:
       - name: Resolve baseline ref
         id: baseline
         shell: bash
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref }}
         run: |
           set -euo pipefail
-          baseline_ref="${{ inputs.baseline_ref }}"
+          baseline_ref="${BASELINE_REF}"
+          if [[ -n "${baseline_ref}" ]]; then
+            # Use FETCH_HEAD so branch, tag, and SHA inputs all resolve to the
+            # exact object fetched above, even in the shallow checkout.
+            baseline_ref="$(git rev-parse --verify 'FETCH_HEAD^{commit}')"
+          fi
           echo "baseline_ref=${baseline_ref}" >> "${GITHUB_OUTPUT}"
           echo "baseline_ref=${baseline_ref}"
 
