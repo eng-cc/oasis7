@@ -622,6 +622,21 @@ impl World {
                         },
                     }));
                 }
+                if !plan
+                    .produce
+                    .iter()
+                    .any(|stack| !stack.kind.trim().is_empty() && stack.amount > 0)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "recipe plan must produce at least one positive material output"
+                                    .to_string(),
+                            ],
+                        },
+                    }));
+                }
                 let recipe_profile = self.recipe_profile(recipe_id);
                 if let Some(profile) = recipe_profile {
                     if !recipe_stage_gate_allowed(
@@ -943,6 +958,17 @@ impl World {
                         },
                     }));
                 };
+                if factory.builder_agent_id != *requester_agent_id {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "pause factory denied: requester {} is not builder {}",
+                                requester_agent_id, factory.builder_agent_id
+                            )],
+                        },
+                    }));
+                }
                 let active_jobs = self
                     .state
                     .pending_recipe_jobs

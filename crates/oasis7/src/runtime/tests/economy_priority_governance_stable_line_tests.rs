@@ -612,3 +612,143 @@ fn planned_pause_on_paused_factory_is_rejected_without_clearing_candidate_or_his
         .clone();
     assert_eq!(after, before);
 }
+
+#[test]
+fn zero_output_recipe_is_rejected_without_advancing_stable_line() {
+    let factory_id = "factory.identity.zero-output";
+    let mut world = stable_identity_fixture(factory_id);
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.identity.zero-output".to_string(),
+        plan: RecipeExecutionPlan::accepted(1, Vec::new(), Vec::new(), Vec::new(), 1, 1),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("reject zero-output recipe");
+
+    assert!(matches!(
+        world.journal().events.last().map(|event| &event.body),
+        Some(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            reason: RejectReason::RuleDenied { .. },
+            ..
+        }))
+    ));
+    assert!(world.state().pending_recipe_jobs.is_empty());
+    assert_eq!(world.state().industry_progress.completed_recipe_jobs, 0);
+    assert_eq!(
+        world.state().industry_progress.stage,
+        IndustryStage::Bootstrap
+    );
+}
+
+#[test]
+fn duplicate_recipe_completion_replay_does_not_duplicate_output_or_progress() {
+    let factory_id = "factory.identity.duplicate-completion";
+    let mut world = stable_identity_fixture(factory_id);
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.identity.duplicate-completion".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            Vec::new(),
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let snapshot = world.snapshot();
+    world.step().expect("complete recipe");
+
+    let mut journal = world.journal().clone();
+    let mut duplicate = journal
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.body,
+                WorldEventBody::Domain(DomainEvent::RecipeCompleted { .. })
+            )
+        })
+        .expect("recipe completion event")
+        .clone();
+    duplicate.id = journal.events.last().expect("journal event").id + 1;
+    journal.append(duplicate);
+
+    let restored = World::from_snapshot(snapshot, journal).expect("replay duplicate completion");
+    assert_eq!(
+        restored.ledger_material_balance(&MaterialLedgerId::site("site-1"), "gear"),
+        1
+    );
+    assert_eq!(restored.state().industry_progress.completed_recipe_jobs, 1);
+    let production = &restored
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory")
+        .production;
+    assert_eq!(production.completed_jobs, 1);
+    assert_eq!(production.same_recipe_repeat_count, 1);
+}
+
+#[test]
+fn non_owner_cannot_pause_idle_factory_or_clear_stable_line_candidate() {
+    let factory_id = "factory.identity.pause.owner";
+    let recipe_id = "recipe.identity.pause.owner";
+    let mut world = stable_identity_fixture(factory_id);
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-b".to_string(),
+        pos: pos(1, 0),
+    });
+    world.step().expect("register non-owner");
+    complete_identity_recipe(
+        &mut world,
+        factory_id,
+        recipe_id,
+        RecipeExecutionPlan::accepted(
+            1,
+            Vec::new(),
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+    );
+    let before = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory before unauthorized pause")
+        .production
+        .clone();
+
+    world.submit_action(Action::PauseFactoryProduction {
+        requester_agent_id: "builder-b".to_string(),
+        factory_id: factory_id.to_string(),
+        reason: "sabotage".to_string(),
+    });
+    world.step().expect("reject unauthorized pause");
+
+    assert!(matches!(
+        world.journal().events.last().map(|event| &event.body),
+        Some(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            reason: RejectReason::RuleDenied { .. },
+            ..
+        }))
+    ));
+    assert_eq!(
+        world
+            .state()
+            .factories
+            .get(factory_id)
+            .expect("factory after unauthorized pause")
+            .production,
+        before
+    );
+}

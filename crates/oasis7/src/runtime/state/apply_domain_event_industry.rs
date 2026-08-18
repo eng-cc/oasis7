@@ -566,10 +566,13 @@ impl WorldState {
                 logistics_path_ids: _,
                 ..
             } => {
-                let completed_snapshot = self
+                let Some(completed_snapshot) = self
                     .pending_recipe_jobs
                     .get(job_id)
-                    .map(FactoryProductionSnapshot::from_recipe_job);
+                    .map(FactoryProductionSnapshot::from_recipe_job)
+                else {
+                    return Ok(());
+                };
                 self.pending_recipe_jobs.remove(job_id);
                 for stack in produce {
                     add_material_balance_for_ledger(
@@ -607,13 +610,11 @@ impl WorldState {
                     factory.production.last_completed_at = Some(now);
                     factory.production.completed_jobs =
                         factory.production.completed_jobs.saturating_add(1);
-                    let same_canonical_line = completed_snapshot.as_ref().is_some_and(|snapshot| {
-                        factory
-                            .production
-                            .last_completed_canonical_snapshot
-                            .as_ref()
-                            == Some(snapshot)
-                    });
+                    let same_canonical_line = factory
+                        .production
+                        .last_completed_canonical_snapshot
+                        .as_ref()
+                        == Some(&completed_snapshot);
                     factory.production.same_recipe_repeat_count = if same_canonical_line {
                         factory
                             .production
@@ -623,7 +624,7 @@ impl WorldState {
                         1
                     };
                     factory.production.last_completed_recipe_id = Some(recipe_id.clone());
-                    factory.production.last_completed_canonical_snapshot = completed_snapshot;
+                    factory.production.last_completed_canonical_snapshot = Some(completed_snapshot);
                     if factory.production.active_jobs == 0 {
                         factory.production.status = FactoryProductionStatus::Idle;
                     }
