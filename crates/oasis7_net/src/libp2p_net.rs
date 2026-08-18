@@ -920,6 +920,7 @@ impl Libp2pNetwork {
                                         &event_traffic_metrics,
                                         peer_id,
                                         local_peer_id,
+                                        peer_record_template.is_some(),
                                     );
                                     maybe_request_cached_discovery_peers(
                                         &mut swarm,
