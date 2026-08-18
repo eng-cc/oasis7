@@ -301,10 +301,16 @@ jobs:
         run: cargo install trunk --locked
       - name: Build web dists
         run: |
-          mkdir -p output/release/web-dist output/release/web-launcher-dist
+          mkdir -p output/release/web-dist output/release/web-launcher-dist output/release/viewer-optional-payload
           (
-            ./scripts/build-viewer-software-safe.sh
-            ./scripts/copy-viewer-web-dist.sh --dist-dir output/release/web-dist
+            ./scripts/build-viewer-software-safe.sh --optional-payload-dir output/release/viewer-optional-payload
+            ./scripts/copy-viewer-web-dist.sh \
+              --dist-dir output/release/web-dist \
+              --optional-payload-dir output/release/viewer-optional-payload
+            ./scripts/package-viewer-web-delivery.sh \
+              --web-dist output/release/web-dist \
+              --optional-payload-dir output/release/viewer-optional-payload \
+              --out-file output/release/oasis7-viewer-web-delivery.tar.gz
           )
           (
             cd crates/oasis7_client_launcher
@@ -318,6 +324,12 @@ jobs:
             output/release/web-dist
             output/release/web-launcher-dist
           if-no-files-found: error
+      - name: Upload viewer web delivery
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-viewer-web-delivery
+          path: output/release/oasis7-viewer-web-delivery.tar.gz
+          if-no-files-found: error
 
   package-native:
     needs: build-web-dist
@@ -327,7 +339,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             platform: linux-x64
-            asset_name: oasis7-linux-x86_64.AppImage
+            asset_name: oasis7-linux-x64.deb
             target_triple: native
           - os: macos-14
             platform: macos-x64
@@ -370,36 +382,6 @@ jobs:
         with:
           shared-key: release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-v2
           cache-on-failure: true
-      - name: Ensure Linux AppImage tooling
-        if: matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APPIMAGETOOL_VERSION="1.9.1"
-          APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
-          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
-          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
-          APPIMAGE_RUNTIME_FILENAME="runtime-x86_64"
-          APPIMAGE_RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/${APPIMAGE_RUNTIME_FILENAME}"
-          APPIMAGE_RUNTIME_SHA256="1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
-
-          mkdir -p "${RUNNER_TEMP}/appimagetool"
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGETOOL_URL}" \
-            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
-          printf '%s  %s\n' \
-            "${APPIMAGETOOL_SHA256}" \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGE_RUNTIME_URL}" \
-            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}"
-          printf '%s  %s\n' \
-            "${APPIMAGE_RUNTIME_SHA256}" \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" | sha256sum -c -
-          chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
-          ln -sf \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
-            "${RUNNER_TEMP}/appimagetool/appimagetool"
-          echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
-          echo "OASIS7_APPIMAGE_RUNTIME_FILE=${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" >> "${GITHUB_ENV}"
       - name: Download web dist artifacts
         uses: actions/download-artifact@v6
         with:
@@ -441,7 +423,36 @@ jobs:
             --web-dist output/release/web-dist \
             --web-launcher-dist output/release/web-launcher-dist \
             --out-dir output/release/assets \
-            --profile release
+            --profile packaging
+      - name: Write BUILDINFO into Linux bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="output/release/assets"
+          bundle="${assets}/oasis7-${{ matrix.platform }}"
+          buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"
+          {
+            echo "workflow=Release Packages"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "release_tag=${GITHUB_REF_NAME}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "build_profile=packaging"
+            echo "platform=${{ matrix.platform }}"
+            echo "target_triple=${{ matrix.target_triple }}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "package_version=${{ steps.release_version.outputs.value }}"
+            echo "published=false"
+          } > "${buildinfo}"
+
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            cp "${buildinfo}" "${bundle}/BUILDINFO"
+            cd "${bundle}"
+            mapfile -t files < <(find . -type f ! -name SHA256SUMS -print | sed 's#^./##' | sort)
+            ((${#files[@]} > 0)) || { echo "error: Linux bundle has no files to checksum" >&2; exit 1; }
+            sha256sum "${files[@]}" > SHA256SUMS
+            sha256sum -c SHA256SUMS >/dev/null
+          fi
       - name: Package native installer
         shell: bash
         run: |
@@ -452,28 +463,17 @@ jobs:
             --out-dir output/release/assets \
             --asset-name "${{ matrix.asset_name }}" \
             --version "${{ steps.release_version.outputs.value }}"
-      - name: Package secondary Linux .deb
-        if: matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          ./scripts/package-native-installer.sh \
-            --platform "${{ matrix.platform }}" \
-            --bundle-dir "output/release/assets/oasis7-${{ matrix.platform }}" \
-            --out-dir output/release/assets \
-            --asset-name "oasis7-linux-x64.deb" \
-            --version "${{ steps.release_version.outputs.value }}"
       - name: Upload platform asset
         uses: actions/upload-artifact@v7
         with:
           name: release-asset-${{ matrix.platform }}
           path: output/release/assets/${{ matrix.asset_name }}
           if-no-files-found: error
-      - name: Upload secondary Linux .deb
-        if: matrix.platform == 'linux-x64'
+      - name: Upload ops-tools asset
         uses: actions/upload-artifact@v7
         with:
-          name: release-asset-linux-x64-deb-secondary
-          path: output/release/assets/oasis7-linux-x64.deb
+          name: release-asset-${{ matrix.platform }}-ops-tools
+          path: output/release/assets/oasis7-${{ matrix.platform }}-ops-tools.tar.gz
           if-no-files-found: error
 
   publish-release:
@@ -505,23 +505,31 @@ jobs:
           pattern: release-asset-*
           path: output/release/assets
           merge-multiple: true
+      - name: Download viewer web delivery
+        uses: actions/download-artifact@v6
+        with:
+          name: release-viewer-web-delivery
+          path: output/release/assets
       - name: Generate checksums
         run: |
           cd output/release/assets
           ls -l
           for file in \
-            oasis7-linux-x86_64.AppImage \
             oasis7-linux-x64.deb \
             oasis7-macos-x64.dmg \
-            oasis7-windows-x64.exe
+            oasis7-windows-x64.exe \
+            oasis7-viewer-web-delivery.tar.gz
           do
             [[ -f "${file}" ]] || { echo "error: missing release asset ${file}" >&2; exit 1; }
           done
           sha256sum \
-            oasis7-linux-x86_64.AppImage \
             oasis7-linux-x64.deb \
             oasis7-macos-x64.dmg \
             oasis7-windows-x64.exe \
+            oasis7-linux-x64-ops-tools.tar.gz \
+            oasis7-macos-x64-ops-tools.tar.gz \
+            oasis7-windows-x64-ops-tools.tar.gz \
+            oasis7-viewer-web-delivery.tar.gz \
             > oasis7-checksums.txt
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
@@ -530,8 +538,11 @@ jobs:
           name: oasis7 ${{ steps.tag.outputs.value }}
           generate_release_notes: true
           files: |
-            output/release/assets/oasis7-linux-x86_64.AppImage
             output/release/assets/oasis7-linux-x64.deb
             output/release/assets/oasis7-macos-x64.dmg
             output/release/assets/oasis7-windows-x64.exe
+            output/release/assets/oasis7-linux-x64-ops-tools.tar.gz
+            output/release/assets/oasis7-macos-x64-ops-tools.tar.gz
+            output/release/assets/oasis7-windows-x64-ops-tools.tar.gz
+            output/release/assets/oasis7-viewer-web-delivery.tar.gz
             output/release/assets/oasis7-checksums.txt

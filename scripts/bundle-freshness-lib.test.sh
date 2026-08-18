@@ -120,4 +120,44 @@ bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 rm -f "$tmp_repo/bundle/web-launcher/app.js"
 expect_asset_drift "deleting bundle/web-launcher/app.js"
 
+bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle" packaging native
+if freshness_output="$(bundle_check_freshness "$tmp_repo" "$tmp_repo/bundle" packaging native 2>&1)"; then
+  :
+else
+  echo "expected matching packaging profile/target to remain fresh: $freshness_output" >&2
+  exit 1
+fi
+if freshness_output="$(bundle_check_freshness "$tmp_repo" "$tmp_repo/bundle" dev native 2>&1)"; then
+  echo "expected profile mismatch to invalidate a reusable bundle" >&2
+  exit 1
+fi
+grep -Fq "bundle profile drift" <<<"$freshness_output" || {
+  echo "expected profile drift diagnostic, got: $freshness_output" >&2
+  exit 1
+}
+if freshness_output="$(bundle_check_freshness "$tmp_repo" "$tmp_repo/bundle" packaging x86_64-apple-darwin 2>&1)"; then
+  echo "expected target mismatch to invalidate a reusable bundle" >&2
+  exit 1
+fi
+grep -Fq "bundle target drift" <<<"$freshness_output" || {
+  echo "expected target drift diagnostic, got: $freshness_output" >&2
+  exit 1
+}
+
+grep -Fq 'bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" "$BUNDLE_PROFILE" "$BUNDLE_TARGET_TRIPLE"' \
+  "$ROOT_DIR/scripts/run-launcher-stack.sh" || {
+  echo "run-launcher-stack must bind bundle profile and target freshness requests" >&2
+  exit 1
+}
+grep -Fq 'bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" dev native' \
+  "$ROOT_DIR/scripts/worktree-harness.sh" || {
+  echo "worktree harness must bind its dev/native bundle freshness request" >&2
+  exit 1
+}
+grep -Fq -- '--bundle-profile "$PROFILE" --bundle-target-triple native' \
+  "$ROOT_DIR/scripts/run-producer-playtest.sh" || {
+  echo "producer playtest must propagate its bundle profile and target" >&2
+  exit 1
+}
+
 echo "bundle freshness lib tests passed"

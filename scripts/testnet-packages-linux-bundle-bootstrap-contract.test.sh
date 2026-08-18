@@ -23,40 +23,48 @@ def step(name: str) -> tuple[int, str]:
 
 
 buildinfo_offset, buildinfo = step("Write BUILDINFO")
-archive_offset, archive = step("Archive raw Linux bundle")
+package_offset, _ = step("Package native installer")
 _, outer_checksums = step("Generate checksums")
-assert buildinfo_offset < archive_offset, (
-    "Linux raw bundle must be archived after BUILDINFO is written"
+assert buildinfo_offset < package_offset, (
+    "BUILDINFO must be staged before package-native-installer runs"
 )
-assert '"output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"' in buildinfo, (
+assert '"platform":"linux-x64"' in workflow
+assert '"asset_name":"oasis7-linux-x64.deb"' in workflow, (
+    "Linux package must publish the Debian installer as the sole primary asset"
+)
+assert "AppImage" not in workflow, "Linux AppImage must not remain a published artifact"
+assert "Archive raw Linux bundle" not in workflow, "raw Linux tar must not remain a release artifact"
+assert "Package secondary Linux .deb" not in workflow, "duplicate Linux deb step must be removed"
+assert 'buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"' in buildinfo, (
     "external Linux BUILDINFO artifact must remain available for outer checksums"
 )
 assert '"${{ matrix.platform }}-BUILDINFO"' in outer_checksums, (
     "outer artifact checksums must continue to cover BUILDINFO"
 )
-assert 'cp "output/testnet-packages/assets/linux-x64-BUILDINFO"' in archive, (
-    "Linux bundle must embed the external BUILDINFO before archive"
+assert 'cp "${buildinfo}" "${bundle}/BUILDINFO"' in buildinfo, (
+    "Linux BUILDINFO must be copied into the Debian payload"
 )
-assert '"$bundle_dir/BUILDINFO"' in archive, (
-    "Linux bundle must place BUILDINFO at its root"
+assert 'sha256sum "${files[@]}" > SHA256SUMS' in buildinfo or \
+    'shasum -a 256 "${files[@]}" > SHA256SUMS' in buildinfo, (
+    "Linux bundle must generate an internal SHA256SUMS before packaging"
 )
-assert "find . -type f ! -name SHA256SUMS" in archive, (
-    "inner bundle checksums must exclude SHA256SUMS to avoid recursive self-checks"
+assert 'shasum -a 256 -c SHA256SUMS' in buildinfo, (
+    "Linux bundle metadata must be self-verified before packaging"
 )
-assert "> SHA256SUMS" in archive, "Linux bundle must write root SHA256SUMS"
-assert archive.index("> SHA256SUMS") < archive.index("tar -C"), (
-    "Linux bundle checksums must be created before archive"
+assert "ops package" in workflow.lower(), "Linux workflow must publish a separate ops package"
+assert "oasis7-${{ matrix.platform }}-ops-tools.tar.gz" in workflow, (
+    "Linux workflow must upload the checksummed ops-tools archive"
 )
 PY
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-linux-bundle-contract.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
-bundle="$TMP_DIR/oasis7-linux-x64"
+bundle="$TMP_DIR/oasis7-linux-x64-ops-tools"
 mkdir -p "$bundle/bin"
-printf 'runtime\n' >"$bundle/bin/oasis7_chain_runtime"
 printf 'repair\n' >"$bundle/bin/oasis7_world_repair_rebuild"
-printf 'registry\n' >"$bundle/bin/oasis7_governance_registry_import"
-printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+test\nrun_id=1\n' >"$bundle/BUILDINFO"
+printf 'registry-import\n' >"$bundle/bin/oasis7_governance_registry_import"
+printf 'registry-audit\n' >"$bundle/bin/oasis7_governance_registry_audit"
+printf '{"opsToolsSchemaVersion":1}\n' >"$bundle/.oasis7-ops-tools-manifest.json"
 (
   cd "$bundle"
   files=()
@@ -66,8 +74,56 @@ printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+t
   shasum -a 256 "${files[@]}" > SHA256SUMS
   shasum -a 256 -c SHA256SUMS >/dev/null
 )
-tar -C "$TMP_DIR" -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" oasis7-linux-x64
-tar -tzf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" | grep -Fxq 'oasis7-linux-x64/BUILDINFO'
-tar -tzf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" | grep -Fxq 'oasis7-linux-x64/SHA256SUMS'
+tar -C "$TMP_DIR" -czf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" oasis7-linux-x64-ops-tools
+tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json'
+tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/SHA256SUMS'
 
-echo "ok: Linux raw bundle embeds non-recursive bootstrap metadata"
+if command -v dpkg-deb >/dev/null 2>&1; then
+  deb_root="$TMP_DIR/deb-root"
+  mkdir -p "$deb_root/DEBIAN" "$deb_root/opt/oasis7/bin"
+  printf 'Package: oasis7\nVersion: 0.0.0\nArchitecture: amd64\nDescription: contract fixture\n' \
+    >"$deb_root/DEBIAN/control"
+  printf 'workflow=Testnet Packages\ncommit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0\nrun_id=1\nplatform=linux-x64\n' \
+    >"$deb_root/opt/oasis7/BUILDINFO"
+  printf '#!/usr/bin/env bash\n' >"$deb_root/opt/oasis7/bin/oasis7_chain_runtime"
+  chmod +x "$deb_root/opt/oasis7/bin/oasis7_chain_runtime"
+  (
+    cd "$deb_root/opt/oasis7"
+    sha256sum bin/oasis7_chain_runtime BUILDINFO >SHA256SUMS
+  )
+  dpkg-deb --build --root-owner-group "$deb_root" "$TMP_DIR/oasis7-linux-x64.deb" >/dev/null
+  extract_dir="$TMP_DIR/deb-extract"
+  dpkg-deb --extract "$TMP_DIR/oasis7-linux-x64.deb" "$extract_dir"
+  test -f "$extract_dir/opt/oasis7/BUILDINFO"
+  test -f "$extract_dir/opt/oasis7/SHA256SUMS"
+  (cd "$extract_dir/opt/oasis7" && sha256sum -c SHA256SUMS >/dev/null)
+
+  verifier="$ROOT_DIR/scripts/p2p-verify-linux-package-bundle.py"
+  bundle="$extract_dir/opt/oasis7"
+  python3 "$verifier" "$bundle" 0.0.0 abcdef1234567890abcdef1234567890abcdef12 1
+
+  # RED/GREEN regression: a regular payload file that is deployed by the
+  # upgrader must not be accepted when it is absent from SHA256SUMS.
+  printf 'unlisted payload\n' >"$bundle/bin/UNLISTED"
+  set +e
+  python3 "$verifier" "$bundle" 0.0.0 abcdef1234567890abcdef1234567890abcdef12 1 \
+    >"$TMP_DIR/unlisted.stdout" 2>"$TMP_DIR/unlisted.stderr"
+  unlisted_status=$?
+  set -e
+  test "$unlisted_status" -ne 0
+  grep -q "SHA256SUMS does not cover bundle files: bin/UNLISTED" "$TMP_DIR/unlisted.stderr"
+
+  # BUILDINFO is also a rollout input to fresh-host bootstrap.  Reject an
+  # unsafe version before any caller can interpolate it into releases/.
+  sed -i 's/^package_version=.*/package_version=..\/outside/' "$bundle/BUILDINFO"
+  (cd "$bundle" && sha256sum bin/oasis7_chain_runtime BUILDINFO >SHA256SUMS)
+  set +e
+  python3 "$verifier" "$bundle" ../outside abcdef1234567890abcdef1234567890abcdef12 1 \
+    >"$TMP_DIR/version.stdout" 2>"$TMP_DIR/version.stderr"
+  version_status=$?
+  set -e
+  test "$version_status" -ne 0
+  grep -q "safe single path token" "$TMP_DIR/version.stderr"
+fi
+
+echo "ok: Linux publishes deb-only player package plus checksummed ops package"

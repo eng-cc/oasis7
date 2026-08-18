@@ -61,7 +61,7 @@ function buildRuntimeUnavailableFatal(moduleUrl, error) {
   ].filter(Boolean).join(": ");
 
   return {
-    code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
+    code: error?.code || PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
     message,
   };
 }

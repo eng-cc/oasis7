@@ -18,9 +18,42 @@ PY
 
 node_root="$TMP_DIR/node"
 bundle_root="$TMP_DIR/bundle/oasis7-linux-x64"
+package_deb="$TMP_DIR/oasis7-linux-x64.deb"
+unlisted_package_deb="$TMP_DIR/oasis7-linux-x64-unlisted.deb"
+ops_tools_tar="$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz"
+ops_bundle_root="$TMP_DIR/bundle/oasis7-linux-x64-ops-tools"
 package_version="0.0.0+testnet.test.abcdef123456"
 commit="abcdef1234567890abcdef1234567890abcdef12"
 run_id="12345"
+
+if ! command -v dpkg-deb >/dev/null 2>&1; then
+  mkdir -p "$TMP_DIR/fake-bin"
+  cat >"$TMP_DIR/fake-bin/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --build)
+    source="${@: -2:1}"
+    output="${@: -1}"
+    mkdir -p "${output}.root"
+    cp -a "$source/." "${output}.root/"
+    : >"$output"
+    ;;
+  --extract)
+    source="${2:?missing source}"
+    destination="${3:?missing destination}"
+    mkdir -p "$destination"
+    cp -a "${source}.root/." "$destination/"
+    ;;
+  *)
+    echo "unsupported dpkg-deb fixture operation" >&2
+    exit 2
+    ;;
+esac
+SH
+  chmod +x "$TMP_DIR/fake-bin/dpkg-deb"
+  export PATH="$TMP_DIR/fake-bin:$PATH"
+fi
 
 mkdir -p \
   "$bundle_root/bin" \
@@ -30,6 +63,14 @@ mkdir -p \
   "$node_root/backups"
 printf 'runtime-v2\n' >"$bundle_root/bin/oasis7_chain_runtime"
 chmod +x "$bundle_root/bin/oasis7_chain_runtime"
+cat >"$bundle_root/BUILDINFO" <<EOF
+workflow=Testnet Packages
+commit=$commit
+package_version=$package_version
+run_id=$run_id
+platform=linux-x64
+EOF
+(cd "$bundle_root" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
 printf 'runtime-v1\n' >"$node_root/releases/old/bin/oasis7_chain_runtime"
 chmod +x "$node_root/releases/old/bin/oasis7_chain_runtime"
 touch -t 202001010000 "$node_root/releases/old"
@@ -72,24 +113,104 @@ read -r buildinfo_uid buildinfo_gid buildinfo_mode \
   <<<"$(file_metadata "$node_root/DEPLOYED_BUILDINFO")"
 
 touch -t 202001010000 "$bundle_root"
-tar -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
+mkdir -p "$ops_bundle_root/bin"
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  printf '#!/usr/bin/env bash\n' >"$ops_bundle_root/bin/$binary"
+  chmod +x "$ops_bundle_root/bin/$binary"
+done
+printf '{"opsToolsSchemaVersion":1}\n' >"$ops_bundle_root/.oasis7-ops-tools-manifest.json"
+(cd "$ops_bundle_root" && shasum -a 256 .oasis7-ops-tools-manifest.json bin/* >SHA256SUMS)
+tar -czf "$ops_tools_tar" -C "$TMP_DIR/bundle" oasis7-linux-x64-ops-tools
+package_root="$TMP_DIR/deb-root"
+mkdir -p "$package_root/DEBIAN" "$package_root/opt/oasis7"
+cp -a "$bundle_root/." "$package_root/opt/oasis7/"
+cat >"$package_root/DEBIAN/control" <<'EOF'
+Package: oasis7
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Description: package node upgrade contract fixture
+EOF
+dpkg-deb --build --root-owner-group "$package_root" "$package_deb" >/dev/null
 
+# Build a package whose regular payload contains an extra file that is absent
+# from the embedded SHA256SUMS.  The upgrader must reject it before creating a
+# transaction snapshot or changing current.
+unlisted_package_root="$TMP_DIR/deb-root-unlisted"
+cp -a "$package_root" "$unlisted_package_root"
+printf 'unlisted payload\n' >"$unlisted_package_root/opt/oasis7/bin/UNLISTED"
+dpkg-deb --build --root-owner-group "$unlisted_package_root" "$unlisted_package_deb" >/dev/null
+
+before_bad_current=$(readlink "$node_root/current")
+set +e
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$node_root" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+  --package-deb "$unlisted_package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
   --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
-  --artifact-ref "testnet-package-linux-x64-$package_version/oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime" \
+  >"$TMP_DIR/unlisted-upgrade.stdout" 2>"$TMP_DIR/unlisted-upgrade.stderr"
+unlisted_upgrade_status=$?
+set -e
+test "$unlisted_upgrade_status" -ne 0
+grep -q "SHA256SUMS does not cover bundle files: bin/UNLISTED" "$TMP_DIR/unlisted-upgrade.stderr"
+test "$(readlink "$node_root/current")" = "$before_bad_current"
+test ! -e "$node_root/releases/$package_version"
+
+# The checksum closure helper must not silently skip an unreadable subtree.
+unreadable_bundle_root="$TMP_DIR/unreadable-bundle"
+mkdir -p "$unreadable_bundle_root/bin/unreadable-subtree"
+printf 'runtime\n' >"$unreadable_bundle_root/bin/runtime"
+printf 'hidden\n' >"$unreadable_bundle_root/bin/unreadable-subtree/hidden"
+(cd "$unreadable_bundle_root" && shasum -a 256 bin/runtime >SHA256SUMS)
+chmod 000 "$unreadable_bundle_root/bin/unreadable-subtree"
+set +e
+unreadable_rebuild_output=$(python3 "$ROOT_DIR/scripts/p2p-rebuild-linux-bundle-checksums.py" "$unreadable_bundle_root" 2>&1)
+unreadable_rebuild_status=$?
+set -e
+chmod 755 "$unreadable_bundle_root/bin/unreadable-subtree"
+test "$unreadable_rebuild_status" -ne 0
+grep -q "cannot read bundle subtree" <<<"$unreadable_rebuild_output"
+
+# A traversal-like CLI value must be rejected before temporary/release/
+# rollback paths are constructed or package extraction is attempted.
+set +e
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$node_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "../../outside" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  >"$TMP_DIR/unsafe-version.stdout" 2>"$TMP_DIR/unsafe-version.stderr"
+unsafe_version_status=$?
+set -e
+test "$unsafe_version_status" -ne 0
+grep -q "safe single path token" "$TMP_DIR/unsafe-version.stderr"
+test "$(readlink "$node_root/current")" = "$before_bad_current"
+test ! -e "$TMP_DIR/outside"
+
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$node_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "$package_version" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  --artifact-ref "testnet-package-linux-x64-$package_version/oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime" \
   >/dev/null
 
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 expected_sha=$(shasum -a 256 "$node_root_abs/current/bin/oasis7_chain_runtime" | awk '{print $1}')
 expected_size=$(wc -c <"$node_root_abs/current/bin/oasis7_chain_runtime" | tr -d ' ')
-expected_artifact_ref="testnet-package-linux-x64-$package_version/oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"
+expected_artifact_ref="testnet-package-linux-x64-$package_version/oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime"
 
 test "$(readlink "$node_root_abs/current")" = "$node_root_abs/releases/$package_version"
 test -x "$node_root_abs/releases/$package_version/bin/oasis7_chain_runtime"
+python3 "$ROOT_DIR/scripts/p2p-verify-linux-package-bundle.py" \
+  "$node_root_abs/releases/$package_version" "$package_version" "$commit" "$run_id"
 test -f "$node_root_abs/CURRENT_VERSION"
 test -f "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^package_version=$package_version$" "$node_root_abs/DEPLOYED_BUILDINFO"
@@ -170,11 +291,12 @@ cp \
 
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$directory_current_node" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
   --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
-  --artifact-ref "testnet-package-linux-x64-$package_version/oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime" \
+  --artifact-ref "testnet-package-linux-x64-$package_version/oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime" \
   >/dev/null
 
 directory_current_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$directory_current_node")
@@ -193,7 +315,8 @@ missing_bundle_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys
 set +e
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$missing_bundle_node" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
   --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
@@ -229,8 +352,9 @@ FAKE_SYSTEMCTL_LOG="$TMP_DIR/fake-systemctl.log" \
 PATH="$TMP_DIR/fake-bin:$PATH" \
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$orphan_node" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
-  --package-version "$package_version-orphan" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-orphan.service \
@@ -294,8 +418,9 @@ FAKE_SYSTEMCTL_LOG="$TMP_DIR/fake-systemctl.log" \
 PATH="$TMP_DIR/fake-bin:$PATH" \
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$blocked_post_restart_node" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
-  --package-version "$package_version-blocked-post-restart" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-blocked-post-restart.service \
@@ -368,8 +493,9 @@ for rollback_attempt in first second; do
   PATH="$TMP_DIR/fake-bin:$PATH" \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
     --node-root "$rollback_node" \
-    --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
-    --package-version "$package_version-rollback" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$ops_tools_tar" \
+    --package-version "$package_version" \
     --commit "$commit" \
     --run-id "$run_id" \
     --systemd-service oasis7-testnet-rollback.service \
@@ -459,8 +585,9 @@ FAKE_SYSTEMCTL_LOG="$TMP_DIR/fake-systemctl.log" \
 PATH="$TMP_DIR/fake-bin:$PATH" \
 "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
   --node-root "$scanner_node" \
-  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
-  --package-version "$package_version-scanner" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --package-version "$package_version" \
   --commit "$commit" \
   --run-id "$run_id" \
   --systemd-service oasis7-testnet-scanner.service \
@@ -470,6 +597,6 @@ scanner_status=$?
 set -e
 test "$scanner_status" -eq 0
 scanner_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$scanner_node_abs/current")
-test "$scanner_current" = "$scanner_node_abs/releases/$package_version-scanner"
+test "$scanner_current" = "$scanner_node_abs/releases/$package_version"
 
 echo "ok: package node upgrade pins current runtime hash into governed bootstrap bundle"

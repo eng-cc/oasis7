@@ -26,6 +26,8 @@ CHAIN_LOCAL_STANDALONE_TEST="${OASIS7_CHAIN_LOCAL_STANDALONE_TEST:-0}"
 CHAIN_NODE_AUTO_ATTEST_ALL="${OASIS7_CHAIN_NODE_AUTO_ATTEST_ALL:-0}"
 CHAIN_NODE_VALIDATORS=()
 BUNDLE_DIR=""
+BUNDLE_PROFILE="packaging"
+BUNDLE_TARGET_TRIPLE="native"
 VIEWER_STATIC_DIR_EXPLICIT="0"
 ALLOW_STALE_BUNDLE="0"
 OUTPUT_DIR=""
@@ -84,6 +86,9 @@ Options:
   --allow-debug-scenario   Allow seeded debug scenarios such as llm_bootstrap
   --bundle-dir <path>      Use packaged bundle <path>/run-game.sh (advanced / wrapper path;
                            producer manual play should prefer run-producer-playtest.sh)
+  --bundle-profile <name>  Expected bundle build profile: packaging|dev (default: packaging)
+  --bundle-target-triple <id>
+                           Expected bundle target triple (default: native)
   --viewer-host <host>     Viewer HTTP host (default: 127.0.0.1)
   --viewer-port <port>     Viewer HTTP port (default: 4173)
   --live-bind <addr:port>  oasis7_game_launcher live TCP bind (default: 127.0.0.1:5023)
@@ -150,6 +155,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bundle-dir)
       BUNDLE_DIR="${2:-}"
+      shift 2
+      ;;
+    --bundle-profile)
+      BUNDLE_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --bundle-target-triple)
+      BUNDLE_TARGET_TRIPLE="${2:-}"
       shift 2
       ;;
     --viewer-host)
@@ -303,6 +316,15 @@ if [[ -z "$VIEWER_HOST" || -z "$VIEWER_PORT" || -z "$LIVE_BIND_ADDR" || -z "$WEB
   exit 1
 fi
 
+if [[ "$BUNDLE_PROFILE" != "packaging" && "$BUNDLE_PROFILE" != "dev" ]]; then
+  echo "error: --bundle-profile must be packaging or dev" >&2
+  exit 1
+fi
+if [[ -z "$BUNDLE_TARGET_TRIPLE" ]]; then
+  echo "error: --bundle-target-triple must not be empty" >&2
+  exit 1
+fi
+
 if ! [[ "$VIEWER_PORT" =~ ^[0-9]+$ ]]; then
   echo "error: --viewer-port must be numeric" >&2
   exit 1
@@ -339,7 +361,7 @@ if [[ -n "$BUNDLE_DIR" ]]; then
     exit 1
   fi
   if [[ "$ALLOW_STALE_BUNDLE" != "1" ]]; then
-    if ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" 2>&1); then
+    if ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" "$BUNDLE_PROFILE" "$BUNDLE_TARGET_TRIPLE" 2>&1); then
       echo "error: $freshness_note" >&2
       echo "hint: rebuild via ./scripts/build-game-launcher-bundle.sh --out-dir $BUNDLE_DIR or rerun producer entry with --rebuild; use --allow-stale-bundle only when intentionally validating an older artifact" >&2
       exit 1

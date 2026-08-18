@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -60,7 +61,11 @@ def sha256_file(path: Path) -> str:
 
 
 def verify_sha256sums(package_dir: Path, sums_path: Path) -> list[str]:
+    package_root = package_dir.resolve()
+    if sums_path.is_symlink() or not sums_path.is_file():
+        die(f"checksum manifest must be a regular non-symlink file: {sums_path}")
     verified: list[str] = []
+    seen: set[str] = set()
     for raw in sums_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
@@ -71,20 +76,38 @@ def verify_sha256sums(package_dir: Path, sums_path: Path) -> list[str]:
             if len(parts) != 2:
                 die(f"cannot parse checksum line in {sums_path}: {raw}")
             expected, name = parts
-        rel_name = name.lstrip("*")
-        target = package_dir / rel_name
-        if not target.is_file():
+        expected = expected.strip()
+        rel_name = name.lstrip("*").strip()
+        relative = PurePosixPath(rel_name.replace("\\", "/"))
+        if (
+            not re.fullmatch(r"[0-9a-fA-F]{64}", expected)
+            or not rel_name
+            or relative.is_absolute()
+            or any(part in ("", ".", "..") for part in relative.parts)
+        ):
+            die(f"checksum manifest contains unsafe entry in {sums_path}: {raw}")
+        target = package_root.joinpath(*relative.parts)
+        try:
+            target.resolve().relative_to(package_root)
+        except ValueError:
+            die(f"checksum target escapes package directory: {rel_name}")
+        if target.is_symlink() or not target.is_file() or not stat.S_ISREG(target.lstat().st_mode):
             die(f"checksum target missing: {target}")
         actual = sha256_file(target)
         if actual.lower() != expected.lower():
             die(f"checksum mismatch for {target}: expected {expected}, got {actual}")
+        if rel_name in seen:
+            die(f"checksum manifest contains duplicate entry: {rel_name}")
+        seen.add(rel_name)
         verified.append(rel_name)
+    if not verified:
+        die(f"checksum manifest is empty: {sums_path}")
     return verified
 
 
 def find_platform_dir(package_dir: Path, platform: str) -> Path:
     buildinfo = package_dir / f"{platform}-BUILDINFO"
-    if buildinfo.is_file():
+    if not buildinfo.is_symlink() and buildinfo.is_file() and stat.S_ISREG(buildinfo.lstat().st_mode):
         return package_dir
     for candidate in package_dir.rglob("*"):
         if not candidate.is_symlink():
@@ -102,7 +125,7 @@ def find_platform_dir(package_dir: Path, platform: str) -> Path:
 
 def platform_asset(platform_dir: Path, platform: str) -> Path:
     names = {
-        "linux-x64": "oasis7-linux-x64-bundle.tar.gz",
+        "linux-x64": "oasis7-linux-x64.deb",
         "windows-x64": "oasis7-windows-x64.exe",
         "macos-x64": "oasis7-macos-x64.dmg",
         "macos-arm64": "oasis7-macos-arm64.dmg",
@@ -111,7 +134,7 @@ def platform_asset(platform_dir: Path, platform: str) -> Path:
     if not name:
         die(f"unsupported platform: {platform}")
     asset = platform_dir / name
-    if not asset.is_file():
+    if asset.is_symlink() or not asset.is_file() or not stat.S_ISREG(asset.lstat().st_mode):
         die(f"missing {platform} asset: {asset}")
     return asset
 
@@ -125,6 +148,25 @@ def require_verified_files(platform: str, platform_dir: Path, buildinfo: Path, a
     for rel_name in required:
         if rel_name not in verified_set:
             die(f"{platform} checksum file does not cover required artifact: {rel_name}")
+
+
+def platform_ops_tools_asset(platform_dir: Path, platform: str) -> Path:
+    asset = platform_dir / f"oasis7-{platform}-ops-tools.tar.gz"
+    if asset.is_symlink() or not asset.is_file() or not stat.S_ISREG(asset.lstat().st_mode):
+        die(f"missing {platform} ops-tools asset: {asset}")
+    return asset
+
+
+def verify_ops_tools_contract(platform_dir: Path, platform: str) -> Path:
+    asset = platform_ops_tools_asset(platform_dir, platform)
+    sums = platform_dir / f"{platform}-ops-tools-SHA256SUMS"
+    if sums.is_symlink() or not sums.is_file() or not stat.S_ISREG(sums.lstat().st_mode):
+        die(f"missing {platform} ops-tools checksum file: {sums}")
+    verified = verify_sha256sums(platform_dir, sums)
+    relative = asset.relative_to(platform_dir).as_posix()
+    if relative not in set(verified):
+        die(f"{platform} ops-tools checksum file does not cover required artifact: {relative}")
+    return asset
 
 
 def require_macos_arm64_metadata(info: dict[str, str]) -> None:
@@ -326,6 +368,29 @@ def verify_package_trust(
     verified_files: dict[str, list[str]] = {}
     for platform in platforms:
         platform_dir = find_platform_dir(package_dir, platform)
+        platform_root = platform_dir.resolve()
+        if platform_dir.is_symlink() or not platform_dir.is_dir():
+            die(f"{platform} package directory must be a regular non-symlink directory: {platform_dir}")
+        for current, directories, files in os.walk(platform_dir, followlinks=False):
+            current_path = Path(current)
+            try:
+                current_path.resolve().relative_to(platform_root)
+            except ValueError:
+                die(f"{platform} package tree escapes its platform directory: {current_path}")
+            for name in directories + files:
+                path = current_path / name
+                if path.is_symlink():
+                    die(f"{platform} package tree contains symlink: {path}")
+                try:
+                    mode = path.lstat().st_mode
+                except OSError as error:
+                    die(f"cannot inspect {platform} package member {path}: {error}")
+                if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+                    die(f"{platform} package tree contains non-regular member: {path}")
+                try:
+                    path.resolve().relative_to(platform_root)
+                except ValueError:
+                    die(f"{platform} package member escapes its platform directory: {path}")
         buildinfo = platform_dir / f"{platform}-BUILDINFO"
         sums = platform_dir / f"{platform}-SHA256SUMS"
         if not sums.is_file():
@@ -333,6 +398,13 @@ def verify_package_trust(
         verified = verify_sha256sums(platform_dir, sums)
         asset = platform_asset(platform_dir, platform)
         require_verified_files(platform, platform_dir, buildinfo, asset, verified)
+        ops_asset = verify_ops_tools_contract(platform_dir, platform)
+        ops_relative = ops_asset.relative_to(platform_dir).as_posix()
+        if ops_relative not in set(verified):
+            die(
+                f"{platform} package checksum file does not cover its co-located ops-tools artifact: "
+                f"{ops_relative}"
+            )
         info = read_buildinfo(buildinfo)
         if platform == "macos-arm64":
             require_macos_arm64_metadata(info)
@@ -354,6 +426,8 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 
 def artifact_ref(platform: str, version: str, asset_name: str, runtime_name: str) -> str:
+    if platform == "linux-x64":
+        return f"testnet-package-{platform}-{version}/{asset_name}!/opt/oasis7/bin/{runtime_name}"
     return f"testnet-package-{platform}-{version}/{asset_name}!/bin/{runtime_name}"
 
 
@@ -683,11 +757,13 @@ Write-Output "provider_checkpoint_gate=passed checkpoint_id=$($sequencerCheckpoi
 def linux_command(
     node: dict[str, Any],
     linux_asset: Path,
+    linux_ops_tools_asset: Path,
     version: str,
     commit: str,
     run_id: str,
     readiness_policy: str,
-    bundle_tar: str | None = None,
+    package_deb: str | None = None,
+    ops_tools_tar: str | None = None,
     script_path: str | None = None,
 ) -> list[str]:
     node_root = str(node.get("node_root") or "")
@@ -697,8 +773,10 @@ def linux_command(
         script_path or str(ROOT_DIR / "scripts" / "p2p-public-testnet-package-node-upgrade.sh"),
         "--node-root",
         node_root,
-        "--bundle-tar",
-        bundle_tar or str(linux_asset),
+        "--package-deb",
+        package_deb or str(linux_asset),
+        "--ops-tools-tar",
+        ops_tools_tar or str(linux_ops_tools_asset),
         "--package-version",
         version,
         "--commit",
@@ -740,6 +818,7 @@ def linux_command(
 def linux_plan_commands(
     node: dict[str, Any],
     linux_asset: Path,
+    linux_ops_tools_asset: Path,
     version: str,
     commit: str,
     run_id: str,
@@ -747,22 +826,26 @@ def linux_plan_commands(
 ) -> list[str]:
     host = str(node.get("host") or "")
     if not host:
-        return [shell_join(linux_command(node, linux_asset, version, commit, run_id, readiness_policy))]
+        return [shell_join(linux_command(node, linux_asset, linux_ops_tools_asset, version, commit, run_id, readiness_policy))]
     user = str(node.get("user") or "root")
-    remote_bundle = str(node.get("remote_bundle") or linux_asset.name)
+    remote_package = str(node.get("remote_package") or linux_asset.name)
+    remote_ops_tools = str(node.get("remote_ops_tools") or linux_ops_tools_asset.name)
     remote_script = str(node.get("remote_script") or "./scripts/p2p-public-testnet-package-node-upgrade.sh")
     remote_command = linux_command(
         node,
         linux_asset,
+        linux_ops_tools_asset,
         version,
         commit,
         run_id,
         readiness_policy,
-        bundle_tar=remote_bundle,
+        package_deb=remote_package,
+        ops_tools_tar=remote_ops_tools,
         script_path=remote_script,
     )
     return [
-        shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_bundle}"]),
+        shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_package}"]),
+        shell_join(["scp", str(linux_ops_tools_asset), f"{user}@{host}:{remote_ops_tools}"]),
         shell_join(["ssh", f"{user}@{host}", shell_join(remote_command)]),
     ]
 
@@ -771,6 +854,7 @@ def write_linux_observer_plan(
     out_dir: Path,
     node: dict[str, Any],
     linux_asset: Path,
+    linux_ops_tools_asset: Path,
     version: str,
     commit: str,
     run_id: str,
@@ -785,26 +869,30 @@ def write_linux_observer_plan(
     host = str(node.get("host") or "")
     if host:
         user = str(node.get("user") or "root")
-        remote_bundle = str(node.get("remote_bundle") or linux_asset.name)
+        remote_package = str(node.get("remote_package") or linux_asset.name)
+        remote_ops_tools = str(node.get("remote_ops_tools") or linux_ops_tools_asset.name)
         remote_script = str(node.get("remote_script") or "./scripts/p2p-public-testnet-package-node-upgrade.sh")
         command = linux_command(
             node,
             linux_asset,
+            linux_ops_tools_asset,
             version,
             commit,
             run_id,
             readiness_policy,
-            bundle_tar=remote_bundle,
+            package_deb=remote_package,
+            ops_tools_tar=remote_ops_tools,
             script_path=remote_script,
         )
         remote_wrapper = str(node.get("remote_observer_gate_script") or script_path.name)
         commands = [
-            shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_bundle}"]),
+            shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_package}"]),
+            shell_join(["scp", str(linux_ops_tools_asset), f"{user}@{host}:{remote_ops_tools}"]),
             shell_join(["scp", str(script_path), f"{user}@{host}:{remote_wrapper}"]),
             shell_join(["ssh", f"{user}@{host}", "bash", remote_wrapper]),
         ]
     else:
-        command = linux_command(node, linux_asset, version, commit, run_id, readiness_policy)
+        command = linux_command(node, linux_asset, linux_ops_tools_asset, version, commit, run_id, readiness_policy)
         commands = [shell_join(["bash", str(script_path)])]
     script_path.write_text(
         "#!/usr/bin/env bash\nset -euo pipefail\n\n"
@@ -2835,6 +2923,10 @@ def main() -> int:
     platform_dirs, platform_infos, platform_assets, verified_files = verify_package_trust(
         package_dir, sorted(trust_platforms)
     )
+    platform_ops_tools_assets = {
+        platform: platform_ops_tools_asset(platform_dirs[platform], platform)
+        for platform in trust_platforms
+    }
     # A multi-platform package is one release truth.  Reject divergent
     # BUILDINFO before a trusted bundle is allowed to start the probe.
     commit = require_same_commit(platform_infos)
@@ -2889,13 +2981,14 @@ def main() -> int:
                 command = linux_command(
                     node,
                     platform_assets[platform],
+                    platform_ops_tools_assets[platform],
                     version,
                     commit,
                     run_id,
                     args.readiness_policy,
                 )
                 node_plan["commands"].extend(
-                    linux_plan_commands(node, platform_assets[platform], version, commit, run_id, args.readiness_policy)
+                    linux_plan_commands(node, platform_assets[platform], platform_ops_tools_assets[platform], version, commit, run_id, args.readiness_policy)
                 )
             else:
                 assert provider_status_urls is not None
@@ -2904,6 +2997,7 @@ def main() -> int:
                     out_dir,
                     node,
                     platform_assets[platform],
+                    platform_ops_tools_assets[platform],
                     version,
                     commit,
                     run_id,

@@ -11,6 +11,7 @@ trap cleanup EXIT
 
 viewer_root="$TMPDIR/viewer"
 dist_dir="$TMPDIR/dist"
+optional_payload_dir="$TMPDIR/optional-payload"
 mkdir -p "$viewer_root/dist/pixel-world-bridge/webgl2"
 
 printf '<!doctype html><link rel="stylesheet" href="./viewer_terminal_shell.css"><script type="module" src="./viewer.js"></script>\n' > "$viewer_root/viewer.html"
@@ -26,7 +27,10 @@ printf 'export const webgl2Bridge = true;\n' > "$viewer_root/dist/pixel-world-br
 printf 'export function init() {}\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
 printf '\0asm\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
-"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" --viewer-root "$viewer_root" --dist-dir "$dist_dir"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$viewer_root" \
+  --dist-dir "$dist_dir" \
+  --optional-payload-dir "$optional_payload_dir"
 
 failures=0
 expect_cmp() {
@@ -50,7 +54,263 @@ expect_cmp "$viewer_root/favicon.ico" "$dist_dir/favicon.ico"
 expect_cmp "$viewer_root/dist/pixel-world-bridge/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
 expect_cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge.js"
 expect_cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
-expect_cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+if [[ -e "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "optional pixel-world WASM must not be copied into the primary viewer dist" >&2
+  exit 1
+fi
+cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" \
+  "$optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
+python3 - "$dist_dir/optional-payloads.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload == {
+    "available": False,
+    "reason": "separate_artifact",
+}, payload
+PY
+
+configured_dist_dir="$TMPDIR/configured-dist"
+configured_optional_payload_dir="$TMPDIR/configured-optional-payload"
+configured_public_path="../viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm"
+mkdir -p "$configured_optional_payload_dir"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$viewer_root" \
+  --dist-dir "$configured_dist_dir" \
+  --optional-payload-dir "$configured_optional_payload_dir" \
+  --optional-payload-public-path "$configured_public_path"
+python3 - "$configured_dist_dir/optional-payloads.json" "$configured_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" "$configured_public_path" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+content = Path(sys.argv[2]).read_bytes()
+assert payload == {
+    "available": True,
+    "path": sys.argv[3],
+    "sha256": hashlib.sha256(content).hexdigest(),
+    "size_bytes": len(content),
+    "delivery": "separate_artifact",
+    "provenance": "viewer-web-build",
+}, payload
+PY
+
+public_delivery_dir="$TMPDIR/public-delivery"
+public_dist_dir="$public_delivery_dir/web-dist"
+public_optional_payload_dir="$public_delivery_dir/viewer-optional-payload"
+public_archive="$TMPDIR/oasis7-viewer-web-delivery.tar.gz"
+mkdir -p "$public_optional_payload_dir"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$viewer_root" \
+  --dist-dir "$public_dist_dir" \
+  --optional-payload-dir "$public_optional_payload_dir"
+python3 - "$public_dist_dir/optional-payloads.json" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload == {
+    "available": False,
+    "reason": "separate_artifact",
+}, payload
+PY
+"$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
+  --web-dist "$public_dist_dir" \
+  --optional-payload-dir "$public_optional_payload_dir" \
+  --out-file "$public_archive"
+printf 'AppleDouble sidecar that must never enter the delivery archive\n' \
+  > "$public_dist_dir/._viewer-sidecar"
+printf 'AppleDouble payload sidecar that must never enter the delivery archive\n' \
+  > "$public_optional_payload_dir/._payload-sidecar"
+python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+import os
+import sys
+
+for raw_path in sys.argv[1:]:
+    try:
+        os.setxattr(raw_path, b"user.oasis7_test_provenance", b"must-not-be-archived")
+    except (AttributeError, OSError):
+        pass
+PY
+source_mtime_path="$ROOT_DIR/crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_wasm.test.js"
+public_archive_repeat="$TMPDIR/oasis7-viewer-web-delivery-repeat.tar.gz"
+python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" "$source_mtime_path" "$ROOT_DIR/scripts/package-viewer-web-delivery.sh" "$public_dist_dir" "$public_optional_payload_dir" "$public_archive_repeat" <<'PY'
+import os
+import subprocess
+import sys
+
+for raw_path in sys.argv[1:3]:
+    os.utime(raw_path, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
+source_path = sys.argv[3]
+helper_path = sys.argv[4]
+source_stat = os.stat(source_path)
+os.utime(source_path, ns=(source_stat.st_atime_ns, 1_700_000_100_987_654_321))
+try:
+    subprocess.run([
+        helper_path,
+        "--web-dist", sys.argv[5],
+        "--optional-payload-dir", sys.argv[6],
+        "--out-file", sys.argv[7],
+    ], check=True)
+finally:
+    os.utime(source_path, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+PY
+python3 - "$public_archive" "$public_archive_repeat" "$public_dist_dir" <<'PY'
+import json
+import hashlib
+import sys
+import tarfile
+from pathlib import Path
+
+first_path = Path(sys.argv[1])
+second_path = Path(sys.argv[2])
+web_dist = Path(sys.argv[3])
+first_bytes = first_path.read_bytes()
+second_bytes = second_path.read_bytes()
+assert first_bytes == second_bytes, (
+    hashlib.sha256(first_bytes).hexdigest(),
+    hashlib.sha256(second_bytes).hexdigest(),
+)
+assert first_bytes[4:8] == b"\0\0\0\0", "gzip mtime must be zero"
+assert b"SCHILY.xattr" not in first_bytes
+assert b"LIBARCHIVE.xattr" not in first_bytes
+assert b"com.apple.provenance" not in first_bytes
+
+expected = {
+    path.relative_to(web_dist).as_posix()
+    for path in web_dist.rglob("*")
+    if path.is_file() and not any(part.startswith("._") for part in path.relative_to(web_dist).parts)
+}
+expected.add("viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm")
+with tarfile.open(first_path, "r:gz") as archive:
+    members = archive.getmembers()
+    names = [member.name for member in members]
+    assert names == sorted(names), names
+    assert set(names) == expected, (set(names) ^ expected)
+    for member in members:
+        assert not any(part.startswith("._") for part in Path(member.name).parts), member.name
+        assert member.pax_headers == {}, member.pax_headers
+        assert member.uid == 0 and member.gid == 0, member
+        assert member.uname == "" and member.gname == "", member
+        assert member.mtime == 0 and member.mode == 0o644, member
+        if member.name == ".oasis7-viewer-dist-manifest.json":
+            delivery_manifest = json.load(archive.extractfile(member))
+            assert "sourceLatestPath" not in delivery_manifest, delivery_manifest
+            assert "sourceLatestMtimeNs" not in delivery_manifest, delivery_manifest
+PY
+extract_dir="$TMPDIR/public-delivery-extracted"
+mkdir -p "$extract_dir"
+tar -xzf "$public_archive" -C "$extract_dir"
+python3 - "$extract_dir/optional-payloads.json" "$extract_dir" <<'PY'
+import json
+import hashlib
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+resolved = (Path(sys.argv[1]).parent / payload["path"]).resolve()
+content = resolved.read_bytes()
+assert payload["available"] is True, payload
+assert payload["path"] == "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm"
+assert payload["sha256"] == hashlib.sha256(content).hexdigest(), payload
+assert payload["size_bytes"] == len(content), payload
+assert payload["delivery"] == "separate_artifact", payload
+assert payload["provenance"] == "viewer-web-build", payload
+assert resolved == (Path(sys.argv[2]) / "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm").resolve()
+assert resolved.is_file(), resolved
+assert not (Path(sys.argv[2]) / "pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm").exists()
+PY
+
+missing_viewer_root="$TMPDIR/missing-viewer"
+missing_dist_dir="$TMPDIR/missing-dist"
+missing_optional_payload_dir="$TMPDIR/missing-optional-payload"
+cp -R "$viewer_root" "$missing_viewer_root"
+rm "$missing_viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+mkdir -p "$missing_optional_payload_dir"
+printf 'stale bytes from another build\n' \
+  > "$missing_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
+
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$missing_viewer_root" \
+  --dist-dir "$missing_dist_dir" \
+  --optional-payload-dir "$missing_optional_payload_dir"
+
+if [[ -e "$missing_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "missing optional pixel-world WASM must not create a staged payload" >&2
+  exit 1
+fi
+python3 - "$missing_dist_dir/optional-payloads.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload["available"] is False, payload
+assert payload["reason"] == "source_missing", payload
+assert "path" not in payload, payload
+PY
+
+in_place_dir="$TMPDIR/in-place-viewer"
+in_place_optional_payload_dir="$TMPDIR/in-place-optional-payload"
+cp -R "$viewer_root" "$in_place_dir"
+
+for pass in first second; do
+  "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+    --viewer-root "$in_place_dir" \
+    --dist-dir "$in_place_dir" \
+    --optional-payload-dir "$in_place_optional_payload_dir"
+
+  if [[ ! -e "$in_place_dir/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+    echo "in-place split pass '$pass' removed canonical source WASM" >&2
+    exit 1
+  fi
+  cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" \
+    "$in_place_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
+  python3 - "$in_place_dir/optional-payloads.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert manifest == {
+    "pixel_world_bridge_bindgen_bg.wasm": {
+        "available": False,
+        "reason": "separate_artifact",
+    }
+}, manifest
+PY
+done
+
+rm "$in_place_dir/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+printf 'stale bytes from another build\n' \
+  > "$in_place_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$in_place_dir" \
+  --dist-dir "$in_place_dir" \
+  --optional-payload-dir "$in_place_optional_payload_dir"
+if [[ -e "$in_place_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "stale staged optional WASM must be removed when source is missing" >&2
+  exit 1
+fi
+python3 - "$in_place_dir/optional-payloads.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload == {"available": False, "reason": "source_missing"}, payload
+PY
 
 if ! viewer_web_dist_contract_pairs | grep -Fxq "viewer_terminal_shell.css viewer_terminal_shell.css"; then
   echo "viewer dist contract must include viewer_terminal_shell.css" >&2

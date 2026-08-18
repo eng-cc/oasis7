@@ -8,7 +8,7 @@ source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 
 BUNDLE_DIR=""
-PROFILE="release"
+PROFILE="packaging"
 REBUILD=0
 OPEN_HEADED=0
 SESSION_NAME="producer-playtest"
@@ -36,7 +36,7 @@ Default behavior:
 
 Options:
   --bundle-dir <path>      Bundle directory to reuse/build (default: output/harness/<worktree>/bundle/game-launcher-producer-local)
-  --profile <name>         Bundle build profile: release|dev (default: release)
+  --profile <name>         Bundle build profile: packaging|dev (default: packaging)
   --rebuild                Force rebuild even if bundle already exists
   --open-headed            After stack ready, auto-open the Viewer URL in headed `agent-browser`
                            with default hardware WebGL args, and close that browser session when
@@ -96,7 +96,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$PROFILE" == "release" || "$PROFILE" == "dev" ]] || { echo "error: --profile must be release or dev" >&2; exit 2; }
+[[ "$PROFILE" == "packaging" || "$PROFILE" == "dev" ]] || { echo "error: --profile must be packaging or dev" >&2; exit 2; }
 [[ -n "$SESSION_NAME" ]] || { echo "error: --session cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
 
@@ -115,7 +115,7 @@ if [[ "$REBUILD" == "1" ]]; then
   BUNDLE_REBUILD_REASON="forced by --rebuild"
 elif [[ ! -x "$ABS_BUNDLE_DIR/run-game.sh" ]]; then
   BUNDLE_REBUILD_REASON="bundle missing run-game.sh"
-elif ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$ABS_BUNDLE_DIR" 2>&1); then
+elif ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$ABS_BUNDLE_DIR" "$PROFILE" native 2>&1); then
   echo "info: stale producer bundle detected: $freshness_note"
   BUNDLE_REBUILD_REASON="workspace drift detected"
 fi
@@ -128,7 +128,7 @@ else
 fi
 
 if [[ "$OPEN_HEADED" != "1" ]]; then
-  exec ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" "${STACK_ARGS[@]}"
+  exec ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native "${STACK_ARGS[@]}"
 fi
 
 ab_require
@@ -164,9 +164,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  stdbuf -oL -eL ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 else
-  ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 fi
 STACK_PID=$!
 

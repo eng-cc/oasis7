@@ -319,7 +319,7 @@ PY
 
     if [[ "$BOOT_MODE" == "bundle" ]]; then
       wh_state_phase "$STATE_FILE" "building_bundle" "checking worktree-local bundle freshness" "$STARTUP_DEADLINE_MS"
-      if [[ ! -x "$BUNDLE_DIR/run-game.sh" ]] || ! bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" >/dev/null 2>&1; then
+      if [[ ! -x "$BUNDLE_DIR/run-game.sh" ]] || ! bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" dev native >/dev/null 2>&1; then
         wh_state_progress "$STATE_FILE" "building fresh worktree-local launcher bundle" "0"
         if wh_run_with_deadline "$STARTUP_DEADLINE_MS" ./scripts/build-game-launcher-bundle.sh --profile dev --out-dir "$BUNDLE_DIR" >>"$STARTUP_LOG" 2>&1; then
           :
@@ -329,7 +329,7 @@ PY
           exit "$build_rc"
         fi
       fi
-      bundle_args=(--bundle-dir "$BUNDLE_DIR")
+      bundle_args=(--bundle-dir "$BUNDLE_DIR" --bundle-profile dev --bundle-target-triple native)
     else
       wh_state_phase "$STATE_FILE" "starting_launcher" "preparing source launcher stack" "$STARTUP_DEADLINE_MS"
       bundle_args=()

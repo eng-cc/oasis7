@@ -36,6 +36,50 @@ function animationHarness() {
   };
 }
 
+const INTEGRITY_PAYLOAD_BYTES = Uint8Array.from([1, 2, 3, 4]);
+const INTEGRITY_PAYLOAD_SHA256 = "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a";
+
+function digestBufferFromHex(hex) {
+  return Uint8Array.from(hex.match(/.{2}/g).map((pair) => Number.parseInt(pair, 16))).buffer;
+}
+
+function installIntegrityCrypto({ digestHex = INTEGRITY_PAYLOAD_SHA256, digestError = null } = {}) {
+  const originalCrypto = globalThis.crypto;
+  const digest = vi.fn(async () => {
+    if (digestError) throw digestError;
+    return digestBufferFromHex(digestHex);
+  });
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: { subtle: { digest } },
+  });
+  return {
+    digest,
+    restore() {
+      if (originalCrypto === undefined) {
+        delete globalThis.crypto;
+      } else {
+        Object.defineProperty(globalThis, "crypto", {
+          configurable: true,
+          value: originalCrypto,
+        });
+      }
+    },
+  };
+}
+
+function integrityManifest(overrides = {}) {
+  return {
+    "pixel_world_bridge_bindgen_bg.wasm": {
+      available: true,
+      path: "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm",
+      size_bytes: INTEGRITY_PAYLOAD_BYTES.byteLength,
+      sha256: INTEGRITY_PAYLOAD_SHA256,
+      ...overrides,
+    },
+  };
+}
+
 vi.mock("./pixel_world_bridge_bindgen.js", () => {
   class MockPixelWorldBridge {
     constructor(onEvent, onFatal) {
@@ -144,6 +188,262 @@ describe("pixel world wasm runtime bridge", () => {
         id: "120,75",
       },
     });
+  });
+
+  it("resolves an available optional WASM payload from the served manifest route", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalBaseUrl = globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        "pixel_world_bridge_bindgen_bg.wasm": {
+          available: true,
+          path: "pixel_world_bridge_bindgen_bg.wasm",
+          size_bytes: 4,
+          sha256: "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__ = "/optional-payload/";
+    try {
+      const { resolvePixelWorldWasmUrlForTest } = await import("./pixel_world_runtime_module_wasm.js");
+      const resolved = await resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      });
+      expect(resolved.href).toBe("https://example.test/optional-payload/pixel_world_bridge_bindgen_bg.wasm");
+      expect(fetchMock).toHaveBeenCalledWith(
+        new URL("https://example.test/viewer/optional-payloads.json"),
+        { cache: "no-store" },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalBaseUrl === undefined) {
+        delete globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+      } else {
+        globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__ = originalBaseUrl;
+      }
+    }
+  });
+
+  it("resolves the published split-delivery payload beside the archive web root", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalBaseUrl = globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        "pixel_world_bridge_bindgen_bg.wasm": {
+          available: true,
+          path: "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm",
+          size_bytes: 4,
+          sha256: "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    delete globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+    try {
+      const { resolvePixelWorldWasmUrlForTest } = await import("./pixel_world_runtime_module_wasm.js");
+      const resolved = await resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      });
+      expect(resolved.href).toBe("https://example.test/viewer/viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm");
+      expect(fetchMock).toHaveBeenCalledWith(
+        new URL("https://example.test/viewer/optional-payloads.json"),
+        { cache: "no-store" },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalBaseUrl === undefined) {
+        delete globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+      } else {
+        globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__ = originalBaseUrl;
+      }
+    }
+  });
+
+  it("fetches and verifies the split payload before wasm-bindgen initialization", async () => {
+    const originalFetch = globalThis.fetch;
+    const cryptoHarness = installIntegrityCrypto();
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).endsWith("optional-payloads.json")) {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => integrityManifest(),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        arrayBuffer: async () => INTEGRITY_PAYLOAD_BYTES.buffer,
+      };
+    });
+    globalThis.fetch = fetchMock;
+    try {
+      const { loadPixelWorldWasmInputForTest } = await import("./pixel_world_runtime_module_wasm.js");
+      const input = await loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      });
+      expect(input).toEqual(INTEGRITY_PAYLOAD_BYTES);
+      expect(cryptoHarness.digest).toHaveBeenCalledWith("SHA-256", INTEGRITY_PAYLOAD_BYTES);
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        new URL("https://example.test/viewer/viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm"),
+        { cache: "no-store" },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      cryptoHarness.restore();
+    }
+  });
+
+  it("rejects an available manifest that omits integrity metadata", async () => {
+    const originalFetch = globalThis.fetch;
+    const cryptoHarness = installIntegrityCrypto();
+    globalThis.fetch = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => integrityManifest({ size_bytes: undefined, sha256: undefined }),
+    }));
+    try {
+      const { loadPixelWorldWasmInputForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE,
+        message: expect.stringContaining("invalid_size_bytes"),
+      });
+      expect(cryptoHarness.digest).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+      cryptoHarness.restore();
+    }
+  });
+
+  it("rejects a split payload whose byte length differs from the manifest", async () => {
+    const originalFetch = globalThis.fetch;
+    const cryptoHarness = installIntegrityCrypto();
+    const fetchMock = vi.fn(async (url) => String(url).endsWith("optional-payloads.json")
+      ? { status: 200, ok: true, json: async () => integrityManifest({ size_bytes: 5 }) }
+      : { status: 200, ok: true, arrayBuffer: async () => INTEGRITY_PAYLOAD_BYTES.buffer });
+    globalThis.fetch = fetchMock;
+    try {
+      const { loadPixelWorldWasmInputForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE,
+        message: expect.stringContaining("size_mismatch"),
+      });
+      expect(cryptoHarness.digest).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+      cryptoHarness.restore();
+    }
+  });
+
+  it("rejects a split payload whose SHA-256 differs from the manifest", async () => {
+    const originalFetch = globalThis.fetch;
+    const cryptoHarness = installIntegrityCrypto({ digestHex: INTEGRITY_PAYLOAD_SHA256 });
+    const fetchMock = vi.fn(async (url) => String(url).endsWith("optional-payloads.json")
+      ? { status: 200, ok: true, json: async () => integrityManifest({ sha256: "0".repeat(64) }) }
+      : { status: 200, ok: true, arrayBuffer: async () => INTEGRITY_PAYLOAD_BYTES.buffer });
+    globalThis.fetch = fetchMock;
+    try {
+      const { loadPixelWorldWasmInputForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE,
+        message: expect.stringContaining("sha256_mismatch"),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      cryptoHarness.restore();
+    }
+  });
+
+  it("surfaces deterministic typed errors for payload fetch and crypto failures", async () => {
+    const originalFetch = globalThis.fetch;
+    const cryptoHarness = installIntegrityCrypto({ digestError: new Error("subtle unavailable") });
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).endsWith("optional-payloads.json")) {
+        return { status: 200, ok: true, json: async () => integrityManifest() };
+      }
+      throw new Error("payload connection reset");
+    });
+    globalThis.fetch = fetchMock;
+    try {
+      const { loadPixelWorldWasmInputForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_FETCH_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_FETCH_CODE,
+        message: expect.stringContaining("payload connection reset"),
+      });
+
+      globalThis.fetch = vi.fn(async (url) => String(url).endsWith("optional-payloads.json")
+        ? { status: 200, ok: true, json: async () => integrityManifest() }
+        : { status: 200, ok: true, arrayBuffer: async () => INTEGRITY_PAYLOAD_BYTES.buffer });
+      const { PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(loadPixelWorldWasmInputForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE,
+        message: expect.stringContaining("digest_failed"),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      cryptoHarness.restore();
+    }
+  });
+
+  it("returns a deterministic missing-payload error instead of probing a stale adjacent WASM", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        "pixel_world_bridge_bindgen_bg.wasm": {
+          available: false,
+          reason: "source_missing",
+        },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    try {
+      const { resolvePixelWorldWasmUrlForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE,
+        message: expect.stringContaining("source_missing"),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("keeps the adjacent WASM URL for development when no manifest is served", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => ({ status: 404, ok: false }));
+    globalThis.fetch = fetchMock;
+    try {
+      const { resolvePixelWorldWasmUrlForTest } = await import("./pixel_world_runtime_module_wasm.js");
+      const resolved = await resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      });
+      expect(resolved.href).toBe("https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm");
+      expect(fetchMock).toHaveBeenCalledWith(
+        new URL("https://example.test/viewer/optional-payloads.json"),
+        { cache: "no-store" },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("caps WASM ambient ticks at 12Hz while leaving pointer input immediate", async () => {

@@ -444,16 +444,16 @@
             </article>
             <article
               data-download-platform-source="linux"
-              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x86_64.AppImage"
+              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb"
             >
-              <h4 data-download-source-title>Linux x64 主运行包</h4>
+              <h4 data-download-source-title>Linux x64 Debian 主包</h4>
               <p data-download-source-badge>当前设备推荐</p>
-              <p data-download-source-copy>下载 `oasis7-linux-x86_64.AppImage`，给执行权限后直接跑就行。`.deb` 还在，但已经降成发行版特化的次级入口，不再和主包并排摆着。</p>
+              <p data-download-source-copy>下载 `oasis7-linux-x64.deb`，用 Debian/Ubuntu 的软件包安装器安装。Linux 现在统一提供这一条主包路径；运维恢复工具另作为独立资产提供。</p>
               <p data-download-source-link-label>下载 Linux 主包</p>
-              <p data-download-source-requirements>x86_64 Linux 桌面环境。默认主包面向能跑 AppImage 的发行版，当前没有 ARM 或其他 Linux 架构的主包。</p>
-              <p data-download-source-install>下载后执行 `chmod +x oasis7-linux-x86_64.AppImage`，然后双击或命令行运行。升级时直接替换 AppImage 文件，不要默认以为换目录会帮你迁移本地状态。</p>
-              <p data-download-source-trust>Linux 主包现在主要靠公开的 `SHA256` 校验文件辅助验证，没有额外的平台签名壳。`.deb` 只保留在 Release 附件里给进阶用户。</p>
-              <p data-download-source-support>如果桌面环境本身不认 AppImage，或者被安全策略拦住，先看发布说明里的最低执行要求；发行版特化问题不算默认支持范围。</p>
+              <p data-download-source-requirements>x86_64 Debian 系 Linux 桌面环境（例如 Debian 或 Ubuntu）。当前没有 ARM 或其他 Linux 架构的主包。</p>
+              <p data-download-source-install>用软件包安装器打开 `.deb`，或在 Debian/Ubuntu 上运行 `sudo apt install ./oasis7-linux-x64.deb`。升级时重新安装最新 `.deb`；不要默认以为换安装目录会自动迁移本地状态。</p>
+              <p data-download-source-trust>Linux 主包随公开的 `SHA256` 校验文件提供来源辅助验证；这不替代发行版信任链或系统安全策略。</p>
+              <p data-download-source-support>如果发行版不兼容 Debian 包，或设备安全策略阻止安装，请先看发布说明里的最低执行要求；其他发行版特化问题不算默认支持范围。</p>
               <p data-download-source-footnote>当前设备默认会先选 Linux x64；如果你是在替别的机器下载，可以自己切上面的按钮。</p>
             </article>
           </div>
@@ -475,7 +475,7 @@
                 oasis7-checksums.txt
               </a>
             </li>
-            <li>Linux `.deb` 现在只是发行版特化的次级入口，默认下载面已经不再主推它。</li>
+            <li>Linux 默认主包是 `.deb`；运维恢复工具另以带 manifest/checksum 的 `oasis7-linux-x64-ops-tools.tar.gz` 独立资产提供。</li>
             <li>升级方式目前很朴素：重新下载最新主包，然后手动覆盖安装或替换；还没有应用内自动更新。</li>
             <li>升级前先备份当前启动目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 和 `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/`；这些状态现在还是跟着实际启动目录走。</li>
             <li>Windows 尤其别把“先卸载再重装”当成等价升级路径。当前卸载器会把安装目录一起删掉。</li>

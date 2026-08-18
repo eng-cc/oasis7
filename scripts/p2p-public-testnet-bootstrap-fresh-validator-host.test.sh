@@ -30,21 +30,24 @@ expect_fail() {
 test -f "$BOOTSTRAP" || fail "missing fresh validator host bootstrap script: $BOOTSTRAP"
 
 stack_root="$TMP_DIR/opt/oasis7/p2p-testnet"
-bundle_dir="$TMP_DIR/bundle/oasis7-linux-x64"
+bundle_dir="$TMP_DIR/bundle/oasis7-linux-x64.deb.root/opt/oasis7"
+ops_bundle_dir="$TMP_DIR/bundle/oasis7-linux-x64-ops-tools"
+package_deb="$TMP_DIR/bundle/oasis7-linux-x64.deb"
+ops_tools_tar="$TMP_DIR/bundle/oasis7-linux-x64-ops-tools.tar.gz"
 config_dir="$TMP_DIR/config"
 world_dir="$TMP_DIR/world"
 systemd_dir="$TMP_DIR/systemd"
 receipt="$TMP_DIR/bootstrap-receipt.json"
-mkdir -p "$bundle_dir/bin" "$config_dir/doc/testing/evidence" "$world_dir/generated-scenario-world" "$systemd_dir" "$TMP_DIR/fake-bin"
+mkdir -p "$bundle_dir/bin" "$ops_bundle_dir/bin" "$config_dir/doc/testing/evidence" "$world_dir/generated-scenario-world" "$systemd_dir" "$TMP_DIR/fake-bin"
 
-for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import; do
-  cat >"$bundle_dir/bin/$binary" <<'SH'
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  cat >"$ops_bundle_dir/bin/$binary" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--help" ]]; then
   printf '%s\n' '--generated-world-dir'
 fi
 SH
-  chmod +x "$bundle_dir/bin/$binary"
+  chmod +x "$ops_bundle_dir/bin/$binary"
 done
 cat >"$bundle_dir/bin/oasis7_chain_runtime" <<'SH'
 #!/usr/bin/env bash
@@ -93,9 +96,28 @@ cat >"$bundle_dir/BUILDINFO" <<EOF
 commit=abcdef1234567890abcdef1234567890abcdef12
 package_version=0.0.0+testnet.test.abcdef123456
 run_id=2737
+platform=linux-x64
 EOF
-(cd "$bundle_dir" && shasum -a 256 "bin/oasis7_chain_runtime" >SHA256SUMS)
-tar -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
+(cd "$bundle_dir" && shasum -a 256 BUILDINFO "bin/oasis7_chain_runtime" >SHA256SUMS)
+printf '{"schema_version":"oasis7.ops-tools.v1"}\n' >"$ops_bundle_dir/.oasis7-ops-tools-manifest.json"
+(cd "$ops_bundle_dir" && shasum -a 256 bin/* >SHA256SUMS)
+tar -czf "$ops_tools_tar" -C "$TMP_DIR/bundle" oasis7-linux-x64-ops-tools
+printf 'fixture-deb\n' >"$package_deb"
+# Native Debian installers expose launcher symlinks under /usr/bin.  The safe
+# extraction boundary must allow those package-owned links while still
+# rejecting symlinks inside the consumed /opt/oasis7 subtree.
+mkdir -p "$TMP_DIR/bundle/oasis7-linux-x64.deb.root/usr/bin"
+ln -s /opt/oasis7/run-client.sh \
+  "$TMP_DIR/bundle/oasis7-linux-x64.deb.root/usr/bin/oasis7-client"
+cat >"$TMP_DIR/fake-bin/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "--extract" ]] || exit 2
+mkdir -p "$3"
+cp -a "$2.root/." "$3/"
+SH
+chmod +x "$TMP_DIR/fake-bin/dpkg-deb"
+export PATH="$TMP_DIR/fake-bin:$PATH"
 
 cat >"$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<EOF
 {"git_commit":"abcdef1234567890abcdef1234567890abcdef12","runtime_build":{"git_commit":"abcdef1234567890abcdef1234567890abcdef12","sha256":"$runtime_sha","size_bytes":$runtime_size}}
@@ -123,7 +145,8 @@ bootstrap_with() {
 bootstrap() {
   bootstrap_with \
     --stack-root "$stack_root" \
-    --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$ops_tools_tar" \
     --config-dir "$config_dir" \
     --world-dir "$world_dir" \
     --node-id triad-testnet-sequencer \
@@ -136,9 +159,14 @@ bootstrap() {
 bootstrap
 stack_root_abs="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$stack_root")"
 test -L "$stack_root_abs/current"
-for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import; do
+for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
   test -x "$stack_root_abs/current/bin/$binary" || fail "missing C1 binary: $binary"
 done
+python3 "$ROOT_DIR/scripts/p2p-verify-linux-package-bundle.py" \
+  "$stack_root_abs/releases/0.0.0+testnet.test.abcdef123456" \
+  "0.0.0+testnet.test.abcdef123456" \
+  "abcdef1234567890abcdef1234567890abcdef12" \
+  "2737"
 test -f "$stack_root_abs/config/node-keypair.toml"
 test "$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$stack_root_abs/config/node-keypair.toml")" = "600"
 test -f "$stack_root_abs/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
@@ -165,52 +193,123 @@ jq -e \
 test -x "$stack_root_abs/current/bin/oasis7_chain_runtime"
 test -x "$stack_root_abs/current/bin/oasis7_world_repair_rebuild"
 test -x "$stack_root_abs/current/bin/oasis7_governance_registry_import"
+test -x "$stack_root_abs/current/bin/oasis7_governance_registry_audit"
 "$stack_root_abs/current/bin/oasis7_world_repair_rebuild" --help | grep -Fq -- '--generated-world-dir'
 
+# Every archive member is classified before extraction. Symlinks, hardlinks,
+# and special files must fail closed without creating an ops-tools path.
+for member_kind in symlink hardlink fifo; do
+  unsafe_tar="$TMP_DIR/unsafe-${member_kind}.tar.gz"
+  python3 - "$unsafe_tar" "$member_kind" <<'PY'
+import tarfile
+import sys
+
+archive_path, member_kind = sys.argv[1:]
+member = tarfile.TarInfo("oasis7-linux-x64-ops-tools/bin/unsafe")
+if member_kind == "symlink":
+    member.type = tarfile.SYMTYPE
+    member.linkname = "../../outside"
+elif member_kind == "hardlink":
+    member.type = tarfile.LNKTYPE
+    member.linkname = "oasis7-linux-x64-ops-tools/bin/target"
+else:
+    member.type = tarfile.FIFOTYPE
+with tarfile.open(archive_path, "w:gz") as archive:
+    archive.addfile(member)
+PY
+  expect_fail "non-regular member" bootstrap_with \
+    --stack-root "$TMP_DIR/unsafe-${member_kind}-root" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$unsafe_tar" \
+    --config-dir "$config_dir" \
+    --world-dir "$world_dir" \
+    --node-id triad-testnet-sequencer \
+    --service-name oasis7-triad-sequencer.service \
+    --receipt "$TMP_DIR/unsafe-${member_kind}-receipt.json"
+  test ! -e "$TMP_DIR/unsafe-${member_kind}-root"
+done
+
+unsafe_tar="$TMP_DIR/unsafe-traversal.tar.gz"
+python3 - "$unsafe_tar" <<'PY'
+import io
+import tarfile
+import sys
+
+member = tarfile.TarInfo("oasis7-linux-x64-ops-tools/../outside")
+member.size = 1
+with tarfile.open(sys.argv[1], "w:gz") as archive:
+    archive.addfile(member, io.BytesIO(b"x"))
+PY
+expect_fail "unsafe member path" bootstrap_with \
+  --stack-root "$TMP_DIR/unsafe-traversal-root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$unsafe_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$world_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --receipt "$TMP_DIR/unsafe-traversal-receipt.json"
+test ! -e "$TMP_DIR/unsafe-traversal-root"
+
+# The Debian player tree is validated in full before any checksum or ops-tool
+# copy. A symlink hidden beside the runtime must therefore leave no bootstrap
+# root behind.
+ln -s "$TMP_DIR" "$bundle_dir/bin/unsafe-link"
+expect_fail "symlink" bootstrap_with \
+  --stack-root "$TMP_DIR/unsafe-deb-root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$world_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --receipt "$TMP_DIR/unsafe-deb-receipt.json"
+rm "$bundle_dir/bin/unsafe-link"
+test ! -e "$TMP_DIR/unsafe-deb-root"
+
 # Fail closed before mutation for package integrity and unsafe filesystem input.
-cp "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" "$TMP_DIR/absent-buildinfo.tar.gz"
-tar -xzf "$TMP_DIR/absent-buildinfo.tar.gz" -C "$TMP_DIR"
+cp "$bundle_dir/BUILDINFO" "$TMP_DIR/valid-buildinfo"
 rm "$bundle_dir/BUILDINFO"
-tar -czf "$TMP_DIR/absent-buildinfo.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
-expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/absent-buildinfo-root" --bundle-tar "$TMP_DIR/absent-buildinfo.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/absent-buildinfo-receipt.json"
+expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/absent-buildinfo-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/absent-buildinfo-receipt.json"
+mv "$TMP_DIR/valid-buildinfo" "$bundle_dir/BUILDINFO"
 
 # Recreate the valid bundle and corrupt its declared runtime checksum.
-printf 'commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\n' >"$bundle_dir/BUILDINFO"
-tar -czf "$TMP_DIR/mismatched-buildinfo.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
-expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/mismatched-buildinfo-root" --bundle-tar "$TMP_DIR/mismatched-buildinfo.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-buildinfo-receipt.json"
+printf 'commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
+expect_fail "BUILDINFO" bootstrap_with --stack-root "$TMP_DIR/mismatched-buildinfo-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-buildinfo-receipt.json"
 
-printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\n' >"$bundle_dir/BUILDINFO"
+printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
 printf '%064d  bin/oasis7_chain_runtime\n' 0 >"$bundle_dir/SHA256SUMS"
-tar -czf "$TMP_DIR/mismatched-checksum.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
-expect_fail "checksum" bootstrap_with --stack-root "$TMP_DIR/mismatched-checksum-root" --bundle-tar "$TMP_DIR/mismatched-checksum.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-checksum-receipt.json"
+expect_fail "checksum" bootstrap_with --stack-root "$TMP_DIR/mismatched-checksum-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/mismatched-checksum-receipt.json"
+printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+testnet.test.abcdef123456\nrun_id=2737\nplatform=linux-x64\n' >"$bundle_dir/BUILDINFO"
+(cd "$bundle_dir" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
 
 mkdir -p "$TMP_DIR/non-empty-root"
 touch "$TMP_DIR/non-empty-root/sentinel"
-expect_fail "empty" bootstrap_with --stack-root "$TMP_DIR/non-empty-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/non-empty-receipt.json"
+expect_fail "empty" bootstrap_with --stack-root "$TMP_DIR/non-empty-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/non-empty-receipt.json"
 
 ln -s "$TMP_DIR/non-empty-root" "$TMP_DIR/symlink-root"
-expect_fail "symlink" bootstrap_with --stack-root "$TMP_DIR/symlink-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/symlink-receipt.json"
+expect_fail "symlink" bootstrap_with --stack-root "$TMP_DIR/symlink-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/symlink-receipt.json"
 
 mkdir -p "$TMP_DIR/physical-root"
 ln -s "$TMP_DIR/physical-root" "$TMP_DIR/symlink-parent"
-expect_fail "symlink" bootstrap_with --stack-root "$TMP_DIR/symlink-parent/child" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/symlink-component-receipt.json"
+expect_fail "symlink" bootstrap_with --stack-root "$TMP_DIR/symlink-parent/child" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/symlink-component-receipt.json"
 
-expect_fail "prefix" bootstrap_with --stack-root /tmp/unsafe-oasis7-root --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/unsafe-root-receipt.json"
-expect_fail "descendant" bootstrap_with --stack-root "$TMP_DIR" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/prefix-equality-receipt.json"
-expect_fail "prefix" bootstrap_with --stack-root "$TMP_DIR/../oasis7-root-escape" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/escape-receipt.json"
-expect_fail "test" bootstrap_with --stack-root /opt/oasis7/p2p-testnet --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/production-root-in-test-receipt.json"
+expect_fail "prefix" bootstrap_with --stack-root /tmp/unsafe-oasis7-root --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/unsafe-root-receipt.json"
+expect_fail "descendant" bootstrap_with --stack-root "$TMP_DIR" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/prefix-equality-receipt.json"
+expect_fail "prefix" bootstrap_with --stack-root "$TMP_DIR/../oasis7-root-escape" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/escape-receipt.json"
+expect_fail "test" bootstrap_with --stack-root /opt/oasis7/p2p-testnet --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/production-root-in-test-receipt.json"
 
 cp -a "$config_dir" "$TMP_DIR/malformed-config"
 printf '{not-json\n' >"$TMP_DIR/malformed-config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
-expect_fail "malformed" bootstrap_with --stack-root "$TMP_DIR/malformed-config-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$TMP_DIR/malformed-config" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/malformed-config-receipt.json"
+expect_fail "malformed" bootstrap_with --stack-root "$TMP_DIR/malformed-config-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$TMP_DIR/malformed-config" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/malformed-config-receipt.json"
 
 mkdir -p "$TMP_DIR/missing-sidecar-world"
 cp "$world_dir/snapshot.json" "$TMP_DIR/missing-sidecar-world/"
 cp "$world_dir/world-generation-provenance.json" "$TMP_DIR/missing-sidecar-world/"
-expect_fail "missing directory" bootstrap_with --stack-root "$TMP_DIR/missing-sidecar-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$TMP_DIR/missing-sidecar-world" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/missing-sidecar-receipt.json"
+expect_fail "missing directory" bootstrap_with --stack-root "$TMP_DIR/missing-sidecar-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$TMP_DIR/missing-sidecar-world" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/missing-sidecar-receipt.json"
 
-expect_fail "service" bootstrap_with --stack-root "$TMP_DIR/malformed-unit-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name '../unsafe.service' --receipt "$TMP_DIR/malformed-unit-receipt.json"
+expect_fail "service" bootstrap_with --stack-root "$TMP_DIR/malformed-unit-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name '../unsafe.service' --receipt "$TMP_DIR/malformed-unit-receipt.json"
 
-expect_fail "OASIS7_TEST_ONLY" "$BOOTSTRAP" --allow-test-stack-root --test-root-prefix "$TMP_DIR" --systemd-unit-dir "$systemd_dir" --stack-root "$TMP_DIR/missing-test-gate-root" --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/missing-test-gate-receipt.json"
+expect_fail "OASIS7_TEST_ONLY" "$BOOTSTRAP" --allow-test-stack-root --test-root-prefix "$TMP_DIR" --systemd-unit-dir "$systemd_dir" --stack-root "$TMP_DIR/missing-test-gate-root" --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" --config-dir "$config_dir" --world-dir "$world_dir" --node-id triad-testnet-sequencer --service-name oasis7-triad-sequencer.service --receipt "$TMP_DIR/missing-test-gate-receipt.json"
 
 printf 'ok: fresh validator host bootstrap contract\n'

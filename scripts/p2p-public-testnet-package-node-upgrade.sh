@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
 usage() {
   cat <<'EOF'
 Usage:
   ./scripts/p2p-public-testnet-package-node-upgrade.sh \
     --node-root <path> \
-    --bundle-tar <oasis7-linux-x64-bundle.tar.gz> \
+    --package-deb <oasis7-linux-x64.deb> \
+    --ops-tools-tar <oasis7-linux-x64-ops-tools.tar.gz> \
     --package-version <version> \
     --commit <sha> \
     --run-id <github-actions-run-id> \
@@ -20,7 +24,8 @@ Usage:
 
 Description:
   Upgrade an installed public testnet Linux node from a CI package bundle.
-  The script extracts the bundle into <node-root>/releases/<package-version>,
+  The script extracts the Debian player package and checksummed operator tools
+  into <node-root>/releases/<package-version>,
   repoints <node-root>/current, and rewrites the node-local governed bootstrap
   bundle runtime_build hash to the installed runtime binary. This keeps the
   network-tier runtime drift guard aligned with the deployed artifact.
@@ -32,10 +37,38 @@ die() {
   exit 1
 }
 
+safe_ops_tools_extract() {
+  local archive=$1 destination=$2
+  python3 "$SCRIPT_DIR/p2p-safe-extract-tar.py" "$archive" "$destination" \
+    || die "cannot safely extract ops-tools archive"
+}
+
+safe_deb_extract() {
+  local package=$1 destination=$2
+  command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the Debian package"
+  dpkg-deb --extract "$package" "$destination" \
+    || die "cannot extract Debian package"
+  # No package member is hashed, copied, or executed until this complete
+  # physical-tree pass has rejected symlinks, special files, and path escapes.
+  python3 "$SCRIPT_DIR/p2p-safe-validate-deb-tree.py" "$destination" "opt/oasis7" \
+    || die "extracted Debian package failed the symlink/non-regular/path containment checks"
+}
+
 require_non_empty() {
   local flag=$1
   local value=$2
   [[ -n "$value" ]] || die "missing required option: $flag"
+}
+
+require_safe_package_version() {
+  local value=$1
+  # Keep the release name a single portable path component.  This validation
+  # must precede every release/tmp/rollback path interpolation below; the
+  # embedded BUILDINFO verifier applies the same rule to package-supplied
+  # provenance before bootstrap callers use that value as a release name.
+  if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9_.+:~-]*$ || "$value" == *..* ]]; then
+    die "--package-version must be a safe single path token (no separators or dot traversal): $value"
+  fi
 }
 
 abs_path() {
@@ -670,7 +703,8 @@ PY
 }
 
 node_root=""
-bundle_tar=""
+package_deb=""
+ops_tools_tar=""
 package_version=""
 commit=""
 run_id=""
@@ -688,8 +722,12 @@ while [[ $# -gt 0 ]]; do
       node_root=${2:-}
       shift 2
       ;;
-    --bundle-tar)
-      bundle_tar=${2:-}
+    --package-deb)
+      package_deb=${2:-}
+      shift 2
+      ;;
+    --ops-tools-tar)
+      ops_tools_tar=${2:-}
       shift 2
       ;;
     --package-version)
@@ -743,11 +781,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_non_empty "--node-root" "$node_root"
-require_non_empty "--bundle-tar" "$bundle_tar"
+require_non_empty "--package-deb" "$package_deb"
+require_non_empty "--ops-tools-tar" "$ops_tools_tar"
 require_non_empty "--package-version" "$package_version"
+require_safe_package_version "$package_version"
 require_non_empty "--commit" "$commit"
 require_non_empty "--run-id" "$run_id"
-[[ -f "$bundle_tar" ]] || die "missing bundle tar: $bundle_tar"
+[[ -f "$package_deb" ]] || die "missing Debian package: $package_deb"
+[[ -f "$ops_tools_tar" ]] || die "missing ops-tools package: $ops_tools_tar"
 if [[ "$restart_service" -eq 1 ]]; then
   require_non_empty "--systemd-service" "$systemd_service"
 fi
@@ -772,8 +813,9 @@ fi
 
 node_root_lexical=$(python3 -c 'import os,sys; value=os.path.expanduser(sys.argv[1]); print(value if os.path.isabs(value) else os.path.join(os.getcwd(), value))' "$node_root")
 node_root=$(abs_path "$node_root")
-bundle_tar=$(abs_path "$bundle_tar")
-artifact_ref=${artifact_ref:-"oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"}
+package_deb=$(abs_path "$package_deb")
+ops_tools_tar=$(abs_path "$ops_tools_tar")
+artifact_ref=${artifact_ref:-"oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime"}
 node_id=$(parse_node_id "$node_root/bin/start-node.sh")
 upgrade_lock_dir="$node_root/.package-upgrade.lock"
 if ! mkdir "$upgrade_lock_dir" 2>/dev/null; then
@@ -789,8 +831,35 @@ transaction_dir="$node_root/package-upgrade-rollback/$backup_suffix"
 mkdir -p "$node_root/releases"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"
-tar -xzf "$bundle_tar" -C "$tmp_dir"
-bundle_root="$tmp_dir/oasis7-linux-x64"
+command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the Debian package"
+safe_deb_extract "$package_deb" "$tmp_dir/deb-root"
+bundle_root="$tmp_dir/deb-root/opt/oasis7"
+[[ -d "$bundle_root" ]] || die "Debian package missing /opt/oasis7 player bundle: $package_deb"
+# BUILDINFO and SHA256SUMS are embedded in the Debian payload.  Bind all three
+# CLI provenance fields before any ops-tool copy, transaction snapshot, or
+# deployment metadata write can occur.
+python3 "$SCRIPT_DIR/p2p-verify-linux-package-bundle.py" \
+  "$bundle_root" "$package_version" "$commit" "$run_id" \
+  || die "embedded Debian BUILDINFO/SHA256SUMS provenance verification failed"
+safe_ops_tools_extract "$ops_tools_tar" "$tmp_dir"
+ops_bundle_root="$tmp_dir/oasis7-linux-x64-ops-tools"
+[[ -f "$ops_bundle_root/.oasis7-ops-tools-manifest.json" ]] || die "ops-tools archive missing manifest"
+[[ -f "$ops_bundle_root/SHA256SUMS" ]] || die "ops-tools archive missing SHA256SUMS"
+(
+  cd "$ops_bundle_root"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum -c SHA256SUMS >/dev/null 2>&1 || die "ops-tools checksum verification failed"
+  else
+    shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 || die "ops-tools checksum verification failed"
+  fi
+)
+for ops_binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  [[ -x "$ops_bundle_root/bin/$ops_binary" ]] || die "ops-tools archive missing executable: $ops_binary"
+done
+mkdir -p "$bundle_root/bin"
+cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
+python3 "$SCRIPT_DIR/p2p-rebuild-linux-bundle-checksums.py" "$bundle_root" \
+  || die "deployed player/ops checksum closure rebuild failed"
 runtime_bin="$bundle_root/bin/oasis7_chain_runtime"
 [[ -x "$runtime_bin" ]] || die "bundle missing executable runtime: $runtime_bin"
 ensure_governed_bootstrap_bundle_exists "$node_root"

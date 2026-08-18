@@ -18,6 +18,16 @@ members = [
 ]
 resolver = "2"
 
+[profile.packaging]
+# Keep native distribution artifacts small without applying native-oriented
+# linker/codegen tuning to wasm32 builds. Trunk intentionally continues to use
+# Cargo's standard `release` profile so its wasm-opt feature validation sees
+# the toolchain's supported WebAssembly feature set.
+inherits = "release"
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
+
 [profile.dev.package.epaint]
 # On wasm32-unknown-unknown, `std::time::Instant` is unavailable.
 # epaint's debug deadlock checks call `parking_lot::try_*_for`, which panics there.
