@@ -1,5 +1,6 @@
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot, ReplicationNetworkDebugSnapshot};
 use sha2::{Digest, Sha256};
@@ -174,18 +175,18 @@ fn rebuild_proof_file_verifier_binds_expected_signer_and_public_key() {
             .expect("bounded proof response");
     let path = temp_proof_path();
     fs::write(
-        &path,
+        path.as_path(),
         serde_json::to_vec(&response).expect("serialize proof response"),
     )
     .expect("write proof response");
     verify_rebuild_proof_file(
-        &path,
+        path.as_path(),
         response.proof.signer_id.as_str(),
         response.proof.signer_public_key_hex.as_str(),
     )
     .expect("trusted proof file verifies");
     let err = verify_rebuild_proof_file(
-        &path,
+        path.as_path(),
         "unexpected-signer",
         response.proof.signer_public_key_hex.as_str(),
     )
@@ -194,18 +195,17 @@ fn rebuild_proof_file_verifier_binds_expected_signer_and_public_key() {
     let mut tampered = serde_json::to_value(&response).expect("serialize tampered proof");
     tampered["proof"]["signature_hex"] = serde_json::Value::String("00".repeat(64));
     fs::write(
-        &path,
+        path.as_path(),
         serde_json::to_vec(&tampered).expect("serialize tampered proof value"),
     )
     .expect("write tampered proof");
     let err = verify_rebuild_proof_file(
-        &path,
+        path.as_path(),
         response.proof.signer_id.as_str(),
         response.proof.signer_public_key_hex.as_str(),
     )
     .expect_err("tampered signature must fail closed");
     assert!(err.contains("signature verification failed"), "{err}");
-    let _ = fs::remove_file(path);
 }
 
 #[test]
@@ -217,9 +217,9 @@ fn rebuild_proof_verification_receipt_binds_peer_and_exact_raw_proof_digest() {
             .expect("bounded proof response");
     let path = temp_proof_path();
     let bytes = serde_json::to_vec(&response).expect("serialize proof response");
-    fs::write(&path, bytes.as_slice()).expect("write proof response");
+    fs::write(path.as_path(), bytes.as_slice()).expect("write proof response");
     let receipt = verify_rebuild_proof_file(
-        &path,
+        path.as_path(),
         response.proof.signer_id.as_str(),
         response.proof.signer_public_key_hex.as_str(),
     )
@@ -233,7 +233,6 @@ fn rebuild_proof_verification_receipt_binds_peer_and_exact_raw_proof_digest() {
         receipt.proof_sha256,
         hex::encode(Sha256::digest(b"different-proof"))
     );
-    let _ = fs::remove_file(path);
 }
 
 #[test]
@@ -248,16 +247,16 @@ fn rebuild_proof_verification_receipt_rejects_tampered_or_wrong_raw_proof_bindin
     let path_b = temp_proof_path();
     let bytes_a = serde_json::to_vec(&response_a).expect("serialize first proof");
     let bytes_b = serde_json::to_vec(&response_b).expect("serialize second proof");
-    fs::write(&path_a, bytes_a.as_slice()).expect("write first proof");
-    fs::write(&path_b, bytes_b.as_slice()).expect("write second proof");
+    fs::write(path_a.as_path(), bytes_a.as_slice()).expect("write first proof");
+    fs::write(path_b.as_path(), bytes_b.as_slice()).expect("write second proof");
     let receipt_a = verify_rebuild_proof_file(
-        &path_a,
+        path_a.as_path(),
         response_a.proof.signer_id.as_str(),
         response_a.proof.signer_public_key_hex.as_str(),
     )
     .expect("first proof verifies");
     let receipt_b = verify_rebuild_proof_file(
-        &path_b,
+        path_b.as_path(),
         response_b.proof.signer_id.as_str(),
         response_b.proof.signer_public_key_hex.as_str(),
     )
@@ -270,25 +269,88 @@ fn rebuild_proof_verification_receipt_rejects_tampered_or_wrong_raw_proof_bindin
             "\"observed_at_unix_ms\":2001",
         )
         .into_bytes();
-    fs::write(&path_b, tampered).expect("write tampered second proof");
+    fs::write(path_b.as_path(), tampered).expect("write tampered second proof");
     assert!(
         verify_rebuild_proof_file(
-            &path_b,
+            path_b.as_path(),
             response_b.proof.signer_id.as_str(),
             response_b.proof.signer_public_key_hex.as_str(),
         )
         .is_err()
     );
-    let _ = fs::remove_file(path_a);
-    let _ = fs::remove_file(path_b);
 }
 
-fn temp_proof_path() -> std::path::PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("oasis7-rebuild-proof-{nonce}.json"))
+static TEMP_PROOF_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct TempProofPath {
+    path: PathBuf,
+}
+
+impl TempProofPath {
+    fn as_path(&self) -> &Path {
+        self.path.as_path()
+    }
+}
+
+impl Drop for TempProofPath {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn temp_proof_path() -> TempProofPath {
+    loop {
+        let sequence = TEMP_PROOF_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "oasis7-rebuild-proof-{}-{sequence}.json",
+            std::process::id()
+        ));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(_) => return TempProofPath { path },
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!(
+                "create unique temporary proof path {}: {error}",
+                path.display()
+            ),
+        }
+    }
+}
+
+#[test]
+fn temp_proof_paths_are_isolated_under_parallel_allocation() {
+    const PATH_COUNT: usize = 64;
+    let paths: Vec<TempProofPath> = std::thread::scope(|scope| {
+        let handles = (0..PATH_COUNT)
+            .map(|_| {
+                scope.spawn(|| {
+                    let path = temp_proof_path();
+                    fs::write(path.as_path(), b"isolated-proof").expect("write isolated proof");
+                    path
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("parallel proof path allocation"))
+            .collect()
+    });
+    let mut unique_paths = paths
+        .iter()
+        .map(|path| path.as_path().to_path_buf())
+        .collect::<Vec<_>>();
+    unique_paths.sort();
+    unique_paths.dedup();
+    assert_eq!(unique_paths.len(), PATH_COUNT);
+    for path in paths {
+        assert_eq!(
+            fs::read(path.as_path()).expect("read isolated proof"),
+            b"isolated-proof"
+        );
+    }
 }
 
 fn snapshot() -> NodeSnapshot {
