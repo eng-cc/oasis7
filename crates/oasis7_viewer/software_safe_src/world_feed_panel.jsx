@@ -76,7 +76,7 @@ function WorldFeedPanel(props) {
   );
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr, status());
-  const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
+  const shouldReload = () => Boolean(feed().snapshotReloadRequired || status() === "gap");
 
   return (
     <details

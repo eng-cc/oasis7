@@ -27,6 +27,26 @@ describe("WorldFeedPanel", () => {
     expect(screen.getByRole("button", { name: /reload authoritative snapshot/i })).toBeInTheDocument();
   });
 
+  it("does not offer snapshot recovery for a source outage", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "unavailable",
+          events: [],
+          worldId: "world-a",
+          reorgEpoch: "0",
+          unavailableReason: "source_unavailable",
+          snapshotReloadRequired: false,
+          stale: true,
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+    expect(screen.getByText("World activity unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reload authoritative snapshot/i })).not.toBeInTheDocument();
+  });
+
   it("renders events as ambient context and links only explicit receipt refs", () => {
     render(() => (
       <WorldFeedPanel
