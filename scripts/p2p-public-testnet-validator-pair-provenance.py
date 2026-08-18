@@ -14,7 +14,9 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -136,6 +138,56 @@ def canonical_without_digest(payload: dict[str, Any]) -> bytes:
     return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def receipt_file(receipt_path: Path, raw_path: Any, field: str) -> Path:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        die(f"signature.{field} must be a file path")
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = receipt_path.parent / path
+    elif not path.exists():
+        staged_fallback = receipt_path.parent / path.name
+        if staged_fallback.exists():
+            path = staged_fallback
+    if path.is_symlink() or not path.is_file():
+        die(f"signature.{field} missing or symlinked: {path}")
+    return path.resolve()
+
+
+def verify_detached_signature(receipt_path: Path, receipt: dict[str, Any], signature: dict[str, Any]) -> None:
+    if signature.get("algorithm") != "openssl-rsa-sha256":
+        die("signature.algorithm must be openssl-rsa-sha256")
+    signature_path = receipt_file(receipt_path, signature.get("signature_ref"), "signature_ref")
+    public_key_path = receipt_file(receipt_path, signature.get("public_key_ref"), "public_key_ref")
+    public_key_sha = signature.get("public_key_sha256")
+    if not isinstance(public_key_sha, str) or not HEX64.fullmatch(public_key_sha):
+        die("signature.public_key_sha256 must be 64-hex")
+    if public_key_sha.lower() != sha256_file(public_key_path):
+        die("signature public key hash mismatch")
+    with tempfile.TemporaryDirectory(prefix="oasis7-provenance-verify-") as temp_dir:
+        payload_path = Path(temp_dir) / "payload"
+        payload_path.write_bytes(canonical_without_digest(receipt))
+        try:
+            result = subprocess.run(
+                [
+                    "openssl",
+                    "dgst",
+                    "-sha256",
+                    "-verify",
+                    str(public_key_path),
+                    "-signature",
+                    str(signature_path),
+                    str(payload_path),
+                ],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+            die(f"detached signature verifier unavailable: {error.__class__.__name__}")
+    if result.returncode != 0:
+        die("detached signature verification failed")
+
+
 def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -148,7 +200,7 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
     signature = receipt.get("signature")
     if not isinstance(signature, dict) or signature.get("status") != "verified":
         die("verified detached signature receipt is required")
-    for field in ("signer_id", "algorithm", "signature_ref"):
+    for field in ("signer_id", "algorithm", "signature_ref", "public_key_ref"):
         if not isinstance(signature.get(field), str) or not signature[field].strip():
             die(f"signature.{field} is required")
     digest = receipt.get("binding_digest")
@@ -157,6 +209,7 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
     actual_digest = hashlib.sha256(canonical_without_digest(receipt)).hexdigest()
     if digest.lower() != actual_digest:
         die("binding_digest mismatch")
+    verify_detached_signature(receipt_path, receipt, signature)
 
     package = receipt.get("package")
     if not isinstance(package, dict):
@@ -189,6 +242,10 @@ def validate_receipt(receipt_path: Path, package_dir: Path) -> dict[str, Any]:
         path = Path(value["path"])
         if not path.is_absolute():
             path = receipt_path.parent / path
+        elif not path.exists():
+            staged_fallback = receipt_path.parent / path.name
+            if staged_fallback.exists():
+                path = staged_fallback
         actual = metadata(path, allow_directory=value.get("kind") == "directory")
         expected_sha = value.get("sha256") or value.get("sha256_tree")
         actual_sha = actual.get("sha256") or actual.get("sha256_tree")
@@ -242,8 +299,16 @@ def create(args: argparse.Namespace) -> int:
             "signer_id": args.signer_id,
             "algorithm": args.signature_algorithm,
             "signature_ref": args.signature_ref,
+            "public_key_ref": args.public_key_ref,
         },
     }
+    if args.public_key_ref:
+        public_key_path = Path(args.public_key_ref).resolve()
+        if public_key_path.is_symlink() or not public_key_path.is_file():
+            die(f"--public-key-ref must point to a regular file: {public_key_path}")
+        payload["signature"]["public_key_sha256"] = sha256_file(public_key_path)
+    if args.verified_signature and not args.public_key_ref:
+        die("--public-key-ref is required with --verified-signature")
     payload["binding_digest"] = hashlib.sha256(canonical_without_digest(payload)).hexdigest()
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -264,7 +329,8 @@ def parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--output", required=True)
     create_parser.add_argument("--signer-id", required=True)
     create_parser.add_argument("--signature-ref", required=True)
-    create_parser.add_argument("--signature-algorithm", default="detached-receipt")
+    create_parser.add_argument("--public-key-ref")
+    create_parser.add_argument("--signature-algorithm", default="openssl-rsa-sha256")
     create_parser.add_argument("--verified-signature", action="store_true")
     validate_parser = sub.add_parser("validate")
     validate_parser.add_argument("--provenance", required=True)

@@ -396,13 +396,14 @@ fn handle_chain_status_connection(
                 )
                 .ok()
                 .flatten();
-            let payload = super::rebuild_status::build_rebuild_status_with_manifest(
+            let payload = super::rebuild_status::build_rebuild_status_with_signer(
                 snapshot,
                 network,
                 checkpoint,
                 now_unix_ms(),
                 loaded_network_tier_manifest,
-            );
+                feedback_submit_signer,
+            )?;
             let body = serde_json::to_vec_pretty(&payload)
                 .map_err(|err| format!("failed to encode rebuild proof payload: {err}"))?;
             write_json_response(&mut stream, 200, body.as_slice(), head_only)

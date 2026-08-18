@@ -1,13 +1,20 @@
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7_node::{NodeSnapshot, ReplicationNetworkDebugSnapshot};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+use super::execution_bridge::ExecutionCheckpointStatusEvidence;
+use super::feedback_submit_api::FeedbackSubmitSigner;
 
 const MAX_CONNECTED_PEER_IDS: usize = 64;
 const MAX_ERROR_BYTES: usize = 512;
+const REBUILD_PROOF_SCHEMA: &str = "oasis7.rebuild_proof.v1";
 
 #[derive(Debug, Serialize)]
 pub(super) struct RebuildStatusResponse {
     pub(super) schema_version: &'static str,
+    pub(super) observed_at_unix_ms: i64,
     pub(super) ok: bool,
     pub(super) liveness: RebuildLiveness,
     pub(super) readiness: RebuildReadiness,
@@ -17,6 +24,7 @@ pub(super) struct RebuildStatusResponse {
     pub(super) local_peer_id: String,
     pub(super) connected_peers: Vec<String>,
     pub(super) connected_peer_count: usize,
+    pub(super) proof: RebuildProofEnvelope,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,28 +62,58 @@ pub(super) struct RebuildNetworkHead {
 pub(super) struct RebuildCheckpoint {
     pub(super) schema_version: u32,
     pub(super) checkpoint_id: String,
+    pub(super) world_id: String,
     pub(super) height: u64,
+    pub(super) execution_block_hash: String,
+    pub(super) execution_state_root: String,
     pub(super) manifest_hash: String,
 }
 
-pub(super) fn build_rebuild_status(
-    snapshot: NodeSnapshot,
-    network: ReplicationNetworkDebugSnapshot,
-    checkpoint: Option<(u32, String, u64, String)>,
-    observed_at_unix_ms: i64,
-) -> RebuildStatusResponse {
-    build_rebuild_status_with_manifest(snapshot, network, checkpoint, observed_at_unix_ms, None)
+#[derive(Debug, Serialize)]
+pub(super) struct RebuildProofEnvelope {
+    pub(super) schema_version: &'static str,
+    pub(super) signer_id: String,
+    pub(super) signer_public_key_hex: String,
+    pub(super) signed_payload_sha256: String,
+    pub(super) signature_hex: String,
 }
 
-pub(super) fn build_rebuild_status_with_manifest(
+#[derive(Debug, Serialize)]
+struct RebuildProofClaims<'a> {
+    schema_version: &'static str,
+    observed_at_unix_ms: i64,
+    node_id: &'a str,
+    world_id: &'a str,
+    ok: bool,
+    liveness: &'a RebuildLiveness,
+    readiness: &'a RebuildReadiness,
+    heights: &'a RebuildHeights,
+    network_head: &'a RebuildNetworkHead,
+    checkpoint: Option<&'a RebuildCheckpoint>,
+    local_peer_id: &'a str,
+    connected_peers: &'a [String],
+    connected_peer_count: usize,
+}
+
+pub(super) fn build_rebuild_status_with_signer(
     snapshot: NodeSnapshot,
     network: ReplicationNetworkDebugSnapshot,
-    checkpoint: Option<(u32, String, u64, String)>,
+    checkpoint: Option<ExecutionCheckpointStatusEvidence>,
     observed_at_unix_ms: i64,
     manifest: Option<&LoadedNetworkTierManifest>,
-) -> RebuildStatusResponse {
+    signer: &FeedbackSubmitSigner,
+) -> Result<RebuildStatusResponse, String> {
     let network_head =
         super::status_payload::build_network_head_status(&snapshot, observed_at_unix_ms, manifest);
+    let checkpoint = checkpoint.map(|evidence| RebuildCheckpoint {
+        schema_version: evidence.schema_version,
+        checkpoint_id: evidence.checkpoint_id,
+        world_id: evidence.world_id,
+        height: evidence.height,
+        execution_block_hash: evidence.execution_block_hash,
+        execution_state_root: evidence.execution_state_root,
+        manifest_hash: evidence.manifest_hash,
+    });
     let mut failed_gates = Vec::new();
     if !snapshot.running {
         failed_gates.push("runtime_not_running".to_string());
@@ -94,6 +132,8 @@ pub(super) fn build_rebuild_status_with_manifest(
     }
     if checkpoint.is_none() {
         failed_gates.push("checkpoint_unavailable".to_string());
+    } else if !checkpoint_matches_runtime_heads(&snapshot, checkpoint.as_ref().expect("checked")) {
+        failed_gates.push("checkpoint_head_mismatch".to_string());
     }
     let readiness_status = if failed_gates.is_empty() {
         "ready"
@@ -105,12 +145,13 @@ pub(super) fn build_rebuild_status_with_manifest(
         .connected_peers
         .into_iter()
         .take(MAX_CONNECTED_PEER_IDS)
-        .collect();
+        .collect::<Vec<_>>();
     let last_error = snapshot
         .last_error
         .map(|error| error.chars().take(MAX_ERROR_BYTES).collect::<String>());
-    RebuildStatusResponse {
+    let mut response = RebuildStatusResponse {
         schema_version: "oasis7.rebuild_status.v1",
+        observed_at_unix_ms,
         ok: readiness_status == "ready",
         liveness: RebuildLiveness {
             running: snapshot.running,
@@ -135,16 +176,122 @@ pub(super) fn build_rebuild_status_with_manifest(
             observed_peer_count: network_head.observed_peer_count,
             fresh_peer_count: network_head.fresh_peer_count,
         },
-        checkpoint: checkpoint.map(|(schema_version, checkpoint_id, height, manifest_hash)| {
-            RebuildCheckpoint {
-                schema_version,
-                checkpoint_id,
-                height,
-                manifest_hash,
-            }
-        }),
+        checkpoint,
         local_peer_id: network.local_peer_id,
         connected_peers,
         connected_peer_count,
+        proof: RebuildProofEnvelope {
+            schema_version: REBUILD_PROOF_SCHEMA,
+            signer_id: snapshot.node_id.clone(),
+            signer_public_key_hex: String::new(),
+            signed_payload_sha256: String::new(),
+            signature_hex: String::new(),
+        },
+    };
+    response.proof = sign_rebuild_proof(&response, signer)?;
+    Ok(response)
+}
+
+fn checkpoint_matches_runtime_heads(
+    snapshot: &NodeSnapshot,
+    checkpoint: &RebuildCheckpoint,
+) -> bool {
+    if checkpoint.world_id != snapshot.world_id
+        || checkpoint.height > snapshot.consensus.committed_height
+        || checkpoint.height > snapshot.consensus.last_execution_height
+    {
+        return false;
     }
+    if snapshot.replication_enabled
+        && snapshot.consensus.network_committed_height > 0
+        && checkpoint.height > snapshot.consensus.network_committed_height
+    {
+        return false;
+    }
+    if checkpoint.height == snapshot.consensus.last_execution_height {
+        snapshot.consensus.last_execution_block_hash.as_deref()
+            == Some(checkpoint.execution_block_hash.as_str())
+            && snapshot.consensus.last_execution_state_root.as_deref()
+                == Some(checkpoint.execution_state_root.as_str())
+    } else {
+        true
+    }
+}
+
+fn proof_claims(response: &RebuildStatusResponse) -> RebuildProofClaims<'_> {
+    RebuildProofClaims {
+        schema_version: response.schema_version,
+        observed_at_unix_ms: response.observed_at_unix_ms,
+        node_id: response.proof.signer_id.as_str(),
+        world_id: response
+            .checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.world_id.as_str())
+            .unwrap_or_default(),
+        ok: response.ok,
+        liveness: &response.liveness,
+        readiness: &response.readiness,
+        heights: &response.heights,
+        network_head: &response.network_head,
+        checkpoint: response.checkpoint.as_ref(),
+        local_peer_id: response.local_peer_id.as_str(),
+        connected_peers: response.connected_peers.as_slice(),
+        connected_peer_count: response.connected_peer_count,
+    }
+}
+
+fn proof_claim_bytes(response: &RebuildStatusResponse) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(&proof_claims(response))
+        .map_err(|err| format!("serialize rebuild proof claims failed: {err}"))
+}
+
+fn sign_rebuild_proof(
+    response: &RebuildStatusResponse,
+    signer: &FeedbackSubmitSigner,
+) -> Result<RebuildProofEnvelope, String> {
+    let private_bytes = hex::decode(signer.private_key_hex.as_str())
+        .map_err(|_| "rebuild proof signer private key is not valid hex".to_string())?;
+    let private_array: [u8; 32] = private_bytes
+        .try_into()
+        .map_err(|_| "rebuild proof signer private key must be 32 bytes".to_string())?;
+    let signing_key = SigningKey::from_bytes(&private_array);
+    let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
+    if public_key_hex != signer.public_key_hex.to_ascii_lowercase() {
+        return Err("rebuild proof signer public key does not match private key".to_string());
+    }
+    let claims = proof_claim_bytes(response)?;
+    let digest = Sha256::digest(claims.as_slice());
+    let signature = signing_key.sign(claims.as_slice());
+    Ok(RebuildProofEnvelope {
+        schema_version: REBUILD_PROOF_SCHEMA,
+        signer_id: response.proof.signer_id.clone(),
+        signer_public_key_hex: public_key_hex,
+        signed_payload_sha256: hex::encode(digest),
+        signature_hex: hex::encode(signature.to_bytes()),
+    })
+}
+
+pub(super) fn verify_rebuild_proof(response: &RebuildStatusResponse) -> Result<(), String> {
+    if response.proof.schema_version != REBUILD_PROOF_SCHEMA {
+        return Err("unsupported rebuild proof schema".to_string());
+    }
+    let public_bytes = hex::decode(response.proof.signer_public_key_hex.as_str())
+        .map_err(|_| "rebuild proof public key is not valid hex".to_string())?;
+    let public_array: [u8; 32] = public_bytes
+        .try_into()
+        .map_err(|_| "rebuild proof public key must be 32 bytes".to_string())?;
+    let signature_bytes = hex::decode(response.proof.signature_hex.as_str())
+        .map_err(|_| "rebuild proof signature is not valid hex".to_string())?;
+    let signature_array: [u8; 64] = signature_bytes
+        .try_into()
+        .map_err(|_| "rebuild proof signature must be 64 bytes".to_string())?;
+    let claims = proof_claim_bytes(response)?;
+    let digest = Sha256::digest(claims.as_slice());
+    if response.proof.signed_payload_sha256 != hex::encode(digest) {
+        return Err("rebuild proof payload digest mismatch".to_string());
+    }
+    VerifyingKey::from_bytes(&public_array)
+        .map_err(|err| format!("rebuild proof public key is invalid: {err}"))?
+        .verify(claims.as_slice(), &Signature::from_bytes(&signature_array))
+        .map_err(|err| format!("rebuild proof signature verification failed: {err}"))
 }

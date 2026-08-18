@@ -197,9 +197,29 @@ phase、rollback/recovery、readiness 或 release 判断。
 1. 优先使用标准 truth capture 脚本：
 
 ```bash
+# 204/sequencer is intentionally sampled through the bounded, signed proof
+# surface; do not feed its full /v1/chain/status payload into a rebuild gate.
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
+  > .tmp/public-testnet-sequencer-204-rebuild-proof.json
+ssh root@39.104.204.172 \
+  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
+  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+jq '{node_id:.proof.signer_id,
+    replication:{local_peer_id:.local_peer_id},
+    consensus:{committed_height:.heights.committed_height,
+      network_committed_height:.heights.network_committed_height,
+      last_execution_height:.heights.last_execution_height,
+      last_block_hash:.network_head.block_hash,
+      last_execution_block_hash:(.checkpoint.execution_block_hash // .network_head.execution_block_hash),
+      last_execution_state_root:(.checkpoint.execution_state_root // .network_head.execution_state_root),
+      network_head:.network_head},
+    readiness,
+    chain_proof:{latest_execution_checkpoint:.checkpoint}}' \
+  .tmp/public-testnet-sequencer-204-rebuild-proof.json \
+  > .tmp/public-testnet-sequencer-204-capture.json
 ./scripts/p2p-public-testnet-capture-truth.sh \
   --bundle doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json \
-  --sequencer-status-url http://39.104.204.172:6631/v1/chain/status \
+  --sequencer-status-json .tmp/public-testnet-sequencer-204-capture.json \
   --storage-status-url http://39.104.205.67:6632/v1/chain/status \
   --sequencer-ssh-host root@39.104.204.172 \
   --storage-ssh-host root@39.104.205.67 \
@@ -230,7 +250,7 @@ ssh root@39.104.205.67 'sha256sum /opt/oasis7/p2p-testnet/current/bin/oasis7_cha
 5. 若 validator 已在运行，读取当前实际 libp2p peer id：
 
 ```bash
-ssh root@39.104.204.172 'curl -s http://127.0.0.1:6631/v1/chain/status | jq -r .replication.local_peer_id'
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof | jq -r .local_peer_id
 ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .replication.local_peer_id'
 ```
 
@@ -276,7 +296,7 @@ ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .r
 manifest/bootstrap peer truth 刷新应写回 deployment artifact，例如：
 
 ```bash
-curl -fsS http://39.104.204.172:6631/v1/chain/status | jq -r '.replication.local_peer_id'
+curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof | jq -r '.local_peer_id'
 curl -fsS http://39.104.205.67:6632/v1/chain/status | jq -r '.replication.local_peer_id'
 $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
 ```
@@ -344,12 +364,19 @@ python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
   --sequencer-proof-url <bounded-proof-endpoint> \
   --out-dir <transaction-dir>
 python3 scripts/p2p-public-testnet-validator-pair-rebuild.py apply \
-  --transaction <transaction-dir>/transaction.json
+  --transaction <transaction-dir>/transaction.json \
+  --host-adapter <governed-host-adapter>
 ```
 
 The transaction is fail-closed and records a complete stopped-state backup
 manifest before mutation. Mutation order is always `storage-205` then
 `sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
+The host adapter is mandatory: it must return one transaction-bound JSON receipt
+covering explicit active/running state, bounded healthz, role-specific listener identity
+(`6632/6832` for storage-205 and `6631/6831` for sequencer-204), `NRestarts=0`,
+no OOM/panic/segfault, exact package runtime hash/size, and the 204
+`full_chain_status_called=false` gate. Without that receipt the local executor
+must not mark the transaction `applied`.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate
 must invoke the recorded same-filesystem snapshot rollback and retain the
 receipt. The pair executor never mutates an observer. A sequencer/204 proof
@@ -486,7 +513,12 @@ trap cleanup_upload_dir EXIT
 # 204/sequencer: use healthz plus the runtime's bounded proof endpoint;
 # never request the full /v1/chain/status payload in the pair transaction.
 curl -s http://127.0.0.1:6631/healthz | jq '{ok,ready,running,last_error}'
-curl -s <sequencer-204-bounded-proof-endpoint> | jq '{schema_version,identity,committed_height,execution_height,signature}'
+curl -fsS <sequencer-204-bounded-proof-endpoint> |
+  jq '{schema_version,observed_at_unix_ms,ok,liveness,readiness,heights,network_head,checkpoint,local_peer_id,connected_peers,connected_peer_count,proof}'
+# The nested proof is an independently verifiable oasis7.rebuild_proof.v1
+# envelope (signer_id, signer_public_key_hex, signed_payload_sha256,
+# signature_hex). The governed consumer must verify its Ed25519 signature and
+# digest over the canonical bounded response claims before accepting it.
 curl -s http://127.0.0.1:6632/v1/chain/status | jq '{running,last_error,committed_height:.consensus.committed_height,last_execution_height:.consensus.last_execution_height,connected_peers:.replication.connected_peers,local_peer_id:.replication.local_peer_id}'
 ```
 

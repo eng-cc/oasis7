@@ -137,6 +137,8 @@ printf 'run_id=3218\ncommit=%s\npackage_version=0.0.0+testnet.261\n' \
   0123456789abcdef0123456789abcdef01234567 >"$TMP_DIR/pair-package/BUILDINFO"
 pair_runtime_sha=$(shasum -a 256 "$TMP_DIR/pair-package/oasis7_chain_runtime" | awk '{print $1}')
 printf '%s  oasis7_chain_runtime\n' "$pair_runtime_sha" >"$TMP_DIR/pair-package/SHA256SUMS"
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$TMP_DIR/attestor-key.pem" >/dev/null 2>&1
+openssl pkey -in "$TMP_DIR/attestor-key.pem" -pubout -out "$TMP_DIR/attestor-public.pem" >/dev/null 2>&1
 python3 "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-provenance.py" create \
   --package-dir "$TMP_DIR/pair-package" \
   --manifest "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
@@ -148,8 +150,32 @@ python3 "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-provenance.py" crea
   --chain-id oasis7-public-testnet-governed-20260606 \
   --output "$TMP_DIR/pair-provenance.json" \
   --signer-id testnet-package-attestor \
-  --signature-ref fixture://signature \
-  --verified-signature >/dev/null
+  --signature-ref "$TMP_DIR/pair-signature.bin" \
+  --public-key-ref "$TMP_DIR/attestor-public.pem" >/dev/null
+python3 - "$TMP_DIR/pair-provenance.json" "$TMP_DIR/attestor-key.pem" "$TMP_DIR/pair-signature.bin" <<'PY'
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt_path = Path(sys.argv[1])
+private_key = sys.argv[2]
+signature_path = sys.argv[3]
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+receipt["signature"]["status"] = "verified"
+body = {key: value for key, value in receipt.items() if key != "binding_digest"}
+receipt["binding_digest"] = hashlib.sha256(
+    json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+).hexdigest()
+receipt_path.write_text(json.dumps(receipt, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+payload_path = receipt_path.with_suffix(".payload")
+payload_path.write_bytes(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+subprocess.run(
+    ["openssl", "dgst", "-sha256", "-sign", private_key, "-out", signature_path, str(payload_path)],
+    check=True,
+)
+PY
 
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
@@ -160,7 +186,14 @@ python3 "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-provenance.py" crea
   --out-dir "$TMP_DIR/stage-with-provenance" >/dev/null
 jq -e '.validator_pair_provenance.sha256 != null' \
   "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
+jq -e '.validator_pair_provenance.resolved_path | contains("stage-with-provenance/config/doc/testing/evidence/")' \
+  "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 grep -q 'Validator pair provenance:' "$TMP_DIR/stage-with-provenance/deployment-truth.md"
+# The staged receipt must retain detached verification after its source receipt
+# and detached files leave the temporary input directory.
+rm -f "$TMP_DIR/pair-provenance.json" "$TMP_DIR/pair-signature.bin" "$TMP_DIR/attestor-public.pem"
+bash "$ROOT_DIR/scripts/release-candidate-bundle.sh" validate \
+  --bundle "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \

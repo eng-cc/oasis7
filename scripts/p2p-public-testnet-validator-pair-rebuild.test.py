@@ -28,6 +28,11 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def canonical_digest(value: dict) -> str:
+    body = {key: item for key, item in value.items() if key != "canonical_digest"}
+    return hashlib.sha256(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 class ValidatorPairRebuildContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="oasis7-pair-rebuild-contract-")
@@ -57,6 +62,30 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         }.items():
             (self.governed / name).write_text(content, encoding="utf-8")
         self.provenance = self.root / "provenance.json"
+        self.signing_key = self.root / "attestor-key.pem"
+        self.public_key = self.root / "attestor-public.pem"
+        self.signature = self.root / "attestor-signature.bin"
+        subprocess.run(
+            [
+                "openssl",
+                "genpkey",
+                "-algorithm",
+                "RSA",
+                "-pkeyopt",
+                "rsa_keygen_bits:2048",
+                "-out",
+                str(self.signing_key),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["openssl", "pkey", "-in", str(self.signing_key), "-pubout", "-out", str(self.public_key)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         self._write_provenance()
         self.impact = self.root / "consumer-impact.json"
         self.impact.write_text(
@@ -131,8 +160,10 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
                 {
                     "status": "verified",
                     "signer_id": "testnet-package-attestor",
-                    "algorithm": "detached-receipt",
-                    "signature_ref": "fixture://signature",
+                    "algorithm": "openssl-rsa-sha256",
+                    "signature_ref": str(self.signature),
+                    "public_key_ref": str(self.public_key),
+                    "public_key_sha256": sha256(self.public_key),
                 }
                 if signature
                 else None
@@ -141,6 +172,59 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         payload["binding_digest"] = hashlib.sha256(canonical.encode()).hexdigest()
         self.provenance.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        if signature:
+            payload_path = self.root / "provenance-signing-payload.bin"
+            payload_path.write_bytes(canonical.encode())
+            subprocess.run(
+                [
+                    "openssl",
+                    "dgst",
+                    "-sha256",
+                    "-sign",
+                    str(self.signing_key),
+                    "-out",
+                    str(self.signature),
+                    str(payload_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+    def _write_host_adapter(self) -> Path:
+        adapter = self.root / "host-adapter.py"
+        adapter.write_text(
+            """#!/usr/bin/env python3
+import json
+import sys
+from pathlib import Path
+
+transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())
+nodes = {}
+for role in transaction['mutation_order']:
+    nodes[role] = {
+        'active': True,
+        'running': True,
+        'healthz_ok': True,
+        'nrestarts': 0,
+        'oom_panic_segfault': False,
+        'runtime_sha256': transaction['package']['runtime_sha256'],
+        'runtime_size_bytes': transaction['package']['runtime_size_bytes'],
+        'listeners': ['6631', '6831'] if role == 'sequencer-204' else ['6632', '6832'],
+        'full_chain_status_called': False,
+    }
+print(json.dumps({
+    'schema_version': 'oasis7.validator_pair_rebuild_host_receipt.v1',
+    'transaction_id': transaction['transaction_id'],
+    'mutation_order': transaction['mutation_order'],
+    'startup_order': transaction['startup_order'],
+    'nodes': nodes,
+}))
+""",
+            encoding="utf-8",
+        )
+        adapter.chmod(0o755)
+        return adapter
 
     def _base_args(self) -> list[str]:
         return [
@@ -187,12 +271,73 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("signature", result.stderr.lower())
 
+    def test_provenance_rejects_tampered_signed_body(self) -> None:
+        receipt = json.loads(self.provenance.read_text(encoding="utf-8"))
+        receipt["package"]["run_id"] = "tampered"
+        body = {key: value for key, value in receipt.items() if key != "binding_digest"}
+        receipt["binding_digest"] = hashlib.sha256(
+            json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        self.provenance.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PROVENANCE),
+                "validate",
+                "--provenance",
+                str(self.provenance),
+                "--package-dir",
+                str(self.package),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("detached signature verification failed", result.stderr.lower())
+
+    def test_staged_receipt_falls_back_to_copied_detached_files(self) -> None:
+        staged = self.root / "staged-evidence"
+        staged.mkdir()
+        staged_receipt = staged / self.provenance.name
+        staged_receipt.write_bytes(self.provenance.read_bytes())
+        (staged / self.signature.name).write_bytes(self.signature.read_bytes())
+        (staged / self.public_key.name).write_bytes(self.public_key.read_bytes())
+        original_signature = self.signature.read_bytes()
+        original_public_key = self.public_key.read_bytes()
+        self.signature.unlink()
+        self.public_key.unlink()
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PROVENANCE),
+                "validate",
+                "--provenance",
+                str(staged_receipt),
+                "--package-dir",
+                str(self.package),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.signature.write_bytes(original_signature)
+        self.public_key.write_bytes(original_public_key)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_apply_writes_full_manifests_and_preserves_order(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
         result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "apply", "--transaction", str(plan_path)],
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+            ],
             text=True,
             capture_output=True,
         )
@@ -204,13 +349,60 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         self.assertTrue(receipt["nodes"]["sequencer-204"]["backup"]["verified"])
         self.assertTrue((self.nodes["storage-205"] / "backups").exists())
         self.assertTrue((self.nodes["sequencer-204"] / "backups").exists())
+        self.assertTrue(receipt["host_receipt"]["nodes"]["sequencer-204"]["healthz_ok"])
+        self.assertTrue(receipt["capacity_apply"]["storage-205"]["verified"])
+
+    def test_apply_requires_host_gate_receipt(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "apply", "--transaction", str(plan_path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("host adapter", result.stderr.lower())
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+
+    def test_apply_rechecks_capacity_after_plan(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        transaction = json.loads(plan.stdout)
+        transaction["capacity"]["storage-205"]["required_bytes"] = 10**30
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(json.dumps(transaction), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(self._write_host_adapter()),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("apply-time capacity", result.stderr.lower())
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
 
     def test_rollback_restores_the_stopped_snapshot(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
         subprocess.run(
-            [sys.executable, str(EXECUTOR), "apply", "--transaction", str(plan_path)],
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(self._write_host_adapter()),
+            ],
             text=True,
             capture_output=True,
             check=True,
@@ -225,6 +417,35 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["phase"], "rolled_back")
         self.assertEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / json.loads(plan.stdout)["transaction_id"] / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
+
+    def test_rollback_rejects_tampered_backup_manifest(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        applied = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(self._write_host_adapter()),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        transaction = json.loads(applied.stdout)
+        manifest = Path(transaction["backup"]["storage-205"]["manifest"])
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("manifest", result.stderr.lower())
 
     def test_plan_rejects_insufficient_capacity(self) -> None:
         self.capacity.write_text(
@@ -268,13 +489,38 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
                 "--signer-id",
                 "testnet-package-attestor",
                 "--signature-ref",
-                "fixture://signature",
-                "--verified-signature",
+                str(self.signature),
+                "--public-key-ref",
+                str(self.public_key),
             ],
             text=True,
             capture_output=True,
         )
         self.assertEqual(create.returncode, 0, create.stderr)
+        generated_payload = json.loads(generated.read_text(encoding="utf-8"))
+        generated_payload["signature"]["status"] = "verified"
+        body = {key: value for key, value in generated_payload.items() if key != "binding_digest"}
+        generated_payload["binding_digest"] = hashlib.sha256(
+            json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        ).hexdigest()
+        generated.write_text(json.dumps(generated_payload, indent=2) + "\n", encoding="utf-8")
+        payload_path = self.root / "generated-provenance-signing-payload.bin"
+        payload_path.write_bytes(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode())
+        subprocess.run(
+            [
+                "openssl",
+                "dgst",
+                "-sha256",
+                "-sign",
+                str(self.signing_key),
+                "-out",
+                str(self.signature),
+                str(payload_path),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         validate = subprocess.run(
             [sys.executable, str(PROVENANCE), "validate", "--provenance", str(generated), "--package-dir", str(self.package)],
             text=True,

@@ -273,7 +273,9 @@ validate_bundle_python() {
 import hashlib
 import json
 import pathlib
+import subprocess
 import sys
+import tempfile
 
 bundle_path = pathlib.Path(sys.argv[1]).resolve()
 expected_head = sys.argv[2]
@@ -329,6 +331,50 @@ def file_sha256(path: pathlib.Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+def verify_pair_provenance_signature(provenance_path: pathlib.Path, provenance: dict) -> None:
+    signature = provenance.get("signature")
+    if not isinstance(signature, dict) or signature.get("status") != "verified":
+        raise SystemExit("validator_pair_provenance requires a verified signature")
+    if signature.get("algorithm") != "openssl-rsa-sha256":
+        raise SystemExit("validator_pair_provenance signature algorithm is unsupported")
+    if not isinstance(signature.get("signer_id"), str) or not signature["signer_id"].strip():
+        raise SystemExit("validator_pair_provenance signature.signer_id is required")
+    def signature_file(field: str) -> pathlib.Path:
+        raw = signature.get(field)
+        if not isinstance(raw, str) or not raw.strip():
+            raise SystemExit(f"validator_pair_provenance signature.{field} is required")
+        path = pathlib.Path(raw)
+        if not path.is_absolute():
+            path = provenance_path.parent / path
+        elif not path.exists():
+            staged_fallback = provenance_path.parent / path.name
+            if staged_fallback.exists():
+                path = staged_fallback
+        if path.is_symlink() or not path.is_file():
+            raise SystemExit(f"validator_pair_provenance signature.{field} missing or symlinked: {path}")
+        return path.resolve()
+    signature_path = signature_file("signature_ref")
+    public_key_path = signature_file("public_key_ref")
+    public_key_sha = signature.get("public_key_sha256")
+    if not isinstance(public_key_sha, str) or len(public_key_sha) != 64 or public_key_sha.lower() != file_sha256(public_key_path):
+        raise SystemExit("validator_pair_provenance public key hash mismatch")
+    body = {key: value for key, value in provenance.items() if key != "binding_digest"}
+    payload = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    with tempfile.TemporaryDirectory(prefix="oasis7-release-provenance-") as temp_dir:
+        payload_path = pathlib.Path(temp_dir) / "payload"
+        payload_path.write_bytes(payload)
+        try:
+            result = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key_path), "-signature", str(signature_path), str(payload_path)],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+            raise SystemExit(f"validator_pair_provenance detached verifier unavailable: {error.__class__.__name__}")
+    if result.returncode != 0:
+        raise SystemExit("validator_pair_provenance detached signature verification failed")
 
 def check_ref(label: str, payload: dict) -> None:
     required = ["ref", "resolved_path", "kind"]
@@ -407,9 +453,7 @@ if pair_provenance is not None:
         raise SystemExit(f"validator_pair_provenance unreadable: {error}")
     if provenance.get("schema_version") != "oasis7.validator_pair_rebuild_provenance.v1":
         raise SystemExit("validator_pair_provenance schema mismatch")
-    signature = provenance.get("signature")
-    if not isinstance(signature, dict) or signature.get("status") != "verified":
-        raise SystemExit("validator_pair_provenance requires a verified signature")
+    verify_pair_provenance_signature(provenance_path, provenance)
     binding = provenance.get("binding_digest")
     body = {key: value for key, value in provenance.items() if key != "binding_digest"}
     actual_binding = hashlib.sha256(

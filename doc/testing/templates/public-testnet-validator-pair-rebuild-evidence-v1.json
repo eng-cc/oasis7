@@ -45,6 +45,28 @@
       "verified": false
     }
   },
+  "capacity_apply": {
+    "storage-205": {
+      "planned_free_bytes": 0,
+      "planned_free_inodes": 0,
+      "apply_free_bytes": 0,
+      "apply_free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "same_filesystem": false,
+      "verified": false
+    },
+    "sequencer-204": {
+      "planned_free_bytes": 0,
+      "planned_free_inodes": 0,
+      "apply_free_bytes": 0,
+      "apply_free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "same_filesystem": false,
+      "verified": false
+    }
+  },
   "mutation_order": ["storage-205", "sequencer-204"],
   "startup_order": ["sequencer-204", "storage-205"],
   "nodes": {
@@ -72,6 +94,36 @@
     "receipt_ref": "",
     "verified": false
   },
+  "host_receipt": {
+    "schema_version": "oasis7.validator_pair_rebuild_host_receipt.v1",
+    "transaction_id": "",
+    "receipt_ref": "",
+    "verified": false,
+    "nodes": {
+      "storage-205": {
+        "active": false,
+        "running": false,
+        "healthz_ok": false,
+        "nrestarts": 0,
+        "oom_panic_segfault": false,
+        "runtime_sha256": "",
+        "runtime_size_bytes": 0,
+        "listeners": ["6632", "6832"],
+        "full_chain_status_called": false
+      },
+      "sequencer-204": {
+        "active": false,
+        "running": false,
+        "healthz_ok": false,
+        "nrestarts": 0,
+        "oom_panic_segfault": false,
+        "runtime_sha256": "",
+        "runtime_size_bytes": 0,
+        "listeners": ["6631", "6831"],
+        "full_chain_status_called": false
+      }
+    }
+  },
   "observer_gate": {
     "status": "hold",
     "receipt_ref": "",
@@ -80,7 +132,10 @@
   "signing": {
     "status": "pending",
     "signer_id": "",
-    "signature_ref": ""
+    "algorithm": "openssl-rsa-sha256",
+    "signature_ref": "",
+    "public_key_ref": "",
+    "public_key_sha256": ""
   },
   "canonical_digest": ""
 }

@@ -3,10 +3,12 @@
 
 The executor is deliberately local-first.  A plan contains immutable package,
 world and capacity evidence and can be reviewed without contacting a host.
-``apply`` and ``rollback`` operate on an explicitly supplied local node root;
-an orchestration layer may map the same transaction to a remote host, but this
-tool never guesses credentials or silently falls back to SSH.  No observer is
-ever touched by this pair transaction.
+``apply`` and ``rollback`` operate on explicitly supplied local node roots;
+``apply`` additionally requires a governed host adapter that returns a
+transaction-bound startup/health receipt.  An orchestration layer may map the
+same transaction to a remote host, but this tool never guesses credentials or
+silently falls back to SSH.  No observer is ever touched by this pair
+transaction.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import time
 import uuid
@@ -29,6 +32,10 @@ from typing import Any, NoReturn
 SCHEMA = "oasis7.validator_pair_rebuild_transaction.v1"
 MUTATION_ORDER = ["storage-205", "sequencer-204"]
 STARTUP_ORDER = ["sequencer-204", "storage-205"]
+EXPECTED_LISTENERS = {
+    "storage-205": {"6632", "6832"},
+    "sequencer-204": {"6631", "6831"},
+}
 RESET_SURFACES = [
     "data/execution-records",
     "data/execution-world",
@@ -295,6 +302,32 @@ def capacity_for(capacity: dict[str, Any], role: str, required: int, required_in
     }
 
 
+def refresh_capacity(root: Path, planned: dict[str, Any], role: str) -> dict[str, Any]:
+    try:
+        usage = shutil.disk_usage(root)
+        statvfs = os.statvfs(root)
+        free_bytes = int(usage.free)
+        free_inodes = int(statvfs.f_favail)
+    except OSError as error:
+        fail(f"cannot recapture apply-time capacity for {role}: {error}")
+    required_bytes = int(planned["required_bytes"])
+    required_inodes = int(planned["required_inodes"])
+    if free_bytes < required_bytes:
+        fail(f"apply-time capacity gate failed for {role}: {free_bytes} < {required_bytes} bytes")
+    if free_inodes < required_inodes:
+        fail(f"apply-time capacity gate failed for {role}: {free_inodes} < {required_inodes} free inodes")
+    return {
+        "planned_free_bytes": int(planned["free_bytes"]),
+        "planned_free_inodes": int(planned["free_inodes"]),
+        "apply_free_bytes": free_bytes,
+        "apply_free_inodes": free_inodes,
+        "required_bytes": required_bytes,
+        "required_inodes": required_inodes,
+        "same_filesystem": planned.get("same_filesystem") is True,
+        "verified": True,
+    }
+
+
 def reject_full_status(url: str | None, label: str) -> None:
     if url and "/v1/chain/status" in url:
         fail(f"204 {label} must use a bounded proof endpoint; full /v1/chain/status is forbidden")
@@ -475,16 +508,98 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
     }
 
 
-def restore_node(backup: dict[str, Any]) -> dict[str, Any]:
+def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    if receipt.get("schema_version") != "oasis7.validator_pair_rebuild_host_receipt.v1":
+        fail("host adapter returned an unsupported receipt schema")
+    if receipt.get("transaction_id") != plan.get("transaction_id"):
+        fail("host adapter receipt transaction identity mismatch")
+    if receipt.get("mutation_order") != MUTATION_ORDER or receipt.get("startup_order") != STARTUP_ORDER:
+        fail("host adapter receipt order mismatch")
+    nodes = receipt.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("host adapter receipt must cover both validator roles")
+    for role in MUTATION_ORDER:
+        value = nodes[role]
+        if not isinstance(value, dict):
+            fail(f"host adapter receipt malformed for {role}")
+        if value.get("active") is not True or value.get("running") is not True or value.get("healthz_ok") is not True:
+            fail(f"host adapter health gate failed for {role}")
+        if value.get("nrestarts") != 0:
+            fail(f"host adapter restart gate failed for {role}")
+        if value.get("oom_panic_segfault") is not False:
+            fail(f"host adapter OOM/panic/segfault gate failed for {role}")
+        if value.get("runtime_sha256") != plan["package"]["runtime_sha256"] or int(value.get("runtime_size_bytes", -1)) != int(plan["package"]["runtime_size_bytes"]):
+            fail(f"host adapter runtime identity mismatch for {role}")
+        if not isinstance(value.get("listeners"), list) or not value["listeners"]:
+            fail(f"host adapter listener gate missing for {role}")
+        actual_listeners = {str(listener) for listener in value["listeners"]}
+        if not EXPECTED_LISTENERS[role].issubset(actual_listeners):
+            fail(f"host adapter listener identity mismatch for {role}")
+        if role == "sequencer-204" and value.get("full_chain_status_called") is not False:
+            fail("204 host adapter receipt must prove full /v1/chain/status was not called")
+    return receipt
+
+
+def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]) -> dict[str, Any]:
+    if adapter.is_symlink() or not adapter.is_file():
+        fail(f"host adapter must be a regular file: {adapter}")
+    adapter = adapter.resolve()
+    try:
+        result = subprocess.run(
+            [str(adapter), "--transaction", str(transaction_path)],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"host adapter execution failed: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail(f"host adapter failed with exit {result.returncode}")
+    try:
+        receipt = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        fail("host adapter must return one JSON receipt on stdout")
+    if not isinstance(receipt, dict):
+        fail("host adapter receipt must be a JSON object")
+    return validate_host_receipt(receipt, plan)
+
+
+def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> dict[str, Any]:
     root = Path(backup["root"])
     backup_root = Path(backup["backup_root"])
     snapshot = Path(backup["snapshot"])
-    if not snapshot.is_dir() or not Path(backup["manifest"]).is_file():
+    manifest_path = Path(backup["manifest"])
+    if not snapshot.is_dir() or not manifest_path.is_file():
         fail(f"rollback snapshot missing: {backup_root}")
+    if transaction_id is not None:
+        expected_backup_root = root / "backups" / transaction_id
+        if backup_root.resolve() != expected_backup_root.resolve():
+            fail(f"rollback backup identity mismatch for {root}")
+    if backup_root.resolve().parent != root.resolve() / "backups":
+        fail(f"rollback backup root escapes node root: {backup_root}")
+    if manifest_path.resolve().parent != backup_root.resolve() or snapshot.resolve().parent != backup_root.resolve():
+        fail(f"rollback backup paths escape backup root: {backup_root}")
+    expected_manifest_sha = backup.get("manifest_sha256")
+    if not isinstance(expected_manifest_sha, str) or expected_manifest_sha != sha256_file(manifest_path):
+        fail(f"rollback manifest digest mismatch: {manifest_path}")
+    try:
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"rollback manifest unreadable: {error}")
+    if manifest_payload.get("schema_version") != "oasis7.validator_pair_rebuild_backup.v1":
+        fail(f"rollback manifest schema mismatch: {manifest_path}")
+    if manifest_payload.get("root") != str(root):
+        fail(f"rollback manifest root mismatch: {manifest_path}")
+    expected = manifest_payload.get("entries")
+    if not isinstance(expected, list) or not expected:
+        fail(f"rollback manifest entries missing: {manifest_path}")
+    snapshot_manifest = without_backup_entries(manifest_tree(snapshot))
+    if snapshot_manifest != expected:
+        fail(f"rollback snapshot manifest verification failed for {root}")
     clear_node_preserving_backup(root, backup_root)
     for child in sorted(snapshot.iterdir(), key=lambda item: item.name):
         copy_entry(child, root / child.name)
-    expected = json.loads(Path(backup["manifest"]).read_text(encoding="utf-8"))["entries"]
     apply_manifest_metadata(root, expected)
     restored_manifest = without_backup_entries(manifest_tree(root))
     if restored_manifest != expected:
@@ -492,18 +607,24 @@ def restore_node(backup: dict[str, Any]) -> dict[str, Any]:
     return {"verified": True, "restored_manifest_entries": len(restored_manifest)}
 
 
-def apply_transaction(path: Path) -> dict[str, Any]:
+def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:
     plan = load_json(path, "transaction")
     if plan.get("schema_version") != SCHEMA or plan.get("phase") != "planned":
         fail("apply requires a planned validator-pair transaction")
     if plan.get("canonical_digest") != canonical_digest(plan):
         fail("transaction canonical digest mismatch")
+    if host_adapter is None:
+        fail("apply requires a governed host adapter for startup and health gates")
     helper = load_provenance_helper()
     package = plan.get("package")
     try:
         helper.validate_receipt(Path(package["provenance"]), Path(package["directory"]))
     except SystemExit as error:
         fail(str(error).removeprefix("error: validator-pair provenance: "))
+    plan["capacity_apply"] = {
+        role: refresh_capacity(Path(plan["nodes"][role]["root"]), plan["capacity"][role], role)
+        for role in MUTATION_ORDER
+    }
     backups: dict[str, Any] = {}
     staged: dict[str, Any] = {}
     try:
@@ -515,6 +636,7 @@ def apply_transaction(path: Path) -> dict[str, Any]:
         for role in MUTATION_ORDER:
             staged[role] = install_local(plan["nodes"][role], plan, backups[role])
         plan["staged"] = staged
+        plan["host_receipt"] = run_host_adapter(host_adapter, path, plan)
         plan["phase"] = "applied"
         plan["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         plan["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
@@ -526,13 +648,23 @@ def apply_transaction(path: Path) -> dict[str, Any]:
         plan["staged"] = staged
         plan["phase"] = "rollback_required"
         plan["failure"] = str(error)
+        rollback_errors: list[str] = []
         for role in reversed(MUTATION_ORDER):
             if role in backups:
-                restore_node(backups[role])
-        plan["phase"] = "rolled_back"
-        plan["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "verified"}
+                try:
+                    restore_node(backups[role], plan.get("transaction_id"))
+                except BaseException as rollback_error:
+                    rollback_errors.append(f"{role}: {rollback_error}")
+        plan["phase"] = "rollback_failed" if rollback_errors else "rolled_back"
+        plan["rollback"] = {
+            "strategy": "same-filesystem-full-snapshot",
+            "status": "failed" if rollback_errors else "verified",
+            "errors": rollback_errors,
+        }
         plan["canonical_digest"] = canonical_digest(plan)
         write_json(path, plan)
+        if rollback_errors:
+            fail("rollback failed: " + "; ".join(rollback_errors))
         if isinstance(error, SystemExit):
             raise
         fail(str(error))
@@ -542,6 +674,8 @@ def rollback_transaction(path: Path) -> dict[str, Any]:
     transaction = load_json(path, "transaction")
     if transaction.get("schema_version") != SCHEMA:
         fail("unsupported transaction schema")
+    if transaction.get("canonical_digest") != canonical_digest(transaction):
+        fail("transaction canonical digest mismatch")
     backups = transaction.get("backup")
     if not isinstance(backups, dict):
         fail("transaction does not contain full backup receipts")
@@ -549,7 +683,7 @@ def rollback_transaction(path: Path) -> dict[str, Any]:
     for role in reversed(MUTATION_ORDER):
         if role not in backups:
             fail(f"backup missing for {role}")
-        results[role] = restore_node(backups[role])
+        results[role] = restore_node(backups[role], transaction.get("transaction_id"))
     transaction["phase"] = "rolled_back"
     transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "verified", "results": results}
     transaction["rolled_back_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -574,6 +708,7 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--out-dir")
     apply = sub.add_parser("apply")
     apply.add_argument("--transaction", required=True)
+    apply.add_argument("--host-adapter")
     rollback = sub.add_parser("rollback")
     rollback.add_argument("--transaction", required=True)
     return root
@@ -587,7 +722,8 @@ def main() -> int:
             write_json(Path(args.out_dir).resolve() / "transaction.json", plan)
         print(json.dumps(plan, ensure_ascii=True, sort_keys=True))
     elif args.mode == "apply":
-        print(json.dumps(apply_transaction(Path(args.transaction).resolve()), ensure_ascii=True, sort_keys=True))
+        host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
+        print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter), ensure_ascii=True, sort_keys=True))
     else:
         print(json.dumps(rollback_transaction(Path(args.transaction).resolve()), ensure_ascii=True, sort_keys=True))
     return 0

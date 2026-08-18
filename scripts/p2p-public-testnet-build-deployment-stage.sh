@@ -413,7 +413,47 @@ if [[ -n "$validator_pair_provenance_ref" ]]; then
   if [[ "$(cd "$(dirname "$validator_pair_provenance_ref")" && pwd)/$(basename "$validator_pair_provenance_ref")" != "$provenance_copy" ]]; then
     cp "$validator_pair_provenance_ref" "$provenance_copy"
   fi
-  printf '%s\n' "- Validator pair provenance: \`$validator_pair_provenance_ref\`" >>"$deployment_truth_md"
+  python3 - "$validator_pair_provenance_ref" "$(dirname "$provenance_copy")" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+receipt_path = Path(sys.argv[1]).resolve()
+evidence_dir = Path(sys.argv[2]).resolve()
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+refs = []
+signature = receipt.get("signature")
+if isinstance(signature, dict):
+    refs.extend(signature.get(field) for field in ("signature_ref", "public_key_ref"))
+governed = receipt.get("governed")
+if isinstance(governed, dict):
+    refs.extend(value.get("path") for value in governed.values() if isinstance(value, dict))
+for raw in refs:
+    if not isinstance(raw, str) or not raw.strip():
+        continue
+    source = Path(raw)
+    if not source.is_absolute():
+        source = receipt_path.parent / source
+    if source.is_symlink() or not source.exists():
+        raise SystemExit(f"provenance closure reference missing or symlinked: {source}")
+    source = source.resolve()
+    destination = evidence_dir / source.name
+    if destination.exists() or destination.is_symlink():
+        if destination.resolve() == source:
+            continue
+        if destination.is_dir() and source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        elif destination.is_file() and source.is_file() and destination.read_bytes() == source.read_bytes():
+            continue
+        else:
+            raise SystemExit(f"provenance closure basename collision: {destination}")
+    elif source.is_dir():
+        shutil.copytree(source, destination)
+    else:
+        shutil.copy2(source, destination)
+PY
+  printf '%s\n' "- Validator pair provenance: \`$provenance_copy\`" >>"$deployment_truth_md"
 fi
 
 release_candidate_args=(
@@ -431,7 +471,7 @@ release_candidate_args=(
   --allow-dirty-worktree
 )
 if [[ -n "$validator_pair_provenance_ref" ]]; then
-  release_candidate_args+=(--validator-pair-provenance-ref "$validator_pair_provenance_ref")
+  release_candidate_args+=(--validator-pair-provenance-ref "$provenance_copy")
 fi
 
 ./scripts/release-candidate-bundle.sh "${release_candidate_args[@]}" >/dev/null
