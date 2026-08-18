@@ -70,7 +70,7 @@ jobs:
       - name: Install pinned Rust toolchain
         shell: bash
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal
           rustup default "${RUST_TOOLCHAIN}"
 
       - name: Install Linux system dependencies
