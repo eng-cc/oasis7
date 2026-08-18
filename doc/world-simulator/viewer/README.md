@@ -101,6 +101,7 @@
 ### 7. split Web delivery / optional WASM
 - `pixel_world_bridge_bindgen_bg.wasm` 约 63.5 MB，故意不进入玩家 native installer 或单独的 `web-dist/`。
 - release、mainnet、testnet workflow 产出 `oasis7-viewer-web-delivery.tar.gz`，内含 Viewer Web 根目录与并列的 `viewer-optional-payload/`；`optional-payloads.json` 以相对路径、SHA-256、字节数和 `viewer-web-build` provenance 声明可用 payload。
+- 发布归档保留内容 fingerprint 与文件清单，但不写入 checkout-specific 的 `sourceLatestPath` / `sourceLatestMtimeNs`；这些字段只服务本地 freshness 检查。
 - 部署 Web 时应解压并以 archive 根目录作为静态根；不要只复制 `web-dist/`。若 payload 真实缺失，manifest 保持 `available: false`，Viewer 必须进入明确的 Renderer Unavailable fallback。
 
 ## 定向检索边界

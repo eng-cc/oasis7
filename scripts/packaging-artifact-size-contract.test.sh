@@ -12,12 +12,13 @@ python3 - \
   "$ROOT_DIR/scripts/build-viewer-software-safe.sh" \
   "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
   "$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
+  "$ROOT_DIR/scripts/viewer-web-dist-contract.sh" \
   "$ROOT_DIR/Cargo.toml" <<'PY'
 from pathlib import Path
 import re
 import sys
 
-testnet, mainnet, release, prepare, build_bundle, build_viewer, copy_viewer, package_viewer, root_cargo = map(
+testnet, mainnet, release, prepare, build_bundle, build_viewer, copy_viewer, package_viewer, viewer_contract, root_cargo = map(
     lambda value: Path(value).read_text(encoding="utf-8"), sys.argv[1:]
 )
 
@@ -240,6 +241,12 @@ require(
     and "gid = 0" in package_viewer
     and "GzipFile" in package_viewer,
     "viewer delivery archive must use deterministic tar/gzip metadata",
+)
+require(
+    "viewer_web_dist_write_delivery_manifest" in package_viewer
+    and "sourceLatestMtimeNs" in viewer_contract
+    and "manifest.pop(\"sourceLatestMtimeNs\", None)" in viewer_contract,
+    "published viewer delivery manifest must omit checkout mtime metadata while primary freshness keeps it",
 )
 require(
     "optional-payload-dir" in build_viewer,

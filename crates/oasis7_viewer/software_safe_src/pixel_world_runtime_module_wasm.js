@@ -14,6 +14,8 @@ let runtimeInitPromise = null;
 const PIXEL_WORLD_WASM_PAYLOAD_NAME = "pixel_world_bridge_bindgen_bg.wasm";
 const PIXEL_WORLD_OPTIONAL_PAYLOAD_MANIFEST_NAME = "optional-payloads.json";
 const PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE = "pixel_world_optional_payload_missing";
+const PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE = "pixel_world_optional_payload_integrity_failed";
+const PIXEL_WORLD_OPTIONAL_PAYLOAD_FETCH_CODE = "pixel_world_optional_payload_fetch_failed";
 
 function legacyPixelWorldWasmUrl(moduleUrl = import.meta.url) {
   return new URL(PIXEL_WORLD_WASM_PAYLOAD_NAME, moduleUrl);
@@ -45,17 +47,41 @@ function optionalPayloadMissingError(reason = "source_missing") {
   return error;
 }
 
-async function resolvePixelWorldWasmUrl({ moduleUrl = import.meta.url } = {}) {
+function optionalPayloadIntegrityError(reason = "integrity_mismatch") {
+  const error = new Error(`optional pixel world WASM payload integrity verification failed: ${reason}`);
+  error.code = PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE;
+  return error;
+}
+
+function optionalPayloadFetchError(reason = "payload_fetch_failed") {
+  const error = new Error(`optional pixel world WASM payload fetch failed: ${reason}`);
+  error.code = PIXEL_WORLD_OPTIONAL_PAYLOAD_FETCH_CODE;
+  return error;
+}
+
+function normalizeOptionalPayloadIntegrity(payload) {
+  const sizeBytes = payload?.size_bytes;
+  const sha256 = typeof payload?.sha256 === "string" ? payload.sha256.trim().toLowerCase() : "";
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+    throw optionalPayloadIntegrityError("invalid_size_bytes");
+  }
+  if (!/^[0-9a-f]{64}$/.test(sha256)) {
+    throw optionalPayloadIntegrityError("invalid_sha256");
+  }
+  return { sizeBytes, sha256 };
+}
+
+async function resolvePixelWorldWasmDescriptor({ moduleUrl = import.meta.url } = {}) {
   const fallbackUrl = legacyPixelWorldWasmUrl(moduleUrl);
   // Node/jsdom unit tests and source-tree development do not serve a JSON
   // manifest. Keep the legacy adjacent-WASM path in those environments.
   if (typeof window === "undefined" || typeof fetch !== "function") {
-    return fallbackUrl;
+    return { url: fallbackUrl, integrity: null };
   }
 
   const manifestUrl = optionalPayloadManifestUrl(moduleUrl);
   if (manifestUrl.protocol !== "http:" && manifestUrl.protocol !== "https:") {
-    return fallbackUrl;
+    return { url: fallbackUrl, integrity: null };
   }
   let response;
   try {
@@ -64,7 +90,7 @@ async function resolvePixelWorldWasmUrl({ moduleUrl = import.meta.url } = {}) {
     throw optionalPayloadMissingError(error instanceof Error ? error.message : "manifest_fetch_failed");
   }
   if (response.status === 404) {
-    return fallbackUrl;
+    return { url: fallbackUrl, integrity: null };
   }
   if (!response.ok) {
     throw optionalPayloadMissingError(`manifest_http_${response.status}`);
@@ -81,7 +107,66 @@ async function resolvePixelWorldWasmUrl({ moduleUrl = import.meta.url } = {}) {
     throw optionalPayloadMissingError(payload?.reason || "source_missing");
   }
 
-  return new URL(payload.path, configuredOptionalPayloadBaseUrl(manifestUrl));
+  let url;
+  try {
+    url = new URL(payload.path, configuredOptionalPayloadBaseUrl(manifestUrl));
+  } catch {
+    throw optionalPayloadMissingError("invalid_payload_path");
+  }
+  return {
+    url,
+    integrity: normalizeOptionalPayloadIntegrity(payload),
+  };
+}
+
+async function resolvePixelWorldWasmUrl({ moduleUrl = import.meta.url } = {}) {
+  const descriptor = await resolvePixelWorldWasmDescriptor({ moduleUrl });
+  return descriptor.url;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function loadPixelWorldWasmInput({ moduleUrl = import.meta.url } = {}) {
+  const descriptor = await resolvePixelWorldWasmDescriptor({ moduleUrl });
+  if (!descriptor.integrity) {
+    return descriptor.url;
+  }
+
+  let response;
+  try {
+    response = await fetch(descriptor.url, { cache: "no-store" });
+  } catch (error) {
+    throw optionalPayloadFetchError(error instanceof Error ? error.message : "network_error");
+  }
+  if (!response?.ok) {
+    throw optionalPayloadFetchError(`http_${response?.status ?? "unknown"}`);
+  }
+
+  let bytes;
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    throw optionalPayloadFetchError(error instanceof Error ? error.message : "body_read_failed");
+  }
+  if (bytes.byteLength !== descriptor.integrity.sizeBytes) {
+    throw optionalPayloadIntegrityError("size_mismatch");
+  }
+  if (!globalThis.crypto?.subtle?.digest) {
+    throw optionalPayloadIntegrityError("crypto_unavailable");
+  }
+
+  let digest;
+  try {
+    digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  } catch {
+    throw optionalPayloadIntegrityError("digest_failed");
+  }
+  if (bytesToHex(digest) !== descriptor.integrity.sha256) {
+    throw optionalPayloadIntegrityError("sha256_mismatch");
+  }
+  return bytes;
 }
 
 function pixelWorldTestApiEnabled() {
@@ -90,8 +175,8 @@ function pixelWorldTestApiEnabled() {
 
 function ensurePixelWorldBridgeModule() {
   if (!runtimeInitPromise) {
-    runtimeInitPromise = resolvePixelWorldWasmUrl().then((wasmUrl) => (
-      initPixelWorldBridgeModule(wasmUrl)
+    runtimeInitPromise = loadPixelWorldWasmInput().then((wasmInput) => (
+      initPixelWorldBridgeModule(wasmInput)
     ));
   }
   return runtimeInitPromise;
@@ -378,6 +463,9 @@ export function derivePixelWorldRenderState(input) {
 export {
   PIXEL_WORLD_OPTIONAL_PAYLOAD_MANIFEST_NAME,
   PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE,
+  PIXEL_WORLD_OPTIONAL_PAYLOAD_INTEGRITY_CODE,
+  PIXEL_WORLD_OPTIONAL_PAYLOAD_FETCH_CODE,
   PIXEL_WORLD_WASM_PAYLOAD_NAME,
+  loadPixelWorldWasmInput as loadPixelWorldWasmInputForTest,
   resolvePixelWorldWasmUrl as resolvePixelWorldWasmUrlForTest,
 };

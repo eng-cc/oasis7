@@ -174,7 +174,7 @@ manifest[payload_name] = {
 manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 rm -f "$OUT_FILE"
-viewer_web_dist_write_manifest "$ROOT_DIR" "$stage_dir"
+viewer_web_dist_write_delivery_manifest "$ROOT_DIR" "$stage_dir"
 python3 - "$stage_dir" "$OUT_FILE" <<'PY'
 from __future__ import annotations
 

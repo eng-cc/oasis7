@@ -140,19 +140,31 @@ for raw_path in sys.argv[1:]:
     except (AttributeError, OSError):
         pass
 PY
-python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+source_mtime_path="$ROOT_DIR/crates/oasis7_viewer/software_safe_src/pixel_world_runtime_module_wasm.test.js"
+public_archive_repeat="$TMPDIR/oasis7-viewer-web-delivery-repeat.tar.gz"
+python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" "$source_mtime_path" "$ROOT_DIR/scripts/package-viewer-web-delivery.sh" "$public_dist_dir" "$public_optional_payload_dir" "$public_archive_repeat" <<'PY'
 import os
+import subprocess
 import sys
 
-for raw_path in sys.argv[1:]:
+for raw_path in sys.argv[1:3]:
     os.utime(raw_path, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
+source_path = sys.argv[3]
+helper_path = sys.argv[4]
+source_stat = os.stat(source_path)
+os.utime(source_path, ns=(source_stat.st_atime_ns, 1_700_000_100_987_654_321))
+try:
+    subprocess.run([
+        helper_path,
+        "--web-dist", sys.argv[5],
+        "--optional-payload-dir", sys.argv[6],
+        "--out-file", sys.argv[7],
+    ], check=True)
+finally:
+    os.utime(source_path, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
 PY
-public_archive_repeat="$TMPDIR/oasis7-viewer-web-delivery-repeat.tar.gz"
-"$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
-  --web-dist "$public_dist_dir" \
-  --optional-payload-dir "$public_optional_payload_dir" \
-  --out-file "$public_archive_repeat"
 python3 - "$public_archive" "$public_archive_repeat" "$public_dist_dir" <<'PY'
+import json
 import hashlib
 import sys
 import tarfile
@@ -189,6 +201,10 @@ with tarfile.open(first_path, "r:gz") as archive:
         assert member.uid == 0 and member.gid == 0, member
         assert member.uname == "" and member.gname == "", member
         assert member.mtime == 0 and member.mode == 0o644, member
+        if member.name == ".oasis7-viewer-dist-manifest.json":
+            delivery_manifest = json.load(archive.extractfile(member))
+            assert "sourceLatestPath" not in delivery_manifest, delivery_manifest
+            assert "sourceLatestMtimeNs" not in delivery_manifest, delivery_manifest
 PY
 extract_dir="$TMPDIR/public-delivery-extracted"
 mkdir -p "$extract_dir"

@@ -138,6 +138,28 @@ manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\
 PY
 }
 
+viewer_web_dist_write_delivery_manifest() {
+  local repo_root=$1
+  local dist_dir=$2
+  viewer_web_dist_write_manifest "$repo_root" "$dist_dir"
+  python3 - "$dist_dir/$(viewer_web_dist_manifest_name)" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+# sourceLatestPath/sourceLatestMtimeNs are useful for local freshness checks,
+# but they are checkout filesystem metadata and must not enter the published
+# deterministic delivery archive. Keep the content fingerprint and file list.
+manifest.pop("sourceLatestPath", None)
+manifest.pop("sourceLatestMtimeNs", None)
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 viewer_web_dist_check_freshness() {
   local repo_root=$1
   local dist_dir=$2
