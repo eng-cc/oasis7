@@ -11673,7 +11673,7 @@ function WorldFeedPanel(props) {
   const presentationEvents = () => [...feed().events || []].sort((left, right) => compareUnsignedDecimal(left?.event_seq, right?.event_seq));
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr2, status());
-  const shouldReload = () => Boolean(feed().snapshotReloadRequired || feed().stale || status() === "gap");
+  const shouldReload = () => Boolean(feed().snapshotReloadRequired || status() === "gap");
   return (() => {
     var _el$ = _tmpl$5$e(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling, _el$5 = _el$4.nextSibling, _el$6 = _el$2.nextSibling, _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild;
     insert(_el$3, () => tr2(locale(), "环境上下文", "Ambient Context"));
