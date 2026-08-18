@@ -14,6 +14,9 @@ compare them with a baseline git ref on the same runner family.
 All Cargo invocations are lockfile-pinned so dependency resolution cannot
 silently change the compile surface being measured.
 
+Each checkout performs one dependency-tree query; closure counting and
+dependency-presence checks are derived from that shared result.
+
 Cargo registry/source downloads use the caller's CARGO_HOME (or the default
 $HOME/.cargo) and are shared by current and baseline measurements. Each
 checkout still receives an isolated target directory so compile timings remain
@@ -209,32 +212,31 @@ measure_checkout() {
   local release_target="$tmp_root/${label}-release-target"
   mkdir -p "$check_target" "$release_target"
 
-  local package_count
+  local dependency_tree_path="$tmp_root/${label}-dependency-tree.txt"
   local tree_args=(cargo tree --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     tree_args+=(--no-default-features)
   fi
-  package_count=$(
+  # One forward dependency-tree query is enough for both closure counting and
+  # the presence checks below.  The prior inverse queries repeated Cargo's
+  # dependency resolution for the same checkout, adding compile-metrics
+  # overhead without changing the measured package closure.
+  (
     cd "$checkout_path"
     export CARGO_HOME="$cargo_home"
-    "${tree_args[@]}" --prefix none | sort -u | wc -l | tr -d '[:space:]'
-  )
+    "${tree_args[@]}" --prefix none
+  ) >"$dependency_tree_path"
+
+  local package_count
+  package_count=$(sort -u "$dependency_tree_path" | wc -l | tr -d '[:space:]')
 
   local wasmtime_present="false"
-  if (
-    cd "$checkout_path"
-    export CARGO_HOME="$cargo_home"
-    "${tree_args[@]}" -i wasmtime >/dev/null 2>&1
-  ); then
+  if grep -Eq '(^|[[:space:]])wasmtime([[:space:]]|$)' "$dependency_tree_path"; then
     wasmtime_present="true"
   fi
 
   local wasm_executor_present="false"
-  if (
-    cd "$checkout_path"
-    export CARGO_HOME="$cargo_home"
-    "${tree_args[@]}" -i oasis7_wasm_executor >/dev/null 2>&1
-  ); then
+  if grep -Eq '(^|[[:space:]])oasis7_wasm_executor([[:space:]]|$)' "$dependency_tree_path"; then
     wasm_executor_present="true"
   fi
 

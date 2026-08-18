@@ -158,6 +158,120 @@ state_path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", 
 PY
 }
 
+# Return a comparable wall-epoch clock in milliseconds.  The Codex CI runner
+# may give separate Python processes independent monotonic origins, so the
+# watchdog uses one epoch clock for both deadline creation and polling.
+wh_clock_ms() {
+  python3 - <<'PY'
+import time
+print(time.time_ns() // 1_000_000)
+PY
+}
+
+# Run a command (or a shell function) until an absolute epoch deadline.
+# `timeout(1)` is not available on every supported macOS/Linux runner, so the
+# small watchdog stays in bash and kills the child on the same portable path.
+# 124 mirrors the conventional timeout exit code and is reserved for the
+# deadline case; callers can distinguish a browser failure from a deadline.
+wh_run_with_deadline() {
+  local deadline_ms=$1
+  shift
+  [[ "$deadline_ms" =~ ^[0-9]+$ ]] || {
+    echo "error: invalid epoch deadline: $deadline_ms" >&2
+    return 2
+  }
+  [[ "$#" -gt 0 ]] || {
+    echo "error: wh_run_with_deadline requires a command" >&2
+    return 2
+  }
+
+  # Enable bash job control for this one launch so the background command gets
+  # its own process group.  Preserve the caller's setting after the launch;
+  # this keeps shell-function commands usable on macOS where `setsid` is not a
+  # guaranteed system utility, while still giving Linux the same group-bound
+  # kill semantics.
+  local monitor_was_enabled=0
+  case "$-" in
+    *m*) monitor_was_enabled=1 ;;
+  esac
+  set -m
+  "$@" &
+  local child_pid=$!
+  if [[ "$monitor_was_enabled" -eq 0 ]]; then
+    set +m
+  fi
+  while kill -0 "$child_pid" >/dev/null 2>&1; do
+    local now_ms
+    now_ms=$(wh_clock_ms)
+    if (( now_ms >= deadline_ms )); then
+      kill -TERM "-$child_pid" >/dev/null 2>&1 || kill -TERM "$child_pid" >/dev/null 2>&1 || true
+      sleep 0.1
+      kill -KILL "-$child_pid" >/dev/null 2>&1 || kill -KILL "$child_pid" >/dev/null 2>&1 || true
+      wait "$child_pid" >/dev/null 2>&1 || true
+      return 124
+    fi
+    sleep 0.05
+  done
+  wait "$child_pid"
+}
+
+wh_state_phase() {
+  local state_file=$1
+  local phase=$2
+  local message=${3:-}
+  local deadline_ms=${4:-}
+  local now_ms
+  now_ms=$(wh_clock_ms)
+  wh_state_write "$state_file" "$(python3 - "$phase" "$message" "$deadline_ms" "$now_ms" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+phase, message, deadline_raw, now_raw = sys.argv[1:]
+deadline = int(deadline_raw) if deadline_raw.isdigit() else None
+now = int(now_raw)
+payload = {
+    "phase": phase,
+    "phase_started_epoch_ms": now,
+    "phase_deadline_epoch_ms": deadline,
+    "progress": {
+        "phase": phase,
+        "message": message,
+        "updated_epoch_ms": now,
+    },
+}
+print(json.dumps(payload, ensure_ascii=False))
+PY
+)"
+}
+
+wh_state_progress() {
+  local state_file=$1
+  local message=$2
+  local attempt=${3:-}
+  local now_ms current_phase
+  now_ms=$(wh_clock_ms)
+  current_phase=$(wh_state_get "$state_file" phase 2>/dev/null || true)
+  wh_state_write "$state_file" "$(python3 - "$current_phase" "$message" "$attempt" "$now_ms" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+phase, message, attempt_raw, now_raw = sys.argv[1:]
+progress = {
+    "phase": phase,
+    "message": message,
+    "updated_epoch_ms": int(now_raw),
+}
+if attempt_raw.isdigit():
+    progress["attempt"] = int(attempt_raw)
+print(json.dumps({"progress": progress}))
+PY
+)"
+}
+
 wh_state_get() {
   local state_file=$1
   local key=$2
@@ -224,4 +338,3 @@ for raw in env_path.read_text(encoding="utf-8").splitlines():
 raise SystemExit(1)
 PY
 }
-

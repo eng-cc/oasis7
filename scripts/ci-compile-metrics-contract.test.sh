@@ -31,6 +31,10 @@ if grep -Eq 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; t
   echo "compile metrics workflow must not request a full-history checkout" >&2
   exit 1
 fi
+if grep -Eq 'COMPILE_METRICS_MAX_[A-Z0-9_]+' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must not define unused threshold environment defaults" >&2
+  exit 1
+fi
 if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1
@@ -121,7 +125,18 @@ case "${1:-}" in
     if [[ "$*" == *"-i wasmtime"* || "$*" == *"-i oasis7_wasm_executor"* ]]; then
       exit 1
     fi
-    printf 'fake-package\nfake-dependency\n'
+    case "${FAKE_CARGO_TREE_FIXTURE:-none}" in
+      all)
+        printf 'fake-package\nfake-dependency\nwasmtime v99.0.0\noasis7_wasm_executor v0.1.0\n'
+        ;;
+      none)
+        printf 'fake-package\nfake-dependency\n'
+        ;;
+      *)
+        echo "unexpected dependency-tree fixture: ${FAKE_CARGO_TREE_FIXTURE}" >&2
+        exit 1
+        ;;
+    esac
     ;;
   fetch|check)
     ;;
@@ -160,6 +175,7 @@ FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/cargo-target.log" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_CARGO_TREE_FIXTURE=all \
 PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
@@ -176,11 +192,13 @@ metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 summary = Path(sys.argv[3]).read_text(encoding="utf-8")
 expected_commit_oid = sys.argv[4]
-assert metrics["package_count"] == 2
+assert metrics["package_count"] == 4
 assert metrics["commit_oid"] == expected_commit_oid
 assert metrics["binary"] is None
 assert metrics["check_only"] is True
 assert metrics["no_default_features"] is True
+assert metrics["wasmtime_present"] is True
+assert metrics["wasm_executor_present"] is True
 assert metrics["cargo_build_release_seconds"] is None
 assert metrics["release_binary_bytes"] is None
 assert comparison["metric_rows"] == []
@@ -206,6 +224,12 @@ if not measured:
 unlocked = [command for command in measured if "--locked" not in command.split()]
 if unlocked:
     raise SystemExit(f"unlocked cargo invocations: {unlocked}")
+tree_commands = [command for command in measured if command.split(maxsplit=1)[0] == "tree"]
+if len(tree_commands) != 1:
+    raise SystemExit(f"expected one dependency-tree query for a check-only run: {tree_commands}")
+if any("-i" in command.split() for command in tree_commands):
+    raise SystemExit(f"dependency-tree query unexpectedly used inverse traversal: {tree_commands}")
+print("dependency-tree queries (current-only): 1")
 PY
 
 baseline_out_dir="$tmp_dir/metrics-with-baseline"
@@ -214,12 +238,23 @@ FAKE_CARGO_LOG="$tmp_dir/baseline-cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/baseline-cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_CARGO_TREE_FIXTURE=none \
 CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
     --out-dir "$baseline_out_dir" \
     --check-only \
     --baseline-ref HEAD
+
+python3 - "$baseline_out_dir/baseline.metrics.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert metrics["wasmtime_present"] is False
+assert metrics["wasm_executor_present"] is False
+PY
 
 python3 - "$tmp_dir/baseline-cargo-home.log" "$baseline_cargo_home" "$tmp_dir/baseline-cargo-target.log" <<'PY'
 from pathlib import Path
@@ -235,6 +270,22 @@ if set(homes) != {expected}:
 targets = [line for line in Path(sys.argv[3]).read_text(encoding="utf-8").splitlines() if line]
 if len(set(targets)) != 2:
     raise SystemExit(f"current and baseline target directories were not isolated: {targets}")
+PY
+
+python3 - "$tmp_dir/baseline-cargo.log" <<'PY'
+from pathlib import Path
+import sys
+
+commands = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+tree_commands = [command for command in commands if command.split(maxsplit=1)[0] == "tree"]
+if len(tree_commands) != 2:
+    raise SystemExit(
+        "expected one dependency-tree query per checkout in a baseline run: "
+        f"{tree_commands}"
+    )
+if any("-i" in command.split() for command in tree_commands):
+    raise SystemExit(f"dependency-tree queries unexpectedly used inverse traversal: {tree_commands}")
+print("dependency-tree queries (current+baseline): 2")
 PY
 
 python3 - "$tmp_dir/comparison.json" <<'PY'

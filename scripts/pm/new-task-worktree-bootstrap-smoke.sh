@@ -202,6 +202,21 @@ payload = json.loads(__import__("os").environ["BOOTSTRAP_JSON"])
 pm_task = payload.get("pm_task")
 if not pm_task:
     raise SystemExit("pm_task summary missing from new-task-worktree bootstrap output")
+if pm_task.get("status") != "committed":
+    raise SystemExit(f"successful bootstrap reported unexpected status: {pm_task.get('status')}")
+if pm_task.get("workflow_started") is not True:
+    raise SystemExit("successful bootstrap did not report workflow_started=true")
+if pm_task.get("bootstrap_complete") is not True:
+    raise SystemExit("successful bootstrap did not report bootstrap_complete=true")
+if pm_task.get("evidence_mode") != "single_pass":
+    raise SystemExit(
+        "successful bootstrap did not report evidence_mode=single_pass: "
+        f"{pm_task.get('evidence_mode')!r}"
+    )
+if not isinstance(pm_task.get("bootstrap_snapshot_path"), str) or not pm_task["bootstrap_snapshot_path"].strip():
+    raise SystemExit("successful bootstrap did not report a non-empty snapshot path")
+if not isinstance(pm_task.get("bootstrap_snapshot_digest"), str) or not pm_task["bootstrap_snapshot_digest"].strip():
+    raise SystemExit("successful bootstrap did not report a non-empty snapshot digest")
 snapshot_path = Path(pm_task.get("bootstrap_snapshot_path") or "")
 if not snapshot_path.is_file():
     raise SystemExit(f"bootstrap snapshot missing: {snapshot_path}")
