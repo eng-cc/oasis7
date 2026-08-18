@@ -14,7 +14,8 @@ usage() {
   cat <<'EOF'
 Usage:
   ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh \
-    --bundle-tar <oasis7-linux-x64-bundle.tar.gz> \
+    --package-deb <oasis7-linux-x64.deb> \
+    --ops-tools-tar <oasis7-linux-x64-ops-tools.tar.gz> \
     --config-dir <governed stage config directory> \
     --world-dir <generated world directory> \
     --node-id triad-testnet-sequencer \
@@ -130,6 +131,12 @@ safe_tar_extract() {
   tar -xzf "$archive" -C "$destination" --no-same-owner --no-same-permissions
 }
 
+safe_deb_extract() {
+  local package=$1 destination=$2
+  require_command dpkg-deb
+  dpkg-deb --extract "$package" "$destination" || die "cannot extract Debian package"
+}
+
 verify_bundle() {
   local bundle_root=$1 config=$2 runtime_sum expected_sum bundle_commit config_commit
   require_file "$bundle_root/BUILDINFO"
@@ -137,7 +144,7 @@ verify_bundle() {
   require_file "$bundle_root/bin/oasis7_chain_runtime"
   (cd "$bundle_root" && shasum -a 256 -c SHA256SUMS) >/dev/null \
     || die "bundle checksum verification failed"
-  for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import; do
+  for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
     [[ -x "$bundle_root/bin/$binary" ]] || die "bundle missing required executable: $binary"
   done
   grep -Eq '^commit=[0-9a-f]{40}$' "$bundle_root/BUILDINFO" || die "BUILDINFO missing valid commit"
@@ -184,7 +191,8 @@ ensure_service_account() {
 
 stack_root=$PRODUCTION_ROOT
 systemd_unit_dir=/etc/systemd/system
-bundle_tar=""
+package_deb=""
+ops_tools_tar=""
 config_dir=""
 world_dir=""
 node_id=""
@@ -195,7 +203,8 @@ test_root_prefix=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --stack-root) stack_root=${2:-}; shift 2 ;;
-    --bundle-tar) bundle_tar=${2:-}; shift 2 ;;
+    --package-deb) package_deb=${2:-}; shift 2 ;;
+    --ops-tools-tar) ops_tools_tar=${2:-}; shift 2 ;;
     --config-dir) config_dir=${2:-}; shift 2 ;;
     --world-dir) world_dir=${2:-}; shift 2 ;;
     --node-id) node_id=${2:-}; shift 2 ;;
@@ -211,7 +220,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for required in bundle_tar config_dir world_dir node_id receipt; do
+for required in package_deb ops_tools_tar config_dir world_dir node_id receipt; do
   [[ -n ${!required} ]] || die "missing required option: --${required//_/-}"
 done
 [[ "$node_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid node-id"
@@ -219,7 +228,8 @@ for command in tar shasum jq python3 install find; do require_command "$command"
 
 stack_root=$(absolute_path "$stack_root")
 systemd_unit_dir=$(absolute_path "$systemd_unit_dir")
-bundle_tar=$(absolute_path "$bundle_tar")
+package_deb=$(absolute_path "$package_deb")
+ops_tools_tar=$(absolute_path "$ops_tools_tar")
 config_dir=$(absolute_path "$config_dir")
 world_dir=$(absolute_path "$world_dir")
 receipt=$(absolute_path "$receipt")
@@ -250,7 +260,7 @@ else
   ensure_service_account
 fi
 
-require_file "$bundle_tar"; require_dir "$config_dir"; require_dir "$world_dir"
+require_file "$package_deb"; require_file "$ops_tools_tar"; require_dir "$config_dir"; require_dir "$world_dir"
 for source in \
   public-testnet-governed-bootstrap-bundle-2026-06-06.json \
   public-testnet-governed-bootstrap-genesis-2026-06-06.json \
@@ -281,8 +291,22 @@ require_file "$template"
 require_file "$start_script"
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-fresh-validator.XXXXXX")
 trap cleanup EXIT
-safe_tar_extract "$bundle_tar" "$work_dir"
-bundle_root="$work_dir/$BUNDLE_DIR_NAME"
+safe_deb_extract "$package_deb" "$work_dir/deb-root"
+bundle_root="$work_dir/deb-root/opt/oasis7"
+[[ -d "$bundle_root" ]] || die "Debian package missing /opt/oasis7 player bundle"
+safe_tar_extract "$ops_tools_tar" "$work_dir"
+ops_bundle_root="$work_dir/${BUNDLE_DIR_NAME}-ops-tools"
+require_file "$ops_bundle_root/.oasis7-ops-tools-manifest.json"
+require_file "$ops_bundle_root/SHA256SUMS"
+(
+  cd "$ops_bundle_root"
+  shasum -a 256 -c SHA256SUMS >/dev/null || die "ops-tools checksum verification failed"
+)
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  [[ -x "$ops_bundle_root/bin/$binary" ]] || die "ops-tools archive missing executable: $binary"
+done
+mkdir -p "$bundle_root/bin"
+cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
 require_dir "$bundle_root"
 verify_bundle "$bundle_root" "$config_dir"
 
@@ -352,14 +376,16 @@ fi
 runtime_path="$stack_root/current/bin/oasis7_chain_runtime"
 runtime_sha=$(sha256_file "$runtime_path")
 runtime_size=$(file_size "$runtime_path")
-bundle_sha=$(sha256_file "$bundle_tar")
-bundle_size=$(file_size "$bundle_tar")
+package_sha=$(sha256_file "$package_deb")
+package_size=$(file_size "$package_deb")
+ops_tools_sha=$(sha256_file "$ops_tools_tar")
+ops_tools_size=$(file_size "$ops_tools_tar")
 unit_sha=$(sha256_file "$installed_unit_path")
 build_commit=$(sed -n 's/^commit=//p' "$release_dir/BUILDINFO" | head -n1)
 build_version=$(sed -n 's/^package_version=//p' "$release_dir/BUILDINFO" | head -n1)
 build_run_id=$(sed -n 's/^run_id=//p' "$release_dir/BUILDINFO" | head -n1)
 binaries_json='[]'
-for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import; do
+for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
   binary_path="$stack_root/current/bin/$binary"
   binaries_json=$(jq -c --arg path "$binary_path" --arg sha256 "$(sha256_file "$binary_path")" \
     --argjson size "$(file_size "$binary_path")" --argjson executable true \
@@ -391,7 +417,8 @@ jq -n \
   --arg time "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --arg root "$stack_root" \
   --arg unit "$installed_unit_path" --arg unit_sha "$unit_sha" --arg active "$service_active" --arg enabled "$service_enabled" \
   --arg commit "$build_commit" --arg package_version "$build_version" --arg run_id "$build_run_id" \
-  --arg bundle "$bundle_tar" --arg bundle_sha "$bundle_sha" --argjson bundle_size "$bundle_size" \
+  --arg package_deb "$package_deb" --arg package_sha "$package_sha" --argjson package_size "$package_size" \
+  --arg ops_tools "$ops_tools_tar" --arg ops_tools_sha "$ops_tools_sha" --argjson ops_tools_size "$ops_tools_size" \
   --arg runtime "$runtime_path" --arg runtime_sha "$runtime_sha" --argjson runtime_size "$runtime_size" \
   --argjson binaries "$binaries_json" --argjson node "$identity_json" --argjson key "$key_json" \
   --argjson key_owner_valid "$key_owner_valid" --argjson service_uid "$service_uid" --argjson service_gid "$service_gid" \
@@ -402,7 +429,7 @@ jq -n \
   --argjson buildinfo "$buildinfo_json" --argjson checksums "$checksums_json" \
   '{schema_version:"oasis7.fresh_validator_host_bootstrap.v1",generated_at:$time,
     stack_root:$root, no_service_started:true,
-    package:{bundle:{path:$bundle,sha256:$bundle_sha,size_bytes:$bundle_size},buildinfo:($buildinfo + {commit:$commit,package_version:$package_version,run_id:$run_id}),sha256sums:$checksums},
+    package:{deb:{path:$package_deb,sha256:$package_sha,size_bytes:$package_size},ops_tools:{path:$ops_tools,sha256:$ops_tools_sha,size_bytes:$ops_tools_size},buildinfo:($buildinfo + {commit:$commit,package_version:$package_version,run_id:$run_id}),sha256sums:$checksums},
     runtime:{path:$runtime,sha256:$runtime_sha,size_bytes:$runtime_size,required_binaries:$binaries},
     node:{node_id:$node.node_id,public_key:$node.root_public_key,finality_public_key:$node.finality_public_key,libp2p_peer_id:$node.libp2p_peer_id,key:($key + {owner_valid:$key_owner_valid})},
     config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers},

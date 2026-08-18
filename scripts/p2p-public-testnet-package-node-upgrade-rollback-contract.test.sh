@@ -25,10 +25,21 @@ EOF
 
 make_bundle() {
   local root=$1
-  mkdir -p "$root/oasis7-linux-x64/bin"
-  printf 'runtime-new\n' >"$root/oasis7-linux-x64/bin/oasis7_chain_runtime"
-  chmod +x "$root/oasis7-linux-x64/bin/oasis7_chain_runtime"
-  tar -czf "$root/oasis7-linux-x64-bundle.tar.gz" -C "$root" oasis7-linux-x64
+  mkdir -p "$root/oasis7-linux-x64.deb.root/opt/oasis7/bin"
+  printf 'runtime-new\n' >"$root/oasis7-linux-x64.deb.root/opt/oasis7/bin/oasis7_chain_runtime"
+  chmod +x "$root/oasis7-linux-x64.deb.root/opt/oasis7/bin/oasis7_chain_runtime"
+  printf 'deb-placeholder\n' >"$root/oasis7-linux-x64.deb"
+  mkdir -p "$root/oasis7-linux-x64-ops-tools/bin"
+  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+    printf '%s\n' "$binary" >"$root/oasis7-linux-x64-ops-tools/bin/$binary"
+    chmod +x "$root/oasis7-linux-x64-ops-tools/bin/$binary"
+  done
+  printf '{"opsToolsSchemaVersion":1}\n' >"$root/oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json"
+  (
+    cd "$root/oasis7-linux-x64-ops-tools"
+    shasum -a 256 $(find . -type f ! -name SHA256SUMS -print | sort) >SHA256SUMS
+  )
+  tar -czf "$root/oasis7-linux-x64-ops-tools.tar.gz" -C "$root" oasis7-linux-x64-ops-tools
 }
 
 make_fake_bin() {
@@ -87,7 +98,17 @@ else
   printf '{"ok":false}\n'
 fi
 SH
+  cat >"$bin/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == --extract ]] || exit 2
+source=${2:?missing source}
+destination=${3:?missing destination}
+mkdir -p "$destination"
+cp -a "${source}.root/." "$destination/"
+SH
   chmod +x "$bin/systemctl" "$bin/ps" "$bin/curl"
+  chmod +x "$bin/dpkg-deb"
 }
 
 run_upgrade_failure() {
@@ -100,7 +121,8 @@ run_upgrade_failure() {
   FAKE_NODE_ROOT="$root" FAKE_SYSTEMCTL_LOG="$log" FAKE_PS_LOG="$ps_log" \
   FAKE_DRIFT_ON_START="$drift" FAKE_DRIFT_ON_STOP="$drift_on_stop" FAKE_DRIFT_ON_CURL="$drift_on_curl" FAKE_DRIFT_ON_ACTIVE="$drift_on_active" FAKE_HEALTH_OK="$health_ok" PATH="$path_bin:$TMP_DIR/fake-bin:$PATH" \
     "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
-    --node-root "$node_arg" --bundle-tar "$TMP_DIR/bundle/oasis7-linux-x64-bundle.tar.gz" \
+    --node-root "$node_arg" --package-deb "$TMP_DIR/bundle/oasis7-linux-x64.deb" \
+    --ops-tools-tar "$TMP_DIR/bundle/oasis7-linux-x64-ops-tools.tar.gz" \
     --package-version 0.0.0+rollback-contract \
     --commit abcdef1234567890abcdef1234567890abcdef12 \
     --run-id 3191-rollback-contract \

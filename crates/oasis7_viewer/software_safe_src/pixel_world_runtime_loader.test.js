@@ -58,6 +58,29 @@ describe("pixel world runtime loader", () => {
     }));
   });
 
+  it("preserves the deterministic optional-payload code for the unavailable viewer surface", async () => {
+    const onFatal = vi.fn();
+    const runtime = await createPixelWorldRuntimeBridge({
+      onFatal,
+      loadRuntimeModule: async () => {
+        const error = new Error("optional pixel world WASM payload is unavailable: source_missing");
+        error.code = "pixel_world_optional_payload_missing";
+        throw error;
+      },
+    });
+
+    expect(runtime.source).toBe("wasm_import_failed");
+    expect(runtime.fatal).toMatchObject({
+      code: "pixel_world_optional_payload_missing",
+      message: expect.stringContaining("source_missing"),
+    });
+    expect(runtime.bridge.mount(document.createElement("canvas"), {})).toMatchObject({
+      status: "unavailable",
+      fatal: runtime.fatal,
+    });
+    expect(onFatal).toHaveBeenCalledWith(runtime.fatal);
+  });
+
   it("surfaces a structured fatal path when the loaded wasm bridge cannot initialize", async () => {
     const onFatal = vi.fn();
     const runtime = await createPixelWorldRuntimeBridge({

@@ -56,16 +56,16 @@ jobs:
 
           case "${{ inputs.package_scope }}" in
             linux_only)
-              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"}]}'
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"}]}'
               ;;
             linux_macos_x64)
-              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"}]}'
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"}]}'
               ;;
             linux_macos_arm64)
-              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-arm64","asset_name":"oasis7-macos-arm64.dmg","target_triple":"aarch64-apple-darwin"}]}'
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"},{"os":"macos-14","platform":"macos-arm64","asset_name":"oasis7-macos-arm64.dmg","target_triple":"aarch64-apple-darwin"}]}'
               ;;
             all_existing)
-              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
               ;;
             *)
               echo "error: unsupported package_scope=${{ inputs.package_scope }}" >&2
@@ -102,10 +102,10 @@ jobs:
         run: cargo install trunk --locked
       - name: Build web dists
         run: |
-          mkdir -p output/testnet-packages/web-dist output/testnet-packages/web-launcher-dist
+          mkdir -p output/testnet-packages/web-dist output/testnet-packages/web-launcher-dist output/testnet-packages/viewer-optional-payload
           (
-            ./scripts/build-viewer-software-safe.sh
-            ./scripts/copy-viewer-web-dist.sh --dist-dir output/testnet-packages/web-dist
+            ./scripts/build-viewer-software-safe.sh --optional-payload-dir output/testnet-packages/viewer-optional-payload
+            ./scripts/copy-viewer-web-dist.sh --dist-dir output/testnet-packages/web-dist --optional-payload-dir output/testnet-packages/viewer-optional-payload
           )
           (
             cd crates/oasis7_client_launcher
@@ -118,6 +118,12 @@ jobs:
           path: |
             output/testnet-packages/web-dist
             output/testnet-packages/web-launcher-dist
+          if-no-files-found: error
+      - name: Upload viewer optional payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: testnet-viewer-optional-payload
+          path: output/testnet-packages/viewer-optional-payload
           if-no-files-found: error
 
   package-native:
@@ -161,36 +167,6 @@ jobs:
         with:
           shared-key: testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1
           cache-on-failure: true
-      - name: Ensure Linux AppImage tooling
-        if: matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APPIMAGETOOL_VERSION="1.9.1"
-          APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
-          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
-          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
-          APPIMAGE_RUNTIME_FILENAME="runtime-x86_64"
-          APPIMAGE_RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/${APPIMAGE_RUNTIME_FILENAME}"
-          APPIMAGE_RUNTIME_SHA256="1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
-
-          mkdir -p "${RUNNER_TEMP}/appimagetool"
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGETOOL_URL}" \
-            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
-          printf '%s  %s\n' \
-            "${APPIMAGETOOL_SHA256}" \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${APPIMAGE_RUNTIME_URL}" \
-            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}"
-          printf '%s  %s\n' \
-            "${APPIMAGE_RUNTIME_SHA256}" \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" | sha256sum -c -
-          chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
-          ln -sf \
-            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
-            "${RUNNER_TEMP}/appimagetool/appimagetool"
-          echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
-          echo "OASIS7_APPIMAGE_RUNTIME_FILE=${RUNNER_TEMP}/appimagetool/${APPIMAGE_RUNTIME_FILENAME}" >> "${GITHUB_ENV}"
       - name: Download web dist artifacts
         uses: actions/download-artifact@v6
         with:
@@ -255,16 +231,6 @@ jobs:
             --out-dir output/testnet-packages/assets \
             --asset-name "${{ matrix.asset_name }}" \
             --version "${{ steps.package_version.outputs.value }}"
-      - name: Package secondary Linux .deb
-        if: matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          ./scripts/package-native-installer.sh \
-            --platform "${{ matrix.platform }}" \
-            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
-            --out-dir output/testnet-packages/assets \
-            --asset-name "oasis7-linux-x64.deb" \
-            --version "${{ steps.package_version.outputs.value }}"
       - name: Write BUILDINFO
         shell: bash
         run: |
@@ -283,29 +249,6 @@ jobs:
             echo "package_version=${{ steps.package_version.outputs.value }}"
             echo "published=false"
           } > "output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"
-      - name: Archive raw Linux bundle
-        if: matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bundle_dir="output/testnet-packages/assets/oasis7-linux-x64"
-          cp "output/testnet-packages/assets/linux-x64-BUILDINFO" "$bundle_dir/BUILDINFO"
-          (
-            cd "$bundle_dir"
-            files=()
-            while IFS= read -r file; do
-              files+=("$file")
-            done < <(find . -type f ! -name SHA256SUMS -print | sort)
-            ((${#files[@]} > 0)) || { echo "error: Linux bundle has no files to checksum" >&2; exit 1; }
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum "${files[@]}" > SHA256SUMS
-            else
-              shasum -a 256 "${files[@]}" > SHA256SUMS
-            fi
-          )
-          tar -C output/testnet-packages/assets \
-            -czf output/testnet-packages/assets/oasis7-linux-x64-bundle.tar.gz \
-            oasis7-linux-x64
       - name: Stage Windows governed deployment closure
         if: matrix.platform == 'windows-x64'
         shell: bash
@@ -355,25 +298,33 @@ jobs:
             find windows-governed-closure -type f -print >/dev/null
             cd windows-governed-closure
             mapfile -t files < <(find . -type f -print | sed 's#^./##' | sort)
+            checksum "${files[@]}" > "${{ matrix.platform }}-SHA256SUMS"
+            cp "${{ matrix.platform }}-SHA256SUMS" ../
           else
             files=(
               "${{ matrix.asset_name }}"
               "${{ matrix.platform }}-BUILDINFO"
               "${{ matrix.platform }}-bundle-manifest.json"
               "${{ matrix.platform }}-entrypoint-validation.log"
+              "oasis7-${{ matrix.platform }}-ops-tools.tar.gz"
             )
+            for file in "${files[@]}"; do
+              [[ -f "${file}" ]] || { echo "error: missing package artifact ${file}" >&2; exit 1; }
+            done
+            checksum "${files[@]}" > "${{ matrix.platform }}-SHA256SUMS"
           fi
-          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
-            files+=(
-              "oasis7-linux-x64.deb"
-              "oasis7-linux-x64-bundle.tar.gz"
-            )
+      - name: Generate ops package checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output/testnet-packages/assets
+          archive="oasis7-${{ matrix.platform }}-ops-tools.tar.gz"
+          [[ -f "${archive}" ]] || { echo "error: missing ops-tools archive ${archive}" >&2; exit 1; }
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${archive}" > "${{ matrix.platform }}-ops-tools-SHA256SUMS"
+          else
+            shasum -a 256 "${archive}" > "${{ matrix.platform }}-ops-tools-SHA256SUMS"
           fi
-
-          for file in "${files[@]}"; do
-            [[ -f "${file}" ]] || { echo "error: missing package artifact ${file}" >&2; exit 1; }
-          done
-          checksum "${files[@]}" > "${{ matrix.platform }}-SHA256SUMS"
       - name: Upload testnet package artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -384,7 +335,7 @@ jobs:
             output/testnet-packages/assets/${{ matrix.platform }}-SHA256SUMS
             output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json
             output/testnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log
-            output/testnet-packages/assets/oasis7-linux-x64.deb
-            output/testnet-packages/assets/oasis7-linux-x64-bundle.tar.gz
+            output/testnet-packages/assets/oasis7-${{ matrix.platform }}-ops-tools.tar.gz
+            output/testnet-packages/assets/${{ matrix.platform }}-ops-tools-SHA256SUMS
             output/testnet-packages/assets/windows-governed-closure/**
           if-no-files-found: warn

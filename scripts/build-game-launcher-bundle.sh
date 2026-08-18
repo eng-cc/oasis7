@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 OUT_DIR=""
+OPS_OUT_DIR=""
 PROFILE="release"
 TARGET_TRIPLE="native"
 WEB_DIST_SOURCE=""
@@ -20,9 +21,6 @@ Build a distributable launcher bundle:
 - bin/oasis7_web_launcher
 - bin/oasis7_viewer_live
 - bin/oasis7_chain_runtime
-- bin/oasis7_world_repair_rebuild
-- bin/oasis7_governance_registry_import
-- bin/oasis7_governance_registry_audit
 - web/ (prebuilt viewer static assets)
 - web-launcher/ (prebuilt launcher web static assets)
 - run-client.sh (desktop client launcher entry)
@@ -32,6 +30,7 @@ Build a distributable launcher bundle:
 
 Options:
   --out-dir <path>       output directory (default: output/release/game-launcher-<timestamp>)
+  --ops-out-dir <path>   optional output directory for operator repair/governance tools
   --profile <name>       cargo profile: release|dev (default: release)
   --target-triple <id>   rust target triple (default: native)
   --web-dist <path>      use existing prebuilt viewer web dist instead of trunk build
@@ -133,6 +132,8 @@ bundle_platform_id() {
     fi
   elif [[ "$target_triple" == *windows* ]]; then
     echo "windows-x64"
+  elif [[ "$target_triple" == aarch64-apple-darwin ]]; then
+    echo "macos-arm64"
   elif [[ "$target_triple" == *apple-darwin* || "$target_triple" == *darwin* ]]; then
     echo "macos-x64"
   else
@@ -144,6 +145,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --out-dir)
       OUT_DIR="${2:-}"
+      shift 2
+      ;;
+    --ops-out-dir)
+      OPS_OUT_DIR="${2:-}"
       shift 2
       ;;
     --profile)
@@ -184,6 +189,9 @@ if [[ -z "$OUT_DIR" ]]; then
 fi
 if [[ "$OUT_DIR" != /* ]]; then
   OUT_DIR="$ROOT_DIR/$OUT_DIR"
+fi
+if [[ -n "$OPS_OUT_DIR" && "$OPS_OUT_DIR" != /* ]]; then
+  OPS_OUT_DIR="$ROOT_DIR/$OPS_OUT_DIR"
 fi
 if [[ -n "$WEB_DIST_SOURCE" && "$WEB_DIST_SOURCE" != /* ]]; then
   WEB_DIST_SOURCE="$ROOT_DIR/$WEB_DIST_SOURCE"
@@ -239,8 +247,16 @@ BUNDLE_PLATFORM_ID="$(bundle_platform_id "$TARGET_TRIPLE")"
 BUNDLE_BIN_DIR="$OUT_DIR/bin"
 BUNDLE_WEB_DIR="$OUT_DIR/web"
 BUNDLE_WEB_LAUNCHER_DIR="$OUT_DIR/web-launcher"
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  OPS_BIN_DIR="$OPS_OUT_DIR/bin"
+else
+  OPS_BIN_DIR="$BUNDLE_BIN_DIR"
+fi
 
 run mkdir -p "$BUNDLE_BIN_DIR" "$BUNDLE_WEB_DIR" "$BUNDLE_WEB_LAUNCHER_DIR"
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  run mkdir -p "$OPS_BIN_DIR"
+fi
 
 # 1) Build native binaries for launcher/live/client launcher.
 BUNDLE_NATIVE_BUILD_ARGS=(
@@ -288,10 +304,10 @@ replace_file "$LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$LAUNCHER_BIN_NAME"
 replace_file "$WEB_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$WEB_LAUNCHER_BIN_NAME"
 replace_file "$LIVE_SRC" "$BUNDLE_BIN_DIR/$LIVE_BIN_NAME"
 replace_file "$CHAIN_SRC" "$BUNDLE_BIN_DIR/$CHAIN_BIN_NAME"
-replace_file "$WORLD_REPAIR_REBUILD_SRC" "$BUNDLE_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
-replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
-replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 replace_file "$CLIENT_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$CLIENT_LAUNCHER_BIN_NAME"
+replace_file "$WORLD_REPAIR_REBUILD_SRC" "$OPS_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
+replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
+replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 
 # 2) Prepare viewer web dist (viewer canonical static bundle, with software_safe compat alias).
 if [[ -n "$WEB_DIST_SOURCE" ]]; then
@@ -326,7 +342,11 @@ else
   fi
 fi
 
-bundle_write_manifest "$ROOT_DIR" "$OUT_DIR"
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "+ bundle_write_manifest $ROOT_DIR $OUT_DIR"
+else
+  bundle_write_manifest "$ROOT_DIR" "$OUT_DIR"
+fi
 
 # 4) Generate desktop client wrapper + one-command CLI wrapper and readme.
 run bash -lc "cat > '$OUT_DIR/run-client.sh' <<'LAUNCH'
@@ -435,7 +455,7 @@ if defined OASIS7_CHAIN_STORAGE_PROFILE (
 LAUNCH"
 fi
 
-if [[ "$BUNDLE_PLATFORM_ID" == "macos-x64" ]]; then
+if [[ "$BUNDLE_PLATFORM_ID" == macos-x64 || "$BUNDLE_PLATFORM_ID" == macos-arm64 ]]; then
   BUNDLE_MACOS_APP_DIR="$OUT_DIR/oasis7 Client Launcher.app"
   run mkdir -p "$BUNDLE_MACOS_APP_DIR/Contents/MacOS" "$BUNDLE_MACOS_APP_DIR/Contents/Resources"
   run bash -lc "cat > '$BUNDLE_MACOS_APP_DIR/Contents/Info.plist' <<'PLIST'
@@ -519,12 +539,96 @@ Bundle layout:
 - run-game.cmd (Windows bundle only)
 - run-chain-runtime.cmd (Windows bundle only)
 - oasis7 Client Launcher.app (macOS bundle only)
+- Operator repair/recovery tools are published separately in the optional
+  oasis7-${BUNDLE_PLATFORM_ID}-ops-tools bundle when --ops-out-dir is used.
 README"
 
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "+ write $OPS_OUT_DIR/README.txt"
+    echo "+ write $OPS_OUT_DIR/.oasis7-ops-tools-manifest.json"
+    echo "+ write $OPS_OUT_DIR/SHA256SUMS"
+  else
+    cat > "$OPS_OUT_DIR/README.txt" <<'README'
+oasis7 Operator Tools Bundle
+
+This optional bundle contains the tools required for world repair/rebuild and
+governance registry import/audit during node upgrade, rollback, and restore
+operations. Keep this bundle together with the primary player/runtime package
+when performing an operator-led recovery.
+
+Contents:
+- bin/oasis7_world_repair_rebuild
+- bin/oasis7_governance_registry_import
+- bin/oasis7_governance_registry_audit
+- .oasis7-ops-tools-manifest.json
+- SHA256SUMS
+README
+
+    source_metadata_json="$(bundle_source_metadata_json "$ROOT_DIR")"
+    python3 - "$OPS_OUT_DIR" "$source_metadata_json" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+import time
+from pathlib import Path
+
+ops_dir = Path(sys.argv[1]).resolve()
+source = json.loads(sys.argv[2])
+tools = []
+for path in sorted((ops_dir / "bin").glob("*")):
+    if not path.is_file():
+        continue
+    tools.append(
+        {
+            "path": path.relative_to(ops_dir).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "sizeBytes": path.stat().st_size,
+        }
+    )
+expected = {
+    "oasis7_world_repair_rebuild",
+    "oasis7_governance_registry_import",
+    "oasis7_governance_registry_audit",
+}
+actual = {Path(item["path"]).stem.removesuffix(".exe") for item in tools}
+if actual != expected:
+    raise SystemExit(f"ops-tools binary set mismatch: expected={sorted(expected)} actual={sorted(actual)}")
+manifest = {
+    "opsToolsSchemaVersion": 1,
+    "generatedAtUnixMs": int(time.time() * 1000),
+    "sourceFingerprint": source.get("sourceFingerprint"),
+    "sourceFileCount": source.get("sourceFileCount"),
+    "tools": tools,
+}
+(ops_dir / ".oasis7-ops-tools-manifest.json").write_text(
+    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+)
+PY
+    (
+      cd "$OPS_OUT_DIR"
+      mapfile -t files < <(find . -type f ! -name SHA256SUMS -print | sort)
+      ((${#files[@]} > 0)) || { echo "error: ops-tools bundle has no files to checksum" >&2; exit 1; }
+      if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "${files[@]}" > SHA256SUMS
+      else
+        shasum -a 256 "${files[@]}" > SHA256SUMS
+      fi
+    )
+  fi
+fi
+
 if [[ "$DRY_RUN" != "1" ]]; then
-  "$ROOT_DIR/scripts/validate-release-platform-entrypoints.sh" \
-    --platform "$BUNDLE_PLATFORM_ID" \
+  validation_args=(
+    --platform "$BUNDLE_PLATFORM_ID"
     --bundle-dir "$OUT_DIR"
+  )
+  if [[ -n "$OPS_OUT_DIR" ]]; then
+    validation_args+=(--ops-bundle-dir "$OPS_OUT_DIR")
+  fi
+  "$ROOT_DIR/scripts/validate-release-platform-entrypoints.sh" "${validation_args[@]}"
 fi
 
 cat <<INFO
@@ -539,3 +643,9 @@ Bundle ready: $OUT_DIR
 - entries:         $OUT_DIR/run-client.sh, $OUT_DIR/run-web-launcher.sh, $OUT_DIR/run-game.sh, $OUT_DIR/run-chain-runtime.sh
 - platform:        $BUNDLE_PLATFORM_ID
 INFO
+
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  cat <<INFO
+- ops tools:       $OPS_OUT_DIR
+INFO
+fi

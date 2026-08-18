@@ -18,6 +18,15 @@ members = [
 ]
 resolver = "2"
 
+[profile.release]
+# Keep release artifacts small without changing the panic strategy used by
+# runtime binaries. Symbol stripping reduces distribution size (and can reduce
+# postmortem symbolization), while thin LTO with one codegen unit keeps
+# cross-crate optimization effective without the full-LTO build-time cost.
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
+
 [profile.dev.package.epaint]
 # On wasm32-unknown-unknown, `std::time::Instant` is unavailable.
 # epaint's debug deadlock checks call `parking_lot::try_*_for`, which panics there.

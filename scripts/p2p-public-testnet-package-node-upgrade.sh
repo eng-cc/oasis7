@@ -6,7 +6,8 @@ usage() {
 Usage:
   ./scripts/p2p-public-testnet-package-node-upgrade.sh \
     --node-root <path> \
-    --bundle-tar <oasis7-linux-x64-bundle.tar.gz> \
+    --package-deb <oasis7-linux-x64.deb> \
+    --ops-tools-tar <oasis7-linux-x64-ops-tools.tar.gz> \
     --package-version <version> \
     --commit <sha> \
     --run-id <github-actions-run-id> \
@@ -20,7 +21,8 @@ Usage:
 
 Description:
   Upgrade an installed public testnet Linux node from a CI package bundle.
-  The script extracts the bundle into <node-root>/releases/<package-version>,
+  The script extracts the Debian player package and checksummed operator tools
+  into <node-root>/releases/<package-version>,
   repoints <node-root>/current, and rewrites the node-local governed bootstrap
   bundle runtime_build hash to the installed runtime binary. This keeps the
   network-tier runtime drift guard aligned with the deployed artifact.
@@ -670,7 +672,8 @@ PY
 }
 
 node_root=""
-bundle_tar=""
+package_deb=""
+ops_tools_tar=""
 package_version=""
 commit=""
 run_id=""
@@ -688,8 +691,12 @@ while [[ $# -gt 0 ]]; do
       node_root=${2:-}
       shift 2
       ;;
-    --bundle-tar)
-      bundle_tar=${2:-}
+    --package-deb)
+      package_deb=${2:-}
+      shift 2
+      ;;
+    --ops-tools-tar)
+      ops_tools_tar=${2:-}
       shift 2
       ;;
     --package-version)
@@ -743,11 +750,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_non_empty "--node-root" "$node_root"
-require_non_empty "--bundle-tar" "$bundle_tar"
+require_non_empty "--package-deb" "$package_deb"
+require_non_empty "--ops-tools-tar" "$ops_tools_tar"
 require_non_empty "--package-version" "$package_version"
 require_non_empty "--commit" "$commit"
 require_non_empty "--run-id" "$run_id"
-[[ -f "$bundle_tar" ]] || die "missing bundle tar: $bundle_tar"
+[[ -f "$package_deb" ]] || die "missing Debian package: $package_deb"
+[[ -f "$ops_tools_tar" ]] || die "missing ops-tools package: $ops_tools_tar"
 if [[ "$restart_service" -eq 1 ]]; then
   require_non_empty "--systemd-service" "$systemd_service"
 fi
@@ -772,8 +781,9 @@ fi
 
 node_root_lexical=$(python3 -c 'import os,sys; value=os.path.expanduser(sys.argv[1]); print(value if os.path.isabs(value) else os.path.join(os.getcwd(), value))' "$node_root")
 node_root=$(abs_path "$node_root")
-bundle_tar=$(abs_path "$bundle_tar")
-artifact_ref=${artifact_ref:-"oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"}
+package_deb=$(abs_path "$package_deb")
+ops_tools_tar=$(abs_path "$ops_tools_tar")
+artifact_ref=${artifact_ref:-"oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime"}
 node_id=$(parse_node_id "$node_root/bin/start-node.sh")
 upgrade_lock_dir="$node_root/.package-upgrade.lock"
 if ! mkdir "$upgrade_lock_dir" 2>/dev/null; then
@@ -789,8 +799,27 @@ transaction_dir="$node_root/package-upgrade-rollback/$backup_suffix"
 mkdir -p "$node_root/releases"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"
-tar -xzf "$bundle_tar" -C "$tmp_dir"
-bundle_root="$tmp_dir/oasis7-linux-x64"
+command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the Debian package"
+dpkg-deb --extract "$package_deb" "$tmp_dir/deb-root"
+bundle_root="$tmp_dir/deb-root/opt/oasis7"
+[[ -d "$bundle_root" ]] || die "Debian package missing /opt/oasis7 player bundle: $package_deb"
+tar -xzf "$ops_tools_tar" -C "$tmp_dir"
+ops_bundle_root="$tmp_dir/oasis7-linux-x64-ops-tools"
+[[ -f "$ops_bundle_root/.oasis7-ops-tools-manifest.json" ]] || die "ops-tools archive missing manifest"
+[[ -f "$ops_bundle_root/SHA256SUMS" ]] || die "ops-tools archive missing SHA256SUMS"
+(
+  cd "$ops_bundle_root"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum -c SHA256SUMS >/dev/null 2>&1 || die "ops-tools checksum verification failed"
+  else
+    shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 || die "ops-tools checksum verification failed"
+  fi
+)
+for ops_binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  [[ -x "$ops_bundle_root/bin/$ops_binary" ]] || die "ops-tools archive missing executable: $ops_binary"
+done
+mkdir -p "$bundle_root/bin"
+cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
 runtime_bin="$bundle_root/bin/oasis7_chain_runtime"
 [[ -x "$runtime_bin" ]] || die "bundle missing executable runtime: $runtime_bin"
 ensure_governed_bootstrap_bundle_exists "$node_root"

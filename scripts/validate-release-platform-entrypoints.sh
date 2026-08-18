@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM=""
 BUNDLE_DIR=""
+OPS_BUNDLE_DIR=""
 
 usage() {
   cat <<'USAGE'
@@ -14,6 +15,8 @@ Validate that a prepared release bundle exposes platform-native launch entrypoin
 Options:
   --platform <id>      required: linux-x64 | macos-x64 | macos-arm64 | windows-x64
   --bundle-dir <path>  required: prepared bundle directory
+  --ops-bundle-dir <path>
+                       optional: separately staged operator tools bundle
   -h, --help           show this help
 USAGE
 }
@@ -73,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       BUNDLE_DIR="${2:-}"
       shift 2
       ;;
+    --ops-bundle-dir)
+      OPS_BUNDLE_DIR="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -96,6 +103,13 @@ esac
 [[ -n "$BUNDLE_DIR" ]] || { echo "error: --bundle-dir is required" >&2; exit 1; }
 BUNDLE_DIR="$(resolve_abs_path "$BUNDLE_DIR")"
 [[ -d "$BUNDLE_DIR" ]] || { echo "error: bundle dir does not exist: $BUNDLE_DIR" >&2; exit 1; }
+if [[ -n "$OPS_BUNDLE_DIR" ]]; then
+  OPS_BUNDLE_DIR="$(resolve_abs_path "$OPS_BUNDLE_DIR")"
+  [[ -d "$OPS_BUNDLE_DIR" ]] || {
+    echo "error: ops bundle dir does not exist: $OPS_BUNDLE_DIR" >&2
+    exit 1
+  }
+fi
 
 require_path "$BUNDLE_DIR/bin" dir
 require_path "$BUNDLE_DIR/web/index.html" file
@@ -129,9 +143,6 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     ;;
   macos-x64|macos-arm64)
     require_path "$BUNDLE_DIR/run-client.sh" executable
@@ -143,9 +154,6 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist" file
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/MacOS/oasis7-client-launcher" executable
     if [[ "$PLATFORM" == "macos-arm64" ]]; then
@@ -162,14 +170,29 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime.exe" file
-    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild.exe" file
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import.exe" file
-    require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit.exe" file
     require_path "$BUNDLE_DIR/run-client.cmd" file
     require_path "$BUNDLE_DIR/run-web-launcher.cmd" file
     require_path "$BUNDLE_DIR/run-game.cmd" file
     require_path "$BUNDLE_DIR/run-chain-runtime.cmd" file
     ;;
 esac
+
+if [[ -n "$OPS_BUNDLE_DIR" ]]; then
+  require_path "$OPS_BUNDLE_DIR/bin" dir
+  require_path "$OPS_BUNDLE_DIR/.oasis7-ops-tools-manifest.json" file
+  require_path "$OPS_BUNDLE_DIR/SHA256SUMS" file
+  case "$PLATFORM" in
+    windows-x64)
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_world_repair_rebuild.exe" file
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_import.exe" file
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_audit.exe" file
+      ;;
+    *)
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
+      require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
+      ;;
+  esac
+fi
 
 echo "Release bundle entrypoints validated: $BUNDLE_DIR ($PLATFORM)"

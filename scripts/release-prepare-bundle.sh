@@ -15,6 +15,12 @@ Usage: ./scripts/release-prepare-bundle.sh [options]
 
 Prepare deterministic launcher bundle directory for CI release packaging.
 
+The player bundle contains only launch/runtime binaries and explicitly excludes
+oasis7_world_repair_rebuild, oasis7_governance_registry_import, and
+oasis7_governance_registry_audit. Operator repair and governance tools are emitted into a separate checksummed ops-tools archive so
+they remain available for upgrade, rollback, and restore procedures without
+inflating the normal player install.
+
 Options:
   --platform <id>        required: linux-x64 | macos-x64 | macos-arm64 | windows-x64
   --target-triple <id>   optional rust target triple (default: native)
@@ -114,7 +120,9 @@ if [[ ! -d "${WEB_LAUNCHER_DIST}" ]]; then
 fi
 
 BUNDLE_DIR="${OUT_DIR}/oasis7-${PLATFORM}"
-rm -rf "${BUNDLE_DIR}"
+OPS_BUNDLE_DIR="${OUT_DIR}/oasis7-${PLATFORM}-ops-tools"
+OPS_ARCHIVE="${OUT_DIR}/oasis7-${PLATFORM}-ops-tools.tar.gz"
+rm -rf "${BUNDLE_DIR}" "${OPS_BUNDLE_DIR}" "${OPS_ARCHIVE}"
 mkdir -p "${OUT_DIR}"
 
 "${ROOT_DIR}/scripts/build-game-launcher-bundle.sh" \
@@ -122,6 +130,18 @@ mkdir -p "${OUT_DIR}"
   --profile "${PROFILE}" \
   --target-triple "${TARGET_TRIPLE}" \
   --web-dist "${WEB_DIST}" \
-  --web-launcher-dist "${WEB_LAUNCHER_DIST}"
+  --web-launcher-dist "${WEB_LAUNCHER_DIST}" \
+  --ops-out-dir "${OPS_BUNDLE_DIR}"
+
+[[ -f "${OPS_BUNDLE_DIR}/.oasis7-ops-tools-manifest.json" ]] || {
+  echo "error: ops-tools manifest missing: ${OPS_BUNDLE_DIR}" >&2
+  exit 1
+}
+[[ -f "${OPS_BUNDLE_DIR}/SHA256SUMS" ]] || {
+  echo "error: ops-tools checksums missing: ${OPS_BUNDLE_DIR}" >&2
+  exit 1
+}
+tar -C "${OUT_DIR}" -czf "${OPS_ARCHIVE}" "$(basename "${OPS_BUNDLE_DIR}")"
 
 echo "Prepared bundle directory: ${BUNDLE_DIR}"
+echo "Prepared ops-tools archive: ${OPS_ARCHIVE}"

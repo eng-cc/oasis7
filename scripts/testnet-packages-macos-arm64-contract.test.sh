@@ -35,7 +35,7 @@ assert scope_entries("linux_macos_x64") == [
     {
         "os": "ubuntu-24.04",
         "platform": "linux-x64",
-        "asset_name": "oasis7-linux-x86_64.AppImage",
+        "asset_name": "oasis7-linux-x64.deb",
         "target_triple": "native",
     },
     {
@@ -49,7 +49,7 @@ assert scope_entries("all_existing") == [
     {
         "os": "ubuntu-24.04",
         "platform": "linux-x64",
-        "asset_name": "oasis7-linux-x86_64.AppImage",
+        "asset_name": "oasis7-linux-x64.deb",
         "target_triple": "native",
     },
     {
@@ -70,7 +70,7 @@ assert scope_entries("linux_macos_arm64") == [
     {
         "os": "ubuntu-24.04",
         "platform": "linux-x64",
-        "asset_name": "oasis7-linux-x86_64.AppImage",
+        "asset_name": "oasis7-linux-x64.deb",
         "target_triple": "native",
     },
     {

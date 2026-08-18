@@ -23,40 +23,34 @@ def step(name: str) -> tuple[int, str]:
 
 
 buildinfo_offset, buildinfo = step("Write BUILDINFO")
-archive_offset, archive = step("Archive raw Linux bundle")
 _, outer_checksums = step("Generate checksums")
-assert buildinfo_offset < archive_offset, (
-    "Linux raw bundle must be archived after BUILDINFO is written"
+assert '"platform":"linux-x64"' in workflow
+assert '"asset_name":"oasis7-linux-x64.deb"' in workflow, (
+    "Linux package must publish the Debian installer as the sole primary asset"
 )
+assert "AppImage" not in workflow, "Linux AppImage must not remain a published artifact"
+assert "Archive raw Linux bundle" not in workflow, "raw Linux tar must not remain a release artifact"
+assert "Package secondary Linux .deb" not in workflow, "duplicate Linux deb step must be removed"
 assert '"output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"' in buildinfo, (
     "external Linux BUILDINFO artifact must remain available for outer checksums"
 )
 assert '"${{ matrix.platform }}-BUILDINFO"' in outer_checksums, (
     "outer artifact checksums must continue to cover BUILDINFO"
 )
-assert 'cp "output/testnet-packages/assets/linux-x64-BUILDINFO"' in archive, (
-    "Linux bundle must embed the external BUILDINFO before archive"
-)
-assert '"$bundle_dir/BUILDINFO"' in archive, (
-    "Linux bundle must place BUILDINFO at its root"
-)
-assert "find . -type f ! -name SHA256SUMS" in archive, (
-    "inner bundle checksums must exclude SHA256SUMS to avoid recursive self-checks"
-)
-assert "> SHA256SUMS" in archive, "Linux bundle must write root SHA256SUMS"
-assert archive.index("> SHA256SUMS") < archive.index("tar -C"), (
-    "Linux bundle checksums must be created before archive"
+assert "ops package" in workflow.lower(), "Linux workflow must publish a separate ops package"
+assert "oasis7-${{ matrix.platform }}-ops-tools.tar.gz" in workflow, (
+    "Linux workflow must upload the checksummed ops-tools archive"
 )
 PY
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-linux-bundle-contract.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
-bundle="$TMP_DIR/oasis7-linux-x64"
+bundle="$TMP_DIR/oasis7-linux-x64-ops-tools"
 mkdir -p "$bundle/bin"
-printf 'runtime\n' >"$bundle/bin/oasis7_chain_runtime"
 printf 'repair\n' >"$bundle/bin/oasis7_world_repair_rebuild"
-printf 'registry\n' >"$bundle/bin/oasis7_governance_registry_import"
-printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+test\nrun_id=1\n' >"$bundle/BUILDINFO"
+printf 'registry-import\n' >"$bundle/bin/oasis7_governance_registry_import"
+printf 'registry-audit\n' >"$bundle/bin/oasis7_governance_registry_audit"
+printf '{"opsToolsSchemaVersion":1}\n' >"$bundle/.oasis7-ops-tools-manifest.json"
 (
   cd "$bundle"
   files=()
@@ -66,8 +60,8 @@ printf 'commit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0+t
   shasum -a 256 "${files[@]}" > SHA256SUMS
   shasum -a 256 -c SHA256SUMS >/dev/null
 )
-tar -C "$TMP_DIR" -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" oasis7-linux-x64
-tar -tzf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" | grep -Fxq 'oasis7-linux-x64/BUILDINFO'
-tar -tzf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" | grep -Fxq 'oasis7-linux-x64/SHA256SUMS'
+tar -C "$TMP_DIR" -czf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" oasis7-linux-x64-ops-tools
+tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json'
+tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/SHA256SUMS'
 
-echo "ok: Linux raw bundle embeds non-recursive bootstrap metadata"
+echo "ok: Linux publishes deb-only player package plus checksummed ops package"

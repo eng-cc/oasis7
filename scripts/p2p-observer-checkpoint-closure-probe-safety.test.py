@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Negative archive and rollout trust-order regression checks."""
-import hashlib, importlib.util, io, json, sys, tarfile, tempfile
+import hashlib, importlib.util, io, json, os, sys, tarfile, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -8,16 +8,27 @@ spec = importlib.util.spec_from_file_location("probe", HERE / "p2p-observer-chec
 probe = importlib.util.module_from_spec(spec); assert spec.loader; spec.loader.exec_module(probe)
 for kind, name in (("path", "../../escape"), ("symlink", "inside-link"), ("hardlink", "inside-hard"), ("char", "device")):
     with tempfile.TemporaryDirectory() as raw:
-        root = Path(raw); package = root / "package"; package.mkdir(); archive = package / "oasis7-linux-x64-bundle.tar.gz"
+        root = Path(raw); package = root / "package"; package.mkdir()
+        deb = package / "oasis7-linux-x64.deb"; deb.write_bytes(b"fixture-deb")
+        deb_root = Path(f"{deb}.root") / "opt/oasis7/bin"; deb_root.mkdir(parents=True)
+        (deb_root / "oasis7_chain_runtime").write_text("#!/bin/sh\n", encoding="utf-8")
+        fake_bin = root / "fake-bin"; fake_bin.mkdir()
+        fake_dpkg = fake_bin / "dpkg-deb"
+        fake_dpkg.write_text("#!/bin/sh\nset -eu\nmkdir -p \"$3\"\ncp -a \"$2.root/.\" \"$3/\"\n", encoding="utf-8")
+        fake_dpkg.chmod(0o755)
+        archive = package / "oasis7-linux-x64-ops-tools.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
             member = tarfile.TarInfo(name)
             if kind == "path": member.size = 1; tar.addfile(member, io.BytesIO(b"x"))
             elif kind == "symlink": member.type = tarfile.SYMTYPE; member.linkname = "/tmp/escape"; tar.addfile(member)
             elif kind == "hardlink": member.type = tarfile.LNKTYPE; member.linkname = "/tmp/escape"; tar.addfile(member)
             else: member.type = tarfile.CHRTYPE; tar.addfile(member)
+        old_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{fake_bin}{os.pathsep}{old_path}"
         try: probe.package_runtime(package, root / "app")
         except SystemExit: pass
         else: raise AssertionError(f"unsafe {kind} archive was accepted")
+        finally: os.environ["PATH"] = old_path
 print("ok: checkpoint closure probe rejects archive escapes and special members")
 
 rollout_spec = importlib.util.spec_from_file_location(
@@ -29,8 +40,10 @@ rollout_spec.loader.exec_module(rollout)
 with tempfile.TemporaryDirectory() as temp:
     root = Path(temp)
     package = root / "package"; macos = package / "macos"; macos.mkdir(parents=True)
-    linux_bundle = package / "oasis7-linux-x64-bundle.tar.gz"
-    linux_bundle.write_bytes(b"trusted-linux-bundle")
+    linux_bundle = package / "oasis7-linux-x64.deb"
+    linux_bundle.write_bytes(b"trusted-linux-deb")
+    linux_ops = package / "oasis7-linux-x64-ops-tools.tar.gz"
+    linux_ops.write_bytes(b"trusted-linux-ops")
     linux_info = package / "linux-x64-BUILDINFO"; linux_info.write_text(
         "commit=fixture\npackage_version=fixture\nrun_id=fixture\n", encoding="utf-8"
     )
@@ -44,8 +57,9 @@ with tempfile.TemporaryDirectory() as temp:
             f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n" for name in names
         ), encoding="utf-8")
     sums(package, [linux_bundle.name, linux_info.name], package / "linux-x64-SHA256SUMS")
+    sums(package, [linux_ops.name], package / "linux-x64-ops-tools-SHA256SUMS")
     sums(macos, [mac_dmg.name, mac_info.name], macos / "macos-arm64-SHA256SUMS")
-    linux_bundle.write_bytes(b"tampered-linux-bundle")
+    linux_bundle.write_bytes(b"tampered-linux-deb")
     manifest = root / "manifest.json"; manifest.write_text(json.dumps({"nodes": [
         {"name": "sequencer", "platform": "macos-arm64", "status_url": "http://127.0.0.1:1/v1/chain/status"},
         {"name": "storage", "platform": "macos-arm64", "status_url": "http://127.0.0.1:2/v1/chain/status"},

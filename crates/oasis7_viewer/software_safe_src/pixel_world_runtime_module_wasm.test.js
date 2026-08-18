@@ -146,6 +146,67 @@ describe("pixel world wasm runtime bridge", () => {
     });
   });
 
+  it("resolves an available optional WASM payload from the served manifest route", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalBaseUrl = globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        "pixel_world_bridge_bindgen_bg.wasm": {
+          available: true,
+          path: "pixel_world_bridge_bindgen_bg.wasm",
+        },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__ = "/optional-payload/";
+    try {
+      const { resolvePixelWorldWasmUrlForTest } = await import("./pixel_world_runtime_module_wasm.js");
+      const resolved = await resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      });
+      expect(resolved.href).toBe("https://example.test/optional-payload/pixel_world_bridge_bindgen_bg.wasm");
+      expect(fetchMock).toHaveBeenCalledWith(
+        new URL("https://example.test/viewer/optional-payloads.json"),
+        { cache: "no-store" },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalBaseUrl === undefined) {
+        delete globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+      } else {
+        globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__ = originalBaseUrl;
+      }
+    }
+  });
+
+  it("returns a deterministic missing-payload error instead of probing a stale adjacent WASM", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        "pixel_world_bridge_bindgen_bg.wasm": {
+          available: false,
+          reason: "source_missing",
+        },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    try {
+      const { resolvePixelWorldWasmUrlForTest, PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE } = await import("./pixel_world_runtime_module_wasm.js");
+      await expect(resolvePixelWorldWasmUrlForTest({
+        moduleUrl: "https://example.test/viewer/pixel-world-bridge/webgl2/pixel_world_bridge.js",
+      })).rejects.toMatchObject({
+        code: PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE,
+        message: expect.stringContaining("source_missing"),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("caps WASM ambient ticks at 12Hz while leaving pointer input immediate", async () => {
     const animation = animationHarness();
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");

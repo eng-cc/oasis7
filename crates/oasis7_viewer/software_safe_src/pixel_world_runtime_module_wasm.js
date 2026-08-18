@@ -11,15 +11,88 @@ const LOCATION_TEST_READBACK_CONTRACT = "oasis7_location_frame_evidence_v1";
 
 let runtimeInitPromise = null;
 
+const PIXEL_WORLD_WASM_PAYLOAD_NAME = "pixel_world_bridge_bindgen_bg.wasm";
+const PIXEL_WORLD_OPTIONAL_PAYLOAD_MANIFEST_NAME = "optional-payloads.json";
+const PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE = "pixel_world_optional_payload_missing";
+
+function legacyPixelWorldWasmUrl(moduleUrl = import.meta.url) {
+  return new URL(PIXEL_WORLD_WASM_PAYLOAD_NAME, moduleUrl);
+}
+
+function optionalPayloadManifestUrl(moduleUrl = import.meta.url) {
+  // The generated bridge lives at pixel-world-bridge/webgl2/. The manifest is
+  // written at the primary viewer-dist root by copy-viewer-web-dist.sh.
+  return new URL(`../../${PIXEL_WORLD_OPTIONAL_PAYLOAD_MANIFEST_NAME}`, moduleUrl);
+}
+
+function configuredOptionalPayloadBaseUrl(manifestUrl) {
+  const configured = globalThis.__OASIS7_VIEWER_OPTIONAL_PAYLOAD_BASE_URL__;
+  if (typeof configured === "string" && configured.trim()) {
+    return new URL(configured, manifestUrl);
+  }
+  if (typeof window !== "undefined" && window.location) {
+    const queryBase = new URL(window.location.href).searchParams.get("optional_payload_base");
+    if (queryBase) {
+      return new URL(queryBase, manifestUrl);
+    }
+  }
+  return manifestUrl;
+}
+
+function optionalPayloadMissingError(reason = "source_missing") {
+  const error = new Error(`optional pixel world WASM payload is unavailable: ${reason}`);
+  error.code = PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE;
+  return error;
+}
+
+async function resolvePixelWorldWasmUrl({ moduleUrl = import.meta.url } = {}) {
+  const fallbackUrl = legacyPixelWorldWasmUrl(moduleUrl);
+  // Node/jsdom unit tests and source-tree development do not serve a JSON
+  // manifest. Keep the legacy adjacent-WASM path in those environments.
+  if (typeof window === "undefined" || typeof fetch !== "function") {
+    return fallbackUrl;
+  }
+
+  const manifestUrl = optionalPayloadManifestUrl(moduleUrl);
+  if (manifestUrl.protocol !== "http:" && manifestUrl.protocol !== "https:") {
+    return fallbackUrl;
+  }
+  let response;
+  try {
+    response = await fetch(manifestUrl, { cache: "no-store" });
+  } catch (error) {
+    throw optionalPayloadMissingError(error instanceof Error ? error.message : "manifest_fetch_failed");
+  }
+  if (response.status === 404) {
+    return fallbackUrl;
+  }
+  if (!response.ok) {
+    throw optionalPayloadMissingError(`manifest_http_${response.status}`);
+  }
+
+  let manifest;
+  try {
+    manifest = await response.json();
+  } catch (error) {
+    throw optionalPayloadMissingError(error instanceof Error ? error.message : "manifest_invalid_json");
+  }
+  const payload = manifest?.[PIXEL_WORLD_WASM_PAYLOAD_NAME];
+  if (payload?.available !== true || typeof payload.path !== "string" || !payload.path.trim()) {
+    throw optionalPayloadMissingError(payload?.reason || "source_missing");
+  }
+
+  return new URL(payload.path, configuredOptionalPayloadBaseUrl(manifestUrl));
+}
+
 function pixelWorldTestApiEnabled() {
   return new URLSearchParams(window.location.search || "").get("test_api") === "1";
 }
 
 function ensurePixelWorldBridgeModule() {
   if (!runtimeInitPromise) {
-    runtimeInitPromise = initPixelWorldBridgeModule(
-      new URL("./pixel_world_bridge_bindgen_bg.wasm", import.meta.url),
-    );
+    runtimeInitPromise = resolvePixelWorldWasmUrl().then((wasmUrl) => (
+      initPixelWorldBridgeModule(wasmUrl)
+    ));
   }
   return runtimeInitPromise;
 }
@@ -301,3 +374,10 @@ export function derivePixelWorldRenderState(input) {
   }
   return build_pixel_world_render_state(input);
 }
+
+export {
+  PIXEL_WORLD_OPTIONAL_PAYLOAD_MANIFEST_NAME,
+  PIXEL_WORLD_OPTIONAL_PAYLOAD_MISSING_CODE,
+  PIXEL_WORLD_WASM_PAYLOAD_NAME,
+  resolvePixelWorldWasmUrl as resolvePixelWorldWasmUrlForTest,
+};

@@ -114,7 +114,7 @@ def bind_probe_runtime_metadata(
     )
     artifact_ref = (
         f"testnet-package-linux-x64-{package_version}/"
-        "oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"
+        "oasis7-linux-x64.deb!/opt/oasis7/bin/oasis7_chain_runtime"
     )
     bundle_paths = sorted(
         (app_root / "config").rglob(
@@ -267,42 +267,93 @@ def clean_room_launch_environment(env: dict[str, str], nonce: str) -> dict[str, 
     }
 
 
-def package_runtime(package_dir: Path, app_root: Path) -> Path:
-    if package_dir.is_symlink() or not package_dir.is_dir():
-        die("package directory must be a non-symlink directory")
-    archives = list(package_dir.rglob("oasis7-linux-x64-bundle.tar.gz"))
-    if len(archives) != 1 or archives[0].is_symlink() or not archives[0].is_file():
-        die("package must contain exactly one linux runtime bundle")
-    with tarfile.open(archives[0], "r:gz") as archive:
-        destination = (app_root / "release").resolve()
-        destination.mkdir(parents=True, exist_ok=True)
-        for member in archive.getmembers():
+def package_file(package_dir: Path, name: str, label: str) -> Path:
+    matches = sorted(package_dir.rglob(name))
+    if len(matches) != 1 or matches[0].is_symlink() or not matches[0].is_file():
+        die(f"package must contain exactly one {label}: {name}")
+    return matches[0]
+
+
+def validate_ops_tools_archive(archive_path: Path, destination: Path) -> None:
+    with tarfile.open(archive_path, "r:gz") as archive:
+        members = archive.getmembers()
+        for member in members:
             target = (destination / member.name).resolve()
             try:
-                target.relative_to(destination)
+                target.relative_to(destination.resolve())
             except ValueError:
-                die(f"package archive member escapes extraction root: {member.name}")
+                die(f"ops-tools archive member escapes extraction root: {member.name}")
             if not (member.isdir() or member.isreg()):
-                die(f"package archive contains non-regular member: {member.name}")
-        # All members have been confined and links/devices rejected before any
-        # filesystem mutation; never use extractall on untrusted packages.
-        for member in archive.getmembers():
+                die(f"ops-tools archive contains non-regular member: {member.name}")
+        for member in members:
             target = destination / member.name
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                source = archive.extractfile(member)
-                if source is None:
-                    die(f"package archive member cannot be read: {member.name}")
-                with source, target.open("xb") as output:
-                    shutil.copyfileobj(source, output)
-    candidates = list((app_root / "release").rglob("oasis7_chain_runtime"))
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                die(f"ops-tools archive member cannot be read: {member.name}")
+            with source, target.open("xb") as output:
+                shutil.copyfileobj(source, output)
+    manifest = destination / "oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json"
+    sums = destination / "oasis7-linux-x64-ops-tools/SHA256SUMS"
+    if not manifest.is_file() or not sums.is_file():
+        die("ops-tools archive missing manifest or SHA256SUMS")
+    for raw in sums.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        expected, separator, relative = line.partition("  ")
+        if not separator:
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2:
+                die("ops-tools SHA256SUMS contains malformed entry")
+            expected, relative = parts
+        target = destination / "oasis7-linux-x64-ops-tools" / relative.lstrip("*")
+        if target.is_symlink() or not target.is_file() or sha256(target) != expected.lower():
+            die(f"ops-tools checksum verification failed: {relative}")
+    for name in (
+        "oasis7_world_repair_rebuild",
+        "oasis7_governance_registry_import",
+        "oasis7_governance_registry_audit",
+    ):
+        if not (destination / "oasis7-linux-x64-ops-tools/bin" / name).is_file():
+            die(f"ops-tools archive missing required executable: {name}")
+
+
+def package_runtime(package_dir: Path, app_root: Path) -> Path:
+    if package_dir.is_symlink() or not package_dir.is_dir():
+        die("package directory must be a non-symlink directory")
+    deb = package_file(package_dir, "oasis7-linux-x64.deb", "linux Debian package")
+    ops_tools = package_file(package_dir, "oasis7-linux-x64-ops-tools.tar.gz", "linux ops-tools archive")
+    app_root.mkdir(parents=True, exist_ok=True)
+    deb_stage = app_root / "_deb-extract"
+    completed = subprocess.run(
+        ["dpkg-deb", "--extract", str(deb), str(deb_stage)],
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode:
+        die(f"cannot extract linux Debian package: {completed.stderr.strip()}")
+    source = deb_stage / "opt/oasis7"
+    if not source.is_dir() or source.is_symlink():
+        die("linux Debian package is missing a regular /opt/oasis7 player bundle")
+    for path in source.rglob("*"):
+        if path.is_symlink() or not (path.is_file() or path.is_dir()):
+            die(f"linux Debian package contains unsupported player entry: {path}")
+    ops_destination = app_root / "_ops-extract"
+    validate_ops_tools_archive(ops_tools, ops_destination)
+    release = app_root / "release/oasis7-linux-x64"
+    shutil.copytree(source, release)
+    shutil.rmtree(deb_stage)
+    shutil.rmtree(ops_destination)
+    candidates = list(release.rglob("oasis7_chain_runtime"))
     if len(candidates) != 1 or not candidates[0].is_file():
-        die("package runtime bundle has no unique runtime executable")
+        die("linux Debian package has no unique runtime executable")
     candidates[0].chmod(candidates[0].stat().st_mode | 0o111)
     current = app_root / "current"
-    current.symlink_to(candidates[0].parents[1])
+    current.symlink_to(release)
     return candidates[0]
 
 
