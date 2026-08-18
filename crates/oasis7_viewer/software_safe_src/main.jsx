@@ -2180,8 +2180,8 @@ function WorldStageHero() {
         />
       </Show>
       <div class="stage-hero__mobile-shortcuts" aria-label={tr(locale(), "移动端快速入口", "Mobile quick actions")}>
-        <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "选择目标", "Select Target")}</a>
-        <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "进入指挥", "Command")}</a>
+        <a class="mobile-rail__link" href="#viewer-targets-panel" onClick={focusViewerAnchor}>{tr(locale(), "选择目标", "Select Target")}</a>
+        <a class="mobile-rail__link" href="#viewer-details-panel" onClick={focusViewerAnchor}>{tr(locale(), "进入指挥", "Command")}</a>
       </div>
       <Show when={core.state.connectionStatus !== "connected"}>
         <CalloutCard

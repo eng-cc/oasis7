@@ -731,11 +731,6 @@ function PixelWorldCommercialHud(props) {
       window.location.hash = nextMoveHref();
     }
   };
-  const activateNextMoveFromKeyboard = (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      activateNextMove(event);
-    }
-  };
   return (
     <Show when={surface()}>
       <div
@@ -755,10 +750,6 @@ function PixelWorldCommercialHud(props) {
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
           data-blocker-present={surface().blocker.label ? "true" : "false"}
-          role="button"
-          tabIndex="0"
-          onClick={activateNextMove}
-          onKeyDown={activateNextMoveFromKeyboard}
         >
           <div class="pixel-world-command-cell__header">
             <div class="pixel-world-command-cell__label">
