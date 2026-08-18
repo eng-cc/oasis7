@@ -206,6 +206,12 @@ if not measured:
 unlocked = [command for command in measured if "--locked" not in command.split()]
 if unlocked:
     raise SystemExit(f"unlocked cargo invocations: {unlocked}")
+tree_commands = [command for command in measured if command.split(maxsplit=1)[0] == "tree"]
+if len(tree_commands) != 1:
+    raise SystemExit(f"expected one dependency-tree query for a check-only run: {tree_commands}")
+if any("-i" in command.split() for command in tree_commands):
+    raise SystemExit(f"dependency-tree query unexpectedly used inverse traversal: {tree_commands}")
+print("dependency-tree queries (current-only): 1")
 PY
 
 baseline_out_dir="$tmp_dir/metrics-with-baseline"
@@ -235,6 +241,22 @@ if set(homes) != {expected}:
 targets = [line for line in Path(sys.argv[3]).read_text(encoding="utf-8").splitlines() if line]
 if len(set(targets)) != 2:
     raise SystemExit(f"current and baseline target directories were not isolated: {targets}")
+PY
+
+python3 - "$tmp_dir/baseline-cargo.log" <<'PY'
+from pathlib import Path
+import sys
+
+commands = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+tree_commands = [command for command in commands if command.split(maxsplit=1)[0] == "tree"]
+if len(tree_commands) != 2:
+    raise SystemExit(
+        "expected one dependency-tree query per checkout in a baseline run: "
+        f"{tree_commands}"
+    )
+if any("-i" in command.split() for command in tree_commands):
+    raise SystemExit(f"dependency-tree queries unexpectedly used inverse traversal: {tree_commands}")
+print("dependency-tree queries (current+baseline): 2")
 PY
 
 python3 - "$tmp_dir/comparison.json" <<'PY'
