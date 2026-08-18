@@ -1,4 +1,5 @@
-use super::super::super::MaterialMarketQuote;
+use super::super::super::{FactoryProductionStatus, MaterialMarketQuote};
+use super::super::logistics::{logistics_path_id, normalize_logistics_route_kind};
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -570,6 +571,8 @@ impl World {
                 factory_id,
                 recipe_id,
                 plan,
+                logistics_route_ids,
+                logistics_path_ids,
             } => {
                 if !self.state.agents.contains_key(requester_agent_id) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -616,6 +619,21 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec!["recipe accepted_batches must be > 0".to_string()],
+                        },
+                    }));
+                }
+                if !plan
+                    .produce
+                    .iter()
+                    .any(|stack| !stack.kind.trim().is_empty() && stack.amount > 0)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "recipe plan must produce at least one positive material output"
+                                    .to_string(),
+                            ],
                         },
                     }));
                 }
@@ -685,6 +703,156 @@ impl World {
                 } else {
                     factory.output_ledger.clone()
                 };
+                let mut resolved_logistics_route_ids = Vec::new();
+                let mut resolved_logistics_path_ids = logistics_path_ids.clone();
+                resolved_logistics_path_ids.sort();
+                if !logistics_route_ids.is_empty() {
+                    let mut seen_route_ids = BTreeSet::new();
+                    for route_id in logistics_route_ids {
+                        if !seen_route_ids.insert(route_id) {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "duplicate logistics route binding: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                    }
+                    let consumed_kinds: BTreeSet<String> = effective_consume
+                        .iter()
+                        .filter_map(|stack| normalize_logistics_route_kind(stack.kind.as_str()))
+                        .collect();
+                    if consumed_kinds.len() != logistics_route_ids.len() {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "logistics route binding count must equal distinct consumed material kinds: routes={} kinds={}",
+                                    logistics_route_ids.len(),
+                                    consumed_kinds.len()
+                                )],
+                            },
+                        }));
+                    }
+                    let mut bound_kinds = BTreeSet::new();
+                    for route_id in logistics_route_ids {
+                        let Some(route) = self.state.logistics_routes.get(route_id) else {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics route not found: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        };
+                        if !self.state.completed_logistics_route_ids.contains(route_id) {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics route is not completed: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                        if route.to_ledger != consume_ledger {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics route destination mismatch: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                        let Some(route_kind) = normalize_logistics_route_kind(route.kind.as_str())
+                        else {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics route material kind is invalid: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        };
+                        if !consumed_kinds.contains(&route_kind)
+                            || !bound_kinds.insert(route_kind.clone())
+                        {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics route material mismatch: route_id={route_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                    }
+                    resolved_logistics_route_ids = logistics_route_ids.clone();
+                    resolved_logistics_route_ids.sort();
+                }
+                if resolved_logistics_path_ids.is_empty() {
+                    resolved_logistics_path_ids = resolved_logistics_route_ids
+                        .iter()
+                        .filter_map(|route_id| logistics_path_id(std::slice::from_ref(route_id)))
+                        .collect();
+                }
+                if !resolved_logistics_path_ids.is_empty() {
+                    let consumed_kinds: BTreeSet<String> = effective_consume
+                        .iter()
+                        .filter_map(|stack| normalize_logistics_route_kind(stack.kind.as_str()))
+                        .collect();
+                    let mut bound_path_kinds = BTreeSet::new();
+                    for path_id in &resolved_logistics_path_ids {
+                        let Some(path) = self.state.completed_logistics_paths.get(path_id) else {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics path is not completed: path_id={path_id}"
+                                    )],
+                                },
+                            }));
+                        };
+                        if path.to_ledger != consume_ledger {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics path destination mismatch: path_id={path_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                        let Some(path_kind) = normalize_logistics_route_kind(path.kind.as_str())
+                        else {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics path material kind is invalid: path_id={path_id}"
+                                    )],
+                                },
+                            }));
+                        };
+                        if !consumed_kinds.contains(&path_kind)
+                            || !bound_path_kinds.insert(path_kind)
+                        {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "logistics path material mismatch: path_id={path_id}"
+                                    )],
+                                },
+                            }));
+                        }
+                    }
+                }
                 for stack in &effective_consume {
                     if stack.amount <= 0 {
                         return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -764,8 +932,77 @@ impl World {
                     output_ledger,
                     bottleneck_tags,
                     market_quotes,
+                    logistics_route_ids: resolved_logistics_route_ids,
+                    logistics_path_ids: resolved_logistics_path_ids,
                     ready_at,
                 }))
+            }
+            Action::PauseFactoryProduction {
+                requester_agent_id,
+                factory_id,
+                reason,
+            } => {
+                if !self.state.agents.contains_key(requester_agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: requester_agent_id.clone(),
+                        },
+                    }));
+                }
+                let Some(factory) = self.state.factories.get(factory_id) else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::FactoryNotFound {
+                            factory_id: factory_id.clone(),
+                        },
+                    }));
+                };
+                if factory.builder_agent_id != *requester_agent_id {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "pause factory denied: requester {} is not builder {}",
+                                requester_agent_id, factory.builder_agent_id
+                            )],
+                        },
+                    }));
+                }
+                let active_jobs = self
+                    .state
+                    .pending_recipe_jobs
+                    .values()
+                    .filter(|job| job.factory_id == *factory_id)
+                    .count();
+                if active_jobs > 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::FactoryBusy {
+                            factory_id: factory_id.clone(),
+                            active_jobs,
+                            recipe_slots: factory.spec.recipe_slots,
+                        },
+                    }));
+                }
+                if factory.production.status != FactoryProductionStatus::Idle {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "factory production pause requires idle factory status".to_string(),
+                            ],
+                        },
+                    }));
+                }
+                Ok(WorldEventBody::Domain(
+                    DomainEvent::FactoryProductionPaused {
+                        action_id,
+                        requester_agent_id: requester_agent_id.clone(),
+                        factory_id: factory_id.clone(),
+                        reason: reason.clone(),
+                    },
+                ))
             }
             Action::ScheduleRecipeWithModule { .. } => {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -912,245 +1149,10 @@ impl World {
             _ => unreachable!("action_to_event_economy received unsupported action variant"),
         }
     }
-
-    fn evaluate_govern_material_profile_action(
-        &self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        profile: &crate::runtime::MaterialProfileV1,
-    ) -> DomainEvent {
-        if let Some(rejected) = self.evaluate_profile_governance_gate(
-            action_id,
-            operator_agent_id,
-            proposal_id,
-            "govern material profile",
-        ) {
-            return rejected;
-        }
-        let allowed_fields = [
-            "kind",
-            "tier",
-            "category",
-            "stack_limit",
-            "transport_loss_class",
-            "decay_bps_per_tick",
-            "default_priority",
-        ];
-        if let Err(reason) =
-            ensure_profile_field_whitelist(profile, allowed_fields.as_slice(), "material profile")
-        {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![reason],
-                },
-            };
-        }
-        let event = DomainEvent::MaterialProfileGoverned {
-            operator_agent_id: operator_agent_id.to_string(),
-            proposal_id,
-            profile: profile.clone(),
-        };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!("govern material profile rejected: {err:?}")],
-                },
-            };
-        }
-        event
-    }
-
-    fn evaluate_govern_product_profile_action(
-        &self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        profile: &crate::runtime::ProductProfileV1,
-    ) -> DomainEvent {
-        if let Some(rejected) = self.evaluate_profile_governance_gate(
-            action_id,
-            operator_agent_id,
-            proposal_id,
-            "govern product profile",
-        ) {
-            return rejected;
-        }
-        let allowed_fields = [
-            "product_id",
-            "role_tag",
-            "maintenance_sink",
-            "tradable",
-            "unlock_stage",
-        ];
-        if let Err(reason) =
-            ensure_profile_field_whitelist(profile, allowed_fields.as_slice(), "product profile")
-        {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![reason],
-                },
-            };
-        }
-        let event = DomainEvent::ProductProfileGoverned {
-            operator_agent_id: operator_agent_id.to_string(),
-            proposal_id,
-            profile: profile.clone(),
-        };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!("govern product profile rejected: {err:?}")],
-                },
-            };
-        }
-        event
-    }
-
-    fn evaluate_govern_recipe_profile_action(
-        &self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        profile: &crate::runtime::RecipeProfileV1,
-    ) -> DomainEvent {
-        if let Some(rejected) = self.evaluate_profile_governance_gate(
-            action_id,
-            operator_agent_id,
-            proposal_id,
-            "govern recipe profile",
-        ) {
-            return rejected;
-        }
-        let allowed_fields = [
-            "recipe_id",
-            "bottleneck_tags",
-            "stage_gate",
-            "preferred_factory_tags",
-        ];
-        if let Err(reason) =
-            ensure_profile_field_whitelist(profile, allowed_fields.as_slice(), "recipe profile")
-        {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![reason],
-                },
-            };
-        }
-        let event = DomainEvent::RecipeProfileGoverned {
-            operator_agent_id: operator_agent_id.to_string(),
-            proposal_id,
-            profile: profile.clone(),
-        };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!("govern recipe profile rejected: {err:?}")],
-                },
-            };
-        }
-        event
-    }
-
-    fn evaluate_govern_factory_profile_action(
-        &self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        profile: &crate::runtime::FactoryProfileV1,
-    ) -> DomainEvent {
-        if let Some(rejected) = self.evaluate_profile_governance_gate(
-            action_id,
-            operator_agent_id,
-            proposal_id,
-            "govern factory profile",
-        ) {
-            return rejected;
-        }
-        let allowed_fields = ["factory_id", "tier", "recipe_slots", "tags"];
-        if let Err(reason) =
-            ensure_profile_field_whitelist(profile, allowed_fields.as_slice(), "factory profile")
-        {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![reason],
-                },
-            };
-        }
-        let event = DomainEvent::FactoryProfileGoverned {
-            operator_agent_id: operator_agent_id.to_string(),
-            proposal_id,
-            profile: profile.clone(),
-        };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
-            return DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!("govern factory profile rejected: {err:?}")],
-                },
-            };
-        }
-        event
-    }
-
-    fn evaluate_profile_governance_gate(
-        &self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        action_label: &str,
-    ) -> Option<DomainEvent> {
-        if !self.state.agents.contains_key(operator_agent_id) {
-            return Some(DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::AgentNotFound {
-                    agent_id: operator_agent_id.to_string(),
-                },
-            });
-        }
-        if proposal_id == 0 {
-            return Some(DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!("{action_label} rejected: proposal_id must be > 0")],
-                },
-            });
-        }
-        let Some(proposal) = self.proposals.get(&proposal_id) else {
-            return Some(DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!(
-                        "{action_label} rejected: governance proposal not found ({proposal_id})"
-                    )],
-                },
-            });
-        };
-        match proposal.status {
-            ProposalStatus::Approved { .. } | ProposalStatus::Applied { .. } => None,
-            _ => Some(DomainEvent::ActionRejected {
-                action_id,
-                reason: RejectReason::RuleDenied {
-                    notes: vec![format!(
-                        "{action_label} rejected: governance proposal must be approved or applied ({proposal_id})"
-                    )],
-                },
-            }),
-        }
-    }
 }
 
+#[path = "action_to_event_economy_profiles.rs"]
+mod action_to_event_economy_profiles;
 #[path = "action_to_event_economy_support.rs"]
 mod action_to_event_economy_support;
 

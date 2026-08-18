@@ -47,50 +47,54 @@ mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
 mod apply_domain_event_main_token;
+#[path = "state_defaults.rs"]
+mod state_defaults;
 mod support;
 
 use self::support::*;
 
 fn default_world_material_ledger() -> MaterialLedgerId {
-    MaterialLedgerId::world()
+    state_defaults::default_world_material_ledger()
+}
+
+fn default_logistics_route_available() -> bool {
+    state_defaults::default_logistics_route_available()
+}
+
+fn default_logistics_capacity_units() -> i64 {
+    state_defaults::default_logistics_capacity_units()
 }
 
 fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<String, i64>> {
-    let mut ledgers = BTreeMap::new();
-    ledgers.insert(MaterialLedgerId::world(), BTreeMap::new());
-    ledgers
+    state_defaults::default_material_ledgers()
 }
 
 fn default_module_market_order_id() -> u64 {
-    1
+    state_defaults::default_module_market_order_id()
 }
 
 fn default_module_market_sale_id() -> u64 {
-    1
+    state_defaults::default_module_market_sale_id()
 }
 
 fn default_next_module_instance_id() -> u64 {
-    1
+    state_defaults::default_next_module_instance_id()
 }
 
 fn default_next_module_release_request_id() -> u64 {
-    1
+    state_defaults::default_next_module_release_request_id()
 }
 
 fn default_factory_durability_ppm() -> i64 {
-    1_000_000
+    state_defaults::default_factory_durability_ppm()
 }
 
 fn default_factory_production_state() -> FactoryProductionState {
-    FactoryProductionState::default()
+    state_defaults::default_factory_production_state()
 }
 
 fn default_module_release_required_roles() -> Vec<String> {
-    vec![
-        "security".to_string(),
-        "economy".to_string(),
-        "runtime".to_string(),
-    ]
+    state_defaults::default_module_release_required_roles()
 }
 
 const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
@@ -101,6 +105,7 @@ pub enum FactoryProductionStatus {
     Idle,
     Running,
     Blocked,
+    Paused,
 }
 
 impl Default for FactoryProductionStatus {
@@ -137,6 +142,8 @@ pub struct FactoryProductionState {
     pub last_completed_recipe_id: Option<String>,
     #[serde(default)]
     pub same_recipe_repeat_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_completed_canonical_snapshot: Option<FactoryProductionSnapshot>,
 }
 
 impl Default for FactoryProductionState {
@@ -155,8 +162,71 @@ impl Default for FactoryProductionState {
             completed_jobs: 0,
             last_completed_recipe_id: None,
             same_recipe_repeat_count: 0,
+            last_completed_canonical_snapshot: None,
         }
     }
+}
+
+/// Stable prerequisite facts for the latest completed recipe on a factory.
+///
+/// This snapshot intentionally excludes transient execution details such as
+/// duration/ETA, live balances, and market quotes.  The factory containing it
+/// is the partition key for the candidate window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct FactoryProductionSnapshot {
+    #[serde(default)]
+    pub recipe_id: String,
+    #[serde(default)]
+    pub consume: Vec<MaterialStack>,
+    #[serde(default)]
+    pub consume_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub power_required: i64,
+    #[serde(default)]
+    pub output_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub bottleneck_tags: Vec<String>,
+    #[serde(default)]
+    pub logistics_route_ids: Vec<String>,
+    #[serde(default)]
+    pub logistics_path_ids: Vec<String>,
+}
+
+impl FactoryProductionSnapshot {
+    fn from_recipe_job(job: &RecipeJobState) -> Self {
+        Self {
+            recipe_id: job.recipe_id.clone(),
+            consume: normalize_material_stacks(&job.consume),
+            consume_ledger: job.consume_ledger.clone(),
+            power_required: job.power_required,
+            output_ledger: job.output_ledger.clone(),
+            bottleneck_tags: normalize_bottleneck_tags(&job.bottleneck_tags),
+            logistics_route_ids: job.logistics_route_ids.clone(),
+            logistics_path_ids: job.logistics_path_ids.clone(),
+        }
+    }
+}
+
+fn normalize_material_stacks(stacks: &[MaterialStack]) -> Vec<MaterialStack> {
+    let mut merged = BTreeMap::<String, i64>::new();
+    for stack in stacks {
+        let kind = stack.kind.trim().to_ascii_lowercase();
+        let amount = merged.entry(kind).or_default();
+        *amount = amount.saturating_add(stack.amount);
+    }
+    merged
+        .into_iter()
+        .map(|(kind, amount)| MaterialStack::new(kind, amount))
+        .collect()
+}
+
+fn normalize_bottleneck_tags(tags: &[String]) -> Vec<String> {
+    tags.iter()
+        .map(|tag| tag.trim().to_ascii_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// Persisted factory instance state.
@@ -208,6 +278,10 @@ pub struct RecipeJobState {
     pub output_ledger: MaterialLedgerId,
     #[serde(default)]
     pub bottleneck_tags: Vec<String>,
+    #[serde(default)]
+    pub logistics_route_ids: Vec<String>,
+    #[serde(default)]
+    pub logistics_path_ids: Vec<String>,
     pub ready_at: WorldTime,
 }
 
@@ -224,7 +298,64 @@ pub struct MaterialTransitJobState {
     pub loss_bps: i64,
     #[serde(default)]
     pub priority: MaterialTransitPriority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default)]
+    pub route_ids: Vec<String>,
+    #[serde(default)]
+    pub tariff_electricity_total: i64,
+    #[serde(default)]
+    pub reroute_count: u32,
     pub ready_at: WorldTime,
+}
+
+/// Immutable material-transit route authority persisted by the world runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogisticsRouteV1 {
+    pub route_id: String,
+    pub from_ledger: MaterialLedgerId,
+    pub to_ledger: MaterialLedgerId,
+    pub kind: String,
+    pub distance_km: i64,
+    pub priority: MaterialTransitPriority,
+    #[serde(default)]
+    pub owner_agent_id: String,
+    #[serde(default = "default_logistics_route_available")]
+    pub available: bool,
+    #[serde(default = "default_logistics_capacity_units")]
+    pub capacity_units: i64,
+    #[serde(default)]
+    pub reserved_capacity_units: i64,
+    #[serde(default)]
+    pub tariff_electricity_per_unit: i64,
+}
+
+/// Completed path authority used by recipe bindings and replay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogisticsPathAuthorityV1 {
+    pub path_id: String,
+    pub route_ids: Vec<String>,
+    pub from_ledger: MaterialLedgerId,
+    pub to_ledger: MaterialLedgerId,
+    pub kind: String,
+}
+
+/// Persisted one-time settlement receipt for a material transit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LogisticsSettlementReceiptV1 {
+    pub job_id: ActionId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default)]
+    pub route_ids: Vec<String>,
+    #[serde(default)]
+    pub tariff_electricity_total: i64,
+    #[serde(default)]
+    pub owner_payouts: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub governance_tax_electricity: i64,
 }
 
 /// Lightweight observability state for industry progression and market snapshots.
@@ -413,6 +544,16 @@ pub struct WorldState {
     #[serde(default)]
     pub material_profiles: BTreeMap<String, MaterialProfileV1>,
     #[serde(default)]
+    pub logistics_routes: BTreeMap<String, LogisticsRouteV1>,
+    #[serde(default)]
+    pub completed_logistics_route_ids: BTreeSet<String>,
+    #[serde(default)]
+    pub completed_logistics_paths: BTreeMap<String, LogisticsPathAuthorityV1>,
+    #[serde(default)]
+    pub settled_logistics_transit_ids: BTreeSet<ActionId>,
+    #[serde(default)]
+    pub logistics_settlement_receipts: BTreeMap<ActionId, LogisticsSettlementReceiptV1>,
+    #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_product_validation: Option<LastProductValidationState>,
@@ -544,84 +685,6 @@ pub struct WorldState {
     pub governance_main_token_controller_registry: Option<GovernanceMainTokenControllerRegistry>,
     #[serde(default)]
     pub reward_signature_governance_policy: RewardSignatureGovernancePolicy,
-}
-
-impl Default for WorldState {
-    fn default() -> Self {
-        Self {
-            time: 0,
-            agents: BTreeMap::new(),
-            resources: BTreeMap::new(),
-            materials: BTreeMap::new(),
-            material_ledgers: default_material_ledgers(),
-            material_profiles: BTreeMap::new(),
-            product_profiles: BTreeMap::new(),
-            latest_product_validation: None,
-            recipe_profiles: BTreeMap::new(),
-            factory_profiles: BTreeMap::new(),
-            factories: BTreeMap::new(),
-            pending_factory_builds: BTreeMap::new(),
-            pending_recipe_jobs: BTreeMap::new(),
-            pending_material_transits: BTreeMap::new(),
-            industry_progress: IndustryProgressState::default(),
-            alliances: BTreeMap::new(),
-            gameplay_policy: GameplayPolicyState::default(),
-            data_access_permissions: BTreeMap::new(),
-            economic_contracts: BTreeMap::new(),
-            agent_claims: BTreeMap::new(),
-            starter_oc_claims: BTreeMap::new(),
-            authenticated_collect_data_last_nonces: BTreeMap::new(),
-            agent_claim_last_processed_epoch: 0,
-            contract_pair_last_success_settled_at: BTreeMap::new(),
-            reputation_reward_window_started_at: BTreeMap::new(),
-            reputation_reward_window_accumulated: BTreeMap::new(),
-            reputation_scores: BTreeMap::new(),
-            wars: BTreeMap::new(),
-            governance_votes: BTreeMap::new(),
-            governance_proposals: BTreeMap::new(),
-            governance_identity_profiles: BTreeMap::new(),
-            crises: BTreeMap::new(),
-            meta_progress: BTreeMap::new(),
-            module_states: BTreeMap::new(),
-            module_artifact_owners: BTreeMap::new(),
-            module_artifact_listings: BTreeMap::new(),
-            module_artifact_bids: BTreeMap::new(),
-            module_instances: BTreeMap::new(),
-            module_release_requests: BTreeMap::new(),
-            module_release_manifest_mappings: BTreeMap::new(),
-            next_module_release_request_id: default_next_module_release_request_id(),
-            module_release_role_bindings: BTreeMap::new(),
-            installed_module_targets: BTreeMap::new(),
-            next_module_instance_id: default_next_module_instance_id(),
-            next_module_market_order_id: default_module_market_order_id(),
-            next_module_market_sale_id: default_module_market_sale_id(),
-            main_token_config: MainTokenConfig::default(),
-            main_token_supply: MainTokenSupplyState::default(),
-            main_token_balances: BTreeMap::new(),
-            restricted_starter_claim_grants: BTreeMap::new(),
-            main_token_genesis_buckets: BTreeMap::new(),
-            main_token_epoch_issuance_records: BTreeMap::new(),
-            main_token_treasury_balances: BTreeMap::new(),
-            main_token_claim_nonces: BTreeMap::new(),
-            main_token_transfer_nonces: BTreeMap::new(),
-            main_token_scheduled_policy_updates: BTreeMap::new(),
-            main_token_node_points_bridge_records: BTreeMap::new(),
-            main_token_treasury_distribution_records: BTreeMap::new(),
-            restricted_starter_claim_liveops_pool_top_up_records: BTreeMap::new(),
-            reward_asset_config: RewardAssetConfig::default(),
-            node_asset_balances: BTreeMap::new(),
-            protocol_power_reserve: ProtocolPowerReserve::default(),
-            reward_mint_records: Vec::new(),
-            node_redeem_nonces: BTreeMap::new(),
-            system_order_pool_budgets: BTreeMap::new(),
-            node_identity_bindings: BTreeMap::new(),
-            node_main_token_account_bindings: BTreeMap::new(),
-            governance_finality_signer_registry: None,
-            governance_validator_admissions: BTreeMap::new(),
-            governance_main_token_controller_registry: None,
-            reward_signature_governance_policy: RewardSignatureGovernancePolicy::default(),
-        }
-    }
 }
 
 impl WorldState {
@@ -946,6 +1009,9 @@ impl WorldState {
             | DomainEvent::PowerRedeemed { .. }
             | DomainEvent::PowerRedeemRejected { .. }
             | DomainEvent::NodePointsSettlementApplied { .. }
+            | DomainEvent::LogisticsRouteRegistered { .. }
+            | DomainEvent::LogisticsRouteAvailabilityChanged { .. }
+            | DomainEvent::LogisticsPathRerouted { .. }
             | DomainEvent::MaterialTransferred { .. }
             | DomainEvent::MaterialTransitStarted { .. }
             | DomainEvent::MaterialTransitCompleted { .. }
@@ -958,6 +1024,7 @@ impl WorldState {
             | DomainEvent::RecipeCompleted { .. }
             | DomainEvent::FactoryProductionBlocked { .. }
             | DomainEvent::FactoryProductionResumed { .. }
+            | DomainEvent::FactoryProductionPaused { .. }
             | DomainEvent::MaterialProfileGoverned { .. }
             | DomainEvent::ProductProfileGoverned { .. }
             | DomainEvent::RecipeProfileGoverned { .. }

@@ -1,3 +1,7 @@
+use super::super::logistics::{
+    logistics_route_id, logistics_route_matches, normalize_logistics_route_kind,
+    select_logistics_path,
+};
 use super::*;
 
 #[path = "action_to_event_core_main_token.rs"]
@@ -527,6 +531,9 @@ impl World {
                 amount,
                 distance_km,
                 priority,
+                route_id,
+                route_ids,
+                auto_reroute,
             } => {
                 if !self.state.agents.contains_key(requester_agent_id) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -575,12 +582,94 @@ impl World {
                         },
                     }));
                 }
-                let available = self.ledger_material_balance(from_ledger, kind.as_str());
+                let normalized_kind = normalize_logistics_route_kind(kind.as_str());
+                let legacy_route = if let Some(route_id) = route_id {
+                    let Some(route) = self.state.logistics_routes.get(route_id) else {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "logistics route not found: route_id={route_id}"
+                                )],
+                            },
+                        }));
+                    };
+                    let Some(normalized_kind) = normalized_kind.as_deref() else {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec!["material kind cannot be empty".to_string()],
+                            },
+                        }));
+                    };
+                    if route_ids.is_empty()
+                        && !logistics_route_matches(
+                            route,
+                            from_ledger,
+                            to_ledger,
+                            normalized_kind,
+                            *distance_km,
+                            *priority,
+                        )
+                    {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "logistics route tuple mismatch: route_id={route_id}"
+                                )],
+                            },
+                        }));
+                    }
+                    Some(route)
+                } else {
+                    None
+                };
+                let mut requested_route_ids = route_ids.clone();
+                if requested_route_ids.is_empty() {
+                    if let Some(route_id) = route_id {
+                        requested_route_ids.push(route_id.clone());
+                    }
+                }
+                // Empty route bindings retain legacy direct semantics. The
+                // graph planner is opt-in via an explicit route/path binding
+                // or auto_reroute.
+                let graph_mode = !requested_route_ids.is_empty() || *auto_reroute;
+                let path_selection = if graph_mode {
+                    Some(select_logistics_path(
+                        self,
+                        from_ledger,
+                        to_ledger,
+                        kind.as_str(),
+                        *amount,
+                        requested_route_ids.as_slice(),
+                        *auto_reroute,
+                    ))
+                } else {
+                    None
+                };
+                let path_selection = match path_selection {
+                    Some(Ok(selection)) => Some(selection),
+                    Some(Err(reason)) => {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason,
+                        }));
+                    }
+                    None => None,
+                };
+                let selected_route = path_selection
+                    .as_ref()
+                    .and_then(|selection| selection.route_ids.first())
+                    .and_then(|route_id| self.state.logistics_routes.get(route_id));
+                let route = selected_route.or(legacy_route);
+                let material_kind = route.map_or(kind.as_str(), |route| route.kind.as_str());
+                let available = self.ledger_material_balance(from_ledger, material_kind);
                 if available < *amount {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::InsufficientMaterial {
-                            material_kind: kind.clone(),
+                            material_kind: material_kind.to_string(),
                             requested: *amount,
                             available,
                         },
@@ -589,18 +678,73 @@ impl World {
                 let priority = priority
                     .as_ref()
                     .copied()
-                    .unwrap_or_else(|| material_transit_priority_for_kind(self, kind.as_str()));
-                let loss_bps = material_transit_loss_bps_for_kind(self, kind.as_str());
+                    .or_else(|| route.map(|route| route.priority))
+                    .unwrap_or_else(|| material_transit_priority_for_kind(self, material_kind));
+                let event_kind = route.map_or_else(|| kind.clone(), |route| route.kind.clone());
+                let loss_bps = material_transit_loss_bps_for_kind(self, event_kind.as_str());
+                let effective_distance_km = path_selection
+                    .as_ref()
+                    .map(|selection| selection.total_distance_km)
+                    .unwrap_or(*distance_km);
+                if effective_distance_km > MATERIAL_TRANSFER_MAX_DISTANCE_KM {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::MaterialTransferDistanceExceeded {
+                            distance_km: effective_distance_km,
+                            max_distance_km: MATERIAL_TRANSFER_MAX_DISTANCE_KM,
+                        },
+                    }));
+                }
+                let selected_route_ids = path_selection
+                    .as_ref()
+                    .map(|selection| selection.route_ids.clone())
+                    .unwrap_or_default();
+                let path_id = path_selection
+                    .as_ref()
+                    .and_then(|selection| selection.path_id.clone());
+                let tariff_electricity_total = path_selection
+                    .as_ref()
+                    .map(|selection| selection.total_tariff_electricity)
+                    .unwrap_or(0);
+                let reroute_count = path_selection
+                    .as_ref()
+                    .map(|selection| selection.reroute_count)
+                    .unwrap_or(0);
+                let event_route_id = if route_ids.is_empty() {
+                    route_id.clone()
+                } else {
+                    None
+                };
+                if tariff_electricity_total > 0 {
+                    let electricity = self
+                        .state
+                        .agents
+                        .get(requester_agent_id)
+                        .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                        .unwrap_or_default();
+                    if electricity < tariff_electricity_total {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::InsufficientResource {
+                                agent_id: requester_agent_id.clone(),
+                                kind: ResourceKind::Electricity,
+                                requested: tariff_electricity_total,
+                                available: electricity,
+                            },
+                        }));
+                    }
+                }
 
-                if *distance_km == 0 {
+                if effective_distance_km == 0 && path_selection.is_none() {
                     return Ok(WorldEventBody::Domain(DomainEvent::MaterialTransferred {
                         requester_agent_id: requester_agent_id.clone(),
                         from_ledger: from_ledger.clone(),
                         to_ledger: to_ledger.clone(),
-                        kind: kind.clone(),
+                        kind: event_kind.clone(),
                         amount: *amount,
-                        distance_km: *distance_km,
+                        distance_km: effective_distance_km,
                         priority,
+                        route_id: event_route_id,
                     }));
                 }
 
@@ -614,7 +758,8 @@ impl World {
                     }));
                 }
 
-                let transit_ticks = material_transit_ticks(*distance_km);
+                let transit_ticks = material_transit_ticks(effective_distance_km)
+                    .max(u64::from(path_selection.is_some()));
                 let ready_at = self.state.time.saturating_add(transit_ticks);
                 Ok(WorldEventBody::Domain(
                     DomainEvent::MaterialTransitStarted {
@@ -622,12 +767,155 @@ impl World {
                         requester_agent_id: requester_agent_id.clone(),
                         from_ledger: from_ledger.clone(),
                         to_ledger: to_ledger.clone(),
-                        kind: kind.clone(),
+                        kind: event_kind,
                         amount: *amount,
-                        distance_km: *distance_km,
+                        distance_km: effective_distance_km,
                         loss_bps,
                         ready_at,
                         priority,
+                        route_id: event_route_id,
+                        path_id,
+                        route_ids: selected_route_ids,
+                        tariff_electricity_total,
+                        reroute_count,
+                    },
+                ))
+            }
+            Action::RegisterLogisticsRoute {
+                requester_agent_id,
+                from_ledger,
+                to_ledger,
+                kind,
+                distance_km,
+                priority,
+                capacity_units,
+                tariff_electricity_per_unit,
+            } => {
+                if !self.state.agents.contains_key(requester_agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: requester_agent_id.clone(),
+                        },
+                    }));
+                }
+                if from_ledger == to_ledger {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec!["from_ledger and to_ledger cannot be the same".to_string()],
+                        },
+                    }));
+                }
+                let Some(normalized_kind) = normalize_logistics_route_kind(kind.as_str()) else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec!["material kind cannot be empty".to_string()],
+                        },
+                    }));
+                };
+                if *distance_km < 0 || *distance_km > MATERIAL_TRANSFER_MAX_DISTANCE_KM {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "distance_km must be within 0..={MATERIAL_TRANSFER_MAX_DISTANCE_KM}"
+                            )],
+                        },
+                    }));
+                }
+                if *capacity_units <= 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec!["capacity_units must be > 0".to_string()],
+                        },
+                    }));
+                }
+                if *tariff_electricity_per_unit < 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec!["tariff_electricity_per_unit must be >= 0".to_string()],
+                        },
+                    }));
+                }
+                let route_id = logistics_route_id(
+                    from_ledger,
+                    to_ledger,
+                    normalized_kind.as_str(),
+                    *distance_km,
+                    *priority,
+                );
+                if self.state.logistics_routes.values().any(|route| {
+                    route.from_ledger == *from_ledger
+                        && route.to_ledger == *to_ledger
+                        && route.kind == normalized_kind
+                        && route.distance_km == *distance_km
+                        && route.priority == *priority
+                }) || self.state.logistics_routes.contains_key(&route_id)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec!["logistics route tuple already registered".to_string()],
+                        },
+                    }));
+                }
+                Ok(WorldEventBody::Domain(
+                    DomainEvent::LogisticsRouteRegistered {
+                        requester_agent_id: requester_agent_id.clone(),
+                        route_id: Some(route_id),
+                        from_ledger: from_ledger.clone(),
+                        to_ledger: to_ledger.clone(),
+                        kind: normalized_kind,
+                        distance_km: *distance_km,
+                        priority: *priority,
+                        owner_agent_id: requester_agent_id.clone(),
+                        available: true,
+                        capacity_units: *capacity_units,
+                        tariff_electricity_per_unit: *tariff_electricity_per_unit,
+                    },
+                ))
+            }
+            Action::SetLogisticsRouteAvailability {
+                requester_agent_id,
+                route_id,
+                available,
+            } => {
+                if !self.state.agents.contains_key(requester_agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: requester_agent_id.clone(),
+                        },
+                    }));
+                }
+                let Some(route) = self.state.logistics_routes.get(route_id) else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!("logistics route not found: route_id={route_id}")],
+                        },
+                    }));
+                };
+                if route.owner_agent_id != *requester_agent_id {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "logistics route availability requires owner: route_id={route_id}"
+                            )],
+                        },
+                    }));
+                }
+                Ok(WorldEventBody::Domain(
+                    DomainEvent::LogisticsRouteAvailabilityChanged {
+                        requester_agent_id: requester_agent_id.clone(),
+                        route_id: route_id.clone(),
+                        available: *available,
+                        owner_agent_id: route.owner_agent_id.clone(),
                     },
                 ))
             }

@@ -227,6 +227,8 @@ pub(in crate::viewer) fn runtime_schedule_recipe_action(
         factory_id: factory_id.to_string(),
         recipe_id: recipe_id.to_string(),
         plan: recipe_plan_for_id(recipe_id, accepted_batches)?,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     })
 }
 

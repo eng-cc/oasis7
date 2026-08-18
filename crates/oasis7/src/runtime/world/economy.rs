@@ -233,6 +233,8 @@ impl World {
                     factory_id: factory_id.clone(),
                     recipe_id: recipe_id.clone(),
                     plan,
+                    logistics_route_ids: Vec::new(),
+                    logistics_path_ids: Vec::new(),
                 }))
             }
             Action::ValidateProductWithModule {
@@ -352,6 +354,8 @@ impl World {
                     byproducts: job.byproducts,
                     output_ledger: job.output_ledger,
                     bottleneck_tags: job.bottleneck_tags,
+                    logistics_route_ids: job.logistics_route_ids,
+                    logistics_path_ids: job.logistics_path_ids,
                 }),
                 None,
             )?;
@@ -473,6 +477,8 @@ impl World {
                     byproducts: committed_byproducts,
                     output_ledger: job.output_ledger,
                     bottleneck_tags: job.bottleneck_tags,
+                    logistics_route_ids: job.logistics_route_ids,
+                    logistics_path_ids: job.logistics_path_ids,
                 }),
                 None,
             )?;

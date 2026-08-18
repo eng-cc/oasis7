@@ -129,6 +129,8 @@ fn factory_depreciation_scales_with_active_recipe_load() {
             1,
             3,
         ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("start recipe");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
@@ -191,6 +193,8 @@ fn factory_depreciation_counts_only_jobs_for_each_factory() {
                 1,
                 3,
             ),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
         });
     }
     world.step().expect("start recipes");
@@ -344,6 +348,8 @@ fn schedule_recipe_world_fallback_adds_one_tick_delay_for_moderate_bottleneck_de
             1,
             3,
         ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("start delayed recipe");
 
@@ -411,6 +417,8 @@ fn schedule_recipe_world_fallback_adds_two_tick_delay_for_severe_bottleneck_defi
             1,
             3,
         ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("start delayed recipe");
 
@@ -463,6 +471,8 @@ fn recycle_factory_rejects_when_recipe_job_is_active() {
             1,
             3,
         ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("schedule recipe");
     assert_eq!(world.pending_recipe_jobs_len(), 1);

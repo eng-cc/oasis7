@@ -260,7 +260,7 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         gameplay.leverage_class.as_deref(),
         Some("regional_specialization_option")
     );
-    assert_eq!(gameplay.same_loop_repeat_count, 3);
+    assert_eq!(gameplay.same_loop_repeat_count, 4);
     assert!(!gameplay.grind_only_flag);
     assert_eq!(
         gameplay.major_power_dependency_status.as_deref(),
