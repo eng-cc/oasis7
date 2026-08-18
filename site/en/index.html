@@ -412,16 +412,16 @@
             </article>
             <article
               data-download-platform-source="linux"
-              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x86_64.AppImage"
+              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb"
             >
-              <h4 data-download-source-title>Linux x64 Primary Runnable Package</h4>
+              <h4 data-download-source-title>Linux x64 Debian Package</h4>
               <p data-download-source-badge>Recommended for this device</p>
-              <p data-download-source-copy>Download `oasis7-linux-x86_64.AppImage`, give it execute permission, and run it directly. The `.deb` build is still there, but it is no longer treated as a first-choice download.</p>
+              <p data-download-source-copy>Download `oasis7-linux-x64.deb` and install it with a Debian/Ubuntu package manager. Linux now has one primary package path; operator recovery tools are shipped as a separate asset.</p>
               <p data-download-source-link-label>Download Linux Primary Package</p>
-              <p data-download-source-requirements>x86_64 Linux desktop environment. The default path assumes a distro that can run AppImage. There is no ARM or other Linux architecture package as a primary public option.</p>
-              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it from the terminal or desktop. For upgrades, replace the existing AppImage file directly instead of assuming a folder move will carry local state with it.</p>
-              <p data-download-source-trust>Linux preview distribution currently relies on the public `SHA256` manifest as an extra check. The `.deb` build stays in release attachments as a more advanced path.</p>
-              <p data-download-source-support>If your desktop environment blocks AppImage or lacks integration, read the release notes for minimum run guidance first. Distro-specific behavior is outside the default support lane.</p>
+              <p data-download-source-requirements>x86_64 Debian-family Linux desktop environment, such as Debian or Ubuntu. There is no ARM or other Linux architecture package as a primary public option.</p>
+              <p data-download-source-install>Open the `.deb` with your package installer, or run `sudo apt install ./oasis7-linux-x64.deb` on Debian/Ubuntu. For upgrades, install the newest `.deb`; do not assume changing the install directory preserves local state automatically.</p>
+              <p data-download-source-trust>Linux preview distribution includes the public `SHA256` manifest as an extra provenance check; it does not replace distro trust or local security policy.</p>
+              <p data-download-source-support>If your distro does not support Debian packages or your device blocks installation, read the release notes for minimum guidance first. Other distro-specific behavior is outside the default support lane.</p>
               <p data-download-source-footnote>The page auto-selected Linux x64 for this device. Switch platforms above if you are downloading for another machine.</p>
             </article>
           </div>
@@ -435,7 +435,7 @@
                 oasis7-checksums.txt
               </a>
             </li>
-            <li>Linux `.deb` is still there as a distro-specific secondary asset, but it is no longer part of the default download choice.</li>
+            <li>Linux uses `.deb` as its default primary package; operator recovery tools are shipped separately as `oasis7-linux-x64-ops-tools.tar.gz` with manifest/checksum coverage.</li>
             <li>Upgrades are still manual: download the newest primary package and replace the current install yourself. There is no in-app auto-update yet.</li>
             <li>Before upgrading, back up `config.toml`, `.oasis7_launcher_ux_state.json`, and `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/` from the directory you actually launch from. Those paths are still resolved relative to the active working directory.</li>
             <li>On Windows especially, do not treat “uninstall then reinstall” as state-preserving. The current uninstaller removes the install directory.</li>
