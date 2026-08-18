@@ -185,15 +185,28 @@ wh_run_with_deadline() {
     return 2
   }
 
+  # Enable bash job control for this one launch so the background command gets
+  # its own process group.  Preserve the caller's setting after the launch;
+  # this keeps shell-function commands usable on macOS where `setsid` is not a
+  # guaranteed system utility, while still giving Linux the same group-bound
+  # kill semantics.
+  local monitor_was_enabled=0
+  case "$-" in
+    *m*) monitor_was_enabled=1 ;;
+  esac
+  set -m
   "$@" &
   local child_pid=$!
+  if [[ "$monitor_was_enabled" -eq 0 ]]; then
+    set +m
+  fi
   while kill -0 "$child_pid" >/dev/null 2>&1; do
     local now_ms
     now_ms=$(wh_clock_ms)
     if (( now_ms >= deadline_ms )); then
-      kill -TERM "$child_pid" >/dev/null 2>&1 || true
+      kill -TERM "-$child_pid" >/dev/null 2>&1 || kill -TERM "$child_pid" >/dev/null 2>&1 || true
       sleep 0.1
-      kill -KILL "$child_pid" >/dev/null 2>&1 || true
+      kill -KILL "-$child_pid" >/dev/null 2>&1 || kill -KILL "$child_pid" >/dev/null 2>&1 || true
       wait "$child_pid" >/dev/null 2>&1 || true
       return 124
     fi

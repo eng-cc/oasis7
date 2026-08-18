@@ -36,6 +36,33 @@ set -e
 
 wh_run_with_deadline "$((deadline + 3000))" bash -c 'sleep 0.05'
 
+DESCENDANT_PID_FILE="$TMP_DIR/descendant.pid"
+deadline="$(wh_clock_ms)"
+descendant_fixture() {
+  sleep 5 &
+  echo "$!" >"$DESCENDANT_PID_FILE"
+  wait
+}
+set +e
+wh_run_with_deadline "$((deadline + 100))" descendant_fixture >/dev/null 2>&1
+descendant_status=$?
+set -e
+[[ "$descendant_status" -eq 124 ]] || {
+  echo "expected descendant fixture deadline status 124, got $descendant_status" >&2
+  exit 1
+}
+descendant_pid="$(cat "$DESCENDANT_PID_FILE")"
+for _ in $(seq 1 20); do
+  if ! kill -0 "$descendant_pid" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.05
+done
+if kill -0 "$descendant_pid" >/dev/null 2>&1; then
+  echo "deadline watchdog left descendant process alive: $descendant_pid" >&2
+  exit 1
+fi
+
 bash -n "$ROOT_DIR/scripts/worktree-harness.sh" "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 grep -Fq -- '--startup-timeout <secs>' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'wh_state_phase "$STATE_FILE" "waiting_metadata"' "$ROOT_DIR/scripts/worktree-harness.sh"
