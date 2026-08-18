@@ -58,6 +58,9 @@ jobs:
           - os: windows-2022
             platform: windows-x64
     runs-on: ${{ matrix.os }}
+    # Bound stalled toolchain/download/compile work so a metrics run cannot
+    # consume unbounded CI time without producing evidence.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
