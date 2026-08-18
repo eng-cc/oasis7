@@ -4,6 +4,20 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+workflow_toolchain_install=$(awk '
+/^[[:space:]]*- name: Install pinned Rust toolchain$/ { in_step=1; next }
+in_step && /^[[:space:]]*- name:/ { in_step=0 }
+in_step && /rustup toolchain install/ { print; exit }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_toolchain_install" != *"--profile minimal"* ]]; then
+  echo "compile metrics workflow must install Rust with the minimal profile" >&2
+  exit 1
+fi
+if [[ "$workflow_toolchain_install" == *"--profile default"* ]]; then
+  echo "compile metrics workflow must not install Rust with the default profile" >&2
+  exit 1
+fi
+
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
 
