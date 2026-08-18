@@ -8,6 +8,7 @@ target, or observer is used.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -258,6 +259,7 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             """#!/usr/bin/env python3
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())
@@ -281,20 +283,22 @@ for role in transaction['mutation_order']:
             'listeners': ['6631', '6831'] if role == 'sequencer-204' else ['6632', '6832'],
             'full_chain_status_called': False,
         })
-identity = json.loads(Path(transaction['proof']['identity_receipts_path']).read_text())
-identity_paths = identity['receipts']
-proof_path = transaction['proof']['sequencer_rebuild_proof_path']
+binding = transaction['adapter_binding']
+evidence = binding['evidence_bindings']
 print(json.dumps({
     'schema_version': 'oasis7.validator_pair_rebuild_host_receipt.v2',
     'phase': phase,
+    'plan_digest': transaction['plan_digest'],
     'transaction_id': transaction['transaction_id'],
+    'captured_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     'mutation_order': transaction['mutation_order'],
     'startup_order': transaction['startup_order'],
     'nodes': nodes,
     'observer_mutation': False,
     'sequencer_proof_url': transaction['proof']['sequencer_proof_url'],
-    'identity_receipts': [{'path': path, 'role': json.loads(Path(path).read_text())['role']} for path in identity_paths] if phase == 'apply' else [],
-    'sequencer_rebuild_proof': {'path': proof_path, 'role': 'sequencer-204'} if phase == 'apply' else {},
+    'evidence_bindings': evidence,
+    'identity_receipts': evidence['identity_receipts'],
+    'sequencer_rebuild_proof': evidence['sequencer_rebuild_proof'],
 }))
 """,
             encoding="utf-8",
@@ -434,6 +438,119 @@ print(json.dumps({
         self.assertIn("backup_receipt", receipt)
         self.assertIn("sequencer_rebuild_proof", receipt["host_receipt"])
 
+    def test_host_receipt_rejects_trusted_but_unplanned_proof(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_host_binding_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        plan = json.loads(subprocess.run(self._base_args(), text=True, capture_output=True, check=True).stdout)
+        plan["schema_version"] = "oasis7.validator_pair_rebuild_transaction.v1"
+        plan["transaction_id"] = "pair-rebuild-test-binding"
+        plan["phase"] = "staged"
+        plan_path = self.out / "binding-transaction.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        adapter = self._write_host_adapter()
+        receipt = module.run_host_adapter(adapter, plan_path, plan, "apply")
+        alternate_proof = self.root / "alternate-host-proof.json"
+        alternate_signature = self.root / "alternate-host-proof.sig"
+        self._write_attestation(
+            alternate_proof,
+            alternate_signature,
+            "oasis7.validator_pair_rebuild_proof.v1",
+            "sequencer-204",
+            "peer-unplanned",
+            "unplanned-sequencer",
+        )
+        receipt["sequencer_rebuild_proof"]["path"] = str(alternate_proof)
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def _bound_host_receipt(self):
+        spec = importlib.util.spec_from_file_location("pair_rebuild_host_binding_fixture", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        plan = json.loads(subprocess.run(self._base_args(), text=True, capture_output=True, check=True).stdout)
+        plan["schema_version"] = "oasis7.validator_pair_rebuild_transaction.v1"
+        plan["transaction_id"] = "pair-rebuild-test-binding"
+        plan["phase"] = "staged"
+        plan_path = self.out / "binding-transaction.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        receipt = module.run_host_adapter(self._write_host_adapter(), plan_path, plan, "apply")
+        return module, plan, receipt
+
+    def test_host_receipt_rejects_incomplete_swapped_or_stale_evidence(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        omitted = copy.deepcopy(receipt)
+        omitted["identity_receipts"] = omitted["identity_receipts"][:1]
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(omitted, plan, "apply")
+        swapped = copy.deepcopy(receipt)
+        swapped["identity_receipts"][0]["role"], swapped["identity_receipts"][1]["role"] = (
+            swapped["identity_receipts"][1]["role"],
+            swapped["identity_receipts"][0]["role"],
+        )
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(swapped, plan, "apply")
+        stale = copy.deepcopy(receipt)
+        stale["captured_at"] = "2000-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(stale, plan, "apply")
+        stale_window = copy.deepcopy(receipt)
+        plan["adapter_binding"]["phase_window_started_at"] = "2000-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(stale_window, plan, "apply")
+        substituted = copy.deepcopy(receipt)
+        substituted["evidence_bindings"]["identity_receipts"][0]["sha256"] = "0" * 64
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(substituted, plan, "apply")
+
+    def test_adapter_binding_separates_raw_and_verification_proof_files(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_binding_shape_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        identities = []
+        for role in ("storage-205", "sequencer-204"):
+            path = self.root / f"binding-{role}.json"
+            path.write_text(role, encoding="utf-8")
+            identities.append({
+                "path": str(path),
+                "sha256": sha256(path),
+                "role": role,
+                "node_id": f"node-{role}",
+                "peer_id": f"peer-{role}",
+            })
+        raw_proof = self.root / "binding-raw-proof.json"
+        verification = self.root / "binding-verification.json"
+        raw_proof.write_text("raw-proof", encoding="utf-8")
+        verification.write_text("verification-receipt", encoding="utf-8")
+        plan = {
+            "plan_digest": "a" * 64,
+            "transaction_id": "binding-shape",
+            "proof": {
+                "identity_receipts": identities,
+                "sequencer_rebuild_proof_path": str(raw_proof),
+                "sequencer_rebuild_proof_verification_path": str(verification),
+                "sequencer_rebuild_proof": {
+                    "path": str(verification),
+                    "sha256": sha256(verification),
+                    "proof_sha256": sha256(raw_proof),
+                    "role": "sequencer-204",
+                    "node_id": "node-sequencer-204",
+                    "peer_id": "peer-sequencer-204",
+                },
+            },
+        }
+        evidence = module._expected_adapter_evidence(plan)
+        self.assertEqual(evidence["sequencer_rebuild_proof"]["path"], str(raw_proof.resolve()))
+        self.assertEqual(evidence["sequencer_rebuild_proof"]["sha256"], sha256(raw_proof))
+        self.assertEqual(evidence["sequencer_rebuild_proof"]["verification_path"], str(verification.resolve()))
+        self.assertEqual(evidence["sequencer_rebuild_proof"]["verification_sha256"], sha256(verification))
+
     def test_plan_rejects_missing_signature_before_any_node_access(self) -> None:
         self._write_provenance(signature=False)
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
@@ -520,6 +637,9 @@ print(json.dumps({
         self.assertTrue((self.nodes["sequencer-204"] / "backups").exists())
         self.assertTrue(receipt["host_receipt"]["nodes"]["sequencer-204"]["healthz_ok"])
         self.assertTrue(receipt["capacity_apply"]["storage-205"]["verified"])
+        self.assertEqual(receipt["host_receipt"]["plan_digest"], receipt["plan_digest"])
+        self.assertEqual(receipt["host_receipt"]["evidence_bindings"], receipt["adapter_binding"]["evidence_bindings"])
+        self.assertTrue(receipt["host_receipt"]["captured_at"])
 
     def test_apply_requires_host_gate_receipt(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)

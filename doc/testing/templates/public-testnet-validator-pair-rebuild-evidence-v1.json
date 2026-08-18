@@ -114,10 +114,24 @@
   "host_receipt": {
     "schema_version": "oasis7.validator_pair_rebuild_host_receipt.v2",
     "phase": "apply",
+    "plan_digest": "",
     "transaction_id": "",
+    "captured_at": "",
     "receipt_ref": "",
     "verified": false,
     "observer_mutation": false,
+    "evidence_bindings": {
+      "identity_receipts": [],
+      "sequencer_rebuild_proof": {
+        "path": "",
+        "sha256": "",
+        "verification_path": "",
+        "verification_sha256": "",
+        "role": "sequencer-204",
+        "node_id": "",
+        "peer_id": ""
+      }
+    },
     "identity_receipts_ref": "",
     "sequencer_rebuild_proof_ref": "",
     "sequencer_rebuild_proof_verification_ref": "",

@@ -1017,6 +1017,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
 def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
     if receipt.get("schema_version") not in {"oasis7.validator_pair_rebuild_host_receipt.v1", "oasis7.validator_pair_rebuild_host_receipt.v2"}:
         fail("host adapter returned an unsupported receipt schema")
+    _validate_adapter_binding(receipt, plan, phase)
     if receipt.get("phase") != phase:
         fail(f"host adapter phase receipt mismatch: expected {phase}")
     if receipt.get("transaction_id") != plan.get("transaction_id"):
@@ -1065,15 +1066,37 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
     proof = receipt.get("sequencer_rebuild_proof")
     if not isinstance(identity_receipts, list) or not isinstance(proof, dict):
         fail("host adapter must consume signed identity receipts and the signed 204 rebuild proof")
+    expected_evidence = _expected_adapter_evidence(plan)
+    expected_identities = expected_evidence["identity_receipts"]
+    if len(identity_receipts) != len(expected_identities):
+        fail("host adapter identity receipt set is incomplete")
+    observed_by_role: dict[str, dict[str, Any]] = {}
+    for value in identity_receipts:
+        if not isinstance(value, dict) or value.get("role") in observed_by_role:
+            fail("host adapter identity receipt set contains duplicate or malformed roles")
+        observed_by_role[str(value.get("role"))] = value
+    if set(observed_by_role) != set(MUTATION_ORDER):
+        fail("host adapter identity receipt set must contain both canonical roles")
     trusted_root = plan["provenance"].get("trusted_root")
     if not isinstance(trusted_root, dict):
         fail("host adapter receipt has no governed trust root")
-    for value in identity_receipts:
-        verify_signed_attestation(Path(value["path"]).resolve(), trusted_root, "host identity receipt", value.get("role"))
-    proof_path = Path(proof["path"]).resolve()
+    for expected in expected_identities:
+        value = observed_by_role[expected["role"]]
+        for key in ("path", "sha256", "role", "node_id", "peer_id"):
+            if value.get(key) != expected[key]:
+                fail(f"host adapter identity evidence binding mismatch for {expected['role']}: {key}")
+        verified_identity = verify_signed_attestation(Path(expected["path"]), trusted_root, "host identity receipt", expected["role"])
+        for key in ("sha256", "role", "node_id", "peer_id"):
+            if verified_identity.get(key) != expected[key]:
+                fail(f"host identity receipt content mismatch for {expected['role']}: {key}")
+    expected_proof = expected_evidence["sequencer_rebuild_proof"]
+    for key in expected_proof:
+        if proof.get(key) != expected_proof.get(key):
+            fail(f"host adapter signed proof evidence binding mismatch: {key}")
+    proof_path = Path(expected_proof["path"]).resolve()
     verification_path = (
-        Path(proof["verification_path"]).resolve()
-        if isinstance(proof.get("verification_path"), str)
+        Path(expected_proof["verification_path"]).resolve()
+        if isinstance(expected_proof.get("verification_path"), str)
         else Path(plan["proof"]["sequencer_rebuild_proof_verification_path"]).resolve()
         if plan.get("proof", {}).get("sequencer_rebuild_proof_verification_path")
         else None
@@ -1104,6 +1127,10 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
     if adapter.is_symlink() or not adapter.is_file():
         fail(f"host adapter must be a regular file: {adapter}")
     adapter = adapter.resolve()
+    phase_window_started_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    plan["adapter_binding"] = _build_adapter_binding(plan, phase, phase_window_started_at)
+    plan["canonical_digest"] = canonical_digest(plan)
+    write_json(transaction_path, plan)
     try:
         result = subprocess.run(
             [str(adapter), "--phase", phase, "--transaction", str(transaction_path)],
@@ -1165,6 +1192,140 @@ def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> d
     if restored_manifest != expected:
         fail(f"rollback manifest verification failed for {root}")
     return {"verified": True, "restored_manifest_entries": len(restored_manifest)}
+
+
+def _parse_timestamp(value: Any, label: str) -> dt.datetime:
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{label} must be an RFC3339 timestamp")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        fail(f"{label} must be an RFC3339 timestamp")
+    if parsed.tzinfo is None:
+        fail(f"{label} must include a timezone")
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def _bound_regular_file(path_value: Any, expected_sha256: Any, label: str) -> dict[str, str]:
+    if not isinstance(path_value, str) or not path_value.strip():
+        fail(f"{label} path is required")
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        fail(f"{label} digest is required")
+    raw_path = Path(path_value)
+    if raw_path.is_symlink():
+        fail(f"{label} must be a regular file")
+    path = raw_path.resolve()
+    if not path.is_file():
+        fail(f"{label} must be a regular file")
+    actual_sha256 = sha256_file(path)
+    if actual_sha256 != expected_sha256.lower():
+        fail(f"{label} digest mismatch")
+    return {"path": str(path), "sha256": actual_sha256}
+
+
+def _expected_adapter_evidence(plan: dict[str, Any]) -> dict[str, Any]:
+    """Build the immutable evidence contract copied into each host receipt.
+
+    The plan's signed-gate summaries are the authority.  Host adapters may
+    report observations, but they cannot substitute a different trusted file
+    or a different validator identity.
+    """
+    proof = plan.get("proof")
+    if not isinstance(proof, dict):
+        fail("plan signed evidence is missing")
+    raw_identities = proof.get("identity_receipts")
+    raw_proof = proof.get("sequencer_rebuild_proof")
+    if not isinstance(raw_identities, list) or not isinstance(raw_proof, dict):
+        fail("plan signed evidence summaries are missing")
+    identities: list[dict[str, Any]] = []
+    for summary in raw_identities:
+        if not isinstance(summary, dict):
+            fail("plan identity evidence summary is malformed")
+        bound_file = _bound_regular_file(summary.get("path"), summary.get("sha256"), "plan identity evidence")
+        role = summary.get("role")
+        node_id = summary.get("node_id")
+        peer_id = summary.get("peer_id")
+        if role not in MUTATION_ORDER or not isinstance(node_id, str) or not node_id.strip() or not isinstance(peer_id, str) or not peer_id.strip():
+            fail("plan identity evidence role/node/peer binding is incomplete")
+        identities.append({**bound_file, "role": role, "node_id": node_id, "peer_id": peer_id})
+    if {item["role"] for item in identities} != set(MUTATION_ORDER) or len(identities) != len(MUTATION_ORDER):
+        fail("plan identity evidence must contain each canonical validator role exactly once")
+    identities.sort(key=lambda item: MUTATION_ORDER.index(item["role"]))
+    raw_proof_path_value = proof.get("sequencer_rebuild_proof_path")
+    verification_path_value = proof.get("sequencer_rebuild_proof_verification_path")
+    if not isinstance(raw_proof_path_value, str) or not raw_proof_path_value.strip():
+        fail("plan signed 204 raw proof path is required")
+    if verification_path_value:
+        raw_proof_sha256 = raw_proof.get("proof_sha256")
+        verification_sha256 = raw_proof.get("sha256")
+    else:
+        raw_proof_sha256 = raw_proof.get("sha256")
+        verification_sha256 = None
+    proof_file = _bound_regular_file(raw_proof_path_value, raw_proof_sha256, "plan signed 204 rebuild proof")
+    proof_role = raw_proof.get("role")
+    proof_node_id = raw_proof.get("node_id")
+    proof_peer_id = raw_proof.get("peer_id")
+    if proof_role != "sequencer-204" or not isinstance(proof_node_id, str) or not proof_node_id.strip() or not isinstance(proof_peer_id, str) or not proof_peer_id.strip():
+        fail("plan signed 204 rebuild proof identity binding is incomplete")
+    verification: dict[str, str] | None = None
+    if verification_path_value:
+        verification = _bound_regular_file(
+            verification_path_value,
+            verification_sha256,
+            "plan signed 204 rebuild proof verification receipt",
+        )
+    proof_binding: dict[str, Any] = {
+        **proof_file,
+        "verification_path": verification["path"] if verification else None,
+        "verification_sha256": verification["sha256"] if verification else None,
+        "role": proof_role,
+        "node_id": proof_node_id,
+        "peer_id": proof_peer_id,
+    }
+    for key in ("signer_id", "signed_payload_sha256", "proof_sha256"):
+        if key in raw_proof:
+            proof_binding[key] = raw_proof[key]
+    return {"identity_receipts": identities, "sequencer_rebuild_proof": proof_binding}
+
+
+def _build_adapter_binding(plan: dict[str, Any], phase: str, phase_window_started_at: str) -> dict[str, Any]:
+    plan_digest = plan.get("plan_digest")
+    transaction_id = plan.get("transaction_id")
+    if not isinstance(plan_digest, str) or len(plan_digest) != 64:
+        fail("adapter binding requires the immutable plan digest")
+    if not isinstance(transaction_id, str) or not transaction_id.strip():
+        fail("adapter binding requires the transaction id")
+    _parse_timestamp(phase_window_started_at, "adapter phase window")
+    return {
+        "schema_version": "oasis7.validator_pair_rebuild_adapter_binding.v1",
+        "plan_digest": plan_digest,
+        "transaction_id": transaction_id,
+        "phase": phase,
+        "phase_window_started_at": phase_window_started_at,
+        "evidence_bindings": _expected_adapter_evidence(plan),
+    }
+
+
+def _validate_adapter_binding(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> None:
+    binding = plan.get("adapter_binding")
+    if not isinstance(binding, dict) or binding.get("schema_version") != "oasis7.validator_pair_rebuild_adapter_binding.v1":
+        fail("host adapter binding was not persisted before invocation")
+    if binding.get("plan_digest") != plan.get("plan_digest") or binding.get("transaction_id") != plan.get("transaction_id") or binding.get("phase") != phase:
+        fail("host adapter binding identity mismatch")
+    expected_evidence = _expected_adapter_evidence(plan)
+    if binding.get("evidence_bindings") != expected_evidence:
+        fail("persisted host adapter binding no longer matches plan evidence")
+    if receipt.get("plan_digest") != binding["plan_digest"] or receipt.get("transaction_id") != binding["transaction_id"] or receipt.get("phase") != binding["phase"]:
+        fail("host adapter receipt plan/transaction/phase binding mismatch")
+    if receipt.get("evidence_bindings") != expected_evidence:
+        fail("host adapter receipt evidence binding differs from the persisted plan evidence")
+    captured_at = _parse_timestamp(receipt.get("captured_at"), "host adapter captured_at")
+    phase_started = _parse_timestamp(binding["phase_window_started_at"], "adapter phase window")
+    now = dt.datetime.now(dt.timezone.utc)
+    if phase_started > now + dt.timedelta(seconds=5) or now - phase_started > dt.timedelta(seconds=300):
+        fail("host adapter phase window is stale or in the future")
+    if captured_at < phase_started or captured_at > now + dt.timedelta(seconds=5) or now - captured_at > dt.timedelta(seconds=300):
+        fail("host adapter receipt freshness is outside the current phase window")
 
 
 def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:

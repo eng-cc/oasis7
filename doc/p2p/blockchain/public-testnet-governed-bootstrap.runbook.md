@@ -459,6 +459,16 @@ verified identity receipts and the signed 204 rebuild proof under the governed
 trust-root allowlist; host self-report alone is not evidence. The observer gate
 remains `hold` until provider closure is independently verified. Without that receipt the local executor
 must not mark the transaction `applied`.
+Before each adapter callback the executor persists an
+`oasis7.validator_pair_rebuild_adapter_binding.v1` in the transaction. The
+binding fixes the immutable `plan_digest`, `transaction_id`, callback `phase`,
+and a complete canonical evidence set: both identity receipt paths and
+SHA-256 digests with their role/node/peer IDs, plus the raw 204 proof and (when
+used) verifier-receipt paths and digests. The adapter must echo
+`plan_digest`, `transaction_id`, `phase`, `evidence_bindings`, and a
+`captured_at` timestamp inside the current callback window. Any omitted or
+swapped role, alternate trusted proof, path/digest substitution, or stale
+timestamp fails closed before the transaction can advance.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate
 must invoke the recorded same-filesystem snapshot rollback and retain the
 receipt. The pair executor never mutates an observer. A sequencer/204 proof
