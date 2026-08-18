@@ -1,6 +1,14 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use serde::{Deserialize, Serialize};
 mod rollback_v2;
 pub use rollback_v2::*;
+mod authoritative;
+pub use authoritative::*;
+mod director;
+pub use director::*;
+mod responses;
+pub use responses::*;
+mod world_feed;
+pub use world_feed::*;
 mod negotiation;
 pub use negotiation::*;
 mod collect_data;
@@ -55,35 +63,6 @@ pub struct HostedStrongAuthGrant {
     pub signature: String,
 }
 
-/// Ephemeral, read-only capability for opening the Viewer Director diagnostics surface.
-///
-/// This grant is intentionally separate from player command/auth proofs.  It does not
-/// authorize gameplay, ownership, prompt control, or any other mutation; it only binds a
-/// short-lived diagnostics visibility decision to a server session epoch.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DirectorCapabilityGrant {
-    pub version: u8,
-    pub action: String,
-    pub audience: String,
-    pub scope: String,
-    pub player_id: String,
-    pub player_public_key: String,
-    pub server: String,
-    pub session_epoch: u64,
-    pub nonce: String,
-    pub issued_at_unix_ms: u64,
-    pub expires_at_unix_ms: u64,
-    pub signer_public_key: String,
-    pub signature: String,
-}
-
-pub const DIRECTOR_CAPABILITY_GRANT_VERSION: u8 = 1;
-pub const DIRECTOR_CAPABILITY_DOMAIN: &str = "awdirectorgrant:v1";
-pub const DIRECTOR_CAPABILITY_ACTION: &str = "director_open";
-pub const DIRECTOR_CAPABILITY_AUDIENCE: &str = "viewer_director";
-pub const DIRECTOR_CAPABILITY_SCOPE: &str = "diagnostics_read";
-pub const DIRECTOR_CAPABILITY_SIGNATURE_V1_PREFIX: &str = "awdirectorgrant:v1:";
-pub const DIRECTOR_CAPABILITY_MAX_TTL_MS: u64 = 60_000;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewerRequest {
@@ -501,129 +480,6 @@ pub enum LiveControl {
     Step { count: usize },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeFinalityState {
-    Pending,
-    Confirmed,
-    Final,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeBatchFinality {
-    pub batch_id: String,
-    pub tx_hash: String,
-    pub commit_tick: u64,
-    pub confirm_height: u64,
-    pub final_height: u64,
-    pub state_root: String,
-    pub data_root: String,
-    pub finality_state: AuthoritativeFinalityState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_seq_start: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_seq_end: Option<u64>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub settlement_ready: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub ranking_ready: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub challenge_open: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub slashed: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub active_challenge_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeChallengeStatus {
-    Challenged,
-    ResolvedNoFraud,
-    ResolvedFraudSlashed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeChallengeAck<Time> {
-    pub challenge_id: String,
-    pub batch_id: String,
-    pub watcher_id: String,
-    pub status: AuthoritativeChallengeStatus,
-    pub submitted_at_tick: Time,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolved_at_tick: Option<Time>,
-    #[serde(skip_serializing_if = "is_false")]
-    pub slash_applied: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub slash_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeChallengeError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub challenge_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub batch_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeRecoveryStatus {
-    SessionRegistered,
-    RolledBack,
-    CatchUpReady,
-    SessionRevoked,
-    SessionRotated,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeRecoveryAck<Time> {
-    pub status: AuthoritativeRecoveryStatus,
-    pub reorg_epoch: u64,
-    pub snapshot_height: u64,
-    pub snapshot_hash: String,
-    pub log_cursor: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stable_batch_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub replaced_by_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_epoch: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoke_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_by: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rollback_receipt: Option<AuthoritativeRollbackReceipt>,
-    pub acknowledged_at_tick: Time,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeRecoveryError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub batch_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoke_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_by: Option<String>,
-}
-
 // Legacy mixed control channel. Prefer PlaybackControl/LiveControl.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
@@ -632,114 +488,6 @@ pub enum ViewerControl {
     Play,
     Step { count: usize },
     Seek { tick: u64 },
-}
-
-pub const WORLD_FEED_SCHEMA_VERSION: &str = "world_feed/v1";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorldFeedStatus {
-    Loading,
-    Ready,
-    Empty,
-    Replay,
-    Gap,
-    Unavailable,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorldFeedGapReason {
-    CursorGap,
-    ReorgEpochChanged,
-    CursorInvalid,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorldFeedUnavailableReason {
-    SourceUnavailable,
-    SchemaUnsupported,
-    PermissionDenied,
-}
-
-fn serialize_u64_as_decimal_string<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(&value.to_string())
-}
-
-fn deserialize_u64_from_decimal_string_or_number<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct U64DecimalVisitor;
-
-    impl<'de> de::Visitor<'de> for U64DecimalVisitor {
-        type Value = u64;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("an unsigned 64-bit integer or decimal string")
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            Ok(value)
-        }
-
-        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            u64::try_from(value).map_err(|_| E::custom("expected a non-negative integer"))
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            value
-                .parse::<u64>()
-                .map_err(|_| E::custom("expected a decimal u64 string"))
-        }
-    }
-
-    deserializer.deserialize_any(U64DecimalVisitor)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorldFeedEvent {
-    #[serde(
-        serialize_with = "serialize_u64_as_decimal_string",
-        deserialize_with = "deserialize_u64_from_decimal_string_or_number"
-    )]
-    pub event_seq: u64,
-    pub kind: String,
-    pub summary: String,
-    pub detail: String,
-    pub receipt_ref: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorldFeedEnvelope {
-    pub schema_version: String,
-    pub world_id: String,
-    #[serde(
-        serialize_with = "serialize_u64_as_decimal_string",
-        deserialize_with = "deserialize_u64_from_decimal_string_or_number"
-    )]
-    pub reorg_epoch: u64,
-    pub cursor: String,
-    pub events: Vec<WorldFeedEvent>,
-    pub status: WorldFeedStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gap_reason: Option<WorldFeedGapReason>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unavailable_reason: Option<WorldFeedUnavailableReason>,
-    pub snapshot_reload_required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -858,104 +606,6 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     Error {
         message: String,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ControlCompletionStatus {
-    Advanced,
-    TimeoutNoProgress,
-    Blocked,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ControlCompletionAck<Time> {
-    pub request_id: u64,
-    pub status: ControlCompletionStatus,
-    pub delta_logical_time: Time,
-    pub delta_event_seq: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PromptControlOperation {
-    Apply,
-    Rollback,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromptControlAck<Time> {
-    pub agent_id: String,
-    pub operation: PromptControlOperation,
-    pub preview: bool,
-    pub version: u64,
-    pub updated_at_tick: Time,
-    pub applied_fields: Vec<String>,
-    pub digest: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rolled_back_to_version: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromptControlError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_version: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentChatAck<Time> {
-    pub agent_id: String,
-    pub accepted_at_tick: Time,
-    pub message_len: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub intent_tick: Option<Time>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub intent_seq: Option<u64>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub idempotent_replay: bool,
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentChatError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameplayActionAck<Time> {
-    pub action_id: String,
-    pub target_agent_id: String,
-    pub player_id: String,
-    pub runtime_action_id: u64,
-    pub accepted_at_tick: Time,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameplayActionError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub action_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_agent_id: Option<String>,
 }
 
 impl From<PlaybackControl> for ViewerControl {
