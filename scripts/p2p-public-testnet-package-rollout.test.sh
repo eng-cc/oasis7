@@ -940,7 +940,15 @@ $representativeGovernedLeaf = 'public-testnet-governed-bootstrap-bundle-2026-06-
 $representativePackagePath = Join-Path $packageWindows $representativeGovernedLeaf
 $representativePackageRelative = Get-FixtureRelativeExistingPath $packageWindows $representativePackagePath 'representative package governed file'
 Assert-Equal $representativePackageRelative $representativeGovernedLeaf 'fixture package projection introduced a spurious directory component'
-Get-ChildItem -LiteralPath $packageWindows -Recurse -File | Where-Object { $_.Name -notin @('oasis7-windows-x64.exe', 'windows-x64-BUILDINFO', 'windows-x64-SHA256SUMS') } | ForEach-Object {
+Get-ChildItem -LiteralPath $packageWindows -Recurse -File | Where-Object {
+  $_.Name -notin @(
+    'oasis7-windows-x64.exe',
+    'windows-x64-BUILDINFO',
+    'windows-x64-SHA256SUMS',
+    'oasis7-windows-x64-ops-tools.tar.gz',
+    'windows-x64-ops-tools-SHA256SUMS'
+  )
+} | ForEach-Object {
   $relative = Get-FixtureRelativeExistingPath $packageWindows $_.FullName 'package governed file'
   $destination = Join-Path (Join-Path $staging 'config') $relative
   New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
@@ -1292,6 +1300,19 @@ assert "Get-FixtureRelativeExistingPath $packageWindows $_.FullName 'package gov
 assert "Get-FixtureRelativeExistingPath $stagingConfig $_.FullName 'staged governed file'" in fixture
 assert ".Substring($packageWindows.Length)" not in fixture
 assert ".Substring($stagingConfig.Length)" not in fixture
+projection_start = fixture.index("Get-ChildItem -LiteralPath $packageWindows")
+projection_end = fixture.index("| ForEach-Object", projection_start)
+projection_filter = fixture[projection_start:projection_end]
+for delivery_asset in (
+    "oasis7-windows-x64.exe",
+    "windows-x64-BUILDINFO",
+    "windows-x64-SHA256SUMS",
+    "oasis7-windows-x64-ops-tools.tar.gz",
+    "windows-x64-ops-tools-SHA256SUMS",
+):
+    assert f"'{delivery_asset}'" in projection_filter, (
+        f"Windows fixture must exclude delivery asset from governed config projection: {delivery_asset}"
+    )
 assert "Assert-Equal $representativePackageRelative $representativeGovernedLeaf" in fixture
 assert "function Get-FixturePhysicalCaseId" in fixture
 assert "return 'c-' + $digest.Substring(0, 16)" in fixture
