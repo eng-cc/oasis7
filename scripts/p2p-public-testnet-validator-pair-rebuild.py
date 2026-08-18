@@ -379,6 +379,39 @@ def attestation_body(value: dict[str, Any]) -> bytes:
 
 def verify_signed_attestation(path: Path, trusted_root: dict[str, Any], label: str, expected_role: str | None = None) -> dict[str, Any]:
     value = load_json(path, label)
+    if value.get("schema_version") == "oasis7.identity_receipt.v1":
+        key_path = Path(str(value.get("key_path", "")))
+        key_sha = value.get("key_sha256")
+        if not key_path.is_file() or key_path.is_symlink() or not isinstance(key_sha, str) or len(key_sha) != 64:
+            fail(f"{label} runtime identity metadata is incomplete")
+        if sha256_file(key_path) != key_sha.lower() or key_path.stat().st_size != int(value.get("key_size_bytes", -1)):
+            fail(f"{label} node-keypair metadata mismatch")
+        return {
+            "path": str(path.resolve()),
+            "sha256": sha256_file(path),
+            "schema_version": value["schema_version"],
+            "role": expected_role,
+            "peer_id": value.get("peer_id"),
+            "node_id": value.get("node_id"),
+            "key_sha256": key_sha.lower(),
+        }
+    if value.get("schema_version") == "oasis7.rebuild_proof_verification.v1":
+        if value.get("verified") is not True or value.get("proof_schema_version") != "oasis7.rebuild_proof.v1":
+            fail(f"{label} runtime verifier receipt is not verified")
+        trusted = [entry for entry in trusted_root.get("allowlist", []) if entry.get("signer_id") == value.get("signer_id")]
+        public_key_hex = value.get("signer_public_key_hex")
+        if not isinstance(public_key_hex, str) or not any(entry.get("public_key_hex", "").lower() == public_key_hex.lower() for entry in trusted):
+            fail(f"{label} runtime verifier signer is not trust-root bound")
+        return {
+            "path": str(path.resolve()),
+            "sha256": sha256_file(path),
+            "schema_version": value["schema_version"],
+            "role": expected_role,
+            "peer_id": value.get("local_peer_id"),
+            "node_id": value.get("signer_id"),
+            "signer_id": value["signer_id"],
+            "public_key_hex": public_key_hex,
+        }
     if value.get("schema_version") not in {"oasis7.validator_identity_receipt.v1", "oasis7.validator_pair_rebuild_proof.v1"}:
         fail(f"{label} has unsupported schema")
     if expected_role is not None and value.get("role") != expected_role:
@@ -449,10 +482,11 @@ def validate_signed_gates(args: argparse.Namespace, provenance_summary: dict[str
         fail("identity receipts must cover both validator roles")
     summaries = []
     for raw in raw_receipts:
-        receipt_path = Path(raw) if isinstance(raw, str) else None
+        expected_role = raw.get("role") if isinstance(raw, dict) else None
+        receipt_path = Path(raw.get("path")) if isinstance(raw, dict) and isinstance(raw.get("path"), str) else Path(raw) if isinstance(raw, str) else None
         if receipt_path is None:
             fail("identity receipt path must be a string")
-        summaries.append(verify_signed_attestation(receipt_path.resolve(), trusted_root, "identity receipt"))
+        summaries.append(verify_signed_attestation(receipt_path.resolve(), trusted_root, "identity receipt", expected_role))
     roles = {item.get("role") for item in summaries}
     if roles != set(MUTATION_ORDER):
         fail("identity receipts must cover storage-205 and sequencer-204")

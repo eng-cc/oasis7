@@ -172,7 +172,13 @@ def load_trust_root(path: Path) -> dict[str, Any]:
         key_sha = entry.get("public_key_sha256")
         if not isinstance(signer_id, str) or not signer_id.strip() or not isinstance(algorithm, str) or not algorithm.strip() or not isinstance(key_sha, str) or not HEX64.fullmatch(key_sha):
             die("trust root allowlist entry is malformed")
-        normalized.append({"signer_id": signer_id, "algorithm": algorithm, "public_key_sha256": key_sha.lower()})
+        normalized_entry = {"signer_id": signer_id, "algorithm": algorithm, "public_key_sha256": key_sha.lower()}
+        if entry.get("public_key_hex") is not None:
+            raw_hex = entry.get("public_key_hex")
+            if not isinstance(raw_hex, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", raw_hex):
+                die("trust root public_key_hex must be 32-byte hex")
+            normalized_entry["public_key_hex"] = raw_hex.lower()
+        normalized.append(normalized_entry)
     return {"schema_version": TRUST_ROOT_SCHEMA, "path": str(path.resolve()), "allowlist": normalized, "root_digest": root_digest.lower()}
 
 
