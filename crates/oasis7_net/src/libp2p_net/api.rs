@@ -462,10 +462,17 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
         world_id: &str,
         peer_id: &str,
     ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        let requested_peer_id =
+            peer_id
+                .parse::<PeerId>()
+                .map_err(|_| WorldError::NetworkProtocolUnavailable {
+                    protocol: "get peer record peer_id must be valid".to_string(),
+                })?;
         let key = dht_peer_record_key(world_id, peer_id);
         let (sender, receiver) = mpsc::channel();
         self.enqueue_command(Command::GetPeerRecord {
             key,
+            peer_id: requested_peer_id,
             response: sender,
         })?;
         block_on_command_response(receiver, "get_peer_record")
