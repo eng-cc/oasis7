@@ -351,9 +351,9 @@ else
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "+ bundle_write_manifest $ROOT_DIR $OUT_DIR"
+  echo "+ bundle_write_manifest $ROOT_DIR $OUT_DIR $PROFILE $TARGET_TRIPLE"
 else
-  bundle_write_manifest "$ROOT_DIR" "$OUT_DIR"
+  bundle_write_manifest "$ROOT_DIR" "$OUT_DIR" "$PROFILE" "$TARGET_TRIPLE"
 fi
 
 # 4) Generate desktop client wrapper + one-command CLI wrapper and readme.

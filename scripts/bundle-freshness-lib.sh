@@ -99,10 +99,12 @@ PY
 bundle_write_manifest() {
   local repo_root=$1
   local bundle_dir=$2
+  local build_profile=${3:-}
+  local target_triple=${4:-}
   local metadata_json manifest_path
   metadata_json=$(bundle_source_metadata_json "$repo_root")
   manifest_path=$(bundle_manifest_path "$bundle_dir")
-  python3 - "$metadata_json" "$bundle_dir" "$manifest_path" <<'PY'
+  python3 - "$metadata_json" "$bundle_dir" "$manifest_path" "$build_profile" "$target_triple" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -114,6 +116,8 @@ from pathlib import Path
 source_metadata = json.loads(sys.argv[1])
 bundle_dir = Path(sys.argv[2]).resolve()
 manifest_path = Path(sys.argv[3]).resolve()
+build_profile = sys.argv[4].strip()
+target_triple = sys.argv[5].strip()
 
 
 def hash_first(pattern: str) -> tuple[str | None, str | None]:
@@ -177,6 +181,10 @@ manifest = {
         "launcherWasmSha256": launcher_wasm_sha256,
     },
 }
+if build_profile:
+    manifest["buildProfile"] = build_profile
+if target_triple:
+    manifest["targetTriple"] = target_triple
 manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -184,6 +192,8 @@ PY
 bundle_check_freshness() {
   local repo_root=$1
   local bundle_dir=$2
+  local requested_profile=${3:-}
+  local requested_target_triple=${4:-}
   local manifest_path current_json
   manifest_path=$(bundle_manifest_path "$bundle_dir")
   if [[ ! -f "$manifest_path" ]]; then
@@ -191,7 +201,7 @@ bundle_check_freshness() {
     return 1
   fi
   current_json=$(bundle_source_metadata_json "$repo_root")
-  python3 - "$manifest_path" "$current_json" <<'PY'
+  python3 - "$manifest_path" "$current_json" "$requested_profile" "$requested_target_triple" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -203,6 +213,8 @@ manifest_path = Path(sys.argv[1])
 bundle_dir = manifest_path.parent
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 current = json.loads(sys.argv[2])
+requested_profile = sys.argv[3].strip()
+requested_target_triple = sys.argv[4].strip()
 errors: list[str] = []
 if manifest.get("sourceFingerprint") != current.get("sourceFingerprint"):
     errors.append(
@@ -213,6 +225,16 @@ if manifest.get("viewerProtocolVersion") != current.get("viewerProtocolVersion")
     errors.append(
         "viewer protocol version drift "
         f"(bundle={manifest.get('viewerProtocolVersion')}, current={current.get('viewerProtocolVersion')})"
+    )
+if requested_profile and manifest.get("buildProfile") != requested_profile:
+    errors.append(
+        "bundle profile drift "
+        f"(bundle={manifest.get('buildProfile')}, requested={requested_profile})"
+    )
+if requested_target_triple and manifest.get("targetTriple") != requested_target_triple:
+    errors.append(
+        "bundle target drift "
+        f"(bundle={manifest.get('targetTriple')}, requested={requested_target_triple})"
     )
 assets = manifest.get("assets") or {}
 for path_key, rel_path in sorted(assets.items()):

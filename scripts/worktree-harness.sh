@@ -242,10 +242,10 @@ PY
 )"
 
     if [[ "$BOOT_MODE" == "bundle" ]]; then
-      if [[ ! -x "$BUNDLE_DIR/run-game.sh" ]] || ! bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" >/dev/null 2>&1; then
+      if [[ ! -x "$BUNDLE_DIR/run-game.sh" ]] || ! bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" dev native >/dev/null 2>&1; then
         ./scripts/build-game-launcher-bundle.sh --profile dev --out-dir "$BUNDLE_DIR" >>"$STARTUP_LOG" 2>&1
       fi
-      bundle_args=(--bundle-dir "$BUNDLE_DIR")
+      bundle_args=(--bundle-dir "$BUNDLE_DIR" --bundle-profile dev --bundle-target-triple native)
     else
       bundle_args=()
     fi

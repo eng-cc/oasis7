@@ -159,6 +159,21 @@ grep -q "SHA256SUMS does not cover bundle files: bin/UNLISTED" "$TMP_DIR/unliste
 test "$(readlink "$node_root/current")" = "$before_bad_current"
 test ! -e "$node_root/releases/$package_version"
 
+# The checksum closure helper must not silently skip an unreadable subtree.
+unreadable_bundle_root="$TMP_DIR/unreadable-bundle"
+mkdir -p "$unreadable_bundle_root/bin/unreadable-subtree"
+printf 'runtime\n' >"$unreadable_bundle_root/bin/runtime"
+printf 'hidden\n' >"$unreadable_bundle_root/bin/unreadable-subtree/hidden"
+(cd "$unreadable_bundle_root" && shasum -a 256 bin/runtime >SHA256SUMS)
+chmod 000 "$unreadable_bundle_root/bin/unreadable-subtree"
+set +e
+unreadable_rebuild_output=$(python3 "$ROOT_DIR/scripts/p2p-rebuild-linux-bundle-checksums.py" "$unreadable_bundle_root" 2>&1)
+unreadable_rebuild_status=$?
+set -e
+chmod 755 "$unreadable_bundle_root/bin/unreadable-subtree"
+test "$unreadable_rebuild_status" -ne 0
+grep -q "cannot read bundle subtree" <<<"$unreadable_rebuild_output"
+
 # A traversal-like CLI value must be rejected before temporary/release/
 # rollback paths are constructed or package extraction is attempted.
 set +e
@@ -194,6 +209,8 @@ expected_artifact_ref="testnet-package-linux-x64-$package_version/oasis7-linux-x
 
 test "$(readlink "$node_root_abs/current")" = "$node_root_abs/releases/$package_version"
 test -x "$node_root_abs/releases/$package_version/bin/oasis7_chain_runtime"
+python3 "$ROOT_DIR/scripts/p2p-verify-linux-package-bundle.py" \
+  "$node_root_abs/releases/$package_version" "$package_version" "$commit" "$run_id"
 test -f "$node_root_abs/CURRENT_VERSION"
 test -f "$node_root_abs/DEPLOYED_BUILDINFO"
 grep -q "^package_version=$package_version$" "$node_root_abs/DEPLOYED_BUILDINFO"

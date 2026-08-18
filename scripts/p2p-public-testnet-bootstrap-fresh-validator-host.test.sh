@@ -162,6 +162,11 @@ test -L "$stack_root_abs/current"
 for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
   test -x "$stack_root_abs/current/bin/$binary" || fail "missing C1 binary: $binary"
 done
+python3 "$ROOT_DIR/scripts/p2p-verify-linux-package-bundle.py" \
+  "$stack_root_abs/releases/0.0.0+testnet.test.abcdef123456" \
+  "0.0.0+testnet.test.abcdef123456" \
+  "abcdef1234567890abcdef1234567890abcdef12" \
+  "2737"
 test -f "$stack_root_abs/config/node-keypair.toml"
 test "$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$stack_root_abs/config/node-keypair.toml")" = "600"
 test -f "$stack_root_abs/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"

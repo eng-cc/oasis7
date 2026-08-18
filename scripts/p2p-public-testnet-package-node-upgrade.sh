@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 usage() {
   cat <<'EOF'
@@ -857,6 +858,8 @@ for ops_binary in oasis7_world_repair_rebuild oasis7_governance_registry_import 
 done
 mkdir -p "$bundle_root/bin"
 cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
+python3 "$SCRIPT_DIR/p2p-rebuild-linux-bundle-checksums.py" "$bundle_root" \
+  || die "deployed player/ops checksum closure rebuild failed"
 runtime_bin="$bundle_root/bin/oasis7_chain_runtime"
 [[ -x "$runtime_bin" ]] || die "bundle missing executable runtime: $runtime_bin"
 ensure_governed_bootstrap_bundle_exists "$node_root"

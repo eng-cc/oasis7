@@ -115,7 +115,7 @@ if [[ "$REBUILD" == "1" ]]; then
   BUNDLE_REBUILD_REASON="forced by --rebuild"
 elif [[ ! -x "$ABS_BUNDLE_DIR/run-game.sh" ]]; then
   BUNDLE_REBUILD_REASON="bundle missing run-game.sh"
-elif ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$ABS_BUNDLE_DIR" 2>&1); then
+elif ! freshness_note=$(bundle_check_freshness "$ROOT_DIR" "$ABS_BUNDLE_DIR" "$PROFILE" native 2>&1); then
   echo "info: stale producer bundle detected: $freshness_note"
   BUNDLE_REBUILD_REASON="workspace drift detected"
 fi
@@ -128,7 +128,7 @@ else
 fi
 
 if [[ "$OPEN_HEADED" != "1" ]]; then
-  exec ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" "${STACK_ARGS[@]}"
+  exec ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native "${STACK_ARGS[@]}"
 fi
 
 ab_require
@@ -164,9 +164,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  stdbuf -oL -eL ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 else
-  ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
+  ./scripts/run-launcher-stack.sh --bundle-dir "$ABS_BUNDLE_DIR" --bundle-profile "$PROFILE" --bundle-target-triple native --meta-file "$META_FILE" "${STACK_ARGS[@]}" > >(tee "$RUN_LOG") 2>&1 &
 fi
 STACK_PID=$!
 
