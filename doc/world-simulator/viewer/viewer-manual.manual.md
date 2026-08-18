@@ -73,6 +73,70 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供第二 Viewer 跳转，也不再承担退役视觉专项工具职责。
 
+### Terminal shell target versus current operation
+- 终端 shell 的 Player/Director、`World / Targets / Command`、Search/Quote、
+  Action Receipt 与 World Feed v1 产品契约，以
+  `viewer-gameplay-release-experience-overhaul.prd.md` 为准。
+- 当前任务分支的 Player 操作路线已经是 stage-first：Targets 继续使用
+  `#entity-search` 过滤/导航，Targets 与 Command/Chat 通过按需 drawer 进入，
+  Diagnostics 保持次级，Recent Events/Feedback 仍按现名显示。Focus hooks 只服务
+  Player 沉浸呈现，不是第二产品模式。World Feed v1 已有 runtime transport、状态机
+  与 `#viewer-world-feed` panel，但仍是只读环境上下文，不是 Action Receipt 替代。
+- Director 的 `#viewer-director-entry` / `#viewer-director-exit`、Viewer 状态机与
+  `/api/public/director/capability` fail-closed endpoint 已实现。当前 endpoint 在没有
+  可信 issuer 绑定 live `session_epoch` 时返回 `director_capability_unavailable`，
+  因此生产环境成功进入仍是 `capability_blocked`；queued/accepted 也不等于完成。
+
+### Terminal Player shell playbook
+This section describes the implemented Player-shell, World Feed, and Director
+security-boundary routes in the current task branch. It is not a release claim:
+World Feed has no inferred receipt links, and production Director success remains
+blocked until a trusted issuer is available.
+
+1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
+   Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
+   Command` route. In fullscreen desktop the three HUD cards share one compact row;
+   on mobile Objective and Player Leverage share the first row and Next Move occupies
+   the second row. `More / Diagnostics` remains reachable as a secondary route.
+2. Search remains inside Targets and only filters the authoritative visible list.
+   Selecting a target recenters/highlights and opens context; it never executes.
+   Quote is reached from contextual Command, not a peer rail item.
+3. Action Receipt is the only player-causality surface. `accepted`/`queued` is
+   waiting, not completion; no receipt is shown explicitly as `No action receipt yet`.
+4. World Feed is the implemented `world_feed/v1` ambient projection. Its identity/dedup
+   key is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and the current
+   runtime emits nullable `receipt_ref=null`; a link is rendered only when runtime
+   supplies explicit causal identity. In fullscreen Player it is a compact collapsed
+   top-right edge overlay/ambient chip that opens on demand, never a persistent column.
+   Wire `reorg_epoch` and `event_seq` are exact decimal strings (legacy numeric input
+   remains accepted); the Viewer compares them exactly and presents canonical ascending
+   event order.
+5. Director is a capability-gated secondary Diagnostics/operator action, ephemeral to
+   the tab. The server validates a short-lived `director_open` grant; invalid/stale/
+   revoked/unauthorized/unavailable entry returns to Player, sanitizes Director
+   surfaces, preserves world/selection, and explains recovery. No trusted issuer is
+   currently wired, so the successful production path remains `capability_blocked`.
+6. Escape closes the local surface/drawer first, then Focus; while IME composition
+   is active it must not close the Viewer surface. Closing returns focus to the invoker.
+7. Target Director controls use `#viewer-director-entry` and `#viewer-director-exit`;
+   these source anchors are implemented but do not persist capability. Fresh load,
+   reload, and new tab remain Player; denied/stale/revoked/unavailable capability fails
+   closed to Player.
+
+8. The canonical pixel renderer is the WebGL2 runtime. GPU-enabled environments have a
+   `ready` path; when WebGL2 is unavailable (including `canvas.getContext("webgl2")`
+   returning null), the page exposes `Renderer Unavailable` with a diagnostic reason and
+   does not present a false ready canvas.
+
+### Target QA evidence checklist
+The implementation owner must supply headed evidence for desktop and 390x844 mobile
+shell hierarchy, Director allowed/denied/stale/revoked entry (the allowed path is
+currently blocked by the missing trusted issuer), duplicate-ID/anchor
+checks, keyboard/IME/Escape focus return, receipt states, feed loading/empty/replay/
+gap/unavailable/reorg recovery, and English/Chinese long-text overflow. Source/package
+tests now cover the World Feed and fail-closed Director boundary; this manual does not
+turn those tests into issuer-backed production access or a release claim.
+
 ### 当前 Agent Chat 与高级 Prompt 设置
 
 - Chat 和 Prompt 控制只对当前账号已绑定/权威认领且当前可控制的 Agent 开放；选中共享世界中的其他 Agent 不会授予控制权。无可控制 Agent 时，页面保持 blocked，并引导先认领 Agent 或等待 binding sync。

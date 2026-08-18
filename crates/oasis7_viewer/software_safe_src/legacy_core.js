@@ -42,7 +42,7 @@ import {
   VIEWER_RENDER_MODE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
-import { createSoftwareSafeState } from "./software_safe_state.js";
+import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js";
 import {
   buildAuthEnvelope,
   generateEphemeralEd25519Keypair,
@@ -72,7 +72,8 @@ const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
 const elements = {};
 let renderHook = () => {};
-let bootstrapped = false;
+let bootstrapped = false; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
+export const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args); export const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
 const HELLO_ACK_TIMEOUT_MS = 2000;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
@@ -1134,7 +1135,7 @@ function scheduleHelloAckTimeout(targetSocket) {
 }
 
 function sendInitialSnapshotRequest() {
-  sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
+  sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] }); worldFeedTransport.requestWorldFeed({ cursor: null });
   sendJson({ type: "request_snapshot" });
 }
 
@@ -1383,10 +1384,7 @@ function handleSnapshot(snapshot) {
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
-  syncEmptyEntitySnapshotRefreshLoop();
-  if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
-    clearFirstAgentClaimAutoAdvanceTimers();
-  }
+  syncEmptyEntitySnapshotRefreshLoop(); if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) { clearFirstAgentClaimAutoAdvanceTimers(); } worldFeedTransport.refreshAfterSnapshot();
 }
 
 function normalizedGameplayActions(snapshot = state.snapshot) {
@@ -3478,6 +3476,7 @@ function handleViewerMessage(message) {
     case "snapshot":
       handleSnapshot(message.snapshot);
       break;
+    case "world_feed": worldFeedTransport.handleWorldFeed(message.feed); break;
     case "event": {
       addRecentEvent(message.event);
       const chatEntry = extractAgentSpokeEntry(message.event);

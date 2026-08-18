@@ -401,10 +401,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(nav).getByRole("link", { name: "World" })).toHaveAttribute("href", "#viewer-stage-panel");
     expect(within(nav).getByRole("link", { name: "Targets" })).toHaveAttribute("href", "#viewer-targets-panel");
     expect(within(nav).getByRole("link", { name: "Command" })).toHaveAttribute("href", "#viewer-details-panel");
-    expect(within(nav).getByRole("link", { name: "Diagnostics" })).toHaveAttribute(
-      "href",
-      "#viewer-diagnostics-panel",
-    );
+    expect(screen.getByRole("button", { name: "More" })).toHaveAttribute("aria-controls", "viewer-diagnostics-panel");
 
     const targetsPanel = container.querySelector("#viewer-targets-panel");
     const stagePanel = container.querySelector("#viewer-stage-panel");
@@ -3265,7 +3262,8 @@ describe("viewer web ui automation baseline", () => {
     expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeUndefined();
     expect(container).not.toHaveAttribute("data-viewer-visual-fixture");
     expect(document.body).not.toHaveAttribute("data-viewer-visual-fixture");
-    expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
+    expect(container.querySelector("#viewer-gameplay-details")).not.toHaveAttribute("open");
+    expect(container.querySelector("#viewer-gameplay-details")).toHaveProperty("open", false);
     expect(container.querySelector("#viewer-diagnostics-panel")).not.toHaveAttribute("open");
     expect(elementPrecedes(
       container.querySelector(".stage-hero"),

@@ -1,6 +1,7 @@
 import { createMutable } from "solid-js/store";
 import { createInitialHostedLoginState } from "./viewer_hosted_login_state_module.js";
 import { VIEWER_RENDER_MODE } from "./software_safe_constants.js";
+import { createInitialWorldFeedState } from "./world_feed_state.js";
 
 export function createSoftwareSafeState() {
   return createMutable({
@@ -65,6 +66,7 @@ export function createSoftwareSafeState() {
     },
     snapshot: null,
     metrics: null,
+    worldFeed: createInitialWorldFeedState(),
     hostedAccess: null,
     hostedAdmission: null,
     recentEvents: [],

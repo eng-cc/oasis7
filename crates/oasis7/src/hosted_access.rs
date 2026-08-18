@@ -299,6 +299,7 @@ pub(super) fn web_launcher_public_endpoints() -> &'static [&'static str] {
         "/api/public/player-session/issue",
         "/api/public/player-session/release",
         "/api/public/strong-auth/grant",
+        "/api/public/director/capability",
         "/api/chain/transfer",
         "/api/chain/transfer/accounts",
         "/api/chain/transfer/status",
@@ -489,6 +490,11 @@ mod tests {
             !web_launcher_public_endpoints()
                 .contains(&"/api/public/strong-auth/grant/prompt-control")
         );
+    }
+
+    #[test]
+    fn web_launcher_public_endpoints_expose_director_capability_status_route() {
+        assert!(web_launcher_public_endpoints().contains(&"/api/public/director/capability"));
     }
 
     #[test]

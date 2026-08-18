@@ -664,7 +664,7 @@ fn rust_host_state_shows_pending_claim_receipt_for_empty_world_onboarding() {
 
     assert_eq!(receipt["present"], true);
     assert_eq!(receipt["state"], "accepted");
-    assert_eq!(receipt["confidence"], "world_delta");
+    assert_eq!(receipt["confidence"], "accepted_intent");
     assert_eq!(receipt["title"], "Action accepted");
     assert!(
         receipt["summary"]
@@ -681,4 +681,57 @@ fn rust_host_state_shows_pending_claim_receipt_for_empty_world_onboarding() {
     assert_eq!(receipt["target_agent_id"], "starter-agent-0");
     assert_eq!(blocker_highlight["kind"], "runtime_snapshot_empty_entities");
     assert_eq!(blocker_highlight["label"], "Claim the first Agent");
+}
+
+#[test]
+fn rust_host_state_keeps_acknowledgement_receipts_pending_until_committed_world_delta() {
+    for stage in ["accepted", "submitted", "queued", "ack"] {
+        let mut input = sample_input();
+        input["gameplay"]["executionState"] = json!(stage);
+        input["gameplay"]["executionStateLabel"] = json!(stage);
+        input["gameplay"]["lastWorldChange"] = Value::Null;
+        input["gameplay"]["recentFeedback"] = json!({
+            "action": "build_factory_smelter_mk1",
+            "stage": stage,
+            "effect": "build request accepted by runtime; waiting for committed snapshot",
+            "reason": Value::Null,
+            "hint": "Waiting for the committed world snapshot.",
+            "deltaLogicalTime": 0,
+            "deltaEventSeq": Value::Null
+        });
+
+        let receipt = build_render_state(&input)["commercial_surface"]["action_receipt"].clone();
+        assert_eq!(
+            receipt["present"], true,
+            "{stage} remains an explicit receipt"
+        );
+        assert_eq!(receipt["state"], stage);
+        assert_eq!(
+            receipt["confidence"], "accepted_intent",
+            "{stage} is not committed"
+        );
+        assert_eq!(receipt["delta_logical_time"], 0);
+        assert!(receipt["delta_event_seq"].is_null());
+    }
+
+    let mut stale_pending_delta = sample_input();
+    stale_pending_delta["gameplay"]["executionState"] = json!("ack");
+    stale_pending_delta["gameplay"]["lastWorldChange"] = Value::Null;
+    stale_pending_delta["gameplay"]["recentFeedback"] = json!({
+        "action": "build_factory_smelter_mk1",
+        "stage": "ack",
+        "effect": "ack payload included a sequence before completion",
+        "deltaLogicalTime": 4,
+        "deltaEventSeq": 9
+    });
+    let stale_receipt =
+        build_render_state(&stale_pending_delta)["commercial_surface"]["action_receipt"].clone();
+    assert_eq!(stale_receipt["confidence"], "accepted_intent");
+
+    let committed =
+        build_render_state(&sample_input())["commercial_surface"]["action_receipt"].clone();
+    assert_eq!(committed["state"], "blocked");
+    assert_eq!(committed["confidence"], "world_delta");
+    assert_eq!(committed["delta_logical_time"], 1);
+    assert_eq!(committed["delta_event_seq"], 2);
 }

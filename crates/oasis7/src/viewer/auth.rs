@@ -62,6 +62,9 @@ mod market_quote_decision;
 pub use market_quote_decision::{
     sign_market_quote_decision_auth_proof, verify_market_quote_decision_auth_proof,
 };
+#[path = "auth_director_capability.rs"]
+mod director_capability;
+pub use director_capability::{sign_director_capability_grant, verify_director_capability_grant};
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
 pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =

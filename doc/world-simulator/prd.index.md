@@ -95,7 +95,7 @@
 | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | GitHub Issue / Project evidence |
+| `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | historical EGUI trace only; not a current layout authority |
 | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.prd.md` | `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.design.md` | historical trace: completed 2026-02-28 / Git history and GitHub task evidence |
 | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.design.md` | historical trace: `task_40310c312e9f4681805b5b74b30cac9a` / `.pm/github-project-sync/task-archive.jsonl` |
