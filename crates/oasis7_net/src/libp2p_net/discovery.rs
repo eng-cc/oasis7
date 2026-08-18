@@ -42,6 +42,7 @@ const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_p
 pub(super) enum PendingPeerRecordRequest {
     ConnectedPeerRecord {
         peer_id: PeerId,
+        target_owned_route_expected: bool,
     },
     CachedPeerRecord {
         ask_peer: PeerId,
@@ -147,6 +148,7 @@ pub(super) fn handle_routing_updated(
             event_traffic_metrics,
             peer,
             local_peer_id,
+            peer_record_template.is_some(),
         );
     }
 }
@@ -336,6 +338,7 @@ pub(super) fn maybe_request_connected_peer_record(
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     peer_id: PeerId,
     local_peer_id: PeerId,
+    target_owned_route_expected: bool,
 ) -> bool {
     let now_ms = super::now_ms();
     if peer_id == local_peer_id
@@ -356,7 +359,10 @@ pub(super) fn maybe_request_connected_peer_record(
     note_peer_record_request_cooldown(connected_peer_record_cooldowns, peer_id, now_ms);
     pending_peer_record_requests.insert(
         request_id,
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id },
+        PendingPeerRecordRequest::ConnectedPeerRecord {
+            peer_id,
+            target_owned_route_expected,
+        },
     );
     true
 }
@@ -752,7 +758,7 @@ pub(super) fn handle_peer_record_response(
         pending_cached_discovery_peers,
     );
     let requested_peer_id = match &kind {
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id }
+        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id, .. }
         | PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => *peer_id,
         PendingPeerRecordRequest::CachedPeerRecord { peer_id, .. } => *peer_id,
     };
@@ -911,19 +917,24 @@ pub(super) fn handle_peer_record_outbound_failure(
         pending_cached_discovery_peers,
     );
     match kind {
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
+        PendingPeerRecordRequest::ConnectedPeerRecord {
+            peer_id,
+            target_owned_route_expected,
+        } => {
             connected_peer_record_cooldowns.remove(&peer_id);
             cached_peer_record_cooldowns.remove(&peer_id);
-            let _ = maybe_request_cached_peer_record(
-                swarm,
-                pending_peer_record_requests,
-                pending_cached_peer_records,
-                cached_peer_record_cooldowns,
-                traffic_metrics,
-                connected_peers,
-                peer_id,
-                local_peer_id,
-            );
+            if !target_owned_route_expected {
+                let _ = maybe_request_cached_peer_record(
+                    swarm,
+                    pending_peer_record_requests,
+                    pending_cached_peer_records,
+                    cached_peer_record_cooldowns,
+                    traffic_metrics,
+                    connected_peers,
+                    peer_id,
+                    local_peer_id,
+                );
+            }
         }
         PendingPeerRecordRequest::CachedPeerRecord {
             peer_id,
@@ -963,7 +974,7 @@ pub(super) fn clear_pending_peer_record_request(
     pending_cached_discovery_peers: &mut HashSet<PeerId>,
 ) {
     match kind {
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
+        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id, .. } => {
             pending_connected_peer_records.remove(peer_id);
         }
         PendingPeerRecordRequest::CachedPeerRecord { peer_id, .. } => {
