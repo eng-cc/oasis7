@@ -1001,6 +1001,8 @@ mod tests {
             output_ledger: MaterialLedgerId::world(),
             bottleneck_tags: Vec::new(),
             market_quotes: Vec::new(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
             ready_at: 99,
         };
         let completed = RuntimeDomainEvent::RecipeCompleted {
@@ -1013,6 +1015,8 @@ mod tests {
             byproducts: Vec::new(),
             output_ledger: MaterialLedgerId::world(),
             bottleneck_tags: Vec::new(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
         };
 
         for (event, expected_kind) in [

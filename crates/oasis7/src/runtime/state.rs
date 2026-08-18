@@ -55,6 +55,14 @@ fn default_world_material_ledger() -> MaterialLedgerId {
     MaterialLedgerId::world()
 }
 
+fn default_logistics_route_available() -> bool {
+    true
+}
+
+fn default_logistics_capacity_units() -> i64 {
+    i64::MAX
+}
+
 fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<String, i64>> {
     let mut ledgers = BTreeMap::new();
     ledgers.insert(MaterialLedgerId::world(), BTreeMap::new());
@@ -101,6 +109,7 @@ pub enum FactoryProductionStatus {
     Idle,
     Running,
     Blocked,
+    Paused,
 }
 
 impl Default for FactoryProductionStatus {
@@ -137,6 +146,8 @@ pub struct FactoryProductionState {
     pub last_completed_recipe_id: Option<String>,
     #[serde(default)]
     pub same_recipe_repeat_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_completed_canonical_snapshot: Option<FactoryProductionSnapshot>,
 }
 
 impl Default for FactoryProductionState {
@@ -155,8 +166,71 @@ impl Default for FactoryProductionState {
             completed_jobs: 0,
             last_completed_recipe_id: None,
             same_recipe_repeat_count: 0,
+            last_completed_canonical_snapshot: None,
         }
     }
+}
+
+/// Stable prerequisite facts for the latest completed recipe on a factory.
+///
+/// This snapshot intentionally excludes transient execution details such as
+/// duration/ETA, live balances, and market quotes.  The factory containing it
+/// is the partition key for the candidate window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct FactoryProductionSnapshot {
+    #[serde(default)]
+    pub recipe_id: String,
+    #[serde(default)]
+    pub consume: Vec<MaterialStack>,
+    #[serde(default)]
+    pub consume_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub power_required: i64,
+    #[serde(default)]
+    pub output_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub bottleneck_tags: Vec<String>,
+    #[serde(default)]
+    pub logistics_route_ids: Vec<String>,
+    #[serde(default)]
+    pub logistics_path_ids: Vec<String>,
+}
+
+impl FactoryProductionSnapshot {
+    fn from_recipe_job(job: &RecipeJobState) -> Self {
+        Self {
+            recipe_id: job.recipe_id.clone(),
+            consume: normalize_material_stacks(&job.consume),
+            consume_ledger: job.consume_ledger.clone(),
+            power_required: job.power_required,
+            output_ledger: job.output_ledger.clone(),
+            bottleneck_tags: normalize_bottleneck_tags(&job.bottleneck_tags),
+            logistics_route_ids: job.logistics_route_ids.clone(),
+            logistics_path_ids: job.logistics_path_ids.clone(),
+        }
+    }
+}
+
+fn normalize_material_stacks(stacks: &[MaterialStack]) -> Vec<MaterialStack> {
+    let mut merged = BTreeMap::<String, i64>::new();
+    for stack in stacks {
+        let kind = stack.kind.trim().to_ascii_lowercase();
+        let amount = merged.entry(kind).or_default();
+        *amount = amount.saturating_add(stack.amount);
+    }
+    merged
+        .into_iter()
+        .map(|(kind, amount)| MaterialStack::new(kind, amount))
+        .collect()
+}
+
+fn normalize_bottleneck_tags(tags: &[String]) -> Vec<String> {
+    tags.iter()
+        .map(|tag| tag.trim().to_ascii_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// Persisted factory instance state.
@@ -208,6 +282,10 @@ pub struct RecipeJobState {
     pub output_ledger: MaterialLedgerId,
     #[serde(default)]
     pub bottleneck_tags: Vec<String>,
+    #[serde(default)]
+    pub logistics_route_ids: Vec<String>,
+    #[serde(default)]
+    pub logistics_path_ids: Vec<String>,
     pub ready_at: WorldTime,
 }
 
@@ -224,7 +302,64 @@ pub struct MaterialTransitJobState {
     pub loss_bps: i64,
     #[serde(default)]
     pub priority: MaterialTransitPriority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default)]
+    pub route_ids: Vec<String>,
+    #[serde(default)]
+    pub tariff_electricity_total: i64,
+    #[serde(default)]
+    pub reroute_count: u32,
     pub ready_at: WorldTime,
+}
+
+/// Immutable material-transit route authority persisted by the world runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogisticsRouteV1 {
+    pub route_id: String,
+    pub from_ledger: MaterialLedgerId,
+    pub to_ledger: MaterialLedgerId,
+    pub kind: String,
+    pub distance_km: i64,
+    pub priority: MaterialTransitPriority,
+    #[serde(default)]
+    pub owner_agent_id: String,
+    #[serde(default = "default_logistics_route_available")]
+    pub available: bool,
+    #[serde(default = "default_logistics_capacity_units")]
+    pub capacity_units: i64,
+    #[serde(default)]
+    pub reserved_capacity_units: i64,
+    #[serde(default)]
+    pub tariff_electricity_per_unit: i64,
+}
+
+/// Completed path authority used by recipe bindings and replay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogisticsPathAuthorityV1 {
+    pub path_id: String,
+    pub route_ids: Vec<String>,
+    pub from_ledger: MaterialLedgerId,
+    pub to_ledger: MaterialLedgerId,
+    pub kind: String,
+}
+
+/// Persisted one-time settlement receipt for a material transit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LogisticsSettlementReceiptV1 {
+    pub job_id: ActionId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default)]
+    pub route_ids: Vec<String>,
+    #[serde(default)]
+    pub tariff_electricity_total: i64,
+    #[serde(default)]
+    pub owner_payouts: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub governance_tax_electricity: i64,
 }
 
 /// Lightweight observability state for industry progression and market snapshots.
@@ -413,6 +548,16 @@ pub struct WorldState {
     #[serde(default)]
     pub material_profiles: BTreeMap<String, MaterialProfileV1>,
     #[serde(default)]
+    pub logistics_routes: BTreeMap<String, LogisticsRouteV1>,
+    #[serde(default)]
+    pub completed_logistics_route_ids: BTreeSet<String>,
+    #[serde(default)]
+    pub completed_logistics_paths: BTreeMap<String, LogisticsPathAuthorityV1>,
+    #[serde(default)]
+    pub settled_logistics_transit_ids: BTreeSet<ActionId>,
+    #[serde(default)]
+    pub logistics_settlement_receipts: BTreeMap<ActionId, LogisticsSettlementReceiptV1>,
+    #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_product_validation: Option<LastProductValidationState>,
@@ -555,6 +700,11 @@ impl Default for WorldState {
             materials: BTreeMap::new(),
             material_ledgers: default_material_ledgers(),
             material_profiles: BTreeMap::new(),
+            logistics_routes: BTreeMap::new(),
+            completed_logistics_route_ids: BTreeSet::new(),
+            completed_logistics_paths: BTreeMap::new(),
+            settled_logistics_transit_ids: BTreeSet::new(),
+            logistics_settlement_receipts: BTreeMap::new(),
             product_profiles: BTreeMap::new(),
             latest_product_validation: None,
             recipe_profiles: BTreeMap::new(),
@@ -946,6 +1096,9 @@ impl WorldState {
             | DomainEvent::PowerRedeemed { .. }
             | DomainEvent::PowerRedeemRejected { .. }
             | DomainEvent::NodePointsSettlementApplied { .. }
+            | DomainEvent::LogisticsRouteRegistered { .. }
+            | DomainEvent::LogisticsRouteAvailabilityChanged { .. }
+            | DomainEvent::LogisticsPathRerouted { .. }
             | DomainEvent::MaterialTransferred { .. }
             | DomainEvent::MaterialTransitStarted { .. }
             | DomainEvent::MaterialTransitCompleted { .. }
@@ -958,6 +1111,7 @@ impl WorldState {
             | DomainEvent::RecipeCompleted { .. }
             | DomainEvent::FactoryProductionBlocked { .. }
             | DomainEvent::FactoryProductionResumed { .. }
+            | DomainEvent::FactoryProductionPaused { .. }
             | DomainEvent::MaterialProfileGoverned { .. }
             | DomainEvent::ProductProfileGoverned { .. }
             | DomainEvent::RecipeProfileGoverned { .. }

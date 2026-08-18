@@ -802,6 +802,9 @@ impl WorldState {
             | event @ DomainEvent::RestrictedStarterClaimGrantIssued { .. }
             | event @ DomainEvent::RestrictedStarterClaimGrantExpired { .. }
             | event @ DomainEvent::RestrictedStarterClaimGrantRevoked { .. }
+            | event @ DomainEvent::LogisticsRouteRegistered { .. }
+            | event @ DomainEvent::LogisticsRouteAvailabilityChanged { .. }
+            | event @ DomainEvent::LogisticsPathRerouted { .. }
             | event @ DomainEvent::MaterialTransferred { .. }
             | event @ DomainEvent::MaterialTransitStarted { .. }
             | event @ DomainEvent::MaterialTransitCompleted { .. }
@@ -814,6 +817,7 @@ impl WorldState {
             | event @ DomainEvent::RecipeCompleted { .. }
             | event @ DomainEvent::FactoryProductionBlocked { .. }
             | event @ DomainEvent::FactoryProductionResumed { .. }
+            | event @ DomainEvent::FactoryProductionPaused { .. }
             | event @ DomainEvent::MaterialProfileGoverned { .. }
             | event @ DomainEvent::ProductProfileGoverned { .. }
             | event @ DomainEvent::RecipeProfileGoverned { .. }

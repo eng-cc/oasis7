@@ -241,6 +241,8 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
         factory_id: "factory.recipe".to_string(),
         recipe_id: "recipe.motor.mk1".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
 
     world.step().expect("start recipe");
@@ -322,6 +324,8 @@ fn schedule_recipe_reads_and_writes_site_material_ledger() {
         factory_id: "factory.site.ledger".to_string(),
         recipe_id: "recipe.site.ledger".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
 
     world.step().expect("start recipe");
@@ -360,6 +364,9 @@ fn transfer_material_distance_zero_moves_immediately() {
         amount: 8,
         distance_km: 0,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("transfer material");
 
@@ -403,6 +410,9 @@ fn transfer_material_cross_site_creates_transit_and_applies_loss() {
         amount: 100,
         distance_km: 200,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("start transit");
 
@@ -464,6 +474,9 @@ fn transfer_material_rejects_when_distance_exceeds_limit() {
         amount: 5,
         distance_km: 20_001,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("reject out of range");
 
@@ -501,6 +514,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.submit_action(Action::TransferMaterial {
         requester_agent_id: "operator-a".to_string(),
@@ -510,6 +526,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.submit_action(Action::TransferMaterial {
         requester_agent_id: "operator-a".to_string(),
@@ -519,6 +538,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
 
     world.step().expect("process transfer actions");
@@ -585,6 +607,8 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
         factory_id: "factory.slot".to_string(),
         recipe_id: "recipe.a".to_string(),
         plan: plan_a,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("start recipe a");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
@@ -602,6 +626,8 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
         factory_id: "factory.slot".to_string(),
         recipe_id: "recipe.b".to_string(),
         plan: plan_b,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("reject recipe b");
 

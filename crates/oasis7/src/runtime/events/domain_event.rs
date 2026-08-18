@@ -1,5 +1,12 @@
 use super::*;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LogisticsOwnerPayout {
+    pub owner_agent_id: String,
+    #[serde(default)]
+    pub electricity: i64,
+}
+
 /// Domain events that describe state changes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -483,6 +490,55 @@ pub enum DomainEvent {
         distance_km: i64,
         #[serde(default = "default_material_transit_priority")]
         priority: MaterialTransitPriority,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route_id: Option<String>,
+    },
+    LogisticsRouteRegistered {
+        requester_agent_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route_id: Option<String>,
+        from_ledger: MaterialLedgerId,
+        to_ledger: MaterialLedgerId,
+        kind: String,
+        distance_km: i64,
+        #[serde(default = "default_material_transit_priority")]
+        priority: MaterialTransitPriority,
+        #[serde(default)]
+        owner_agent_id: String,
+        #[serde(default = "default_logistics_route_available")]
+        available: bool,
+        #[serde(default = "default_logistics_capacity_units")]
+        capacity_units: i64,
+        #[serde(default)]
+        tariff_electricity_per_unit: i64,
+    },
+    LogisticsRouteAvailabilityChanged {
+        requester_agent_id: String,
+        route_id: String,
+        available: bool,
+        #[serde(default)]
+        owner_agent_id: String,
+    },
+    LogisticsPathRerouted {
+        requester_agent_id: String,
+        job_id: ActionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original_path_id: Option<String>,
+        #[serde(default)]
+        original_route_ids: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effective_path_id: Option<String>,
+        #[serde(default)]
+        effective_route_ids: Vec<String>,
+        reason: String,
+        #[serde(default)]
+        reroute_count: u32,
+        #[serde(default)]
+        tariff_electricity_total: i64,
+        #[serde(default)]
+        owner_payouts: Vec<LogisticsOwnerPayout>,
+        #[serde(default)]
+        governance_tax_electricity: i64,
     },
     MaterialTransitStarted {
         job_id: ActionId,
@@ -496,6 +552,16 @@ pub enum DomainEvent {
         ready_at: WorldTime,
         #[serde(default = "default_material_transit_priority")]
         priority: MaterialTransitPriority,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path_id: Option<String>,
+        #[serde(default)]
+        route_ids: Vec<String>,
+        #[serde(default)]
+        tariff_electricity_total: i64,
+        #[serde(default)]
+        reroute_count: u32,
     },
     MaterialTransitCompleted {
         job_id: ActionId,
@@ -509,6 +575,16 @@ pub enum DomainEvent {
         distance_km: i64,
         #[serde(default = "default_material_transit_priority")]
         priority: MaterialTransitPriority,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path_id: Option<String>,
+        #[serde(default)]
+        route_ids: Vec<String>,
+        #[serde(default)]
+        tariff_electricity_total: i64,
+        #[serde(default)]
+        reroute_count: u32,
     },
     FactoryBuildStarted {
         job_id: ActionId,
@@ -566,6 +642,10 @@ pub enum DomainEvent {
         bottleneck_tags: Vec<String>,
         #[serde(default)]
         market_quotes: Vec<MaterialMarketQuote>,
+        #[serde(default)]
+        logistics_route_ids: Vec<String>,
+        #[serde(default)]
+        logistics_path_ids: Vec<String>,
         ready_at: WorldTime,
     },
     RecipeCompleted {
@@ -580,6 +660,10 @@ pub enum DomainEvent {
         output_ledger: MaterialLedgerId,
         #[serde(default)]
         bottleneck_tags: Vec<String>,
+        #[serde(default)]
+        logistics_route_ids: Vec<String>,
+        #[serde(default)]
+        logistics_path_ids: Vec<String>,
     },
     FactoryProductionBlocked {
         action_id: ActionId,
@@ -600,6 +684,12 @@ pub enum DomainEvent {
         previous_blocker_kind: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         previous_blocker_detail: Option<String>,
+    },
+    FactoryProductionPaused {
+        action_id: ActionId,
+        requester_agent_id: String,
+        factory_id: String,
+        reason: String,
     },
     GameplayPolicyUpdated {
         operator_agent_id: String,
@@ -892,6 +982,15 @@ impl DomainEvent {
             DomainEvent::MaterialTransferred {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
+            DomainEvent::LogisticsRouteRegistered {
+                requester_agent_id, ..
+            } => Some(requester_agent_id.as_str()),
+            DomainEvent::LogisticsRouteAvailabilityChanged {
+                requester_agent_id, ..
+            } => Some(requester_agent_id.as_str()),
+            DomainEvent::LogisticsPathRerouted {
+                requester_agent_id, ..
+            } => Some(requester_agent_id.as_str()),
             DomainEvent::MaterialTransitStarted {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
@@ -921,6 +1020,9 @@ impl DomainEvent {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
             DomainEvent::FactoryProductionResumed {
+                requester_agent_id, ..
+            } => Some(requester_agent_id.as_str()),
+            DomainEvent::FactoryProductionPaused {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
             DomainEvent::GameplayPolicyUpdated {

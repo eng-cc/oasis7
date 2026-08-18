@@ -1168,6 +1168,8 @@ fn runtime_simulator_action_mapping_includes_industrial_actions() {
                 18,
                 1,
             ),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
         }
     );
 

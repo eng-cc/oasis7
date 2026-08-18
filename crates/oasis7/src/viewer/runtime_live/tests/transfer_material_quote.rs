@@ -186,6 +186,9 @@ fn runtime_transfer_material_quote_surfaces_capacity_and_source_recommendations(
                 amount: 20,
                 distance_km: 200,
                 priority: None,
+                route_id: None,
+                route_ids: Vec::new(),
+                auto_reroute: false,
             });
     }
     server
