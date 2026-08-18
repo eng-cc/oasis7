@@ -85,6 +85,11 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::AgentClaimReleased { .. } => "domain.gameplay.agent_claim_released",
             DomainEvent::AgentClaimReclaimed { .. } => "domain.gameplay.agent_claim_reclaimed",
             DomainEvent::MaterialTransferred { .. } => "domain.material_transferred",
+            DomainEvent::LogisticsRouteRegistered { .. } => "domain.logistics_route_registered",
+            DomainEvent::LogisticsRouteAvailabilityChanged { .. } => {
+                "domain.logistics_route_availability_changed"
+            }
+            DomainEvent::LogisticsPathRerouted { .. } => "domain.logistics_path_rerouted",
             DomainEvent::MaterialTransitStarted { .. } => "domain.material_transit_started",
             DomainEvent::MaterialTransitCompleted { .. } => "domain.material_transit_completed",
             DomainEvent::FactoryBuildStarted { .. } => "domain.economy.factory_build_started",
@@ -101,6 +106,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             }
             DomainEvent::FactoryProductionResumed { .. } => {
                 "domain.economy.factory_production_resumed"
+            }
+            DomainEvent::FactoryProductionPaused { .. } => {
+                "domain.economy.factory_production_paused"
             }
             DomainEvent::GameplayPolicyUpdated { .. } => "domain.gameplay.policy_updated",
             DomainEvent::EconomicContractOpened { .. } => {
@@ -234,6 +242,8 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::ClaimStarterOc { .. } => "action.gameplay.claim_starter_oc",
         Action::ReleaseAgentClaim { .. } => "action.gameplay.release_agent_claim",
         Action::TransferMaterial { .. } => "action.transfer_material",
+        Action::RegisterLogisticsRoute { .. } => "action.register_logistics_route",
+        Action::SetLogisticsRouteAvailability { .. } => "action.set_logistics_route_availability",
         Action::FormAlliance { .. } => "action.gameplay.form_alliance",
         Action::JoinAlliance { .. } => "action.gameplay.join_alliance",
         Action::LeaveAlliance { .. } => "action.gameplay.leave_alliance",
@@ -268,6 +278,7 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::MaintainFactory { .. } => "action.economy.maintain_factory",
         Action::RecycleFactory { .. } => "action.economy.recycle_factory",
         Action::ScheduleRecipe { .. } => "action.economy.schedule_recipe",
+        Action::PauseFactoryProduction { .. } => "action.economy.pause_factory_production",
         Action::ScheduleRecipeWithModule { .. } => "action.economy.schedule_recipe_with_module",
         Action::ValidateProduct { .. } => "action.economy.validate_product",
         Action::ValidateProductWithModule { .. } => "action.economy.validate_product_with_module",

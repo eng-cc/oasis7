@@ -83,7 +83,7 @@
 | `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` | `doc/world-simulator/llm/provider-agent-dual-mode-contract.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | GitHub Issue / Project evidence |
+| `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`（`PRD-WORLD_SIMULATOR-047`） | `doc/world-simulator/m4/industrial-resource-flow-contract.design.md` | GitHub Issue / Project evidence；上层产品映射 `doc/product/world-rules-core-gameplay/prd.md` SC-21 |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/scenario/chunked-fragment-generation.prd.md` | `doc/world-simulator/scenario/chunked-fragment-generation.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/scenario/scenario-files.prd.md` | `doc/world-simulator/scenario/scenario-files.design.md` | GitHub Issue / Project evidence |
@@ -95,7 +95,7 @@
 | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | GitHub Issue / Project evidence |
+| `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | historical EGUI trace only; not a current layout authority |
 | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.prd.md` | `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.design.md` | historical trace: completed 2026-02-28 / Git history and GitHub task evidence |
 | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.design.md` | historical trace: `task_40310c312e9f4681805b5b74b30cac9a` / `.pm/github-project-sync/task-archive.jsonl` |

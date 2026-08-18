@@ -7,9 +7,12 @@ use super::super::{
 };
 use super::World;
 use super::economy::EconomyActionResolution;
+use super::logistics::logistics_path_id;
 use crate::runtime::EconomicContractFulfillmentKind;
 use crate::runtime::RuntimeCommittedTickContext;
+use crate::runtime::events::LogisticsOwnerPayout;
 use crate::simulator::ResourceKind;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default)]
 struct FactoryProductionFollowupContext {
@@ -21,6 +24,79 @@ struct FactoryProductionFollowupContext {
 }
 
 impl World {
+    fn append_logistics_reroute_receipt(
+        &mut self,
+        action: &Action,
+        event_body: &WorldEventBody,
+    ) -> Result<Option<WorldEvent>, WorldError> {
+        let Action::TransferMaterial {
+            requester_agent_id,
+            route_id,
+            route_ids,
+            ..
+        } = action
+        else {
+            return Ok(None);
+        };
+        let WorldEventBody::Domain(DomainEvent::MaterialTransitStarted {
+            job_id,
+            amount,
+            path_id: effective_path_id,
+            route_ids: effective_route_ids,
+            tariff_electricity_total,
+            reroute_count,
+            ..
+        }) = event_body
+        else {
+            return Ok(None);
+        };
+        if *reroute_count == 0 {
+            return Ok(None);
+        }
+        let mut original_route_ids = route_ids.clone();
+        if original_route_ids.is_empty() {
+            if let Some(route_id) = route_id {
+                original_route_ids.push(route_id.clone());
+            }
+        }
+        let original_path_id = logistics_path_id(&original_route_ids);
+        let mut payout_map = BTreeMap::<String, i64>::new();
+        for route_id in effective_route_ids {
+            if let Some(route) = self.state.logistics_routes.get(route_id) {
+                let payout = route
+                    .tariff_electricity_per_unit
+                    .saturating_mul(*amount)
+                    .max(0);
+                if payout > 0 {
+                    let owner_payout = payout_map.entry(route.owner_agent_id.clone()).or_default();
+                    *owner_payout = owner_payout.saturating_add(payout);
+                }
+            }
+        }
+        let owner_payouts = payout_map
+            .into_iter()
+            .map(|(owner_agent_id, electricity)| LogisticsOwnerPayout {
+                owner_agent_id,
+                electricity,
+            })
+            .collect();
+        let receipt = WorldEventBody::Domain(DomainEvent::LogisticsPathRerouted {
+            requester_agent_id: requester_agent_id.clone(),
+            job_id: *job_id,
+            original_path_id,
+            original_route_ids,
+            effective_path_id: effective_path_id.clone(),
+            effective_route_ids: effective_route_ids.clone(),
+            reason: "requested_path_unavailable_or_capacity_conflicted".to_string(),
+            reroute_count: *reroute_count,
+            tariff_electricity_total: *tariff_electricity_total,
+            owner_payouts,
+            governance_tax_electricity: 0,
+        });
+        self.append_event(receipt, Some(CausedBy::Action(*job_id)))?;
+        Ok(self.journal.events.last().cloned())
+    }
+
     fn should_emit_action_accepted(action: &Action) -> bool {
         if matches!(
             action,
@@ -197,7 +273,10 @@ impl World {
                 }),
             ) => {
                 let context = context?;
-                if context.current_status != Some(FactoryProductionStatus::Blocked) {
+                if !matches!(
+                    context.current_status,
+                    Some(FactoryProductionStatus::Blocked | FactoryProductionStatus::Paused)
+                ) {
                     return None;
                 }
                 Some(DomainEvent::FactoryProductionResumed {
@@ -246,6 +325,7 @@ impl World {
             self.preflight_domain_event(&event_body)?;
             self.append_action_accepted_event(&envelope)?;
             self.append_event(event_body.clone(), Some(CausedBy::Action(envelope.id)))?;
+            let _ = self.append_logistics_reroute_receipt(&envelope.action, &event_body)?;
             let _ = self.append_factory_production_followup_event(
                 &envelope,
                 &event_body,
@@ -404,6 +484,12 @@ impl World {
                                     Some(CausedBy::Action(envelope.id)),
                                 )?;
                                 post_action_result_event = self.journal.events.last().cloned();
+                                if let Some(event) = self.append_logistics_reroute_receipt(
+                                    &action_envelope.action,
+                                    &event_body,
+                                )? {
+                                    self.route_event_to_modules(&event, sandbox)?;
+                                }
                                 if let Some(event) = self.journal.events.last() {
                                     let event = event.clone();
                                     self.route_event_to_modules(&event, sandbox)?;

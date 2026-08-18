@@ -2,8 +2,12 @@ use serde_json::{Map, Value, json};
 
 #[path = "host_micro_depot_projection.rs"]
 mod micro_depot_projection;
+#[path = "host_resource_summary.rs"]
+mod resource_summary_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
+
+use resource_summary_projection::{count_resource_entries, resource_summary};
 
 const FRAGMENT_TERRAIN_PALETTE: &[(&str, [u8; 3])] = &[
     ("silicate_matrix", [126, 144, 99]),
@@ -126,40 +130,6 @@ fn world_center_position(world_bounds: &Value) -> Option<Value> {
         "y_cm": number_key(world_bounds, "depth_cm", 0.0) / 2.0,
         "z_cm": number_key(world_bounds, "height_cm", 0.0) / 2.0,
     }))
-}
-
-fn resource_summary(resources: &Value) -> String {
-    let Some(resources) = resources.as_object() else {
-        return "-".to_string();
-    };
-    let entries: Vec<String> = resources
-        .iter()
-        .map(|(key, value)| {
-            if value.is_object() {
-                format!("{key}:{}", value)
-            } else if let Some(text) = value.as_str() {
-                format!("{key}:{text}")
-            } else {
-                format!("{key}:{value}")
-            }
-        })
-        .collect();
-    if entries.is_empty() {
-        "-".to_string()
-    } else {
-        entries.join(" · ")
-    }
-}
-
-fn count_resource_entries(summary: &str) -> usize {
-    if summary.is_empty() || summary == "-" {
-        return 0;
-    }
-    summary
-        .split(" · ")
-        .map(str::trim)
-        .filter(|entry| !entry.is_empty())
-        .count()
 }
 
 fn agent_power_state(agent: &Value) -> Option<&'static str> {
@@ -615,11 +585,27 @@ fn has_enabled_first_agent_claim(gameplay: &Value) -> bool {
         })
 }
 
+fn has_positive_world_delta(recent_feedback: &Value) -> bool {
+    ["deltaLogicalTime", "deltaEventSeq"]
+        .into_iter()
+        .any(|key| number(obj(recent_feedback, key), 0.0) > 0.0)
+}
+
+fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
+    matches!(
+        stage,
+        Some("accepted" | "submitted" | "queued" | "ack" | "registering" | "signing" | "sent")
+    )
+}
+
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
-    let has_world_delta = str_key(gameplay, "lastWorldChange").is_some()
-        || str_key(recent_feedback, "effect").is_some();
+    let receipt_stage =
+        str_key(gameplay, "executionState").or_else(|| str_key(recent_feedback, "stage"));
+    let has_world_delta = !is_pending_receipt_stage(receipt_stage)
+        && (str_key(gameplay, "lastWorldChange").is_some()
+            || has_positive_world_delta(recent_feedback));
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
         || str_key(gameplay, "acceptedIntentScope").is_some()
         || str_key(gameplay, "acceptedIntentTarget").is_some()
@@ -651,9 +637,7 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     }
     let present =
         has_world_delta || has_player_intent || str_key(recent_feedback, "reason").is_some();
-    let raw_state = str_key(gameplay, "executionState")
-        .or_else(|| str_key(recent_feedback, "stage"))
-        .unwrap_or("waiting_for_intent");
+    let raw_state = receipt_stage.unwrap_or("waiting_for_intent");
     let state = if present {
         raw_state
     } else {

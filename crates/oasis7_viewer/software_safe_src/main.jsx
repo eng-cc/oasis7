@@ -2,7 +2,9 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid
 import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { FirstChatUnlockPreview } from "./first_chat_unlock_preview.jsx";
-import { PixelWorldHost } from "./pixel_world_host.jsx";
+import { PixelWorldHost } from "./pixel_world_host.jsx"; import { WorldFeedSurface } from "./world_feed_integration.jsx";
+import { MobileJumpRail, SecondaryViewerNavigation, focusViewerAnchor, installViewerRouteController } from "./viewer_navigation.jsx";
+import { DirectorEntryCard, DirectorSurface } from "./director_surface.jsx"; import { createViewerDirectorSession } from "./director_viewer_integration.js";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
@@ -24,10 +26,6 @@ function observeViewerStateRevision() {
   viewerStateRevision();
 }
 function uiLocale() { return core.state.uiLocale; }
-function focusViewerAnchor(event) {
-  const href = event.currentTarget.getAttribute("href"); const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
-  if (!target) return; event.preventDefault(); target.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" }); window.history.replaceState(null, "", href);
-}
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
 }
@@ -42,7 +40,6 @@ function buildViewerEntryUrls(locale) {
     softwareSafeUrl: softwareSafeUrl.toString(),
   };
 }
-
 function Badge(props) {
   return <span class={props.class ?? "badge"}>{props.children}</span>;
 }
@@ -2183,8 +2180,8 @@ function WorldStageHero() {
         />
       </Show>
       <div class="stage-hero__mobile-shortcuts" aria-label={tr(locale(), "移动端快速入口", "Mobile quick actions")}>
-        <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "选择目标", "Select Target")}</a>
-        <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "进入指挥", "Command")}</a>
+        <a class="mobile-rail__link" href="#viewer-targets-panel" onClick={focusViewerAnchor}>{tr(locale(), "选择目标", "Select Target")}</a>
+        <a class="mobile-rail__link" href="#viewer-details-panel" onClick={focusViewerAnchor}>{tr(locale(), "进入指挥", "Command")}</a>
       </div>
       <Show when={core.state.connectionStatus !== "connected"}>
         <CalloutCard
@@ -2203,21 +2200,6 @@ function WorldStageHero() {
         </CalloutCard>
       </Show>
     </div>
-  );
-}
-
-function MobileJumpRail() {
-  const locale = () => uiLocale();
-  return (
-    <nav class="mobile-rail" aria-label={tr(locale(), "主入口分区导航", "Primary entry section navigation")}>
-      <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
-      <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
-      <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
-      <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
-        {tr(locale(), "诊断", "Diagnostics")}
-      </a>
-      <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
-    </nav>
   );
 }
 
@@ -2397,7 +2379,7 @@ function TargetsPanel() {
   );
 }
 
-function WorldSummaryPanel() {
+function WorldSummaryPanel(props = {}) {
   observeViewerStateRevision();
   const locale = () => uiLocale();
   const state = core.state;
@@ -2442,7 +2424,7 @@ function WorldSummaryPanel() {
   ];
 
   return (
-    <>
+    <div data-viewer-overlay="world-summary">
       <Show when={!starterOcGateOpen() && starterOcAction(gameplaySummary())}>
         <CalloutCard
           title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
@@ -2452,7 +2434,7 @@ function WorldSummaryPanel() {
           <StarterOcOnboardingPanel gameplay={gameplaySummary()} locale={locale()} />
         </CalloutCard>
       </Show>
-      <details class="gameplay-details-surface" id="viewer-gameplay-details" open>
+      <details class="gameplay-details-surface" id="viewer-gameplay-details">
       <summary class="gameplay-details-surface__summary">
         <div class="diagnostic-surface__title">
           <span>{tr(locale(), "玩法明细", "Gameplay Details")}</span>
@@ -3039,6 +3021,7 @@ function WorldSummaryPanel() {
           </div>
         </summary>
         <div class="panel__body stack">
+          <DirectorEntryCard controller={props.directorController} locale={locale} onRequest={props.onRequestDirector} />
           <div class="badge-row">
             <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
             <Badge>{`entryReason=${state.viewerReason || "-"}`}</Badge>
@@ -3290,7 +3273,7 @@ function WorldSummaryPanel() {
       </details>
       </div>
       </details>
-    </>
+    </div>
   );
 }
 
@@ -3838,16 +3821,22 @@ function DetailsPanel() {
 function AppShell() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
+  const directorSession = createViewerDirectorSession({ core, fetchImpl: window.fetch?.bind(window) });
+  createEffect(() => { observeViewerStateRevision(); directorSession.observeRuntime(); });
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
+  onMount(() => onCleanup(installViewerRouteController()));
   return (
-    <>
-      <MobileJumpRail />
+    <div class="viewer-shell" data-viewer-shell="player-fullscreen">
+      <MobileJumpRail locale={locale} tr={tr} data-viewer-overlay="navigation" />
+      <SecondaryViewerNavigation locale={locale} tr={tr} />
       <HostedLoginGate />
       <StarterOcRequiredGate />
       <section
         class="panel panel--targets"
         id="viewer-targets-panel"
+        data-viewer-route-panel="targets" data-viewer-overlay="targets"
+        tabIndex="-1"
         data-viewer-surface="targets"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3856,6 +3845,9 @@ function AppShell() {
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
           <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div>
+          <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
+            {tr(locale(), "返回世界", "Back to World")}
+          </a>
         </div>
         <div class="panel__body">
           <TargetsPanel />
@@ -3864,6 +3856,7 @@ function AppShell() {
       <section
         class="panel panel--stage"
         id="viewer-stage-panel"
+        tabIndex="-1" data-viewer-map-layer="base"
         data-viewer-surface="stage"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3871,19 +3864,22 @@ function AppShell() {
         <div class="panel__body panel__body--stage">
           <div class="stack">
             <Show when={diagnosticsVisualFixture()}>
-              <WorldSummaryPanel />
+              <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
             <WorldStageHero />
             <PixelWorldHost locale={locale()} />
             <Show when={!diagnosticsVisualFixture()}>
-              <WorldSummaryPanel />
+              <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
+            <WorldFeedSurface core={core} locale={locale} tr={tr} onReloadSnapshot={() => core.reloadWorldFeedFromAuthoritativeSnapshot()} />
           </div>
         </div>
       </section>
       <section
         class="panel panel--details"
         id="viewer-details-panel"
+        data-viewer-route-panel="command" data-viewer-overlay="command"
+        tabIndex="-1"
         data-viewer-surface="command"
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
@@ -3894,12 +3890,16 @@ function AppShell() {
           <div class="panel__meta-copy">
             {tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
           </div>
+          <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
+            {tr(locale(), "返回世界", "Back to World")}
+          </a>
         </div>
         <div class="panel__body">
           <DetailsPanel />
         </div>
       </section>
-    </>
+      <DirectorSurface controller={directorSession.controller} core={core} locale={locale} />
+    </div>
   );
 }
 

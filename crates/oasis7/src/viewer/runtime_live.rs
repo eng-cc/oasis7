@@ -35,6 +35,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tracing::Level;
 mod authoritative;
+mod auto_play;
 mod branch_commitment;
 #[path = "runtime_live/chain_link.rs"]
 mod chain_link;
@@ -85,6 +86,7 @@ mod tests;
 mod transfer_material_quote;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
+mod world_feed;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
@@ -370,6 +372,27 @@ impl ViewerRuntimeLiveServer {
         self.config.hosted_public_join_mode
     }
 
+    /// Validate and consume a server-issued Director visibility grant.
+    ///
+    /// This is deliberately a read-only capability boundary. It does not alter the
+    /// command/auth paths, and consumed nonces live only in the current runtime process;
+    /// the grant itself is never persisted in a recovery generation.
+    pub fn consume_director_capability_grant(
+        &mut self,
+        grant: &crate::viewer::DirectorCapabilityGrant,
+        expected_server: &str,
+        required_signer_public_key: &str,
+        now_unix_ms: u64,
+    ) -> Result<(), String> {
+        self.session_policy
+            .validate_and_consume_director_capability_grant(
+                grant,
+                expected_server,
+                required_signer_public_key,
+                now_unix_ms,
+            )
+    }
+
     fn chain_link_enabled(&self) -> bool {
         self.config
             .chain_status_bind
@@ -380,96 +403,6 @@ impl ViewerRuntimeLiveServer {
 
     fn supports_agent_chat(&self) -> bool {
         self.llm_sidecar.supports_agent_chat() || self.config.agent_chat_echo_enabled
-    }
-
-    fn enable_auto_play_for_session_if_available(&mut self, session: &mut RuntimeLiveSession) {
-        if !self.config.auto_play_on_connect {
-            return;
-        }
-        session.playing = !self.auto_play_paused;
-        session.next_play_step_at = None;
-        session.transient_play_failures = 0;
-    }
-
-    fn pause_auto_play(&mut self, session: &mut RuntimeLiveSession) {
-        self.auto_play_paused = true;
-        session.playing = false;
-        session.next_play_step_at = None;
-    }
-
-    fn resume_auto_play(&mut self, session: &mut RuntimeLiveSession) {
-        self.auto_play_paused = false;
-        session.playing = true;
-        session.next_play_step_at = None;
-        session.transient_play_failures = 0;
-        self.next_auto_play_step_at = None;
-    }
-
-    fn should_advance_auto_play_step(&mut self) -> bool {
-        if !self.config.auto_play_on_connect || self.auto_play_paused {
-            self.next_auto_play_step_at = None;
-            return false;
-        }
-        let now = Instant::now();
-        if let Some(next_step_at) = self.next_auto_play_step_at {
-            if now < next_step_at {
-                return false;
-            }
-        }
-        self.next_auto_play_step_at = Some(now + self.config.play_step_interval);
-        true
-    }
-
-    fn defer_next_auto_play_step_after_completion(&mut self, interval: Duration) {
-        if self.config.auto_play_on_connect && !self.auto_play_paused {
-            self.next_auto_play_step_at = Some(Instant::now() + interval);
-        }
-    }
-
-    fn emit_background_play_snapshot(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if session.explicitly_subscribed_to(ViewerStream::Snapshot)
-            && should_emit_runtime_advance_snapshot(session, "play", false)
-        {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-        }
-        session.metrics = runtime_metrics(&self.world);
-        if session.explicitly_subscribed_to(ViewerStream::Metrics) {
-            send_response(
-                writer,
-                &ViewerResponse::Metrics {
-                    time: Some(self.world.state().time),
-                    metrics: session.metrics.clone(),
-                },
-            )?;
-        }
-        Ok(())
-    }
-
-    fn drive_auto_play(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if !self.config.auto_play_on_connect
-            || self.auto_play_paused
-            || !session.initial_snapshot_sent
-        {
-            return Ok(());
-        }
-        session.playing = true;
-        if self.should_advance_auto_play_step() {
-            let play_step_interval = self.config.play_step_interval;
-            self.advance_runtime(session, writer, "play", 1, None, false)?;
-            self.defer_next_auto_play_step_after_completion(play_step_interval);
-        } else {
-            self.emit_background_play_snapshot(session, writer)?;
-        }
-        Ok(())
     }
 
     fn serve_shared_stream(
@@ -595,6 +528,7 @@ impl ViewerRuntimeLiveServer {
                     | ViewerRequest::HelloV2 { .. }
                     | ViewerRequest::Subscribe { .. }
                     | ViewerRequest::RequestSnapshot
+                    | ViewerRequest::RequestWorldFeed { .. }
             )
         {
             return Err(ViewerRuntimeLiveServerError::Init(
@@ -724,6 +658,16 @@ impl ViewerRuntimeLiveServer {
                 }
                 session.initial_snapshot_sent = true;
                 self.enable_auto_play_for_session_if_available(session);
+            }
+            ViewerRequest::RequestWorldFeed { cursor, limit } => {
+                let feed = world_feed::build_world_feed(
+                    &self.config.world_id,
+                    self.reorg_epoch,
+                    self.world.journal(),
+                    cursor.as_deref(),
+                    limit,
+                );
+                send_response(writer, &ViewerResponse::WorldFeed { feed })?;
             }
             ViewerRequest::PlaybackControl { mode, request_id } => {
                 self.apply_control_mode(ViewerControl::from(mode), request_id, session, writer)?;

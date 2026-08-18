@@ -14,6 +14,11 @@ compare them with a baseline git ref on the same runner family.
 All Cargo invocations are lockfile-pinned so dependency resolution cannot
 silently change the compile surface being measured.
 
+Cargo registry/source downloads use the caller's CARGO_HOME (or the default
+$HOME/.cargo) and are shared by current and baseline measurements. Each
+checkout still receives an isolated target directory so compile timings remain
+cold and comparable.
+
 Required:
   --package <name>          Cargo package to measure.
   --out-dir <dir>           Output directory for JSON/Markdown/log artifacts.
@@ -112,6 +117,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+cargo_home=$(python3 - "$cargo_home" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).expanduser().resolve())
+PY
+)
+
 measure_command_seconds() {
   local checkout_path="$1"
   local target_dir="$2"
@@ -193,8 +207,7 @@ measure_checkout() {
 
   local check_target="$tmp_root/${label}-check-target"
   local release_target="$tmp_root/${label}-release-target"
-  local cargo_home="$tmp_root/${label}-cargo-home"
-  mkdir -p "$check_target" "$release_target" "$cargo_home"
+  mkdir -p "$check_target" "$release_target"
 
   local package_count
   local tree_args=(cargo tree --locked -p "$package_name")
@@ -203,12 +216,14 @@ measure_checkout() {
   fi
   package_count=$(
     cd "$checkout_path"
+    export CARGO_HOME="$cargo_home"
     "${tree_args[@]}" --prefix none | sort -u | wc -l | tr -d '[:space:]'
   )
 
   local wasmtime_present="false"
   if (
     cd "$checkout_path"
+    export CARGO_HOME="$cargo_home"
     "${tree_args[@]}" -i wasmtime >/dev/null 2>&1
   ); then
     wasmtime_present="true"
@@ -217,6 +232,7 @@ measure_checkout() {
   local wasm_executor_present="false"
   if (
     cd "$checkout_path"
+    export CARGO_HOME="$cargo_home"
     "${tree_args[@]}" -i oasis7_wasm_executor >/dev/null 2>&1
   ); then
     wasm_executor_present="true"

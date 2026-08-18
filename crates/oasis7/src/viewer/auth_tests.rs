@@ -188,6 +188,79 @@ fn hosted_prompt_control_strong_auth_grant_roundtrip() {
 }
 
 #[test]
+fn director_capability_grant_sign_and_verify_binds_session_scope() {
+    let (player_public_key, _) = test_signer_with_seed(11);
+    let (backend_public_key, backend_private_key) = test_signer_with_seed(12);
+    let grant = sign_director_capability_grant(
+        "player-a",
+        player_public_key.as_str(),
+        "viewer-live-1",
+        4,
+        "director-nonce-1",
+        1_000,
+        2_000,
+        backend_public_key.as_str(),
+        backend_private_key.as_str(),
+    )
+    .expect("sign director capability grant");
+    verify_director_capability_grant(
+        &grant,
+        "player-a",
+        player_public_key.as_str(),
+        "viewer-live-1",
+        4,
+        backend_public_key.as_str(),
+        1_500,
+    )
+    .expect("verify director capability grant");
+}
+
+#[test]
+fn director_capability_grant_rejects_scope_ttl_and_expiry_violations() {
+    let (player_public_key, _) = test_signer_with_seed(13);
+    let (backend_public_key, backend_private_key) = test_signer_with_seed(14);
+    let grant = sign_director_capability_grant(
+        "player-a",
+        player_public_key.as_str(),
+        "viewer-live-1",
+        4,
+        "director-nonce-2",
+        1_000,
+        61_001,
+        backend_public_key.as_str(),
+        backend_private_key.as_str(),
+    )
+    .expect_err("director grant TTL above 60s must be rejected before signing");
+    assert!(grant.contains("TTL"));
+
+    let valid = sign_director_capability_grant(
+        "player-a",
+        player_public_key.as_str(),
+        "viewer-live-1",
+        4,
+        "director-nonce-3",
+        1_000,
+        2_000,
+        backend_public_key.as_str(),
+        backend_private_key.as_str(),
+    )
+    .expect("sign valid director capability grant");
+    let mut tampered = valid.clone();
+    tampered.scope = "diagnostics_write".to_string();
+    let err = verify_director_capability_grant(
+        &tampered,
+        "player-a",
+        player_public_key.as_str(),
+        "viewer-live-1",
+        4,
+        backend_public_key.as_str(),
+        1_500,
+    )
+    .expect_err("director scope must be fixed and signature-bound");
+    assert!(err.contains("scope") || err.contains("signature"));
+}
+
+#[test]
 fn hosted_prompt_control_strong_auth_grant_rejects_request_mismatch() {
     let (player_public_key, _) = test_signer();
     let (backend_public_key, backend_private_key) = test_signer_with_seed(10);

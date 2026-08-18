@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "fc8461094b30b1cf90c75528d9f3d777d53c717418103a790c895e175da640ae"
+      "content_sha256": "5b4f88e47cc603bf532db69d49117425b2e4475ddac85d4c9bdf8509eba4a552"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -399,7 +399,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "43ee2b6b92120ed5e5efff96d7c87f0da292e56984e6f4576e5ecd2ba5f0ef81",
+      "content_sha256": "21d1b45f99064746ecd7d1d223ebe4e4e46d7239d835261c027eadf6d3f0a5be",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -413,7 +413,7 @@
     },
     {
       "path": "doc/game/README.md",
-      "content_sha256": "cc70621c866db61dc591daa229efaaaad74c5b0f6a42dec6a8fbf6f9ed2a389c",
+      "content_sha256": "7e82329a9bf141c80055e717dd7894b0f3d4bfc597795ca12f0682095be7d052",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -539,7 +539,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md",
-      "content_sha256": "1e05016243219a3f355597eaa79f26ba080289927b4469014bd18a0979f7b049",
+      "content_sha256": "42a902afe996c57ab05c3c7032647501e57e593351f5afc3b3fc19e264b2ef4e",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -553,7 +553,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md",
-      "content_sha256": "ce66f533c375eaddfabc41147ec80c61d47d833375bd6a6e8ef74b7687597df1",
+      "content_sha256": "54b50ce06851135ec0bbb95dabfcb261f7509ecfafc47df9a0b90158a58cfe0a",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -581,7 +581,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-top-level-design.prd.md",
-      "content_sha256": "7e873768a00127d0ccecbab361d3f7f649436366099bce484ad072d5840f4165",
+      "content_sha256": "3b84de8f1e3fccbe59f6d3d7bf6d22e57eea1c16572ce3b07c36f726d59919b4",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -609,7 +609,7 @@
     },
     {
       "path": "doc/game/prd.index.md",
-      "content_sha256": "731dc9a2f20c9bb820a0a4e4860db7ba2bdda232e99e0efdd3c755c71406b375",
+      "content_sha256": "8bb433ea24f0df9ccd256407157a00379aeea1067653723b2bdc5d0c910a98ff",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -623,7 +623,7 @@
     },
     {
       "path": "doc/game/prd.md",
-      "content_sha256": "192912a5c2f9b90065fd4a44cf3c3f09c605736799a490399acbfcb6dc97e356",
+      "content_sha256": "763be9c3cbd8e0db9b1ee0d3cb2c74ad01ffca2edf87584fe2fe7a5499eb43ec",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -959,7 +959,7 @@
     },
     {
       "path": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
-      "content_sha256": "d181b2632a85a1950c3a01ce28889ca58f236faa7afa7db152c8edcc69db0296",
+      "content_sha256": "00eb11269c5a8b0815241c19e542668824306126173cdd45e8639a9524fbb3f8",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1939,7 +1939,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "8c1ede820f7fb950746a738b2a498b499d051eae60c8dce4cb40d1260fbbccc0",
+      "content_sha256": "3a03d4c108286ce46e99d33c9e38a52eb07f4739a22e87b07e04f40aa40140ee",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1953,7 +1953,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md",
-      "content_sha256": "9201dba29c1046c71ed7e7ad7a8bd710bbe9380fd2bfd85d8d43c6c8bff9b306",
+      "content_sha256": "7ee3d2173ba0cfc8fcbc7830d44eb061d6c29684a0f1f0174426abc5f472d1ac",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1967,7 +1967,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-      "content_sha256": "c22dfb3f284ec41b1481ffec5a48764ff5252babb5b164b50b610642d297b34f",
+      "content_sha256": "e62e60add1158a405c11988a29e0d1f513239a460cb6a48d652af54300770125",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1981,7 +1981,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md",
-      "content_sha256": "533d7b378c8d8d84fa56680f142e7e4af054bc5f9a63ecb5bb3aef1bb768d89b",
+      "content_sha256": "5838af0a6a531fcc65c65e5a4eab977f040082b6a9d4c3216ef19356dc415d78",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2009,7 +2009,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md",
-      "content_sha256": "17272b8b935ada2d40fc928012c4cecf1bcce4f01ce0298c1aafb427342c1ba8",
+      "content_sha256": "8778bd4061b14a7145ef1f9cb8cf9c397ba8332dcf9d53b6781d2fdbc45385e0",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2037,7 +2037,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-world-stage.prd.md",
-      "content_sha256": "89fae8131954d5c2e88b8b779524bc46c27961e60acb4365628214839e1f8bee",
+      "content_sha256": "3809bad116aa1bec80e9b1c21165fab33b80696f742417a6f3c7473aeb12d80a",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2065,7 +2065,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
-      "content_sha256": "86f82060bfc24fb3d519b3b78decda5a728f3a765b1dc0af1f78f8c02e0fe7c8",
+      "content_sha256": "e7d622715b7a1d8f29a0dbed45bdb539f58dfb6e82f11128843bdacb3f583b19",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2079,7 +2079,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-learning-intelligence-and-cadence.prd.md",
-      "content_sha256": "1c914fcf1401c55c7c8593ba15dc8b6c1d561a86eef7a20dcfd1dec8261571ae",
+      "content_sha256": "8315d81b380b3296a0902e8d4370cef0ec54aaf2c539de9a8900784f86e3927b",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2107,7 +2107,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md",
-      "content_sha256": "784c4060c1838032762376196a7051d0437e406ad3b3e7db3b7ed5662d94c967",
+      "content_sha256": "0357b5457571a8f25f4128183a4bfdbb7ab83658592b1f1e5a2a79d72daf8c6f",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2121,7 +2121,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md",
-      "content_sha256": "813dbecd5cb609c2614a6a2041c61e4e8d6bf6cafefcb4c3cfefa71da5a30edf",
+      "content_sha256": "6c31c3ac884d8bda1dae7da55ebd467bb84b5a2c41e2eaf8559e412c1c8eb950",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2149,7 +2149,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/participation-and-recognition-boundaries.prd.md",
-      "content_sha256": "dfd9f41fe7727f889242d4da8dceb8039cad512af2579f0fa1c6fb0cf3bc9f43",
+      "content_sha256": "0adb6836b37522fd6712b1706951750136dbe3e71a12c6a279106747074df3e4",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2163,7 +2163,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/prd.md",
-      "content_sha256": "0eeef49d2f3e94b252ffd7b6b6b3499789f41c3e24ceb38fa94a18507f9c3f8b",
+      "content_sha256": "0f474363edcf4e72d98a07bf13237215aceb0225a92a0adb64a972c73f65683d",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2191,7 +2191,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
-      "content_sha256": "a8da4b740c55d972f6704829daf2e98cf16fef5d40f088411d62303dad4bbb99",
+      "content_sha256": "d0dabcc8492cd65fac514c829c466b5af1b4adb7c7f166e7209ddc3c61f6c8ad",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2205,21 +2205,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "c197b6cf8fd8842c268f7d33a019c7c993284b9cc2a1c8e1a921dc342ef43a9d",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/product/world-infrastructure/frontier-expansion-and-world-information-boundaries.prd.md",
-      "content_sha256": "3724e37c5ba6a9e06faba65289440df2da94784fde3731d604d2e4e75da00f43",
+      "content_sha256": "83214f8ee78e3b3d2522e978c14aca58b7b342959aa68ef8ee42a0b27e3c8f32",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2233,7 +2219,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md",
-      "content_sha256": "ebd3084101eef4f44d9884a1f78c3c9dd16aabfcc8f6def3921e8d6356c34b36",
+      "content_sha256": "61b6b2c59960c7c312bec35192db93964bac1f1b01b08475e8b40035ae8adfad",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2247,21 +2233,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
-      "content_sha256": "c2aeb1136d380f4a3f071a4a631b56bdcb3e5146e0617da81c963f0fa5c51fa8",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/product/world-infrastructure/governed-regional-capabilities-and-extensions.prd.md",
-      "content_sha256": "8e8a633846815687ff26a4ef8d62b0f3eb6abee06e650c1c866f171190aab149",
+      "content_sha256": "54ff813869e5b34bcada375e69c5786fd624ab5b0cd6ef6ca50e5a74ea396ae4",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2275,7 +2247,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "3de201d17bdf9a69df84bfdb9fb95b628de78d685ea80428c970fff796e6332f",
+      "content_sha256": "84761ed13570e6b6ce0b23b701e174905fd2d9fa8adcbc0cbe2e760ab3322139",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2303,7 +2275,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md",
-      "content_sha256": "6357f606f04b4bde9a52b46af627b9b9b9ffeeeef7148f92ae1d77deb986ea8a",
+      "content_sha256": "b7b737536461e4c38cdd9aa44365399260b167db5bd5bd813d153a9dc61325b1",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2317,7 +2289,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md",
-      "content_sha256": "b7552ad86e0e2138407d6af03e5ef10cf5f530ca8c085c9acfbdb7d0ecf419dc",
+      "content_sha256": "65326768927f4abb81c0a62f8d504bdc7af7bfa994846bd2e7198e1a13cb32e3",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2331,7 +2303,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md",
-      "content_sha256": "70d35afbbf4c6d0727cee9ffb014ad4a87bf66e476d2983b7c4fefbd13648583",
+      "content_sha256": "da6d04a711e8f80315ae36be1f7d228d4d07ecbd40f3643aa1e53ad5f659359d",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2345,7 +2317,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md",
-      "content_sha256": "e5ce30f82bc35cf3e8177883d3417d33b93a7125e4c0919b459d77fd804961d9",
+      "content_sha256": "03f1985a58e5be06832e1a12ebd01883c616ff86f31491e86b87e55c5926ec75",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2359,7 +2331,49 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md",
-      "content_sha256": "4f8dd160bf6ee712a47aff1127ce05eace673984ec621a9b1c1a492a8b3f0a1a",
+      "content_sha256": "9d294bd92136c8d54780a40c5b9c79eeca0941c40d35db1367ed7c24e4571f69",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/frontier-expansion-and-world-information-boundaries.prd.md",
+      "content_sha256": "d97471af312855ff3f49c5dfffb3c8fff121affc72d9a4554639b4aad8b22c39",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md",
+      "content_sha256": "6da9f93c25f546bbd143400d97cbff12e48f1448447653fbd16bcd68bde8e645",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md",
+      "content_sha256": "0c2737b469a07b5eb570dc59e125aaa4c7e9900a7faf6382190adee2d8080355",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2386,8 +2400,36 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/product/world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md",
+      "content_sha256": "8544a4083e9089628d32df1ab7cc366907586553001e45231ecab34352d959f9",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/product/world-rules-core-gameplay/mature-world-progression.prd.md",
-      "content_sha256": "80fda83b4353e59b44d074c02ead3ddf634d5556916ffae490e8ceb6e64c4856",
+      "content_sha256": "0ed6f30b26cbeb8800200426879fde60c4ae937b5bfb1f1b60b7668e3a8ed01f",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md",
+      "content_sha256": "294810d81c9b18f9b84dd7bacc69ea52dfc29f1cdc536cd274442d8f6f934a21",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2415,7 +2457,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "21034edb1bc231c79f652bbf759b4ab23d5e223c355b81ec92bfb74c47db5194",
+      "content_sha256": "406e651905989f34bed1d98c78129c7659e93836f30c05335782bb0b502caf75",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -3521,7 +3563,7 @@
     },
     {
       "path": "doc/testing/ci/ci-tiered-execution.prd.md",
-      "content_sha256": "e43f906210c8bc825f3e57ae58934b119a576a1311c46896ec3713d06b58abfa",
+      "content_sha256": "882b4c8bdcdb14b9cc10ebd73e2f00aa8cdac9e399d6ff29608bc301c1981aea",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3689,7 +3731,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md",
-      "content_sha256": "4936d5ada417ec15010a16f7d6a8abddf5f1b088fc32170d307869b79687a74c",
+      "content_sha256": "108c3fb5e271826438d88522c5cc3410012b2b67747ab6189422a55a0d2e585b",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -5271,7 +5313,7 @@
     },
     {
       "path": "doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md",
-      "content_sha256": "7d46d7ec9aab96fd62110e6999522e27947de2df7385af1303478cd01cf81018",
+      "content_sha256": "0106d5532a0ab973fbf55e3eae1c7318622f86014f23bbe3fe023912274da8e6",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5285,7 +5327,7 @@
     },
     {
       "path": "doc/world-simulator/launcher/README.md",
-      "content_sha256": "12097a3ee370b83e437c0a76ff950705269c80e8b3240f0ba36f0a51235e75a2",
+      "content_sha256": "a121b2924364c354057e8d2721cfaa8f9922aca87438e5466035d79b15d2ffe9",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5803,7 +5845,7 @@
     },
     {
       "path": "doc/world-simulator/prd.index.md",
-      "content_sha256": "d63bbc62949f924af98aca67ae6c58cb6b2290559794bc634fdc9150d1d314f1",
+      "content_sha256": "2cfdc417d2a7f24caaa8818d0feef0fd0cce65a09cc5259ff274533bd2f96535",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5887,7 +5929,7 @@
     },
     {
       "path": "doc/world-simulator/scenario/chunked-fragment-generation.prd.md",
-      "content_sha256": "dde7790cb0ef4f45172a43a4df10f1c73ac228ec262f6b06afe2cd6813d931ce",
+      "content_sha256": "9c69719291490b05ad39ac9068d6726f69f4d62a1912f5d07b182936275a7357",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6013,7 +6055,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/README.md",
-      "content_sha256": "41f3a8759d515559688c5cd401961cc3841ecd74c7235e12ece650f8b0c50d29",
+      "content_sha256": "9f95a9b54ea6f87809b16749d3cfd877145da9ef619d7c50ebb79e060d9ba0d7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6041,7 +6083,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md",
-      "content_sha256": "2d1428272ac97d26a9b94e04b249fd2eaec9c4ce67b54e31de93881b427bb5a2",
+      "content_sha256": "d9fa21e812898195e8f9c699a3e985dc8aeeb146264bed9937a047d8d130378c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6195,7 +6237,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md",
-      "content_sha256": "223084ec63093db565f576a44009615fb97c4f2544fc7ec6978c54bf4cedb038",
+      "content_sha256": "72d94f43de0f2f3faf04f4ea7a9d3bf01511059cbe2c093a46e281cb9b0a34da",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6209,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "54c53fc086081b0ccce4856c7d56711fc1330669d80839c7f3240791e52e837e",
+      "content_sha256": "adc5744dd123e97c41bd117230c12dc968da76b3724a0c487c85565d67e29158",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6251,7 +6293,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "edc88d74aa628a851858a6da3d74bb499694794774c9bdbcf887b0cfe5ee1bb4",
+      "content_sha256": "eaf2ebbac8ea6f9ca91e8bc182f3bfe12a385915b25305ddc8190ac332139617",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6321,7 +6363,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md",
-      "content_sha256": "556e1dd506b7c20cbc3b34b9b3e87c98adfbf0c333b9373709cc4c8bb39534d8",
+      "content_sha256": "a306524db09f124bb90bbee55a5ebe864600a154e8e0bcfaffe8163506c468fe",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6405,7 +6447,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md",
-      "content_sha256": "42c08c9c7447ceb59b05edbb09dced2349b2dcae3920fe1b34ed4227c1155c05",
+      "content_sha256": "4db46b03c0b8c7ba49789d33df22581c0b0f1969f0a0bdfe138342866cf8f1c1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6419,7 +6461,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md",
-      "content_sha256": "00b2282096f6593c5a399a88a8ef6824f124284746d8da6d4a8179841979fba4",
+      "content_sha256": "d1bdf025ee537bc9eb0e6ba1e11b2bf562ae8a23c801f37c3ef844a012542286",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6461,7 +6503,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
-      "content_sha256": "7073d3708b9cdc49232ad4bcf7c7bd07ed3447301661743a7d04db2e00f79afe",
+      "content_sha256": "0e4f6b0d1333fcfae2bb2305f65c337971abe8afd4ca11e9b344f75333a431f8",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

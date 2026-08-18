@@ -492,6 +492,8 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
         factory_id: "factory.blocked_resume".to_string(),
         recipe_id: "recipe.blocked_resume".to_string(),
         plan: plan.clone(),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("blocked schedule");
 
@@ -535,6 +537,8 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
         factory_id: "factory.blocked_resume".to_string(),
         recipe_id: "recipe.blocked_resume".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("resume schedule");
 
@@ -616,6 +620,8 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
         factory_id: "factory.blocked_resume.post_action".to_string(),
         recipe_id: "recipe.blocked_resume".to_string(),
         plan: plan.clone(),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("block factory production");
 
@@ -664,6 +670,8 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
         factory_id: "factory.blocked_resume.post_action".to_string(),
         recipe_id: "recipe.blocked_resume".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
         new_state: None,

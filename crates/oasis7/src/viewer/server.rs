@@ -223,6 +223,27 @@ impl<'a> ViewerSession<'a> {
                     )?;
                 }
             }
+            ViewerRequest::RequestWorldFeed { .. } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::WorldFeed {
+                        feed: crate::viewer::protocol::WorldFeedEnvelope {
+                            schema_version:
+                                crate::viewer::protocol::WORLD_FEED_SCHEMA_VERSION.to_string(),
+                            world_id: world_id.to_string(),
+                            reorg_epoch: 0,
+                            cursor: String::new(),
+                            events: Vec::new(),
+                            status: crate::viewer::protocol::WorldFeedStatus::Unavailable,
+                            gap_reason: None,
+                            unavailable_reason: Some(
+                                crate::viewer::protocol::WorldFeedUnavailableReason::SourceUnavailable,
+                            ),
+                            snapshot_reload_required: false,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::PlaybackControl { mode, request_id } => {
                 self.handle_playback_control(mode, request_id, writer)?
             }

@@ -22,6 +22,7 @@ pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_choice;
 mod claim_runway;
+mod director_capability;
 mod fine_grain_translation;
 mod governance_vote_quote;
 mod governance_vote_quote_debug;
@@ -1168,6 +1169,8 @@ fn runtime_simulator_action_mapping_includes_industrial_actions() {
                 18,
                 1,
             ),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
         }
     );
 

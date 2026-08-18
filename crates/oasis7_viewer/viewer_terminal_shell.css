@@ -1,0 +1,574 @@
+.viewer-shell {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
+  overflow: hidden;
+}
+
+body {
+  padding: 0;
+}
+
+/* Legacy selector kept as a stage-first compatibility alias; the mounted root is
+ * `.viewer-shell`, so this cannot reintroduce the former three-column layout. */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "stage";
+  min-height: 100dvh;
+}
+
+#viewer-stage-panel[data-viewer-map-layer="base"] {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+#viewer-stage-panel[data-viewer-map-layer="base"] > .panel__body {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+#viewer-stage-panel[data-viewer-map-layer="base"] > .panel__body > .stack {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+}
+
+.panel--stage::before {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+[data-viewer-overlay="world-hud"] > .pixel-world-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__surface {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__overlay {
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-focus-drawer {
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-host__summary,
+[data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics,
+[data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
+  position: absolute;
+  z-index: 14;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-host__summary,
+[data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
+  display: none;
+}
+
+[data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
+  top: 16px;
+  right: 120px;
+}
+
+[data-viewer-shell="player-fullscreen"] .pixel-world-readout {
+  display: none;
+}
+
+[data-viewer-shell="player-fullscreen"] .stage-hero {
+  display: none;
+}
+
+[data-viewer-overlay="world-summary"] {
+  display: none;
+}
+
+[data-viewer-overlay="world-summary"]:has(#viewer-gameplay-details[open]) {
+  display: block;
+  position: fixed;
+  z-index: 50;
+  inset: 96px 24px 24px auto;
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+}
+
+[data-viewer-overlay="next-move"] {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  z-index: 24;
+  left: 16px;
+  right: auto;
+  bottom: 120px;
+  width: min(760px, calc(100vw - 32px));
+  pointer-events: auto;
+}
+
+.pixel-world-canvas__callout--goal,
+.pixel-world-canvas__callout--blocker {
+  display: none;
+}
+
+[data-viewer-overlay="receipt"] {
+  position: absolute;
+  z-index: 25;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="feed"] {
+  position: absolute;
+  z-index: 26;
+  top: 72px;
+  right: 16px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="navigation"] {
+  position: fixed;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  z-index: 40;
+  top: 16px;
+  left: 16px;
+  pointer-events: auto;
+}
+
+.secondary-viewer-nav {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 40;
+  top: 16px;
+  right: 16px;
+  pointer-events: auto;
+}
+
+.secondary-viewer-nav__more {
+  appearance: none;
+  min-width: 72px;
+  min-height: 44px;
+  border: 1px solid rgba(152, 177, 150, 0.28);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(9, 13, 11, 0.68);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.secondary-viewer-nav__more::after {
+  content: " ▾";
+}
+
+.secondary-viewer-nav__more:hover,
+.secondary-viewer-nav__more:focus-visible,
+.secondary-viewer-nav__more[aria-expanded="true"] {
+  border-color: rgba(152, 177, 150, 0.52);
+  color: var(--text);
+}
+
+[data-viewer-route-panel="targets"],
+[data-viewer-route-panel="command"] {
+  display: none;
+  position: fixed;
+  inset: 24px 24px 24px auto;
+  z-index: 50;
+  width: min(420px, calc(100vw - 48px));
+  max-width: min(420px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+}
+
+#viewer-targets-panel,
+#viewer-details-panel {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  max-width: min(420px, calc(100vw - 48px));
+  overflow-x: hidden;
+}
+
+#viewer-targets-panel:target,
+#viewer-targets-panel[data-route-open="true"],
+#viewer-details-panel:target,
+#viewer-details-panel[data-route-open="true"] {
+  display: block;
+}
+
+.mobile-rail__link,
+.secondary-viewer-nav__link {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+[data-viewer-route-panel="targets"]:target,
+[data-viewer-route-panel="targets"][data-route-open="true"],
+[data-viewer-route-panel="command"]:target,
+[data-viewer-route-panel="command"][data-route-open="true"] {
+  display: block;
+}
+
+.panel__route-close {
+  align-self: flex-start;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.panel__route-close:hover,
+.panel__route-close:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.panel--world-feed {
+  margin-top: 0;
+  border-top: 1px solid rgba(152, 177, 150, 0.18);
+  background: rgba(9, 13, 11, 0.82);
+}
+
+.world-feed__summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.world-feed__summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel--world-feed:not([open]) {
+  width: auto;
+  max-width: min(220px, calc(100vw - 32px));
+}
+
+.panel--world-feed:not([open]) .world-feed__summary {
+  padding: 10px 12px;
+}
+
+.panel--world-feed:not([open]) .panel__eyebrow,
+.panel--world-feed:not([open]) .panel__meta-copy {
+  display: none;
+}
+
+.world-feed__body {
+  display: grid;
+  gap: 10px;
+}
+
+.world-feed__status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.world-feed__notice,
+.world-feed__empty,
+.world-feed__event {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.world-feed__notice {
+  color: var(--muted-strong);
+}
+
+.world-feed__events {
+  display: grid;
+  gap: 8px;
+}
+
+.world-feed__event {
+  border-left: 2px solid rgba(152, 177, 150, 0.42);
+  background: rgba(15, 21, 17, 0.42);
+}
+
+.world-feed__receipt-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.world-feed__receipt-link:hover,
+.world-feed__receipt-link:focus-visible {
+  color: var(--text);
+}
+
+.world-feed__empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.director-surface {
+  position: fixed;
+  inset: 24px 24px 24px auto;
+  z-index: 60;
+  width: min(560px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.52);
+}
+
+.director-entry-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(152, 177, 150, 0.18);
+  border-radius: 12px;
+  background: rgba(9, 13, 11, 0.52);
+}
+
+.director-density-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.director-density-list {
+  display: grid;
+  gap: 6px;
+}
+
+.director-density-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(152, 177, 150, 0.12);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1240px) {
+  .viewer-shell {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  #viewer-stage-panel[data-viewer-map-layer="base"] {
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .pixel-world-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  [data-viewer-overlay="navigation"] {
+    top: 10px;
+    left: 10px;
+    right: 92px;
+  }
+
+  .secondary-viewer-nav {
+    top: 10px;
+    right: 10px;
+  }
+
+  [data-viewer-overlay="next-move"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    left: 10px;
+    right: auto;
+    bottom: 124px;
+    width: min(560px, calc(100vw - 20px));
+  }
+
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell__detail {
+    display: none;
+  }
+
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell__value {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  [data-viewer-overlay="receipt"] {
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    max-height: 96px;
+    overflow: auto;
+  }
+
+  [data-viewer-overlay="feed"] {
+    top: 104px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(62dvh, 520px);
+  }
+
+  [data-viewer-overlay="world-summary"]:has(#viewer-gameplay-details[open]) {
+    inset: 82px 12px 72px;
+    width: auto;
+    max-height: calc(100dvh - 154px);
+  }
+
+  .pixel-world-command-cell--next .pixel-world-command-cell__detail {
+    display: none;
+  }
+
+  .pixel-world-command-cell--next .pixel-world-command-cell__value {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .pixel-world-action-receipt__detail,
+  .pixel-world-action-receipt__meta {
+    display: none;
+  }
+
+  [data-viewer-route-panel="targets"],
+  [data-viewer-route-panel="command"] {
+    inset: auto 12px 72px;
+    width: auto;
+    max-width: none;
+    max-height: min(72dvh, 560px);
+    margin-inline: 0;
+    border-radius: 12px;
+  }
+
+  #viewer-targets-panel,
+  #viewer-details-panel {
+    inset: auto 12px 72px;
+    width: auto;
+    max-width: none;
+    max-height: min(72dvh, 560px);
+  }
+
+  .director-surface {
+    inset: 82px 12px 72px;
+    width: auto;
+    max-width: calc(100% - 24px);
+    max-height: calc(100dvh - 154px);
+  }
+
+  .director-density-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  [data-viewer-overlay="navigation"] {
+    right: 10px;
+  }
+
+  .secondary-viewer-nav {
+    top: 56px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  [data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
+    display: none;
+  }
+
+  [data-viewer-overlay="feed"] {
+    top: 104px;
+  }
+
+  [data-viewer-overlay="next-move"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: calc(100vw - 20px);
+    max-height: min(30dvh, 220px);
+  }
+
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell--objective {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell--next {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .world-feed__event {
+    padding: 10px;
+  }
+}

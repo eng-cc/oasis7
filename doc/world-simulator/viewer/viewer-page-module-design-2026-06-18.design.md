@@ -21,6 +21,11 @@ world, understand the active objective, find the next command route, see the
 latest action receipt, and reach details or diagnostics without the first screen
 becoming a diagnostics dashboard.
 
+The paired [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gameplay-release-experience-overhaul.prd.md)
+owns the terminal shell contract. This module design translates that authority
+into visual zones and interaction details; focus/right-panel hooks are current
+implementation baseline/debt, not a second product mode.
+
 This design owns visual hierarchy, interaction readability, module rhythm,
 state expression, and screenshot-review expectations. It does not own runtime
 correctness, engineering feasibility, QA release judgment, product priority, or
@@ -49,15 +54,20 @@ Use four priority levels:
 | Context | `#viewer-targets-panel`, `#viewer-gameplay-details`, selected target details | selection, explanation, state machine | useful, not louder than stage |
 | Diagnostics | `#viewer-diagnostics-panel`, renderer details, raw JSON | debug and QA visibility | collapsed or visually muted by default |
 
-Desktop layout keeps the current three-zone structure:
+Player layout uses one world-first stage with a quiet edge dock:
 
-- left: Targets and selection context;
-- center: Stage, command strip, world board, receipt, gameplay details;
-- right: Details and command surface;
-- diagnostics: collapsed inside the details/diagnostics route.
+- stage: full-stage world board and compact HUD own the first visual read;
+- edge dock: `World / Targets / Command` are primary; Search is the Targets
+  `#entity-search` compatibility filter and Diagnostics is secondary;
+- contextual console: opens on demand in the order primary command/chat, selected
+  context, gameplay details, diagnostics/raw state;
+- Director-only layout: a dense three-column tool arrangement may be exposed when
+  explicitly selected through the server-validated capability boundary, without
+  changing any product or gameplay semantics. The local endpoint fails closed when
+  no trusted issuer can bind the grant to the live session epoch.
 
-The center stage owns the first visual read. Left and right panels should frame
-the command table without stealing the first glance.
+Targets, details, and diagnostics remain reachable routes, not equal-weight
+columns competing with the Player stage.
 
 ### 2.3 Reading Order
 Desktop first viewport:
@@ -66,12 +76,15 @@ Desktop first viewport:
 2. Command strip with Objective, Next Move, and Player Leverage.
 3. Pixel World Board/Canvas.
 4. Action Receipt.
-5. Targets and Details panels as side routes.
-6. Gameplay Details and Diagnostics as disclosure surfaces.
+5. Edge dock routes for Targets and Command; Search stays inside Targets and
+   Diagnostics remains secondary.
+6. Gameplay Details and raw diagnostics inside the contextual console as disclosure
+   surfaces.
 
 Mobile reading order:
 
-1. Mobile rail: `World / Targets / Command`, with Diagnostics secondary.
+1. Edge/mobile rail: `World / Targets / Command`, with Search inside Targets and
+   Diagnostics secondary.
 2. Compact stage identity.
 3. Command strip in one column.
 4. World Board/Canvas.
@@ -85,17 +98,123 @@ The page should behave as a command-table shell:
 - Command band: objective, next move, player leverage.
 - World board: the main visual canvas and route/selection read.
 - Feedback band: action receipt, blocker, no-receipt, or unavailable state.
-- Side context: target list and command panel.
-- Deep context: gameplay details, auth/economy, diagnostics.
+- Edge dock: target navigation and route entry, with Search filtering the current
+  authoritative Targets list.
+- Contextual console: command/chat first, then selected context, gameplay details,
+  auth/economy, and diagnostics/raw state.
 
 The command band and receipt may bracket the board, but they must not compress
 the board into a secondary widget.
 
+The current fullscreen Player default renders the command strip as three compact
+cards on desktop (`Objective / Next Move / Player Leverage`). At mobile width,
+`Objective` and `Player Leverage` share the first compact row and `Next Move` spans
+the second row. `More / Diagnostics` remains a reachable secondary route rather
+than a competing primary column.
+
 ### 2.5 Responsive Route
-Desktop can use three columns. Tablet should keep the stage first, then targets
-and command as stacked panels. Mobile must not rely on a long undifferentiated
-page stack. Preserve explicit `World / Targets / Command` navigation and keep
-Diagnostics visible but lower priority.
+Player desktop, tablet, and mobile preserve one conceptual route: stage first,
+edge dock second, contextual console on demand. Director may use three columns
+only after explicit opt-in. Tablet stacks dock routes without demoting the stage;
+mobile uses the rail and does not rely on a long undifferentiated page stack.
+Keep `World / Targets / Command` primary, Search inside Targets, Diagnostics secondary, and
+preserve keyboard focus, close/`Escape`, CJK labels, no-overflow, and honest
+empty/unavailable contracts at every width.
+
+### 2.6 Target wireframes (ASCII; implementation handoff)
+These wireframes describe the target Player shell, not a screenshot or shipped
+layout. Director may expose a denser tool arrangement only after the explicit,
+capability-gated action described by the paired PRD.
+
+Desktop (world-first, 1280px+):
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ world / stage identity       Objective · Next Move · Player Leverage          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌───────────────────────────────────────────────┐  ┌──────────────────────┐  │
+│  │                                               │  │ World  Targets       │  │
+│  │              PIXEL WORLD BOARD                │  │ Command  More        │  │
+│  │   agent · route · selected target · blocker   │  │ (quiet edge dock)    │  │
+│  │                                               │  └──────────────────────┘  │
+│  └───────────────────────────────────────────────┘                           │
+│  Action Receipt: result / reason / next       [open contextual console]       │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Mobile (390x844; sticky rail, one route at a time):
+
+```text
+┌──────────────────────────────┐
+│ world / objective             │
+├──────────────────────────────┤
+│ World  Targets  Command  More │  ← sticky rail; Search is inside Targets
+├──────────────────────────────┤
+│ Objective                    │
+│ Next Move                    │
+│ Player Leverage              │
+├──────────────────────────────┤
+│                              │
+│       PIXEL WORLD BOARD      │
+│                              │
+├──────────────────────────────┤
+│ Action Receipt / blocker      │
+└──────────────────────────────┘
+```
+
+`More` contains secondary Diagnostics. Quote is reachable from the contextual
+Command route, never as a fifth rail item. Target selection recenters/highlights
+and opens context; it never executes an action.
+
+Targets and contextual Command are one-at-a-time overlays, not permanent columns:
+
+```text
+┌──────── Targets ────────┐      ┌──────── Contextual Command ─────────┐
+│ Search targets           │      │ Command / Chat                      │
+│ A-017  Mining  [selected]│      │ Selected context                    │
+│ B-04   Moving            │      │ Gameplay Details ▸                  │
+│ C-12   Thinking          │      │ Diagnostics / raw state ▸           │
+│                [Close]   │      │ Quote appears here when relevant    │
+└──────────────────────────┘      └─────────────────────────────────────┘
+```
+
+Director is a capability-gated dense tool view entered only through the secondary
+operator action; it is never the fresh-load layout:
+
+```text
+┌──────────────────────────── Director ──────────────────────────────────┐
+│ World/selection │ stage + authoritative state │ diagnostics/tools      │
+│                 │ semantics unchanged          │ [Exit Director]        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+Target source anchors are `#viewer-director-entry` and `#viewer-director-exit`.
+They are implemented source anchors; the flow remains fail-closed until the server
+returns a valid short-lived grant, and the current issuer gap keeps production entry
+`capability_blocked`.
+
+### 2.7 Interaction state machine and focus contract
+The implementation must preserve these transitions; labels may be localized but
+the transitions and causality boundaries are stable:
+
+| From | Trigger | To | Required feedback |
+| --- | --- | --- | --- |
+| `player_ready` | `World` | `stage_visible` | board remains first focus; no new action |
+| `player_ready` | `Targets` | `targets_open` | focus moves to heading/close, Search remains inside Targets |
+| `targets_open` | target select | `target_selected` | row, board callout, and context mirror selection; no execution |
+| `target_selected` | `Command`/Next Move | `console_open` | command/chat first, then selected context/details/diagnostics |
+| `console_open` | submit command | `receipt_pending` | pending copy; never show completion from ambient feed |
+| `receipt_pending` | runtime receipt | `receipt_completed`/`receipt_blocked`/`receipt_rejected` | Action Receipt shows result, reason, and next |
+| any local drawer | `Escape` (no IME composition) | prior surface | close only the innermost drawer and restore its invoker |
+| focus presentation | `Escape` (no local drawer) | prior Player route | exit Focus/presentation and return focus to Focus invoker |
+| Player | explicit Diagnostics + capability | `director_open` | ephemeral dense tools; no semantic or progress change |
+| Player/Director entry | invalid/stale/revoked/unauthorized | `player_ready` | sanitize Director surfaces, preserve world/selection, explain recovery |
+
+Escape is ordered local surface/drawer first, then Focus. While an IME composition
+is active, the browser/IME consumes Escape and the Viewer must not close the surface.
+Every opened surface records its invoker and returns focus to it on close; if the
+invoker disappeared, return to the owning rail item or stage heading.
 
 ## 3. Module Design
 ### 3.1 Stage Hero
@@ -190,6 +309,15 @@ Design contract:
 - no-receipt is a real state, not an absence of UI;
 - blocked/rejected states use warning or danger language plus recovery route;
 - completed states can be positive but must not imply unsupported causality.
+- World Feed v1 is implemented: Viewer owner `viewer_engineer`, source the ordered
+  persisted runtime `WorldEvent` journal projection, stable anchor `#viewer-world-feed`,
+  and acceptance that it remains ambient, never replaces a missing receipt, and
+  exposes honest empty/loading/unavailable states. In fullscreen Player it stays a
+  compact collapsed top-right edge overlay/ambient chip and opens on demand; it must
+  not become a persistent first-screen column.
+  Current `state.recentEvents` is only a non-contract ambient preview;
+  `player_gameplay.recent_feedback` remains exclusive to Action Receipt. Current
+  Recent Events/Feedback are not silently renamed.
 
 State handling:
 - no receipt: muted but explicit;
@@ -204,6 +332,10 @@ Role:
 - selection and orientation surface;
 - lets the player choose the agent, location, or target that the stage and
   command panel will follow.
+- Search filters the current authoritative visible-target list through
+  `#entity-search`; it is not an independent snapshot query. Selection never
+  executes an action. Quote remains a contextual Command/Console route, not
+  a peer dock item.
 
 Design contract:
 - target rows should read as selectable controls, not diagnostics;
@@ -222,7 +354,7 @@ Current anchor: `#viewer-details-panel`.
 
 Role:
 - command execution route and selected-target details;
-- right-side command area on desktop;
+- contextual-console command area on every Player viewport;
 - target of `Go to Command` on mobile and conservative Next Move routing.
 
 Design contract:
@@ -231,6 +363,9 @@ Design contract:
 - selected-target context appears before raw JSON;
 - if Next Move routes here, the destination section should visibly match the
   action label enough that the player knows they arrived correctly.
+- primary command/chat appears before gameplay details and diagnostics/raw state;
+- action result is represented by the Action Receipt, never by ambient World Feed
+  activity or a selection event.
 
 Handoff:
 - direct Next Move execution feasibility belongs to `viewer_engineer`;
@@ -280,16 +415,18 @@ State handling:
 - no runtime/provider: distinguish player-fixable from system issue;
 - long diagnostic text: scroll or collapse inside diagnostic surface.
 
-### 3.9 Focus Mode
+### 3.9 Player Shell Immersive Presentation
 Current anchors: `.pixel-world-host--focus`, `.pixel-world-focus-hud`,
 `.pixel-world-focus-cinematic`, `.pixel-world-focus-drawer`.
 
 Role:
-- immersive world-first mode for reading objective, route, blocker, receipt,
-  and issuing command without the full shell.
+- implementation presentation for the default Player shell: immersive world-first
+  reading of objective, route, blocker, receipt, and command without the Director
+  tool density. These hooks are an implementation substrate, not a separate
+  product mode or alternative authority.
 
 Design contract:
-- focus HUD uses stable command vocabulary: World Focus, Current Objective,
+- Player HUD uses stable command vocabulary: World, Current Objective,
   Mission Progress, World Tick, Blocker, Receipt;
 - board remains the main subject;
 - command drawer is a clear route, not a hidden debug panel;
@@ -300,7 +437,8 @@ State handling:
 - renderer unavailable: minimap is absent and the diagnostic is honest and compact;
 - no selected agent: command surface explains selection requirement;
 - blocked: blocker cell rises above receipt detail;
-- mobile: focus HUD stacks without overlapping the board or controls.
+- mobile: immersive HUD stacks without overlapping the board or controls; close/
+  `Escape` returns to the same Player route.
 
 ### 3.10 Mobile Route
 Current anchor: `.mobile-rail`.
@@ -310,7 +448,7 @@ Role:
 
 Design contract:
 - primary route is `World / Targets / Command`;
-- Diagnostics can exist as a quieter fourth link;
+- Search stays inside Targets; Diagnostics is a quieter secondary link;
 - first mobile viewport should include stage identity plus either command strip
   or board start;
 - avoid horizontal overflow from badges, long labels, or command controls;
@@ -319,7 +457,7 @@ Design contract:
 State handling:
 - long zh labels: wrap or shorten nav labels, do not overflow;
 - blocked/offline: show warning near world, not only inside diagnostics;
-- focus mode: hide shell panels but keep exit and command controls reachable.
+- immersive Player presentation: keep close/`Escape` and command controls reachable.
 
 ## 4. State Model
 All modules should map to these player-facing states:
@@ -336,6 +474,26 @@ All modules should map to these player-facing states:
 | long text | wrap or clamp within stable modules | no horizontal overflow |
 | zh locale | CJK labels fit primary controls and panels | screenshot required when touched |
 
+### 4.1 Stable anchor and compatibility migration
+Existing hooks remain compatibility inputs. New anchors are added only in source
+JSX, with one unique ID each; generated bundles are never hand-edited.
+
+| Existing hook | Terminal role | Migration action | Compatibility/verification |
+| --- | --- | --- | --- |
+| `#viewer-stage-panel` | Player stage | retain | one ID; stage-first route smoke |
+| `#viewer-targets-panel` | Targets dock/route | retain; nest `#entity-search` | Search filters visible authoritative targets only |
+| `#viewer-details-panel` | contextual Command route | retain as section; optionally add `#viewer-console` in source JSX | no duplicate IDs; command/chat first |
+| `#viewer-diagnostics-panel` | secondary More/Diagnostics | retain; optional `#viewer-diagnostics-drawer` | hidden by default in Player; explicit unavailable state |
+| `.mobile-rail` | sticky World/Targets/Command rail | retain class; add source button labels | 390x844 keyboard/tap route |
+| `.pixel-world-action-receipt` | causal receipt | retain class; add `#viewer-action-receipt` only in source JSX if needed | no World Feed substitution |
+| `.pixel-world-host--focus` / focus HUD/drawer hooks | Player immersive presentation | classify as implementation substrate, not separate mode | Focus close/Escape/focus-return tests |
+| `#viewer-director-entry` / `#viewer-director-exit` | capability-gated Director transition | retain source anchors; server-validated short-lived grant and focus-return handling | fresh-load Player, denied/stale/revoked/unavailable, reload and exit tests |
+| `#viewer-world-feed` | World Feed v1 ambient projection | retain implemented panel; runtime journal source, cursor/reorg recovery, explicit/null-safe receipt refs | schema/order/dedup/gap/reload tests; no Action Receipt substitution |
+
+These anchors are now implemented in source and generated output. They remain
+compatibility surfaces: Director grant state is ephemeral, and World Feed links are
+rendered only for explicit runtime `receipt_ref` values (current runtime uses `null`).
+
 ## 5. Image2 Target Usage
 The Image2 target is binding as a direction for:
 
@@ -348,8 +506,7 @@ The Image2 target is binding as a direction for:
 The Image2 target is aspirational, not binding, for:
 
 - exact map art, terrain density, icons, and pixel illustration style;
-- exact browser chrome, brand mark, right-side accordion labels, or left-side
-  resource panel;
+- exact browser chrome, brand mark, or historical right/left panel labels;
 - exact colors beyond the existing Viewer token taxonomy;
 - exact layout measurements.
 
@@ -413,17 +570,38 @@ Verification gate:
 - external browser runtime check if renderer/WebGPU behavior conflicts with
   in-app browser evidence.
 
-### Slice 4: Focus mode and mobile route
-Goal: keep immersive mode and mobile route coherent after hierarchy changes.
+### Slice 4: Player shell presentation and mobile route
+Goal: keep the Player shell presentation and mobile route coherent after
+hierarchy changes.
 
 Recommended work:
-- verify focus HUD labels, command drawer, diagnostics drawer, and exit controls;
-- verify mobile `World / Targets / Command` route, long labels, and no overlap.
+- verify Player HUD labels, contextual command/diagnostics drawers, and close/
+  `Escape` controls;
+- verify mobile `World / Targets / Command` route, Targets-contained Search and secondary Diagnostics,
+  long labels, and no overlap.
 
 Verification gate:
-- focus-mode visual screenshot;
+- Player shell visual screenshot, desktop and mobile;
 - mobile screenshot at 390x844 or equivalent;
 - zh locale screenshot or overflow probe.
+
+### Slice 5: Terminal handoff order (superseding implementation order)
+The six-slice order below is the integration contract for the terminal shell. It
+keeps feed/runtime work separate from the initial IA migration.
+
+1. **Anchors/tests** — retain canonical anchors, add only source-JSX IDs, and add
+   duplicate-ID/compatibility assertions.
+2. **Shell layout** — implement the world-first stage, compact HUD, quiet dock and
+   mobile sticky rail without changing data semantics.
+3. **Console/receipt** — open contextual Command on demand, place Quote inside it,
+   and render explicit no-receipt/pending/blocked/completed Action Receipt states.
+4. **Focus/a11y** — implement local-drawer-first Escape, IME protection, focus return,
+   keyboard names, CJK/long-text wrapping and no-overflow checks.
+5. **Separate World Feed** — consume only the implemented additive `world_feed/v1`
+   projection; preserve Recent Events/Feedback names and explicit/null-safe
+   `receipt_ref` semantics.
+6. **Headed QA** — run desktop/mobile/keyboard/locale/state evidence and record
+   residual risk; no screenshot-only preview substitutes for interaction smoke.
 
 ## 7. Verification Gates
 Recommended commands when the local Node environment is available:
@@ -443,9 +621,40 @@ Recommended screenshot scenarios:
 - no receipt;
 - blocked next move;
 - completed receipt;
-- focus mode, desktop and mobile.
+- Player shell presentation, desktop and mobile.
+
+### 7.1 Terminal QA evidence matrix
+| ID | Scenario | Required evidence | Blocking observation |
+| --- | --- | --- | --- |
+| QA-IA-D | Player desktop first screen | headed screenshot + DOM landmark read | stage is not dominant or dock becomes a competing column |
+| QA-IA-M | Player mobile 390x844 | headed screenshot + rail interaction | rail missing/scrolls away or horizontal overflow appears |
+| QA-DIR | Director allowed/denied/stale/revoked | tab reload/new-tab smoke + sanitized screenshot | Director persists, changes semantics, or fails to return to Player |
+| QA-FOCUS | console/drawer/focus presentation | keyboard sequence with focus target log | Escape closes wrong layer, loses focus, or interrupts IME |
+| QA-ANCHOR | source anchors and compatibility | DOM ID uniqueness + route assertions | duplicate ID, generated artifact edit, or missing invoker route |
+| QA-REC | no receipt/queued/advanced/no-progress/blocked | state fixtures + screenshot/DOM copy | ambient event or queued state reads as success |
+| QA-FEED | loading/empty/replay/gap/unavailable/reorg | feed fixture + cursor/reload evidence | feed guesses receipt linkage or merges recovery states |
+| QA-COPY | English/Chinese/long labels | `locale=en|zh` screenshots or overflow probe | clipped primary action, raw enum, or unreadable CJK |
+| QA-RENDER | renderer unavailable | explicit unavailable state screenshot | blank board or diagnostics-only explanation |
+
+These remain acceptance inputs for `qa_engineer`. Task #3248 epoch 2 now has
+source/package tests plus external-Chrome desktop/mobile Player-shell evidence;
+World Feed schema/transport/state and Director fail-closed boundary are implemented,
+while issuer-backed Director allowed entry and full headed renderer/Focus release
+rows remain outstanding.
 
 ## 8. Residual Risks and Role Handoffs
+- Task #3248 epoch 2 removes Quote from the peer rail, defaults Gameplay Details
+  closed, ships stage-first Targets/Command drawers, opens/focuses secondary
+  Diagnostics, and guarantees route/Focus drawer Escape, IME suppression, and
+  invoker focus return in source and packaged Web tests. Quote remains contextual
+  Command content only when its real surface exists.
+- World Feed v1 DTO, cursor/reorg recovery, and `#viewer-world-feed` anchor are shipped
+  in runtime/viewer code; current projections keep `receipt_ref=null` unless runtime
+  supplies explicit causal identity. Cross-surface headed QA remains required.
+- Director verifier/state machine and fail-closed endpoint are shipped, but the trusted
+  operator issuer is not wired; successful production entry remains `capability_blocked`.
+- WebGL2 has GPU-enabled `ready` evidence and GPU-disabled explicit `Renderer Unavailable`
+  fallback evidence; this does not replace full renderer/release judgment.
 - `viewer_engineer`: decide whether Next Move can directly execute a published
   action or should remain an anchor to `#viewer-details-panel`; validate DOM,
   renderer, responsive, and implementation feasibility.
@@ -462,8 +671,7 @@ Recommended screenshot scenarios:
 
 ## 9. Professional Slice Verdict
 Proceed with the visual polish only as a page-architecture and module-contract
-pass, then implement in small slices. The existing provisional implementation is
-directionally aligned with the compact-hero, collapsed-gameplay-details, command
-proximity, and diagnostics-demotion goals, but it still needs real screenshot
-gap notes against the Image2 target and module-state verification before any
-completion claim.
+pass, then implement in small slices. Existing implementation hooks can support
+the compact HUD, collapsed gameplay details, command proximity, and diagnostics
+demotion goals, but real screenshot gap notes against the Image2 target and
+module-state verification are still required before any completion claim.

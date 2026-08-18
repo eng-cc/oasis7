@@ -102,7 +102,7 @@
       }
       .shell {
         display: grid;
-        grid-template-columns: minmax(220px, 260px) minmax(560px, 1fr) minmax(280px, 330px);
+        grid-template-columns: minmax(200px, 240px) minmax(640px, 1fr) minmax(260px, 300px);
         grid-template-areas: "targets stage details";
         gap: var(--space-panel-gap);
         min-height: calc(100vh - 48px);
@@ -121,15 +121,6 @@
       #app[data-viewer-visual-fixture] {
         --space-panel-gap: 10px;
         --space-stack-gap: 10px;
-      }
-      #app[data-viewer-visual-fixture] .panel__header {
-        padding: 12px 14px;
-      }
-      #app[data-viewer-visual-fixture] .panel__body {
-        padding: 12px;
-      }
-      #app[data-viewer-visual-fixture] .panel--stage > .panel__body {
-        padding: 12px;
       }
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .panel--stage > .panel__body,
       #app[data-viewer-visual-fixture="agent_chat_history"] .panel--stage > .panel__body {
@@ -162,8 +153,6 @@
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .pixel-world-command-strip,
       #app[data-viewer-visual-fixture="agent_chat_history"] .pixel-world-command-strip {
         order: 2;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
       }
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .pixel-world-action-receipt,
       #app[data-viewer-visual-fixture="agent_chat_history"] .pixel-world-action-receipt,
@@ -178,9 +167,6 @@
       #app[data-viewer-visual-fixture="shell_selected_blocker"] .stage-hero .callout__body,
       #app[data-viewer-visual-fixture="agent_chat_history"] .stage-hero .callout__body {
         display: none;
-      }
-      #app[data-viewer-visual-fixture="agent_chat_history"] .shell {
-        grid-template-columns: minmax(210px, 240px) minmax(470px, 0.9fr) minmax(390px, 460px);
       }
       #app[data-viewer-visual-fixture="agent_chat_history"] .panel--details {
         border-color: rgba(141, 199, 170, 0.32);
@@ -2038,11 +2024,6 @@
         background: rgba(255, 255, 255, 0.04);
         font-size: 13px;
       }
-      .mobile-rail__link--diagnostics {
-        color: var(--muted);
-        border-color: rgba(152, 177, 150, 0.14);
-        background: rgba(255, 255, 255, 0.02);
-      }
       .pixel-world-canvas {
         position: relative;
         min-height: clamp(430px, 52vh, 680px);
@@ -2834,9 +2815,10 @@
         .pixel-world-command-cell--next:active { transform: none; }
       }
     </style>
+    <link rel="stylesheet" href="./viewer_terminal_shell.css" />
   </head>
   <body>
-    <div id="app" class="shell" aria-live="polite"></div>
+    <div id="app" class="viewer-shell" data-viewer-shell="player-fullscreen" aria-live="polite"></div>
     <script type="module" src="./viewer.js"></script>
   </body>
 </html>

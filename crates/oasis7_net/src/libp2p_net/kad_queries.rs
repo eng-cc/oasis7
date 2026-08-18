@@ -12,6 +12,26 @@ use oasis7_proto::distributed_dht::{
 use super::CommandResponseSender;
 use super::peer_record::decode_peer_record;
 
+fn decode_peer_record_for_target(
+    payload: &[u8],
+    requested_peer_id: PeerId,
+) -> Result<SignedPeerRecord, WorldError> {
+    let decoded = decode_peer_record(payload)?;
+    let record_peer_id = decoded.record.peer_id.parse::<PeerId>().map_err(|_| {
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "kad peer record peer_id must be valid".to_string(),
+        }
+    })?;
+    if record_peer_id != requested_peer_id {
+        return Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!(
+                "kad peer record target mismatch requested={requested_peer_id} actual={record_peer_id}"
+            ),
+        });
+    }
+    Ok(decoded)
+}
+
 pub(super) enum PendingDhtQuery {
     PublishProvider {
         response: Option<CommandResponseSender<()>>,
@@ -41,6 +61,7 @@ pub(super) enum PendingDhtQuery {
         response: Option<CommandResponseSender<()>>,
     },
     GetPeerRecord {
+        peer_id: PeerId,
         response: Option<CommandResponseSender<Option<SignedPeerRecord>>>,
         record: Option<SignedPeerRecord>,
         error: Option<WorldError>,
@@ -54,6 +75,20 @@ pub(super) enum PendingDhtQuery {
         record: Option<SignedPeerRecord>,
         error: Option<WorldError>,
     },
+}
+
+impl PendingDhtQuery {
+    pub(super) fn get_peer_record(
+        peer_id: PeerId,
+        response: CommandResponseSender<Option<SignedPeerRecord>>,
+    ) -> Self {
+        Self::GetPeerRecord {
+            peer_id,
+            response: Some(response),
+            record: None,
+            error: None,
+        }
+    }
 }
 
 pub(super) enum DhtProgressAction {
@@ -296,13 +331,14 @@ pub(super) fn handle_dht_progress(
             }
         }
         PendingDhtQuery::GetPeerRecord {
+            peer_id,
             response,
             record,
             error,
         } => {
             match result {
                 kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(found))) => {
-                    match decode_peer_record(&found.record.value) {
+                    match decode_peer_record_for_target(&found.record.value, *peer_id) {
                         Ok(decoded) => *record = Some(decoded),
                         Err(err) => *error = Some(err),
                     }
@@ -318,7 +354,7 @@ pub(super) fn handle_dht_progress(
                     ..
                 })) => {
                     if let Some(found) = records.first() {
-                        match decode_peer_record(&found.record.value) {
+                        match decode_peer_record_for_target(&found.record.value, *peer_id) {
                             Ok(decoded) => *record = Some(decoded),
                             Err(err) => *error = Some(err),
                         }

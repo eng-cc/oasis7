@@ -24,7 +24,7 @@ use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldTime};
 
 mod domain_event;
 
-pub use self::domain_event::{CausedBy, DomainEvent, RejectReason};
+pub use self::domain_event::{CausedBy, DomainEvent, LogisticsOwnerPayout, RejectReason};
 
 fn default_world_material_ledger() -> MaterialLedgerId {
     MaterialLedgerId::world()
@@ -36,6 +36,14 @@ fn default_module_action_fee_kind() -> ResourceKind {
 
 fn default_material_transit_priority() -> MaterialTransitPriority {
     MaterialTransitPriority::Standard
+}
+
+fn default_logistics_capacity_units() -> i64 {
+    i64::MAX
+}
+
+fn default_logistics_route_available() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -454,6 +462,29 @@ pub enum Action {
         distance_km: i64,
         #[serde(default)]
         priority: Option<MaterialTransitPriority>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route_id: Option<String>,
+        #[serde(default)]
+        route_ids: Vec<String>,
+        #[serde(default)]
+        auto_reroute: bool,
+    },
+    RegisterLogisticsRoute {
+        requester_agent_id: String,
+        from_ledger: MaterialLedgerId,
+        to_ledger: MaterialLedgerId,
+        kind: String,
+        distance_km: i64,
+        priority: MaterialTransitPriority,
+        #[serde(default = "default_logistics_capacity_units")]
+        capacity_units: i64,
+        #[serde(default)]
+        tariff_electricity_per_unit: i64,
+    },
+    SetLogisticsRouteAvailability {
+        requester_agent_id: String,
+        route_id: String,
+        available: bool,
     },
     FormAlliance {
         proposer_agent_id: String,
@@ -610,6 +641,15 @@ pub enum Action {
         factory_id: String,
         recipe_id: String,
         plan: RecipeExecutionPlan,
+        #[serde(default)]
+        logistics_route_ids: Vec<String>,
+        #[serde(default)]
+        logistics_path_ids: Vec<String>,
+    },
+    PauseFactoryProduction {
+        requester_agent_id: String,
+        factory_id: String,
+        reason: String,
     },
     ScheduleRecipeWithModule {
         requester_agent_id: String,
@@ -780,7 +820,16 @@ impl Action {
             Action::TransferMaterial {
                 requester_agent_id, ..
             }
+            | Action::RegisterLogisticsRoute {
+                requester_agent_id, ..
+            }
+            | Action::SetLogisticsRouteAvailability {
+                requester_agent_id, ..
+            }
             | Action::ScheduleRecipe {
+                requester_agent_id, ..
+            }
+            | Action::PauseFactoryProduction {
                 requester_agent_id, ..
             }
             | Action::ScheduleRecipeWithModule {

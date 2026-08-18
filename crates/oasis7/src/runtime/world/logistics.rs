@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
+use super::super::state::LogisticsRouteV1;
+use super::super::util::sha256_hex;
 use super::super::{
     DomainEvent, MaterialDefaultPriority, MaterialLedgerId, MaterialTransitPriority,
     MaterialTransportLossClass, RejectReason, WorldError, WorldEvent, WorldEventBody, WorldTime,
@@ -10,6 +13,269 @@ pub(super) const MATERIAL_TRANSFER_MAX_DISTANCE_KM: i64 = 10_000;
 pub(super) const MATERIAL_TRANSFER_LOSS_PER_KM_BPS: i64 = 5;
 pub(super) const MATERIAL_TRANSFER_SPEED_KM_PER_TICK: i64 = 100;
 pub(super) const MATERIAL_TRANSFER_MAX_INFLIGHT: usize = 2;
+pub(super) const LOGISTICS_MAX_HOPS: usize = 8;
+pub(super) const LOGISTICS_MAX_PATH_SEARCHES: usize = 4_096;
+
+pub(super) fn normalize_logistics_route_kind(kind: &str) -> Option<String> {
+    let normalized = kind.trim().to_ascii_lowercase();
+    (!normalized.is_empty()).then_some(normalized)
+}
+
+pub(super) fn logistics_route_id(
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+    distance_km: i64,
+    priority: MaterialTransitPriority,
+) -> String {
+    let tuple = (from_ledger, to_ledger, kind, distance_km, priority);
+    let bytes = serde_json::to_vec(&tuple).expect("logistics route tuple is serializable");
+    sha256_hex(&bytes)
+}
+
+pub(super) fn logistics_route_matches(
+    route: &LogisticsRouteV1,
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+    distance_km: i64,
+    priority: Option<MaterialTransitPriority>,
+) -> bool {
+    route.from_ledger == *from_ledger
+        && route.to_ledger == *to_ledger
+        && route.kind == kind
+        && route.distance_km == distance_km
+        && priority.is_none_or(|priority| priority == route.priority)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct LogisticsPathSelection {
+    pub route_ids: Vec<String>,
+    pub path_id: Option<String>,
+    pub total_distance_km: i64,
+    pub total_tariff_electricity: i64,
+    pub total_expected_loss_amount: i64,
+    pub reroute_count: u32,
+}
+
+pub(super) fn logistics_path_id(route_ids: &[String]) -> Option<String> {
+    if route_ids.is_empty() {
+        return None;
+    }
+    let bytes = serde_json::to_vec(route_ids).expect("logistics path ids are serializable");
+    Some(sha256_hex(&bytes))
+}
+
+fn route_available_for_amount(route: &LogisticsRouteV1, amount: i64) -> bool {
+    route.available
+        && route.capacity_units > 0
+        && route.reserved_capacity_units.saturating_add(amount) <= route.capacity_units
+}
+
+fn path_candidate_key(
+    world: &World,
+    route_ids: &[String],
+    amount: i64,
+) -> Option<(u64, i64, i64, usize, Vec<String>)> {
+    let mut total_distance = 0_i64;
+    let mut total_tariff = 0_i64;
+    let mut total_loss = 0_i64;
+    for route_id in route_ids {
+        let route = world.state.logistics_routes.get(route_id)?;
+        total_distance = total_distance.checked_add(route.distance_km)?;
+        total_tariff =
+            total_tariff.checked_add(route.tariff_electricity_per_unit.checked_mul(amount)?)?;
+        total_loss = total_loss.checked_add(material_transit_loss_amount(
+            amount,
+            route.distance_km,
+            material_transit_loss_bps_for_kind(world, route.kind.as_str()),
+        ))?;
+    }
+    Some((
+        material_transit_ticks(total_distance),
+        total_tariff,
+        total_loss,
+        route_ids.len(),
+        route_ids.to_vec(),
+    ))
+}
+
+fn path_matches_route_tuple(
+    world: &World,
+    route_ids: &[String],
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+) -> bool {
+    if route_ids.is_empty() || route_ids.len() > LOGISTICS_MAX_HOPS {
+        return false;
+    }
+    let mut current = from_ledger;
+    let mut seen_route_ids = BTreeSet::new();
+    let mut seen_ledgers = BTreeSet::new();
+    seen_ledgers.insert(from_ledger.clone());
+    for route_id in route_ids {
+        if !seen_route_ids.insert(route_id) {
+            return false;
+        }
+        let Some(route) = world.state.logistics_routes.get(route_id) else {
+            return false;
+        };
+        if route.from_ledger != *current || route.kind != kind {
+            return false;
+        }
+        if !seen_ledgers.insert(route.to_ledger.clone()) {
+            return false;
+        }
+        current = &route.to_ledger;
+    }
+    current == to_ledger
+}
+
+fn find_paths_dfs(
+    world: &World,
+    current: &MaterialLedgerId,
+    destination: &MaterialLedgerId,
+    kind: &str,
+    amount: i64,
+    path: &mut Vec<String>,
+    visited: &mut BTreeSet<MaterialLedgerId>,
+    candidates: &mut Vec<Vec<String>>,
+    searches: &mut usize,
+) {
+    if current == destination {
+        candidates.push(path.clone());
+        return;
+    }
+    if *searches >= LOGISTICS_MAX_PATH_SEARCHES || path.len() >= LOGISTICS_MAX_HOPS {
+        return;
+    }
+    let edges: Vec<(String, MaterialLedgerId)> = world
+        .state
+        .logistics_routes
+        .iter()
+        .filter(|(_, route)| {
+            route.from_ledger == *current
+                && route.kind == kind
+                && route_available_for_amount(route, amount)
+                && !visited.contains(&route.to_ledger)
+        })
+        .map(|(route_id, route)| (route_id.clone(), route.to_ledger.clone()))
+        .collect();
+    for (route_id, next) in edges {
+        *searches = searches.saturating_add(1);
+        path.push(route_id);
+        visited.insert(next.clone());
+        find_paths_dfs(
+            world,
+            &next,
+            destination,
+            kind,
+            amount,
+            path,
+            visited,
+            candidates,
+            searches,
+        );
+        visited.remove(&next);
+        path.pop();
+    }
+}
+
+pub(super) fn select_logistics_path(
+    world: &World,
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+    amount: i64,
+    requested_route_ids: &[String],
+    auto_reroute: bool,
+) -> Result<LogisticsPathSelection, RejectReason> {
+    let Some(normalized_kind) = normalize_logistics_route_kind(kind) else {
+        return Err(RejectReason::RuleDenied {
+            notes: vec!["material kind cannot be empty".to_string()],
+        });
+    };
+    let mut reroute_count = 0;
+    let mut candidates = Vec::new();
+    if !requested_route_ids.is_empty() {
+        if !path_matches_route_tuple(
+            world,
+            requested_route_ids,
+            from_ledger,
+            to_ledger,
+            normalized_kind.as_str(),
+        ) {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![
+                    "logistics route path is cyclic, disconnected, or incompatible".to_string(),
+                ],
+            });
+        }
+        let requested_available = requested_route_ids.iter().all(|route_id| {
+            world
+                .state
+                .logistics_routes
+                .get(route_id)
+                .is_some_and(|route| route_available_for_amount(route, amount))
+        });
+        if requested_available {
+            candidates.push(requested_route_ids.to_vec());
+        } else if !auto_reroute {
+            return Err(RejectReason::RuleDenied {
+                notes: vec!["requested logistics path is unavailable or at capacity".to_string()],
+            });
+        } else {
+            reroute_count = 1;
+        }
+    }
+    if candidates.is_empty() {
+        let mut path = Vec::new();
+        let mut visited = BTreeSet::new();
+        let mut searches = 0;
+        visited.insert(from_ledger.clone());
+        find_paths_dfs(
+            world,
+            from_ledger,
+            to_ledger,
+            normalized_kind.as_str(),
+            amount,
+            &mut path,
+            &mut visited,
+            &mut candidates,
+            &mut searches,
+        );
+        if reroute_count > 0 {
+            candidates.retain(|candidate| candidate != requested_route_ids);
+        }
+    }
+    let route_ids = candidates
+        .into_iter()
+        .filter_map(|candidate| {
+            path_candidate_key(world, &candidate, amount).map(|key| (key, candidate))
+        })
+        .min_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, candidate)| candidate)
+        .ok_or_else(|| RejectReason::RuleDenied {
+            notes: vec!["no available logistics path to destination".to_string()],
+        })?;
+    let key =
+        path_candidate_key(world, &route_ids, amount).ok_or_else(|| RejectReason::RuleDenied {
+            notes: vec!["logistics path tariff or distance overflow".to_string()],
+        })?;
+    Ok(LogisticsPathSelection {
+        path_id: logistics_path_id(&route_ids),
+        total_distance_km: route_ids
+            .iter()
+            .filter_map(|route_id| world.state.logistics_routes.get(route_id))
+            .map(|route| route.distance_km)
+            .sum(),
+        total_tariff_electricity: key.1,
+        total_expected_loss_amount: key.2,
+        route_ids,
+        reroute_count,
+    })
+}
 
 const MATERIAL_TRANSIT_URGENT_KEYWORDS: &[&str] = &[
     "survival",
@@ -255,6 +521,11 @@ impl World {
                     loss_amount,
                     distance_km: job.distance_km,
                     priority: job.priority,
+                    route_id: job.route_id,
+                    path_id: job.path_id,
+                    route_ids: job.route_ids,
+                    tariff_electricity_total: job.tariff_electricity_total,
+                    reroute_count: job.reroute_count,
                 }),
                 None,
             )?;

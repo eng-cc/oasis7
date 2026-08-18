@@ -241,6 +241,8 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
         factory_id: "factory.recipe".to_string(),
         recipe_id: "recipe.motor.mk1".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
 
     world.step().expect("start recipe");
@@ -277,6 +279,72 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
         }
         other => panic!("expected RecipeCompleted, got {other:?}"),
     }
+}
+
+#[test]
+fn schedule_recipe_rejects_invalid_byproduct_before_any_resource_sink() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    world
+        .set_material_balance("steel_plate", 11)
+        .expect("seed build steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed build circuits");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.invalid.bundle", 1, 1),
+    });
+    world.step().expect("start factory build");
+    world.step().expect("factory ready");
+
+    world
+        .set_material_balance("iron_ingot", 1)
+        .expect("seed recipe input");
+    world.set_resource_balance(ResourceKind::Electricity, 5);
+    let journal_before = world.journal().events.len();
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.invalid.bundle".to_string(),
+        recipe_id: "recipe.invalid.bundle".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 1)],
+            vec![MaterialStack::new("motor_mk1", 1)],
+            vec![MaterialStack::new("metal_scrap", -1)],
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("reject invalid output bundle");
+
+    assert!(
+        world.journal().events[journal_before..]
+            .iter()
+            .any(|event| {
+                matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        reason: RejectReason::RuleDenied { notes },
+                        ..
+                    }) if notes.iter().any(|note| note.contains("byproduct"))
+                )
+            })
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(world.material_balance("iron_ingot"), 1);
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 5);
+    assert_eq!(world.material_balance("motor_mk1"), 0);
+    assert_eq!(world.material_balance("metal_scrap"), 0);
 }
 
 #[test]
@@ -322,6 +390,8 @@ fn schedule_recipe_reads_and_writes_site_material_ledger() {
         factory_id: "factory.site.ledger".to_string(),
         recipe_id: "recipe.site.ledger".to_string(),
         plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
 
     world.step().expect("start recipe");
@@ -360,6 +430,9 @@ fn transfer_material_distance_zero_moves_immediately() {
         amount: 8,
         distance_km: 0,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("transfer material");
 
@@ -403,6 +476,9 @@ fn transfer_material_cross_site_creates_transit_and_applies_loss() {
         amount: 100,
         distance_km: 200,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("start transit");
 
@@ -464,6 +540,9 @@ fn transfer_material_rejects_when_distance_exceeds_limit() {
         amount: 5,
         distance_km: 20_001,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("reject out of range");
 
@@ -501,6 +580,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.submit_action(Action::TransferMaterial {
         requester_agent_id: "operator-a".to_string(),
@@ -510,6 +592,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.submit_action(Action::TransferMaterial {
         requester_agent_id: "operator-a".to_string(),
@@ -519,6 +604,9 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
         amount: 10,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
 
     world.step().expect("process transfer actions");
@@ -585,6 +673,8 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
         factory_id: "factory.slot".to_string(),
         recipe_id: "recipe.a".to_string(),
         plan: plan_a,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("start recipe a");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
@@ -602,6 +692,8 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
         factory_id: "factory.slot".to_string(),
         recipe_id: "recipe.b".to_string(),
         plan: plan_b,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
     });
     world.step().expect("reject recipe b");
 

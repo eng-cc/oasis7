@@ -2,10 +2,9 @@ import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, on
 
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
-import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js";
+import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js"; import { createPixelWorldFocusController } from "./pixel_world_focus_controller.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
-
 export { pixelWorldSelectedBlockerVisualFixture };
 
 function tr(locale, zh, en) {
@@ -475,15 +474,14 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
         };
       }
       const mountedRenderState = derived.renderState;
-      const result = bridge.mount(canvas, mountedRenderState);
-      return {
-        status: result?.status || "ready",
-        selection: mountedRenderState.selection,
-        fatal: result?.fatal || null,
-        renderState: mountedRenderState,
-        runtimeSource,
-        runtimeModuleUrl,
-      };
+      try {
+        const result = await bridge.mount(canvas, mountedRenderState);
+        return { status: result?.status || "ready", selection: mountedRenderState.selection, fatal: result?.fatal || null, renderState: mountedRenderState, runtimeSource, runtimeModuleUrl };
+      } catch (error) {
+        const fatal = { code: "pixel_world_webgl2_unavailable", message: error instanceof Error ? error.message : String(error || "embedded WebGL2 renderer mount failed") };
+        onFatal?.(fatal);
+        return { status: "unavailable", selection: null, fatal, renderState: null, runtimeSource, runtimeModuleUrl };
+      }
     },
     update(renderInput) {
       const derived = deriveRenderStateOrUnavailable(renderInput);
@@ -649,7 +647,8 @@ function PixelWorldActionReceipt(props) {
   const receipt = () => props.surface().action_receipt;
   return (
     <div
-      class={`pixel-world-action-receipt ${props.class ?? ""}`}
+      id={props.id}
+      class={`pixel-world-action-receipt ${props.class ?? ""}`} data-viewer-overlay="receipt"
       data-receipt-present={receipt().present ? "true" : "false"}
       data-receipt-state={receipt().state}
       data-receipt-confidence={receipt().confidence}
@@ -732,15 +731,10 @@ function PixelWorldCommercialHud(props) {
       window.location.hash = nextMoveHref();
     }
   };
-  const activateNextMoveFromKeyboard = (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      activateNextMove(event);
-    }
-  };
   return (
     <Show when={surface()}>
       <div
-        class="pixel-world-command-strip"
+        class="pixel-world-command-strip" data-viewer-overlay="next-move"
         data-active-agent={surface().active_agent_id || ""}
         data-leverage-state={surface().player_leverage.state}
       >
@@ -756,10 +750,6 @@ function PixelWorldCommercialHud(props) {
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
           data-blocker-present={surface().blocker.label ? "true" : "false"}
-          role="button"
-          tabIndex="0"
-          onClick={activateNextMove}
-          onKeyDown={activateNextMoveFromKeyboard}
         >
           <div class="pixel-world-command-cell__header">
             <div class="pixel-world-command-cell__label">
@@ -796,6 +786,7 @@ function PixelWorldCommercialHud(props) {
         </div>
       </div>
       <PixelWorldActionReceipt
+        id="viewer-action-receipt"
         locale={props.locale}
         surface={surface}
       />
@@ -882,7 +873,7 @@ function PixelWorldFocusHud(props) {
                 ? tr(props.locale(), "还原布局", "Restore Layout")
                 : tr(props.locale(), "最大化", "Maximize")}
             </button>
-            <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>{tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}</button>
+            <button id="viewer-focus-exit" type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>{tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}</button>
           </details>
         </div>
       </div>
@@ -1086,7 +1077,7 @@ function PixelWorldFocusCommandSurface(props) {
       .slice(0, 12);
 
   return (
-    <div class="pixel-world-focus-command-surface stack">
+    <div id="viewer-command-console" class="pixel-world-focus-command-surface stack">
       <Show
         when={agentId()}
         fallback={<div class="empty">{tr(locale(), "先选中一个行动体，才能在沉浸模式里直接下指令。", "Select an agent to issue direct commands in World Focus.")}</div>}
@@ -1269,33 +1260,19 @@ export function PixelWorldHost(props) {
     setMaximized(next);
   }
 
-  function enterFocusMode() {
-    setPersistentFocusMode(true);
-    setPersistentCommandDrawerOpen(false);
-    setPersistentDiagnosticsDrawerOpen(false);
-    setPersistentMaximized(false);
-  }
-
-  function exitFocusMode() {
-    setPersistentFocusMode(false);
-    setPersistentCommandDrawerOpen(false);
-    setPersistentDiagnosticsDrawerOpen(false);
-    setPersistentMaximized(false);
-  }
-
-  function openCommandDrawer() {
-    setPersistentCommandDrawerOpen(true);
-    setPersistentDiagnosticsDrawerOpen(false);
-  }
-
-  function openDiagnosticsDrawer() {
-    setPersistentDiagnosticsDrawerOpen(true);
-    setPersistentCommandDrawerOpen(false);
-  }
-
   function toggleMaximized() {
     setPersistentMaximized(!maximized());
   }
+
+  const focusController = createPixelWorldFocusController({
+    focusMode,
+    commandDrawerOpen,
+    diagnosticsDrawerOpen,
+    setFocusMode: setPersistentFocusMode,
+    setCommandDrawerOpen: setPersistentCommandDrawerOpen,
+    setDiagnosticsDrawerOpen: setPersistentDiagnosticsDrawerOpen,
+    setMaximized: setPersistentMaximized,
+  });
 
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
@@ -1423,10 +1400,7 @@ export function PixelWorldHost(props) {
 
   onMount(() => {
     function handleKeyDown(event) {
-      if (event.key === "Escape" && focusMode()) {
-        event.preventDefault();
-        exitFocusMode();
-      }
+      focusController.handleKeyDown(event);
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1463,6 +1437,7 @@ export function PixelWorldHost(props) {
   return (
     <div
       class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
+      data-viewer-overlay="world-hud"
       data-world-focus={focusMode() ? "true" : "false"}
       data-world-focus-maximized={focusMode() && maximized() ? "true" : "false"}
       data-visual-fixture={visualFixtureName || ""}
@@ -1487,7 +1462,7 @@ export function PixelWorldHost(props) {
               type="button"
               class="pixel-world-focus-entry__button"
               disabled={!renderState()}
-              onClick={enterFocusMode}
+              onClick={focusController.enterFocusMode}
               aria-pressed={focusMode() ? "true" : "false"}
               aria-describedby="pixel-world-focus-entry-hint"
             >
@@ -1506,9 +1481,9 @@ export function PixelWorldHost(props) {
         <PixelWorldFocusHud
           locale={locale}
           renderState={renderState}
-          onExit={exitFocusMode}
-          onOpenCommand={openCommandDrawer}
-          onOpenDiagnostics={openDiagnosticsDrawer}
+          onExit={focusController.exitFocusMode}
+          onOpenCommand={focusController.openCommandDrawer}
+          onOpenDiagnostics={focusController.openDiagnosticsDrawer}
           onToggleMaximized={toggleMaximized}
           maximized={maximized}
         />
@@ -1586,9 +1561,17 @@ export function PixelWorldHost(props) {
       </Show>
       <Show when={focusMode()}>
         <details
+          id="viewer-focus-command-drawer"
           class="pixel-world-focus-drawer pixel-world-focus-drawer--command"
           open={commandDrawerOpen()}
-          onToggle={(event) => setPersistentCommandDrawerOpen(event.currentTarget.open)}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            if (open) {
+              setPersistentCommandDrawerOpen(true);
+            } else {
+              focusController.closeCommandDrawer({ returnFocus: true });
+            }
+          }}
         >
           <summary>{tr(locale(), "命令与目标", "Command and Target")}</summary>
           <div class="pixel-world-focus-drawer__body">
@@ -1639,9 +1622,17 @@ export function PixelWorldHost(props) {
       </Show>
       <Show when={focusMode() && renderState()}>
         <details
+          id="viewer-focus-diagnostics-drawer"
           class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"
           open={diagnosticsDrawerOpen()}
-          onToggle={(event) => setPersistentDiagnosticsDrawerOpen(event.currentTarget.open)}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            if (open) {
+              setPersistentDiagnosticsDrawerOpen(true);
+            } else {
+              focusController.closeDiagnosticsDrawer({ returnFocus: true });
+            }
+          }}
         >
           <summary>{tr(locale(), "沉浸诊断", "Focus Diagnostics")}</summary>
           <div class="pixel-world-focus-drawer__body">

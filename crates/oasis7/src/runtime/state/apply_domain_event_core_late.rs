@@ -852,7 +852,10 @@ impl WorldState {
             | event @ DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
                 self.apply_domain_event_main_token(event, now)?;
             }
-            event @ DomainEvent::MaterialTransferred { .. }
+            event @ DomainEvent::LogisticsRouteRegistered { .. }
+            | event @ DomainEvent::LogisticsRouteAvailabilityChanged { .. }
+            | event @ DomainEvent::LogisticsPathRerouted { .. }
+            | event @ DomainEvent::MaterialTransferred { .. }
             | event @ DomainEvent::MaterialTransitStarted { .. }
             | event @ DomainEvent::MaterialTransitCompleted { .. }
             | event @ DomainEvent::FactoryBuildStarted { .. }
@@ -863,7 +866,8 @@ impl WorldState {
             | event @ DomainEvent::RecipeStarted { .. }
             | event @ DomainEvent::RecipeCompleted { .. }
             | event @ DomainEvent::FactoryProductionBlocked { .. }
-            | event @ DomainEvent::FactoryProductionResumed { .. } => {
+            | event @ DomainEvent::FactoryProductionResumed { .. }
+            | event @ DomainEvent::FactoryProductionPaused { .. } => {
                 self.apply_domain_event_industry(event, now)?;
             }
             DomainEvent::MaterialProfileGoverned {

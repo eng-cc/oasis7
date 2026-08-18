@@ -108,6 +108,9 @@ fn logistics_transfer_quote_is_read_only_deterministic_and_matches_transit_autho
         amount: 50,
         distance_km: 100,
         priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
     });
     world.step().expect("start quoted transit");
     let (started_loss_bps, started_ready_at, started_priority) = world
@@ -169,6 +172,9 @@ fn logistics_transfer_quote_makes_capacity_and_amount_recovery_recommendations_c
             amount: 20,
             distance_km: 200,
             priority: None,
+            route_id: None,
+            route_ids: Vec::new(),
+            auto_reroute: false,
         });
     }
     world.step().expect("start capacity-filling transits");

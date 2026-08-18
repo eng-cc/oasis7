@@ -7,6 +7,7 @@ viewer.html viewer.html
 software_safe.html software_safe.html
 viewer.js viewer.js
 software_safe.js software_safe.js
+viewer_terminal_shell.css viewer_terminal_shell.css
 viewer_first_agent_claim_evidence.html viewer_first_agent_claim_evidence.html
 software_safe_first_agent_claim_evidence.html software_safe_first_agent_claim_evidence.html
 favicon.ico favicon.ico
@@ -20,6 +21,7 @@ viewer.html
 software_safe.html
 viewer.js
 software_safe.js
+viewer_terminal_shell.css
 viewer_first_agent_claim_evidence.html
 software_safe_first_agent_claim_evidence.html
 favicon.ico
@@ -49,6 +51,7 @@ scope = [
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe.js",
+    "crates/oasis7_viewer/viewer_terminal_shell.css",
     "crates/oasis7_viewer/viewer_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/package.json",

@@ -178,6 +178,8 @@ impl World {
             | Action::TopUpRestrictedStarterClaimLiveopsPool { .. }
             | Action::IssueRestrictedStarterClaimGrant { .. }
             | Action::RevokeRestrictedStarterClaimGrant { .. }
+            | Action::RegisterLogisticsRoute { .. }
+            | Action::SetLogisticsRouteAvailability { .. }
             | Action::TransferMaterial { .. } => {
                 self.action_to_event_core(action_id, &envelope.action)
             }
@@ -218,6 +220,7 @@ impl World {
             | Action::MaintainFactory { .. }
             | Action::RecycleFactory { .. }
             | Action::ScheduleRecipe { .. }
+            | Action::PauseFactoryProduction { .. }
             | Action::ScheduleRecipeWithModule { .. }
             | Action::ValidateProduct { .. }
             | Action::ValidateProductWithModule { .. }

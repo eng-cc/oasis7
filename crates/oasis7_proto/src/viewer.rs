@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 mod rollback_v2;
 pub use rollback_v2::*;
+mod authoritative;
+pub use authoritative::*;
+mod director;
+pub use director::*;
+mod responses;
+pub use responses::*;
+mod world_feed;
+pub use world_feed::*;
 mod negotiation;
 pub use negotiation::*;
 mod collect_data;
@@ -54,6 +62,7 @@ pub struct HostedStrongAuthGrant {
     pub signer_public_key: String,
     pub signature: String,
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewerRequest {
@@ -73,6 +82,11 @@ pub enum ViewerRequest {
         event_kinds: Vec<ViewerEventKind>,
     },
     RequestSnapshot,
+    RequestWorldFeed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
     PlaybackControl {
         mode: PlaybackControl,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -466,129 +480,6 @@ pub enum LiveControl {
     Step { count: usize },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeFinalityState {
-    Pending,
-    Confirmed,
-    Final,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeBatchFinality {
-    pub batch_id: String,
-    pub tx_hash: String,
-    pub commit_tick: u64,
-    pub confirm_height: u64,
-    pub final_height: u64,
-    pub state_root: String,
-    pub data_root: String,
-    pub finality_state: AuthoritativeFinalityState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_seq_start: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_seq_end: Option<u64>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub settlement_ready: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub ranking_ready: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub challenge_open: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub slashed: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub active_challenge_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeChallengeStatus {
-    Challenged,
-    ResolvedNoFraud,
-    ResolvedFraudSlashed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeChallengeAck<Time> {
-    pub challenge_id: String,
-    pub batch_id: String,
-    pub watcher_id: String,
-    pub status: AuthoritativeChallengeStatus,
-    pub submitted_at_tick: Time,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolved_at_tick: Option<Time>,
-    #[serde(skip_serializing_if = "is_false")]
-    pub slash_applied: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub slash_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeChallengeError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub challenge_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub batch_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthoritativeRecoveryStatus {
-    SessionRegistered,
-    RolledBack,
-    CatchUpReady,
-    SessionRevoked,
-    SessionRotated,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeRecoveryAck<Time> {
-    pub status: AuthoritativeRecoveryStatus,
-    pub reorg_epoch: u64,
-    pub snapshot_height: u64,
-    pub snapshot_hash: String,
-    pub log_cursor: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stable_batch_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub replaced_by_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_epoch: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoke_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_by: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rollback_receipt: Option<AuthoritativeRollbackReceipt>,
-    pub acknowledged_at_tick: Time,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeRecoveryError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub batch_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoke_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_by: Option<String>,
-}
-
 // Legacy mixed control channel. Prefer PlaybackControl/LiveControl.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
@@ -620,6 +511,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     Event {
         event: Event,
+    },
+    WorldFeed {
+        feed: WorldFeedEnvelope,
     },
     AuthoritativeBatch {
         batch: AuthoritativeBatchFinality,
@@ -712,104 +606,6 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     Error {
         message: String,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ControlCompletionStatus {
-    Advanced,
-    TimeoutNoProgress,
-    Blocked,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ControlCompletionAck<Time> {
-    pub request_id: u64,
-    pub status: ControlCompletionStatus,
-    pub delta_logical_time: Time,
-    pub delta_event_seq: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PromptControlOperation {
-    Apply,
-    Rollback,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromptControlAck<Time> {
-    pub agent_id: String,
-    pub operation: PromptControlOperation,
-    pub preview: bool,
-    pub version: u64,
-    pub updated_at_tick: Time,
-    pub applied_fields: Vec<String>,
-    pub digest: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rolled_back_to_version: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromptControlError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_version: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentChatAck<Time> {
-    pub agent_id: String,
-    pub accepted_at_tick: Time,
-    pub message_len: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub intent_tick: Option<Time>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub intent_seq: Option<u64>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub idempotent_replay: bool,
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentChatError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameplayActionAck<Time> {
-    pub action_id: String,
-    pub target_agent_id: String,
-    pub player_id: String,
-    pub runtime_action_id: u64,
-    pub accepted_at_tick: Time,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameplayActionError {
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub action_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_agent_id: Option<String>,
 }
 
 impl From<PlaybackControl> for ViewerControl {
@@ -1168,6 +964,132 @@ mod tests {
             u64,
         > = serde_json::from_str(&json).expect("deserialize response");
         assert_eq!(parsed, response);
+    }
+
+    #[test]
+    fn world_feed_v1_round_trip_preserves_cursor_and_gap_contract() {
+        let request_json = serde_json::json!({
+            "type": "request_world_feed",
+            "cursor": "opaque-cursor",
+            "limit": 25
+        });
+        let request: ViewerRequest =
+            serde_json::from_value(request_json.clone()).expect("decode world feed request");
+        assert_eq!(
+            serde_json::to_value(request).expect("encode request"),
+            request_json
+        );
+
+        let legacy_response_json = serde_json::json!({
+            "type": "world_feed",
+            "feed": {
+                "schema_version": "world_feed/v1",
+                "world_id": "world-1",
+                "reorg_epoch": 3,
+                "cursor": "next-cursor",
+                "events": [],
+                "status": "gap",
+                "gap_reason": "reorg_epoch_changed",
+                "snapshot_reload_required": true
+            }
+        });
+        let response: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(legacy_response_json).expect("decode world feed response");
+        let encoded = serde_json::to_value(response).expect("encode response");
+        assert_eq!(encoded["feed"]["reorg_epoch"], serde_json::json!("3"));
+    }
+
+    #[test]
+    fn world_feed_v1_event_keeps_explicit_receipt_reference_nullable() {
+        let legacy_response_json = serde_json::json!({
+            "type": "world_feed",
+            "feed": {
+                "schema_version": "world_feed/v1",
+                "world_id": "world-1",
+                "reorg_epoch": 0,
+                "cursor": "cursor-7",
+                "events": [{
+                    "event_seq": 7,
+                    "kind": "domain",
+                    "summary": "Domain event",
+                    "detail": "{}",
+                    "receipt_ref": null
+                }],
+                "status": "ready",
+                "snapshot_reload_required": false
+            }
+        });
+        let response: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(legacy_response_json).expect("decode world feed response");
+        let encoded = serde_json::to_value(response).expect("encode response");
+        assert_eq!(encoded["feed"]["reorg_epoch"], serde_json::json!("0"));
+        assert_eq!(
+            encoded["feed"]["events"][0]["event_seq"],
+            serde_json::json!("7")
+        );
+        assert!(encoded["feed"]["events"][0]["receipt_ref"].is_null());
+    }
+
+    #[test]
+    fn world_feed_v1_u64_identifiers_serialize_as_exact_decimal_strings() {
+        let response = ViewerResponse::<(), (), (), (), u64>::WorldFeed {
+            feed: WorldFeedEnvelope {
+                schema_version: WORLD_FEED_SCHEMA_VERSION.to_string(),
+                world_id: "world-max".to_string(),
+                reorg_epoch: u64::MAX,
+                cursor: "cursor-max".to_string(),
+                events: vec![WorldFeedEvent {
+                    event_seq: u64::MAX,
+                    kind: "domain".to_string(),
+                    summary: "Max event sequence".to_string(),
+                    detail: "{}".to_string(),
+                    receipt_ref: None,
+                }],
+                status: WorldFeedStatus::Ready,
+                gap_reason: None,
+                unavailable_reason: None,
+                snapshot_reload_required: false,
+            },
+        };
+
+        let encoded = serde_json::to_value(&response).expect("encode max u64 feed");
+        assert_eq!(
+            encoded["feed"]["reorg_epoch"],
+            serde_json::json!(u64::MAX.to_string())
+        );
+        assert_eq!(
+            encoded["feed"]["events"][0]["event_seq"],
+            serde_json::json!(u64::MAX.to_string())
+        );
+
+        let parsed: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(encoded).expect("decode max u64 feed");
+        assert_eq!(parsed, response);
+    }
+
+    #[test]
+    fn director_capability_grant_round_trip_preserves_signed_scope() {
+        let grant_json = serde_json::json!({
+            "version": 1,
+            "action": "director_open",
+            "audience": "viewer_director",
+            "scope": "diagnostics_read",
+            "player_id": "player-1",
+            "player_public_key": "11".repeat(32),
+            "server": "viewer-live-1",
+            "session_epoch": 4,
+            "nonce": "director-nonce-1",
+            "issued_at_unix_ms": 1000,
+            "expires_at_unix_ms": 2000,
+            "signer_public_key": "22".repeat(32),
+            "signature": "awdirectorgrant:v1:33".to_string() + &"33".repeat(63),
+        });
+        let grant: DirectorCapabilityGrant =
+            serde_json::from_value(grant_json.clone()).expect("decode director grant");
+        assert_eq!(
+            serde_json::to_value(grant).expect("encode director grant"),
+            grant_json
+        );
     }
 }
 

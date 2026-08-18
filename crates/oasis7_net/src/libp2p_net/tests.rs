@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 mod active_set_candidate_tests;
 mod admissible_request_peers_tests;
 mod discovery_dial_tests;
+mod discovery_peer_record_failure_tests;
 mod discovery_peer_record_tests;
 mod peer_health_refresh_tests;
 mod peer_manager_observer_tests;
@@ -232,6 +233,7 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
     let peer_record = kad::PeerRecord { peer: None, record };
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut pending = PendingDhtQuery::GetPeerRecord {
+        peer_id: PeerId::from(keypair.public()),
         response: Some(sender),
         record: None,
         error: None,
