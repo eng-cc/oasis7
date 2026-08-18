@@ -11662,8 +11662,16 @@ function reasonCopy(locale, tr2, feed) {
   }
   return null;
 }
-function eventDetail(event, locale, tr2) {
-  return tr2(locale, `${event.kind} · ${event.detail || "无额外详情"}`, `${event.kind} · ${event.detail || "No additional detail"}`);
+function eventKindLabel(event, locale, tr2) {
+  const normalized = String(event?.kind || "world_update").trim().replace(/[^a-zA-Z0-9]+/g, " ").replace(/\s+/g, " ");
+  const known2 = {
+    snapshot_created: ["世界快照", "World snapshot"],
+    resource_change: ["资源变化", "Resource change"],
+    agent_spoke: ["Agent 动态", "Agent activity"]
+  }[String(event?.kind || "").toLowerCase()];
+  if (known2) return tr2(locale, known2[0], known2[1]);
+  if (!normalized) return tr2(locale, "世界更新", "World update");
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 function WorldFeedPanel(props) {
   const locale = () => typeof props.locale === "function" ? props.locale() : props.locale || "en";
@@ -11744,7 +11752,7 @@ function WorldFeedPanel(props) {
             var _el$14 = _tmpl$8$2(), _el$15 = _el$14.firstChild, _el$16 = _el$15.firstChild, _el$17 = _el$16.nextSibling, _el$18 = _el$15.nextSibling;
             insert(_el$16, () => event.summary);
             insert(_el$17, () => `#${event.event_seq}`);
-            insert(_el$18, () => eventDetail(event, locale(), tr2));
+            insert(_el$18, () => eventKindLabel(event, locale(), tr2));
             insert(_el$14, createComponent(Show, {
               get when() {
                 return event.receipt_ref != null;

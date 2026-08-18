@@ -51,6 +51,29 @@ describe("WorldFeedPanel", () => {
     expect(document.querySelectorAll("a[data-world-feed-receipt-ref]")).toHaveLength(1);
   });
 
+  it("formats runtime kinds and keeps diagnostic JSON out of the player feed", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [{
+            event_seq: 9,
+            kind: "snapshot_created",
+            summary: "World snapshot updated",
+            detail: '{"kind":"SnapshotCreated","internal_state":"raw"}',
+            receipt_ref: null,
+          }],
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    expect(screen.getByText("World snapshot")).toBeInTheDocument();
+    expect(screen.queryByText("snapshot_created")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("internal_state");
+  });
+
   it("presents World Feed events in ascending event sequence order", () => {
     const { container } = render(() => (
       <WorldFeedPanel

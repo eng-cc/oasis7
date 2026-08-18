@@ -50,12 +50,19 @@ function reasonCopy(locale, tr, feed) {
   return null;
 }
 
-function eventDetail(event, locale, tr) {
-  return tr(
-    locale,
-    `${event.kind} · ${event.detail || "无额外详情"}`,
-    `${event.kind} · ${event.detail || "No additional detail"}`,
-  );
+function eventKindLabel(event, locale, tr) {
+  const normalized = String(event?.kind || "world_update")
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ");
+  const known = {
+    snapshot_created: ["世界快照", "World snapshot"],
+    resource_change: ["资源变化", "Resource change"],
+    agent_spoke: ["Agent 动态", "Agent activity"],
+  }[String(event?.kind || "").toLowerCase()];
+  if (known) return tr(locale, known[0], known[1]);
+  if (!normalized) return tr(locale, "世界更新", "World update");
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function WorldFeedPanel(props) {
@@ -131,7 +138,7 @@ function WorldFeedPanel(props) {
                     <div class="event-card__title">{event.summary}</div>
                     <span class="badge">{`#${event.event_seq}`}</span>
                   </div>
-                  <div class="event-card__meta">{eventDetail(event, locale(), tr)}</div>
+                  <div class="event-card__meta">{eventKindLabel(event, locale(), tr)}</div>
                   <Show when={event.receipt_ref != null}>
                     <a
                       data-world-feed-receipt-ref={event.receipt_ref}
