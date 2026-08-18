@@ -282,6 +282,72 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
 }
 
 #[test]
+fn schedule_recipe_rejects_invalid_byproduct_before_any_resource_sink() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    world
+        .set_material_balance("steel_plate", 11)
+        .expect("seed build steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed build circuits");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.invalid.bundle", 1, 1),
+    });
+    world.step().expect("start factory build");
+    world.step().expect("factory ready");
+
+    world
+        .set_material_balance("iron_ingot", 1)
+        .expect("seed recipe input");
+    world.set_resource_balance(ResourceKind::Electricity, 5);
+    let journal_before = world.journal().events.len();
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.invalid.bundle".to_string(),
+        recipe_id: "recipe.invalid.bundle".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 1)],
+            vec![MaterialStack::new("motor_mk1", 1)],
+            vec![MaterialStack::new("metal_scrap", -1)],
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("reject invalid output bundle");
+
+    assert!(
+        world.journal().events[journal_before..]
+            .iter()
+            .any(|event| {
+                matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        reason: RejectReason::RuleDenied { notes },
+                        ..
+                    }) if notes.iter().any(|note| note.contains("byproduct"))
+                )
+            })
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(world.material_balance("iron_ingot"), 1);
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 5);
+    assert_eq!(world.material_balance("motor_mk1"), 0);
+    assert_eq!(world.material_balance("metal_scrap"), 0);
+}
+
+#[test]
 fn schedule_recipe_reads_and_writes_site_material_ledger() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {

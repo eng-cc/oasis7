@@ -614,6 +614,18 @@ impl World {
                         },
                     }));
                 }
+                for (label, stacks) in [
+                    ("consume", plan.consume.as_slice()),
+                    ("produce", plan.produce.as_slice()),
+                    ("byproduct", plan.byproducts.as_slice()),
+                ] {
+                    if let Some(note) = invalid_recipe_plan_stack_note(label, stacks) {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied { notes: vec![note] },
+                        }));
+                    }
+                }
                 if plan.accepted_batches == 0 {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
@@ -1149,6 +1161,13 @@ impl World {
             _ => unreachable!("action_to_event_economy received unsupported action variant"),
         }
     }
+}
+
+fn invalid_recipe_plan_stack_note(label: &str, stacks: &[MaterialStack]) -> Option<String> {
+    stacks
+        .iter()
+        .find(|stack| stack.kind.trim().is_empty() || stack.amount <= 0)
+        .map(|_| format!("recipe plan {label} stack must have non-empty kind and amount > 0"))
 }
 
 #[path = "action_to_event_economy_profiles.rs"]
