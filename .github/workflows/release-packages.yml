@@ -418,6 +418,35 @@ jobs:
             --web-launcher-dist output/release/web-launcher-dist \
             --out-dir output/release/assets \
             --profile packaging
+      - name: Write BUILDINFO into Linux bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="output/release/assets"
+          bundle="${assets}/oasis7-${{ matrix.platform }}"
+          buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"
+          {
+            echo "workflow=Release Packages"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "release_tag=${GITHUB_REF_NAME}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "build_profile=packaging"
+            echo "platform=${{ matrix.platform }}"
+            echo "target_triple=${{ matrix.target_triple }}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "package_version=${{ steps.release_version.outputs.value }}"
+            echo "published=false"
+          } > "${buildinfo}"
+
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            cp "${buildinfo}" "${bundle}/BUILDINFO"
+            cd "${bundle}"
+            mapfile -t files < <(find . -type f ! -name SHA256SUMS -print | sed 's#^./##' | sort)
+            ((${#files[@]} > 0)) || { echo "error: Linux bundle has no files to checksum" >&2; exit 1; }
+            sha256sum "${files[@]}" > SHA256SUMS
+            sha256sum -c SHA256SUMS >/dev/null
+          fi
       - name: Package native installer
         shell: bash
         run: |

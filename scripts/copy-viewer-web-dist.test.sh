@@ -55,8 +55,8 @@ from pathlib import Path
 manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
 assert payload == {
-    "available": True,
-    "path": "pixel_world_bridge_bindgen_bg.wasm",
+    "available": False,
+    "reason": "separate_artifact",
 }, payload
 PY
 
@@ -65,6 +65,9 @@ missing_dist_dir="$TMPDIR/missing-dist"
 missing_optional_payload_dir="$TMPDIR/missing-optional-payload"
 cp -R "$viewer_root" "$missing_viewer_root"
 rm "$missing_viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+mkdir -p "$missing_optional_payload_dir"
+printf 'stale bytes from another build\n' \
+  > "$missing_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
 
 "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
   --viewer-root "$missing_viewer_root" \
@@ -97,8 +100,8 @@ for pass in first second; do
     --dist-dir "$in_place_dir" \
     --optional-payload-dir "$in_place_optional_payload_dir"
 
-  if [[ -e "$in_place_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
-    echo "in-place split pass '$pass' copied optional WASM into primary dist" >&2
+  if [[ ! -e "$in_place_dir/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+    echo "in-place split pass '$pass' removed canonical source WASM" >&2
     exit 1
   fi
   cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" \
@@ -111,11 +114,32 @@ from pathlib import Path
 manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert manifest == {
     "pixel_world_bridge_bindgen_bg.wasm": {
-        "available": True,
-        "path": "pixel_world_bridge_bindgen_bg.wasm",
+        "available": False,
+        "reason": "separate_artifact",
     }
 }, manifest
 PY
 done
+
+rm "$in_place_dir/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
+printf 'stale bytes from another build\n' \
+  > "$in_place_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$in_place_dir" \
+  --dist-dir "$in_place_dir" \
+  --optional-payload-dir "$in_place_optional_payload_dir"
+if [[ -e "$in_place_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "stale staged optional WASM must be removed when source is missing" >&2
+  exit 1
+fi
+python3 - "$in_place_dir/optional-payloads.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload == {"available": False, "reason": "source_missing"}, payload
+PY
 
 echo "copy-viewer-web-dist.test: OK"

@@ -19,7 +19,8 @@ later inputs or hosts ready.
 
 ## Required inputs
 
-- `oasis7-linux-x64-bundle.tar.gz` from the approved package artifact.
+- `oasis7-linux-x64.deb` from the approved Linux package artifact.
+- `oasis7-linux-x64-ops-tools.tar.gz` from the matching checksummed operator-tools artifact.
 - A governed stage `config/` containing the bootstrap bundle, genesis,
   validator registry, `node.env`, and the production manifest and bootstrap-peer inputs.
 - A governed stage `generated-world/` containing `snapshot.json`,
@@ -29,7 +30,8 @@ Run as the host operator:
 
 ```bash
 ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh \
-  --bundle-tar /srv/oasis7/oasis7-linux-x64-bundle.tar.gz \
+  --package-deb /srv/oasis7/oasis7-linux-x64.deb \
+  --ops-tools-tar /srv/oasis7/oasis7-linux-x64-ops-tools.tar.gz \
   --config-dir /srv/oasis7/stage/config \
   --world-dir /srv/oasis7/stage/generated-world \
   --node-id triad-testnet-sequencer \

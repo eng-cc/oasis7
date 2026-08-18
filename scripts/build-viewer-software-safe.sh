@@ -6,6 +6,7 @@ source "$ROOT_DIR/scripts/viewer-web-dist-contract.sh"
 source "$ROOT_DIR/scripts/viewer-dependency-preflight.sh"
 viewer_dist_dir="$ROOT_DIR/crates/oasis7_viewer/dist"
 optional_payload_dir="${OASIS7_VIEWER_OPTIONAL_PAYLOAD_DIR:-}"
+viewer_optional_payload_source="$viewer_dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
 usage() {
   cat <<'USAGE'
@@ -46,7 +47,8 @@ copy_viewer_dist() {
   "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" "${args[@]}" >/dev/null
 }
 
-if [[ "${OASIS7_FORCE_VIEWER_SOFTWARE_SAFE_BUILD:-0}" != "1" ]] \
+if [[ "${OASIS7_FORCE_VIEWER_SOFTWARE_SAFE_BUILD:-0}" != "1" \
+  && -f "$viewer_optional_payload_source" ]] \
   && viewer_web_dist_check_freshness "$ROOT_DIR" "$viewer_dist_dir" >/dev/null 2>&1; then
   echo "+ viewer software-safe dist is fresh; skipping rebuild"
   copy_viewer_dist

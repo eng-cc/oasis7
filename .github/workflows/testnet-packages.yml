@@ -222,18 +222,13 @@ jobs:
           cp \
             "output/testnet-packages/assets/oasis7-${{ matrix.platform }}/.oasis7-bundle-manifest.json" \
             "output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json"
-      - name: Package native installer
-        shell: bash
-        run: |
-          ./scripts/package-native-installer.sh \
-            --platform "${{ matrix.platform }}" \
-            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
-            --out-dir output/testnet-packages/assets \
-            --asset-name "${{ matrix.asset_name }}" \
-            --version "${{ steps.package_version.outputs.value }}"
       - name: Write BUILDINFO
         shell: bash
         run: |
+          set -euo pipefail
+          assets="output/testnet-packages/assets"
+          bundle="${assets}/oasis7-${{ matrix.platform }}"
+          buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"
           {
             echo "workflow=Testnet Packages"
             echo "run_id=${GITHUB_RUN_ID}"
@@ -248,7 +243,29 @@ jobs:
             echo "runner_os=${RUNNER_OS}"
             echo "package_version=${{ steps.package_version.outputs.value }}"
             echo "published=false"
-          } > "output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"
+          } > "${buildinfo}"
+
+          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            cp "${buildinfo}" "${bundle}/BUILDINFO"
+            cd "${bundle}"
+            mapfile -t files < <(find . -type f ! -name SHA256SUMS -print | sed 's#^./##' | sort)
+            ((${#files[@]} > 0)) || { echo "error: Linux bundle has no files to checksum" >&2; exit 1; }
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "${files[@]}" > SHA256SUMS
+            else
+              shasum -a 256 "${files[@]}" > SHA256SUMS
+            fi
+            shasum -a 256 -c SHA256SUMS >/dev/null
+          fi
+      - name: Package native installer
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/testnet-packages/assets \
+            --asset-name "${{ matrix.asset_name }}" \
+            --version "${{ steps.package_version.outputs.value }}"
       - name: Stage Windows governed deployment closure
         if: matrix.platform == 'windows-x64'
         shell: bash

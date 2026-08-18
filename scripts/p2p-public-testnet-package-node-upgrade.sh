@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -32,6 +34,12 @@ EOF
 die() {
   printf 'error: %s\n' "$*" >&2
   exit 1
+}
+
+safe_ops_tools_extract() {
+  local archive=$1 destination=$2
+  python3 "$SCRIPT_DIR/p2p-safe-extract-tar.py" "$archive" "$destination" \
+    || die "cannot safely extract ops-tools archive"
 }
 
 require_non_empty() {
@@ -803,7 +811,7 @@ command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required to extract the 
 dpkg-deb --extract "$package_deb" "$tmp_dir/deb-root"
 bundle_root="$tmp_dir/deb-root/opt/oasis7"
 [[ -d "$bundle_root" ]] || die "Debian package missing /opt/oasis7 player bundle: $package_deb"
-tar -xzf "$ops_tools_tar" -C "$tmp_dir"
+safe_ops_tools_extract "$ops_tools_tar" "$tmp_dir"
 ops_bundle_root="$tmp_dir/oasis7-linux-x64-ops-tools"
 [[ -f "$ops_bundle_root/.oasis7-ops-tools-manifest.json" ]] || die "ops-tools archive missing manifest"
 [[ -f "$ops_bundle_root/SHA256SUMS" ]] || die "ops-tools archive missing SHA256SUMS"

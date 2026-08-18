@@ -17,8 +17,9 @@ Copy the canonical viewer web dist into a prepared output directory.
 
 When --optional-payload-dir is provided, the WebGL2 bridge WASM is staged in
 that directory instead of the primary viewer dist. The primary dist receives
-optional-payloads.json so consumers can distinguish an available payload from
-a deterministic source_missing result.
+optional-payloads.json with available=false because the separately uploaded
+payload is not part of the player bundle. A missing source is reported as the
+deterministic source_missing result and never falls back to staged bytes.
 USAGE
 }
 
@@ -127,12 +128,31 @@ if [[ -d "$pixel_world_bridge_dir" ]]; then
     rm -rf "$DIST_DIR/pixel-world-bridge"
     cp -R "$pixel_world_bridge_dir" "$DIST_DIR/pixel-world-bridge"
   fi
-else
-  # A prior packaging-mode copy may have left the optional manifest in a
-  # reused output directory. Legacy developer copies keep the adjacent WASM
-  # and must not leave stale split-mode metadata behind.
-  rm -f "$DIST_DIR/optional-payloads.json"
 fi
+
+write_optional_payload_manifest() {
+  local reason="$1"
+  python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" "$reason" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+payload_name = sys.argv[2]
+reason = sys.argv[3]
+manifest_path.write_text(
+    json.dumps(
+        {payload_name: {"available": False, "reason": reason}},
+        ensure_ascii=False,
+        indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+}
 
 if [[ -n "$OPTIONAL_PAYLOAD_DIR" ]]; then
   mkdir -p "$OPTIONAL_PAYLOAD_DIR"
@@ -140,72 +160,27 @@ if [[ -n "$OPTIONAL_PAYLOAD_DIR" ]]; then
 
   if [[ -f "$pixel_world_webgl2_wasm" ]]; then
     cp "$pixel_world_webgl2_wasm" "$staged_optional_payload"
-    rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
-    python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-manifest_path = Path(sys.argv[1])
-payload_name = sys.argv[2]
-manifest_path.write_text(
-    json.dumps(
-        {payload_name: {"available": True, "path": payload_name}},
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    encoding="utf-8",
-)
-PY
-  elif [[ -f "$staged_optional_payload" ]]; then
-    # An in-place split copy removes the generated WASM from the primary
-    # dist. Reuse the already staged payload on a freshness-skipped rerun so
-    # staging remains idempotent instead of reporting a false source_missing.
-    rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
-    python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-manifest_path = Path(sys.argv[1])
-payload_name = sys.argv[2]
-manifest_path.write_text(
-    json.dumps(
-        {payload_name: {"available": True, "path": payload_name}},
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    encoding="utf-8",
-)
-PY
+    # The player dist deliberately excludes the separately uploaded payload.
+    # Keep the canonical source dist intact when this helper is called
+    # in-place by build-viewer-software-safe.sh.
+    if [[ "$DIST_DIR" != "$VIEWER_ROOT/dist" ]]; then
+      rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
+    fi
+    write_optional_payload_manifest "separate_artifact"
   else
-    rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
-    python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-manifest_path = Path(sys.argv[1])
-payload_name = sys.argv[2]
-manifest_path.write_text(
-    json.dumps(
-        {payload_name: {"available": False, "reason": "source_missing"}},
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    encoding="utf-8",
-)
-PY
+    # Never trust a staged file from an earlier build. A missing generated
+    # source invalidates the optional artifact and must be visible to the
+    # player instead of being masked by stale bytes.
+    rm -f "$staged_optional_payload"
+    if [[ "$DIST_DIR" != "$VIEWER_ROOT/dist" ]]; then
+      rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
+    fi
+    write_optional_payload_manifest "source_missing"
   fi
+else
+  # A regular player/developer copy keeps the adjacent WASM and must not
+  # carry split-mode metadata from a reused output directory.
+  rm -f "$DIST_DIR/optional-payloads.json"
 fi
 
 viewer_web_dist_write_manifest "$ROOT_DIR" "$DIST_DIR"

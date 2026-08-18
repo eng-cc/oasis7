@@ -9,6 +9,7 @@ readonly PRODUCTION_ROOT=/opt/oasis7/p2p-testnet
 readonly PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-sequencer.service
 readonly SERVICE_NAME=oasis7-triad-sequencer.service
 readonly BUNDLE_DIR_NAME=oasis7-linux-x64
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF'
@@ -121,14 +122,9 @@ assert_no_symlink_below_prefix() {
 }
 
 safe_tar_extract() {
-  local archive=$1 destination=$2 listing member
-  listing=$(tar -tzf "$archive") || die "cannot inspect bundle tar"
-  while IFS= read -r member; do
-    [[ -n "$member" ]] || continue
-    [[ "$member" != /* && "$member" != *"../"* && "$member" != ".." ]] \
-      || die "bundle tar contains unsafe member: $member"
-  done <<<"$listing"
-  tar -xzf "$archive" -C "$destination" --no-same-owner --no-same-permissions
+  local archive=$1 destination=$2
+  python3 "$SCRIPT_DIR/p2p-safe-extract-tar.py" "$archive" "$destination" \
+    || die "cannot safely extract ops-tools archive"
 }
 
 safe_deb_extract() {

@@ -187,6 +187,61 @@ test -x "$stack_root_abs/current/bin/oasis7_governance_registry_import"
 test -x "$stack_root_abs/current/bin/oasis7_governance_registry_audit"
 "$stack_root_abs/current/bin/oasis7_world_repair_rebuild" --help | grep -Fq -- '--generated-world-dir'
 
+# Every archive member is classified before extraction. Symlinks, hardlinks,
+# and special files must fail closed without creating an ops-tools path.
+for member_kind in symlink hardlink fifo; do
+  unsafe_tar="$TMP_DIR/unsafe-${member_kind}.tar.gz"
+  python3 - "$unsafe_tar" "$member_kind" <<'PY'
+import tarfile
+import sys
+
+archive_path, member_kind = sys.argv[1:]
+member = tarfile.TarInfo("oasis7-linux-x64-ops-tools/bin/unsafe")
+if member_kind == "symlink":
+    member.type = tarfile.SYMTYPE
+    member.linkname = "../../outside"
+elif member_kind == "hardlink":
+    member.type = tarfile.LNKTYPE
+    member.linkname = "oasis7-linux-x64-ops-tools/bin/target"
+else:
+    member.type = tarfile.FIFOTYPE
+with tarfile.open(archive_path, "w:gz") as archive:
+    archive.addfile(member)
+PY
+  expect_fail "non-regular member" bootstrap_with \
+    --stack-root "$TMP_DIR/unsafe-${member_kind}-root" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$unsafe_tar" \
+    --config-dir "$config_dir" \
+    --world-dir "$world_dir" \
+    --node-id triad-testnet-sequencer \
+    --service-name oasis7-triad-sequencer.service \
+    --receipt "$TMP_DIR/unsafe-${member_kind}-receipt.json"
+  test ! -e "$TMP_DIR/unsafe-${member_kind}-root"
+done
+
+unsafe_tar="$TMP_DIR/unsafe-traversal.tar.gz"
+python3 - "$unsafe_tar" <<'PY'
+import io
+import tarfile
+import sys
+
+member = tarfile.TarInfo("oasis7-linux-x64-ops-tools/../outside")
+member.size = 1
+with tarfile.open(sys.argv[1], "w:gz") as archive:
+    archive.addfile(member, io.BytesIO(b"x"))
+PY
+expect_fail "unsafe member path" bootstrap_with \
+  --stack-root "$TMP_DIR/unsafe-traversal-root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$unsafe_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$world_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --receipt "$TMP_DIR/unsafe-traversal-receipt.json"
+test ! -e "$TMP_DIR/unsafe-traversal-root"
+
 # Fail closed before mutation for package integrity and unsafe filesystem input.
 cp "$bundle_dir/BUILDINFO" "$TMP_DIR/valid-buildinfo"
 rm "$bundle_dir/BUILDINFO"

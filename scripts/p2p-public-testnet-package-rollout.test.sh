@@ -27,6 +27,35 @@ macos_package_version="0.0.0+testnet.90.419e119bc897"
 macos_run_id="27605906796"
 checkpoint_closure_receipt="$TMP_DIR/observer-checkpoint-closure-receipt.json"
 
+if ! command -v dpkg-deb >/dev/null 2>&1; then
+  mkdir -p "$TMP_DIR/fake-bin"
+  cat >"$TMP_DIR/fake-bin/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --build)
+    source="${@: -2:1}"
+    output="${@: -1}"
+    mkdir -p "${output}.root"
+    cp -a "$source/." "${output}.root/"
+    : >"$output"
+    ;;
+  --extract)
+    source="${2:?missing source}"
+    destination="${3:?missing destination}"
+    mkdir -p "$destination"
+    cp -a "${source}.root/." "$destination/"
+    ;;
+  *)
+    echo "unsupported dpkg-deb fixture operation" >&2
+    exit 2
+    ;;
+esac
+SH
+  chmod +x "$TMP_DIR/fake-bin/dpkg-deb"
+  export PATH="$TMP_DIR/fake-bin:$PATH"
+fi
+
 cat >"$checkpoint_closure_receipt" <<'EOF'
 {
   "schema_version": "oasis7.observer_checkpoint_closure_receipt.v1",
@@ -116,9 +145,59 @@ trap 'exit 0' TERM INT
 while :; do sleep 1; done
 EOF
 chmod +x "$bundle_src/bin/oasis7_chain_runtime"
-tar -czf "$package_dir/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
+cat >"$bundle_src/BUILDINFO" <<EOF
+workflow=Testnet Packages
+run_id=$run_id
+run_number=89
+repository=eng-cc/oasis7
+requested_ref=$commit
+commit=$commit
+build_profile=release
+package_scope=all_existing
+platform=linux-x64
+package_version=$package_version
+published=false
+EOF
+(cd "$bundle_src" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
+linux_deb_root="$TMP_DIR/linux-deb-root"
+mkdir -p "$linux_deb_root/DEBIAN" "$linux_deb_root/opt/oasis7"
+cp -a "$bundle_src/." "$linux_deb_root/opt/oasis7/"
+cat >"$linux_deb_root/DEBIAN/control" <<'EOF'
+Package: oasis7
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Description: package rollout Linux fixture
+EOF
+dpkg-deb --build --root-owner-group "$linux_deb_root" "$package_dir/oasis7-linux-x64.deb" >/dev/null
+make_ops_tools_archive() {
+  local platform="$1" platform_dir="$2"
+  local ops_root="$TMP_DIR/ops-bundle/oasis7-${platform}-ops-tools"
+  mkdir -p "$ops_root/bin"
+  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+    printf '#!/usr/bin/env bash\n' >"$ops_root/bin/$binary"
+    chmod +x "$ops_root/bin/$binary"
+  done
+  printf '{"opsToolsSchemaVersion":1}\n' >"$ops_root/.oasis7-ops-tools-manifest.json"
+  (
+    cd "$ops_root"
+    shasum -a 256 .oasis7-ops-tools-manifest.json bin/* >SHA256SUMS
+  )
+  tar -czf "$platform_dir/oasis7-${platform}-ops-tools.tar.gz" \
+    -C "$TMP_DIR/ops-bundle" "oasis7-${platform}-ops-tools"
+  (
+    cd "$platform_dir"
+    shasum -a 256 "oasis7-${platform}-ops-tools.tar.gz" \
+      >"${platform}-ops-tools-SHA256SUMS"
+  )
+}
+
+make_ops_tools_archive linux-x64 "$package_dir"
 printf 'fake windows installer\n' >"$package_dir/windows/oasis7-windows-x64.exe"
 printf 'fake macos arm64 dmg\n' >"$package_dir/macos/oasis7-macos-arm64.dmg"
+make_ops_tools_archive windows-x64 "$package_dir/windows"
+make_ops_tools_archive macos-arm64 "$package_dir/macos"
 
 windows_bundle="$package_dir/windows/public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"
 windows_genesis="$package_dir/windows/public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json"
@@ -343,11 +422,16 @@ EOF
 
 (
   cd "$package_dir"
-  shasum -a 256 oasis7-linux-x64-bundle.tar.gz linux-x64-BUILDINFO >linux-x64-SHA256SUMS
+  shasum -a 256 \
+    oasis7-linux-x64.deb \
+    linux-x64-BUILDINFO \
+    oasis7-linux-x64-ops-tools.tar.gz \
+    >linux-x64-SHA256SUMS
   cd "$package_dir/windows"
   shasum -a 256 \
     oasis7-windows-x64.exe \
     windows-x64-BUILDINFO \
+    oasis7-windows-x64-ops-tools.tar.gz \
     public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json \
     public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json \
     public-testnet-governed-bootstrap-manifest-2026-06-06.windows.json \
@@ -365,7 +449,7 @@ EOF
     doc/testing/evidence/governed-bootstrap-topology.md \
     >windows-x64-SHA256SUMS
   cd "$package_dir/macos"
-  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO oasis7-macos-arm64-ops-tools.tar.gz >macos-arm64-SHA256SUMS
 )
 
 # Windows-only: package fixture setup above is shared with the POSIX harness, but
@@ -1385,7 +1469,8 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "host": "198.51.100.44",
       "user": "root",
       "node_root": "/opt/oasis7/p2p-testnet",
-      "remote_bundle": "/tmp/oasis7-linux-x64-bundle.tar.gz",
+      "remote_package": "/tmp/oasis7-linux-x64.deb",
+      "remote_ops_tools": "/tmp/oasis7-linux-x64-ops-tools.tar.gz",
       "remote_script": "/opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh",
       "restart": true,
       "systemd_service": "oasis7-testnet-storage.service",
@@ -1525,7 +1610,8 @@ test "$plan_current_target" = "$node_root_abs/releases/old"
 jq -e '
   (.nodes[] | select(.name == "sequencer") | .applied == false)
   and (.nodes[] | select(.name == "storage") | .commands[0] | startswith("scp "))
-  and (.nodes[] | select(.name == "storage") | .commands[1] | startswith("ssh root@198.51.100.44 "))
+  and (.nodes[] | select(.name == "storage") | .commands[1] | startswith("scp "))
+  and (.nodes[] | select(.name == "storage") | .commands[2] | startswith("ssh root@198.51.100.44 "))
   and (.nodes[] | select(.name == "windows-observer") | any(.commands[]; contains("staging_parent_ready=")))
   and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))
   and (.nodes[] | select(.name == "windows-observer") | .package_provenance.package_version == "0.0.0+testnet.89.419e119bc897")
@@ -1545,7 +1631,8 @@ jq '{nodes: [
     host: "192.0.2.44",
     user: "root",
     node_root: "/opt/oasis7/p2p-testnet-local",
-    remote_bundle: "/tmp/oasis7-linux-x64-bundle.tar.gz",
+    remote_package: "/tmp/oasis7-linux-x64.deb",
+    remote_ops_tools: "/tmp/oasis7-linux-x64-ops-tools.tar.gz",
     remote_script: "/opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh",
     status_url: "http://127.0.0.1:6633/v1/chain/status",
     restart: false
@@ -1563,10 +1650,11 @@ import sys
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 observer = next(node for node in plan["nodes"] if node["name"] == "linux-lan-observer")
-assert len(observer["commands"]) == 3
+assert len(observer["commands"]) == 4
 assert observer["commands"][0].startswith("scp ")
 assert observer["commands"][1].startswith("scp ")
-assert observer["commands"][2].startswith("ssh root@192.0.2.44 ")
+assert observer["commands"][2].startswith("scp ")
+assert observer["commands"][3].startswith("ssh root@192.0.2.44 ")
 wrapper = Path(observer["observer_checkpoint_gate_script"])
 text = wrapper.read_text(encoding="utf-8")
 assert "provider_checkpoint_gate=passed" in text
@@ -4180,7 +4268,27 @@ if "$rollout_driver" \
   echo "expected missing asset checksum coverage to fail" >&2
   exit 1
 fi
-grep -q "checksum file does not cover required artifact: oasis7-linux-x64-bundle.tar.gz" "$TMP_DIR/bad-sums.err"
+grep -q "checksum file does not cover required artifact: oasis7-linux-x64.deb" "$TMP_DIR/bad-sums.err"
+
+bad_ops_dir="$TMP_DIR/bad-ops-package"
+cp -R "$package_dir" "$bad_ops_dir"
+printf 'tampered-ops-tools\n' >>"$bad_ops_dir/oasis7-linux-x64-ops-tools.tar.gz"
+(
+  cd "$bad_ops_dir"
+  # Keep the platform checksum current so the dedicated ops-tools checksum
+  # contract, rather than the outer package checksum, is the failing guard.
+  shasum -a 256 oasis7-linux-x64.deb linux-x64-BUILDINFO oasis7-linux-x64-ops-tools.tar.gz \
+    >linux-x64-SHA256SUMS
+)
+if "$rollout_driver" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$bad_ops_dir" \
+  --out-dir "$TMP_DIR/bad-ops-out" \
+  >"$TMP_DIR/bad-ops.out" 2>"$TMP_DIR/bad-ops.err"; then
+  echo "expected tampered ops-tools archive to fail dedicated checksum validation" >&2
+  exit 1
+fi
+grep -q 'checksum mismatch.*oasis7-linux-x64-ops-tools.tar.gz' "$TMP_DIR/bad-ops.err"
 
 strict_node_root="$TMP_DIR/strict-node"
 mkdir -p "$strict_node_root/releases/old/bin" "$strict_node_root/config/doc/testing/evidence"
@@ -4282,7 +4390,7 @@ fi
 grep -q 'caller-supplied checkpoint closure receipt is forbidden' "$TMP_DIR/legacy-env.err"
 
 # The probe executes a Linux runtime even for a macOS-only mutation plan.  A
-# damaged Linux bundle must therefore stop before the in-process test probe is
+# damaged Linux Debian package must therefore stop before the in-process test probe is
 # reached and before any observer gate script is generated.
 non_linux_only_manifest="$TMP_DIR/non-linux-only-observer-manifest.json"
 cat >"$non_linux_only_manifest" <<'EOF'
@@ -4294,7 +4402,7 @@ cat >"$non_linux_only_manifest" <<'EOF'
 EOF
 tampered_linux_probe_package="$TMP_DIR/tampered-linux-probe-package"
 cp -R "$package_dir" "$tampered_linux_probe_package"
-printf 'tampered-before-probe\n' >>"$tampered_linux_probe_package/oasis7-linux-x64-bundle.tar.gz"
+printf 'tampered-before-probe\n' >>"$tampered_linux_probe_package/oasis7-linux-x64.deb"
 non_linux_probe_marker="$TMP_DIR/non-linux-probe-started"
 if OASIS7_TEST_INPROCESS_PROBE_MARKER="$non_linux_probe_marker" \
   "$rollout_driver" --manifest "$non_linux_only_manifest" \

@@ -187,6 +187,14 @@ require(
     "viewer copy contract must name the pixel-world WASM payload",
 )
 require(
+    '"available": False' in copy_viewer and "separate_artifact" in copy_viewer,
+    "split player viewer dist must mark the separately uploaded payload unavailable",
+)
+require(
+    'rm -f "$staged_optional_payload"' in copy_viewer,
+    "missing viewer payload must invalidate and remove stale staged bytes",
+)
+require(
     "optional-payload-dir" in build_viewer,
     "viewer build wrapper must forward the optional payload staging directory",
 )

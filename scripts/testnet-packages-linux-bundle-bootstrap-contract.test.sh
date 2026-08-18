@@ -23,7 +23,11 @@ def step(name: str) -> tuple[int, str]:
 
 
 buildinfo_offset, buildinfo = step("Write BUILDINFO")
+package_offset, _ = step("Package native installer")
 _, outer_checksums = step("Generate checksums")
+assert buildinfo_offset < package_offset, (
+    "BUILDINFO must be staged before package-native-installer runs"
+)
 assert '"platform":"linux-x64"' in workflow
 assert '"asset_name":"oasis7-linux-x64.deb"' in workflow, (
     "Linux package must publish the Debian installer as the sole primary asset"
@@ -31,11 +35,21 @@ assert '"asset_name":"oasis7-linux-x64.deb"' in workflow, (
 assert "AppImage" not in workflow, "Linux AppImage must not remain a published artifact"
 assert "Archive raw Linux bundle" not in workflow, "raw Linux tar must not remain a release artifact"
 assert "Package secondary Linux .deb" not in workflow, "duplicate Linux deb step must be removed"
-assert '"output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO"' in buildinfo, (
+assert 'buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"' in buildinfo, (
     "external Linux BUILDINFO artifact must remain available for outer checksums"
 )
 assert '"${{ matrix.platform }}-BUILDINFO"' in outer_checksums, (
     "outer artifact checksums must continue to cover BUILDINFO"
+)
+assert 'cp "${buildinfo}" "${bundle}/BUILDINFO"' in buildinfo, (
+    "Linux BUILDINFO must be copied into the Debian payload"
+)
+assert 'sha256sum "${files[@]}" > SHA256SUMS' in buildinfo or \
+    'shasum -a 256 "${files[@]}" > SHA256SUMS' in buildinfo, (
+    "Linux bundle must generate an internal SHA256SUMS before packaging"
+)
+assert 'shasum -a 256 -c SHA256SUMS' in buildinfo, (
+    "Linux bundle metadata must be self-verified before packaging"
 )
 assert "ops package" in workflow.lower(), "Linux workflow must publish a separate ops package"
 assert "oasis7-${{ matrix.platform }}-ops-tools.tar.gz" in workflow, (
@@ -63,5 +77,26 @@ printf '{"opsToolsSchemaVersion":1}\n' >"$bundle/.oasis7-ops-tools-manifest.json
 tar -C "$TMP_DIR" -czf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" oasis7-linux-x64-ops-tools
 tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json'
 tar -tzf "$TMP_DIR/oasis7-linux-x64-ops-tools.tar.gz" | grep -Fxq 'oasis7-linux-x64-ops-tools/SHA256SUMS'
+
+if command -v dpkg-deb >/dev/null 2>&1; then
+  deb_root="$TMP_DIR/deb-root"
+  mkdir -p "$deb_root/DEBIAN" "$deb_root/opt/oasis7/bin"
+  printf 'Package: oasis7\nVersion: 0.0.0\nArchitecture: amd64\nDescription: contract fixture\n' \
+    >"$deb_root/DEBIAN/control"
+  printf 'workflow=Testnet Packages\ncommit=abcdef1234567890abcdef1234567890abcdef12\npackage_version=0.0.0\nrun_id=1\n' \
+    >"$deb_root/opt/oasis7/BUILDINFO"
+  printf '#!/usr/bin/env bash\n' >"$deb_root/opt/oasis7/bin/oasis7_chain_runtime"
+  chmod +x "$deb_root/opt/oasis7/bin/oasis7_chain_runtime"
+  (
+    cd "$deb_root/opt/oasis7"
+    sha256sum bin/oasis7_chain_runtime BUILDINFO >SHA256SUMS
+  )
+  dpkg-deb --build --root-owner-group "$deb_root" "$TMP_DIR/oasis7-linux-x64.deb" >/dev/null
+  extract_dir="$TMP_DIR/deb-extract"
+  dpkg-deb --extract "$TMP_DIR/oasis7-linux-x64.deb" "$extract_dir"
+  test -f "$extract_dir/opt/oasis7/BUILDINFO"
+  test -f "$extract_dir/opt/oasis7/SHA256SUMS"
+  (cd "$extract_dir/opt/oasis7" && sha256sum -c SHA256SUMS >/dev/null)
+fi
 
 echo "ok: Linux publishes deb-only player package plus checksummed ops package"
