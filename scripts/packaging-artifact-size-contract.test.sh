@@ -11,12 +11,13 @@ python3 - \
   "$ROOT_DIR/scripts/build-game-launcher-bundle.sh" \
   "$ROOT_DIR/scripts/build-viewer-software-safe.sh" \
   "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  "$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
   "$ROOT_DIR/Cargo.toml" <<'PY'
 from pathlib import Path
 import re
 import sys
 
-testnet, mainnet, release, prepare, build_bundle, build_viewer, copy_viewer, root_cargo = map(
+testnet, mainnet, release, prepare, build_bundle, build_viewer, copy_viewer, package_viewer, root_cargo = map(
     lambda value: Path(value).read_text(encoding="utf-8"), sys.argv[1:]
 )
 
@@ -79,15 +80,20 @@ require(
 
 # 2b. The large viewer WASM is published as an independent optional payload;
 # package-native jobs consume only the web dist artifact and must not fold the
-# payload back into player installers.
+# payload back into player installers. A separate final delivery archive keeps
+# the payload beside (not inside) web-dist so the relative manifest path works.
 for name, workflow in (("testnet", testnet), ("mainnet", mainnet), ("release", release)):
     require(
         "--optional-payload-dir" in workflow,
         f"{name}: web build must stage the optional viewer payload",
     )
     require(
-        re.search(rf"{name}-viewer-optional-payload", workflow),
-        f"{name}: optional viewer payload must be uploaded separately",
+        re.search(rf"{name}-viewer-web-delivery", workflow),
+        f"{name}: final viewer web delivery must be uploaded",
+    )
+    require(
+        "oasis7-viewer-web-delivery.tar.gz" in workflow,
+        f"{name}: final viewer delivery archive must be named and carried through",
     )
     web_upload = re.search(
         rf"name: {name}-web-dists(?P<body>[\s\S]*?)(?=\n\s*- name:|\Z)",
@@ -106,6 +112,22 @@ require(
         build_bundle,
     ),
     "player bundle must route the world repair tool only to the ops output",
+)
+require(
+    "package-viewer-web-delivery.sh" in testnet + mainnet + release,
+    "all package workflows must build the final viewer web delivery archive",
+)
+require(
+    "name: release-viewer-web-delivery" in release
+    and "Publish GitHub release" in release
+    and "output/release/assets/oasis7-viewer-web-delivery.tar.gz" in release,
+    "release workflow must publish the final viewer delivery archive",
+)
+require(
+    "name: mainnet-viewer-web-delivery" in mainnet
+    and "name: package-index" in mainnet
+    and "output/mainnet-packages/index/oasis7-viewer-web-delivery.tar.gz" in mainnet,
+    "mainnet package index must carry the final viewer delivery archive",
 )
 require(
     re.search(r"(?is)ops.*?(?:SHA256SUMS|checksum)", testnet + mainnet + release + prepare),
@@ -193,6 +215,31 @@ require(
 require(
     'rm -f "$staged_optional_payload"' in copy_viewer,
     "missing viewer payload must invalidate and remove stale staged bytes",
+)
+require(
+    "OPTIONAL_PAYLOAD_PUBLIC_PATH" in copy_viewer
+    and '"available": True' in copy_viewer
+    and '"sha256"' in copy_viewer
+    and '"size_bytes"' in copy_viewer,
+    "viewer copy contract must emit available=true integrity metadata when a public payload path is configured",
+)
+require(
+    '"provenance": "viewer-web-build"' in copy_viewer,
+    "viewer copy contract must identify the build provenance of the optional payload",
+)
+require(
+    "optional-payload" in package_viewer
+    and "viewer-optional-payload" in package_viewer
+    and "web-dist" in package_viewer,
+    "viewer delivery contract must provide a final archive helper",
+)
+require(
+    "tarfile.USTAR_FORMAT" in package_viewer
+    and "mtime=0" in package_viewer
+    and "uid = 0" in package_viewer
+    and "gid = 0" in package_viewer
+    and "GzipFile" in package_viewer,
+    "viewer delivery archive must use deterministic tar/gzip metadata",
 )
 require(
     "optional-payload-dir" in build_viewer,

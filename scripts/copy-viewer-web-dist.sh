@@ -6,19 +6,23 @@ source "$ROOT_DIR/scripts/viewer-web-dist-contract.sh"
 VIEWER_ROOT="$ROOT_DIR/crates/oasis7_viewer"
 DIST_DIR=""
 OPTIONAL_PAYLOAD_DIR=""
+OPTIONAL_PAYLOAD_PUBLIC_PATH=""
 OPTIONAL_PAYLOAD_NAME="pixel_world_bridge_bindgen_bg.wasm"
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/copy-viewer-web-dist.sh --dist-dir <path> [--viewer-root <path>] \
-  [--optional-payload-dir <path>]
+  [--optional-payload-dir <path>] [--optional-payload-public-path <path>]
 
 Copy the canonical viewer web dist into a prepared output directory.
 
 When --optional-payload-dir is provided, the WebGL2 bridge WASM is staged in
 that directory instead of the primary viewer dist. The primary dist receives
 optional-payloads.json with available=false because the separately uploaded
-payload is not part of the player bundle. A missing source is reported as the
+payload is not part of the player bundle. Pass
+--optional-payload-public-path when a final delivery archive publishes that
+separate payload at a resolvable relative URL; the manifest then records
+available=true plus integrity metadata. A missing source is reported as the
 deterministic source_missing result and never falls back to staged bytes.
 USAGE
 }
@@ -46,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       OPTIONAL_PAYLOAD_DIR="${2:-}"
       shift 2
       ;;
+    --optional-payload-public-path)
+      OPTIONAL_PAYLOAD_PUBLIC_PATH="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -63,6 +71,15 @@ VIEWER_ROOT="$(resolve_abs_path "$VIEWER_ROOT")"
 DIST_DIR="$(resolve_abs_path "$DIST_DIR")"
 if [[ -n "$OPTIONAL_PAYLOAD_DIR" ]]; then
   OPTIONAL_PAYLOAD_DIR="$(resolve_abs_path "$OPTIONAL_PAYLOAD_DIR")"
+fi
+if [[ -n "$OPTIONAL_PAYLOAD_PUBLIC_PATH" && -z "$OPTIONAL_PAYLOAD_DIR" ]]; then
+  echo "error: --optional-payload-public-path requires --optional-payload-dir" >&2
+  exit 2
+fi
+if [[ -n "$OPTIONAL_PAYLOAD_PUBLIC_PATH" \
+  && ("$OPTIONAL_PAYLOAD_PUBLIC_PATH" == /* || "$OPTIONAL_PAYLOAD_PUBLIC_PATH" == *"://"*) ]]; then
+  echo "error: --optional-payload-public-path must be a relative URL path" >&2
+  exit 2
 fi
 
 require_file() {
@@ -132,9 +149,12 @@ fi
 
 write_optional_payload_manifest() {
   local reason="$1"
-  python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" "$reason" <<'PY'
+  local staged_path="${2:-}"
+  python3 - "$DIST_DIR/optional-payloads.json" "$OPTIONAL_PAYLOAD_NAME" "$reason" \
+    "$OPTIONAL_PAYLOAD_PUBLIC_PATH" "$staged_path" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -142,9 +162,22 @@ from pathlib import Path
 manifest_path = Path(sys.argv[1])
 payload_name = sys.argv[2]
 reason = sys.argv[3]
+public_path = sys.argv[4]
+staged_path = Path(sys.argv[5]) if sys.argv[5] else None
+payload = {"available": False, "reason": reason}
+if public_path and staged_path is not None:
+    payload_bytes = staged_path.read_bytes()
+    payload = {
+        "available": True,
+        "path": public_path,
+        "sha256": hashlib.sha256(payload_bytes).hexdigest(),
+        "size_bytes": len(payload_bytes),
+        "delivery": "separate_artifact",
+        "provenance": "viewer-web-build",
+    }
 manifest_path.write_text(
     json.dumps(
-        {payload_name: {"available": False, "reason": reason}},
+        {payload_name: payload},
         ensure_ascii=False,
         indent=2,
     )
@@ -166,7 +199,7 @@ if [[ -n "$OPTIONAL_PAYLOAD_DIR" ]]; then
     if [[ "$DIST_DIR" != "$VIEWER_ROOT/dist" ]]; then
       rm -f "$DIST_DIR/pixel-world-bridge/webgl2/$OPTIONAL_PAYLOAD_NAME"
     fi
-    write_optional_payload_manifest "separate_artifact"
+    write_optional_payload_manifest "separate_artifact" "$staged_optional_payload"
   else
     # Never trust a staged file from an earlier build. A missing generated
     # source invalidates the optional artifact and must be visible to the

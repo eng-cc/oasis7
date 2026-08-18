@@ -73,6 +73,147 @@ assert payload == {
 }, payload
 PY
 
+configured_dist_dir="$TMPDIR/configured-dist"
+configured_optional_payload_dir="$TMPDIR/configured-optional-payload"
+configured_public_path="../viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm"
+mkdir -p "$configured_optional_payload_dir"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$viewer_root" \
+  --dist-dir "$configured_dist_dir" \
+  --optional-payload-dir "$configured_optional_payload_dir" \
+  --optional-payload-public-path "$configured_public_path"
+python3 - "$configured_dist_dir/optional-payloads.json" "$configured_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" "$configured_public_path" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+content = Path(sys.argv[2]).read_bytes()
+assert payload == {
+    "available": True,
+    "path": sys.argv[3],
+    "sha256": hashlib.sha256(content).hexdigest(),
+    "size_bytes": len(content),
+    "delivery": "separate_artifact",
+    "provenance": "viewer-web-build",
+}, payload
+PY
+
+public_delivery_dir="$TMPDIR/public-delivery"
+public_dist_dir="$public_delivery_dir/web-dist"
+public_optional_payload_dir="$public_delivery_dir/viewer-optional-payload"
+public_archive="$TMPDIR/oasis7-viewer-web-delivery.tar.gz"
+mkdir -p "$public_optional_payload_dir"
+"$ROOT_DIR/scripts/copy-viewer-web-dist.sh" \
+  --viewer-root "$viewer_root" \
+  --dist-dir "$public_dist_dir" \
+  --optional-payload-dir "$public_optional_payload_dir"
+python3 - "$public_dist_dir/optional-payloads.json" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+assert payload == {
+    "available": False,
+    "reason": "separate_artifact",
+}, payload
+PY
+"$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
+  --web-dist "$public_dist_dir" \
+  --optional-payload-dir "$public_optional_payload_dir" \
+  --out-file "$public_archive"
+printf 'AppleDouble sidecar that must never enter the delivery archive\n' \
+  > "$public_dist_dir/._viewer-sidecar"
+printf 'AppleDouble payload sidecar that must never enter the delivery archive\n' \
+  > "$public_optional_payload_dir/._payload-sidecar"
+python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+import os
+import sys
+
+for raw_path in sys.argv[1:]:
+    try:
+        os.setxattr(raw_path, b"user.oasis7_test_provenance", b"must-not-be-archived")
+    except (AttributeError, OSError):
+        pass
+PY
+python3 - "$public_dist_dir/viewer.js" "$public_optional_payload_dir/pixel_world_bridge_bindgen_bg.wasm" <<'PY'
+import os
+import sys
+
+for raw_path in sys.argv[1:]:
+    os.utime(raw_path, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
+PY
+public_archive_repeat="$TMPDIR/oasis7-viewer-web-delivery-repeat.tar.gz"
+"$ROOT_DIR/scripts/package-viewer-web-delivery.sh" \
+  --web-dist "$public_dist_dir" \
+  --optional-payload-dir "$public_optional_payload_dir" \
+  --out-file "$public_archive_repeat"
+python3 - "$public_archive" "$public_archive_repeat" "$public_dist_dir" <<'PY'
+import hashlib
+import sys
+import tarfile
+from pathlib import Path
+
+first_path = Path(sys.argv[1])
+second_path = Path(sys.argv[2])
+web_dist = Path(sys.argv[3])
+first_bytes = first_path.read_bytes()
+second_bytes = second_path.read_bytes()
+assert first_bytes == second_bytes, (
+    hashlib.sha256(first_bytes).hexdigest(),
+    hashlib.sha256(second_bytes).hexdigest(),
+)
+assert first_bytes[4:8] == b"\0\0\0\0", "gzip mtime must be zero"
+assert b"SCHILY.xattr" not in first_bytes
+assert b"LIBARCHIVE.xattr" not in first_bytes
+assert b"com.apple.provenance" not in first_bytes
+
+expected = {
+    path.relative_to(web_dist).as_posix()
+    for path in web_dist.rglob("*")
+    if path.is_file() and not any(part.startswith("._") for part in path.relative_to(web_dist).parts)
+}
+expected.add("viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm")
+with tarfile.open(first_path, "r:gz") as archive:
+    members = archive.getmembers()
+    names = [member.name for member in members]
+    assert names == sorted(names), names
+    assert set(names) == expected, (set(names) ^ expected)
+    for member in members:
+        assert not any(part.startswith("._") for part in Path(member.name).parts), member.name
+        assert member.pax_headers == {}, member.pax_headers
+        assert member.uid == 0 and member.gid == 0, member
+        assert member.uname == "" and member.gname == "", member
+        assert member.mtime == 0 and member.mode == 0o644, member
+PY
+extract_dir="$TMPDIR/public-delivery-extracted"
+mkdir -p "$extract_dir"
+tar -xzf "$public_archive" -C "$extract_dir"
+python3 - "$extract_dir/optional-payloads.json" "$extract_dir" <<'PY'
+import json
+import hashlib
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = manifest["pixel_world_bridge_bindgen_bg.wasm"]
+resolved = (Path(sys.argv[1]).parent / payload["path"]).resolve()
+content = resolved.read_bytes()
+assert payload["available"] is True, payload
+assert payload["path"] == "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm"
+assert payload["sha256"] == hashlib.sha256(content).hexdigest(), payload
+assert payload["size_bytes"] == len(content), payload
+assert payload["delivery"] == "separate_artifact", payload
+assert payload["provenance"] == "viewer-web-build", payload
+assert resolved == (Path(sys.argv[2]) / "viewer-optional-payload/pixel_world_bridge_bindgen_bg.wasm").resolve()
+assert resolved.is_file(), resolved
+assert not (Path(sys.argv[2]) / "pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm").exists()
+PY
+
 missing_viewer_root="$TMPDIR/missing-viewer"
 missing_dist_dir="$TMPDIR/missing-dist"
 missing_optional_payload_dir="$TMPDIR/missing-optional-payload"

@@ -66,6 +66,7 @@ scope = [
     "crates/oasis7_proto/src",
     "scripts/copy-viewer-web-dist.sh",
     "scripts/viewer-web-dist-contract.sh",
+    "scripts/package-viewer-web-delivery.sh",
 ]
 
 files: list[Path] = []

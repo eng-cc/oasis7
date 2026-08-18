@@ -98,6 +98,11 @@
   - 首局体验、release readiness、viewer 主体验的主文档是什么
   - 哪些沉浸阶段已经物理合并，哪些不再是独立首读入口
 
+### 7. split Web delivery / optional WASM
+- `pixel_world_bridge_bindgen_bg.wasm` 约 63.5 MB，故意不进入玩家 native installer 或单独的 `web-dist/`。
+- release、mainnet、testnet workflow 产出 `oasis7-viewer-web-delivery.tar.gz`，内含 Viewer Web 根目录与并列的 `viewer-optional-payload/`；`optional-payloads.json` 以相对路径、SHA-256、字节数和 `viewer-web-build` provenance 声明可用 payload。
+- 部署 Web 时应解压并以 archive 根目录作为静态根；不要只复制 `web-dist/`。若 payload 真实缺失，manifest 保持 `available: false`，Viewer 必须进入明确的 Renderer Unavailable fallback。
+
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
 - 旧 2026-03-11 模块状态 closure / viewer-to-producer handoff 文档已退役删除；当前 Viewer 合同以本目录 PRD/design/manual 为准，活跃任务状态与历史专题从 `../prd.index.md`、GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl` 进入。
