@@ -96,6 +96,16 @@ describe("fullscreen map shell contract", () => {
     }
   });
 
+  it("keeps Focus drawers interactive inside the pointer-transparent world HUD", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const drawerRule = findRule(
+      terminalShellCss,
+      /\[data-viewer-overlay=["']world-hud["']\]\s+\.pixel-world-focus-drawer/,
+    );
+    expect(drawerRule).not.toBeNull();
+    expect(hasDeclaration(drawerRule, "pointer-events", /auto/)).toBe(true);
+  });
+
   it("keeps Targets and Command as fixed drawers with stable route anchors", async () => {
     const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
     for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {

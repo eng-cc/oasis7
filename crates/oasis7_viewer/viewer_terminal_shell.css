@@ -85,6 +85,10 @@ body {
   pointer-events: auto;
 }
 
+[data-viewer-overlay="world-hud"] .pixel-world-focus-drawer {
+  pointer-events: auto;
+}
+
 [data-viewer-overlay="world-hud"] .pixel-world-host__summary,
 [data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics,
 [data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
