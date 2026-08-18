@@ -31,6 +31,10 @@ if grep -Eq 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; t
   echo "compile metrics workflow must not request a full-history checkout" >&2
   exit 1
 fi
+if grep -Eq 'COMPILE_METRICS_MAX_[A-Z0-9_]+' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must not define unused threshold environment defaults" >&2
+  exit 1
+fi
 if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1
