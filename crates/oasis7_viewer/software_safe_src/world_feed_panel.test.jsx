@@ -1,11 +1,13 @@
-import { render, screen } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { describe, expect, it, vi } from "vitest";
 import { WorldFeedPanel } from "./world_feed_panel.jsx";
 
 const tr = (_locale, zh, en) => en;
 
 describe("WorldFeedPanel", () => {
   it("keeps an explicit contextual surface for every protocol state", () => {
+    const onReloadSnapshot = vi.fn();
+    const onRetryFeed = vi.fn();
     const { container } = render(() => (
       <WorldFeedPanel
         feed={() => ({
@@ -19,15 +21,22 @@ describe("WorldFeedPanel", () => {
         })}
         locale={() => "en"}
         tr={tr}
-        onReloadSnapshot={() => {}}
+        onReloadSnapshot={onReloadSnapshot}
+        onRetryFeed={onRetryFeed}
       />
     ));
     expect(container.querySelector("#viewer-world-feed")).toBeTruthy();
     expect(screen.getByText("World activity is stale")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /reload authoritative snapshot/i })).toBeInTheDocument();
+    const reloadButton = screen.getByRole("button", { name: /reload authoritative snapshot/i });
+    expect(reloadButton).toBeInTheDocument();
+    fireEvent.click(reloadButton);
+    expect(onReloadSnapshot).toHaveBeenCalledTimes(1);
+    expect(onRetryFeed).not.toHaveBeenCalled();
   });
 
-  it("does not offer snapshot recovery for a source outage", () => {
+  it("offers a distinct World Feed retry for an unavailable source without snapshot recovery", () => {
+    const onReloadSnapshot = vi.fn();
+    const onRetryFeed = vi.fn();
     render(() => (
       <WorldFeedPanel
         feed={() => ({
@@ -41,9 +50,16 @@ describe("WorldFeedPanel", () => {
         })}
         locale={() => "en"}
         tr={tr}
+        onReloadSnapshot={onReloadSnapshot}
+        onRetryFeed={onRetryFeed}
       />
     ));
     expect(screen.getByText("World activity unavailable")).toBeInTheDocument();
+    const retryButton = screen.getByRole("button", { name: /retry world feed/i });
+    expect(retryButton).toBeInTheDocument();
+    fireEvent.click(retryButton);
+    expect(onRetryFeed).toHaveBeenCalledTimes(1);
+    expect(onReloadSnapshot).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /reload authoritative snapshot/i })).not.toBeInTheDocument();
   });
 

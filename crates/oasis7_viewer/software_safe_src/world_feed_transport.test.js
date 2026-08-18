@@ -148,5 +148,11 @@ describe("World Feed transport", () => {
       snapshotReloadRequired: false,
     });
     expect(sentMessages.filter((message) => message.type === "request_snapshot")).toHaveLength(snapshotsBeforeUnavailable);
+
+    const worldFeedRequestsBeforeRetry = sentMessages.filter((message) => message.type === "request_world_feed").length;
+    expect(core.requestWorldFeed({ cursor: null, limit: 50 })).toBe(true);
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toHaveLength(worldFeedRequestsBeforeRetry + 1);
+    expect(sentMessages.at(-1)).toEqual({ type: "request_world_feed", cursor: null, limit: 50 });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot")).toHaveLength(snapshotsBeforeUnavailable);
   });
 });

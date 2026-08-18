@@ -76,7 +76,8 @@ function WorldFeedPanel(props) {
   );
   const status = () => String(feed().status || "unavailable");
   const statusLabel = () => statusCopy(locale(), tr, status());
-  const shouldReload = () => Boolean(feed().snapshotReloadRequired || status() === "gap");
+  const shouldReload = () => status() !== "unavailable"
+    && Boolean(feed().snapshotReloadRequired || status() === "gap");
 
   return (
     <details
@@ -118,6 +119,17 @@ function WorldFeedPanel(props) {
             </button>
           </div>
         </Show>
+        <Show when={status() === "unavailable"}>
+          <div class="toolbar world-feed__recovery">
+            <button
+              type="button"
+              data-world-feed-action="retry-world-feed"
+              onClick={() => props.onRetryFeed?.()}
+            >
+              {tr(locale(), "重试 World Feed", "Retry World Feed")}
+            </button>
+          </div>
+        </Show>
         <Show
           when={presentationEvents().length > 0}
           fallback={
@@ -126,7 +138,9 @@ function WorldFeedPanel(props) {
                 ? tr(locale(), "正在等待 world_feed/v1 响应…", "Waiting for a world_feed/v1 response…")
                 : status() === "empty"
                   ? tr(locale(), "权威运行时暂未发布事件。", "The authoritative runtime has not published events yet.")
-                  : tr(locale(), "没有可显示的环境事件。", "No ambient events are available to display.")}
+                  : status() === "unavailable"
+                    ? tr(locale(), "重试 World Feed 以检查最新环境动态。", "Retry World Feed to check for the latest ambient activity.")
+                    : tr(locale(), "没有可显示的环境事件。", "No ambient events are available to display.")}
             </div>
           }
         >
