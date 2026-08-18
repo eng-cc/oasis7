@@ -31,7 +31,7 @@ if grep -Eq 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; t
   echo "compile metrics workflow must not request a full-history checkout" >&2
   exit 1
 fi
-if ! grep -Eq 'git fetch --no-tags --depth=1 origin "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
+if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1
 fi
@@ -87,6 +87,22 @@ resolved_malicious_ref=$(
 )
 if [[ "$resolved_malicious_ref" != "$malicious_ref" || -e "$malicious_ref_marker" ]]; then
   echo "baseline resolver must preserve malicious-looking refs literally" >&2
+  exit 1
+fi
+
+option_ref_marker="$tmp_dir/option-ref-marker"
+option_ref="--upload-pack=touch ${option_ref_marker}"
+option_ref_repo="$tmp_dir/option-ref-repo"
+option_ref_origin="$tmp_dir/option-ref-origin.git"
+git init --bare --quiet "$option_ref_origin"
+git init --quiet "$option_ref_repo"
+git -C "$option_ref_repo" remote add origin "$option_ref_origin"
+if git -C "$option_ref_repo" fetch --no-tags --depth=1 origin -- "$option_ref" 2>/dev/null; then
+  echo "option-shaped baseline ref unexpectedly fetched" >&2
+  exit 1
+fi
+if [[ -e "$option_ref_marker" ]]; then
+  echo "baseline fetch must not execute option-shaped refs" >&2
   exit 1
 fi
 

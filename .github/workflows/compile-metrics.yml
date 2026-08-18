@@ -77,7 +77,7 @@ jobs:
           BASELINE_REF: ${{ inputs.baseline_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${BASELINE_REF}"
+          git fetch --no-tags --depth=1 origin -- "${BASELINE_REF}"
 
       - name: Install pinned Rust toolchain
         shell: bash
