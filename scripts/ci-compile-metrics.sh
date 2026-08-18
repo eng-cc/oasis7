@@ -31,6 +31,10 @@ Outputs:
   <out-dir>/comparison.json
   <out-dir>/summary.md
   <out-dir>/logs/*.log
+
+Each metrics JSON and the summary records the resolved commit OID for the
+checkout it measured, so a movable baseline ref cannot make the evidence
+ambiguous after the run.
 USAGE
 }
 
@@ -184,6 +188,9 @@ measure_checkout() {
   local checkout_path="$2"
   local result_path="$3"
 
+  local commit_oid
+  commit_oid=$(git -C "$checkout_path" rev-parse --verify 'HEAD^{commit}')
+
   local check_target="$tmp_root/${label}-check-target"
   local release_target="$tmp_root/${label}-release-target"
   local cargo_home="$tmp_root/${label}-cargo-home"
@@ -259,6 +266,7 @@ PY
   python3 - "$result_path" <<'PY' \
     "$label" \
     "$checkout_path" \
+    "$commit_oid" \
     "$package_name" \
     "$binary_name" \
     "$package_count" \
@@ -276,16 +284,17 @@ out_path = sys.argv[1]
 payload = {
     "label": sys.argv[2],
     "checkout_path": sys.argv[3],
-    "package": sys.argv[4],
-    "binary": sys.argv[5] or None,
-    "package_count": int(sys.argv[6]),
-    "wasmtime_present": sys.argv[7] == "true",
-    "wasm_executor_present": sys.argv[8] == "true",
-    "cargo_check_seconds": float(sys.argv[9]),
-    "cargo_build_release_seconds": float(sys.argv[10]) if sys.argv[10] else None,
-    "release_binary_bytes": int(sys.argv[11]) if sys.argv[11] else None,
-    "check_only": sys.argv[12] == "true",
-    "no_default_features": sys.argv[13] == "true",
+    "commit_oid": sys.argv[4],
+    "package": sys.argv[5],
+    "binary": sys.argv[6] or None,
+    "package_count": int(sys.argv[7]),
+    "wasmtime_present": sys.argv[8] == "true",
+    "wasm_executor_present": sys.argv[9] == "true",
+    "cargo_check_seconds": float(sys.argv[10]),
+    "cargo_build_release_seconds": float(sys.argv[11]) if sys.argv[11] else None,
+    "release_binary_bytes": int(sys.argv[12]) if sys.argv[12] else None,
+    "check_only": sys.argv[13] == "true",
+    "no_default_features": sys.argv[14] == "true",
 }
 with open(out_path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -360,8 +369,10 @@ if current is None:
 comparison = {
     "package": current["package"],
     "binary": current["binary"],
+    "current_commit_oid": current["commit_oid"],
     "current": current,
     "baseline_ref": baseline_ref or None,
+    "baseline_commit_oid": baseline["commit_oid"] if baseline is not None else None,
     "baseline": baseline,
 }
 
@@ -395,6 +406,7 @@ with comparison_path.open("w", encoding="utf-8") as handle:
 lines: list[str] = []
 lines.append(f"# Compile Metrics: {current['package']}")
 lines.append("")
+lines.append(f"- Current commit OID: `{current['commit_oid']}`")
 if current["binary"] is None:
     lines.append("- Binary: `not measured (check-only package)`")
 else:
@@ -413,7 +425,7 @@ if baseline is None:
     lines.append("No baseline ref was provided, so this report contains current-run metrics only.")
 else:
     lines.append("")
-    lines.append(f"Compared against baseline ref `{baseline_ref}` measured on the same runner family with isolated cargo target directories.")
+    lines.append(f"Compared against baseline ref `{baseline_ref}` at commit `{baseline['commit_oid']}` measured on the same runner family with isolated cargo target directories.")
     lines.append("")
     lines.append("| Metric | Baseline | Current | Delta | Delta % |")
     lines.append("| --- | ---: | ---: | ---: | ---: |")
