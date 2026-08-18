@@ -27,7 +27,21 @@ def main() -> int:
     root = args.root.resolve()
     fixture_receipts = os.environ.get("OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS") == "1" and str(root).startswith(("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/"))
     ledger = Path(args.ledger)
-    path = ledger if ledger.is_absolute() else root / ledger
+    def resolve_repo_path(raw: str, base: Path | None = None) -> Path:
+        candidate = Path(raw).expanduser()
+        options = [candidate] if candidate.is_absolute() else [root / candidate]
+        if base is not None and not candidate.is_absolute():
+            options.append(base.parent / candidate)
+        for option in options:
+            if option.is_file():
+                resolved = option.resolve()
+                try:
+                    resolved.relative_to(root)
+                except ValueError:
+                    p.error(f"review artifact escapes repository root: {raw}")
+                return resolved
+        return options[0].resolve()
+    path = resolve_repo_path(str(ledger))
     if not path.is_file():
         p.error(f"slice ledger does not exist: {args.ledger}")
     required = {x.strip() for x in args.roles.split(",") if x.strip()}
@@ -49,7 +63,7 @@ def main() -> int:
             p.error(f"slice_id is not a strict UUID for {role}")
         if str(item.get("head") or "") != args.source_head: p.error(f"source head mismatch for {role}")
         if args.mode == "unattended":
-            receipt_path = root / str(item["dispatch_receipt"])
+            receipt_path = resolve_repo_path(str(item["dispatch_receipt"]), path)
             if not receipt_path.is_file(): capability_blocked(role, "dispatch receipt missing")
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             if receipt.get("receipt_type") != "oasis7_subagent_dispatch" or receipt.get("issuer") != "codex_runtime": p.error(f"untrusted dispatch receipt for {role}")
@@ -60,7 +74,7 @@ def main() -> int:
         digest = str(item["artifact_digest"])
         if not re.fullmatch(r"[0-9a-f]{64}", digest): p.error(f"invalid artifact digest for {role}")
         artifacts = item.get("artifacts") or []
-        artifact = root / str(artifacts[0]) if artifacts else None
+        artifact = resolve_repo_path(str(artifacts[0]), path) if artifacts else None
         if artifact is None or not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
             p.error(f"artifact digest mismatch for {role}")
         seen[role] = item

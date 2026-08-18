@@ -26,12 +26,19 @@ case "$*" in
   api\ graphql*)
     python3 - "$GH_MAPPING_PATH" <<'PY'
 import json, os, sys
-m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); s=next_record["status"]
-state_file=os.environ.get("GH_PROJECT_STATE_FILE")
-if state_file and os.path.exists(state_file): s=open(state_file).read().strip() or s
-status={"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(s,"In Progress")
-phase={"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(s,"execution")
-nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":s,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
+m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); pm_status=next_record["status"]
+def read_state(name, fallback):
+    path=os.environ.get(name)
+    if path and os.path.exists(path):
+        return open(path).read().strip() or fallback
+    return fallback
+# Project lifecycle fields are independent: draft candidates change Workflow
+# Phase to verification without changing PM Status=committed. A scalar fake
+# state used to conflate the two and fail the selected-task audit too early.
+pm_status=read_state("GH_PROJECT_STATE_FILE", pm_status)
+status=read_state("GH_PROJECT_STATUS_STATE_FILE", {"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(pm_status,"Todo"))
+phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase") or {"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(pm_status,"execution"))
+nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
 if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
 node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"nodes":nodes}}
 print(json.dumps({"data":{"nodes":[node]}}))
@@ -128,7 +135,7 @@ JSON
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
 {"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_VERIFICATION","name":"verification"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
 {"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
 {"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
@@ -157,14 +164,34 @@ JSON
 JSON
     ;;
   project\ item-edit*)
-    if [[ "$*" == *"OPT_COMMITTED"* ]]; then
-      printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
-    elif [[ "$*" == *"OPT_READY_PM"* ]]; then
-      printf 'ready\n' >"$GH_PROJECT_STATE_FILE"
-    elif [[ "$*" == *"OPT_PR_WATCH_PM"* ]]; then
-      printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
-    elif [[ "$*" == *"OPT_DONE"* ]]; then
-      printf 'done\n' >"$GH_PROJECT_STATE_FILE"
+    if [[ "$*" == *"--field-id FIELD_STATUS"* ]]; then
+      case "$*" in
+        *OPT_TODO*) printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
+        *OPT_IN_PROGRESS*) printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
+        *OPT_READY*) printf 'Ready / PR\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
+        *OPT_PR_WATCH*) printf 'PR Watch\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
+        *OPT_DONE_STATUS*) printf 'Done\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
+      esac
+    elif [[ "$*" == *"--field-id FIELD_PM_STATUS"* ]]; then
+      if [[ "$*" == *"OPT_CANDIDATE"* ]]; then
+        printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_COMMITTED"* ]]; then
+        printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_READY_PM"* ]]; then
+        printf 'ready\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_PR_WATCH_PM"* ]]; then
+        printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_DONE"* ]]; then
+        printf 'done\n' >"$GH_PROJECT_STATE_FILE"
+      fi
+    elif [[ "$*" == *"--field-id FIELD_WORKFLOW_PHASE"* ]]; then
+      case "$*" in
+        *OPT_EXECUTION*) printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_VERIFICATION*) printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_PRE_PR_READY*) printf 'pre_pr_ready\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_PR_WATCH_PHASE*) printf 'pr_watch\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_DONE_PHASE*) printf 'done\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+      esac
     fi
     printf '{}\n'
     ;;
@@ -179,7 +206,7 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
@@ -190,6 +217,10 @@ export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
 export GH_PROJECT_STATE_FILE="$TMPDIR/project-live-state"
 printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+export GH_PROJECT_STATUS_STATE_FILE="$TMPDIR/project-live-status"
+printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+export GH_PROJECT_PHASE_STATE_FILE="$TMPDIR/project-live-phase"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
@@ -219,7 +250,24 @@ printf 'fixture return\n' >"$LEDGER_DIR/return.md"
 RETURN_SHA="$(shasum -a 256 "$LEDGER_DIR/return.md" | awk '{print $1}')"
 printf '{"receipt_type":"oasis7_subagent_dispatch","issuer":"codex_runtime","dispatch_id":"11111111-1111-4111-8111-111111111111","role":"repository_health_engineer","source_head":"%s","contract_digest":"%064d"}\n' "$HEAD_SHA" 0 >"$LEDGER_DIR/dispatch.json"
 printf '{"task_uid":"%s","role":"repository_health_engineer","status":"completed","head":"%s","slice_id":"11111111-1111-4111-8111-111111111111","dispatch_receipt":".pm/scratch/%s/dispatch.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified: fixture","artifact_digest":"%s","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture","artifacts":[".pm/scratch/%s/return.md"]}\n' "$TASK_UID" "$HEAD_SHA" "$TASK_UID" "$RETURN_SHA" "$TASK_UID" >"$LEDGER_DIR/slice-ledger.jsonl"
-printf -- "- Pre-PR Local Role Review: passed\n- Source Head: %s\n- Review Roles: repository_health_engineer\n- Slice Ledger: .pm/scratch/%s/slice-ledger.jsonl\n" "$HEAD_SHA" "$TASK_UID" >"$REVIEW_PACKET"
+REVIEW_PLAN="$TMPDIR/.pm/scratch/$TASK_UID/review-plans/fixture.json"
+mkdir -p "$(dirname "$REVIEW_PLAN")"
+python3 - "$REVIEW_PLAN" "$HEAD_SHA" "$TASK_UID" "$LEDGER_DIR" <<'PY'
+import json, sys
+path, head, uid, ledger_dir = sys.argv[1:]
+json.dump({
+  "schema": "oasis7-review-plan/v1", "task_uid": uid, "frozen_head": head,
+  "comparison_ref": "HEAD", "comparison_oid": head,
+  "relevant_evidence_digest": "a" * 64,
+  "roles": ["repository_health_engineer"],
+  "expected_slices": [{"role": "repository_health_engineer", "slice_id": "11111111-1111-4111-8111-111111111111"}],
+  "epoch": "b" * 64, "batch_path": ".pm/scratch/%s/review-batches/%s.json" % (uid, "b" * 64),
+  "preflight": {"status": "incomplete", "ledger_path": ".pm/scratch/%s/slice-ledger.jsonl" % uid},
+}, open(path, "w"))
+PY
+# Deliberately retain a stale compatibility role in the packet: closeout must
+# derive the authoritative role and ledger from Review Plan.
+printf -- "- Pre-PR Local Role Review: passed\n- Source Head: %s\n- Review Plan: .pm/scratch/%s/review-plans/fixture.json\n- Review Roles: stale_compatibility_role\n- Slice Ledger: n/a; derived from Review Plan\n" "$HEAD_SHA" "$TASK_UID" >"$REVIEW_PACKET"
 
 python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
   --repo eng-cc/oasis7 \
@@ -228,6 +276,24 @@ python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
   --task-uid "$TASK_UID" \
   --to-status committed \
   --json > "$TMPDIR/move-committed.json"
+
+python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$TASK_UID" \
+  --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+  --draft-candidate \
+  --json > "$TMPDIR/record-draft.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" <<'PY'
+import json, pathlib, sys
+record = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["tasks"][sys.argv[2]]
+calls = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+if record.get("status") != "committed" or record.get("workflow_phase") != "verification":
+    raise SystemExit(f"draft candidate did not persist committed/verification truth: {record}")
+if "OPT_VERIFICATION" not in calls:
+    raise SystemExit("draft candidate did not project Workflow Phase=verification")
+PY
 
 MAPPING_BEFORE_MISSING_WORKFLOW_REPORT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 for phase in start close; do

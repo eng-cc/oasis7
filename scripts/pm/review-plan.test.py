@@ -141,6 +141,9 @@ class ReviewPlanTests(unittest.TestCase):
         artifacts = self.root / "preflight"
         plan = self.plan("--preflight-dir", str(artifacts))
         self.assertEqual("incomplete", plan["preflight"]["status"])
+        persisted = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertEqual(plan["preflight"]["ledger_path"], persisted["preflight"]["ledger_path"])
+        self.assertEqual(plan["epoch"], persisted["epoch"])
         self.assertFalse(Path(plan["collection_path"]).exists())
         for artifact in plan["preflight"]["artifact_paths"]:
             returned = json.loads(Path(artifact).read_text(encoding="utf-8"))

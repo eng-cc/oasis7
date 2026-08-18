@@ -120,6 +120,26 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
+compile_metrics_output="$(plan_for_paths \
+  scripts/ci-compile-metrics.sh \
+  scripts/ci-compile-metrics-gate.py \
+  scripts/ci-compile-metrics-contract.test.sh)"
+assert_key_equals "$compile_metrics_output" scope targeted
+assert_key_equals "$compile_metrics_output" run_compile_metrics_contract_tests true
+assert_key_equals "$compile_metrics_output" run_rust_baseline false
+assert_key_equals "$compile_metrics_output" needs_rust_toolchain false
+assert_key_equals "$compile_metrics_output" needs_node false
+assert_key_equals "$compile_metrics_output" needs_system_deps false
+assert_key_equals "$compile_metrics_output" selected_capabilities compile_metrics
+assert_reason_contains "$compile_metrics_output" "compile_metrics:scripts/ci-compile-metrics.sh"
+assert_reason_absent "$compile_metrics_output" "unclassified_or_unresolvable:"
+
+compile_metrics_workflow_output="$(plan_for_path .github/workflows/compile-metrics.yml)"
+assert_key_equals "$compile_metrics_workflow_output" scope full
+assert_key_equals "$compile_metrics_workflow_output" run_compile_metrics_contract_tests true
+assert_key_equals "$compile_metrics_workflow_output" run_rust_baseline true
+assert_reason_contains "$compile_metrics_workflow_output" "compile_metrics_workflow:.github/workflows/compile-metrics.yml"
+
 viewer_web_wrapper_output="$(plan_for_paths \
   scripts/build-viewer-software-safe.sh \
   scripts/viewer-dependency-preflight.sh \
@@ -138,7 +158,8 @@ assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:
 
 viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-producer-playtest.sh \
-  scripts/worktree-harness.sh)"
+  scripts/worktree-harness.sh \
+  scripts/worktree-harness-contract.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
@@ -146,6 +167,7 @@ assert_key_equals "$viewer_launcher_wrapper_output" run_launcher_web_build true
 assert_key_equals "$viewer_launcher_wrapper_output" needs_trunk true
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
 
 viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"

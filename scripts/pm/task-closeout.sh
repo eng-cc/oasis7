@@ -138,7 +138,8 @@ if [[ "$TARGET_STATUS" == "ready" ]]; then
   FROZEN_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)"
   grep -q 'Pre-PR Local Role Review: passed' "$REVIEW_PACKET_FILE" || die "review packet is not passed"
   grep -q "Source Head: $FROZEN_HEAD" "$REVIEW_PACKET_FILE" || die "review packet is not bound to current frozen HEAD"
-  grep -Eq 'Slice Ledger: [^[:space:]].*slice-ledger.*\.jsonl' "$REVIEW_PACKET_FILE" || die "review packet lacks a machine-checkable role-return ledger"
+  grep -Eq 'Slice Ledger: [^[:space:]].*slice-ledger.*\.jsonl|Review Plan: [^[:space:]].*\.json' "$REVIEW_PACKET_FILE" \
+    || die "review packet lacks an authoritative review plan or machine-checkable role-return ledger; regenerate with ./scripts/pm/review-plan.py --preflight-dir <dir> and rerun record-pre-pr-review"
   REVIEW_FIELDS="$(python3 - "$REVIEW_PACKET_FILE" <<'PY'
 import re,sys
 t=open(sys.argv[1],encoding='utf-8').read()
@@ -147,13 +148,42 @@ def f(k):
 print('roles='+f('Review Roles'))
 print('head='+f('Source Head'))
 print('ledger='+f('Slice Ledger'))
+print('plan='+f('Review Plan'))
 print('evidence_digest='+f('Review Evidence Digest'))
 PY
 )"
   REVIEW_ROLES="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^roles=//p')"
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
+  REVIEW_PLAN="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^plan=//p')"
   REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^evidence_digest=//p')"
+  if [[ -n "$REVIEW_PLAN" && "$REVIEW_PLAN" != n/a* ]]; then
+    PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" <<'PY'
+import json, sys
+from pathlib import Path
+root, raw = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).expanduser()
+path = raw if raw.is_absolute() else root / raw
+try:
+    plan = json.loads(path.read_text(encoding='utf-8'))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"review packet Review Plan cannot be read: {exc}")
+if plan.get('schema') != 'oasis7-review-plan/v1' or not isinstance(plan.get('roles'), list) or not plan.get('roles'):
+    raise SystemExit('review packet Review Plan is not a complete oasis7-review-plan/v1')
+preflight = plan.get('preflight') or {}
+ledger = preflight.get('ledger_path') if isinstance(preflight, dict) else ''
+print(','.join(str(role) for role in plan['roles']))
+print(str(ledger or ''))
+PY
+)" || die "review packet Review Plan is invalid; regenerate with ./scripts/pm/review-plan.py --preflight-dir <dir> and rerun record-pre-pr-review"
+    REVIEW_ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
+    PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
+    if [[ "$REVIEW_LEDGER" == n/a* || -z "$REVIEW_LEDGER" ]]; then
+      REVIEW_LEDGER="$PLAN_LEDGER"
+    fi
+  fi
+  if [[ -z "$REVIEW_LEDGER" || "$REVIEW_LEDGER" == n/a* ]]; then
+    die "review packet has no derived preflight ledger; regenerate with ./scripts/pm/review-plan.py --root . --task-uid $TASK_UID --head $REVIEW_HEAD --comparison-ref <comparison-ref> --comparison-oid <comparison-oid> --evidence-digest <sha256> --change-class <change-class> --preflight-dir .pm/scratch/$TASK_UID/review-preflight, then rerun record-pre-pr-review"
+  fi
   if [[ "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
     [[ "$REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || die "review packet lacks a canonical Review Evidence Digest"
   fi
@@ -166,7 +196,7 @@ PY
   [[ "$same_head" == true ]] || die "ci_ready_receipt, reviewed_source_head, and frozen HEAD must satisfy same_head"
   [[ "$REVIEW_LEDGER_PATH" == /* ]] || REVIEW_LEDGER_PATH="$ROOT_DIR/$REVIEW_LEDGER_PATH"
   python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
-    || die "ready closeout role-return validation failed"
+    || die "ready closeout role-return validation failed (roles=$REVIEW_ROLES ledger=$REVIEW_LEDGER); regenerate the immutable review plan/preflight with ./scripts/pm/review-plan.py --preflight-dir <dir>, rerun record-pre-pr-review, and retry task-closeout"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then
   RECORDED_PR_NUMBER="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'

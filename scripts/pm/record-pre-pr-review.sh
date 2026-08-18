@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pm/record-pre-pr-review.sh --task-uid <uid> --roles <csv> --review-evidence <text> --review-verdicts <text> --finding-disposition-evidence <text> --verification <text> --residual-risk <text> [options]
+Usage: ./scripts/pm/record-pre-pr-review.sh --task-uid <uid> --review-evidence <text> --review-verdicts <text> --finding-disposition-evidence <text> --verification <text> --residual-risk <text> [options]
 
 Generate and optionally post a passed pre-PR local role review packet.
 
@@ -15,7 +15,7 @@ Options:
   --task-uid <uid>             Task UID.
   --issue <number>             GitHub issue number. Defaults from .pm/github-project-sync/tasks.json.
   --repo <owner/name>          GitHub repo. Defaults from project mapping or eng-cc/oasis7.
-  --roles <csv>                Review roles included in the packet.
+  --roles <csv>                Optional compatibility input; --review-plan roles are authoritative.
   --role-basis <text>          Role selection basis.
   --review-evidence <text>     Per-role evidence summary.
   --review-verdicts <text>     Per-role dual verdict summary.
@@ -33,7 +33,7 @@ Options:
   --liveops-evidence <text>    LiveOps Evidence value.
   --comparison-ref <ref>       Comparison Ref value (default: refs/remotes/origin/main).
   --comparison-oid <oid>       Optional assertion for the resolved comparison ref OID.
-  --review-plan <path>         Immutable review plan; validates task/head/ref/OID/roles.
+  --review-plan <path>         Immutable review plan; derives task/head/ref/OID/roles and preflight ledger.
   --source-head <sha>          Source Head value (default: HEAD).
   --source-branch <branch>     Source Branch value (default: current branch).
   --allow-dirty                Allow dirty working tree only when --reviewed-paths
@@ -64,6 +64,9 @@ sanitize_evidence_path_field() {
     return
   fi
 
+  case "$value" in
+    ./*) value="${value#./}" ;;
+  esac
   printf '%s\n' "$value"
 }
 
@@ -128,13 +131,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
-[[ -n "$ROLES" || -n "$REVIEW_PLAN" ]] || die "--roles is required unless --review-plan is supplied"
 [[ -n "$REVIEW_EVIDENCE" ]] || die "--review-evidence is required"
 [[ -n "$REVIEW_VERDICTS" ]] || die "--review-verdicts is required"
 [[ -n "$FINDING_DISPOSITION_EVIDENCE" ]] || die "--finding-disposition-evidence is required"
 [[ -n "$VERIFICATION" ]] || die "--verification is required"
 [[ -n "$RESIDUAL_RISK" ]] || die "--residual-risk is required"
-[[ "$SLICE_LEDGER" != n/a* ]] || die "--slice-ledger must name a machine-checkable role-return JSONL file for a passed review"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   if [[ "$ALLOW_DIRTY" != "1" || -z "$REVIEWED_PATHS" || -z "$SOURCE_HEAD" ]]; then
@@ -191,6 +192,8 @@ print(plan["comparison_ref"])
 print(plan["comparison_oid"])
 print(plan["epoch"])
 print(plan["relevant_evidence_digest"])
+preflight = plan.get("preflight") or {}
+print(preflight.get("ledger_path") if isinstance(preflight, dict) else "")
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -199,6 +202,10 @@ PY
   COMPARISON_OID="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '4p')"
   REVIEW_PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
   REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
+  REVIEW_PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '7p')"
+fi
+if [[ -z "$REVIEW_PLAN" ]]; then
+  [[ -n "$ROLES" ]] || die "--roles is required when --review-plan is not supplied"
 fi
 CURRENT_HEAD="$(git rev-parse HEAD)"
 [[ "$SOURCE_HEAD" == "$CURRENT_HEAD" ]] || die "source head must be the current frozen HEAD: expected $CURRENT_HEAD, actual $SOURCE_HEAD"
@@ -213,6 +220,13 @@ fi
 if [[ -z "$ROLE_BASIS" ]]; then
   ROLE_BASIS="changed paths, task history, verification claim, and explicit adjacent-role skips"
 fi
+REVIEW_PLAN_DISPLAY="$(sanitize_evidence_path_field "Review Plan" "$REVIEW_PLAN")"
+if [[ -n "${REVIEW_PLAN_LEDGER:-}" && "$SLICE_LEDGER" == n/a* ]]; then
+  SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
+fi
+if [[ -n "$REVIEW_PLAN" && "$SLICE_LEDGER" == n/a* ]]; then
+  die "--review-plan has no persisted preflight ledger; regenerate it with ./scripts/pm/review-plan.py --root . --task-uid $TASK_UID --head $SOURCE_HEAD --comparison-ref $COMPARISON_REF --comparison-oid $COMPARISON_OID --evidence-digest <sha256> --change-class <change-class> --preflight-dir .pm/scratch/$TASK_UID/review-preflight, then rerun record-pre-pr-review"
+fi
 REVIEW_PACKAGE="$(sanitize_evidence_path_field "Review Package" "$REVIEW_PACKAGE")"
 SLICE_LEDGER="$(sanitize_evidence_path_field "Slice Ledger" "$SLICE_LEDGER")"
 python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" "$REVIEW_PLAN" <<'PY'
@@ -221,7 +235,21 @@ import hashlib, json, re, sys
 from pathlib import Path
 
 root, relative, roles_csv, source_head, review_plan = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
-path = root / relative
+def resolve_repo_path(raw: str, base: Path | None = None) -> Path:
+    candidate = Path(raw).expanduser()
+    options = [candidate] if candidate.is_absolute() else [root / candidate]
+    if base is not None and not candidate.is_absolute():
+        options.append(base.parent / candidate)
+    for option in options:
+        if option.is_file():
+            resolved = option.resolve()
+            try:
+                resolved.relative_to(root.resolve())
+            except ValueError:
+                raise SystemExit(f"error: review artifact escapes repository root: {raw}")
+            return resolved
+    return options[0].resolve()
+path = resolve_repo_path(relative)
 if not path.is_file():
     raise SystemExit(f"error: Slice Ledger does not exist: {relative}")
 required = {item.strip() for item in roles_csv.split(",") if item.strip()}
@@ -267,7 +295,7 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
     artifacts = item.get("artifacts") or []
     if not artifacts:
         raise SystemExit(f"error: Slice Ledger has no returned artifact for {role}")
-    artifact = root / str(artifacts[0])
+    artifact = resolve_repo_path(str(artifacts[0]), path)
     if not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
         raise SystemExit(f"error: Slice Ledger artifact digest mismatch for {role}")
     seen[role] = item
@@ -344,6 +372,7 @@ PACKET="$(cat <<EOF
 - Comparison OID: $COMPARISON_OID
 - Reviewed Changed Paths: $REVIEWED_PATHS
 - Review Package: $REVIEW_PACKAGE
+- Review Plan: ${REVIEW_PLAN_DISPLAY:-n/a; no immutable plan supplied}
 - Review Evidence Digest: $REVIEW_EVIDENCE_DIGEST
 - Role Selection Basis: $ROLE_BASIS
 - Review Roles: $ROLES

@@ -611,6 +611,8 @@ if sys.argv[29] == "1":
         "bootstrap_snapshot_digest": sys.argv[37],
         "status": "committed",
         "workflow_started": True,
+        "bootstrap_complete": True,
+        "evidence_mode": "single_pass",
     }
 print(json.dumps(payload, ensure_ascii=False))
 PY

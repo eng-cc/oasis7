@@ -25,6 +25,7 @@ Options for `up`:
   --no-llm                 Negative-path only; launcher boot will fail fast without LLM
   --bundle-mode            Build/reuse a worktree-local bundle and boot from it
   --source-mode            Boot directly from source (default)
+  --startup-timeout <secs> Maximum startup deadline (default: 300)
   --smoke-timeout <secs>   After boot, run a minimal agent-browser smoke within <secs>
 
 Options for `status`:
@@ -90,7 +91,7 @@ refresh_state() {
 
   if [[ "$current_status" == "ready" ]]; then
     if ! wh_pid_alive "$harness_pid" && ! wh_pid_alive "$launcher_pid"; then
-      wh_state_write "$STATE_FILE" '{"status": "stopped", "harness_pid": null, "launcher_pid": null}'
+      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "launcher_pid": null}'
       return 0
     fi
   fi
@@ -122,22 +123,78 @@ run_smoke() {
   fi
 
   ab_require
+  if [[ "$timeout_secs" -le 0 ]]; then
+    echo "error: smoke timeout must be greater than zero" >&2
+    exit 2
+  fi
+  local smoke_deadline_ms=$(( $(wh_clock_ms) + timeout_secs * 1000 ))
+  wh_state_phase "$STATE_FILE" "smoke" "browser smoke in progress" "$smoke_deadline_ms"
+
+  smoke_failed() {
+    local reason=$1
+    wh_state_write "$STATE_FILE" "$(python3 - "$reason" "$timeout_secs" <<'PY'
+import json
+import sys
+print(json.dumps({"phase": "smoke_failed", "last_smoke_ok": False, "last_smoke_timeout_secs": int(sys.argv[2]), "last_smoke_error": sys.argv[1]}))
+PY
+)"
+    echo "error: worktree harness smoke failed: $reason" >&2
+    return 1
+  }
+
+  smoke_step() {
+    local label=$1
+    shift
+    local now_ms remaining_ms rc
+    now_ms=$(wh_clock_ms)
+    remaining_ms=$(( smoke_deadline_ms - now_ms ))
+    if (( remaining_ms <= 0 )); then
+      smoke_failed "deadline exceeded before ${label}"
+      return 1
+    fi
+    wh_state_progress "$STATE_FILE" "browser operation: $label ($remaining_ms ms remaining)"
+    if wh_run_with_deadline "$smoke_deadline_ms" "$@"; then
+      return 0
+    else
+      rc=$?
+    fi
+    if [[ "$rc" -eq 124 ]]; then
+      smoke_failed "deadline exceeded during ${label}"
+    else
+      smoke_failed "${label} exited with status ${rc}"
+    fi
+    return 1
+  }
+
   smoke_dir="$ARTIFACT_DIR/smoke-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$smoke_dir"
 
-  ab_open "$BROWSER_SESSION" 0 "$viewer_url" >>"$smoke_dir/agent-browser.log" 2>&1
-  ab_cmd "$BROWSER_SESSION" wait --load networkidle >>"$smoke_dir/agent-browser.log" 2>&1 || true
-  state_raw=$(ab_eval "$BROWSER_SESSION" 'JSON.stringify(window.__AW_TEST__ ? window.__AW_TEST__.getState() : null)') || {
+  smoke_step "open" ab_open "$BROWSER_SESSION" 0 "$viewer_url" >>"$smoke_dir/agent-browser.log" 2>&1 || return 1
+  if ! smoke_step "wait for networkidle" ab_cmd "$BROWSER_SESSION" wait --load networkidle >>"$smoke_dir/agent-browser.log" 2>&1; then
     cat "$smoke_dir/agent-browser.log" >&2
-    exit 1
-  }
+    return 1
+  fi
+  wh_state_progress "$STATE_FILE" "browser operation: evaluate state" "0"
+  if state_raw="$(wh_run_with_deadline "$smoke_deadline_ms" ab_eval "$BROWSER_SESSION" 'JSON.stringify(window.__AW_TEST__ ? window.__AW_TEST__.getState() : null)')"; then
+    :
+  else
+    local eval_rc=$?
+    if [[ "$eval_rc" -eq 124 ]]; then
+      smoke_failed "deadline exceeded during state evaluation"
+    else
+      smoke_failed "state evaluation exited with status $eval_rc"
+    fi
+    cat "$smoke_dir/agent-browser.log" >&2
+    return 1
+  fi
   if [[ -z "$state_raw" || "$state_raw" == "null" ]]; then
-    echo "error: worktree harness smoke failed; __AW_TEST__.getState() returned empty payload" >&2
-    exit 1
+    smoke_failed "__AW_TEST__.getState() returned empty payload"
+    cat "$smoke_dir/agent-browser.log" >&2
+    return 1
   fi
   json_to_file "$state_raw" "$smoke_dir/state.json"
-  ab_screenshot "$BROWSER_SESSION" "$smoke_dir/final.png" >>"$smoke_dir/agent-browser.log" 2>&1 || true
-  wh_state_write "$STATE_FILE" "{\"last_smoke_dir\": $(json_quote "$smoke_dir"), \"last_smoke_ok\": true, \"last_smoke_timeout_secs\": $timeout_secs}"
+  smoke_step "screenshot" ab_screenshot "$BROWSER_SESSION" "$smoke_dir/final.png" >>"$smoke_dir/agent-browser.log" 2>&1 || return 1
+  wh_state_write "$STATE_FILE" "{\"phase\": \"ready\", \"last_smoke_dir\": $(json_quote "$smoke_dir"), \"last_smoke_ok\": true, \"last_smoke_timeout_secs\": $timeout_secs, \"last_smoke_deadline_epoch_ms\": $smoke_deadline_ms}"
   printf '%s\n' "$smoke_dir"
 }
 
@@ -145,6 +202,7 @@ case "$action" in
   up)
     ENABLE_LLM="1"
     BOOT_MODE="source"
+    STARTUP_TIMEOUT=300
     SMOKE_TIMEOUT=0
     while [[ $# -gt 0 ]]; do
       case "$1" in
@@ -164,6 +222,10 @@ case "$action" in
           BOOT_MODE="source"
           shift
           ;;
+        --startup-timeout)
+          STARTUP_TIMEOUT="${2:-}"
+          shift 2
+          ;;
         --smoke-timeout)
           SMOKE_TIMEOUT="${2:-}"
           shift 2
@@ -179,6 +241,7 @@ case "$action" in
           ;;
       esac
     done
+    [[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
     [[ "$SMOKE_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "error: --smoke-timeout must be a non-negative integer" >&2; exit 2; }
     if [[ "$ENABLE_LLM" != "1" ]]; then
       echo "error: worktree harness now boots through ./scripts/run-launcher-stack.sh and oasis7_game_launcher, both of which require active LLM access" >&2
@@ -200,6 +263,7 @@ case "$action" in
     web_bind=$(json_get "$ports_json" web_bind)
     live_bind=$(json_get "$ports_json" live_bind)
     chain_status_bind=$(json_get "$ports_json" chain_status_bind)
+    STARTUP_DEADLINE_MS=$(( $(wh_clock_ms) + STARTUP_TIMEOUT * 1000 ))
 
     wh_state_write "$STATE_FILE" "$(python3 - \
       "$WORKTREE_ID" \
@@ -216,7 +280,9 @@ case "$action" in
       "$ARTIFACT_DIR" \
       "$BROWSER_DIR" \
       "$BROWSER_SESSION" \
-      "$STARTUP_LOG" <<'PY'
+      "$STARTUP_LOG" \
+      "$STARTUP_TIMEOUT" \
+      "$STARTUP_DEADLINE_MS" <<'PY'
 import json
 import sys
 payload = {
@@ -236,17 +302,36 @@ payload = {
     "browser_dir": sys.argv[13],
     "browser_session": sys.argv[14],
     "startup_log": sys.argv[15],
+    "startup_timeout_secs": int(sys.argv[16]),
+    "startup_deadline_epoch_ms": int(sys.argv[17]),
+    "phase": "preparing",
+    "phase_started_epoch_ms": int(sys.argv[17]) - int(sys.argv[16]) * 1000,
+    "phase_deadline_epoch_ms": int(sys.argv[17]),
+    "progress": {
+        "phase": "preparing",
+        "message": "resolving worktree ports",
+        "updated_epoch_ms": int(sys.argv[17]) - int(sys.argv[16]) * 1000,
+    },
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
 )"
 
     if [[ "$BOOT_MODE" == "bundle" ]]; then
+      wh_state_phase "$STATE_FILE" "building_bundle" "checking worktree-local bundle freshness" "$STARTUP_DEADLINE_MS"
       if [[ ! -x "$BUNDLE_DIR/run-game.sh" ]] || ! bundle_check_freshness "$ROOT_DIR" "$BUNDLE_DIR" >/dev/null 2>&1; then
-        ./scripts/build-game-launcher-bundle.sh --profile dev --out-dir "$BUNDLE_DIR" >>"$STARTUP_LOG" 2>&1
+        wh_state_progress "$STATE_FILE" "building fresh worktree-local launcher bundle" "0"
+        if wh_run_with_deadline "$STARTUP_DEADLINE_MS" ./scripts/build-game-launcher-bundle.sh --profile dev --out-dir "$BUNDLE_DIR" >>"$STARTUP_LOG" 2>&1; then
+          :
+        else
+          build_rc=$?
+          wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"phase\": \"failed\", \"failure_reason\": \"bundle build exited with status $build_rc\"}"
+          exit "$build_rc"
+        fi
       fi
       bundle_args=(--bundle-dir "$BUNDLE_DIR")
     else
+      wh_state_phase "$STATE_FILE" "starting_launcher" "preparing source launcher stack" "$STARTUP_DEADLINE_MS"
       bundle_args=()
     fi
 
@@ -267,12 +352,17 @@ PY
     )
     run_args+=(--with-llm)
 
+    wh_state_phase "$STATE_FILE" "starting_launcher" "launching run-launcher-stack.sh" "$STARTUP_DEADLINE_MS"
     nohup ./scripts/run-launcher-stack.sh "${run_args[@]}" >"$STARTUP_LOG" 2>&1 < /dev/null &
     HARNESS_PID=$!
     wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID}"
 
-    for _ in $(seq 1 180); do
+    wh_state_phase "$STATE_FILE" "waiting_metadata" "waiting for STACK_READY metadata" "$STARTUP_DEADLINE_MS"
+    attempt=0
+    while (( $(wh_clock_ms) < STARTUP_DEADLINE_MS )); do
+      attempt=$((attempt + 1))
       if ! wh_pid_alive "$HARNESS_PID"; then
+        wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh exited before STACK_READY"}'
         echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2
         tail -n 120 "$STARTUP_LOG" >&2 || true
         exit 1
@@ -283,10 +373,13 @@ PY
           break
         fi
       fi
+      remaining_ms=$(( STARTUP_DEADLINE_MS - $(wh_clock_ms) ))
+      wh_state_progress "$STATE_FILE" "waiting for STACK_READY metadata (${remaining_ms}ms remaining)" "$attempt"
       sleep 1
     done
 
     if [[ ! -f "$META_FILE" ]] || [[ "$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)" != "1" ]]; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "startup deadline exceeded waiting for STACK_READY"}'
       echo "error: timed out waiting for worktree harness readiness" >&2
       tail -n 120 "$STARTUP_LOG" >&2 || true
       exit 1
@@ -303,6 +396,7 @@ import sys
 launcher_pid = sys.argv[2]
 payload = {
     "status": "ready",
+    "phase": "ready",
     "viewer_url": sys.argv[1],
     "launcher_pid": int(launcher_pid) if launcher_pid else None,
     "meta_file": sys.argv[3],
@@ -320,7 +414,7 @@ PY
     ;;
   down)
     kill_recorded_processes
-    wh_state_write "$STATE_FILE" '{"status": "stopped", "harness_pid": null, "launcher_pid": null}'
+    wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "launcher_pid": null}'
     echo "worktree harness stopped: $WORKTREE_ID"
     ;;
   status)

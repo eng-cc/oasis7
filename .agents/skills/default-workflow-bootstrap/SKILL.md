@@ -17,11 +17,11 @@ Use for every request, including read-only/chat-only work. Do not repeat bootstr
    - repository-changing: requires standard worktree + GitHub Project-backed task truth before edits
    - read-only/chat-only pure fact lookup: requires standard worktree + GitHub Project-backed task truth before direct answer
    - read-only/chat-only professional judgment: requires the same binding, then a matching professional slice
-2. Reuse a valid canonical task worktree only when identity matches; otherwise create one:
+2. Reuse a valid canonical task worktree only when identity matches; otherwise create one. For a new PM-backed task, capture the machine-readable result:
 
 ```bash
 ./scripts/new-task-worktree.sh <module> <task> \
-  --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>
+  --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref> --json
 ```
 
 TPM is the default coordinator and continuation owner, not the task outcome
@@ -29,8 +29,8 @@ owner. Determine and bind the matching professional role as `owner_role`;
 reuse an existing owner only when task truth still validates it. Create a
 dedicated worktree unless the user explicitly authorized reuse. Professional
 work still requires matching bounded subagent slices.
-3. Confirm task UID, issue/Project binding, owner, repository, branch, worktree, request identity, and acceptance target using `./scripts/pm/workflow-report.sh --phase start --role tpm --task-uid <task_uid>`. Start and close reports require the explicit selected task UID; only the repository-wide `--phase review` report may omit it.
-4. Create or reuse one immutable bootstrap snapshot with `./scripts/pm/bootstrap-task-snapshot.py validate-or-create --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm`; record its path/digest and validate its result before downstream dispatch. The helper derives a new request identity only from bound task truth, reuses an existing immutable snapshot byte-for-byte, and fails closed on drift. Keep `create` / `validate` only for explicit compatibility or diagnosis; do not replay the full bootstrap report while the snapshot remains valid.
+3. Treat a successful helper JSON result with `pm_task.bootstrap_complete=true`, `status=committed`, `workflow_started=true`, and non-empty `bootstrap_snapshot_path`/`bootstrap_snapshot_digest` as the complete bootstrap confirmation. It already binds task UID, issue/Project item, owner, repository, branch, worktree, request identity, acceptance target, workflow start, and immutable snapshot; do not call `workflow-report --phase start` or replay snapshot validation again. For a reused existing task, or any result marked partial/incomplete, confirm the same fields with `./scripts/pm/workflow-report.sh --phase start --role tpm --task-uid <task_uid>` and `./scripts/pm/bootstrap-task-snapshot.py validate-or-create --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm`. Start and close reports require the explicit selected task UID; only the repository-wide `--phase review` report may omit it.
+4. If the helper exits after creating a remote object, or its JSON is missing/incomplete, preserve the worktree and follow its printed `resume-bootstrap` command. Recovery repeats only the missing journaled step, then validates the same task UID/request/epoch; it must not create a second task, replay a complete start, or overwrite an immutable snapshot.
 5. Record the bootstrap result in a GitHub issue evidence comment (mandatory). Fallback evidence cannot replace the GitHub-backed task evidence sink for task truth.
 6. Once task truth exists, hand off to `repo-owned-workflow-router` via `./.agents/skills/repo-owned-workflow-router/SKILL.md`.
 

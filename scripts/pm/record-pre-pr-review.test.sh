@@ -183,10 +183,11 @@ grep -q "issuecomment-fixture" "$TMPDIR/no-cache-comment.out"
 git -C "$TEST_REPO" reset --hard -q "$HEAD_SHA"
 BASE_A="$(git -C "$TEST_REPO" rev-parse refs/heads/base)"
 BASE_B="$(git -C "$TEST_REPO" commit-tree "$HEAD_SHA^{tree}" -p "$BASE_A" -m 'moved symbolic comparison ref')"
-PLAN="$TMPDIR/frozen-plan.json"
-python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" <<'PY'
+PLAN="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json"
+mkdir -p "$(dirname "$PLAN")"
+python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" "$LEDGER_REL" <<'PY'
 import json, sys
-json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"relevant_evidence_digest":"b"*64,"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json"},open(sys.argv[1],"w"))
+json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"relevant_evidence_digest":"b"*64,"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json","preflight":{"status":"incomplete","ledger_path":sys.argv[4]}},open(sys.argv[1],"w"))
 PY
 python3 - "$TEST_REPO/$LEDGER_REL" <<'PY'
 import json,sys
@@ -196,8 +197,10 @@ for row in rows: row["epoch"]="a"*64
 open(path,"w").write("".join(json.dumps(row)+"\n" for row in rows))
 PY
 git -C "$TEST_REPO" update-ref refs/heads/base "$BASE_B"
-"$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_11111111111111111111111111111111 --review-plan "$PLAN" --review-evidence "repository_health_engineer: no_findings; smoke" --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" --finding-disposition-evidence "smoke evidence" --verification "helper -> smoke -> observed" --residual-risk "fixture risk" --slice-ledger "$LEDGER_REL" --print-only >"$TMPDIR/frozen-plan.out"
+"$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_11111111111111111111111111111111 --review-plan "$PLAN" --review-evidence "repository_health_engineer: no_findings; smoke" --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" --finding-disposition-evidence "smoke evidence" --verification "helper -> smoke -> observed" --residual-risk "fixture risk" --print-only >"$TMPDIR/frozen-plan.out"
 grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
+grep -q "Review Plan: .pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json" "$TMPDIR/frozen-plan.out"
+grep -q "Slice Ledger: .pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$TMPDIR/frozen-plan.out"
 python3 - "$PLAN" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1])); p["comparison_oid"]="0"*40; json.dump(p,open(sys.argv[1],"w"))
