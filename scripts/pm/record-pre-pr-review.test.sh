@@ -197,6 +197,27 @@ for row in rows: row["epoch"]="a"*64
 open(path,"w").write("".join(json.dumps(row)+"\n" for row in rows))
 PY
 git -C "$TEST_REPO" update-ref refs/heads/base "$BASE_B"
+
+# Review plans are authoritative, so traversal and escaping symlink paths must
+# be rejected before the helper reads roles or derives the preflight ledger.
+cp "$PLAN" "$TMPDIR/outside-review-plan.json"
+ln -s "$TMPDIR/outside-review-plan.json" "$TEST_REPO/.pm/scratch/escaping-review-plan.json"
+for escaped_plan in ../outside-review-plan.json .pm/scratch/escaping-review-plan.json; do
+  if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+    --task-uid task_11111111111111111111111111111111 \
+    --review-plan "$escaped_plan" \
+    --review-evidence "repository_health_engineer: no_findings; smoke" \
+    --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+    --finding-disposition-evidence "smoke evidence" \
+    --verification "helper -> smoke -> observed" \
+    --residual-risk "fixture risk" \
+    --print-only >"$TMPDIR/escaped-plan.out" 2>"$TMPDIR/escaped-plan.err"; then
+    echo "expected escaping review plan path to fail: $escaped_plan" >&2
+    exit 1
+  fi
+  grep -qi "escapes repository root" "$TMPDIR/escaped-plan.err"
+done
+
 "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_11111111111111111111111111111111 --review-plan "$PLAN" --review-evidence "repository_health_engineer: no_findings; smoke" --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" --finding-disposition-evidence "smoke evidence" --verification "helper -> smoke -> observed" --residual-risk "fixture risk" --print-only >"$TMPDIR/frozen-plan.out"
 grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
 grep -q "Review Plan: .pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json" "$TMPDIR/frozen-plan.out"

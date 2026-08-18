@@ -53,9 +53,17 @@ sanitize_evidence_path_field() {
   local value="$2"
 
   if [[ "$value" == /* ]]; then
-    case "$value" in
-      "$ROOT_DIR"/*)
-        printf '%s\n' "${value#"$ROOT_DIR"/}"
+    local root_real value_real
+    root_real="$(cd "$ROOT_DIR" && pwd -P)"
+    value_real="$(python3 - "$value" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).expanduser().resolve(strict=False))
+PY
+)"
+    case "$value_real" in
+      "$root_real"/*)
+        printf '%s\n' "${value_real#"$root_real"/}"
         ;;
       *)
         die "$label must not expose a local absolute path in GitHub issue evidence; use a repo-relative path or n/a"
@@ -68,6 +76,30 @@ sanitize_evidence_path_field() {
     ./*) value="${value#./}" ;;
   esac
   printf '%s\n' "$value"
+}
+
+resolve_repo_owned_path() {
+  local label="$1"
+  local raw="$2"
+  python3 - "$ROOT_DIR" "$raw" "$label" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve()
+raw = Path(sys.argv[2]).expanduser()
+candidate = raw if raw.is_absolute() else root / raw
+try:
+    resolved = candidate.resolve(strict=True)
+except OSError as exc:
+    raise SystemExit(f"error: {sys.argv[3]} cannot be resolved: {exc}")
+try:
+    resolved.relative_to(root)
+except ValueError:
+    raise SystemExit(f"error: {sys.argv[3]} escapes repository root: {sys.argv[2]}")
+if not resolved.is_file():
+    raise SystemExit(f"error: {sys.argv[3]} is not a file: {sys.argv[2]}")
+print(resolved)
+PY
 }
 
 TASK_UID=""
@@ -150,6 +182,7 @@ if [[ -z "$SOURCE_BRANCH" ]]; then
   SOURCE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 fi
 if [[ -n "$REVIEW_PLAN" ]]; then
+  REVIEW_PLAN="$(resolve_repo_owned_path "Review Plan" "$REVIEW_PLAN")" || exit 1
   PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" "$ROLES" "$SOURCE_HEAD" "$COMPARISON_REF" "$COMPARISON_REF_EXPLICIT" "$COMPARISON_OID" <<'PY'
 from __future__ import annotations
 import json, subprocess, sys

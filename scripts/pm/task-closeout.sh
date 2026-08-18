@@ -162,7 +162,17 @@ PY
 import json, sys
 from pathlib import Path
 root, raw = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).expanduser()
-path = raw if raw.is_absolute() else root / raw
+candidate = raw if raw.is_absolute() else root / raw
+try:
+    path = candidate.resolve(strict=True)
+except OSError as exc:
+    raise SystemExit(f"review packet Review Plan cannot be resolved: {exc}")
+try:
+    path.relative_to(root)
+except ValueError:
+    raise SystemExit(f"review packet Review Plan escapes repository root: {raw}")
+if not path.is_file():
+    raise SystemExit(f"review packet Review Plan is not a file: {raw}")
 try:
     plan = json.loads(path.read_text(encoding='utf-8'))
 except (OSError, json.JSONDecodeError) as exc:
