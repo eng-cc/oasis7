@@ -431,7 +431,7 @@ body {
   [data-viewer-overlay="navigation"] {
     top: 10px;
     left: 10px;
-    right: 10px;
+    right: 92px;
   }
 
   .secondary-viewer-nav {
@@ -527,6 +527,10 @@ body {
 }
 
 @media (max-width: 640px) {
+  [data-viewer-overlay="navigation"] {
+    right: 10px;
+  }
+
   .secondary-viewer-nav {
     top: 56px;
     right: 10px;

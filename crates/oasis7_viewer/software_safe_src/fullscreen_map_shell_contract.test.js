@@ -183,6 +183,12 @@ describe("fullscreen map shell contract", () => {
     );
   });
 
+  it("reserves tablet rail space for the secondary More control", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const tabletBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
+    expect(tabletBlock).toMatch(/\[data-viewer-overlay=["']navigation["']\][^{]*\{[^}]*right\s*:\s*(?:9[0-9]|[1-9]\d{2,})px/i);
+  });
+
   it("keeps all three mobile HUD meanings visible without a scroll-only third card", async () => {
     const { terminalShellCss } = await readViewerHtml();
     const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
