@@ -28,6 +28,7 @@
 | runtime 升级 | 模块 registry/manifest/artifact hash、兼容检查与 atomic apply/replay 已有基础合同。 | 尚未把 runtime manifest 的 governed activation height、validator prefetch/readiness、cancellation/rollback 和 release-lane classifier 收敛为端到端合同。 |
 | 消费者与不可用状态 | chain-linked consumers 已要求 committed-only visibility，replay/restore 不一致会阻断。 | 尚未完成 light companion proof verification、pending-intent durable queue、stale/unavailable projection，或 local/global `world_id` 隔离的完整实现与验证。 |
 | 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 immutable identity manifest -> finalized checkpoint certificate -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
+| 工业 operation identity | 当前 `ActionEnvelope.id` 是单次 action identity；部分异步过程把该 `ActionId` 复用为 `job_id`，`WorldEvent.caused_by` 只提供可选的 action/effect 审计原因。因此当前能追踪单个 action、job 与直接 cause，但不能表达跨 stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/receipt 的 immutable root、owning revision/segment、直接 parent/child role 或 terminal finality。 | 在 authoritative accepted outcome 边界原子签发一次 immutable root operation identity；atomic reject 且无 accepted intent 时不签发。所有 child effect/receipt 持久化 root、owning revision/segment 与直接 parent/child role，并在 first sink/credit/progress 前对缺失或冲突 identity fail closed；retry、recovery 与 replay 重读同一 identity 和 terminal disposition。 |
 
 ### Consumer compatibility: industrial profile and stage execution
 
@@ -36,6 +37,20 @@
 - recipe `stage_gate` 与 product `unlock_stage` 可阻止高于当前 `IndustryStage` 的排产。阶段由当前设施能力重新计算，设施回收或损失后允许回退；不得把阶段描述为只升不降的永久等级。
 - 非空 bottleneck profile 优先于推断值；缺失或空配置走兼容推断。产品战略角色与瓶颈压力共同影响排队优先级，准确映射和 fallback 以 runtime 代码与定向测试为执行真值。
 - 上述执行能力不证明玩家侧 `product_validation_quote` / `validation_unlock_preview` 已实现；玩家用途、能力解锁、阶段后果、下一步与门槛恢复路径由 gameplay 权威定义并保持独立验收。
+
+### Industrial execution status and authority matrix
+
+本表是 current/legacy/target 的状态与权威索引，不是第二套工业协议。`world-runtime` 拥有 event、receipt、job、replay、ID/schema 的当前事实与目标执行合同；[`M4 industrial resource flow contract`](../world-simulator/m4/industrial-resource-flow-contract.prd.md) 拥有工业 domain 语义；[`gameplay top-level design`](../game/gameplay/gameplay-top-level-design.prd.md) 与产品 PRD 拥有玩家承诺。首次新增任一 root/join/window/terminal/bundle 字段或权威建设电力报价时，必须刷新本表并链接 replay/receipt evidence；在对应证据存在前，目标项不得写成当前实现。
+
+| 术语 / surface | 历史兼容 | 当前 runtime 事实 | 目标 / 未决 | 权威与证据 |
+| --- | --- | --- | --- | --- |
+| Direct material transfer / immediate | zero-distance 且空 `logistics_route_ids` 保留 direct compatibility；显式 path binding（即使距离为零）进入 transit/path authority，不合成 path reservation 或 market settlement。 | `MaterialTransferred` 直接 debit/credit；只有通用 `WorldEvent.caused_by = Action(action_id)` trace，没有 operation/root 字段。 | 定义 direct-handoff operation identity 与 settlement/finality 映射，同时不伪造 path identity。 | runtime action/event/tests；gameplay direct-transfer compatibility；M4 handoff/settlement。 |
+| Factory maintenance / depreciation | `FactoryMaintained` legacy event shape 没有 operation 字段；自动 `FactoryDurabilityChanged` 是 system effect。 | action 消耗 parts 并改变 durability；submitted action 可有 generic cause，自动 depreciation 可为 `caused_by=None`；尚无 maintenance status/quote/window/root。 | 分离 maintenance quote/status 与 sink；若维护影响工业 run，则把 effect 绑定 root/segment/window，并保持 system depreciation 的确定性 replay。 | runtime event/apply/replay；产品维护合同；gameplay 维护选择。 |
+| Multi-stage job / root | 现有 `job_id: ActionId` 是 per-action/job key，不是 canonical root。 | pending maps 以 `ActionId` 为键；没有 root/revision/segment 或 parent/child links。 | accepted outcome 签发 immutable root；checkpoint/non-causal revision 保持 root，causal cutover 建立链接 child root；closed-root late effect 服从 pending/compensation。 | `PRD-WORLD_RUNTIME-043` 目标合同；M4 lineage/cutover；产品因果承诺。 |
+| Input join | 没有 dedicated `join_id` / parent-edge receipt-set schema；多个 `consume` stack 不构成 join identity。 | 当前 schema 不能表达 required parent set、one-use reservation 或 remaining obligations。 | canonical join ID、稳定 parent set、atomic default、staged-intake opt-in 和单次 parent disposition。 | M4 join domain contract；`PRD-WORLD_RUNTIME-043` 执行目标。 |
+| Service window / terminal | recipe/transit 的 `ready_at` 或 output ledger 不是 service-window、lease、terminal 或 delivery identity。 | 当前事件没有独立 window/lease/terminal/delivery finality；production output 不能据此视为 delivery settlement。 | 独立 window identity、reservation mode/disposition，以及 production 与 delivery settlement 分离。 | M4 window/terminal domain contract；gameplay 玩家承诺；`PRD-WORLD_RUNTIME-043` 执行目标。 |
+| Output bundle / branch | `produce`/`byproducts` vectors 与 output ledger 没有 bundle/branch identity。 | 当前不能表达 atomic-vs-split disposition、branch pending/residual 或 branch receipt/finality。 | 单一 bundle identity、branch identities、atomic default 或显式 split fan-out，以及逐 branch finality。 | M4 bundle domain contract；`PRD-WORLD_RUNTIME-043` 执行目标。 |
+| Factory construction power quote | simulator legacy/current-local config 与 event 有 `factory_build_electricity_cost`；该事实不自动成为 runtime authority。 | runtime `BuildFactory` 校验 material `build_cost` 并进入 pending construction；尚未与 simulator electricity/Data sink、Viewer availability 或 read-only quote 对齐。 | 先共同记录唯一成本/资源映射、construction power mode、activation boundary 与 authority revision，再暴露权威 quote。 | 产品 `BuildFactory` 报价合同；gameplay 选择；runtime/simulator current evidence。 |
 
 ### Consumer compatibility: gameplay lifecycle protocol boundary
 
@@ -150,6 +165,7 @@
   - PRD-WORLD_RUNTIME-038: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status.traffic.libp2p_replication` to expose real substream wire-byte totals plus derived control-plane wire bytes, so that control-plane overhead can be estimated from runtime truth instead of only host NIC totals or event-count heuristics.
   - PRD-WORLD_RUNTIME-039: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status` to expose commit freshness, pending proposal progress, pending consensus action queue pressure, recent finality latency, transfer lifecycle and confirmation latency summaries, plus inbound timing reject counters, so that common chain stalls can be classified directly from status truth instead of ad hoc log grep.
   - PRD-WORLD_RUNTIME-040: As a 新账号玩家 / `liveops_community`, I want the first `slot-1` claim to auto-draw startup restricted funding from the dedicated pool when runtime says the pool can cover it, so that onboarding no longer depends on operator review queues or undocumented manual grants.
+  - PRD-WORLD_RUNTIME-043: As a Runtime 维护者 / QA / 审计者, I want every authoritative accepted industrial outcome to receive one immutable root operation identity with persisted revision/segment, direct parent/child and terminal-disposition links, so that stage/join/bundle/transit/terminal effects remain attributable and retry, recovery or replay cannot duplicate sink, credit, progress, receipt or reward.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -214,6 +230,7 @@
   - AC-36: 默认 WASM status payload 不得暴露 `trace_id`、原始 payload bytes 或无界 `module_id -> timing` map；若提供模块级热点明细，必须限制为 bounded top-N 或显式 allowlist，并在裁剪时输出可观测标记。
   - AC-37: `/v1/chain/status.traffic.libp2p_replication` 必须同时暴露 `totals`（应用 payload）、`wire_totals`（libp2p substream wire bytes）与 `control_plane.wire_bytes`（`wire_totals - totals.payload_bytes`）；`control_plane.wire_scope` 必须显式声明其只覆盖 substream 级非 payload bytes，且继续排除 transport handshake/framing 开销。
   - AC-38: `crates/oasis7_builtin_wasm_modules/m1_*` 中消费 `GeoPos`/`*_cm` 坐标的 builtin wasm 模块必须把模块内部主表示收口到整数厘米，并对动作/事件 JSON 边界拒绝 fractional cm；升级后仍需兼容读取旧的整值浮点 module state，并把新的 state / observability sample 统一序列化为整数厘米。
+  - AC-41: runtime schema 与 apply paths 必须区分 legacy `ActionId/job_id/caused_by` trace 和 canonical operation protocol。每个 authoritative accepted industrial outcome 的测试必须证明：acceptance 只签发一个 root，atomic reject 且无 accepted intent 时不签发；两个 payload 相同的 accepted intents 获得不同 roots；stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/validation/settlement child 持久化同一 root、owning revision/segment 与直接 parent/child role；missing/conflicting/wrong-root/terminal-closed linkage 在 first sink、credit、progress 或 reward 前 fail closed；retry、reconnect、乱序、snapshot restore 与 canonical replay 重建相同 child identity 和 terminal disposition，且不复制效果；snapshot + journal replay 得到同一 operation graph/finality 与 world state root。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -325,6 +342,7 @@
 | PRD-WORLD_RUNTIME-039 | task_f15a1d9ea3194c39aa35158bf93d8ff1 | `test_tier_required` | `/v1/chain/status.consensus` commit freshness / pending proposal / queue pressure / inbound timing reject 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | 节点共识堵塞分类、提交停滞与队列压力真值补齐 |
 | PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
 | PRD-WORLD_RUNTIME-040 | task_313368c409c54cc2bcf8ef4f47919b65 | `test_tier_required` | 首个 claim auto-funding / claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` claim submit API 回归、viewer claim snapshot 自动资助字段回归、`software_safe` 正式摘要去审批化回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、专用池自动资助真值、slot-1 restricted funding 直连 claim 闭环 |
+| PRD-WORLD_RUNTIME-043 | task_bb59399112634bdb994530662adfdc4b | `test_tier_required` + `test_tier_full` | schema round-trip、相同 intent 不同 root、fan-in/fan-out parent linkage、wrong/missing-root fail-closed、terminal-late、retry/recovery/replay idempotency、snapshot+journal state-root equivalence | 工业 action/event schema、apply paths、persistence/replay 与 Viewer/API projection |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
