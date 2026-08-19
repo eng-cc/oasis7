@@ -181,6 +181,7 @@ run_operational_contract_tests() {
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
   run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh
+  run bash ./scripts/build-game-launcher-bundle-macos-bash3.test.sh
   run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh
   run bash ./scripts/testnet-packages-windows-governed-closure.test.sh
   run_provider_remote_https_smoke

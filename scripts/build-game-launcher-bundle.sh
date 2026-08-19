@@ -617,7 +617,10 @@ manifest = {
 PY
     (
       cd "$OPS_OUT_DIR"
-      mapfile -t files < <(find . -type f ! -name SHA256SUMS -print | sort)
+      files=()
+      while IFS= read -r file; do
+        files+=("$file")
+      done < <(find . -type f ! -name SHA256SUMS -print | sort)
       ((${#files[@]} > 0)) || { echo "error: ops-tools bundle has no files to checksum" >&2; exit 1; }
       if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "${files[@]}" > SHA256SUMS
