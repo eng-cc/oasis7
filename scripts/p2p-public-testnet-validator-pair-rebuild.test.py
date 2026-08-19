@@ -357,6 +357,126 @@ print(json.dumps({
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
 
+    def test_remote_identity_receipt_binds_metadata_without_local_key_access(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_remote_identity_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        receipt = self.root / "remote-identity-receipt.json"
+        receipt.write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_receipt.v1",
+                    "node_id": "triad-testnet-storage",
+                    "peer_id": "peer-storage-205",
+                    "key_path": "/remote/validator/config/node-keypair.toml",
+                    "key_sha256": "a" * 64,
+                    "key_size_bytes": 321,
+                    "key_mode": 0o600,
+                    "key_uid": 1001,
+                    "key_gid": 1001,
+                }
+            ),
+            encoding="utf-8",
+        )
+        expected_metadata = module._expected_identity_metadata(
+            {
+                "expected_key_mode": 0o600,
+                "expected_key_uid": 1001,
+                "expected_key_gid": 1001,
+            },
+            "identity manifest entry",
+        )
+        self.assertEqual(
+            module._expected_identity_binding(
+                {
+                    "expected_node_id": "triad-testnet-storage",
+                    "expected_peer_id": "peer-storage-205",
+                },
+                "identity manifest entry",
+            ),
+            {"node_id": "triad-testnet-storage", "peer_id": "peer-storage-205"},
+        )
+        with self.assertRaisesRegex(SystemExit, "governed expected key metadata"):
+            module.verify_signed_attestation(
+                receipt,
+                {"root_digest": "remote-capture"},
+                "remote identity receipt",
+                "storage-205",
+            )
+        summary = module.verify_signed_attestation(
+            receipt,
+            {"root_digest": "remote-capture"},
+            "remote identity receipt",
+            "storage-205",
+            expected_identity_metadata=expected_metadata,
+        )
+        self.assertEqual(summary["role"], "storage-205")
+        self.assertEqual(summary["node_id"], "triad-testnet-storage")
+        self.assertEqual(summary["peer_id"], "peer-storage-205")
+        self.assertEqual(summary["key_path"], "/remote/validator/config/node-keypair.toml")
+        self.assertEqual(summary["key_sha256"], "a" * 64)
+        self.assertEqual(summary["key_size_bytes"], 321)
+        self.assertEqual(summary["key_mode"], 0o600)
+        self.assertEqual(summary["key_uid"], 1001)
+        self.assertEqual(summary["key_gid"], 1001)
+
+    def test_remote_identity_receipt_rejects_weak_metadata_contract(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_remote_identity_metadata_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        receipt = self.root / "weak-remote-identity-receipt.json"
+        receipt.write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_receipt.v1",
+                    "node_id": "triad-testnet-storage",
+                    "peer_id": "peer-storage-205",
+                    "key_path": "/remote/validator/config/node-keypair.toml",
+                    "key_sha256": "b" * 64,
+                    "key_size_bytes": 321,
+                    "key_mode": 0o644,
+                    "key_uid": 9999,
+                    "key_gid": 9999,
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(SystemExit, "metadata"):
+            module.verify_signed_attestation(
+                receipt,
+                {"root_digest": "remote-capture"},
+                "remote identity receipt",
+                "storage-205",
+                expected_identity_metadata={
+                    "key_mode": 0o600,
+                    "key_uid": 1001,
+                    "key_gid": 1001,
+                },
+            )
+
+    def test_identity_manifest_rejects_relative_governed_key_path(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_identity_manifest_path_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with self.assertRaisesRegex(SystemExit, "lexically absolute"):
+            module._expected_identity_metadata(
+                {
+                    "expected_key_path": "config/node-keypair.toml",
+                    "expected_key_sha256": "a" * 64,
+                    "expected_key_size_bytes": 321,
+                    "expected_key_mode": 0o600,
+                    "expected_key_uid": 1001,
+                    "expected_key_gid": 1001,
+                },
+                "identity manifest entry",
+            )
+
     def test_plan_binds_complete_tree_inventory_to_capacity_and_inode_budget(self) -> None:
         for node in self.nodes.values():
             current = node / "current"
@@ -580,6 +700,12 @@ print(json.dumps({
                 "role": role,
                 "node_id": f"node-{role}",
                 "peer_id": f"peer-{role}",
+                "key_path": f"/remote/{role}/config/node-keypair.toml",
+                "key_sha256": "c" * 64,
+                "key_size_bytes": 321,
+                "key_mode": 0o600,
+                "key_uid": 1001,
+                "key_gid": 1001,
             })
         raw_proof = self.root / "binding-raw-proof.json"
         verification = self.root / "binding-verification.json"
@@ -603,6 +729,9 @@ print(json.dumps({
             },
         }
         evidence = module._expected_adapter_evidence(plan)
+        self.assertEqual(evidence["identity_receipts"][0]["key_mode"], 0o600)
+        self.assertEqual(evidence["identity_receipts"][0]["key_uid"], 1001)
+        self.assertEqual(evidence["identity_receipts"][0]["key_gid"], 1001)
         self.assertEqual(evidence["sequencer_rebuild_proof"]["path"], str(raw_proof.resolve()))
         self.assertEqual(evidence["sequencer_rebuild_proof"]["sha256"], sha256(raw_proof))
         self.assertEqual(evidence["sequencer_rebuild_proof"]["verification_path"], str(verification.resolve()))

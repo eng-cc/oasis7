@@ -34,6 +34,15 @@ PLAN_SCHEMA = "oasis7.validator_pair_rebuild_plan.v1"
 SCHEMA = "oasis7.validator_pair_rebuild_transaction.v1"
 MUTATION_ORDER = ["storage-205", "sequencer-204"]
 STARTUP_ORDER = ["sequencer-204", "storage-205"]
+IDENTITY_METADATA_FIELDS = (
+    "key_path",
+    "key_sha256",
+    "key_size_bytes",
+    "key_mode",
+    "key_uid",
+    "key_gid",
+)
+IDENTITY_EXPECTED_REQUIRED_FIELDS = ("key_mode", "key_uid", "key_gid")
 EXPECTED_LISTENERS = {
     "storage-205": {"6632", "6832"},
     "sequencer-204": {"6631", "6831"},
@@ -693,6 +702,134 @@ def _run_governed_runtime_verifier(
             fail(f"governed runtime verifier receipt mismatch: {key}")
 
 
+def _validate_identity_receipt_metadata(
+    value: dict[str, Any],
+    label: str,
+    expected_role: str | None,
+) -> dict[str, Any]:
+    """Validate remote key metadata without dereferencing the reported path.
+
+    Identity receipts are captured on the validator host.  Their ``key_path``
+    is an audit reference, not a controller-local path; opening, stat-ing, or
+    hashing it here could accidentally inspect an unrelated local key.  The
+    host-side capture therefore supplies the immutable metadata tuple and the
+    controller only validates its shape and security contract before binding
+    it into the transaction evidence.
+    """
+    key_path = value.get("key_path")
+    key_sha = value.get("key_sha256")
+    key_size = value.get("key_size_bytes")
+    key_mode = value.get("key_mode")
+    key_uid = value.get("key_uid")
+    key_gid = value.get("key_gid")
+    node_id = value.get("node_id")
+    peer_id = value.get("peer_id")
+    receipt_role = value.get("role")
+    if receipt_role is not None and receipt_role != expected_role:
+        fail(f"{label} runtime identity metadata role binding mismatch")
+    if (
+        not isinstance(key_path, str)
+        or not key_path.strip()
+        or "\x00" in key_path
+        or not Path(key_path).is_absolute()
+    ):
+        fail(f"{label} runtime identity metadata key path must be lexically absolute")
+    if not isinstance(key_sha, str) or len(key_sha) != 64 or any(
+        char not in "0123456789abcdefABCDEF" for char in key_sha
+    ):
+        fail(f"{label} runtime identity metadata key digest is invalid")
+    if isinstance(key_size, bool) or not isinstance(key_size, int) or key_size <= 0:
+        fail(f"{label} runtime identity metadata key size is invalid")
+    if isinstance(key_mode, bool) or not isinstance(key_mode, int) or key_mode != 0o600:
+        fail(f"{label} runtime identity metadata key mode must be 0600")
+    for field, number in (("key_uid", key_uid), ("key_gid", key_gid)):
+        if isinstance(number, bool) or not isinstance(number, int) or number < 0 or number > 0xFFFFFFFF:
+            fail(f"{label} runtime identity metadata {field} is invalid")
+    if not isinstance(node_id, str) or not node_id.strip() or not isinstance(peer_id, str) or not peer_id.strip():
+        fail(f"{label} runtime identity metadata node/peer binding is incomplete")
+    if expected_role not in MUTATION_ORDER:
+        fail(f"{label} runtime identity metadata role binding is incomplete")
+    return {
+        "role": expected_role,
+        "peer_id": peer_id,
+        "node_id": node_id,
+        "key_path": key_path,
+        "key_sha256": key_sha.lower(),
+        "key_size_bytes": key_size,
+        "key_mode": key_mode,
+        "key_uid": key_uid,
+        "key_gid": key_gid,
+    }
+
+
+def _expected_identity_metadata(raw: dict[str, Any], label: str) -> dict[str, Any] | None:
+    """Read the governed ownership tuple from an identity manifest entry.
+
+    The runtime receipt is a host observation.  The manifest entry supplies
+    the deployment-truth expectations; accepting the receipt's own uid/gid
+    as its authority would make an integer-but-wrong owner indistinguishable
+    from the expected service account.  Optional path/hash/size expectations
+    are accepted only when the deployment truth governs those values.
+    """
+    nested = raw.get("expected_key_metadata")
+    if nested is not None and not isinstance(nested, dict):
+        fail(f"{label} expected key metadata must be an object")
+    if isinstance(nested, dict):
+        expected = dict(nested)
+    else:
+        expected = {
+            key: raw[f"expected_{key}"]
+            for key in IDENTITY_METADATA_FIELDS
+            if f"expected_{key}" in raw
+        }
+    if not expected:
+        return None
+    unknown = set(expected) - set(IDENTITY_METADATA_FIELDS)
+    if unknown:
+        fail(f"{label} expected key metadata has unsupported fields: {', '.join(sorted(unknown))}")
+    missing = [key for key in IDENTITY_EXPECTED_REQUIRED_FIELDS if key not in expected]
+    if missing:
+        fail(f"{label} expected key metadata is missing: {', '.join(missing)}")
+    key_mode = expected.get("key_mode")
+    key_uid = expected.get("key_uid")
+    key_gid = expected.get("key_gid")
+    if isinstance(key_mode, bool) or not isinstance(key_mode, int) or key_mode != 0o600:
+        fail(f"{label} expected key mode must be 0600")
+    for field, number in (("key_uid", key_uid), ("key_gid", key_gid)):
+        if isinstance(number, bool) or not isinstance(number, int) or number < 0 or number > 0xFFFFFFFF:
+            fail(f"{label} expected key {field} is invalid")
+    optional = {key for key in ("key_path", "key_sha256", "key_size_bytes") if key in expected}
+    if optional and optional != {"key_path", "key_sha256", "key_size_bytes"}:
+        fail(f"{label} expected key path/hash/size must be complete when governed")
+    if "key_path" in expected:
+        key_path = expected["key_path"]
+        if not isinstance(key_path, str) or not key_path.strip() or "\x00" in key_path or not Path(key_path).is_absolute():
+            fail(f"{label} expected key path must be lexically absolute")
+        key_sha = expected["key_sha256"]
+        if not isinstance(key_sha, str) or len(key_sha) != 64 or any(
+            char not in "0123456789abcdefABCDEF" for char in key_sha
+        ):
+            fail(f"{label} expected key digest is invalid")
+        key_size = expected["key_size_bytes"]
+        if isinstance(key_size, bool) or not isinstance(key_size, int) or key_size <= 0:
+            fail(f"{label} expected key size is invalid")
+    return {
+        key: expected[key]
+        for key in IDENTITY_METADATA_FIELDS
+        if key in expected
+    } | ({"key_sha256": expected["key_sha256"].lower()} if "key_sha256" in expected else {})
+
+
+def _expected_identity_binding(raw: dict[str, Any], label: str) -> dict[str, str] | None:
+    expected_node_id = raw.get("expected_node_id")
+    expected_peer_id = raw.get("expected_peer_id")
+    if expected_node_id is None and expected_peer_id is None:
+        return None
+    if not isinstance(expected_node_id, str) or not expected_node_id.strip() or not isinstance(expected_peer_id, str) or not expected_peer_id.strip():
+        fail(f"{label} expected node/peer binding is incomplete")
+    return {"node_id": expected_node_id, "peer_id": expected_peer_id}
+
+
 def verify_signed_attestation(
     path: Path,
     trusted_root: dict[str, Any],
@@ -701,23 +838,21 @@ def verify_signed_attestation(
     expected_proof_path: Path | None = None,
     expected_proof_verifier: Path | None = None,
     expected_runtime: Path | None = None,
+    expected_identity_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     value = load_json(path, label)
     if value.get("schema_version") == "oasis7.identity_receipt.v1":
-        key_path = Path(str(value.get("key_path", "")))
-        key_sha = value.get("key_sha256")
-        if not key_path.is_file() or key_path.is_symlink() or not isinstance(key_sha, str) or len(key_sha) != 64:
-            fail(f"{label} runtime identity metadata is incomplete")
-        if sha256_file(key_path) != key_sha.lower() or key_path.stat().st_size != int(value.get("key_size_bytes", -1)):
-            fail(f"{label} node-keypair metadata mismatch")
+        if expected_identity_metadata is None:
+            fail(f"{label} governed expected key metadata is required")
+        metadata = _validate_identity_receipt_metadata(value, label, expected_role)
+        for key, expected_value in expected_identity_metadata.items():
+            if metadata.get(key) != expected_value:
+                fail(f"{label} key metadata does not match governed deployment truth: {key}")
         return {
             "path": str(path.resolve()),
             "sha256": sha256_file(path),
             "schema_version": value["schema_version"],
-            "role": expected_role,
-            "peer_id": value.get("peer_id"),
-            "node_id": value.get("node_id"),
-            "key_sha256": key_sha.lower(),
+            **metadata,
         }
     if value.get("schema_version") == "oasis7.rebuild_proof_verification.v1":
         if value.get("verified") is not True or value.get("proof_schema_version") != "oasis7.rebuild_proof.v1":
@@ -860,7 +995,24 @@ def validate_signed_gates(
         receipt_path = Path(raw.get("path")) if isinstance(raw, dict) and isinstance(raw.get("path"), str) else Path(raw) if isinstance(raw, str) else None
         if receipt_path is None:
             fail("identity receipt path must be a string")
-        summaries.append(verify_signed_attestation(receipt_path.resolve(), trusted_root, "identity receipt", expected_role))
+        expected_metadata = _expected_identity_metadata(raw, "identity manifest entry") if isinstance(raw, dict) else None
+        expected_binding = _expected_identity_binding(raw, "identity manifest entry") if isinstance(raw, dict) else None
+        receipt_path = receipt_path.resolve()
+        receipt_value = load_json(receipt_path, "identity receipt")
+        if receipt_value.get("schema_version") == "oasis7.identity_receipt.v1" and expected_metadata is None:
+            fail("identity manifest must carry governed key metadata for oasis7.identity_receipt.v1")
+        if receipt_value.get("schema_version") == "oasis7.identity_receipt.v1" and expected_binding is None:
+            fail("identity manifest must carry governed node/peer binding for oasis7.identity_receipt.v1")
+        summary = verify_signed_attestation(
+            receipt_path,
+            trusted_root,
+            "identity receipt",
+            expected_role,
+            expected_identity_metadata=expected_metadata,
+        )
+        summaries.append(summary)
+        if expected_binding is not None and any(summary.get(key) != value for key, value in expected_binding.items()):
+            fail("identity receipt node/peer does not match governed deployment truth")
     roles = {item.get("role") for item in summaries}
     if roles != set(MUTATION_ORDER):
         fail("identity receipts must cover storage-205 and sequencer-204")
@@ -1184,11 +1336,39 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         fail("host adapter receipt has no governed trust root")
     for expected in expected_identities:
         value = observed_by_role[expected["role"]]
-        for key in ("path", "sha256", "role", "node_id", "peer_id"):
+        identity_keys = (
+            "path",
+            "sha256",
+            "role",
+            "node_id",
+            "peer_id",
+            "key_path",
+            "key_sha256",
+            "key_size_bytes",
+            "key_mode",
+            "key_uid",
+            "key_gid",
+        )
+        for key in identity_keys:
+            if key not in expected:
+                continue
             if value.get(key) != expected[key]:
                 fail(f"host adapter identity evidence binding mismatch for {expected['role']}: {key}")
-        verified_identity = verify_signed_attestation(Path(expected["path"]), trusted_root, "host identity receipt", expected["role"])
-        for key in ("sha256", "role", "node_id", "peer_id"):
+        identity_metadata = {
+            key: expected[key]
+            for key in IDENTITY_METADATA_FIELDS
+            if key in expected
+        }
+        verified_identity = verify_signed_attestation(
+            Path(expected["path"]),
+            trusted_root,
+            "host identity receipt",
+            expected["role"],
+            expected_identity_metadata=identity_metadata or None,
+        )
+        for key in identity_keys:
+            if key not in expected:
+                continue
             if verified_identity.get(key) != expected[key]:
                 fail(f"host identity receipt content mismatch for {expected['role']}: {key}")
     expected_proof = expected_evidence["sequencer_rebuild_proof"]
@@ -1349,7 +1529,14 @@ def _expected_adapter_evidence(plan: dict[str, Any]) -> dict[str, Any]:
         peer_id = summary.get("peer_id")
         if role not in MUTATION_ORDER or not isinstance(node_id, str) or not node_id.strip() or not isinstance(peer_id, str) or not peer_id.strip():
             fail("plan identity evidence role/node/peer binding is incomplete")
-        identities.append({**bound_file, "role": role, "node_id": node_id, "peer_id": peer_id})
+        metadata_keys = ("key_path", "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid")
+        metadata_present = {key for key in metadata_keys if key in summary}
+        if metadata_present and metadata_present != set(metadata_keys):
+            fail("plan identity evidence metadata tuple is incomplete")
+        identity = {**bound_file, "role": role, "node_id": node_id, "peer_id": peer_id}
+        if metadata_present:
+            identity.update(_validate_identity_receipt_metadata(summary, "plan identity evidence", role))
+        identities.append(identity)
     if {item["role"] for item in identities} != set(MUTATION_ORDER) or len(identities) != len(MUTATION_ORDER):
         fail("plan identity evidence must contain each canonical validator role exactly once")
     identities.sort(key=lambda item: MUTATION_ORDER.index(item["role"]))

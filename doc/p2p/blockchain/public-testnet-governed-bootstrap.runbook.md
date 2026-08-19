@@ -80,6 +80,17 @@ the same operator window:
 2. `identity-receipt` returns `oasis7.identity_receipt.v1` with only
    `node_id`, derived `peer_id`, key path, key SHA-256, size, mode, uid, and
    gid. It never emits private key bytes and never creates or repairs the key.
+The pair input manifest must represent each metadata-only receipt as an
+object carrying `path`, `role`, `expected_node_id`, `expected_peer_id`,
+`expected_key_mode`, `expected_key_uid`, and `expected_key_gid`; these
+expectations come from the governed deployment
+service account, not from the receipt itself. `expected_key_path`,
+`expected_key_sha256`, and `expected_key_size_bytes` may be included only when
+the deployment manifest governs those values, and then all three are
+required. A receipt is accepted only when its complete metadata tuple matches
+these expectations. A relative key path, `0644` mode, or integer owner/group
+that differs from the governed tuple fails closed; the controller never opens,
+stats, resolves, or hashes the remote key path.
 
 The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
 `signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and
@@ -115,8 +126,15 @@ release contract for `<sequencer-node-id>-feedback-submit`; it must never be
 copied from the proof being verified. The expected signer id is the node id
 bound by deployment truth. The identity receipt is then checked separately
 against the same deployment truth for `peer_id`, root key SHA-256, mode, uid,
-and gid. A valid signature without this trust-root/allowlist binding is not
-readiness evidence and must fail closed. This envelope is a node-signed
+and gid. For `oasis7.identity_receipt.v1`, `key_path` is a host-side audit
+reference only: the controller must never open, stat, hash, or resolve that
+path locally. The receipt must carry the complete metadata tuple
+`node_id`, `peer_id`, `key_sha256` (64 hexadecimal characters), positive
+`key_size_bytes`, `key_mode=0600`, and numeric `key_uid`/`key_gid`; the
+role supplied by deployment truth remains authoritative. A missing,
+malformed, or cross-role tuple fails closed. A valid proof signature without
+this trust-root/allowlist binding is not readiness evidence and must fail
+closed. This envelope is a node-signed
 bounded status receipt, not validator-quorum finality or a replacement for
 `WorldHeadProofV1`.
 
