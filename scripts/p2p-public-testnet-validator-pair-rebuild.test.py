@@ -173,7 +173,15 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
 
     def _write_provenance(self, *, signature: bool = True, extra_governed: Path | None = None) -> None:
         governed = {
-            name: {"path": str(path), "sha256": sha256(path), "size_bytes": path.stat().st_size}
+            name: {
+                "path": str(path),
+                "sha256": sha256(path),
+                "size_bytes": path.stat().st_size,
+                "entry_count": 1,
+                "link_count": 0,
+                "dir_count": 0,
+                "file_count": 1,
+            }
             for name, path in (
                 ("manifest", self.governed / "manifest.json"),
                 ("genesis", self.governed / "genesis.json"),
@@ -187,6 +195,10 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
                 "path": str(extra_governed),
                 "sha256": sha256(extra_governed),
                 "size_bytes": extra_governed.stat().st_size,
+                "entry_count": 1,
+                "link_count": 0,
+                "dir_count": 0,
+                "file_count": 1,
             }
         payload = {
             "schema_version": "oasis7.validator_pair_rebuild_provenance.v1",
@@ -344,6 +356,31 @@ print(json.dumps({
         self.assertEqual(receipt["mutation_order"], ["storage-205", "sequencer-204"])
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
+
+    def test_plan_binds_complete_tree_inventory_to_capacity_and_inode_budget(self) -> None:
+        for node in self.nodes.values():
+            current = node / "current"
+            release = node / "releases" / "known"
+            release.mkdir(parents=True)
+            (release / "bin").mkdir()
+            (release / "bin" / "oasis7_chain_runtime").write_bytes(b"runtime-old\n")
+            shutil.rmtree(current)
+            current.symlink_to("releases/known", target_is_directory=True)
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        for role in ("storage-205", "sequencer-204"):
+            inventory = plan["capacity"][role]["inventory"]
+            self.assertEqual(
+                set(inventory),
+                {"entry_count", "link_count", "dir_count", "file_count", "total_bytes"},
+            )
+            self.assertEqual(
+                inventory["entry_count"],
+                inventory["link_count"] + inventory["dir_count"] + inventory["file_count"],
+            )
+            self.assertGreaterEqual(inventory["link_count"], 1)
+            self.assertGreaterEqual(plan["capacity"][role]["required_inodes"], inventory["entry_count"])
 
     def test_plan_digest_is_stable_and_runtime_transaction_metadata_is_separate(self) -> None:
         first = subprocess.run(self._base_args(), text=True, capture_output=True)
@@ -637,6 +674,15 @@ print(json.dumps({
         self.assertTrue((self.nodes["sequencer-204"] / "backups").exists())
         self.assertTrue(receipt["host_receipt"]["nodes"]["sequencer-204"]["healthz_ok"])
         self.assertTrue(receipt["capacity_apply"]["storage-205"]["verified"])
+        for role in ("storage-205", "sequencer-204"):
+            self.assertEqual(
+                receipt["capacity_apply"][role]["inventory"],
+                receipt["capacity"][role]["inventory"],
+            )
+        self.assertEqual(
+            set(receipt["staged"]["storage-205"]["governed_inventory"]),
+            {"manifest", "genesis", "registry", "bootstrap", "world"},
+        )
         self.assertEqual(receipt["host_receipt"]["plan_digest"], receipt["plan_digest"])
         self.assertEqual(receipt["host_receipt"]["evidence_bindings"], receipt["adapter_binding"]["evidence_bindings"])
         self.assertTrue(receipt["host_receipt"]["captured_at"])
@@ -678,6 +724,28 @@ print(json.dumps({
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("apply-time capacity", result.stderr.lower())
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+
+    def test_apply_rejects_inventory_drift_after_plan(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        (self.nodes["storage-205"] / "data" / "unexpected-entry").write_text("drift\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(self._write_host_adapter()),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inventory changed", result.stderr.lower())
         self.assertFalse((self.nodes["storage-205"] / "backups").exists())
 
     def test_rollback_restores_the_stopped_snapshot(self) -> None:
@@ -823,6 +891,51 @@ print(json.dumps({
         )
         self.assertEqual(validate.returncode, 0, validate.stderr)
         self.assertEqual(json.loads(validate.stdout)["signature"]["signer_id"], "testnet-package-attestor")
+
+    def test_provenance_rejects_nested_directory_symlink_before_file_filtering(self) -> None:
+        world = self.root / "world-tree"
+        world.mkdir()
+        (world / "state.json").write_text('{"height":1}\n', encoding="utf-8")
+        target = self.root / "outside-world"
+        target.mkdir()
+        (target / "hidden.json").write_text('{"hidden":true}\n', encoding="utf-8")
+        (world / "nested-link").symlink_to(target, target_is_directory=True)
+        generated = self.root / "symlink-provenance.json"
+        create = subprocess.run(
+            [
+                sys.executable,
+                str(PROVENANCE),
+                "create",
+                "--package-dir",
+                str(self.package),
+                "--manifest",
+                str(self.governed / "manifest.json"),
+                "--genesis",
+                str(self.governed / "genesis.json"),
+                "--registry",
+                str(self.governed / "registry.json"),
+                "--bootstrap",
+                str(self.governed / "bootstrap.txt"),
+                "--world",
+                str(world),
+                "--network-id",
+                "oasis7-public-testnet-governed-20260606",
+                "--chain-id",
+                "oasis7-public-testnet-governed-20260606",
+                "--output",
+                str(generated),
+                "--signer-id",
+                "testnet-package-attestor",
+                "--signature-ref",
+                str(self.signature),
+                "--public-key-ref",
+                str(self.public_key),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(create.returncode, 0)
+        self.assertIn("symlink", create.stderr.lower())
 
     def test_release_bundle_validates_pair_provenance_binding(self) -> None:
         bundle = self.root / "release-bundle.json"

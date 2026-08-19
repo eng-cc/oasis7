@@ -42,6 +42,13 @@
       "free_inodes": 0,
       "required_bytes": 0,
       "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
       "same_filesystem": false,
       "verified": false
     },
@@ -50,6 +57,13 @@
       "free_inodes": 0,
       "required_bytes": 0,
       "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
       "same_filesystem": false,
       "verified": false
     }
@@ -62,6 +76,13 @@
       "apply_free_inodes": 0,
       "required_bytes": 0,
       "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
       "same_filesystem": false,
       "verified": false
     },
@@ -72,6 +93,13 @@
       "apply_free_inodes": 0,
       "required_bytes": 0,
       "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
       "same_filesystem": false,
       "verified": false
     }

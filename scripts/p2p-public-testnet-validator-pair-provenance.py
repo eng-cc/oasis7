@@ -40,15 +40,32 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def tree_digest(path: Path) -> tuple[str, int, int]:
+def tree_inventory(path: Path) -> dict[str, Any]:
+    """Hash a governed tree and account for every entry before filtering.
+
+    Governed world trees do not permit symlinks.  The explicit first pass is
+    intentional: filtering through ``is_file()`` first would hide a nested
+    directory symlink (or a broken link) from the policy check.
+    """
     if not path.is_dir() or path.is_symlink():
         die(f"world reference must be a real directory: {path}")
-    digest = hashlib.sha256()
-    count = 0
-    total = 0
-    for child in sorted((item for item in path.rglob("*") if item.is_file()), key=lambda p: p.relative_to(path).as_posix()):
+    entries = sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix())
+    for child in entries:
         if child.is_symlink():
             die(f"world reference contains symlink: {child}")
+    digest = hashlib.sha256()
+    total = 0
+    link_count = 0
+    # The directory root itself is a copied/inventoried inode.  Child entries
+    # are added below after the symlink policy pass.
+    dir_count = 1
+    file_count = 0
+    for child in entries:
+        if child.is_dir():
+            dir_count += 1
+            continue
+        if not child.is_file():
+            die(f"world reference contains unsupported entry: {child}")
         relative = child.relative_to(path).as_posix()
         child_sha = sha256_file(child)
         size = child.stat().st_size
@@ -58,11 +75,23 @@ def tree_digest(path: Path) -> tuple[str, int, int]:
         digest.update(b"\0")
         digest.update(str(size).encode("ascii"))
         digest.update(b"\n")
-        count += 1
+        file_count += 1
         total += size
-    if count == 0:
+    if file_count == 0:
         die(f"world reference is empty: {path}")
-    return digest.hexdigest(), count, total
+    return {
+        "sha256_tree": digest.hexdigest(),
+        "entry_count": len(entries) + 1,
+        "link_count": link_count,
+        "dir_count": dir_count,
+        "file_count": file_count,
+        "total_bytes": total,
+    }
+
+
+def tree_digest(path: Path) -> tuple[str, int, int]:
+    inventory = tree_inventory(path)
+    return inventory["sha256_tree"], inventory["file_count"], inventory["total_bytes"]
 
 
 def metadata(path: Path, *, allow_directory: bool = False) -> dict[str, Any]:
@@ -70,10 +99,19 @@ def metadata(path: Path, *, allow_directory: bool = False) -> dict[str, Any]:
         die(f"provenance reference missing or symlinked: {path}")
     stat = path.stat()
     if path.is_file():
-        return {"path": str(path), "sha256": sha256_file(path), "size_bytes": stat.st_size, "kind": "file"}
+        return {
+            "path": str(path),
+            "sha256": sha256_file(path),
+            "size_bytes": stat.st_size,
+            "entry_count": 1,
+            "link_count": 0,
+            "dir_count": 0,
+            "file_count": 1,
+            "kind": "file",
+        }
     if allow_directory and path.is_dir():
-        digest, count, total = tree_digest(path)
-        return {"path": str(path), "sha256_tree": digest, "file_count": count, "total_bytes": total, "kind": "directory"}
+        inventory = tree_inventory(path)
+        return {"path": str(path), **inventory, "kind": "directory"}
     die(f"provenance reference is not a regular file: {path}")
 
 
@@ -327,6 +365,16 @@ def validate_receipt(receipt_path: Path, package_dir: Path, trust_root_path: Pat
         actual_sha = actual.get("sha256") or actual.get("sha256_tree")
         if expected_sha != actual_sha or int(value.get("size_bytes", value.get("total_bytes", -1))) != int(actual.get("size_bytes", actual.get("total_bytes", -2))):
             die(f"governed.{key} hash/size binding mismatch")
+        for field in ("entry_count", "link_count", "dir_count", "file_count"):
+            if field not in value:
+                die(f"governed.{key} missing inventory field: {field}")
+            try:
+                expected_count = int(value[field])
+                actual_count = int(actual[field])
+            except (KeyError, TypeError, ValueError):
+                die(f"governed.{key} inventory field is malformed: {field}")
+            if expected_count != actual_count:
+                die(f"governed.{key} inventory mismatch for {field}: {expected_count} != {actual_count}")
     return {
         "schema_version": SCHEMA,
         "binding_digest": digest.lower(),

@@ -99,19 +99,45 @@ def path_kind(path: Path) -> str:
     return "missing"
 
 
-def hash_tree(path: Path) -> tuple[str, int, int]:
-    """Hash a tree without following symlinks and count every inode entry."""
+def inventory_tree(path: Path) -> dict[str, Any]:
+    """Hash a tree without following symlinks and count every inode class."""
     digest = hashlib.sha256()
     total = 0
-    count = 0
+    # Count the directory root as well as its children: snapshot manifests
+    # and copytree both account for that inode.
+    entry_count = 1
+    link_count = 0
+    dir_count = 1
+    file_count = 0
     if path.is_symlink():
         target = os.readlink(path)
         digest.update(f"L\0{target}\n".encode())
-        return digest.hexdigest(), 0, 1
+        return {
+            "sha256": digest.hexdigest(),
+            "total_bytes": 0,
+            "entry_count": 1,
+            "link_count": 1,
+            "dir_count": 0,
+            "file_count": 0,
+        }
     if path.is_file():
-        return sha256_file(path), path.stat().st_size, 1
+        return {
+            "sha256": sha256_file(path),
+            "total_bytes": path.stat().st_size,
+            "entry_count": 1,
+            "link_count": 0,
+            "dir_count": 0,
+            "file_count": 1,
+        }
     if not path.exists():
-        return hashlib.sha256(b"<missing>").hexdigest(), 0, 0
+        return {
+            "sha256": hashlib.sha256(b"<missing>").hexdigest(),
+            "total_bytes": 0,
+            "entry_count": 0,
+            "link_count": 0,
+            "dir_count": 0,
+            "file_count": 0,
+        }
     for child in sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix()):
         rel = child.relative_to(path).as_posix()
         if child.is_symlink():
@@ -120,11 +146,13 @@ def hash_tree(path: Path) -> tuple[str, int, int]:
             digest.update(b"\0L\0")
             digest.update(target.encode("utf-8"))
             digest.update(b"\n")
-            count += 1
+            entry_count += 1
+            link_count += 1
         elif child.is_dir():
             # Directory entries consume inodes even when empty.  Do not add
             # them to the digest so governed-world file digests stay compatible.
-            count += 1
+            entry_count += 1
+            dir_count += 1
         elif child.is_file():
             child_sha = sha256_file(child)
             size = child.stat().st_size
@@ -137,8 +165,44 @@ def hash_tree(path: Path) -> tuple[str, int, int]:
             digest.update(str(size).encode("ascii"))
             digest.update(b"\n")
             total += size
-            count += 1
-    return digest.hexdigest(), total, count
+            entry_count += 1
+            file_count += 1
+    return {
+        "sha256": digest.hexdigest(),
+        "total_bytes": total,
+        "entry_count": entry_count,
+        "link_count": link_count,
+        "dir_count": dir_count,
+        "file_count": file_count,
+    }
+
+
+def hash_tree(path: Path) -> tuple[str, int, int]:
+    """Compatibility tuple for callers that need digest, bytes, inode count."""
+    inventory = inventory_tree(path)
+    return inventory["sha256"], inventory["total_bytes"], inventory["entry_count"]
+
+
+INVENTORY_FIELDS = ("entry_count", "link_count", "dir_count", "file_count", "total_bytes")
+
+
+def inventory_summary(inventory: dict[str, Any], label: str) -> dict[str, int]:
+    """Return the complete count/byte contract without the implementation hash."""
+    if not isinstance(inventory, dict):
+        fail(f"{label} inventory must be an object")
+    result: dict[str, int] = {}
+    for field in INVENTORY_FIELDS:
+        try:
+            raw_value = inventory[field] if field != "total_bytes" else inventory.get("total_bytes", inventory.get("size_bytes"))
+            value = int(raw_value)
+        except (KeyError, TypeError, ValueError):
+            fail(f"{label} inventory field is malformed: {field}")
+        if value < 0:
+            fail(f"{label} inventory field must be non-negative: {field}")
+        result[field] = value
+    if result["entry_count"] != result["link_count"] + result["dir_count"] + result["file_count"]:
+        fail(f"{label} inventory entry count does not equal its inode classes")
+    return result
 
 
 def tree_size(path: Path) -> int:
@@ -316,7 +380,13 @@ def validate_impact(path: Path) -> dict[str, Any]:
     return {"decision": "proceed", "evidence_source": impact["evidence_source"], "timestamp": impact["timestamp"]}
 
 
-def capacity_for(capacity: dict[str, Any], role: str, required: int, required_inodes: int) -> dict[str, Any]:
+def capacity_for(
+    capacity: dict[str, Any],
+    role: str,
+    required: int,
+    required_inodes: int,
+    inventory: dict[str, Any],
+) -> dict[str, Any]:
     value = capacity.get(role)
     if not isinstance(value, dict):
         fail(f"capacity evidence missing {role}")
@@ -331,12 +401,14 @@ def capacity_for(capacity: dict[str, Any], role: str, required: int, required_in
         fail(f"capacity gate failed for {role}: {free_inodes} < {required_inodes} free inodes")
     if value.get("same_filesystem") is not True:
         fail(f"same-filesystem backup gate failed for {role}")
+    inventory_value = inventory_summary(inventory, f"{role} node")
     return {
         "free_bytes": free_bytes,
         "free_inodes": free_inodes,
         "same_filesystem": True,
         "required_bytes": required,
         "required_inodes": required_inodes,
+        "inventory": inventory_value,
         "verified": True,
     }
 
@@ -351,6 +423,10 @@ def refresh_capacity(root: Path, planned: dict[str, Any], role: str) -> dict[str
         fail(f"cannot recapture apply-time capacity for {role}: {error}")
     required_bytes = int(planned["required_bytes"])
     required_inodes = int(planned["required_inodes"])
+    actual_inventory = inventory_summary(inventory_tree(root), f"{role} apply-time node")
+    planned_inventory = inventory_summary(planned.get("inventory"), f"{role} planned node")
+    if actual_inventory != planned_inventory:
+        fail(f"apply-time inventory changed for {role}: {actual_inventory} != {planned_inventory}")
     if free_bytes < required_bytes:
         fail(f"apply-time capacity gate failed for {role}: {free_bytes} < {required_bytes} bytes")
     if free_inodes < required_inodes:
@@ -363,6 +439,7 @@ def refresh_capacity(root: Path, planned: dict[str, Any], role: str) -> dict[str
         "required_bytes": required_bytes,
         "required_inodes": required_inodes,
         "same_filesystem": planned.get("same_filesystem") is True,
+        "inventory": actual_inventory,
         "verified": True,
     }
 
@@ -854,12 +931,16 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         for surface in RESET_SURFACES:
             if (Path(node["root"]) / surface).is_symlink():
                 fail(f"reset surface must not be a symlink: {role}/{surface}")
-        _, full_backup_bytes, full_backup_entries = hash_tree(Path(node["root"]))
+        node_inventory = inventory_tree(Path(node["root"]))
+        full_backup_bytes = node_inventory["total_bytes"]
+        full_backup_entries = node_inventory["entry_count"]
         required = int((full_backup_bytes + package_bytes + governed_bytes) * 1.20) + 1
-        governed_entries = sum(int(item.get("file_count", 1)) for item in governed.values())
-        package_entries = hash_tree(package_dir)[2]
+        governed_entries = sum(
+            inventory_summary(item, f"governed.{key}")["entry_count"] for key, item in governed.items()
+        )
+        package_entries = inventory_tree(package_dir)["entry_count"]
         required_inodes = max(128, int((full_backup_entries + package_entries + governed_entries) * 1.20) + 16)
-        capacities[role] = capacity_for(capacity, role, required, required_inodes)
+        capacities[role] = capacity_for(capacity, role, required, required_inodes, node_inventory)
     reject_full_status(args.sequencer_proof_url, "proof URL")
     reject_full_status(args.sequencer_health_url, "health URL")
     plan: dict[str, Any] = {
@@ -987,21 +1068,30 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
     governed_root = root / "staged-governed"
     governed_root.mkdir(parents=True, exist_ok=True)
     staged: dict[str, str] = {}
+    governed_inventory: dict[str, dict[str, int]] = {}
     for key, value in plan["network"]["governed"].items():
         source = Path(value["path"])
         governed_destination = governed_root / key
         if governed_destination.exists() or governed_destination.is_symlink():
             remove_entry(governed_destination)
         copy_entry(source, governed_destination)
-        actual_sha, total, _ = hash_tree(governed_destination)
+        actual_tree = inventory_tree(governed_destination)
+        actual_sha = actual_tree["sha256"] if value.get("kind") == "directory" else actual_tree["sha256"]
+        total = actual_tree["total_bytes"]
         expected_sha = value.get("sha256") or value.get("sha256_tree")
         if actual_sha != expected_sha or total != int(value.get("size_bytes", value.get("total_bytes", 0))):
             fail(f"governed {key} identity mismatch after staging {node['role']}")
+        expected_inventory = inventory_summary(value, f"governed.{key}")
+        actual_inventory = inventory_summary(actual_tree, f"staged governed.{key}")
+        if actual_inventory != expected_inventory:
+            fail(f"governed {key} inventory mismatch after staging {node['role']}")
         staged[key] = str(governed_destination)
+        governed_inventory[key] = actual_inventory
     return {
         "staged_release": str(release.parent),
         "runtime": str(runtime_destination),
         "governed": staged,
+        "governed_inventory": governed_inventory,
         "service_action": "local dry-run; service manager delegated to governed host adapter",
         "startup_order_position": STARTUP_ORDER.index(node["role"]) + 1,
         "post_apply_gates": {
