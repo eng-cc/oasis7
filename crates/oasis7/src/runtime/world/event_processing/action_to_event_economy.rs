@@ -8,64 +8,7 @@ const FACTORY_MAINTENANCE_PART_KIND: &str = "hardware_part";
 const FACTORY_MAINTENANCE_REPAIR_PPM_PER_PART: i64 = 25_000;
 const FACTORY_RECYCLE_BASE_PPM: i64 = 700_000;
 const BOTTLENECK_TAG_KINDS: &[&str] = &["iron_ingot", "copper_wire", "control_chip", "motor_mk1"];
-
 impl World {
-    /// Computes the local scarcity delay that a canonical recipe submission would
-    /// add, without consuming materials or advancing runtime time.  The quote
-    /// endpoint uses this same ledger/profile path as `ScheduleRecipe` execution.
-    pub(crate) fn schedule_recipe_local_scarcity_delay_for_quote(
-        &self,
-        factory_id: &str,
-        recipe_id: &str,
-        consume: &[MaterialStack],
-        produce: &[MaterialStack],
-    ) -> Result<(i64, String), String> {
-        let factory = self
-            .state
-            .factories
-            .get(factory_id)
-            .ok_or_else(|| format!("factory not found: {factory_id}"))?;
-        let effective_consume = merge_recipe_consume_with_maintenance_sink(self, consume, produce);
-        let preferred_consume_ledger = factory.input_ledger.clone();
-        let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
-            preferred_consume_ledger.clone(),
-            &effective_consume,
-        );
-        // Keep quote acceptance identical to ScheduleRecipe execution: the
-        // selected local-or-world ledger must cover every effective input,
-        // including maintenance sinks merged into the recipe consume list.
-        for stack in &effective_consume {
-            if stack.amount <= 0 {
-                return Err(format!(
-                    "recipe consume must be > 0: {}={}",
-                    stack.kind, stack.amount
-                ));
-            }
-            let available = self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
-            if available < stack.amount {
-                return Err(format!(
-                    "insufficient material {}: requested {}, available {}",
-                    stack.kind, stack.amount, available
-                ));
-            }
-        }
-        let bottleneck_tags =
-            resolve_recipe_bottleneck_tags(self.recipe_profile(recipe_id), &effective_consume);
-        let delay = compute_local_scarcity_delay_ticks(
-            self,
-            &preferred_consume_ledger,
-            &consume_ledger,
-            &effective_consume,
-            &bottleneck_tags,
-        ) as i64;
-        let reason = match delay {
-            0 => "none",
-            1 => "local_bottleneck_deficit_moderate",
-            _ => "local_bottleneck_deficit_severe",
-        };
-        Ok((delay, reason.to_string()))
-    }
-
     pub(super) fn action_to_event_economy(
         &self,
         action_id: ActionId,
@@ -305,6 +248,17 @@ impl World {
                         action_id,
                         reason: RejectReason::RuleDenied {
                             notes: vec!["factory_id cannot be empty".to_string()],
+                        },
+                    }));
+                }
+                if self.state.retired_factory_ids.contains(&spec.factory_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "factory identity is retired: {}",
+                                spec.factory_id
+                            )],
                         },
                     }));
                 }
@@ -590,6 +544,12 @@ impl World {
                         },
                     }));
                 };
+                if let Some(reason) = self.factory_owner_rejection(requester_agent_id, factory_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason,
+                    }));
+                }
                 let active_jobs = self
                     .state
                     .pending_recipe_jobs
@@ -898,12 +858,18 @@ impl World {
                         },
                     }));
                 }
-                let available_power = self.resource_balance(ResourceKind::Electricity);
+                let power_owner_agent_id = factory.builder_agent_id.clone();
+                let available_power = self
+                    .state
+                    .agents
+                    .get(&power_owner_agent_id)
+                    .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                    .unwrap_or(0);
                 if available_power < plan.power_required {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::InsufficientResource {
-                            agent_id: "world".to_string(),
+                            agent_id: power_owner_agent_id,
                             kind: ResourceKind::Electricity,
                             requested: plan.power_required,
                             available: available_power,
@@ -939,6 +905,7 @@ impl World {
                     produce: plan.produce.clone(),
                     byproducts: plan.byproducts.clone(),
                     power_required: plan.power_required,
+                    power_owner_agent_id: Some(factory.builder_agent_id.clone()),
                     duration_ticks,
                     consume_ledger,
                     output_ledger,
@@ -1163,18 +1130,12 @@ impl World {
     }
 }
 
-fn invalid_recipe_plan_stack_note(label: &str, stacks: &[MaterialStack]) -> Option<String> {
-    stacks
-        .iter()
-        .find(|stack| stack.kind.trim().is_empty() || stack.amount <= 0)
-        .map(|_| format!("recipe plan {label} stack must have non-empty kind and amount > 0"))
-}
-
 #[path = "action_to_event_economy_profiles.rs"]
 mod action_to_event_economy_profiles;
 #[path = "action_to_event_economy_support.rs"]
 mod action_to_event_economy_support;
 
+use super::super::economy::invalid_recipe_plan_stack_note;
 pub(crate) use action_to_event_economy_support::build_material_market_quotes;
 use action_to_event_economy_support::{
     compute_local_scarcity_delay_ticks, industry_stage_label,

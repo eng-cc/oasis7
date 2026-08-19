@@ -979,6 +979,7 @@ mod tests {
             produce: vec![MaterialStack::new("motor_mk1", 2)],
             byproducts: Vec::new(),
             power_required: 12,
+            power_owner_agent_id: Some("agent.alpha".to_string()),
             duration_ticks: 3,
             consume_ledger: MaterialLedgerId::world(),
             output_ledger: MaterialLedgerId::world(),

@@ -35,7 +35,7 @@ fn submit_iron_ingot_schedule(
 }
 
 #[test]
-fn runtime_gameplay_smelter_readiness_matches_submit_material_and_world_power_checks() {
+fn runtime_gameplay_smelter_readiness_matches_submit_material_and_owner_power_checks() {
     let _guard = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) =
         setup_runtime_industrial_gameplay_session(43);
@@ -113,15 +113,16 @@ fn runtime_gameplay_smelter_readiness_matches_submit_material_and_world_power_ch
         .expect("restore smelter iron ore");
     server
         .world
-        .set_resource_balance(ResourceKind::Electricity, 0);
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 0)
+        .expect("drain factory-owner electricity");
 
-    let gameplay = expect_player_gameplay(&mut server, "world power readiness snapshot");
+    let gameplay = expect_player_gameplay(&mut server, "owner power readiness snapshot");
     let power_reason =
         smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT)
             .disabled_reason
             .as_deref()
-            .expect("missing world power should disable iron ingot scheduling");
-    assert!(power_reason.contains("insufficient world electricity"));
+            .expect("missing owner power should disable iron ingot scheduling");
+    assert!(power_reason.contains("insufficient electricity"));
     assert!(power_reason.contains("replenish electricity"));
 
     submit_iron_ingot_schedule(
@@ -139,7 +140,7 @@ fn runtime_gameplay_smelter_readiness_matches_submit_material_and_world_power_ch
             .get("factory.smelter.mk1")
             .and_then(|factory| factory.production.current_blocker_kind.as_deref()),
         Some("power_shortage"),
-        "submit must reject the world power shortage surfaced by readiness"
+        "submit must reject the owner power shortage surfaced by readiness"
     );
 }
 

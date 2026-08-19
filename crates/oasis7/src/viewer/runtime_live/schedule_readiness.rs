@@ -43,6 +43,12 @@ pub(super) fn schedule_recipe_disabled_reason(
         ));
     }
     let factory = state.factories.get(factory_id.as_str())?;
+    if factory.builder_agent_id != agent_id {
+        return Some(format!(
+            "factory {} is owned by {}; only the factory owner may schedule this run",
+            factory_id, factory.builder_agent_id
+        ));
+    }
     let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
     let consume_ledger = if ledger_has_materials(state, &factory.input_ledger, &consume) {
         factory.input_ledger.clone()
@@ -58,15 +64,16 @@ pub(super) fn schedule_recipe_disabled_reason(
             ));
         }
     }
-    let available_world_electricity = state
+    let available_owner_electricity = state
+        .agents
+        .get(factory.builder_agent_id.as_str())?
+        .state
         .resources
-        .get(&ResourceKind::Electricity)
-        .copied()
-        .unwrap_or_default();
-    if available_world_electricity < plan.power_required {
+        .get(ResourceKind::Electricity);
+    if available_owner_electricity < plan.power_required {
         return Some(format!(
-            "insufficient world electricity: need {}, have {}; replenish electricity before scheduling this run",
-            plan.power_required, available_world_electricity
+            "insufficient factory-owner electricity: need {}, have {}; replenish electricity before scheduling this run",
+            plan.power_required, available_owner_electricity
         ));
     }
     None

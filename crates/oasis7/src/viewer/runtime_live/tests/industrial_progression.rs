@@ -90,6 +90,10 @@ pub(super) fn build_first_smelter_via_gameplay_action(
     server
         .world
         .set_resource_balance(crate::simulator::ResourceKind::Electricity, 2_000);
+    server
+        .world
+        .set_agent_resource_balance(agent_id, crate::simulator::ResourceKind::Electricity, 2_000)
+        .expect("seed factory-builder electricity for repeated recipes");
 }
 
 fn build_first_assembler_via_gameplay_action(

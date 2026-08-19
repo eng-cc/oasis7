@@ -633,6 +633,11 @@ pub enum DomainEvent {
         produce: Vec<MaterialStack>,
         byproducts: Vec<MaterialStack>,
         power_required: i64,
+        /// Explicit electricity payer for the recipe commitment.  Legacy
+        /// events omit this field and are rejected by the reducer rather than
+        /// implicitly charging the world pool.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        power_owner_agent_id: Option<String>,
         duration_ticks: u32,
         #[serde(default = "default_world_material_ledger")]
         consume_ledger: MaterialLedgerId,

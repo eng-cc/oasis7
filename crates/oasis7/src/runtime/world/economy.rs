@@ -57,6 +57,16 @@ const BOTTLENECK_LOW_STOCK_THRESHOLDS: &[(&str, i64)] = &[
     ("motor_mk1", 4),
 ];
 
+pub(super) fn invalid_recipe_plan_stack_note(
+    label: &str,
+    stacks: &[MaterialStack],
+) -> Option<String> {
+    stacks
+        .iter()
+        .find(|stack| stack.kind.trim().is_empty() || stack.amount <= 0)
+        .map(|_| format!("recipe plan {label} stack must have non-empty kind and amount > 0"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum ProductionQueuePriority {
     Survival = 0,
@@ -94,6 +104,21 @@ impl World {
 
     pub fn has_factory(&self, factory_id: &str) -> bool {
         self.state.factories.contains_key(factory_id)
+    }
+
+    pub(super) fn factory_owner_rejection(
+        &self,
+        requester_agent_id: &str,
+        factory_id: &str,
+    ) -> Option<RejectReason> {
+        self.state.factories.get(factory_id).and_then(|factory| {
+            (factory.builder_agent_id != requester_agent_id).then(|| RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "schedule recipe requester is not factory builder: factory_id={factory_id} requester={requester_agent_id} builder={}",
+                    factory.builder_agent_id
+                )],
+            })
+        })
     }
 
     pub(super) fn resolve_module_backed_economy_action(
@@ -179,6 +204,23 @@ impl World {
                 desired_batches,
                 deterministic_seed,
             } => {
+                if !self.state.agents.contains_key(requester_agent_id) {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::AgentNotFound {
+                            agent_id: requester_agent_id.clone(),
+                        },
+                    ));
+                }
+                let Some(factory) = self.state.factories.get(factory_id) else {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::FactoryNotFound {
+                            factory_id: factory_id.clone(),
+                        },
+                    ));
+                };
+                if let Some(reason) = self.factory_owner_rejection(requester_agent_id, factory_id) {
+                    return Ok(EconomyActionResolution::Rejected(reason));
+                }
                 if module_id.trim().is_empty() {
                     return Ok(EconomyActionResolution::Rejected(
                         RejectReason::RuleDenied {
@@ -193,12 +235,7 @@ impl World {
                         },
                     ));
                 }
-                let preferred_ledger = self
-                    .state
-                    .factories
-                    .get(factory_id)
-                    .map(|factory| factory.input_ledger.clone())
-                    .unwrap_or_else(MaterialLedgerId::world);
+                let preferred_ledger = factory.input_ledger.clone();
                 let mut available_inputs = self.ledger_material_stacks(&preferred_ledger);
                 if available_inputs.is_empty() && preferred_ledger != MaterialLedgerId::world() {
                     available_inputs = self.material_stacks();
@@ -210,7 +247,12 @@ impl World {
                     desired_batches: *desired_batches,
                     available_inputs,
                     available_inputs_by_ledger: Some(self.material_stacks_by_ledger()),
-                    available_power: self.resource_balance(ResourceKind::Electricity),
+                    available_power: self
+                        .state
+                        .agents
+                        .get(&factory.builder_agent_id)
+                        .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                        .unwrap_or(0),
                     deterministic_seed: *deterministic_seed,
                 };
                 let plan = self.evaluate_recipe_with_module(
@@ -224,6 +266,16 @@ impl World {
                     return Ok(EconomyActionResolution::Rejected(
                         RejectReason::RuleDenied {
                             notes: vec![format!("recipe module denied: {reason}")],
+                        },
+                    ));
+                }
+                if plan.accepted_batches > *desired_batches {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "recipe module accepted_batches exceeds desired_batches: accepted_batches={} desired_batches={}",
+                                plan.accepted_batches, desired_batches
+                            )],
                         },
                     ));
                 }
@@ -419,8 +471,7 @@ impl World {
         });
 
         for job in due_recipes {
-            let mut committed_produce = job.produce.clone();
-            let mut committed_byproducts = job.byproducts.clone();
+            let mut validation_rejected = false;
 
             for (index, stack) in job.produce.iter().enumerate() {
                 let Some(module_id) = self.resolve_product_module_for_stack(stack.kind.as_str())
@@ -460,10 +511,31 @@ impl World {
                     emitted.push(event.clone());
                 }
                 if rejected {
-                    committed_produce.clear();
-                    committed_byproducts.clear();
+                    self.append_event(
+                        WorldEventBody::Domain(DomainEvent::FactoryProductionBlocked {
+                            action_id: job.job_id,
+                            requester_agent_id: job.requester_agent_id.clone(),
+                            factory_id: job.factory_id.clone(),
+                            recipe_id: job.recipe_id.clone(),
+                            blocker_kind: "product_validation".to_string(),
+                            blocker_detail:
+                                "product validation rejected before production settlement"
+                                    .to_string(),
+                        }),
+                        None,
+                    )?;
+                    if let Some(event) = self.journal.events.last() {
+                        emitted.push(event.clone());
+                    }
+                    // The input/power sink happened at RecipeStarted, but a
+                    // rejected validation never reaches production settlement.
+                    validation_rejected = true;
                     break;
                 }
+            }
+
+            if validation_rejected {
+                continue;
             }
 
             self.append_event(
@@ -473,8 +545,8 @@ impl World {
                     factory_id: job.factory_id,
                     recipe_id: job.recipe_id,
                     accepted_batches: job.accepted_batches,
-                    produce: committed_produce,
-                    byproducts: committed_byproducts,
+                    produce: job.produce,
+                    byproducts: job.byproducts,
                     output_ledger: job.output_ledger,
                     bottleneck_tags: job.bottleneck_tags,
                     logistics_route_ids: job.logistics_route_ids,

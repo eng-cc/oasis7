@@ -260,7 +260,10 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
     world
         .set_material_balance("iron_ingot", 9)
         .expect("seed world ingot");
-    world.set_resource_balance(ResourceKind::Electricity, 30);
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 30)
+        .expect("seed builder electricity");
+    world.set_resource_balance(ResourceKind::Electricity, 0);
     activate_pure_module(&mut world, "m4.recipe.capture", b"recipe-capture-module");
 
     world.submit_action(Action::ScheduleRecipeWithModule {
@@ -316,6 +319,10 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
     );
     assert_eq!(request.desired_batches, 2);
     assert_eq!(request.deterministic_seed, 20260214);
+    assert_eq!(
+        request.available_power, 30,
+        "recipe module quote must see the factory builder's electricity ledger"
+    );
     assert_eq!(stack_amount(&request.available_inputs, "iron_ingot"), 6);
 
     let by_ledger = request
@@ -326,4 +333,16 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
 
     let world_inputs = by_ledger.get("world").expect("world ledger entry");
     assert_eq!(stack_amount(world_inputs, "iron_ingot"), 9);
+    assert_eq!(
+        world.pending_recipe_jobs_len(),
+        1,
+        "accepted module plan must schedule against the owner power ledger"
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder electricity after module schedule"),
+        21
+    );
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 0);
 }

@@ -24,6 +24,7 @@ fn industry_stage_progresses_from_bootstrap_to_scale_out_and_governance() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 30)
         .expect("seed local recipe material");
+    seed_builder_electricity(&mut world, 100);
     world.set_resource_balance(ResourceKind::Electricity, 100);
 
     authorize_policy_update(&mut world, "builder-a", "proposal.policy.disable-tax");
@@ -144,6 +145,7 @@ fn mixed_recipe_completions_on_one_factory_do_not_unlock_scale_out() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "copper_wire", 2)
         .expect("seed copper recipe material");
+    seed_builder_electricity(&mut world, 100);
     world.set_resource_balance(ResourceKind::Electricity, 100);
 
     let mixed_recipes = [
@@ -254,6 +256,7 @@ fn factory_blocker_resets_stable_line_and_requires_three_fresh_completions() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 12)
         .expect("seed pre- and post-block recipe material");
+    seed_builder_electricity(&mut world, 100);
     world.set_resource_balance(ResourceKind::Electricity, 100);
 
     for _ in 0..3 {
@@ -383,6 +386,7 @@ fn industry_stage_downgrades_when_last_completed_factory_is_recycled() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 30)
         .expect("seed local recipe material");
+    seed_builder_electricity(&mut world, 100);
     world.set_resource_balance(ResourceKind::Electricity, 100);
 
     authorize_policy_update(&mut world, "builder-a", "proposal.policy.disable-tax");

@@ -1,3 +1,7 @@
+use super::apply_domain_event_industry_helpers::{
+    aggregate_recipe_material_stacks, validate_recipe_material_stacks,
+    validate_recipe_output_capacity,
+};
 use super::*;
 
 impl WorldState {
@@ -84,6 +88,14 @@ impl WorldState {
                 route_id,
                 ..
             } => {
+                preflight_material_balance_additions(
+                    &self.material_ledgers,
+                    to_ledger,
+                    &[MaterialStack::new(kind.clone(), *amount)],
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid {
+                    reason: format!("material transfer add preflight failed: {reason}"),
+                })?;
                 remove_material_balance_for_ledger(
                     &mut self.material_ledgers,
                     from_ledger,
@@ -230,16 +242,74 @@ impl WorldState {
                 from_ledger,
                 to_ledger,
                 kind,
+                sent_amount,
                 received_amount,
+                loss_amount,
+                distance_km,
+                priority,
                 route_id,
                 path_id,
                 route_ids,
+                tariff_electricity_total,
+                reroute_count,
                 ..
             } => {
-                let pending = self.pending_material_transits.remove(job_id);
-                if pending.is_none() && self.settled_logistics_transit_ids.contains(job_id) {
+                if self.settled_logistics_transit_ids.contains(job_id) {
                     return Ok(());
                 }
+                let Some(pending) = self.pending_material_transits.get(job_id).cloned() else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "material transit completion has no pending job: job_id={job_id}"
+                        ),
+                    });
+                };
+                let expected_loss = {
+                    let amount = pending.amount.max(0);
+                    ((amount as i128)
+                        .saturating_mul(pending.distance_km as i128)
+                        .saturating_mul(pending.loss_bps as i128)
+                        / 10_000)
+                        .clamp(0, amount as i128) as i64
+                };
+                let conservation_valid = *sent_amount >= 0
+                    && *received_amount >= 0
+                    && *loss_amount >= 0
+                    && *received_amount <= *sent_amount
+                    && sent_amount.checked_sub(*received_amount) == Some(*loss_amount)
+                    && *loss_amount == expected_loss
+                    && *received_amount == pending.amount.saturating_sub(expected_loss);
+                let identity_valid = pending.requester_agent_id == *requester_agent_id
+                    && pending.from_ledger == *from_ledger
+                    && pending.to_ledger == *to_ledger
+                    && pending.kind == *kind
+                    && pending.amount == *sent_amount
+                    && pending.distance_km == *distance_km
+                    && pending.priority == *priority
+                    && pending.route_id == *route_id
+                    && pending.path_id == *path_id
+                    && pending.route_ids == *route_ids
+                    && pending.tariff_electricity_total == *tariff_electricity_total
+                    && pending.reroute_count == *reroute_count;
+                if !identity_valid || !conservation_valid {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "material transit completion does not match pending commitment: job_id={job_id}"
+                        ),
+                    });
+                }
+                if *received_amount > 0 {
+                    preflight_material_balance_additions(
+                        &self.material_ledgers,
+                        to_ledger,
+                        &[MaterialStack::new(kind.clone(), *received_amount)],
+                    )
+                    .map_err(|reason| WorldError::ResourceBalanceInvalid {
+                        reason: format!("material transit completion preflight failed: {reason}"),
+                    })?;
+                }
+                self.pending_material_transits.remove(job_id);
+                let pending = Some(pending);
                 if *received_amount > 0 {
                     add_material_balance_for_ledger(
                         &mut self.material_ledgers,
@@ -367,31 +437,15 @@ impl WorldState {
                 consume_ledger,
                 ready_at,
             } => {
-                for stack in &spec.build_cost {
-                    remove_material_balance_for_ledger(
-                        &mut self.material_ledgers,
-                        consume_ledger,
-                        stack.kind.as_str(),
-                        stack.amount,
-                    )
-                    .map_err(|reason| WorldError::ResourceBalanceInvalid {
-                        reason: format!("factory build consume failed: {reason}"),
-                    })?;
-                }
-                self.pending_factory_builds.insert(
-                    *job_id,
-                    FactoryBuildJobState {
-                        job_id: *job_id,
-                        builder_agent_id: builder_agent_id.clone(),
-                        site_id: site_id.clone(),
-                        spec: spec.clone(),
-                        consume_ledger: consume_ledger.clone(),
-                        ready_at: *ready_at,
-                    },
-                );
-                if let Some(cell) = self.agents.get_mut(builder_agent_id) {
-                    cell.last_active = now;
-                }
+                self.apply_factory_build_started(
+                    now,
+                    job_id,
+                    builder_agent_id,
+                    site_id,
+                    spec,
+                    consume_ledger,
+                    ready_at,
+                )?;
             }
             DomainEvent::FactoryBuilt {
                 job_id,
@@ -399,26 +453,7 @@ impl WorldState {
                 site_id,
                 spec,
             } => {
-                self.pending_factory_builds.remove(job_id);
-                let site_ledger = MaterialLedgerId::site(site_id.clone());
-                self.factories.insert(
-                    spec.factory_id.clone(),
-                    FactoryState {
-                        factory_id: spec.factory_id.clone(),
-                        site_id: site_id.clone(),
-                        builder_agent_id: builder_agent_id.clone(),
-                        spec: spec.clone(),
-                        input_ledger: site_ledger.clone(),
-                        output_ledger: site_ledger,
-                        durability_ppm: 1_000_000,
-                        production: FactoryProductionState::default(),
-                        built_at: now,
-                    },
-                );
-                self.refresh_industry_progress_stage(now);
-                if let Some(cell) = self.agents.get_mut(builder_agent_id) {
-                    cell.last_active = now;
-                }
+                self.apply_factory_built(now, job_id, builder_agent_id, site_id, spec)?;
             }
             DomainEvent::FactoryDurabilityChanged {
                 factory_id,
@@ -436,21 +471,14 @@ impl WorldState {
                 consumed_parts,
                 durability_ppm,
             } => {
-                remove_material_balance_for_ledger(
-                    &mut self.material_ledgers,
+                self.apply_factory_maintained(
+                    now,
+                    operator_agent_id,
+                    factory_id,
                     consume_ledger,
-                    "hardware_part",
-                    *consumed_parts,
-                )
-                .map_err(|reason| WorldError::ResourceBalanceInvalid {
-                    reason: format!("factory maintenance consume failed: {reason}"),
-                })?;
-                if let Some(factory) = self.factories.get_mut(factory_id) {
-                    factory.durability_ppm = (*durability_ppm).clamp(0, 1_000_000);
-                }
-                if let Some(cell) = self.agents.get_mut(operator_agent_id) {
-                    cell.last_active = now;
-                }
+                    consumed_parts,
+                    durability_ppm,
+                )?;
             }
             DomainEvent::FactoryRecycled {
                 operator_agent_id,
@@ -459,24 +487,13 @@ impl WorldState {
                 recovered,
                 ..
             } => {
-                self.factories.remove(factory_id);
-                self.pending_recipe_jobs
-                    .retain(|_, job| job.factory_id != *factory_id);
-                for stack in recovered {
-                    add_material_balance_for_ledger(
-                        &mut self.material_ledgers,
-                        recycle_ledger,
-                        stack.kind.as_str(),
-                        stack.amount,
-                    )
-                    .map_err(|reason| WorldError::ResourceBalanceInvalid {
-                        reason: format!("factory recycle material add failed: {reason}"),
-                    })?;
-                }
-                self.refresh_industry_progress_stage(now);
-                if let Some(cell) = self.agents.get_mut(operator_agent_id) {
-                    cell.last_active = now;
-                }
+                self.apply_factory_recycled(
+                    now,
+                    operator_agent_id,
+                    factory_id,
+                    recycle_ledger,
+                    recovered,
+                )?;
             }
             DomainEvent::RecipeStarted {
                 job_id,
@@ -488,6 +505,7 @@ impl WorldState {
                 produce,
                 byproducts,
                 power_required,
+                power_owner_agent_id,
                 duration_ticks,
                 consume_ledger,
                 output_ledger,
@@ -497,6 +515,175 @@ impl WorldState {
                 logistics_path_ids,
                 ready_at,
             } => {
+                if self.pending_recipe_jobs.contains_key(job_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe start job is already pending: job_id={job_id}"),
+                    });
+                }
+                if self.settled_recipe_job_ids.contains(job_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe start job identity is already settled: job_id={job_id}"
+                        ),
+                    });
+                }
+                if self.retired_factory_ids.contains(factory_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe scheduled for retired factory: factory_id={factory_id}"
+                        ),
+                    });
+                }
+                let Some(factory) = self.factories.get(factory_id).cloned() else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe factory not found: factory_id={factory_id}"),
+                    });
+                };
+                let Some(power_owner_agent_id) = power_owner_agent_id.as_deref() else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power owner is missing: job_id={job_id} factory_id={factory_id}"
+                        ),
+                    });
+                };
+                if power_owner_agent_id != factory.builder_agent_id
+                    || power_owner_agent_id != requester_agent_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power owner mismatch: job_id={job_id} payer={power_owner_agent_id} requester={requester_agent_id} builder={} ",
+                            factory.builder_agent_id
+                        ),
+                    });
+                }
+                if !self.agents.contains_key(power_owner_agent_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power owner agent not found: job_id={job_id} payer={power_owner_agent_id}"
+                        ),
+                    });
+                }
+                if factory.builder_agent_id != *requester_agent_id {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe requester is not factory builder: factory_id={factory_id} requester={requester_agent_id} builder={}",
+                            factory.builder_agent_id
+                        ),
+                    });
+                }
+                if factory.spec.recipe_slots == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe factory has no execution slots: factory_id={factory_id}"
+                        ),
+                    });
+                }
+                let pending_factory_jobs = self
+                    .pending_recipe_jobs
+                    .values()
+                    .filter(|job| job.factory_id == *factory_id)
+                    .count();
+                if pending_factory_jobs >= usize::from(factory.spec.recipe_slots)
+                    || usize::from(factory.production.active_jobs)
+                        >= usize::from(factory.spec.recipe_slots)
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe factory has no free execution slot: factory_id={factory_id} active_jobs={} pending_jobs={} recipe_slots={}",
+                            factory.production.active_jobs,
+                            pending_factory_jobs,
+                            factory.spec.recipe_slots
+                        ),
+                    });
+                }
+                let expected_output_ledger = if *consume_ledger == MaterialLedgerId::world() {
+                    MaterialLedgerId::world()
+                } else if *consume_ledger == factory.input_ledger {
+                    factory.output_ledger.clone()
+                } else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe consume ledger does not match factory input or world fallback: factory_id={factory_id} consume_ledger={consume_ledger} input_ledger={}",
+                            factory.input_ledger
+                        ),
+                    });
+                };
+                if *output_ledger != expected_output_ledger {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe output ledger does not match committed factory route: factory_id={factory_id} output_ledger={output_ledger} expected={expected_output_ledger}"
+                        ),
+                    });
+                }
+                if *accepted_batches == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe accepted_batches must be positive: job_id={job_id}"
+                        ),
+                    });
+                }
+                if *duration_ticks == 0 || *ready_at <= now {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe timing commitment is invalid: job_id={job_id} duration_ticks={duration_ticks} ready_at={ready_at} now={now}"
+                        ),
+                    });
+                }
+                validate_recipe_material_stacks("consume", consume).map_err(|reason| {
+                    WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe consume stack invalid: {reason}"),
+                    }
+                })?;
+                validate_recipe_material_stacks("produce", produce).map_err(|reason| {
+                    WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe produce stack invalid: {reason}"),
+                    }
+                })?;
+                validate_recipe_material_stacks("byproduct", byproducts).map_err(|reason| {
+                    WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe byproduct stack invalid: {reason}"),
+                    }
+                })?;
+                let required_inputs =
+                    aggregate_recipe_material_stacks(consume).map_err(|reason| {
+                        WorldError::ResourceBalanceInvalid {
+                            reason: format!("recipe consume aggregation failed: {reason}"),
+                        }
+                    })?;
+                for (kind, amount) in required_inputs {
+                    let available = self
+                        .material_ledgers
+                        .get(consume_ledger)
+                        .and_then(|ledger| ledger.get(&kind))
+                        .copied()
+                        .unwrap_or(0);
+                    if available < amount {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "recipe consume failed: insufficient material {kind}: requested={amount} available={available}"
+                            ),
+                        });
+                    }
+                }
+                if *power_required < 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power_required must be non-negative: job_id={job_id} power_required={power_required}"
+                        ),
+                    });
+                }
+                let available_power = self
+                    .agents
+                    .get(power_owner_agent_id)
+                    .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                    .unwrap_or(0);
+                if available_power < *power_required {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power consume failed: insufficient electricity: payer={power_owner_agent_id} requested={power_required} available={available_power}"
+                        ),
+                    });
+                }
                 for stack in consume {
                     remove_material_balance_for_ledger(
                         &mut self.material_ledgers,
@@ -508,14 +695,17 @@ impl WorldState {
                         reason: format!("recipe consume failed: {reason}"),
                     })?;
                 }
-                remove_resource_balance(
-                    &mut self.resources,
-                    ResourceKind::Electricity,
-                    *power_required,
-                )
-                .map_err(|reason| WorldError::ResourceBalanceInvalid {
-                    reason: format!("recipe power consume failed: {reason}"),
-                })?;
+                self.agents
+                    .get_mut(power_owner_agent_id)
+                    .expect("recipe power owner existence prevalidated")
+                    .state
+                    .resources
+                    .remove(ResourceKind::Electricity, *power_required)
+                    .map_err(|reason| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe power consume failed for payer {power_owner_agent_id}: {reason:?}"
+                        ),
+                    })?;
                 self.pending_recipe_jobs.insert(
                     *job_id,
                     RecipeJobState {
@@ -528,6 +718,7 @@ impl WorldState {
                         produce: produce.clone(),
                         byproducts: byproducts.clone(),
                         power_required: *power_required,
+                        power_owner_agent_id: Some(power_owner_agent_id.to_string()),
                         duration_ticks: *duration_ticks,
                         consume_ledger: consume_ledger.clone(),
                         output_ledger: output_ledger.clone(),
@@ -559,20 +750,58 @@ impl WorldState {
                 requester_agent_id,
                 factory_id,
                 recipe_id,
+                accepted_batches,
                 produce,
                 byproducts,
                 output_ledger,
-                logistics_route_ids: _,
-                logistics_path_ids: _,
+                bottleneck_tags,
+                logistics_route_ids,
+                logistics_path_ids,
                 ..
             } => {
-                let Some(completed_snapshot) = self
-                    .pending_recipe_jobs
-                    .get(job_id)
-                    .map(FactoryProductionSnapshot::from_recipe_job)
-                else {
+                if self.settled_recipe_job_ids.contains(job_id) {
                     return Ok(());
+                }
+                let Some(pending) = self.pending_recipe_jobs.get(job_id).cloned() else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe completion has no pending job: job_id={job_id}"),
+                    });
                 };
+                if now < pending.ready_at {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe completion is early: job_id={job_id} ready_at={} now={now}",
+                            pending.ready_at
+                        ),
+                    });
+                }
+                if pending.requester_agent_id != *requester_agent_id
+                    || pending.factory_id != *factory_id
+                    || pending.recipe_id != *recipe_id
+                    || pending.accepted_batches != *accepted_batches
+                    || pending.produce != *produce
+                    || pending.byproducts != *byproducts
+                    || pending.output_ledger != *output_ledger
+                    || pending.bottleneck_tags != *bottleneck_tags
+                    || pending.logistics_route_ids != *logistics_route_ids
+                    || pending.logistics_path_ids != *logistics_path_ids
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe completion does not match pending commitment: job_id={job_id}"
+                        ),
+                    });
+                }
+                validate_recipe_output_capacity(
+                    &self.material_ledgers,
+                    output_ledger,
+                    produce,
+                    byproducts,
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid {
+                    reason: format!("recipe output preflight failed: {reason}"),
+                })?;
+                let completed_snapshot = FactoryProductionSnapshot::from_recipe_job(&pending);
                 self.pending_recipe_jobs.remove(job_id);
                 for stack in produce {
                     add_material_balance_for_ledger(
@@ -596,6 +825,7 @@ impl WorldState {
                         reason: format!("recipe byproduct failed: {reason}"),
                     })?;
                 }
+                self.settled_recipe_job_ids.insert(*job_id);
                 self.industry_progress.completed_recipe_jobs = self
                     .industry_progress
                     .completed_recipe_jobs
@@ -635,24 +865,69 @@ impl WorldState {
                 }
             }
             DomainEvent::FactoryProductionBlocked {
+                action_id,
                 requester_agent_id,
                 factory_id,
+                recipe_id,
                 blocker_kind,
                 blocker_detail,
                 ..
             } => {
+                let product_validation_failure = blocker_kind == "product_validation";
+                if product_validation_failure {
+                    let Some(pending) = self.pending_recipe_jobs.get(action_id) else {
+                        // A validation disposition already applied is a
+                        // terminal replay and must remain byte-stable.
+                        return Ok(());
+                    };
+                    if pending.requester_agent_id != *requester_agent_id
+                        || pending.factory_id != *factory_id
+                        || pending.recipe_id != *recipe_id
+                    {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "product-validation blocker does not match pending commitment: job_id={action_id}"
+                            ),
+                        });
+                    }
+                }
+                let terminated_job = if product_validation_failure {
+                    self.pending_recipe_jobs.remove(action_id)
+                } else {
+                    None
+                };
+                // A replayed validation-failure disposition is already
+                // terminal; do not mutate counters or stable-line state twice.
+                if product_validation_failure && terminated_job.is_none() {
+                    return Ok(());
+                }
+                if product_validation_failure {
+                    self.settled_recipe_job_ids.insert(*action_id);
+                }
                 if let Some(factory) = self.factories.get_mut(factory_id) {
+                    if terminated_job.is_some() {
+                        factory.production.active_jobs =
+                            factory.production.active_jobs.saturating_sub(1);
+                        if factory.production.current_job_id == Some(*action_id) {
+                            factory.production.current_job_id = None;
+                        }
+                        factory.production.current_recipe_id = None;
+                    }
                     factory.production.status = FactoryProductionStatus::Blocked;
                     factory.production.last_blocked_at = Some(now);
                     factory.production.current_blocker_kind = Some(blocker_kind.clone());
                     factory.production.current_blocker_detail = Some(blocker_detail.clone());
                     factory.production.current_job_id = None;
                     factory.production.current_recipe_id = None;
-                    factory.production.last_completed_recipe_id = None;
-                    factory.production.same_recipe_repeat_count = 0;
-                    factory.production.last_completed_canonical_snapshot = None;
+                    if !product_validation_failure {
+                        factory.production.last_completed_recipe_id = None;
+                        factory.production.same_recipe_repeat_count = 0;
+                        factory.production.last_completed_canonical_snapshot = None;
+                    }
                 }
-                self.refresh_industry_progress_stage(now);
+                if !product_validation_failure {
+                    self.refresh_industry_progress_stage(now);
+                }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
                     cell.last_active = now;
                 }

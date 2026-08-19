@@ -1024,7 +1024,15 @@ impl World {
             });
         }
         let current = self.ledger_material_balance(&ledger_id, material_kind.as_str());
-        let next = current.saturating_add(delta);
+        let next =
+            current
+                .checked_add(delta)
+                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "material balance overflow: kind={} current={} delta={}",
+                        material_kind, current, delta
+                    ),
+                })?;
         if next < 0 {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -1059,6 +1067,15 @@ impl World {
                 reason: format!("material transfer amount must be > 0, got {amount}"),
             });
         }
+        let destination_current = self.ledger_material_balance(to_ledger, material_kind);
+        destination_current.checked_add(amount).ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "material balance overflow: kind={} current={} delta={}",
+                    material_kind, destination_current, amount
+                ),
+            }
+        })?;
         self.adjust_ledger_material_balance(
             from_ledger.clone(),
             material_kind.to_string(),

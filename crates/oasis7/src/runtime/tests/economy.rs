@@ -225,6 +225,9 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     world
         .set_material_balance("iron_ingot", 6)
         .expect("seed recipe input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 20);
 
     let plan = RecipeExecutionPlan::accepted(
@@ -248,7 +251,13 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     world.step().expect("start recipe");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
     assert_eq!(world.material_balance("iron_ingot"), 0);
-    assert_eq!(world.resource_balance(ResourceKind::Electricity), 13);
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder electricity"),
+        13
+    );
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 20);
 
     let started = world.journal().events.last().expect("recipe started event");
     match &started.body {
@@ -375,6 +384,9 @@ fn schedule_recipe_reads_and_writes_site_material_ledger() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-ledger"), "iron_ingot", 6)
         .expect("seed site iron");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 20);
 
     let plan = RecipeExecutionPlan::accepted(
@@ -658,6 +670,9 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
     world
         .set_material_balance("gear", 8)
         .expect("seed recipe input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 50)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 50);
 
     let plan_a = RecipeExecutionPlan::accepted(
@@ -852,6 +867,9 @@ fn schedule_recipe_with_module_uses_module_plan() {
     world
         .set_material_balance("iron_ingot", 7)
         .expect("seed ingot");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 30)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 30);
     activate_pure_module(&mut world, "m4.recipe.motor", b"recipe-module");
 
@@ -888,7 +906,13 @@ fn schedule_recipe_with_module_uses_module_plan() {
         .expect("start recipe with module");
 
     assert_eq!(world.material_balance("iron_ingot"), 1);
-    assert_eq!(world.resource_balance(ResourceKind::Electricity), 21);
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder electricity"),
+        21
+    );
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 30);
     assert_eq!(world.pending_recipe_jobs_len(), 1);
 
     for _ in 0..4 {

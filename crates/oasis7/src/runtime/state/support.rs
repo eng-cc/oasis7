@@ -445,18 +445,36 @@ pub(super) fn integer_sqrt_u64(value: u64) -> u64 {
     x0
 }
 
-fn add_material_balance(
-    balances: &mut BTreeMap<String, i64>,
-    kind: &str,
-    amount: i64,
+pub(super) fn preflight_material_balance_additions(
+    ledgers: &BTreeMap<MaterialLedgerId, BTreeMap<String, i64>>,
+    ledger: &MaterialLedgerId,
+    stacks: &[MaterialStack],
 ) -> Result<(), String> {
-    if amount < 0 {
-        return Err(format!("negative material amount not allowed: {amount}"));
+    let mut additions = BTreeMap::<String, i64>::new();
+    for stack in stacks {
+        if stack.amount < 0 {
+            return Err(format!(
+                "negative material amount not allowed: {}",
+                stack.amount
+            ));
+        }
+        let total = additions.entry(stack.kind.clone()).or_default();
+        *total = total.checked_add(stack.amount).ok_or_else(|| {
+            format!(
+                "material balance addition overflow: kind={} amount={}",
+                stack.kind, stack.amount
+            )
+        })?;
     }
-    let entry = balances.entry(kind.to_string()).or_insert(0);
-    *entry = entry.saturating_add(amount);
-    if *entry == 0 {
-        balances.remove(kind);
+    let balances = ledgers.get(ledger);
+    for (kind, amount) in additions {
+        let current = balances
+            .and_then(|entries| entries.get(&kind))
+            .copied()
+            .unwrap_or(0);
+        current.checked_add(amount).ok_or_else(|| {
+            format!("material balance overflow: kind={kind} current={current} amount={amount}")
+        })?;
     }
     Ok(())
 }
@@ -467,8 +485,21 @@ pub(super) fn add_material_balance_for_ledger(
     kind: &str,
     amount: i64,
 ) -> Result<(), String> {
+    let current = ledgers
+        .get(ledger)
+        .and_then(|balances| balances.get(kind))
+        .copied()
+        .unwrap_or(0);
+    let next = current.checked_add(amount).ok_or_else(|| {
+        format!("material balance overflow: kind={kind} current={current} amount={amount}")
+    })?;
     let balances = ledgers.entry(ledger.clone()).or_default();
-    add_material_balance(balances, kind, amount)
+    if next == 0 {
+        balances.remove(kind);
+    } else {
+        balances.insert(kind.to_string(), next);
+    }
+    Ok(())
 }
 
 fn remove_material_balance(
