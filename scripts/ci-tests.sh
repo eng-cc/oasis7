@@ -264,6 +264,7 @@ run_required_gate_checks() {
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
   run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
   run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
+  run bash ./scripts/release-packages-trunk-cache-contract.test.sh
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh

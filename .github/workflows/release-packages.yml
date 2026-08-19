@@ -20,6 +20,7 @@ env:
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
   RUST_TOOLCHAIN: 1.96.0
+  TRUNK_VERSION: 0.21.14
   BUILTIN_WASM_TOOLCHAIN: nightly-2025-12-11
   BUILTIN_WASM_TARGET: wasm32-unknown-unknown
 
@@ -297,8 +298,20 @@ jobs:
         with:
           shared-key: release-packages-web-wasm-v2
           cache-on-failure: true
-      - name: Install trunk
-        run: cargo install trunk --locked
+      - name: Restore pinned trunk binary
+        id: trunk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/trunk
+          key: release-packages-trunk-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.TRUNK_VERSION }}
+      - name: Install pinned trunk
+        if: steps.trunk-cache.outputs.cache-hit != 'true'
+        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
+      - name: Verify pinned trunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
       - name: Build web dists
         run: |
           mkdir -p output/release/web-dist output/release/web-launcher-dist output/release/viewer-optional-payload
