@@ -104,6 +104,20 @@ assert_key_equals "$config_output" run_rust_baseline true
 assert_key_equals "$config_output" needs_rust_toolchain true
 assert_key_equals "$config_output" needs_node true
 
+bundle_portability_output="$(plan_for_paths \
+  scripts/build-game-launcher-bundle.sh \
+  scripts/build-game-launcher-bundle-macos-bash3.test.sh)"
+assert_key_equals "$bundle_portability_output" scope targeted
+assert_key_equals "$bundle_portability_output" run_operational_contracts true
+assert_key_equals "$bundle_portability_output" run_rust_baseline true
+assert_key_equals "$bundle_portability_output" needs_rust_toolchain true
+assert_key_equals "$bundle_portability_output" needs_node false
+assert_key_equals "$bundle_portability_output" selected_capabilities operational_contracts
+assert_reason_contains "$bundle_portability_output" \
+  "operational_contracts:scripts/build-game-launcher-bundle.sh"
+assert_reason_contains "$bundle_portability_output" \
+  "operational_contracts:scripts/build-game-launcher-bundle-macos-bash3.test.sh"
+
 governance_helper_output="$(plan_for_paths \
   scripts/prepare-task-pr.sh \
   scripts/pm/patch-equivalence-receipt.sh \
