@@ -25,6 +25,8 @@ Create options:
   --world-generation-provenance-ref <path>
                                       Generated map provenance path/ref
   --governance-manifest-ref <path>   Governance manifest path/ref (required)
+  --validator-pair-provenance-ref <path>
+                                      Signed package/world/node provenance receipt
   --evidence-ref <path>              Evidence path/ref; repeatable
   --note <text>                      Free-form note; repeatable
   --allow-dirty-worktree             Allow create on dirty git worktree
@@ -65,6 +67,7 @@ world_snapshot_ref=""
 generated_world_sidecar_ref=""
 world_generation_provenance_ref=""
 governance_manifest_ref=""
+validator_pair_provenance_ref=""
 allow_dirty_worktree=0
 check_git_head=0
 check_clean_worktree=0
@@ -103,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --governance-manifest-ref)
       governance_manifest_ref=${2:-}
+      shift 2
+      ;;
+    --validator-pair-provenance-ref)
+      validator_pair_provenance_ref=${2:-}
       shift 2
       ;;
     --evidence-ref)
@@ -266,7 +273,9 @@ validate_bundle_python() {
 import hashlib
 import json
 import pathlib
+import subprocess
 import sys
+import tempfile
 
 bundle_path = pathlib.Path(sys.argv[1]).resolve()
 expected_head = sys.argv[2]
@@ -322,6 +331,50 @@ def file_sha256(path: pathlib.Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+def verify_pair_provenance_signature(provenance_path: pathlib.Path, provenance: dict) -> None:
+    signature = provenance.get("signature")
+    if not isinstance(signature, dict) or signature.get("status") != "verified":
+        raise SystemExit("validator_pair_provenance requires a verified signature")
+    if signature.get("algorithm") != "openssl-rsa-sha256":
+        raise SystemExit("validator_pair_provenance signature algorithm is unsupported")
+    if not isinstance(signature.get("signer_id"), str) or not signature["signer_id"].strip():
+        raise SystemExit("validator_pair_provenance signature.signer_id is required")
+    def signature_file(field: str) -> pathlib.Path:
+        raw = signature.get(field)
+        if not isinstance(raw, str) or not raw.strip():
+            raise SystemExit(f"validator_pair_provenance signature.{field} is required")
+        path = pathlib.Path(raw)
+        if not path.is_absolute():
+            path = provenance_path.parent / path
+        elif not path.exists():
+            staged_fallback = provenance_path.parent / path.name
+            if staged_fallback.exists():
+                path = staged_fallback
+        if path.is_symlink() or not path.is_file():
+            raise SystemExit(f"validator_pair_provenance signature.{field} missing or symlinked: {path}")
+        return path.resolve()
+    signature_path = signature_file("signature_ref")
+    public_key_path = signature_file("public_key_ref")
+    public_key_sha = signature.get("public_key_sha256")
+    if not isinstance(public_key_sha, str) or len(public_key_sha) != 64 or public_key_sha.lower() != file_sha256(public_key_path):
+        raise SystemExit("validator_pair_provenance public key hash mismatch")
+    body = {key: value for key, value in provenance.items() if key != "binding_digest"}
+    payload = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    with tempfile.TemporaryDirectory(prefix="oasis7-release-provenance-") as temp_dir:
+        payload_path = pathlib.Path(temp_dir) / "payload"
+        payload_path.write_bytes(payload)
+        try:
+            result = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key_path), "-signature", str(signature_path), str(payload_path)],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+            raise SystemExit(f"validator_pair_provenance detached verifier unavailable: {error.__class__.__name__}")
+    if result.returncode != 0:
+        raise SystemExit("validator_pair_provenance detached signature verification failed")
 
 def check_ref(label: str, payload: dict) -> None:
     required = ["ref", "resolved_path", "kind"]
@@ -390,6 +443,25 @@ for label in ("generated_world_sidecar", "world_generation_provenance"):
     if label in bundle:
         check_ref(label, bundle[label])
 
+pair_provenance = bundle.get("validator_pair_provenance")
+if pair_provenance is not None:
+    check_ref("validator_pair_provenance", pair_provenance)
+    provenance_path = pathlib.Path(pair_provenance["resolved_path"])
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"validator_pair_provenance unreadable: {error}")
+    if provenance.get("schema_version") != "oasis7.validator_pair_rebuild_provenance.v1":
+        raise SystemExit("validator_pair_provenance schema mismatch")
+    verify_pair_provenance_signature(provenance_path, provenance)
+    binding = provenance.get("binding_digest")
+    body = {key: value for key, value in provenance.items() if key != "binding_digest"}
+    actual_binding = hashlib.sha256(
+        json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if binding != actual_binding:
+        raise SystemExit("validator_pair_provenance binding_digest mismatch")
+
 for index, item in enumerate(bundle.get("evidence_refs", []), start=1):
     if "ref" not in item or "resolved_path" not in item:
         raise SystemExit(f"evidence_refs[{index}] missing ref or resolved_path")
@@ -453,6 +525,11 @@ case "$mode" in
       world_generation_provenance_meta=$(path_metadata_json "$world_generation_provenance_ref")
     fi
     governance_manifest_meta=$(path_metadata_json "$governance_manifest_ref")
+    validator_pair_provenance_meta="null"
+    if [[ -n "$validator_pair_provenance_ref" ]]; then
+      ensure_existing_path "--validator-pair-provenance-ref" "$validator_pair_provenance_ref"
+      validator_pair_provenance_meta=$(path_metadata_json "$validator_pair_provenance_ref")
+    fi
 
     evidence_json="[]"
     if [[ "${#evidence_refs[@]}" -gt 0 ]]; then
@@ -482,6 +559,7 @@ case "$mode" in
       --argjson generated_world_sidecar "$generated_world_sidecar_meta" \
       --argjson world_generation_provenance "$world_generation_provenance_meta" \
       --argjson governance_manifest "$governance_manifest_meta" \
+      --argjson validator_pair_provenance "$validator_pair_provenance_meta" \
       --argjson evidence_refs "$evidence_json" \
       --argjson notes "$notes_json" \
       '{
@@ -497,6 +575,7 @@ case "$mode" in
         generated_world_sidecar: $generated_world_sidecar,
         world_generation_provenance: $world_generation_provenance,
         governance_manifest: $governance_manifest,
+        validator_pair_provenance: $validator_pair_provenance,
         evidence_refs: $evidence_refs,
         notes: $notes
       } | with_entries(select(.value != null))' >"$bundle_path"

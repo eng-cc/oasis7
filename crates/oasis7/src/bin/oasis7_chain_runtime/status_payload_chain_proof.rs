@@ -65,13 +65,11 @@ pub(crate) fn build_chain_proof_status(
             .ok()
             .flatten()
         })
-        .map(|(schema_version, checkpoint_id, height, manifest_hash)| {
-            LatestExecutionCheckpointStatus {
-                schema_version,
-                checkpoint_id,
-                height,
-                manifest_hash,
-            }
+        .map(|evidence| LatestExecutionCheckpointStatus {
+            schema_version: evidence.schema_version,
+            checkpoint_id: evidence.checkpoint_id,
+            height: evidence.height,
+            manifest_hash: evidence.manifest_hash,
         });
     let Some(execution_records_dir) = execution_records_dir else {
         return ChainProofStatus {

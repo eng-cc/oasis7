@@ -50,6 +50,11 @@ mod gameplay_submit_api;
 mod governance_registry;
 #[path = "oasis7_chain_runtime/identity_provision.rs"]
 mod identity_provision;
+#[path = "oasis7_chain_runtime/identity_receipt.rs"]
+mod identity_receipt;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/identity_receipt_tests.rs"]
+mod identity_receipt_tests;
 #[path = "oasis7_chain_runtime/main_token_submit_api.rs"]
 mod main_token_submit_api;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
@@ -62,6 +67,11 @@ mod p2p_status;
 mod publication_lifecycle;
 #[path = "oasis7_chain_runtime/publication_proof.rs"]
 mod publication_proof;
+#[path = "oasis7_chain_runtime/rebuild_status.rs"]
+mod rebuild_status;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/rebuild_status_tests.rs"]
+mod rebuild_status_tests;
 #[path = "oasis7_chain_runtime/reward_runtime_settlement.rs"]
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
@@ -169,10 +179,11 @@ mod execution_bridge {
         reset_execution_bridge_commit_timing_for_tests, snapshot_execution_bridge_commit_timing,
         snapshot_execution_bridge_module_tick_routing_metrics,
     };
+    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::ExecutionCheckpointStatusEvidence;
 
     pub(crate) fn load_latest_execution_checkpoint_status_evidence(
         execution_records_dir: &Path,
-    ) -> Result<Option<(u32, String, u64, String)>, String> {
+    ) -> Result<Option<ExecutionCheckpointStatusEvidence>, String> {
         super::execution_bridge_real_tests::real_execution_bridge::load_latest_execution_checkpoint_status_evidence(
             execution_records_dir,
         )
@@ -334,12 +345,9 @@ fn stop_storage_metrics_worker(worker: &mut StorageMetricsWorker) {
 fn main() {
     init_tracing("oasis7_chain_runtime");
     let raw_args: Vec<String> = env::args().skip(1).collect();
-    if raw_args
-        .first()
-        .is_some_and(|arg| arg == "provision-identity")
-    {
-        if let Err(err) = identity_provision::run(raw_args.iter().skip(1).map(String::as_str)) {
-            error!(error = %err, "identity provisioning failed");
+    if let Some(result) = identity_receipt::dispatch(raw_args.iter().map(String::as_str)) {
+        if let Err(err) = result {
+            error!(error = %err, "identity command failed");
             process::exit(1);
         }
         return;

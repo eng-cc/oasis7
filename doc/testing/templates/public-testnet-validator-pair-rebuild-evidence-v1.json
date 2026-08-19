@@ -1,0 +1,206 @@
+{
+  "schema_version": "oasis7.validator_pair_rebuild_evidence.v1",
+  "task_id": "",
+  "plan_schema": "oasis7.validator_pair_rebuild_plan.v1",
+  "plan_digest": "",
+  "transaction_ref": "",
+  "transaction_schema": "oasis7.validator_pair_rebuild_transaction.v1",
+  "package": {
+    "run_id": "",
+    "commit": "",
+    "package_version": "",
+    "runtime_sha256": "",
+    "runtime_size_bytes": 0,
+    "buildinfo_sha256": "",
+    "sha256sums_sha256": ""
+  },
+  "network": {
+    "network_id": "",
+    "chain_id": "",
+    "manifest_sha256": "",
+    "genesis_sha256": "",
+    "registry_sha256": "",
+    "bootstrap_sha256": "",
+    "world_sha256_tree": ""
+  },
+  "provenance_trust_root": {
+    "schema_version": "oasis7.validator_pair_provenance_trust_root.v1",
+    "ref": "",
+    "root_digest": "",
+    "trusted_signer_id": "",
+    "trusted_public_key_sha256": ""
+  },
+  "consumer_impact": {
+    "decision": "proceed",
+    "record_ref": "",
+    "outage_window": "",
+    "validators_already_stopped": false
+  },
+  "capacity": {
+    "storage-205": {
+      "free_bytes": 0,
+      "free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
+      "same_filesystem": false,
+      "verified": false
+    },
+    "sequencer-204": {
+      "free_bytes": 0,
+      "free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
+      "same_filesystem": false,
+      "verified": false
+    }
+  },
+  "capacity_apply": {
+    "storage-205": {
+      "planned_free_bytes": 0,
+      "planned_free_inodes": 0,
+      "apply_free_bytes": 0,
+      "apply_free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
+      "same_filesystem": false,
+      "verified": false
+    },
+    "sequencer-204": {
+      "planned_free_bytes": 0,
+      "planned_free_inodes": 0,
+      "apply_free_bytes": 0,
+      "apply_free_inodes": 0,
+      "required_bytes": 0,
+      "required_inodes": 0,
+      "inventory": {
+        "entry_count": 0,
+        "link_count": 0,
+        "dir_count": 0,
+        "file_count": 0,
+        "total_bytes": 0
+      },
+      "same_filesystem": false,
+      "verified": false
+    }
+  },
+  "mutation_order": ["storage-205", "sequencer-204"],
+  "startup_order": ["sequencer-204", "storage-205"],
+  "nodes": {
+    "storage-205": {
+      "backup_manifest_ref": "",
+      "backup_manifest_sha256": "",
+      "backup_verified": false,
+      "identity_receipt_ref": "",
+      "peer_id": "",
+      "node_id": "",
+      "healthz": "",
+      "nrestarts": 0,
+      "oom_panic_or_segfault": false
+    },
+    "sequencer-204": {
+      "backup_manifest_ref": "",
+      "backup_manifest_sha256": "",
+      "backup_verified": false,
+      "identity_receipt_ref": "",
+      "peer_id": "",
+      "node_id": "",
+      "bounded_proof_endpoint": "",
+      "full_chain_status_called": false,
+      "healthz": "",
+      "nrestarts": 0,
+      "oom_panic_or_segfault": false
+    }
+  },
+  "rollback": {
+    "strategy": "same-filesystem-full-snapshot",
+    "receipt_ref": "",
+    "verified": false,
+    "rollback_failed": false,
+    "adapter_callback_ref": ""
+  },
+  "host_receipt": {
+    "schema_version": "oasis7.validator_pair_rebuild_host_receipt.v2",
+    "phase": "apply",
+    "plan_digest": "",
+    "transaction_id": "",
+    "captured_at": "",
+    "receipt_ref": "",
+    "verified": false,
+    "observer_mutation": false,
+    "evidence_bindings": {
+      "identity_receipts": [],
+      "sequencer_rebuild_proof": {
+        "path": "",
+        "sha256": "",
+        "verification_path": "",
+        "verification_sha256": "",
+        "role": "sequencer-204",
+        "node_id": "",
+        "peer_id": ""
+      }
+    },
+    "identity_receipts_ref": "",
+    "sequencer_rebuild_proof_ref": "",
+    "sequencer_rebuild_proof_verification_ref": "",
+    "nodes": {
+      "storage-205": {
+        "active": false,
+        "running": false,
+        "healthz_ok": false,
+        "nrestarts": 0,
+        "oom_panic_segfault": false,
+        "runtime_sha256": "",
+        "runtime_size_bytes": 0,
+        "listeners": ["6632", "6832"],
+        "full_chain_status_called": false
+      },
+      "sequencer-204": {
+        "active": false,
+        "running": false,
+        "healthz_ok": false,
+        "nrestarts": 0,
+        "oom_panic_segfault": false,
+        "runtime_sha256": "",
+        "runtime_size_bytes": 0,
+        "listeners": ["6631", "6831"],
+        "full_chain_status_called": false
+      }
+    }
+  },
+  "observer_gate": {
+    "status": "hold",
+    "receipt_ref": "",
+    "required_before_observer_mutation": true,
+    "closure_receipt_ref": ""
+  },
+  "signing": {
+    "status": "pending",
+    "signer_id": "",
+    "algorithm": "openssl-rsa-sha256",
+    "signature_ref": "",
+    "public_key_ref": "",
+    "public_key_sha256": ""
+  },
+  "canonical_digest": ""
+}

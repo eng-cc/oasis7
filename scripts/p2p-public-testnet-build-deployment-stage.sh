@@ -11,6 +11,7 @@ Usage:
     --storage-finality-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
+    [--validator-pair-provenance-ref <path>] \
     [--track public_testnet_rehearsal|staging|canary]
 
   ./scripts/p2p-public-testnet-build-deployment-stage.sh \
@@ -20,6 +21,7 @@ Usage:
     --storage-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
+    [--validator-pair-provenance-ref <path>] \
     [--track public_testnet_rehearsal|staging|canary]
 
 Description:
@@ -69,6 +71,7 @@ sequencer_public_key=""
 storage_public_key=""
 extra_validators=()
 out_dir=""
+validator_pair_provenance_ref=""
 
 base_genesis="doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
 base_manifest="doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
@@ -108,6 +111,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       out_dir=${2:-}
+      shift 2
+      ;;
+    --validator-pair-provenance-ref)
+      validator_pair_provenance_ref=${2:-}
       shift 2
       ;;
     --base-genesis)
@@ -159,6 +166,9 @@ require_file "$runtime_build_ref"
 require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  require_file "$validator_pair_provenance_ref"
+fi
 
 is_hex_32() {
   [[ "$1" =~ ^[0-9a-fA-F]{64}$ ]]
@@ -398,18 +408,107 @@ content = f"""# Deployment Truth
 path.write_text(content, encoding="utf-8")
 PY
 
-./scripts/release-candidate-bundle.sh create \
-  --bundle "$bundle_path" \
-  --candidate-id "$candidate_id" \
-  --track "$track" \
-  --runtime-build-ref "$runtime_build_ref" \
-  --world-snapshot-ref "$out_dir/generated-world/world" \
-  --generated-world-sidecar-ref "$out_dir/generated-world/generated-scenario-world" \
-  --world-generation-provenance-ref "$out_dir/generated-world/world-generation-provenance.json" \
-  --governance-manifest-ref "$registry_path" \
-  --evidence-ref "$deployment_truth_md" \
-  --note "Deployment-only bundle derived from current validator signer truth." \
-  --allow-dirty-worktree >/dev/null
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  provenance_copy="$out_dir/config/doc/testing/evidence/$(basename "$validator_pair_provenance_ref")"
+  if [[ "$(cd "$(dirname "$validator_pair_provenance_ref")" && pwd)/$(basename "$validator_pair_provenance_ref")" != "$provenance_copy" ]]; then
+    cp "$validator_pair_provenance_ref" "$provenance_copy"
+  fi
+  python3 - "$validator_pair_provenance_ref" "$(dirname "$provenance_copy")" "$provenance_copy" <<'PY'
+import json
+import hashlib
+import os
+import shutil
+import sys
+from pathlib import Path
+
+receipt_path = Path(sys.argv[1]).resolve()
+evidence_dir = Path(sys.argv[2]).resolve()
+provenance_copy = Path(sys.argv[3]).resolve()
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+refs = []
+signature = receipt.get("signature")
+if isinstance(signature, dict):
+    refs.extend(signature.get(field) for field in ("signature_ref", "public_key_ref"))
+governed = receipt.get("governed")
+if isinstance(governed, dict):
+    refs.extend(value.get("path") for value in governed.values() if isinstance(value, dict))
+closure_map = {}
+def content_digest(source: Path) -> str:
+    digest = hashlib.sha256()
+    if source.is_file():
+        digest.update(source.read_bytes())
+    elif source.is_dir():
+        for child in sorted(source.rglob("*"), key=lambda item: item.relative_to(source).as_posix()):
+            relative = child.relative_to(source).as_posix()
+            digest.update(relative.encode())
+            digest.update(b"\0")
+            if child.is_symlink():
+                digest.update(b"L\0" + os.readlink(child).encode())
+            elif child.is_file():
+                digest.update(b"F\0" + child.read_bytes())
+            else:
+                digest.update(b"D\0")
+    return digest.hexdigest()
+for raw in refs:
+    if not isinstance(raw, str) or not raw.strip():
+        continue
+    source = Path(raw)
+    if not source.is_absolute():
+        source = receipt_path.parent / source
+    if source.is_symlink() or not source.exists():
+        raise SystemExit(f"provenance closure reference missing or symlinked: {source}")
+    source = source.resolve()
+    destination = evidence_dir / source.name
+    if destination.exists() or destination.is_symlink():
+        if destination.resolve() == source:
+            closure_map[raw] = destination.name
+            continue
+        if destination.is_dir() and source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        elif destination.is_file() and source.is_file() and destination.read_bytes() == source.read_bytes():
+            closure_map[raw] = destination.name
+            continue
+        else:
+            digest = content_digest(source)[:16]
+            destination = evidence_dir / f"{digest}-{source.name}"
+            if destination.exists() and destination.is_file() and source.is_file() and destination.read_bytes() != source.read_bytes():
+                raise SystemExit(f"provenance closure deterministic collision: {destination}")
+    if not destination.exists() and not destination.is_symlink():
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+    closure_map[raw] = destination.name
+closure_path = Path(str(provenance_copy) + ".closure.json")
+closure_payload = {
+    "schema_version": "oasis7.validator_pair_provenance_closure.v1",
+    "receipt": provenance_copy.name,
+    "mapping": {key: closure_map[key] for key in sorted(closure_map)},
+}
+closure_path.write_text(json.dumps(closure_payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+PY
+  printf '%s\n' "- Validator pair provenance: \`$provenance_copy\`" >>"$deployment_truth_md"
+fi
+
+release_candidate_args=(
+  create
+  --bundle "$bundle_path"
+  --candidate-id "$candidate_id"
+  --track "$track"
+  --runtime-build-ref "$runtime_build_ref"
+  --world-snapshot-ref "$out_dir/generated-world/world"
+  --generated-world-sidecar-ref "$out_dir/generated-world/generated-scenario-world"
+  --world-generation-provenance-ref "$out_dir/generated-world/world-generation-provenance.json"
+  --governance-manifest-ref "$registry_path"
+  --evidence-ref "$deployment_truth_md"
+  --note "Deployment-only bundle derived from current validator signer truth."
+  --allow-dirty-worktree
+)
+if [[ -n "$validator_pair_provenance_ref" ]]; then
+  release_candidate_args+=(--validator-pair-provenance-ref "$provenance_copy")
+fi
+
+./scripts/release-candidate-bundle.sh "${release_candidate_args[@]}" >/dev/null
 cp "$bundle_path" "$out_dir/config/doc/testing/evidence/"
 
 ./scripts/release-candidate-bundle.sh validate --bundle "$bundle_path" >/dev/null

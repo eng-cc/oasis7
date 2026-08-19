@@ -629,6 +629,21 @@ pub(super) struct ExecutionCheckpointManifest {
     pub created_at_ms: i64,
 }
 
+/// Bounded checkpoint identity exposed to the governed rebuild proof endpoint.
+/// This intentionally carries the execution binding fields needed to compare
+/// the retained boundary with the live runtime head without exposing the full
+/// manifest or CAS references.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExecutionCheckpointStatusEvidence {
+    pub schema_version: u32,
+    pub checkpoint_id: String,
+    pub world_id: String,
+    pub height: u64,
+    pub execution_block_hash: String,
+    pub execution_state_root: String,
+    pub manifest_hash: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionCheckpointLatestPointer {
     #[serde(default = "execution_checkpoint_manifest_schema_v1")]
@@ -766,15 +781,16 @@ mod checkpoint_manifest;
 
 pub(crate) fn load_latest_execution_checkpoint_status_evidence(
     execution_records_dir: &Path,
-) -> Result<Option<(u32, String, u64, String)>, String> {
+) -> Result<Option<ExecutionCheckpointStatusEvidence>, String> {
     checkpoint::load_latest_execution_checkpoint_manifest(execution_records_dir).map(|manifest| {
-        manifest.map(|manifest| {
-            (
-                manifest.schema_version,
-                manifest.checkpoint_id,
-                manifest.height,
-                manifest.manifest_hash,
-            )
+        manifest.map(|manifest| ExecutionCheckpointStatusEvidence {
+            schema_version: manifest.schema_version,
+            checkpoint_id: manifest.checkpoint_id,
+            world_id: manifest.world_id,
+            height: manifest.height,
+            execution_block_hash: manifest.execution_block_hash,
+            execution_state_root: manifest.execution_state_root,
+            manifest_hash: manifest.manifest_hash,
         })
     })
 }
