@@ -46,6 +46,7 @@ mod apply_domain_event_core;
 mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
+mod apply_domain_event_industry_helpers;
 mod apply_domain_event_main_token;
 #[path = "state_defaults.rs"]
 mod state_defaults;
@@ -271,6 +272,11 @@ pub struct RecipeJobState {
     pub produce: Vec<MaterialStack>,
     pub byproducts: Vec<MaterialStack>,
     pub power_required: i64,
+    /// Electricity payer committed at recipe start.  Optional for snapshot
+    /// compatibility with pre-owner-power jobs; such legacy jobs are not
+    /// newly admitted but can still be inspected/replayed safely.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_owner_agent_id: Option<String>,
     pub duration_ticks: u32,
     #[serde(default = "default_world_material_ledger")]
     pub consume_ledger: MaterialLedgerId,
@@ -563,10 +569,26 @@ pub struct WorldState {
     pub factory_profiles: BTreeMap<String, FactoryProfileV1>,
     #[serde(default)]
     pub factories: BTreeMap<String, FactoryState>,
+    /// Factory identities are single-use.  Recycling leaves a durable
+    /// tombstone so stale build/recycle events cannot resurrect or mutate the
+    /// same identity after replay or recovery.
+    #[serde(default)]
+    pub retired_factory_ids: BTreeSet<String>,
+    /// Factory build action identities are single-use.  Once a build has
+    /// settled, replaying the same completion event must not recreate or
+    /// overwrite the factory; the receipt also lets the reducer distinguish
+    /// a settled duplicate from an unknown/reordered completion.
+    #[serde(default)]
+    pub settled_factory_build_ids: BTreeSet<ActionId>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_factory_builds: BTreeMap<ActionId, FactoryBuildJobState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_recipe_jobs: BTreeMap<ActionId, RecipeJobState>,
+    /// Recipe action identities are single-use.  Once a recipe reaches a
+    /// terminal settlement (including a product-validation block), replaying
+    /// the same completion/start identity must not sink or credit it again.
+    #[serde(default)]
+    pub settled_recipe_job_ids: BTreeSet<ActionId>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_material_transits: BTreeMap<ActionId, MaterialTransitJobState>,
     #[serde(default)]

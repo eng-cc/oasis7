@@ -1,3 +1,5 @@
+use crate::runtime::WorldError;
+
 fn stable_identity_fixture(factory_id: &str) -> World {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -34,6 +36,9 @@ fn stable_identity_fixture(factory_id: &str) -> World {
         forbidden_location_ids: Vec::new(),
     });
     world.step().expect("disable tax policy");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 100)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 100);
     world
 }
@@ -695,6 +700,307 @@ fn duplicate_recipe_completion_replay_does_not_duplicate_output_or_progress() {
         .production;
     assert_eq!(production.completed_jobs, 1);
     assert_eq!(production.same_recipe_repeat_count, 1);
+}
+
+#[test]
+fn industrial_integrity_tampered_recipe_completion_fails_before_mutation() {
+    let factory_id = "factory.identity.tampered-completion";
+    let mut world = stable_identity_fixture(factory_id);
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.identity.tampered-completion".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            Vec::new(),
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe for tampered completion");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending recipe job")
+        .clone();
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before tampered completion");
+    let event = DomainEvent::RecipeCompleted {
+        job_id: pending.job_id,
+        requester_agent_id: pending.requester_agent_id,
+        factory_id: pending.factory_id,
+        recipe_id: "recipe.identity.attacker-controlled".to_string(),
+        accepted_batches: pending.accepted_batches,
+        produce: pending.produce,
+        byproducts: pending.byproducts,
+        output_ledger: pending.output_ledger,
+        bottleneck_tags: pending.bottleneck_tags,
+        logistics_route_ids: pending.logistics_route_ids,
+        logistics_path_ids: pending.logistics_path_ids,
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+    assert!(result.is_err(), "tampered recipe completion must be rejected");
+    assert!(
+        serde_json::to_vec(&replay).expect("serialize state after tampered completion") == before,
+        "tampered recipe completion must not consume pending job or credit output"
+    );
+}
+
+#[test]
+fn industrial_integrity_duplicate_recipe_started_fails_before_second_sink() {
+    let factory_id = "factory.identity.duplicate-start";
+    let recipe_id = "recipe.identity.duplicate-start";
+    let mut world = stable_identity_fixture(factory_id);
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 4)
+        .expect("seed duplicate-start input");
+    let plan = RecipeExecutionPlan::accepted(
+        1,
+        vec![MaterialStack::new("iron_ingot", 2)],
+        vec![MaterialStack::new("gear", 1)],
+        Vec::new(),
+        1,
+        1,
+    );
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let started = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(domain @ DomainEvent::RecipeStarted { .. }) => {
+                Some(domain.clone())
+            }
+            _ => None,
+        })
+        .expect("recipe-start event");
+
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before duplicate start");
+    let result = replay.apply_domain_event(&started, replay.time);
+
+    assert!(
+        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
+        "duplicate recipe start must fail closed: {result:?}"
+    );
+    assert_eq!(
+        serde_json::to_vec(&replay).expect("serialize state after duplicate start"),
+        before,
+        "duplicate recipe start must not sink material/power or overwrite pending state"
+    );
+}
+
+#[test]
+fn legacy_recipe_started_without_power_owner_fails_closed_before_mutation() {
+    let factory_id = "factory.identity.legacy-power-owner";
+    let recipe_id = "recipe.identity.legacy-power-owner";
+    let mut world = stable_identity_fixture(factory_id);
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 4)
+        .expect("seed legacy payer input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 100)
+        .expect("seed legacy payer electricity");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 2)],
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            2,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+
+    // Build a valid current-schema RecipeStarted event, but apply it to the
+    // pre-event state after removing the optional payer field as a legacy
+    // snapshot/replay would have done.
+    let mut replay = world.state().clone();
+    world.step().expect("produce current recipe-start event");
+    let started = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(domain @ DomainEvent::RecipeStarted { .. }) => {
+                Some(domain.clone())
+            }
+            _ => None,
+        })
+        .expect("current recipe-start event");
+    let mut legacy_json = serde_json::to_value(&started).expect("serialize recipe-start event");
+    legacy_json
+        .get_mut("data")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("recipe-start event data object")
+        .remove("power_owner_agent_id");
+    let legacy_started: DomainEvent =
+        serde_json::from_value(legacy_json).expect("legacy payer field defaults to None");
+    assert!(matches!(
+        &legacy_started,
+        DomainEvent::RecipeStarted {
+            power_owner_agent_id: None,
+            ..
+        }
+    ));
+
+    let before = serde_json::to_vec(&replay).expect("serialize state before legacy replay");
+    let material_before = replay
+        .material_ledgers
+        .clone();
+    let agent_power_before = replay
+        .agents
+        .get("builder-a")
+        .expect("builder agent")
+        .state
+        .resources
+        .get(ResourceKind::Electricity);
+    let global_power_before = replay
+        .resources
+        .get(&ResourceKind::Electricity)
+        .copied()
+        .unwrap_or_default();
+
+    let result = replay.apply_domain_event(&legacy_started, replay.time);
+    assert!(
+        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
+        "legacy RecipeStarted without payer must fail closed: {result:?}"
+    );
+    assert_eq!(
+        serde_json::to_vec(&replay).expect("serialize state after legacy replay"),
+        before,
+        "legacy replay must not mutate pending jobs or any state"
+    );
+    assert_eq!(replay.material_ledgers, material_before);
+    assert_eq!(
+        replay
+            .agents
+            .get("builder-a")
+            .expect("builder agent after replay")
+            .state
+            .resources
+            .get(ResourceKind::Electricity),
+        agent_power_before
+    );
+    assert_eq!(
+        replay
+            .resources
+            .get(&ResourceKind::Electricity)
+            .copied()
+            .unwrap_or_default(),
+        global_power_before
+    );
+}
+
+#[test]
+fn industrial_integrity_unknown_recipe_completion_fails_before_mutation() {
+    let world = stable_identity_fixture("factory.identity.unknown-completion");
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before unknown completion");
+    let event = DomainEvent::RecipeCompleted {
+        job_id: 9_999,
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.identity.unknown-completion".to_string(),
+        recipe_id: "recipe.identity.unknown-completion".to_string(),
+        accepted_batches: 1,
+        produce: vec![MaterialStack::new("gear", 1)],
+        byproducts: Vec::new(),
+        output_ledger: MaterialLedgerId::site("site-1"),
+        bottleneck_tags: Vec::new(),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+
+    assert!(
+        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
+        "unknown recipe completion must fail closed: {result:?}"
+    );
+    assert_eq!(
+        serde_json::to_vec(&replay).expect("serialize state after unknown completion"),
+        before,
+        "unknown recipe completion must not credit output or progress"
+    );
+}
+
+#[test]
+fn non_owner_cannot_schedule_recipe_before_material_or_power_sink() {
+    let factory_id = "factory.identity.schedule-owner";
+    let mut world = stable_identity_fixture(factory_id);
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-b".to_string(),
+        pos: pos(1, 0),
+    });
+    world.step().expect("register non-owner");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 4)
+        .expect("seed owner-guard input");
+    let input_before =
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot");
+    let power_before = world.resource_balance(ResourceKind::Electricity);
+    let journal_start = world.journal().events.len();
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-b".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.identity.schedule-owner".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 2)],
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("reject non-owner schedule");
+
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { .. },
+                ..
+            })
+        )
+    }));
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        input_before,
+        "non-owner schedule must not sink input"
+    );
+    assert_eq!(
+        world.resource_balance(ResourceKind::Electricity),
+        power_before,
+        "non-owner schedule must not sink power"
+    );
 }
 
 #[test]

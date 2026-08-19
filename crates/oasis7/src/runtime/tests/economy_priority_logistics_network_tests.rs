@@ -19,6 +19,22 @@ fn logistics_network_fixture() -> World {
     world
 }
 
+fn started_logistics_network_transit_fixture() -> World {
+    let mut world = logistics_network_fixture();
+    let route = register_network_edge(&mut world, "owner-a", "source", "destination", 100, 10, 2);
+    world.submit_action(transfer_over_path(
+        "sender-a",
+        "source",
+        "destination",
+        1,
+        vec![route],
+        false,
+    ));
+    world.step().expect("start transit for integrity test");
+    assert_eq!(world.pending_material_transits_len(), 1);
+    world
+}
+
 fn register_network_edge(
     world: &mut World,
     owner_agent_id: &str,
@@ -613,6 +629,131 @@ fn logistics_network_reroute_persists_receipt_and_duplicate_completion_is_idempo
         serde_json::to_vec(&replay).expect("serialize replayed state"),
         state_before_duplicate,
         "duplicate completion must not double release capacity or settle tariff/payout"
+    );
+}
+
+#[test]
+fn industrial_integrity_unknown_material_transit_completion_fails_closed_before_mutation() {
+    let world = started_logistics_network_transit_fixture();
+    let pending = world
+        .state()
+        .pending_material_transits
+        .values()
+        .next()
+        .expect("pending transit job")
+        .clone();
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before unknown completion");
+    let event = DomainEvent::MaterialTransitCompleted {
+        job_id: pending.job_id.saturating_add(1),
+        requester_agent_id: pending.requester_agent_id,
+        from_ledger: pending.from_ledger,
+        to_ledger: pending.to_ledger,
+        kind: pending.kind,
+        sent_amount: pending.amount,
+        received_amount: pending.amount,
+        loss_amount: 0,
+        distance_km: pending.distance_km,
+        priority: pending.priority,
+        route_id: pending.route_id,
+        path_id: pending.path_id,
+        route_ids: pending.route_ids,
+        tariff_electricity_total: pending.tariff_electricity_total,
+        reroute_count: pending.reroute_count,
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+    assert!(result.is_err(), "unknown transit completion must be rejected");
+    assert!(
+        serde_json::to_vec(&replay).expect("serialize state after unknown completion") == before,
+        "unknown transit completion must not mutate pending state or balances"
+    );
+}
+
+#[test]
+fn industrial_integrity_mismatched_material_transit_completion_fails_closed_before_mutation() {
+    let world = started_logistics_network_transit_fixture();
+    let pending = world
+        .state()
+        .pending_material_transits
+        .values()
+        .next()
+        .expect("pending transit job")
+        .clone();
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before mismatched completion");
+    let event = DomainEvent::MaterialTransitCompleted {
+        job_id: pending.job_id,
+        requester_agent_id: pending.requester_agent_id,
+        from_ledger: MaterialLedgerId::site("tampered-source"),
+        to_ledger: pending.to_ledger,
+        kind: pending.kind,
+        sent_amount: pending.amount,
+        received_amount: pending.amount,
+        loss_amount: 0,
+        distance_km: pending.distance_km,
+        priority: pending.priority,
+        route_id: pending.route_id,
+        path_id: pending.path_id,
+        route_ids: pending.route_ids,
+        tariff_electricity_total: pending.tariff_electricity_total,
+        reroute_count: pending.reroute_count,
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+    assert!(result.is_err(), "mismatched transit completion must be rejected");
+    assert!(
+        serde_json::to_vec(&replay).expect("serialize state after mismatched completion") == before,
+        "mismatched transit completion must not mutate pending state or balances"
+    );
+}
+
+#[test]
+fn industrial_integrity_material_transit_destination_overflow_fails_closed_before_settlement() {
+    let mut world = started_logistics_network_transit_fixture();
+    world
+        .set_ledger_material_balance(
+            MaterialLedgerId::site("destination"),
+            "steel_plate",
+            i64::MAX,
+        )
+        .expect("seed destination at material balance ceiling");
+    let pending = world
+        .state()
+        .pending_material_transits
+        .values()
+        .next()
+        .expect("pending transit job")
+        .clone();
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before overflow completion");
+    let event = DomainEvent::MaterialTransitCompleted {
+        job_id: pending.job_id,
+        requester_agent_id: pending.requester_agent_id,
+        from_ledger: pending.from_ledger,
+        to_ledger: pending.to_ledger,
+        kind: pending.kind,
+        sent_amount: pending.amount,
+        received_amount: pending.amount,
+        loss_amount: 0,
+        distance_km: pending.distance_km,
+        priority: pending.priority,
+        route_id: pending.route_id,
+        path_id: pending.path_id,
+        route_ids: pending.route_ids,
+        tariff_electricity_total: pending.tariff_electricity_total,
+        reroute_count: pending.reroute_count,
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+    assert!(
+        result.is_err(),
+        "destination material overflow must reject transit completion"
+    );
+    assert_eq!(
+        serde_json::to_vec(&replay).expect("serialize state after overflow completion"),
+        before,
+        "overflow rejection must retain pending transit and avoid receipt/progress mutation"
     );
 }
 

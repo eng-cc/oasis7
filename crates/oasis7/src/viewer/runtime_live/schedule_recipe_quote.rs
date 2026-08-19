@@ -49,6 +49,36 @@ impl ViewerRuntimeLiveServer {
             target_agent_id: err.agent_id,
         })?;
 
+        // Factory electricity is held by its canonical builder.  Keep the
+        // quote's requester/owner boundary explicit here instead of allowing
+        // the simulator snapshot or the world pool to select a payer.
+        let factory_builder_agent_id = self
+            .world
+            .state()
+            .factories
+            .get(request.factory_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: format!(
+                    "quote_schedule_recipe rejected: factory not found: {}",
+                    request.factory_id
+                ),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })
+            .map(|factory| factory.builder_agent_id.clone())?;
+        if factory_builder_agent_id != agent_id {
+            return Err(GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: format!(
+                    "quote_schedule_recipe rejected: factory owner mismatch: {}",
+                    request.factory_id
+                ),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            });
+        }
+
         let model = mapping::runtime_state_to_simulator_model(
             self.world.state(),
             &self.llm_sidecar,
@@ -102,7 +132,23 @@ impl ViewerRuntimeLiveServer {
                 target_agent_id: Some(agent_id.to_string()),
             });
         }
-        let available_electricity = self.world.resource_balance(ResourceKind::Electricity);
+        let available_electricity = self
+            .world
+            .state()
+            .agents
+            .get(factory_builder_agent_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "schedule_recipe_quote_rejected".to_string(),
+                message: format!(
+                    "quote_schedule_recipe rejected: factory builder agent is missing: {}",
+                    factory_builder_agent_id
+                ),
+                action_id: Some("quote_schedule_recipe".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })?
+            .state
+            .resources
+            .get(ResourceKind::Electricity);
         if available_electricity < canonical_plan.power_required {
             return Err(GameplayActionError {
                 code: "schedule_recipe_quote_rejected".to_string(),

@@ -221,6 +221,7 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
     let quote = server
         .handle_schedule_recipe_quote(request)
         .expect("authenticated schedule recipe quote");
+    assert_eq!(quote.electricity_after, 16);
     let runtime_action = crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
         agent_id.as_str(),
         crate::viewer::FACTORY_SMELTER_MK1,
@@ -240,6 +241,7 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
     match &started.body {
         crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeStarted {
             power_required,
+            power_owner_agent_id,
             duration_ticks,
             consume,
             produce,
@@ -247,6 +249,7 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
             ..
         }) => {
             assert_eq!(i64::from(*power_required), quote.electricity_cost);
+            assert_eq!(power_owner_agent_id.as_deref(), Some(agent_id.as_str()));
             assert_eq!(
                 consume
                     .iter()
@@ -280,13 +283,24 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
     assert_eq!(
         server
             .world
+            .agent_resource_balance(
+                agent_id.as_str(),
+                crate::simulator::ResourceKind::Electricity
+            )
+            .expect("builder electricity after recipe start"),
+        quote.electricity_after
+    );
+    assert_eq!(
+        server
+            .world
             .resource_balance(crate::simulator::ResourceKind::Electricity),
-        16
+        32,
+        "the world electricity pool is not the recipe payer"
     );
 }
 
 #[test]
-fn runtime_schedule_recipe_quote_uses_global_ledgers_when_agent_local_stocks_are_low() {
+fn runtime_schedule_recipe_quote_uses_global_material_ledgers_when_site_stocks_are_low() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -319,16 +333,16 @@ fn runtime_schedule_recipe_quote_uses_global_ledgers_when_agent_local_stocks_are
         .set_agent_resource_balance(
             agent_id.as_str(),
             crate::simulator::ResourceKind::Electricity,
-            0,
+            32,
         )
-        .expect("seed low local electricity");
+        .expect("seed builder electricity");
     server
         .world
         .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 0)
         .expect("seed low local data");
     server
         .world
-        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 0);
     let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
     server
         .world
@@ -387,13 +401,155 @@ fn runtime_schedule_recipe_quote_uses_global_ledgers_when_agent_local_stocks_are
     assert_eq!(
         server
             .world
-            .resource_balance(crate::simulator::ResourceKind::Electricity),
+            .agent_resource_balance(
+                agent_id.as_str(),
+                crate::simulator::ResourceKind::Electricity
+            )
+            .expect("builder electricity after recipe start"),
         16
+    );
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        0,
+        "global electricity remains irrelevant to the owner-held power debit"
     );
 }
 
 #[test]
-fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient() {
+fn runtime_schedule_recipe_quote_requires_factory_builder_electricity_not_world_pool() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(180);
+    register_runtime_session_with_options(
+        &mut server,
+        "local-test-player-schedule-quote-owner-power",
+        Some(agent_id.as_str()),
+        true,
+        282,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed smelter factory");
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            0,
+        )
+        .expect("drain factory builder electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 16)
+        .expect("seed builder data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
+
+    let err = server
+        .handle_schedule_recipe_quote(signed_schedule_recipe_quote_request(
+            crate::viewer::FACTORY_SMELTER_MK1,
+            "recipe.smelter.iron_ingot",
+            2,
+            "local-test-player-schedule-quote-owner-power",
+            283,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("world electricity must not fund a quote for an unpowered builder");
+
+    assert_eq!(err.code, "schedule_recipe_quote_rejected");
+    assert!(
+        err.message.contains("requires 16 electricity, available 0"),
+        "owner-held power should be the quote affordability source: {}",
+        err.message
+    );
+    assert_eq!(err.target_agent_id.as_deref(), Some(agent_id.as_str()));
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_reports_factory_builder_electricity_after_not_world_pool() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(182);
+    register_runtime_session_with_options(
+        &mut server,
+        "local-test-player-schedule-quote-owner-after",
+        Some(agent_id.as_str()),
+        true,
+        285,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .seed_smelter_affordability_debug_scenario()
+        .expect("seed smelter factory");
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            32,
+        )
+        .expect("seed builder electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 16)
+        .expect("seed builder data");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 0);
+
+    let quote = server
+        .handle_schedule_recipe_quote(signed_schedule_recipe_quote_request(
+            crate::viewer::FACTORY_SMELTER_MK1,
+            "recipe.smelter.iron_ingot",
+            2,
+            "local-test-player-schedule-quote-owner-after",
+            286,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("builder-held electricity must authorize the quote");
+
+    assert_eq!(quote.owner_agent_id, agent_id);
+    assert_eq!(quote.electricity_cost, 16);
+    assert_eq!(
+        quote.electricity_after, 16,
+        "electricity_after must be derived from the factory builder's stock"
+    );
+}
+
+#[test]
+fn runtime_schedule_recipe_quote_rejects_when_factory_builder_electricity_is_insufficient() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -426,16 +582,16 @@ fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient
         .set_agent_resource_balance(
             agent_id.as_str(),
             crate::simulator::ResourceKind::Electricity,
-            100,
+            15,
         )
-        .expect("seed high local electricity");
+        .expect("seed insufficient builder electricity");
     server
         .world
         .set_agent_resource_balance(agent_id.as_str(), crate::simulator::ResourceKind::Data, 100)
         .expect("seed high local data");
     server
         .world
-        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 15);
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 100);
 
     let request = signed_schedule_recipe_quote_request(
         crate::viewer::FACTORY_SMELTER_MK1,
@@ -448,28 +604,45 @@ fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient
     );
     let err = server
         .handle_schedule_recipe_quote(request)
-        .expect_err("global runtime electricity must gate quote acceptance");
+        .expect_err("builder-agent electricity must gate quote acceptance");
     assert_eq!(err.code, "schedule_recipe_quote_rejected");
     assert!(
         err.message
             .contains("requires 16 electricity, available 15")
     );
-    assert!(!server.world.journal().events.iter().any(|event| matches!(
-        event.body,
-        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeStarted { .. })
-    )));
+    assert_eq!(
+        server
+            .world
+            .agent_resource_balance(
+                agent_id.as_str(),
+                crate::simulator::ResourceKind::Electricity
+            )
+            .expect("builder electricity after rejected quote"),
+        15
+    );
     assert_eq!(
         server
             .world
             .resource_balance(crate::simulator::ResourceKind::Electricity),
-        15
+        100,
+        "an insufficient builder quote must not inspect or debit the world pool"
     );
+    assert!(!server.world.journal().events.iter().any(|event| matches!(
+        event.body,
+        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeStarted { .. })
+    )));
 
-    // Once global electricity is restored, the runtime material ledger remains
-    // authoritative as the next independent acceptance gate.
+    // Once builder electricity is restored, the runtime material ledger remains
+    // authoritative as the next independent acceptance gate.  The world pool
+    // is intentionally left unchanged because it is not the recipe payer.
     server
         .world
-        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Electricity,
+            32,
+        )
+        .expect("restore builder electricity");
     server
         .world
         .set_material_balance("iron_ore", 0)
@@ -504,8 +677,18 @@ fn runtime_schedule_recipe_quote_rejects_when_global_electricity_is_insufficient
     assert_eq!(
         server
             .world
-            .resource_balance(crate::simulator::ResourceKind::Electricity),
+            .agent_resource_balance(
+                agent_id.as_str(),
+                crate::simulator::ResourceKind::Electricity
+            )
+            .expect("builder electricity after material rejection"),
         32
+    );
+    assert_eq!(
+        server
+            .world
+            .resource_balance(crate::simulator::ResourceKind::Electricity),
+        100
     );
 }
 

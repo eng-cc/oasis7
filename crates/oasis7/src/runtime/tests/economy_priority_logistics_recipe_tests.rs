@@ -33,6 +33,7 @@ fn recipe_route_fixture(factory_id: &str) -> World {
         forbidden_location_ids: Vec::new(),
     });
     world.step().expect("disable recipe route tax");
+    seed_builder_electricity(&mut world, 100);
     world.set_resource_balance(ResourceKind::Electricity, 100);
     world
 }
@@ -541,6 +542,7 @@ fn schedule_recipe_rejects_when_product_unlock_stage_exceeds_current_stage() {
     world
         .set_material_balance("iron_ingot", 2)
         .expect("seed world material");
+    seed_builder_electricity(&mut world, 10);
     world.set_resource_balance(ResourceKind::Electricity, 10);
 
     let plan = RecipeExecutionPlan::accepted(
@@ -673,6 +675,7 @@ fn schedule_recipe_uses_profile_bottleneck_tags_before_inference() {
     world
         .set_material_balance("gear", 4)
         .expect("seed world material");
+    seed_builder_electricity(&mut world, 20);
     world.set_resource_balance(ResourceKind::Electricity, 20);
 
     let plan = RecipeExecutionPlan::accepted(
@@ -755,6 +758,7 @@ fn due_recipe_jobs_prioritize_by_product_role_tag_before_keyword_fallback() {
     world
         .set_material_balance("gear", 6)
         .expect("seed world material");
+    seed_builder_electricity(&mut world, 20);
     world.set_resource_balance(ResourceKind::Electricity, 20);
 
     let scale_plan = RecipeExecutionPlan::accepted(
@@ -866,6 +870,7 @@ fn schedule_recipe_applies_product_maintenance_sink_to_consume() {
     world
         .set_material_balance("hardware_part", 4)
         .expect("seed world hardware");
+    seed_builder_electricity(&mut world, 10);
     world.set_resource_balance(ResourceKind::Electricity, 10);
 
     let plan = RecipeExecutionPlan::accepted(
@@ -934,6 +939,7 @@ fn recipe_started_market_quote_reflects_governance_tax_change() {
     world
         .set_material_balance("iron_ingot", 100)
         .expect("seed world recipe input");
+    seed_builder_electricity(&mut world, 50);
     world.set_resource_balance(ResourceKind::Electricity, 50);
 
     authorize_policy_update(&mut world, "builder-a", "proposal.policy.zero-tax");
@@ -1058,6 +1064,7 @@ fn recipe_started_market_quote_uses_material_profile_transport_loss() {
     world
         .set_material_balance("iron_ingot", 100)
         .expect("seed world recipe input");
+    seed_builder_electricity(&mut world, 50);
     world.set_resource_balance(ResourceKind::Electricity, 50);
 
     let plan = RecipeExecutionPlan::accepted(

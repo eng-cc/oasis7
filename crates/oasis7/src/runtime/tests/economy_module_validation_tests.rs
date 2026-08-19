@@ -1,6 +1,8 @@
 use super::*;
 use crate::runtime::tests::signed_test_artifact_identity;
-use crate::runtime::{Manifest, ModuleSubscription, ModuleSubscriptionStage, WorldEvent};
+use crate::runtime::{
+    Manifest, ModuleSubscription, ModuleSubscriptionStage, WorldError, WorldEvent,
+};
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
 };
@@ -95,6 +97,9 @@ fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
     world
         .set_material_balance("chassis_plate", 1)
         .expect("seed chassis");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 40);
 
     activate_pure_module(&mut world, "m4.recipe.logistics_drone", b"recipe-module");
@@ -206,6 +211,9 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
     world
         .set_material_balance("chassis_plate", 1)
         .expect("seed chassis");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 40);
 
     activate_pure_module(&mut world, "m4.recipe.logistics_drone", b"recipe-module");
@@ -219,6 +227,23 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
         desired_batches: 1,
         deterministic_seed: 20260214,
     });
+
+    let factory_completion_count_before = world
+        .state()
+        .factories
+        .get("factory.recipe.auto_reject")
+        .expect("factory state before rejected settlement")
+        .production
+        .completed_jobs;
+    let stable_line_repeat_count_before = world
+        .state()
+        .factories
+        .get("factory.recipe.auto_reject")
+        .expect("factory state before rejected settlement")
+        .production
+        .same_recipe_repeat_count;
+    let completed_recipe_jobs_before = world.state().industry_progress.completed_recipe_jobs;
+    let industry_stage_before = world.state().industry_progress.stage;
 
     let output = ModuleOutput {
         new_state: None,
@@ -273,6 +298,41 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
     assert_eq!(world.material_balance("logistics_drone"), 0);
     assert_eq!(world.material_balance("assembly_scrap"), 0);
 
+    let factory = world
+        .state()
+        .factories
+        .get("factory.recipe.auto_reject")
+        .expect("factory state after rejected settlement");
+    assert_eq!(
+        factory.production.completed_jobs, factory_completion_count_before,
+        "rejected product validation must not complete a factory job"
+    );
+    assert_eq!(
+        factory.production.same_recipe_repeat_count, stable_line_repeat_count_before,
+        "rejected product validation must not advance stable-line progress"
+    );
+    assert!(
+        factory.production.last_completed_recipe_id.is_none(),
+        "rejected product validation must not record a completed recipe"
+    );
+    assert!(
+        factory
+            .production
+            .last_completed_canonical_snapshot
+            .is_none(),
+        "rejected product validation must not retain stable-line identity"
+    );
+    assert_eq!(
+        world.state().industry_progress.completed_recipe_jobs,
+        completed_recipe_jobs_before,
+        "rejected product validation must not advance recipe completion progress"
+    );
+    assert_eq!(
+        world.state().industry_progress.stage,
+        industry_stage_before,
+        "rejected product validation must leave the industry stage unchanged"
+    );
+
     let has_rejected = world.journal().events.iter().any(|event| {
         matches!(
             &event.body,
@@ -283,6 +343,204 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
         )
     });
     assert!(has_rejected);
+}
+
+#[test]
+fn industrial_integrity_schedule_recipe_with_module_rejects_plan_over_requested_batches_before_sink()
+ {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    world
+        .set_material_balance("steel_plate", 10)
+        .expect("seed steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed circuits");
+    world
+        .set_material_balance("iron_ingot", 1)
+        .expect("seed recipe input");
+    world.set_resource_balance(ResourceKind::Electricity, 40);
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.recipe.batch-bound", 1, 1),
+    });
+    world.step().expect("start build");
+    world.step().expect("build complete");
+
+    activate_pure_module(
+        &mut world,
+        "m4.recipe.batch-bound",
+        b"batch-bound-recipe-module",
+    );
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.batch-bound".to_string(),
+        recipe_id: "recipe.batch-bound".to_string(),
+        module_id: "m4.recipe.batch-bound".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260214,
+    });
+
+    let input_before = world.material_balance("iron_ingot");
+    let power_before = world.resource_balance(ResourceKind::Electricity);
+    let journal_start = world.journal().events.len();
+    let output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.recipe_execution_plan".to_string(),
+            payload: serde_json::to_value(RecipeExecutionPlan::accepted(
+                2,
+                vec![MaterialStack::new("iron_ingot", 1)],
+                vec![MaterialStack::new("gear", 2)],
+                Vec::new(),
+                10,
+                1,
+            ))
+            .expect("serialize over-accepted recipe plan"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let mut sandbox = FixedSandbox::succeed(output);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("over-accepted recipe plan should produce a rejection event");
+
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(world.material_balance("iron_ingot"), input_before);
+    assert_eq!(
+        world.resource_balance(ResourceKind::Electricity),
+        power_before,
+        "over-accepted plan must reject before power sink"
+    );
+    assert!(
+        !world.journal().events[journal_start..].iter().any(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::RecipeStarted { .. })
+            )
+        })
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| {
+                note.contains("accepted_batches") || note.contains("desired_batches")
+            })
+        )
+    }));
+}
+
+#[test]
+fn industrial_integrity_product_validation_blocker_rejects_tampered_identity_before_mutation() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    world
+        .set_material_balance("steel_plate", 10)
+        .expect("seed steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed circuits");
+    world
+        .set_material_balance("iron_ingot", 1)
+        .expect("seed recipe input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
+        .expect("seed builder electricity");
+    world.set_resource_balance(ResourceKind::Electricity, 40);
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.recipe.identity-guard", 1, 1),
+    });
+    world.step().expect("start build");
+    world.step().expect("build complete");
+
+    activate_pure_module(
+        &mut world,
+        "m4.recipe.identity-guard",
+        b"identity-guard-recipe-module",
+    );
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.identity-guard".to_string(),
+        recipe_id: "recipe.identity-guard".to_string(),
+        module_id: "m4.recipe.identity-guard".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260214,
+    });
+
+    let output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.recipe_execution_plan".to_string(),
+            payload: serde_json::to_value(RecipeExecutionPlan::accepted(
+                1,
+                vec![MaterialStack::new("iron_ingot", 1)],
+                vec![MaterialStack::new("gear", 1)],
+                Vec::new(),
+                10,
+                1,
+            ))
+            .expect("serialize identity-guard recipe plan"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let mut sandbox = FixedSandbox::succeed(output);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("start module recipe");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending module recipe")
+        .clone();
+
+    let mut replay = world.state().clone();
+    let before = serde_json::to_vec(&replay).expect("serialize state before tampered blocker");
+    let event = DomainEvent::FactoryProductionBlocked {
+        action_id: pending.job_id,
+        requester_agent_id: "forged-requester".to_string(),
+        factory_id: "forged-factory".to_string(),
+        recipe_id: "forged-recipe".to_string(),
+        blocker_kind: "product_validation".to_string(),
+        blocker_detail: "forged product validation disposition".to_string(),
+    };
+
+    let result = replay.apply_domain_event(&event, replay.time);
+    assert!(
+        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
+        "tampered product-validation blocker must fail closed: {result:?}"
+    );
+    assert_eq!(
+        serde_json::to_vec(&replay).expect("serialize state after tampered blocker"),
+        before,
+        "tampered blocker must not mutate serialized world state"
+    );
+    assert_eq!(
+        replay.pending_recipe_jobs.get(&pending.job_id),
+        Some(&pending),
+        "tampered blocker must retain the pending recipe commitment"
+    );
 }
 
 #[test]
@@ -486,6 +744,9 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
         1,
         1,
     );
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 5)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 5);
     world.submit_action(Action::ScheduleRecipe {
         requester_agent_id: "builder-a".to_string(),
@@ -614,6 +875,9 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
         1,
         1,
     );
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 5)
+        .expect("seed builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 5);
     world.submit_action(Action::ScheduleRecipe {
         requester_agent_id: "builder-a".to_string(),
@@ -717,4 +981,101 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
         }
         other => panic!("expected FactoryProductionResumed, got {other:?}"),
     }
+}
+
+#[test]
+fn non_owner_schedule_recipe_with_module_rejects_before_module_plan_or_sink() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register owner");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-b".to_string(),
+        pos: pos(1, 0),
+    });
+    world.step().expect("register non-owner");
+    world
+        .set_material_balance("steel_plate", 10)
+        .expect("seed steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed circuits");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.recipe.module-owner", 1, 1),
+    });
+    world.step().expect("start build");
+    world.step().expect("complete build");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 2)
+        .expect("seed recipe input");
+    world.set_resource_balance(ResourceKind::Electricity, 30);
+    activate_pure_module(
+        &mut world,
+        "m4.recipe.module-owner",
+        b"recipe-module-owner-guard",
+    );
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-b".to_string(),
+        factory_id: "factory.recipe.module-owner".to_string(),
+        recipe_id: "recipe.module-owner".to_string(),
+        module_id: "m4.recipe.module-owner".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260818,
+    });
+
+    let input_before =
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot");
+    let power_before = world.resource_balance(ResourceKind::Electricity);
+    let journal_start = world.journal().events.len();
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.recipe_execution_plan".to_string(),
+            payload: serde_json::to_value(RecipeExecutionPlan::accepted(
+                1,
+                vec![MaterialStack::new("iron_ingot", 2)],
+                vec![MaterialStack::new("gear", 1)],
+                Vec::new(),
+                5,
+                1,
+            ))
+            .expect("serialize owner-guard recipe plan"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    }]);
+
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("reject non-owner module schedule");
+
+    assert!(
+        sandbox.requests.is_empty(),
+        "non-owner schedule must be rejected before invoking the recipe module"
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        input_before,
+        "non-owner module schedule must not sink input"
+    );
+    assert_eq!(
+        world.resource_balance(ResourceKind::Electricity),
+        power_before,
+        "non-owner module schedule must not sink power"
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { .. },
+                ..
+            })
+        )
+    }));
 }

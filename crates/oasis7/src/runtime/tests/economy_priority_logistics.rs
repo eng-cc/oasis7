@@ -115,6 +115,12 @@ fn latest_factory_production_block(world: &World) -> (String, String) {
         .expect("factory production blocked")
 }
 
+fn seed_builder_electricity(world: &mut World, amount: i64) {
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, amount)
+        .expect("seed builder electricity");
+}
+
 include!("economy_priority_logistics_priority_tests.rs");
 include!("economy_priority_logistics_recipe_tests.rs");
 include!("economy_priority_logistics_network_tests.rs");
