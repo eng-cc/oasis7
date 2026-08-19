@@ -382,6 +382,26 @@ print(json.dumps({
             self.assertGreaterEqual(inventory["link_count"], 1)
             self.assertGreaterEqual(plan["capacity"][role]["required_inodes"], inventory["entry_count"])
 
+    def test_plan_rejects_unsupported_fifo_before_any_quiesce(self) -> None:
+        fifo = self.nodes["storage-205"] / "data" / "unsupported.fifo"
+        os.mkfifo(fifo)
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsupported", result.stderr.lower())
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+
+    def test_snapshot_failure_removes_partial_backup_for_unsupported_entry(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_snapshot_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fifo = self.nodes["storage-205"] / "data" / "unsupported.fifo"
+        os.mkfifo(fifo)
+        with self.assertRaises(Exception):
+            module.snapshot_node({"role": "storage-205", "root": str(self.nodes["storage-205"])}, "partial-backup")
+        self.assertFalse((self.nodes["storage-205"] / "backups" / "partial-backup").exists())
+
     def test_plan_digest_is_stable_and_runtime_transaction_metadata_is_separate(self) -> None:
         first = subprocess.run(self._base_args(), text=True, capture_output=True)
         self.assertEqual(first.returncode, 0, first.stderr)

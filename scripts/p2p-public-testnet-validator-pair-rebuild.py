@@ -138,6 +138,8 @@ def inventory_tree(path: Path) -> dict[str, Any]:
             "dir_count": 0,
             "file_count": 0,
         }
+    if not path.is_dir():
+        fail(f"unsupported path entry: {path} ({stat.filemode(path.lstat().st_mode)})")
     for child in sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix()):
         rel = child.relative_to(path).as_posix()
         if child.is_symlink():
@@ -167,6 +169,8 @@ def inventory_tree(path: Path) -> dict[str, Any]:
             total += size
             entry_count += 1
             file_count += 1
+        else:
+            fail(f"unsupported path entry: {child} ({stat.filemode(child.lstat().st_mode)})")
     return {
         "sha256": digest.hexdigest(),
         "total_bytes": total,
@@ -1009,29 +1013,37 @@ def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
     if backup_root.exists():
         fail(f"backup already exists for {node['role']}: {backup_root}")
     backup_root.mkdir(parents=True, exist_ok=False)
-    snapshot = backup_root / "snapshot"
-    snapshot.mkdir()
-    source_manifest = without_backup_entries(manifest_tree(root))
-    for child in sorted(root.iterdir(), key=lambda item: item.name):
-        if child.name == "backups":
-            continue
-        copy_entry(child, snapshot / child.name)
-    apply_manifest_metadata(snapshot, source_manifest)
-    manifest = source_manifest
-    if manifest_tree(snapshot) != manifest:
-        fail(f"backup snapshot manifest verification failed for {root}")
-    manifest_path = backup_root / "manifest.json"
-    manifest_path.write_text(json.dumps({"schema_version": "oasis7.validator_pair_rebuild_backup.v1", "root": str(root), "entries": manifest}, indent=2) + "\n", encoding="utf-8")
-    digest = sha256_file(manifest_path)
-    return {
-        "root": str(root),
-        "backup_root": str(backup_root),
-        "snapshot": str(snapshot),
-        "manifest": str(manifest_path),
-        "manifest_sha256": digest,
-        "manifest_entries": len(manifest),
-        "verified": bool(manifest),
-    }
+    try:
+        snapshot = backup_root / "snapshot"
+        snapshot.mkdir()
+        source_manifest = without_backup_entries(manifest_tree(root))
+        for child in sorted(root.iterdir(), key=lambda item: item.name):
+            if child.name == "backups":
+                continue
+            copy_entry(child, snapshot / child.name)
+        apply_manifest_metadata(snapshot, source_manifest)
+        manifest = source_manifest
+        if manifest_tree(snapshot) != manifest:
+            fail(f"backup snapshot manifest verification failed for {root}")
+        manifest_path = backup_root / "manifest.json"
+        manifest_path.write_text(json.dumps({"schema_version": "oasis7.validator_pair_rebuild_backup.v1", "root": str(root), "entries": manifest}, indent=2) + "\n", encoding="utf-8")
+        digest = sha256_file(manifest_path)
+        return {
+            "root": str(root),
+            "backup_root": str(backup_root),
+            "snapshot": str(snapshot),
+            "manifest": str(manifest_path),
+            "manifest_sha256": digest,
+            "manifest_entries": len(manifest),
+            "verified": bool(manifest),
+        }
+    except BaseException:
+        try:
+            if backup_root.exists() or backup_root.is_symlink():
+                remove_entry(backup_root)
+        except BaseException as cleanup_error:
+            fail(f"snapshot failed for {root}; partial backup cleanup failed: {cleanup_error}")
+        raise
 
 
 def clear_node_preserving_backup(root: Path, backup_root: Path) -> None:
