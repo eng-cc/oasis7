@@ -317,6 +317,7 @@ impl World {
                 let decision = self.evaluate_product_with_module(
                     module_id.as_str(),
                     envelope.id,
+                    None,
                     &request,
                     sandbox,
                 )?;
@@ -473,7 +474,8 @@ impl World {
         for job in due_recipes {
             let mut validation_rejected = false;
 
-            for (index, stack) in job.produce.iter().enumerate() {
+            let outputs = job.produce.iter().chain(job.byproducts.iter());
+            for (output_index, stack) in outputs.enumerate() {
                 let Some(module_id) = self.resolve_product_module_for_stack(stack.kind.as_str())
                 else {
                     continue;
@@ -484,12 +486,13 @@ impl World {
                     deterministic_seed: job
                         .job_id
                         .wrapping_mul(1_000_003)
-                        .wrapping_add(index as u64)
+                        .wrapping_add(output_index as u64)
                         .wrapping_add(self.state.time),
                 };
                 let decision = self.evaluate_product_with_module(
                     module_id.as_str(),
                     job.job_id,
+                    Some(output_index),
                     &request,
                     sandbox,
                 )?;
@@ -518,9 +521,10 @@ impl World {
                             factory_id: job.factory_id.clone(),
                             recipe_id: job.recipe_id.clone(),
                             blocker_kind: "product_validation".to_string(),
-                            blocker_detail:
-                                "product validation rejected before production settlement"
-                                    .to_string(),
+                            blocker_detail: format!(
+                                "product validation rejected for {} before production settlement",
+                                stack.kind
+                            ),
                         }),
                         None,
                     )?;
@@ -770,10 +774,14 @@ impl World {
         &mut self,
         module_id: &str,
         action_id: ActionId,
+        validation_index: Option<usize>,
         request: &ProductValidationRequest,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<ProductValidationDecision, WorldError> {
-        let trace_id = format!("action-{action_id}-{module_id}-product");
+        let trace_id = validation_index.map_or_else(
+            || format!("action-{action_id}-{module_id}-product"),
+            |index| format!("action-{action_id}-{module_id}-product-{index}"),
+        );
         // Keep backward compatibility for product modules that decode legacy stack-only payloads.
         let wire_request = ProductValidationModuleCallRequest {
             product_id: request.product_id.clone(),
