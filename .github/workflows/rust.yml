@@ -194,8 +194,31 @@ jobs:
       - name: Install system deps
         if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          apt_options=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          max_attempts=3
+          run_apt() {
+            local operation="$1"
+            shift
+            local attempt
+            for ((attempt=1; attempt<=max_attempts; attempt++)); do
+              echo "apt ${operation} attempt ${attempt}/${max_attempts}"
+              if sudo timeout --foreground 120s apt-get "${apt_options[@]}" "$@"; then
+                return 0
+              fi
+              if (( attempt < max_attempts )); then
+                echo "warning: apt ${operation} failed; retrying" >&2
+                sleep 5
+              fi
+            done
+            echo "error: apt ${operation} failed after ${max_attempts} attempts" >&2
+            return 1
+          }
+          run_apt update update
+          run_apt install install -y \
             pkg-config \
             libwayland-dev \
             wayland-protocols \
