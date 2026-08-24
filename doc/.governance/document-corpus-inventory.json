@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "5b4f88e47cc603bf532db69d49117425b2e4475ddac85d4c9bdf8509eba4a552"
+      "content_sha256": "4ed3ac8586b4d0351d334281e5816a1ba3b57718d3b3744ade592de5398b98b2"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -399,7 +399,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "21d1b45f99064746ecd7d1d223ebe4e4e46d7239d835261c027eadf6d3f0a5be",
+      "content_sha256": "4c48448c9cc20db4c4c5477d5d13dac24bc106c585eb18e1a28752ed8da8d946",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -581,7 +581,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-top-level-design.prd.md",
-      "content_sha256": "3b84de8f1e3fccbe59f6d3d7bf6d22e57eea1c16572ce3b07c36f726d59919b4",
+      "content_sha256": "91b0db456ac2d2b6e36a91d63c46dd5f303cd77aaf6a53bb794d9343c767299e",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -959,7 +959,7 @@
     },
     {
       "path": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
-      "content_sha256": "00eb11269c5a8b0815241c19e542668824306126173cdd45e8639a9524fbb3f8",
+      "content_sha256": "41c6507bee667b76119cf76ad73561a7de80f57f011fd296d18560c9fb723ac3",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -2247,7 +2247,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "84761ed13570e6b6ce0b23b701e174905fd2d9fa8adcbc0cbe2e760ab3322139",
+      "content_sha256": "8d72c6879a85908b9a798af33ef2539b3a355fd0264930c7f03c74622959ce7c",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2457,7 +2457,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "406e651905989f34bed1d98c78129c7659e93836f30c05335782bb0b502caf75",
+      "content_sha256": "2c678a876b276bad6aed9faca854e7a5e265292f081c4826270bcd23ce3f601c",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -3031,7 +3031,7 @@
     },
     {
       "path": "doc/scripts/design.md",
-      "content_sha256": "cd208787725f4f428ee488ebef3f8a06e0d8fba2235b727cc84625c20a271357",
+      "content_sha256": "37661c4964b3f16d423fd2df6e9a82a2e0a54bb91bbf3e0dd297b2c8407ff49f",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3353,7 +3353,7 @@
     },
     {
       "path": "doc/site/prd.md",
-      "content_sha256": "4e4ba6d1fa7e3956f74965754a8bb154a67a12f3a69870329588c8a301fe1f84",
+      "content_sha256": "1680f2f5d76e6448cc609bd741387a485bcecae4fb5bbdb569bf5b5ba014c455",
       "registry_type": "professional_domain",
       "structural_owner": "liveops_community",
       "authority_entry": "doc/site/README.md",
@@ -3857,7 +3857,7 @@
     },
     {
       "path": "doc/testing/manual/public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md",
-      "content_sha256": "7ac960e7415aab508e4bfb483bcbf6b9b2537641d0a32dd35f4cb73c6ac3be44",
+      "content_sha256": "4ba1b338aa015b34aca58d4f7c667a2acdfb9b4218349d611040043412b295be",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4326,6 +4326,20 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "markdown_record",
+      "lifecycle_candidate": "review_required",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json",
+      "content_sha256": "13a2d91d01a3cc252e74efe57984e2743296662f348a2c8ec401b1b2f033c3a0",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "supporting_artifact",
       "lifecycle_candidate": "review_required",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
@@ -4935,7 +4949,7 @@
     },
     {
       "path": "doc/world-runtime/prd.md",
-      "content_sha256": "0bfca8fbc9935622f60a83d3ba13dc1e328eb9e396a655e30238d93d3d2beee2",
+      "content_sha256": "67f75e854210fe54016b05c46f19c45e620e42763d94de76d8f7cea4459f48ae",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5733,7 +5747,7 @@
     },
     {
       "path": "doc/world-simulator/m4/industrial-resource-flow-contract.prd.md",
-      "content_sha256": "de7f63f4d1a506aa63f234e435cacbbf64f9a3ea60924da06106f90cc8ae2107",
+      "content_sha256": "4b6c57b358bbbfbb57b83229978327321c9ce5bb563dfdf9419421e7f3d51bd5",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5845,7 +5859,7 @@
     },
     {
       "path": "doc/world-simulator/prd.index.md",
-      "content_sha256": "2cfdc417d2a7f24caaa8818d0feef0fd0cce65a09cc5259ff274533bd2f96535",
+      "content_sha256": "eb46620e8b4b05632902b051ce5637454008a86d2035a36873bf90d2377d0066",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5859,7 +5873,7 @@
     },
     {
       "path": "doc/world-simulator/prd.md",
-      "content_sha256": "02f2f150e828da14053498a372691b5966c9d2b03f819553dc71eb56fdf30fd3",
+      "content_sha256": "b3ce07bc9f8d6be457ef816cd59c1a1f723e0ca734c7022bbe6880641efec930",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6055,7 +6069,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/README.md",
-      "content_sha256": "497b23c55750f17ae86429504cd40085d8d621442f2a93c50e0faf2705c0ca55",
+      "content_sha256": "88b9b47f43ba79b0179c4b028144d3a66c99f7598ff1921f16c12b77adaf33c9",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6237,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md",
-      "content_sha256": "af2565c23ea3c668664a6840f6627e2bf4fe913d03fb61830f756e78a36ea428",
+      "content_sha256": "46cb5ce5644706bcf9b352941c7c71292cefe5f93a7e968c015337f7d8744ac9",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6251,7 +6265,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "024852188c4b56b1347a8ab8717b32dc5c1d27887f1def093ed4baa6cdad0e16",
+      "content_sha256": "0c4b01ff775597bdcd2a9df698a2abbcab8cd34850941fb40e352e56f3814f95",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6293,7 +6307,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "39d3f6d104d07956c03b9ebf638f3a2bbe896655fddce3c48591096822388eac",
+      "content_sha256": "03145dd56b858c44be7279fe051b2159e4d5deae51f46b7ffa7e9f310d42b31e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
