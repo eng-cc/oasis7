@@ -522,12 +522,7 @@ fn persist_uses_legacy_tick_consensus_archive_when_index_segment_is_missing() {
 }
 
 #[test]
-fn persist_rejects_tampered_tick_consensus_archive_segment_hash() {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct ArchiveSegmentFile {
-        records: Vec<TickConsensusRecord>,
-    }
-
+fn persist_rejects_tampered_selected_tick_consensus_archive_hash() {
     let mut world = World::new();
     for _ in 0..260 {
         world.step().expect("step");
@@ -538,29 +533,29 @@ fn persist_rejects_tampered_tick_consensus_archive_segment_hash() {
         .save_to_dir(&dir)
         .expect("save world with archive index");
 
-    let archive_index: serde_json::Value = serde_json::from_slice(
-        &fs::read(dir.join("tick-consensus.archive.index.json"))
-            .expect("read tick consensus archive index json"),
+    let generation_index: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            dir.join(".distfs-state")
+                .join("sidecar-generations")
+                .join("index.json"),
+        )
+        .expect("read sidecar generation index"),
     )
-    .expect("decode tick consensus archive index json");
-    let first_segment_path = archive_index
-        .get("archived_segments")
-        .and_then(|value| value.as_array())
-        .and_then(|segments| segments.first())
-        .and_then(|segment| segment.get("relative_path"))
-        .and_then(|value| value.as_str())
-        .expect("first segment relative path");
-    let segment_path = dir.join(first_segment_path);
-    let mut segment_file: ArchiveSegmentFile = serde_json::from_slice(
-        &fs::read(segment_path.as_path()).expect("read archive segment file"),
-    )
-    .expect("decode archive segment file");
-    segment_file.records[0].certificate.block_hash = "tampered-hash".to_string();
-    fs::write(
-        segment_path.as_path(),
-        serde_json::to_vec_pretty(&segment_file).expect("encode tampered archive segment"),
-    )
-    .expect("write tampered archive segment");
+    .expect("decode sidecar generation index");
+    let latest_generation = generation_index["latest_generation"]
+        .as_str()
+        .expect("latest generation id");
+    let archive_ref =
+        generation_index["generations"][latest_generation]["tick_consensus_archive_ref"]
+            .as_str()
+            .expect("selected archive ref");
+    let cas_path = dir
+        .join(".distfs-state")
+        .join("blobs")
+        .join(format!("{archive_ref}.blob"));
+    let mut archive_bytes = fs::read(&cas_path).expect("read selected archive blob");
+    archive_bytes[0] ^= 0x01;
+    fs::write(&cas_path, archive_bytes).expect("write tampered archive blob");
 
     let err = World::verify_tick_consensus_archive_from_dir(&dir)
         .expect_err("tampered archive segment should be rejected");
@@ -572,7 +567,9 @@ fn persist_rejects_tampered_tick_consensus_archive_segment_hash() {
         unreachable!("validated above");
     };
     assert!(
-        reason.contains("content hash mismatch") || reason.contains("block hash mismatch"),
+        reason.contains("content hash mismatch")
+            || reason.contains("block hash mismatch")
+            || reason.contains("no valid latest or rollback-safe generation"),
         "unexpected error reason: {reason}"
     );
 

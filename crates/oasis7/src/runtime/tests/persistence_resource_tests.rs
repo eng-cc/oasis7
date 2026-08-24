@@ -156,7 +156,7 @@ fn load_from_dir_preserves_chain_resource_context_in_runtime_snapshot() {
 }
 
 #[test]
-fn load_from_dir_prefers_json_when_distfs_sidecar_has_stale_chain_resource_context() {
+fn load_from_dir_keeps_indexed_sidecar_when_json_context_differs() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-stale-sidecar".to_string(),
@@ -188,11 +188,7 @@ fn load_from_dir_prefers_json_when_distfs_sidecar_has_stale_chain_resource_conte
 
     assert_eq!(
         restored_snapshot.chain_resource_manifest.world_id,
-        "testnet-world"
-    );
-    assert_eq!(
-        restored_snapshot.chain_resource_manifest.manifest_height,
-        21
+        "runtime-world"
     );
     let audit: serde_json::Value = serde_json::from_slice(
         &std::fs::read(dir.join("distfs.recovery.audit.json")).expect("read distfs recovery audit"),
@@ -200,13 +196,7 @@ fn load_from_dir_prefers_json_when_distfs_sidecar_has_stale_chain_resource_conte
     .expect("decode recovery audit");
     assert_eq!(
         audit.get("status").and_then(|value| value.as_str()),
-        Some("fallback_json")
-    );
-    assert!(
-        audit
-            .get("reason")
-            .and_then(|value| value.as_str())
-            .is_some_and(|reason| reason.contains("stale_chain_resource_context"))
+        Some("distfs_restored")
     );
 
     let _ = std::fs::remove_dir_all(&dir);

@@ -105,7 +105,7 @@ fn signed_rollback_authorization(
 }
 
 #[test]
-fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
+fn load_from_dir_ignores_invalid_legacy_payload_when_indexed_sidecar_is_valid() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
@@ -121,21 +121,21 @@ fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
     )
     .expect("tamper sidecar");
 
-    let restored = World::load_from_dir(&dir).expect("fallback to legacy json");
+    let restored = World::load_from_dir(&dir).expect("restore indexed sidecar");
     assert_eq!(restored.state(), world.state());
     let audit_value: serde_json::Value = serde_json::from_slice(
-        &fs::read(dir.join("distfs.recovery.audit.json")).expect("read distfs fallback audit"),
+        &fs::read(dir.join("distfs.recovery.audit.json")).expect("read indexed recovery audit"),
     )
     .expect("decode distfs fallback audit");
     assert_eq!(
         audit_value.get("status").and_then(|value| value.as_str()),
-        Some("fallback_json")
+        Some("distfs_restored")
     );
     assert!(
         audit_value
             .get("reason")
             .and_then(|value| value.as_str())
-            .map(|reason| reason.contains("distfs_restore_failed"))
+            .map(|reason| reason.contains("legacy_payload_ignored"))
             .unwrap_or(false)
     );
     assert!(
