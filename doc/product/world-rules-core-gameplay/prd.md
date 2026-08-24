@@ -155,6 +155,28 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 本 handoff 的 Non-Goals 是：不规定采集、补种、精炼或运输的产率/价格/损耗公式，不新增或重命名 runtime/ABI/ledger 字段，不决定队列、公平性、UI 布局或 Agent 自动化策略，不把产品读面当作当前实现完成证明，也不替代 `game` 的玩法平衡、M4 的材料/账本合同或 `world-runtime` 的事件、状态、持久化与 replay 权威。
 
+#### 原材料批次时效、质量漂移与仓储保管
+
+材料到达目的账本不等于其质量永远有效。每个材料/产品 profile 必须声明自身属于 `stable` 或 `time/environment-sensitive`：`stable` 批次在等待、运输和有界 buffer 保管期间不因时间自动失效，但仍受新的权威规格、owner、账本或污染/损坏事实约束；`time/environment-sensitive` 批次则必须声明适用的有效性边界、保管/运输条件与重新验证点。材料批次、profile、质量/规格适用性与 custody 语义的专业 authority 是 [`M4 industrial resource flow contract`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；`world-runtime` 继续拥有事件、schema、权威状态、时间与当前实现状态，产品层只冻结玩家承诺，不成为第二套 schema authority。未声明或 legacy profile 在完成显式 admission/backfill 前一律视为 `unknown`，并在首个 input sink、WIP、稳定进度或奖励前 fail closed；不能由本段文字、材料名称、客户端缓存或 Agent 推断为 `stable`、可用或已完成 backfill。该分类只定义产品结果语义，不规定所有材料都要衰减。
+
+材料在 source/refinement settlement 时必须保留可追溯的质量 provenance：批次身份、材料 profile、实际数量、规格/品质证据、owner/账本、结算与当前 custody 的权威锚点，以及与 parent receipt 的 lineage。运输、转入/转出 buffer、保管条件改变或重新验证都不能就地改写 parent receipt；只能在声明的 custody segment 上产生链接的状态/decision 或处置 receipt，并保留已发生的数量、损耗和责任。仓储容量、占用和保管义务属于真实的 batch/custody 状态，不能因 surface 显示、重连或“等待”而免费释放或隐藏。
+
+`time/environment-sensitive` 批次只在 profile 声明的边界重新验证，例如 handoff 接受、transit launch/arrival、buffer admission、recipe input join/start 或某个权威 world-time checkpoint；不得由 Viewer 刷新、客户端计时或每次重复预览自行制造验证。每个边界都必须以当前权威时间、路线/保管条件、批次 provenance、目的账本与下游规格重新判断。边界证据缺失、条件漂移或结果无法证明时，批次为 `unknown`/`blocked`，在首个 input sink、WIP、稳定进度、需求减少或奖励前 fail closed；不能把未知写成零损耗、稳定、可适用或自动延期。
+
+质量是叠加在既有 handoff lifecycle 上的正交 facet，不替换 `preview`、`source-settled`、`in-transit`、`arrived`、`applicable` 与 `blocked` 的批次流转身份：`arrived` 只证明 custody/到达，不证明质量可用；`applicable` 必须同时满足到达、当前规格/用途条件与质量 facet 为 usable。这里的 `usable` 不是新的 enum 或持久化 lifecycle state，而是由 canonical M4/Recipe/Product target profile 针对当前用途派生的 predicate；它仅在当前 profile 证明质量有效，或显式允许 `degraded` 用于当前用途时成立。`unknown`、`quarantine`、`expired` 在消费侧一律映射为 `blocked`；`degraded` 只有目标 recipe/阶段 profile 明示允许该质量用途时才可映射为 `applicable`，否则仍为 `blocked`。质量重验保留旧 decision 的 immutable 结果，并只通过 linked revalidation decision 改变后续消费判断，不能回写旧 handoff receipt 或把质量结论提升为新的到达结算。
+
+玩家与 Agent 的读面必须区分：`blocked`（必要有效性或 custody 证据尚未成立，保留当前占用与复查点）、`degraded`（profile 证明质量下降但存在明确的受限用途或 at-risk 继续规则）、`expired`（有效边界已过，不取得新的消费资格）和 `quarantine`（因污染、条件违约或待复验而隔离，不能被下游消费）。`degraded` 只有在目标 recipe/阶段 profile 明确允许时才可进入新的候选；`expired` 或 `quarantine` 不得靠同名材料、降级标签、混批或换账本恢复。读面至少说明批次/阶段、质量原因、仍占用或已损失的价值、下一次权威复查点，以及当前专业合同真实支持的恢复动作；这些是产品语义，不冻结 runtime enum 或 UI 布局。
+
+恢复与处置必须显式且有界：专业合同支持时，玩家可以比较 `revalidate`、`rework`、`salvage`、`return`、`discard`、继续隔离或重新取得合法来源；每个候选说明追加成本、保管/容量占用、预计质量/数量结果、交付或配方影响、失败损失、可撤回性和推荐理由。`revalidate` 只能从 fresh authoritative state 产生链接旧 decision 的新 decision；`rework`、`salvage` 或转换必须创建新的 batch/lineage，并披露实际投入、损耗与新用途；`return`、`discard` 和补偿只能按专业合同各结算一次。没有对应能力时保持真实 `blocked`/`quarantine` 或拒绝，不能自动退款、免费补发、静默修复、无限延期或把隔离物料伪装成下游库存。
+
+每个 `batch + custody segment + revalidation boundary` 的质量判断和处置至多生效一次，并绑定 parent receipt、当前 root/阶段/配方用途及权威时间/状态锚点。边界前后发生漂移时，旧 decision 保持 immutable，由 profile 创建 linked revalidation/处置；重复 submit、arrival、拆小批、重连、Agent retry、乱序、snapshot restore 与 replay 只能重读相同结果，不能刷新有效期、复制 sink、重复释放保管容量、把同一数量同时分给多个 join，或以混批掩盖失效批次。拆分、汇合和跨账本转移必须分别复验每个 parent batch；任何由 rework/salvage/return 形成的新用途都必须由新的可追溯 receipt 触发。
+
+该边界保持 **world-first**：配方输入反映真实时间、保管条件、规格与损耗，而不是稳定库存假设；保持 **emergence-first**：玩家在保管、调运、复验、返工和改换来源之间做有代价的选择；保持 **persistent**：批次年龄/条件结论、隔离、处置和 lineage 跨重连、恢复与 replay 延续；保持 **auditable**：质量证据、custody、处置、数量/损耗和 parent receipt 可追溯；保持 **extensible**：未来可增加稳定、时效、环境或污染 profile，而不改写既有 settlement 与历史结果。`game` 拥有 profile 的节奏、机会成本和玩法取舍，M4/Recipe/Product 拥有材料质量与适用性语义，`world-runtime` 拥有权威时钟、状态、事件、持久化和 replay，QA 拥有组合验证；产品层不替代这些专业 authority。
+
+本节的 Non-Goals 是：不规定衰减/污染/温度/湿度/保质期的绝对数值、公式或仿真模型；不默认所有材料可腐败或必须保温；不新增或重命名 runtime/ABI/ledger 字段，不决定运输寻路、队列、公平性、价格、产率、损耗、返工收益、配给或 UI 布局；不把 `degraded`、`expired`、`quarantine` 写成当前 runtime 已实现或公开发布能力，也不承诺自动补货、退款、销毁或补偿。
+
+`test_tier_required` 至少覆盖：`stable` 批次在等待/运输/有界保管中保持质量但遇权威规格或污染事实变化时重新判定；`time/environment-sensitive` 批次在有效边界内可一次成为 `applicable`，跨过声明边界后只能得到 `degraded`、`expired`、`quarantine` 或 `blocked` 中与 profile 一致的结果，且在首个 input sink/WIP/progress/reward 前不消费；缺失 custody、时间、条件或质量证据时 fail closed 并显示 primary blocker/复查点；`revalidate`、`rework`、`salvage`、`return`、`discard` 各自只产生一次、保留 parent provenance 和实际数量/损耗；拆分/汇合/转移不把失效批次混成适用输入；重复 submit、arrival、重连、retry、乱序、snapshot restore 与 replay 不刷新有效期、不复制 sink/处置/容量释放；玩家与 Agent 以及 Viewer/pure API 对质量状态、占用/损失、lineage、下一步和不可用原因保持同义。`test_tier_full` 的跨窗口、长时间与多阶段组合验证由 M4、runtime、gameplay、Viewer 与 QA 专业合同另行定义。
+
 #### 多阶段工业流水线与中间品背压
 
 单个配方任务完成不等于多阶段流水线已经连通。代表性流水线必须以有向无环的阶段关系声明 `上游阶段 -> 中间品边 -> 下游阶段`；每条边至少绑定可追溯的阶段/配方或能力版本、材料类别、来源与目的账本，以及适用的电力、物流和容量前置。替换决定产出因果的阶段、配方、设施或边后，属于新的候选流水线，不能继承旧候选的稳定窗口、未决资格或里程碑进度。循环生产若未来成为正式能力，必须由独立专业合同定义库存上限、终止与反套利规则，不能把隐式环当作普通流水线接受。
