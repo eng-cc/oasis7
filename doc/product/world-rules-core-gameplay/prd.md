@@ -231,6 +231,28 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 同一批次跨阶段的 lineage 必须在持久化、恢复和 replay 后仍能关联各阶段承诺、边、中间品数量/预留、父级 receipt、规格/品质适用结论及其来源、实际损耗与 blocker。重复提交、Agent 重试、重连或事件重放对每个阶段至多产生一次 sink、产出与里程碑效果，也不能把未知/不适用批次重试成适用；已完成阶段可以按专业合同从已结算结果继续，但不得重新发奖、复制中间品或跳过尚未满足的下游前置。`game` 拥有阶段节奏、容量取舍、规格/品质带来的用途选择、返工收益和 anti-grind 平衡；`world-runtime` 与工业模块拥有图、账本、批次属性、适用性校验、预留、状态、守恒、去重与 replay 合同；Viewer 与 pure API 必须表达同一根因、适用结论、背压和下一步。产品层不冻结品质数值/公式、buffer 数值、配方、并行度、队列/图算法、runtime 枚举或 UI 布局。
 
+#### 配方生命周期、版本兼容与受控退役
+
+配方不是可被客户端或 Agent 就地修改的库存标签，而是具有来源、作用域和版本身份的受治理工业能力。配方从**提案/待验证**、**已验证待准入**、**已生效**到**限制/退役**必须有可读的权威状态；只有已生效且当前授权、工厂能力、原材料规格/品质、物流路径、电力与终端前置均满足的版本，才能成为新的生产候选。提案、模拟结果、同名配方推荐或“已下载”状态都不产生预留、输入 sink、产出、稳定窗口或交付资格。
+
+每个已接受的工业任务必须固定一个不可变的配方版本/能力身份，并把它与 factory capability、输入批次、物流边/路径、输出 bundle 和 terminal purpose 关联。改变输入/输出/副产物、规格或品质适用范围、阶段关系、能源/物流前置、工厂能力或终端资格等产出因果内容，必须创建新的配方版本和 parent-linked 候选；新候选从稳定窗口 `W=0` 开始，不能继承旧候选的 receipt、reservation、里程碑、排队优先级或实际进度。仅改变不影响产出因果的说明/展示元数据时，才可保留原生产身份；无法证明为非因果变更时，按新版本处理并 fail closed，不能靠名称相同或当前缓存猜测兼容。
+
+配方兼容不是“材料名称相同”或“有一座工厂”即可。提交前的只读预览至少让玩家看见配方版本的来源/授权作用域、输入与产出/副产物用途、匹配的 factory capability、每条必需物流边或路径、规格/品质适用结论、power/容量/terminal 前置、当前状态和下一次复查点。`ready`、`pending_validation`、`not_licensed`、`incompatible`、`retiring`、`expired` 与 `unknown` 等产品语义必须能被玩家区分；未验证、授权失效、能力不匹配或证据未知的版本不得被展示为可选择的“降级替代”。
+
+配方状态或前置在报价后漂移时，系统只能按当前权威版本重新评估并产生一次 receipt，或在首个不可逆 sink 前原子拒绝/保持无效果待决。至少以下情形必须 fail closed：版本身份或授权范围缺失；输入规格、owner、账本、路线、容量、power 或 terminal 资格不匹配；旧版本已经退役且没有当前有效的显式兼容/排空 profile；候选引用了错误 root、批次、stage 或 module/provenance。失败必须保留原任务/已结算历史的 lineage，说明最早 blocker、已占用/已消费与下一步；不得自动换配方、免费转换材料、静默降低规格、伪造退款或以“已接受”代替生效。
+
+退役只禁止新任务继续取得该版本的生产资格，不能追溯删除已结算历史。退役时，新的排程必须拒绝并推荐当前有效版本或等待重新授权；已经 accepted 但未产生不可逆 sink 的任务按 profile 释放/保持/重新报价，已经产生 WIP、在途或 buffer 的任务只能完成旧版本、隔离、返工、salvage、return、改道或终止中真实受支持的一条处置路径。若存在兼容 successor，仍须在同一权威快照完成 fresh revalidation，并由玩家或具备范围授权的 Agent 明确确认；转换必须创建链接旧 receipt、实际数量/损耗与新候选身份的单次 handoff/conversion receipt，稳定窗口重新计数。旧版本的重连、重试、回放或陈旧批准不能重新激活、复制产出或刷新容量顺位。
+
+该边界同时服务五项产品原则：**world-first** 让可用配方由真实授权、材料和设施能力决定；**emergence-first** 允许玩家在约束内选择来源、版本、路线与退役处置，而不是领取免费转换；**persistent** 让版本 pin、lineage、pending 与退役处置跨重连/恢复/replay 延续；**auditable** 让提案、准入、版本变更、兼容结论和单次 receipt 可追溯；**extensible** 允许未来增加配方/工厂 profile 而不改写既有批次和历史。配方治理不直接发放原材料、产能、库存或市场权利，也不规定配方比率、授权角色、版税、兼容算法、runtime schema 或 UI 实现。
+
+配方生命周期验收至少包括：
+
+- 一条提案→验证→准入→生效→退役样例；生效前无世界效果，玩家可读每个状态、阻塞与下一步。
+- 同名但改变产出因果的两个版本；旧任务固定旧版本，新候选 `W=0`，两者不共享 receipt、reservation、进度或奖励。
+- 授权、输入规格、factory fit、物流/电力/容量或 terminal 证据缺失/漂移的负例；首个 sink 前原子拒绝或无效果待决，且显示 primary blocker 与复查边界。
+- 退役同时存在新排程、未开始任务、WIP/在途/缓冲批次的样例；新排程不可选，存量任务只能按 profile 取得一次明确处置，兼容 successor 需显式确认和 parent-linked conversion。
+- 重复 submit、arrival、重连、Agent retry、snapshot restore 与 replay；同一版本最多产生一次 sink/产出/receipt，旧版本不能复活，Viewer 与 pure API 对状态、兼容结论、机会成本和下一步保持同义。
+
 ### 世界宪法级产品不变量
 
 - 玩家通过目标、Agent、地点、设施、配方、关系与治理等受支持动作获得间接战略能动性；资源变化必须来自被授权的 source/sink 因果链，不能凭空生成或绕过成本。
@@ -281,6 +303,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 - SC-22：代表性产线维护/计划停机样例证明排产前可比较 `maintain_before_run`、`run_at_risk`、`reduce_load` 与 `defer` 中真实支持的路径，并读到维护目标/范围、追加成本与仍占用、预计产出/复查时延、故障/损失风险、可撤回性与推荐理由；维护真值缺失时显示 `maintenance_not_tracked` 而不伪造安全继续。若 submit boundary 仍为 `unknown`，会产生 irreversible sink、停机/稳定影响或交付承诺的候选不得 selectable，必须 atomic reject 或保持有界 pending（不得产生隐式 hold）并给出下一次权威复查；只有专业合同真实支持且明确标注 `at-risk/unknown` 的路径可继续展示，preview 无 authority。报价无世界效果，提交按当前状态重验且前置漂移原子拒绝并保留原任务/未结算状态，成功只产生一次维护/排程结果，计划停机不伪造稳定/交付，重连、重试与 replay 不复制 sink、停机结果或里程碑。
 - SC-23：代表性 `BuildFactory` 路径证明建设报价只读且绑定 owner/site/kind/id、candidate/config/world revision 及稳定 quote correlation；玩家可比较 build-now、补料、移站、补电和延期，并逐项读到 owner-held electricity 与全部 construction inputs 的 kind/quantity/ledger/before/after、power mode、profile 选定的 output boundary、主要 blocker、下一复查点与首个工业目标关联。每个可选项都说明目标/范围、追加成本与仍占用、预计结果/复查时延、风险/损失、可撤回性与推荐理由，未实现或前置不可证明的选择不得 selectable。提交按当前权威状态重验，竞争性漂移只能产生一次当前条件 receipt 或无 sink 的原子拒绝；任一输入不足、地点/chunk/owner/kind/existing-or-pending ID、未知 authority 与未冻结 mode 不得伪装为可支付或已预留；四类 mode 各自的 sink/hold/revalidation/best-effort 和争用/unknown 边界可验证，重连、重试、重复提交、恢复与 replay 不复制 sink、设施、激活、发电或奖励。建设成本、配方电力、maintenance 与 battery runway 分层，PowerPlant 仅在 profile 声明的 output boundary 后生效；Viewer 与 pure API 对上述事实保持一致。该 SC 只冻结玩家承诺与验收，不冻结公式、字段、队列、UI 或当前实现完成声明。
+- SC-24：代表性配方生命周期证明配方从提案/待验证、已验证待准入、已生效到限制/退役的状态可读且生效前无世界效果；每个 accepted 任务固定不可变 recipe version/authority，并与 factory capability、输入批次、物流路径、output bundle 和 terminal purpose 关联。改变输入/输出/副产物、规格/品质、阶段/边、power/logistics 或 terminal 资格等产出因果内容必须新建 parent-linked 版本/候选并从 `W=0` 开始，不能继承旧 receipt、reservation、队列优先级、进度或奖励；非因果元数据才可保留身份，无法证明则 fail closed。版本/授权/输入规格/factory fit/路线/容量/power/terminal 证据缺失或漂移时，在首个不可逆 sink 前原子拒绝或保持无效果待决，玩家可见 primary blocker、机会成本和复查点，不能同名替代、免费转换、静默降级或伪造退款。退役禁止新排程但保留历史；未开始、WIP、在途、buffer 任务只能按 profile 各产生一次 finish/hold/rework/salvage/return/改道/终止处置，兼容 successor 需 fresh revalidation、明确授权和 parent-linked conversion，重连/retry/replay 不复活旧版本或复制效果。`test_tier_required` 覆盖上述生命周期、漂移、退役、兼容与单次效果，`test_tier_full` 覆盖多阶段在制/在途/缓冲、持久化/replay、Agent 重试和 Viewer/pure API parity；产品层不冻结 recipe ratio、授权角色、兼容算法、runtime schema、UI 或当前实现声明。
 
 ### 5.1 验收追踪
 
@@ -310,9 +333,12 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 | SC-22 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 维护/计划停机前的可比较取舍、维护真值缺失的诚实表达、提交重验、bounded pending 无隐式 hold、原任务/未结算状态保留、单次结果与稳定/交付影响 | test_tier_required |
 | SC-23 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-001 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | BuildFactory quote 的只读/确定性、逐项成本与余额、四类 power mode/未冻结 authority、choices/blockers、quote correlation、fresh submit revalidation、single sink/receipt、profile output boundary、retry/reconnect/replay 与 Viewer/pure API parity | test_tier_required |
+| SC-24 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 配方生命周期状态、版本 pin、兼容性/授权/前置漂移 fail-closed、退役对新旧任务的有界处置、parent-linked conversion、持久化/replay/Agent retry 单次效果与 Viewer/pure API parity | test_tier_full |
 
 ## 6. Non-Goals
 
 - 不在产品层冻结新的玩法细则、数值、掉落或成长曲线。
 - 不把分布式执行、任意 WASM 或全局治理包装成当前玩家默认能力。
 - 不复制 `game` 专题 PRD、project 任务或测试步骤。
+- 不提供自由配方编辑器、客户端上传即生效、自动配方替换或跨版本免费材料转换。
+- 不冻结配方比例、产率/损耗、授权/版税公式、兼容算法、审批角色、runtime schema、队列或 UI；本节也不宣称配方治理、退役迁移或当前工业闭环已经实现。
