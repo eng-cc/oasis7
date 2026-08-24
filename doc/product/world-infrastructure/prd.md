@@ -95,6 +95,17 @@
 
 这项闸门保持 **world-first**：是否重新开放写入由当前可验证世界与执行/最终性条件决定，而不是由本地进程或界面状态决定；保持 **persistent / auditable**：只读恢复、可服务恢复、再次隔离以及 pending 的重新裁决均可与同一世界历史关联；保持 **extensible**：未来可增加服务角色或证明步骤，但不能把只读恢复降格为可写，也不能跳过当前条件。
 
+### 工业流水线的跨域执行边界
+
+工厂、配方、原材料和物流不是四条可以各自结算、最后再拼成“生产完成”的本地流程。它们只有在同一条可验证世界历史中形成一条因果流水线时，才可以产生玩家或 Agent 能据此行动的工业结果。本节只定义基础设施与工业消费者之间的组合边界，不定义配方比例、产能、价格、物流算法、排队或玩家体验；工业生命周期与材料适用性仍由 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md) 及其链接的 M4 / runtime 专业合同拥有。
+
+- **单一流水线身份：** 在工业动作跨过“已接受”边界时，权威世界必须为该次操作建立一个不可变的 root identity，并将它绑定到同一 `world_id`、当前版本化执行规则和 parent committed state。工厂能力/位置、配方版本、原料来源与目标账本、物流 path/edge 以及其 revision/segment 只作为该 root 的可追溯上下文；具体字段、事件和 receipt schema 由 [`world-runtime industrial execution status and authority matrix`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 定义，产品层不复制 schema。
+- **跨阶段守恒：** 工厂启动、配方输入 join、原料 handoff、运输/到达、buffer 或产物交付等 child effect 必须保留 root、所属 revision/segment 与直接 parent/child 关系。首个不可逆 input sink、运输/目的账本 credit 或产出进度前，root、版本、来源/目的地或 parent 关系缺失、冲突或无法验证时，必须原子 fail closed；预览、推荐、pending 或本地排队不得产生上述世界效果。
+- **因果变更与恢复：** 在同一因果计划内恢复只能继续原 root；若改变工厂、配方、输入/输出、物流边或终端等会改变产出因果的条件，必须建立与旧 root 可读关联的新 revision/child root，重新校验输入、容量、权限和世界版本，不能静默迁移旧任务。重试、重连、snapshot restore 与 replay 只重读同一 root 的 disposition；同一阶段/边/批次不得复制 sink、credit、进度、receipt 或奖励。
+- **阻塞与可观察性：** 跨域消费者必须能从 committed state 区分预览、已接受、进行中、被阻塞、已完成与已终止，并定位最早可归因的 stage/edge、仍占用与已消费的投入、下一次权威复查边界和真实可用的恢复/退出路径。Viewer、Agent 和纯 API 可以采用各自读面，但不得把工厂可用、配方已接受、物流已发运或本地重连表述为交付、结算或生产完成。
+
+该边界保持 **world-first**：工业结果由同一 `world_id`、版本化执行与 committed receipt 决定，而不是由某个设施进程或客户端缓存决定；保持 **emergence-first**：玩家/Agent 可在约束内选择来源、工厂、路线和恢复，不获得预写的免费转换；保持 **persistent / auditable**：root、child lineage、批次、receipt、损耗与 terminal disposition 跨重连、恢复和 replay 延续；保持 **extensible**：未来增加新的工厂、配方、材料或物流 profile 时复用同一组合边界而不改变既有历史。
+
 ## 5. Done：成功标准与验收
 
 - SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。
@@ -104,6 +115,7 @@
 - SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时，待决 intent 不产生下游资格或世界效果，消费者能区分仍待决与须重新规划的结果，并只在恢复后取得的 committed receipt 上更新结论。明确互斥的同 lineage 成员中，首个产生有效世界效果的 receipt 唯一获胜并原子终止其余成员；拒绝/过期只终止自身，独立 intent 保持并发；原请求与撤回/替代请求的关联及各自真实状态可读。
 - SC-6：恢复路径只在同一 `world_id` 的 checkpoint/snapshot、canonical replay 与 state root 验证链成立时恢复世界结论；缺失、冲突或其他 `world_id` 的候选保持原世界不可用和隔离，不接受新权威 intent，也不把本地/测试/替代世界、缓存或部分数据表述为连续恢复。已 committed receipt 保留其原历史，未 final intent 不被静默结算、取消、重放或迁移；任何替代世界或受治理迁移必须作为独立产品决策，而非恢复副作用。
 - SC-7：同一候选的恢复演练至少各覆盖一例“恢复只读”“恢复可服务”和“恢复受阻/隔离”，并覆盖一次闸门在提交或恢复中回退；同一 `world_id` 的历史验证链是必要但不足以重新接受写入，追加/最终性/版本化执行或 head 连续性未重新成立时，所有新 intent 尝试均原子拒绝或保持无效果待决（每个受测新 intent 的 committed receipt 数为 `0`）。进入可服务后，既有 pending 按当前条件和 canonical 顺序重新裁决；停机排队与历史 receipt 不延长期限、不继承优先级；每个被接受的新 intent 最多产生一个 committed receipt，且不产生第二次效果。闸门再次失效时回到只读/隔离且不撤销、重放或改写已确认 receipt。玩家/Agent 能读到当前服务语义、主要 blocker 与下一步。测试层级：`test_tier_full`。
+- SC-8：同一条代表性 `factory → recipe/input join → raw-material handoff → logistics/transit → output or terminal` 流水线在同一 `world_id`、版本化执行规则和 immutable root 下完成可追溯的 accepted/blocked/terminal 结果；任何 child effect 在缺失或冲突 root、revision、parent 或目的状态时于首个不可逆 sink 前 fail closed。改变产出因果的工厂、配方、输入/输出、物流边或终端条件必须产生 parent-linked revision/child root；retry、reconnect、restore 与 replay 只能重读同一 disposition，不产生第二次 sink、credit、进度、receipt 或奖励。玩家/Agent 可读最早 blocker、仍占用/已消费投入与下一次复查边界，但不能把局部完成、在途或本地缓存当作交付/生产完成。测试层级：`test_tier_full`。
 
 ### 5.1 验收追踪
 
@@ -116,12 +128,13 @@
 | SC-5 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 本文 `Finality 缺失时的意图连续性` 对应的 committed/pending protocol boundary、待决/无效或重规划结果的可区分性、恢复后重新校验与 receipt-gated 结果、proof verification；包含同 lineage 互斥成员的竞态/同序唯一胜者、拒绝/过期仅终止自身、replay/重复重试无第二效果及独立 intent 并发负例，以及正式 surface 的关联/状态可读性核对 | test_tier_required |
 | SC-6 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / `viewer-control-plane-split-live-playback.prd.md` / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md`; `doc/testing/prd.md` | 同一 `world_id` 的 checkpoint/snapshot、replay 与 root 验证恢复样例；缺失、冲突或其他 `world_id` 候选的 fail-closed 负例，断言不接收新权威 intent、不把替代 endpoint/缓存/本地世界表述为恢复，并核对 committed receipt 与未 final intent 的连续性；若触达可见 Viewer 恢复/重连/回放表述，按该 Viewer authority 和 `testing-manual.md` S6 核对 canonical snapshot/feedback、可见状态与 browser console 不把本地回放或重连表述为恢复 | test_tier_full |
 | SC-7 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一候选至少覆盖恢复只读、恢复可服务、恢复受阻/隔离各一例及一次闸门回退；未满足闸门时新 intent 的原子拒绝/无效果待决（committed receipt 为 0）；满足闸门后的 pending 当前条件重裁决与 canonical 顺序；停机排队不继承期限/优先级；每个新 intent 至多一个 committed receipt、无第二次效果；回退后的 fail-closed 与已确认 receipt 连续性；正式 surface 可读服务语义、blocker 与下一步 | test_tier_full |
+| SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 代表性工厂→配方/input join→原料 handoff→物流/transit→产物/终端路径的 root/revision/parent lineage、缺失/冲突 identity fail-closed、因果 cutover、blocked/terminal 读面、单次 sink/credit 与 retry/restore/replay 证据；包含 Viewer/pure API 不把局部完成或在途伪装为交付/生产完成 | test_tier_full |
 
 ## 6. Non-Goals
 
 这是目标架构，不是当前可用性或发行声明。当前代码仍须由 P2P/runtime/QA 同一候选证据评估；根 `README.md` 独占公开 claim envelope。
 
 - 不把当前 stake-threshold prototype 误报为完整 BFT certificate、分区恢复、permissionless 服务可用性或主网。
-- 不以本模块定义区域设施、工业/市场、charter、frontier、普通治理、资源平衡、Agent 行为或玩家体验。
+- 不以本模块定义区域设施、工业/市场的玩法规则、配方/价格/产能/物流数值、charter、frontier、普通治理、资源平衡、Agent 行为或玩家体验；本模块仅定义本节的跨域执行边界。
 - 不把运维拓扑、软件部署、SLA、费用/奖励数值或第三方库选择写成产品已交付事实。
 - 不批量改写历史文档，不制造兼容 redirect 壳，不改变当前公开状态或发布声明。
