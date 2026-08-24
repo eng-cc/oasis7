@@ -79,7 +79,11 @@ function readyFeed(overrides = {}) {
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
-  window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011");
+  // Keep these transport tests on the guest/auth-independent lane.  The
+  // loopback test API otherwise auto-issues a local player session, and a
+  // reconnect handshake can race its async reconnect_sync attempt with the
+  // fake socket lifecycle, producing an unrelated unhandled send rejection.
+  window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&hosted_access=%7B%22deployment_mode%22%3A%22hosted_public_join%22%7D&locale=en&ws=ws://127.0.0.1:5011");
   document.body.innerHTML = "";
 });
 
@@ -104,6 +108,147 @@ describe("World Feed transport", () => {
     expect(core.state.recentEvents).toEqual([]);
   });
 
+  it("continues an initial page asynchronously from the returned cursor", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toHaveLength(1);
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+
+    // Continuation must be deferred so the response handler cannot recurse
+    // synchronously, while still issuing exactly one request for the latest cursor.
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(0);
+    const worldFeedRequests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(worldFeedRequests).toHaveLength(2);
+    expect(worldFeedRequests.at(-1)).toEqual({
+      type: "request_world_feed",
+      cursor: "wf1.cursor-2",
+      limit: 50,
+    });
+  });
+
+  it("drops a queued continuation when a gap arrives and lets snapshot recovery restart at null", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+    sockets[0].receive(readyFeed({
+      reorg_epoch: 1,
+      cursor: "wf1.cursor-gap",
+      status: "gap",
+      gap_reason: "reorg_epoch_changed",
+      snapshot_reload_required: true,
+      events: [],
+    }));
+    const requestsBeforeTimer = sentMessages.filter((message) => message.type === "request_world_feed");
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toEqual(requestsBeforeTimer);
+    expect(core.state.worldFeed.snapshotReloadRequired).toBe(true);
+
+    sockets[0].receive({ type: "snapshot", snapshot: { model: {} } });
+    const worldFeedRequests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(worldFeedRequests.at(-1)).toEqual({
+      type: "request_world_feed",
+      cursor: null,
+      limit: 50,
+    });
+  });
+
+  it("does not refresh the feed from world activity while a gap awaits snapshot recovery", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+
+    sockets[0].receive(readyFeed({
+      reorg_epoch: 1,
+      cursor: "wf1.cursor-gap",
+      status: "gap",
+      gap_reason: "reorg_epoch_changed",
+      snapshot_reload_required: true,
+      events: [],
+    }));
+    const requestsBeforeEvent = sentMessages.filter((message) => message.type === "request_world_feed");
+
+    sockets[0].receive({
+      type: "event",
+      event: { id: 8, time: 1, kind: { type: "resource_change" } },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toEqual(requestsBeforeEvent);
+    expect(core.state.worldFeed.snapshotReloadRequired).toBe(true);
+  });
+
+  it("cancels an old continuation across reconnect and sends one fresh null request", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+
+    sockets[0].close();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(sockets).toHaveLength(2);
+    sockets[1].open();
+    sockets[1].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const worldFeedRequests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(worldFeedRequests).toHaveLength(2);
+    expect(worldFeedRequests[0]).toEqual({ type: "request_world_feed", cursor: null, limit: 50 });
+    expect(worldFeedRequests[1]).toEqual({ type: "request_world_feed", cursor: null, limit: 50 });
+    vi.clearAllTimers();
+  });
+
+  it("refreshes the latest cursor once after world activity and does not overlap in-flight requests", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A response for the continuation makes the transport idle at the latest cursor.
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
+    const idleRequestCount = sentMessages.filter((message) => message.type === "request_world_feed").length;
+
+    sockets[0].receive({
+      type: "event",
+      event: { id: 8, time: 1, kind: { type: "resource_change" } },
+    });
+    sockets[0].receive({
+      type: "event",
+      event: { id: 9, time: 2, kind: { type: "resource_change" } },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const worldFeedRequests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(worldFeedRequests).toHaveLength(idleRequestCount + 1);
+    expect(worldFeedRequests.at(-1)).toMatchObject({
+      type: "request_world_feed",
+      cursor: "wf1.cursor-2",
+    });
+    expect(core.state.worldFeed.requestInFlight).toBe(true);
+  });
+
   it("stops append on a runtime gap and asks the same socket path for an authoritative snapshot", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
@@ -121,7 +266,7 @@ describe("World Feed transport", () => {
     }));
     expect(core.state.worldFeed.status).toBe("gap");
     expect(core.state.worldFeed.stale).toBe(true);
-    expect(core.state.worldFeed.events.map((event) => event.event_seq)).toEqual([7]);
+    expect(core.state.worldFeed.events).toEqual([]);
     expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
       .toBeGreaterThan(snapshotRequestsBeforeGap);
   });
@@ -151,8 +296,9 @@ describe("World Feed transport", () => {
 
     const worldFeedRequestsBeforeRetry = sentMessages.filter((message) => message.type === "request_world_feed").length;
     expect(core.requestWorldFeed({ cursor: null, limit: 50 })).toBe(true);
-    expect(sentMessages.filter((message) => message.type === "request_world_feed")).toHaveLength(worldFeedRequestsBeforeRetry + 1);
-    expect(sentMessages.at(-1)).toEqual({ type: "request_world_feed", cursor: null, limit: 50 });
+    const worldFeedRequests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(worldFeedRequests).toHaveLength(worldFeedRequestsBeforeRetry + 1);
+    expect(worldFeedRequests.at(-1)).toEqual({ type: "request_world_feed", cursor: null, limit: 50 });
     expect(sentMessages.filter((message) => message.type === "request_snapshot")).toHaveLength(snapshotsBeforeUnavailable);
   });
 });

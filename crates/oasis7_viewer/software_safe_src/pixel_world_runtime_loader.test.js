@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
   createPixelWorldRuntimeBridge,
+  probePixelWorldWebgl2Surface,
 } from "./pixel_world_runtime_loader.js";
 import { derivePixelWorldRenderState as deriveStubRenderState } from "./pixel_world_runtime_module_stub.js";
 import {
@@ -11,6 +12,17 @@ import {
 } from "./pixel_world_runtime_module_selector.js";
 
 describe("pixel world runtime loader", () => {
+  it("reports an unavailable WebGL2 surface before runtime mount", () => {
+    const canvas = document.createElement("canvas");
+    const getContext = vi.spyOn(canvas, "getContext").mockReturnValue(null);
+
+    expect(probePixelWorldWebgl2Surface(canvas)).toEqual({
+      code: "pixel_world_webgl2_unavailable",
+      message: "canvas.getContext() returned null; webgl2 not available or canvas already in use",
+    });
+    expect(getContext).toHaveBeenCalledWith("webgl2", { antialias: false });
+  });
+
   it("uses the wasm runtime module when it loads successfully", async () => {
     const createPixelWorldBridge = vi.fn(async () => ({
       mount: vi.fn(() => ({ status: "ready" })),

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount } from "solid-js";
 
 import * as core from "./legacy_core.js";
-import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
+import { createPixelWorldRuntimeBridge, probePixelWorldWebgl2Surface } from "./pixel_world_runtime_loader.js";
 import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js"; import { createPixelWorldFocusController } from "./pixel_world_focus_controller.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
@@ -12,6 +12,7 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID = "pixel-world-renderer-unavailable-message";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const pixelWorldFocusUiSessionState = {
   focusMode: false,
@@ -524,12 +525,7 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     simulateHover(selection) {
       onHoverEntity?.(selection || null);
     },
-    simulateFatal(message) {
-      onFatal?.({
-        code: "pixel_world_renderer_fatal",
-        message: String(message || "renderer fatal"),
-      });
-    },
+    simulateFatal(message) { onFatal?.(typeof message === "object" ? message : { code: "pixel_world_renderer_fatal", message: String(message || "renderer fatal") }); },
     runtimeSource() {
       return runtimeSource;
     },
@@ -584,7 +580,7 @@ function PixelWorldCanvasRenderer(props) {
   });
 
   return (
-    <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready="true">
+    <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready={props.rendererStatus?.() === "ready" ? "true" : undefined}>
       <canvas
         ref={canvasRef}
         id={PIXEL_WORLD_RUNTIME_CANVAS_ID}
@@ -765,7 +761,12 @@ function PixelWorldCommercialHud(props) {
           <Show when={surface().next_action.detail}>
             <div class="pixel-world-command-cell__detail">{surface().next_action.detail}</div>
           </Show>
-          <a class="pixel-world-command-cell__action" href={nextMoveHref()} onClick={activateNextMove}>
+          <a
+            class="pixel-world-command-cell__action"
+            href={nextMoveHref()}
+            aria-label={`${tr(props.locale(), "下一步", "Next Move")}: ${surface().next_action.label}`}
+            onClick={activateNextMove}
+          >
             {directNextMoveAction()
               ? surface().next_action.label
               : nextMoveRoutesToGameplayDetails()
@@ -791,16 +792,11 @@ function PixelWorldCommercialHud(props) {
         surface={surface}
       />
       <div class="pixel-world-readout badge-row">
+        <span class="badge badge--good">LIVE</span>
         <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
           <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
         </Show>
         <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
-        <span class="badge">{`routes=${surface().world_read.routes}`}</span>
-        <span class="badge">{`fragments=${surface().world_read.fragments}`}</span>
-        <span class="badge">{`hotspots=${surface().world_read.hotspots}`}</span>
-        <Show when={surface().blocker.label}>
-          <span class="badge badge--warn">{`blocker=${surface().blocker.label}`}</span>
-        </Show>
       </div>
     </Show>
   );
@@ -813,7 +809,7 @@ function PixelWorldFocusHud(props) {
       <div class="pixel-world-focus-hud" data-focus-hud="true">
         <div class="pixel-world-focus-hud__identity">
           <div class="pixel-world-focus-hud__eyebrow">
-            {tr(props.locale(), "沉浸模式", "World Focus")}
+            {tr(props.locale(), "电影视图", "Cinematic View")}
           </div>
           <div class="pixel-world-focus-hud__title">
             {tr(props.locale(), "世界指挥棋盘", "World Command Board")}
@@ -861,10 +857,11 @@ function PixelWorldFocusHud(props) {
           <strong>{surface().action_receipt.title}</strong>
           <em>{surface().action_receipt.confidence}</em>
         </div>
-        <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "沉浸模式控制", "World focus controls")}>
+        <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "电影视图控制", "Cinematic controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
             {tr(props.locale(), "命令与目标", "Command & Target")}
           </button>
+          <button id="viewer-focus-exit" type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>{tr(props.locale(), "退出电影视图", "Exit Cinematic")}</button>
           <details class="pixel-world-focus-more-controls">
             <summary>{tr(props.locale(), "更多控制", "More controls")}</summary>
             <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>{tr(props.locale(), "世界状态", "World Status")}</button>
@@ -873,7 +870,6 @@ function PixelWorldFocusHud(props) {
                 ? tr(props.locale(), "还原布局", "Restore Layout")
                 : tr(props.locale(), "最大化", "Maximize")}
             </button>
-            <button id="viewer-focus-exit" type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>{tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}</button>
           </details>
         </div>
       </div>
@@ -1080,7 +1076,7 @@ function PixelWorldFocusCommandSurface(props) {
     <div id="viewer-command-console" class="pixel-world-focus-command-surface stack">
       <Show
         when={agentId()}
-        fallback={<div class="empty">{tr(locale(), "先选中一个行动体，才能在沉浸模式里直接下指令。", "Select an agent to issue direct commands in World Focus.")}</div>}
+        fallback={<div class="empty">{tr(locale(), "先选中一个行动体，才能在电影视图里直接下指令。", "Select an agent to issue direct commands in Cinematic View.")}</div>}
       >
         <div class="badge-row">
           <span class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</span>
@@ -1297,6 +1293,7 @@ export function PixelWorldHost(props) {
       }
       setRendererFatal(fatal);
       setRendererStatus("unavailable");
+      setRuntimeSource(fatal?.code === "pixel_world_webgl2_unavailable" ? "surface_unavailable" : runtimeSource());
       setRustRenderState(null);
       core.updatePixelWorldRuntimeMeta({
         runtimeStatus: "unavailable",
@@ -1312,6 +1309,9 @@ export function PixelWorldHost(props) {
   let mountedCanvas = null;
 
   function applyRendererUpdate() {
+    if (rendererStatus() === "unavailable") {
+      return;
+    }
     const result = adapter().update(renderInput());
     if (result?.fatal) {
       setRendererFatal(result.fatal);
@@ -1367,6 +1367,11 @@ export function PixelWorldHost(props) {
         camera: cameraState(),
         fatal,
       });
+      return;
+    }
+    const surfaceFatal = probePixelWorldWebgl2Surface(mountedCanvas);
+    if (surfaceFatal) {
+      adapter().simulateFatal(surfaceFatal);
       return;
     }
     const result = await adapter().mount(mountedCanvas, renderInput());
@@ -1454,23 +1459,29 @@ export function PixelWorldHost(props) {
                 || tr(locale(), "等待 Rust bridge 生成世界显示状态。", "Waiting for the Rust bridge to derive the world display state.")}
             </div>
           </div>
-          <div class="pixel-world-focus-entry">
-            <div id="pixel-world-focus-entry-hint" class="pixel-world-focus-entry__hint">
-              {tr(locale(), "拖动、缩放并检查世界", "Pan, zoom, and inspect the world")}
-            </div>
-            <button
-              type="button"
-              class="pixel-world-focus-entry__button"
-              disabled={!renderState()}
-              onClick={focusController.enterFocusMode}
-              aria-pressed={focusMode() ? "true" : "false"}
-              aria-describedby="pixel-world-focus-entry-hint"
-            >
-              {tr(locale(), "进入沉浸模式", "Enter World Focus")}
-            </button>
-          </div>
         </div>
       </Show>
+      <div
+        class="pixel-world-focus-entry"
+        data-viewer-overlay="cinematic-entry"
+        hidden={focusMode()}
+      >
+          <div id="pixel-world-focus-entry-hint" class="pixel-world-focus-entry__hint">
+            {tr(locale(), "拖动、缩放并检查世界", "Pan, zoom, and inspect the world")}
+          </div>
+          <button
+            type="button"
+            class="pixel-world-focus-entry__button"
+            disabled={!renderState()}
+            onClick={focusController.enterFocusMode}
+            aria-pressed="false"
+            aria-describedby={rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : "pixel-world-focus-entry-hint"}
+          >
+            {rendererStatus() === "unavailable"
+              ? tr(locale(), "电影视图（当前不可用）", "Cinematic View (unavailable)")
+              : tr(locale(), "电影视图", "Cinematic View")}
+          </button>
+      </div>
       <Show when={focusMode() && renderState()}>
         <Show when={!maximized() && shouldShowFocusCinematic(renderState())}>
           <PixelWorldFocusCinematicBanner
@@ -1505,6 +1516,7 @@ export function PixelWorldHost(props) {
       <Show when={rendererStatus() !== "fallback" && rendererStatus() !== "unavailable"}>
         <PixelWorldCanvasRenderer
           locale={locale}
+          rendererStatus={rendererStatus}
           renderInput={renderInput}
           renderState={renderState}
           selection={selectedEntity}
@@ -1527,28 +1539,16 @@ export function PixelWorldHost(props) {
         />
       </Show>
       <Show when={!renderState()}>
-        <div class="empty pixel-world-render-unavailable" data-renderer-state="unavailable">
-          {rendererFatal()
-            ? `${rendererFatal().code}: ${rendererFatal().message}`
+        <div
+          id={rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : undefined}
+          class="empty pixel-world-render-unavailable"
+          data-viewer-overlay="renderer-unavailable"
+          data-renderer-state={rendererStatus()}
+        >
+          {rendererStatus() === "unavailable"
+            ? tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")
             : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
         </div>
-      </Show>
-      <Show when={rendererStatus() === "unavailable"}>
-        <details class="diagnostic pixel-world-render-unavailable" data-renderer-state="unavailable">
-          <summary>{tr(locale(), "Renderer 不可用", "Renderer Unavailable")}</summary>
-          <div class="stack flow-top">
-            <div class="feedback-summary">
-              {tr(
-                locale(),
-                "Rust bridge 未能生成世界显示状态；页面不再保留第二套 JS 世界渲染。",
-                "Rust bridge could not derive the world display state; the page no longer keeps a second JS world renderer.",
-              )}
-            </div>
-            <Show when={rendererFatal()}>
-              <div class="feedback-detail">{`${rendererFatal().code}: ${rendererFatal().message}`}</div>
-            </Show>
-          </div>
-        </details>
       </Show>
       <Show when={focusMode() && renderState()?.commercial_surface && !maximized()}>
         <div class="pixel-world-focus-receipt">
@@ -1580,7 +1580,7 @@ export function PixelWorldHost(props) {
         </details>
       </Show>
       <Show when={!focusMode() || !maximized()}>
-        <details class="diagnostic pixel-world-render-diagnostics">
+        <details class="diagnostic pixel-world-render-diagnostics" data-renderer-state={rendererStatus()}>
           <summary>{tr(locale(), "Renderer 诊断", "Renderer Diagnostics")}</summary>
           <div class="pixel-world-host__toolbar badge-row">
             <span class="badge badge--accent">{`locations=${visualState().locations.length}`}</span>
@@ -1617,6 +1617,9 @@ export function PixelWorldHost(props) {
                 "The world stage depends only on the wasm/Rust bridge, embedded canvas, light pan-zoom interaction, and event callbacks.",
               )}
             </div>
+            <Show when={rendererStatus() === "unavailable" && rendererFatal()}>
+              <div class="feedback-detail" data-renderer-fatal>{`${rendererFatal().code}: ${rendererFatal().message}`}</div>
+            </Show>
           </div>
         </details>
       </Show>
@@ -1634,7 +1637,7 @@ export function PixelWorldHost(props) {
             }
           }}
         >
-          <summary>{tr(locale(), "沉浸诊断", "Focus Diagnostics")}</summary>
+          <summary>{tr(locale(), "电影视图诊断", "Cinematic Diagnostics")}</summary>
           <div class="pixel-world-focus-drawer__body">
             <div class="badge-row">
               <Show when={renderState().world_tick !== null && renderState().world_tick !== undefined}>

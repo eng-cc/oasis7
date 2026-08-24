@@ -2491,6 +2491,8 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByText("Please restore the smelter line before expanding.").closest(".event-card")).toHaveClass("event-card--chat-player");
     expect(screen.getByText("Raw diagnostics")).toBeInTheDocument();
     expect(screen.queryByText(/"message": "Please restore the smelter line before expanding."/)).not.toBeInTheDocument();
+    const commandPanel = document.querySelector("#viewer-details-panel"); expect(within(commandPanel).getByText("Agent Chat")).toBeInTheDocument(); expect(commandPanel.querySelector(".command-surface__diagnostic-strip")?.closest("details")).toHaveProperty("open", false);
+    for (const label of ["Advanced Prompt Settings", "Asset / Governance Lane"]) expect(within(commandPanel).getByText(label).closest("details"), `${label} must be a closed disclosure`).toHaveProperty("open", false);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders provider chat failures in message flow", async () => {

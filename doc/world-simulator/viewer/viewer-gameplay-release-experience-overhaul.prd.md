@@ -56,6 +56,11 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 ### Current implementation boundary
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
+- 当前 `main` 已交付的 Player shell 是 fullscreen、world-first 的单舞台：世界棋盘
+  覆盖首屏，HUD 以 `Objective / Next Move / Player Leverage` 三张紧凑卡片叠加，
+  `World / Targets / Command` 通过按需 drawer 进入。旧的“左侧/中间/右侧”三栏
+  Player IA 不属于当前默认入口；密集三栏只保留给显式、能力门控的 Director 工具视图，
+  不能与 Player shell 混写。
 - 当前反馈投影仍包括 `player_gameplay.recent_feedback`、本地 gameplay feedback、
   `last_world_change` 与页面的 Recent Events/Feedback；Action Receipt 继续只读这些
   因果字段。独立的 `world_feed/v1` 已由 runtime journal → Viewer transport/panel
@@ -70,6 +75,27 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
   状态并保留可诊断原因，不把空白画布当作成功。
 - Quote 是 Command/Console 的上下文只读/行动路线，不是与 World/Targets/Command
   并列的 dock route。任何 rail 暴露均属于实现债务，不能写成终端 IA。
+
+### Expanded visual contract (target; pending implementation and headed QA)
+- **World HUD hierarchy**：世界棋盘仍是最大视觉主体；Player HUD 的阅读顺序为条件性
+  connection/renderer/blocker attention、`Objective`、一个主导性的 `Next Move` CTA、
+  `Player Leverage`/selected-agent context、`Action Receipt`，World Feed 保持收起的
+  ambient chip。HUD 只可格式化既有 `commercial_surface` 与 `buildGameplaySummary()`。
+  `world_read` 的 `tick/agents/routes/fragments/hotspots` 只在运行时已发布且非空时作为
+  次级摘要显示；不得补造 Power、Data、Consensus 或其他未发布指标。
+- **Flattened Next Move**：`Next Move` 只保留一个清晰的主动作/路由，目标与杠杆作为
+  支持上下文，阻塞原因内联；不得让 ambient World Feed 或重复引导文案冒充动作结果。
+- **Agent Console disclosure**：默认打开后先呈现当前选择、授权的 command/chat、当前
+  blocker 与 receipt；未选择或不可控时只给出导航/恢复说明。Prompt override、auth/
+  capability、raw snapshot/JSON、world-scale 与 Director 工具保持在收起的
+  `Diagnostics / More` 下，不改变既有权限或 fail-closed 语义。
+- **Focus presentation**：用户-facing 名称为 `Cinematic View / Minimal HUD`，但保留
+  `focusMode` 与既有 source/test hooks。显式进入时收起完整 HUD、dock、readout/feed，
+  保留选择标记、当前 objective/blocker、存在中的 receipt 与明确退出入口；Escape 先
+  关闭局部 drawer，再退出该呈现层，不能改变 world、command、auth 或 receipt 因果。
+- **Non-goals**：本目标不新增 runtime/protocol 字段，不改仿真、replay、renderer、
+  Director capability、ownership、经济或玩家权限，也不从 metrics、ambient event、
+  wall clock、cursor 或文案推断玩家进展。以上是目标合同，不是当前已完成或发行结论。
 
 ### Director entry and failure contract (implemented boundary; issuer blocked)
 - 每次 fresh load、reload、new tab 或新 session 都进入 Player；Director 不是可持久化
@@ -181,6 +207,32 @@ must not be rendered as a contiguous event stream. `loading`, `empty`, `replay`,
 `unavailable` remain distinct, and `accepted`/`queued` feed entries never imply a
 completed action. Action Receipt remains the sole player-causality surface.
 
+### Previously reported feed/readout defects — resolved by #3315
+
+These implementation findings are now resolved on the current branch; the target
+contract above remains the authority, and the tests below are the evidence for the
+bounded fixes:
+
+- **P1 cursor continuation — resolved:** `world_feed_transport.js` now schedules a
+  deferred request with the returned cursor and refreshes once after world activity,
+  without overlapping an in-flight request. Coverage is in
+  `crates/oasis7_viewer/software_safe_src/world_feed_transport.test.js`, tests
+  `continues an initial page asynchronously from the returned cursor` and
+  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`.
+- **P2 gap/reorg event retention — resolved:** `consumeWorldFeed()` clears the prior
+  `events` array when `status === "gap"` before authoritative snapshot reload. Coverage is
+  in `crates/oasis7_viewer/software_safe_src/world_feed_state.test.js`, test
+  `stops appending on gap/reorg and requires authoritative snapshot reload`.
+- **P2 multi-resource readout fallback — resolved:** the selected-resource formatter now
+  parses each host entry joined by ` · ` and formats every structured resource instead of
+  returning raw serialized text. Coverage is in
+  `crates/pixel_world_bridge/src/render_selected_resource_readout.rs`, test
+  `resource_readout_formats_each_structured_entry_without_raw_json`.
+
+Task #3248 browser screenshots and headed runs remain historical evidence only. This
+documentation update has no fresh headed browser run and does not claim new browser or
+release verification beyond the focused implementation tests cited above.
+
 ### 可发现性增强
 - 为关键入口增加显式提示文案（例如：快捷键提示、模式提示）。
 - 不依赖用户阅读手册即可发现“如何打开面板”和“如何聚焦对象”。
@@ -209,8 +261,12 @@ required after the corresponding implementation slice.
 
 | ID | Surface/state | Viewports/input | Required proof | Owner |
 | --- | --- | --- | --- | --- |
-| IA-01 | Player default | desktop 1280px+ | stage/HUD/board/receipt dominate; quiet dock; no three-column default | viewer + visual |
-| IA-02 | sticky rail | 390x844 and tablet | `World / Targets / Command`; Search nested in Targets; More contains Diagnostics | viewer + visual |
+| IA-01 | Player default | headed desktop 1440x1000 | stage/HUD/board/receipt dominate; quiet dock; no three-column default | viewer + visual |
+| IA-02 | sticky rail | headed mobile 390x844 | `World / Targets / Command`; Search nested in Targets; More contains Diagnostics | viewer + visual |
+| HUD-01 | World HUD hierarchy | headed 1440x1000 + 390x844 | attention → Objective → one Next Move CTA → Leverage/context → Receipt; optional world_read only when authoritative | viewer + visual |
+| HUD-02 | Flattened Next Move | headed 1440x1000 + 390x844 | one dominant action/route, inline blocker, no duplicate or ambient success claim | viewer + visual + QA |
+| CON-01 | Agent Console disclosure | desktop/mobile + keyboard | command/chat and selected context are default; raw/auth/operator details are collapsed Diagnostics | viewer + QA |
+| CIN-01 | Cinematic / Minimal HUD | headed 1440x1000 + 390x844 + Escape/IME | explicit entry/exit, minimal objective/blocker/receipt and selected marker, focus return preserved | viewer + visual + QA |
 | DIR-01 | Director allowed | fresh Player -> explicit Diagnostics action | capability-gated, ephemeral, visibility/density only, world/selection preserved | producer + viewer |
 | DIR-02 | Director denied/stale/revoked | reload/new tab + denied entry | fail closed to Player, sanitized surfaces, recovery copy, no persistence | viewer + QA |
 | FOC-01 | drawers/console/focus | keyboard + screen reader semantics | local surface closes before Focus; invoker receives focus | viewer + QA |

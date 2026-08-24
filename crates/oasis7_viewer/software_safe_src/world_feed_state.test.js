@@ -104,8 +104,18 @@ describe("World Feed v1 state", () => {
     }));
     expect(gap.state.status).toBe("gap");
     expect(gap.state.stale).toBe(true);
-    expect(gap.state.events).toHaveLength(2);
+    expect(gap.state.events).toEqual([]);
     expect(gap.requiresSnapshotReload).toBe(true);
+
+    const recovered = consumeWorldFeed(gap.state, feed({
+      reorg_epoch: 3,
+      cursor: "wf1.cursor-3",
+      events: [{ event_seq: 1, kind: "reorg_ready", summary: "new epoch", detail: "", receipt_ref: null }],
+    }));
+    expect(recovered.state.status).toBe("ready");
+    expect(recovered.state.events).toEqual([
+      { event_seq: 1, kind: "reorg_ready", summary: "new epoch", detail: "", receipt_ref: null },
+    ]);
   });
 
   it("fails closed for unsupported schema and unknown statuses without splicing events", () => {
