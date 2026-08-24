@@ -107,6 +107,8 @@ struct SidecarGenerationRecord {
     recovery_metadata_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recovery_metadata_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tick_consensus_archive_ref: Option<String>,
     pinned_blob_hashes: Vec<String>,
     created_at_ms: i64,
 }
@@ -130,6 +132,8 @@ struct SidecarGenerationHashPayload<'a> {
     journal_segment_hashes: &'a [String],
     recovery_metadata_path: &'a Option<String>,
     recovery_metadata_hash: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tick_consensus_archive_ref: &'a Option<String>,
     pinned_blob_hashes: &'a [String],
     created_at_ms: i64,
 }
@@ -527,6 +531,13 @@ fn hydrate_tick_consensus_snapshot_from_archive(
         }
         Err(err) => return Err(err),
     };
+    hydrate_tick_consensus_snapshot_from_archived_records(snapshot, archived_records)
+}
+
+fn hydrate_tick_consensus_snapshot_from_archived_records(
+    snapshot: &mut Snapshot,
+    archived_records: Vec<TickConsensusRecord>,
+) -> Result<(), WorldError> {
     let mut records = archived_records;
     records.extend(snapshot.tick_consensus_records.clone());
     if records.len() != snapshot.tick_consensus_total_record_count {
@@ -539,6 +550,15 @@ fn hydrate_tick_consensus_snapshot_from_archive(
         });
     }
     snapshot.tick_consensus_records = records;
+    // This counter describes the on-disk split only. Once the archive is
+    // materialized, the in-memory snapshot is complete and a second hydration
+    // pass must be a no-op.
+    snapshot.tick_consensus_archived_record_count = 0;
+    snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
+    let (hot_from_tick, hot_to_tick) =
+        tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
+    snapshot.tick_consensus_hot_from_tick = hot_from_tick;
+    snapshot.tick_consensus_hot_to_tick = hot_to_tick;
     Ok(())
 }
 
@@ -550,6 +570,47 @@ fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapsho
     let mut snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
     hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
     Ok(snapshot)
+}
+
+fn validate_compatible_legacy_distfs_payloads(
+    dir: &Path,
+    selected_manifest: &SnapshotManifest,
+    selected_journal_segments: &[JournalSegmentRef],
+) -> Result<(), WorldError> {
+    let manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
+    if !manifest_path.exists() {
+        return Ok(());
+    }
+    let legacy_manifest: SnapshotManifest = read_json_from_path(manifest_path.as_path())?;
+    if hash_json(&legacy_manifest)? != hash_json(selected_manifest)? {
+        // A valid but different top-level payload can belong to a newer
+        // generation while an older sidecar generation is being restored.
+        return Ok(());
+    }
+    let journal_path = dir.join(DISTFS_JOURNAL_SEGMENTS_FILE);
+    if !journal_path.exists() {
+        return Ok(());
+    }
+    let legacy_journal: Vec<JournalSegmentRef> = read_json_from_path(journal_path.as_path())?;
+    if legacy_journal != selected_journal_segments {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "selected sidecar generation conflicts with legacy journal payload".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn load_legacy_tick_consensus_records_for_verification(
+    dir: &Path,
+    persisted_snapshot: &Snapshot,
+) -> Result<Vec<TickConsensusRecord>, WorldError> {
+    let mut records = match load_tick_consensus_archive_records_from_index(dir, persisted_snapshot)?
+    {
+        Some(records) => records,
+        None => load_tick_consensus_legacy_archive_records(dir, persisted_snapshot)?,
+    };
+    records.extend(persisted_snapshot.tick_consensus_records.clone());
+    Ok(records)
 }
 
 fn load_json_snapshot_if_newer_chain_resource_context(
@@ -810,7 +871,14 @@ impl World {
         self.journal.save_json(journal_path)?;
         persisted_snapshot.save_json(snapshot_path)?;
         persist_tick_consensus_archive(dir, &persisted_snapshot, tick_consensus_archive.as_ref())?;
-        self.save_distfs_sidecar(dir, &persisted_snapshot, None)?;
+        let archive_bytes = tick_consensus_archive
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("serialize tick consensus generation archive failed: {err}"),
+            })?;
+        self.save_distfs_sidecar(dir, &persisted_snapshot, archive_bytes.as_deref(), None)?;
         self.save_module_store_to_dir(dir)?;
         Ok(())
     }
@@ -894,7 +962,13 @@ impl World {
     }
 
     pub fn verify_tick_consensus_archive_from_dir(dir: impl AsRef<Path>) -> Result<(), WorldError> {
-        let records = Self::load_tick_consensus_records_from_dir(dir, None, None)?;
+        let dir = dir.as_ref();
+        let persisted_snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
+        let records = if persisted_snapshot.tick_consensus_archived_record_count == 0 {
+            persisted_snapshot.tick_consensus_records.clone()
+        } else {
+            load_legacy_tick_consensus_records_for_verification(dir, &persisted_snapshot)?
+        };
         verify_tick_consensus_record_slice(records.as_slice())
     }
 
@@ -1001,6 +1075,7 @@ impl World {
         &self,
         dir: &Path,
         snapshot: &Snapshot,
+        tick_consensus_archive_bytes: Option<&[u8]>,
         recovery_metadata: Option<&[u8]>,
     ) -> Result<(), WorldError> {
         let inherited_recovery_metadata = if recovery_metadata.is_none() {
@@ -1037,6 +1112,7 @@ impl World {
             store_root.as_path(),
             &manifest,
             journal_segments.as_slice(),
+            tick_consensus_archive_bytes,
             recovery_metadata,
         )?;
         let snapshot_manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
@@ -1052,10 +1128,6 @@ impl World {
         let store_root = dir.join(DISTFS_STATE_DIR);
         if store_root.exists()
             && let Some(index) = persistence_support::load_sidecar_generation_index(&store_root)?
-            && index
-                .generations
-                .get(index.latest_generation.as_str())
-                .is_some_and(|record| record.recovery_metadata_path.is_some())
         {
             for generation_id in std::iter::once(index.latest_generation.as_str())
                 .chain(index.rollback_safe_generation.as_deref())
@@ -1070,16 +1142,40 @@ impl World {
                 }
                 let (manifest, journal_segments) =
                     persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
+                if let Err(err) = validate_compatible_legacy_distfs_payloads(
+                    dir,
+                    &manifest,
+                    journal_segments.as_slice(),
+                ) {
+                    let _ = write_distfs_recovery_audit(
+                        dir,
+                        "fallback_json",
+                        Some(format!("distfs_restore_failed: {:?}", err)),
+                    );
+                    return Ok(None);
+                }
                 let store = LocalCasStore::new(&store_root);
-                let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+                let mut snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+                if let Some(archive) =
+                    persistence_support::load_sidecar_tick_consensus_archive(&store_root, record)?
+                {
+                    hydrate_tick_consensus_snapshot_from_archived_records(
+                        &mut snapshot,
+                        archive.archived_records,
+                    )?;
+                }
                 let events: Vec<WorldEvent> =
                     assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
                 let _ = write_distfs_recovery_audit(
                     dir,
-                    if generation_id == index.latest_generation {
-                        "generation_restored"
+                    if record.recovery_metadata_path.is_some() {
+                        if generation_id == index.latest_generation {
+                            "generation_restored"
+                        } else {
+                            "rollback_safe_generation_restored"
+                        }
                     } else {
-                        "rollback_safe_generation_restored"
+                        "distfs_restored"
                     },
                     None,
                 );

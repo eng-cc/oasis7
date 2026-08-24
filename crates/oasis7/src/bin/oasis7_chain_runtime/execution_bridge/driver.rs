@@ -24,9 +24,10 @@ use serde::Serialize;
 use super::checkpoint::{
     begin_execution_bridge_retention_transaction, complete_execution_bridge_retention_transaction,
     execution_bridge_record_path, execution_checkpoint_root_dir,
-    fail_execution_bridge_retention_transaction, load_execution_bridge_record,
-    load_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
-    persist_execution_bridge_record, promote_interrupted_execution_bridge_retention,
+    fail_execution_bridge_retention_transaction, list_execution_bridge_record_heights,
+    load_execution_bridge_record, load_execution_checkpoint_manifest,
+    maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
+    promote_interrupted_execution_bridge_retention,
     run_execution_bridge_incremental_retention_maintenance,
     run_execution_bridge_retention_maintenance,
 };
@@ -290,7 +291,17 @@ impl NodeRuntimeExecutionDriver {
             execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
-        if driver.state.last_applied_committed_height > 0 {
+        // The bridge state file is a cache of the committed head, not the
+        // authority for it. A crash can publish a record before this cache is
+        // replaced, or the cache can be lost independently. In either case,
+        // bootstrapping the world from disk would replay the next commit on a
+        // different generation than the durable execution record. Reconcile
+        // from the record chain whenever one exists and fail closed if its
+        // latest pointer is missing/corrupt.
+        let has_execution_records =
+            !list_execution_bridge_record_heights(driver.records_dir.as_path())?.is_empty()
+                || driver.records_dir.join("latest.json").exists();
+        if driver.state.last_applied_committed_height > 0 || has_execution_records {
             driver.restore_startup_execution_head()?;
         } else {
             if execution_world_bootstrap_required {

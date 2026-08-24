@@ -107,7 +107,7 @@ impl World {
         let snapshot = self.snapshot();
         let write_result = fs::create_dir_all(dir)
             .map_err(WorldError::from)
-            .and_then(|_| self.save_distfs_sidecar(dir, &snapshot, Some(recovery_metadata)));
+            .and_then(|_| self.save_distfs_sidecar(dir, &snapshot, None, Some(recovery_metadata)));
         let readback =
             Self::readback_authoritative_recovery_generation(dir, expected_metadata_hash.as_str());
         match readback {

@@ -12,7 +12,7 @@ use super::*;
 use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
-use oasis7::runtime::LocalCasStore;
+use oasis7::runtime::{LocalCasStore, blake3_hex};
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{
     NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
@@ -103,6 +103,54 @@ fn node_runtime_execution_driver_rolls_back_in_memory_worlds_after_state_persist
     let persisted = load_execution_bridge_state(state_path.as_path()).expect("persisted state");
     assert_eq!(persisted.last_applied_committed_height, 1);
     assert_eq!(persisted.last_node_block_hash.as_deref(), Some("node-h1"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_recovers_when_bridge_state_metadata_is_lost() {
+    let dir = temp_dir("execution-driver-missing-state-recovery");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let context = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(context).expect("commit");
+    assert_eq!(driver.state.last_applied_committed_height, 1);
+
+    fs::remove_file(state_path.as_path()).expect("simulate lost bridge state metadata");
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("startup must recover from the authoritative execution record");
+
+    assert_eq!(restarted.state.last_applied_committed_height, 1);
+    assert_eq!(
+        restarted.state.last_node_block_hash.as_deref(),
+        Some("node-h1")
+    );
+    let record = load_execution_bridge_record(
+        execution_bridge_record_path(
+            restarted.records_dir.as_path(),
+            restarted.state.last_applied_committed_height,
+        )
+        .as_path(),
+    )
+    .expect("authoritative record");
+    let snapshot_ref = record.snapshot_ref.as_deref().expect("snapshot ref");
+    let snapshot_bytes = LocalCasStore::new(dir.join("store"))
+        .get_verified(snapshot_ref)
+        .expect("recovered snapshot");
+    assert_eq!(
+        blake3_hex(snapshot_bytes.as_slice()),
+        record.execution_state_root
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
