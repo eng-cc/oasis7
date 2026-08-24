@@ -1263,8 +1263,8 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
-    expect(screen.getByTestId("viewer-primary-action-preview")).toHaveTextContent(/Recommended context: Advance recovery proof/);
+    expect(within(stagePanel).getAllByTestId("viewer-playthrough-action-recommended")).toHaveLength(1);
+    ["step", "request-snapshot"].forEach((suffix) => expect(within(stagePanel).queryByTestId(`viewer-playthrough-action-${suffix}`)).not.toBeInTheDocument());
     expect(within(stagePanel).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1294,7 +1294,8 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Request snapshot/);
+    expect(within(stagePanel).getAllByTestId("viewer-playthrough-action-recommended")).toHaveLength(1);
+    ["viewer-playthrough-action-step", "viewer-primary-action-preview"].forEach((testId) => expect(within(stagePanel).queryByTestId(testId)).not.toBeInTheDocument());
     expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1422,8 +1423,7 @@ describe("viewer web ui automation baseline", () => {
 
     expect(screen.getByTestId("viewer-playthrough-select-agent")).toHaveAccessibleName(/agent/i);
     expect(screen.getByTestId("viewer-playthrough-action-recommended")).toHaveAccessibleName("Advance One Step");
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Advance recovery proof/);
+    ["step", "request-snapshot"].forEach((suffix) => expect(screen.queryByTestId(`viewer-playthrough-action-${suffix}`)).not.toBeInTheDocument());
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders claim-agent quote and owned claim guidance without inventing claim controls", async () => {

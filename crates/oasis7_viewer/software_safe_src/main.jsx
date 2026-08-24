@@ -2047,36 +2047,7 @@ function WorldStageHero() {
         `The current intent is centered on ${gameplaySummary().acceptedIntentTarget}.`,
       )
       : selectionHint();
-  const refreshSnapshotAction = () =>
-    (gameplaySummary()?.availableActions || []).find((action) => action.executeKind === "request_snapshot")
-    || {
-      actionId: "request_snapshot",
-      action_id: "request_snapshot",
-      label: "Request snapshot",
-      protocolAction: "request_snapshot",
-      protocol_action: "request_snapshot",
-      executeKind: "request_snapshot",
-      targetAgentId: null,
-      disabledReason: null,
-    };
-  const primaryActionContext = () =>
-    gameplaySummary()?.recommendedAction?.label
-    || gameplaySummary()?.narrativeNextStep
-    || gameplaySummary()?.nextStepHint
-    || gameplaySummary()?.objective
-    || "";
-  const primaryRefreshLabel = () => {
-    const context = primaryActionContext();
-    return context
-      ? tr(locale(), `刷新快照，确认：${context}`, `Refresh Snapshot to verify: ${context}`)
-      : tr(locale(), "刷新快照，确认当前玩法状态", "Refresh Snapshot to verify the current gameplay state");
-  };
-  const primaryStepLabel = () => {
-    const context = primaryActionContext();
-    return context
-      ? tr(locale(), `推进一步，尝试：${context}`, `Advance One Step toward: ${context}`)
-      : tr(locale(), "推进一步，尝试当前下一步", "Advance One Step toward the current next move");
-  };
+  const recommendedAction = () => gameplaySummary()?.recommendedAction || null;
 
   return (
     <div class="stage-hero stage-hero--compact" data-stage-state={gameplaySummary()?.blockerKind || "ready"}>
@@ -2146,32 +2117,39 @@ function WorldStageHero() {
           <div class="hero-focus-card__detail">{identityMeta()}</div>
         </div>
       </div>
-      <div class="toolbar" aria-label={tr(locale(), "主要玩法动作", "Primary gameplay actions")}>
-        <button
-          type="button"
-          data-testid="viewer-playthrough-action-request-snapshot"
-          aria-label={primaryRefreshLabel()}
-          class={gameplayActionButtonClass(refreshSnapshotAction())}
-          aria-busy={gameplayActionButtonBusyAttrs(refreshSnapshotAction())}
-          disabled={gameplayActionPendingFor(refreshSnapshotAction())}
-          onClick={() => renderGameplayAction(refreshSnapshotAction())}
-        >
-          {gameplayActionDisplayLabel(refreshSnapshotAction(), locale(), tr(locale(), "刷新快照", "Refresh Snapshot"))}
-        </button>
-        <button
-          type="button"
-          data-testid="viewer-playthrough-action-step"
-          aria-label={primaryStepLabel()}
-          onClick={() => core.sendControl("step", { count: 1 })}
-        >
-          {tr(locale(), "推进一步", "Advance One Step")}
-        </button>
-      </div>
-      <div class="feedback-detail" data-testid="viewer-primary-action-preview">
-        {primaryActionContext()
-          ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`)
-          : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.")}
-      </div>
+      <Show when={recommendedAction()}>
+        {(action) => (
+          <CalloutCard
+            title={tr(locale(), "推荐动作", "Recommended Action")}
+            badge={action().executeKind || "ready"}
+            badgeClass="badge badge--good"
+          >
+            <div class="feedback-summary">
+              {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
+            </div>
+            <div
+              class="feedback-detail"
+              id={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+            >
+              {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
+                || gameplayActionDetail(action(), gameplaySummary(), locale())}
+            </div>
+            <div class="toolbar" aria-label={tr(locale(), "下一步动作", "Next Move action")}>
+              <button
+                type="button"
+                data-testid={gameplayActionTestId(action(), "recommended")}
+                class={gameplayActionButtonClass(action())}
+                aria-busy={gameplayActionButtonBusyAttrs(action())}
+                disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
+                aria-describedby={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+                onClick={() => renderGameplayAction(action())}
+              >
+                {gameplayActionDisplayLabel(action(), locale())}
+              </button>
+            </div>
+          </CalloutCard>
+        )}
+      </Show>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
         <EmptyEntityRecoveryCard
           locale={locale()}
@@ -2814,34 +2792,6 @@ function WorldSummaryPanel(props = {}) {
                 )}
               </Show>
               <ProductValidationQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
-              <Show when={gameplay().recommendedAction}>
-                {(action) => (
-                  <CalloutCard
-                    title={tr(locale(), "推荐动作", "Recommended Action")}
-                    badge={action().executeKind || "ready"}
-                    badgeClass="badge badge--good"
-                  >
-                    <div class="feedback-summary">
-                      {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
-                    </div>
-                    <div class="feedback-detail">
-                      {gameplayActionDisabledReason(action(), gameplay(), locale())
-                        || gameplayActionDetail(action(), gameplay(), locale())}
-                    </div>
-                    <div class="toolbar">
-                      <button
-                        data-testid={gameplayActionTestId(action(), "recommended")}
-                        class={gameplayActionButtonClass(action())}
-                        aria-busy={gameplayActionButtonBusyAttrs(action())}
-                        disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
-                        onClick={() => renderGameplayAction(action())}
-                      >
-                        {gameplayActionDisplayLabel(action(), locale())}
-                      </button>
-                    </div>
-                  </CalloutCard>
-                )}
-              </Show>
               <Show when={!shouldShowStarterOcRequiredGate(gameplay()) && (gameplay().recommendedAction?.actionId === "claim_starter_oc" || starterOcAction(gameplay()))}>
                 <CalloutCard
                   title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}

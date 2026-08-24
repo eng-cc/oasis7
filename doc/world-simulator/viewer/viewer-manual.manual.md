@@ -166,9 +166,11 @@ named tests as the current evidence, not the historical browser artifacts:
   ` · `-joined host entry. See Rust test
   `render_selected_resource_readout.rs::resource_readout_formats_each_structured_entry_without_raw_json`.
 
-The #3248 browser evidence referenced by the surrounding Viewer docs is historical. This
-implementation has no fresh headed browser run and does not turn focused tests into a
-headed-browser or release-readiness claim.
+The #3248 browser evidence referenced by the surrounding Viewer docs is historical. For
+#3315, external Chrome freshly verified only the GPU-unavailable fallback at headed
+`1440x1000` and `390x844`; the `ready=true` WebGL2/Cinematic path, post-probe async GPU
+failure, and tablet widths `641–1240` remain unverified. This is browser evidence for the
+fallback surface, not a release-readiness claim.
 
 ### Target QA evidence checklist
 The implementation owner must supply headed evidence for desktop `1440x1000` and mobile `390x844`

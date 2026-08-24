@@ -102,6 +102,7 @@ unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fu
   `render_selected_resource_readout.rs` 的
   `resource_readout_formats_each_structured_entry_without_raw_json`。
 
-这些是 #3315 的 focused implementation/test evidence，不是新的 headed browser 或
-发行放行结论；#3248 浏览器证据仍是历史记录，#3315 没有新增 fresh headed browser
-验证。
+这些是 #3315 的 focused implementation/test evidence；外部 Chrome 另在 headed
+`1440x1000` 与 `390x844` 复核了 GPU 不可用 fallback。该浏览器证据不覆盖
+`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
+宽度，也不是发行放行结论；#3248 浏览器证据仍是历史记录。

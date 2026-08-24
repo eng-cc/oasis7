@@ -229,9 +229,10 @@ bounded fixes:
   `crates/pixel_world_bridge/src/render_selected_resource_readout.rs`, test
   `resource_readout_formats_each_structured_entry_without_raw_json`.
 
-Task #3248 browser screenshots and headed runs remain historical evidence only. This
-documentation update has no fresh headed browser run and does not claim new browser or
-release verification beyond the focused implementation tests cited above.
+Task #3248 browser screenshots and headed runs remain historical evidence. For #3315,
+external Chrome freshly verified only the GPU-unavailable fallback at headed `1440x1000`
+and `390x844`; this does not verify the `ready=true` WebGL2/Cinematic path, post-probe
+async GPU failure, or tablet widths `641–1240`, and is not a release-readiness claim.
 
 ### 可发现性增强
 - 为关键入口增加显式提示文案（例如：快捷键提示、模式提示）。
