@@ -460,6 +460,12 @@ fn persist_loads_legacy_tick_consensus_archive_without_index() {
     world
         .save_to_dir(&dir)
         .expect("save world with archive index");
+    fs::remove_file(
+        dir.join(".distfs-state")
+            .join("sidecar-generations")
+            .join("index.json"),
+    )
+    .expect("remove sidecar generation index");
 
     let archived_record_count = world.tick_consensus_records().len().saturating_sub(128);
     let legacy_archive = LegacyArchiveFile {
@@ -497,6 +503,12 @@ fn persist_uses_legacy_tick_consensus_archive_when_index_segment_is_missing() {
     world
         .save_to_dir(&dir)
         .expect("save world with archive index");
+    fs::remove_file(
+        dir.join(".distfs-state")
+            .join("sidecar-generations")
+            .join("index.json"),
+    )
+    .expect("remove sidecar generation index");
 
     let archive_index: serde_json::Value = serde_json::from_slice(
         &fs::read(dir.join("tick-consensus.archive.index.json"))
