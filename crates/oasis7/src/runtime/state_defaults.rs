@@ -18,6 +18,10 @@ pub(super) fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<
     ledgers
 }
 
+pub(super) fn default_material_transit_priority() -> MaterialTransitPriority {
+    MaterialTransitPriority::Standard
+}
+
 pub(super) fn default_module_market_order_id() -> u64 {
     1
 }
@@ -64,6 +68,7 @@ impl Default for WorldState {
             completed_logistics_paths: BTreeMap::new(),
             settled_logistics_transit_ids: BTreeSet::new(),
             logistics_settlement_receipts: BTreeMap::new(),
+            direct_material_transfer_receipts: BTreeMap::new(),
             product_profiles: BTreeMap::new(),
             latest_product_validation: None,
             recipe_profiles: BTreeMap::new(),
