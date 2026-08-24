@@ -53,7 +53,15 @@ impl World {
             let (manifest, journal_segments) =
                 persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
             let store = LocalCasStore::new(&store_root);
-            let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+            let mut snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+            if let Some(archive) =
+                persistence_support::load_sidecar_tick_consensus_archive(&store_root, record)?
+            {
+                hydrate_tick_consensus_snapshot_from_archived_records(
+                    &mut snapshot,
+                    archive.archived_records,
+                )?;
+            }
             let events: Vec<WorldEvent> =
                 assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
             let world = World::from_snapshot(snapshot, Journal { events })?;
@@ -182,7 +190,7 @@ impl World {
             ),
         })?;
         let store = LocalCasStore::new(store_root.as_path());
-        let snapshot: Snapshot = assemble_snapshot(&manifest, &store).map_err(|err| {
+        let mut snapshot: Snapshot = assemble_snapshot(&manifest, &store).map_err(|err| {
             AuthoritativeRecoveryCommitError::StatusUnknown {
                 reason: format!(
                     "matching recovery snapshot assemble failed: generation_id={} err={err:?}",
@@ -190,6 +198,27 @@ impl World {
                 ),
             }
         })?;
+        if let Some(archive) = persistence_support::load_sidecar_tick_consensus_archive(
+            store_root.as_path(),
+            record,
+        )
+        .map_err(|err| AuthoritativeRecoveryCommitError::StatusUnknown {
+            reason: format!(
+                "matching recovery tick consensus archive read failed: generation_id={} err={err:?}",
+                record.generation_id
+            ),
+        })? {
+            hydrate_tick_consensus_snapshot_from_archived_records(
+                &mut snapshot,
+                archive.archived_records,
+            )
+            .map_err(|err| AuthoritativeRecoveryCommitError::StatusUnknown {
+                reason: format!(
+                    "matching recovery tick consensus archive hydrate failed: generation_id={} err={err:?}",
+                    record.generation_id
+                ),
+            })?;
+        }
         let events: Vec<WorldEvent> =
             assemble_journal(journal_segments.as_slice(), &store, |event: &WorldEvent| {
                 event.id

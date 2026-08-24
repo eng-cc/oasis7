@@ -566,7 +566,9 @@ fn hydrate_tick_consensus_snapshot_from_archived_records(
 
 fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapshot, WorldError> {
     if let Some((mut snapshot, _)) = World::try_load_from_distfs_sidecar(dir)? {
-        hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+        if !World::has_indexed_sidecar_generation(dir)? {
+            hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+        }
         return Ok(snapshot);
     }
     let mut snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
@@ -600,19 +602,6 @@ fn validate_compatible_legacy_distfs_payloads(
         });
     }
     Ok(())
-}
-
-fn load_legacy_tick_consensus_records_for_verification(
-    dir: &Path,
-    persisted_snapshot: &Snapshot,
-) -> Result<Vec<TickConsensusRecord>, WorldError> {
-    let mut records = match load_tick_consensus_archive_records_from_index(dir, persisted_snapshot)?
-    {
-        Some(records) => records,
-        None => load_tick_consensus_legacy_archive_records(dir, persisted_snapshot)?,
-    };
-    records.extend(persisted_snapshot.tick_consensus_records.clone());
-    Ok(records)
 }
 
 fn load_json_snapshot_if_newer_chain_resource_context(
@@ -908,8 +897,8 @@ impl World {
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
-            let has_committed_generation = Self::has_authoritative_recovery_generation(dir)?;
-            if !has_committed_generation
+            let has_indexed_generation = Self::has_indexed_sidecar_generation(dir)?;
+            if !has_indexed_generation
                 && let Some(mut json_snapshot) =
                     load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
             {
@@ -924,7 +913,9 @@ impl World {
                 world.load_module_store_from_dir(dir)?;
                 return Ok(world);
             }
-            hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+            if !has_indexed_generation {
+                hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+            }
             let mut world = Self::from_snapshot(snapshot, journal)?;
             world.load_module_store_from_dir(dir)?;
             return Ok(world);
@@ -965,13 +956,8 @@ impl World {
 
     pub fn verify_tick_consensus_archive_from_dir(dir: impl AsRef<Path>) -> Result<(), WorldError> {
         let dir = dir.as_ref();
-        let persisted_snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
-        let records = if persisted_snapshot.tick_consensus_archived_record_count == 0 {
-            persisted_snapshot.tick_consensus_records.clone()
-        } else {
-            load_legacy_tick_consensus_records_for_verification(dir, &persisted_snapshot)?
-        };
-        verify_tick_consensus_record_slice(records.as_slice())
+        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir)?;
+        verify_tick_consensus_record_slice(snapshot.tick_consensus_records.as_slice())
     }
 
     pub fn load_module_store_from_dir(&mut self, dir: impl AsRef<Path>) -> Result<(), WorldError> {

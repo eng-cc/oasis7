@@ -23,20 +23,20 @@ impl World {
                 }
                 let (manifest, journal_segments) =
                     persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
-                if let Err(err) = validate_compatible_legacy_distfs_payloads(
+                let ignored_legacy_payload_reason = validate_compatible_legacy_distfs_payloads(
                     dir,
                     &manifest,
                     journal_segments.as_slice(),
-                ) {
-                    let _ = write_distfs_recovery_audit(
-                        dir,
-                        "fallback_json",
-                        Some(format!("distfs_restore_failed: {:?}", err)),
-                    );
-                    return Ok(None);
-                }
+                )
+                .err()
+                .map(|err| format!("legacy_payload_ignored: {:?}", err));
                 let store = LocalCasStore::new(&store_root);
                 let mut snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+                if snapshot.tick_consensus_archived_record_count > 0
+                    && record.tick_consensus_archive_ref.is_none()
+                {
+                    continue;
+                }
                 if let Some(archive) =
                     persistence_support::load_sidecar_tick_consensus_archive(&store_root, record)?
                 {
@@ -58,7 +58,7 @@ impl World {
                     } else {
                         "distfs_restored"
                     },
-                    None,
+                    ignored_legacy_payload_reason,
                 );
                 return Ok(Some((snapshot, Journal { events })));
             }
@@ -95,18 +95,9 @@ impl World {
         }
     }
 
-    pub(super) fn has_authoritative_recovery_generation(dir: &Path) -> Result<bool, WorldError> {
+    pub(super) fn has_indexed_sidecar_generation(dir: &Path) -> Result<bool, WorldError> {
         let store_root = dir.join(DISTFS_STATE_DIR);
-        Ok(
-            persistence_support::load_sidecar_generation_index(&store_root)?
-                .and_then(|index| {
-                    index
-                        .generations
-                        .get(index.latest_generation.as_str())
-                        .cloned()
-                })
-                .is_some_and(|record| record.recovery_metadata_path.is_some()),
-        )
+        Ok(persistence_support::load_sidecar_generation_index(&store_root)?.is_some())
     }
 
     pub(super) fn load_from_distfs_sidecar(
