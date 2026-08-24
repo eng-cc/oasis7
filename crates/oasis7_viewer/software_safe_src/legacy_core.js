@@ -3484,7 +3484,7 @@ function handleViewerMessage(message) {
         pushChatHistory(chatEntry);
       }
       state.logicalTime = Math.max(state.logicalTime, Number(message.event?.time || 0));
-      state.tick = state.logicalTime;
+      state.tick = state.logicalTime; worldFeedTransport.refreshAfterWorldActivity();
       break;
     }
     case "metrics":
@@ -3531,7 +3531,7 @@ function handleViewerMessage(message) {
 }
 
 function attachSocket(ws) {
-  ws.addEventListener("open", () => {
+  ws.addEventListener("open", () => { worldFeedTransport.resetGeneration(ws);
     state.connectionStatus = "connected";
     state.lastError = null;
     state.server = null;
@@ -3559,7 +3559,7 @@ function attachSocket(ws) {
     reportFatalError("websocket error", "viewer.ws");
   });
 
-  ws.addEventListener("close", () => {
+  ws.addEventListener("close", () => { worldFeedTransport.resetGeneration(ws);
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -4084,7 +4084,7 @@ function renderDetails() {
       ${renderInteractionPanel()}
       ${state.selectedObject
         ? `<pre class="json">${escapeHtml(JSON.stringify(state.selectedObject, null, 2))}</pre>`
-        : '<div class="empty">Select an agent or location from the left list.</div>'}
+        : '<div class="empty">Select an agent or location from Targets first.</div>'}
       <div>
         <div class="panel__title" style="margin-bottom:10px;">Snapshot Summary</div>
         <pre class="json">${escapeHtml(

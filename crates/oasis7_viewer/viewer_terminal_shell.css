@@ -89,6 +89,43 @@ body {
   pointer-events: auto;
 }
 
+[data-viewer-overlay="cinematic-entry"] {
+  position: fixed;
+  z-index: 40;
+  top: 16px;
+  right: 112px;
+  display: flex;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="cinematic-entry"] .pixel-world-focus-entry__hint {
+  display: none;
+}
+
+[data-viewer-overlay="cinematic-entry"][hidden] {
+  display: none;
+}
+
+[data-viewer-overlay="renderer-unavailable"] {
+  position: absolute;
+  z-index: 30;
+  top: 72px;
+  left: 16px;
+  right: 96px;
+  width: auto;
+  max-width: min(520px, calc(100vw - 112px));
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(229, 143, 118, 0.34);
+  border-radius: 8px;
+  background: rgba(24, 11, 9, 0.78);
+  color: var(--text);
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 [data-viewer-overlay="world-hud"] .pixel-world-host__summary,
 [data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics,
 [data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
@@ -102,16 +139,46 @@ body {
   display: none;
 }
 
+[data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics[data-renderer-state="unavailable"] {
+  display: block;
+  top: 112px;
+  left: 16px;
+  right: 96px;
+  width: auto;
+  max-width: min(520px, calc(100vw - 112px));
+  max-height: min(32vh, 300px);
+  overflow: auto;
+}
+
 [data-viewer-overlay="world-hud"] > .diagnostic:not(.pixel-world-focus-drawer) {
   display: none;
 }
 
 [data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
   top: 16px;
-  right: 120px;
+  right: 280px;
+}
+
+/* Keep the fixed More control's 80px hit area clear of Cinematic HUD controls. */
+.pixel-world-host--focus .pixel-world-focus-hud {
+  right: 96px;
 }
 
 [data-viewer-shell="player-fullscreen"] .pixel-world-readout {
+  position: absolute;
+  z-index: 13;
+  top: 64px;
+  left: 16px;
+  display: flex;
+  max-width: min(520px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+[data-viewer-shell="player-fullscreen"] .pixel-world-host--focus .pixel-world-readout,
+[data-viewer-shell="player-fullscreen"] .pixel-world-host--focus .pixel-world-focus-hud__cell--mission,
+[data-viewer-shell="player-fullscreen"] .pixel-world-host--focus .pixel-world-focus-hud__cell--tick,
+[data-viewer-shell="player-fullscreen"] .pixel-world-host--focus .pixel-world-focus-rail,
+[data-viewer-shell="player-fullscreen"] .pixel-world-host--focus .pixel-world-focus-minimap {
   display: none;
 }
 
@@ -143,6 +210,26 @@ body {
   bottom: 120px;
   width: min(760px, calc(100vw - 32px));
   pointer-events: auto;
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--objective,
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage {
+  opacity: 0.78;
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--next {
+  position: relative;
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--accent, #f4c15d) 72%, transparent);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 34%);
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-command-cell--next .pixel-world-command-cell__action {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
 }
 
 .pixel-world-canvas__callout--goal,
@@ -428,6 +515,10 @@ body {
     min-height: 0;
   }
 
+  .pixel-world-host--focus .pixel-world-focus-hud {
+    right: 90px;
+  }
+
   [data-viewer-overlay="navigation"] {
     top: 10px;
     left: 10px;
@@ -436,6 +527,11 @@ body {
 
   .secondary-viewer-nav {
     top: 10px;
+    right: 10px;
+  }
+
+  [data-viewer-overlay="cinematic-entry"] {
+    top: 64px;
     right: 10px;
   }
 
@@ -539,8 +635,35 @@ body {
     justify-content: flex-end;
   }
 
+  [data-viewer-overlay="cinematic-entry"] {
+    top: 64px;
+    right: auto;
+    left: 10px;
+  }
+
+  [data-viewer-overlay="renderer-unavailable"] {
+    top: 158px;
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+  }
+
+  [data-viewer-overlay="world-hud"] .pixel-world-render-diagnostics[data-renderer-state="unavailable"] {
+    top: 232px;
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    max-height: min(28vh, 220px);
+  }
+
   [data-viewer-overlay="world-hud"] .pixel-world-canvas__selection {
     display: none;
+  }
+
+  [data-viewer-shell="player-fullscreen"] .pixel-world-readout {
+    top: 96px;
+    left: 10px;
+    max-width: calc(100vw - 20px);
   }
 
   [data-viewer-overlay="feed"] {
@@ -556,6 +679,10 @@ body {
   [data-viewer-overlay="next-move"] .pixel-world-command-cell--objective {
     grid-column: 1;
     grid-row: 1;
+  }
+
+  .pixel-world-host--focus .pixel-world-focus-hud__cell--prompt {
+    margin-right: 80px;
   }
 
   [data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage {

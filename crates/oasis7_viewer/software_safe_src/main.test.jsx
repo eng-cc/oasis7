@@ -1059,12 +1059,12 @@ describe("viewer web ui automation baseline", () => {
       }),
     });
 
-    const stagePanel = container.querySelector("#viewer-stage-panel");
-    const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
-    expect(claimButtons.length).toBeGreaterThan(0);
-    expect(container.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]')).toBeInTheDocument();
+    const stagePanel = container.querySelector("#viewer-stage-panel"); const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
+    expect(claimButtons).toHaveLength(1); expect(container.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]')).toBeInTheDocument();
 
-    fireEvent.click(claimButtons[0]);
+    const dispatchSpy = vi.spyOn(core, "sendGameplayAction"); fireEvent.click(claimButtons[0]);
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ actionId: "claim_first_agent", executeKind: "claim_first_agent" }));
 
     for (let attempt = 0; attempt < 50; attempt += 1) {
       if (core.state.lastGameplayActionFeedback?.stage !== "queued") {
@@ -1263,8 +1263,8 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
-    expect(screen.getByTestId("viewer-primary-action-preview")).toHaveTextContent(/Recommended context: Advance recovery proof/);
+    expect(within(stagePanel).getAllByTestId("viewer-playthrough-action-recommended")).toHaveLength(1);
+    ["step", "request-snapshot"].forEach((suffix) => expect(within(stagePanel).queryByTestId(`viewer-playthrough-action-${suffix}`)).not.toBeInTheDocument());
     expect(within(stagePanel).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1294,7 +1294,8 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Request snapshot/);
+    expect(within(stagePanel).getAllByTestId("viewer-playthrough-action-recommended")).toHaveLength(1);
+    ["viewer-playthrough-action-step", "viewer-primary-action-preview"].forEach((testId) => expect(within(stagePanel).queryByTestId(testId)).not.toBeInTheDocument());
     expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1422,8 +1423,7 @@ describe("viewer web ui automation baseline", () => {
 
     expect(screen.getByTestId("viewer-playthrough-select-agent")).toHaveAccessibleName(/agent/i);
     expect(screen.getByTestId("viewer-playthrough-action-recommended")).toHaveAccessibleName("Advance One Step");
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Advance recovery proof/);
+    ["step", "request-snapshot"].forEach((suffix) => expect(screen.queryByTestId(`viewer-playthrough-action-${suffix}`)).not.toBeInTheDocument());
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders claim-agent quote and owned claim guidance without inventing claim controls", async () => {
@@ -2491,6 +2491,8 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByText("Please restore the smelter line before expanding.").closest(".event-card")).toHaveClass("event-card--chat-player");
     expect(screen.getByText("Raw diagnostics")).toBeInTheDocument();
     expect(screen.queryByText(/"message": "Please restore the smelter line before expanding."/)).not.toBeInTheDocument();
+    const commandPanel = document.querySelector("#viewer-details-panel"); expect(within(commandPanel).getByText("Agent Chat")).toBeInTheDocument(); expect(commandPanel.querySelector(".command-surface__diagnostic-strip")?.closest("details")).toHaveProperty("open", false);
+    for (const label of ["Advanced Prompt Settings", "Asset / Governance Lane"]) expect(within(commandPanel).getByText(label).closest("details"), `${label} must be a closed disclosure`).toHaveProperty("open", false);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders provider chat failures in message flow", async () => {

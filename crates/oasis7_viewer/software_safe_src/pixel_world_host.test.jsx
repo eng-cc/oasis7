@@ -9,7 +9,8 @@ const runtimeMock = vi.hoisted(() => ({
   onEvent: null,
 }));
 
-vi.mock("./pixel_world_runtime_loader.js", () => ({
+vi.mock("./pixel_world_runtime_loader.js", async () => ({
+  ...(await vi.importActual("./pixel_world_runtime_loader.js")),
   createPixelWorldRuntimeBridge: async ({ onEvent, onFatal }) => {
     runtimeMock.onEvent = onEvent;
     return {
@@ -60,6 +61,7 @@ vi.mock("./pixel_world_runtime_loader.js", () => ({
 }));
 
 let activeCleanup = null;
+let canvasContextSpy = null;
 const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
 
 function clone(value) {
@@ -429,6 +431,7 @@ beforeEach(() => {
   runtimeMock.mountError = null;
   runtimeMock.mountCalls = 0;
   runtimeMock.onEvent = null;
+  canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({});
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
   window.localStorage.clear();
   document.body.innerHTML = "";
@@ -437,6 +440,8 @@ beforeEach(() => {
 afterEach(() => {
   activeCleanup?.();
   activeCleanup = null;
+  canvasContextSpy?.mockRestore();
+  canvasContextSpy = null;
   document.body.innerHTML = "";
 });
 
@@ -500,6 +505,63 @@ describe("pixel world host", () => {
     expect(resolvePixelWorldDirectNextMoveAction(gameplay, "gameplay_action")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("uses authoritative world_read for the optional player HUD without ambient topology/debug counts", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      commercial_surface: {
+        ...buildTestRustRenderState(input).commercial_surface,
+        world_read: {
+          tick: 12,
+          agents: 7,
+          routes: 99,
+          fragments: 101,
+          hotspots: 103,
+        },
+      },
+    }));
+
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const worldHud = document.querySelector('[data-viewer-overlay="world-hud"]');
+    expect(worldHud).toBeTruthy();
+    const readout = worldHud.querySelector(".pixel-world-readout");
+    expect(readout).toHaveTextContent("agents=7");
+    expect(readout).not.toHaveTextContent(/routes=|fragments=|hotspots=|renderer=|runtime=/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps Objective and Player Leverage as supporting cells around one labelled dominant Next Move CTA", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const strip = document.querySelector('[data-viewer-overlay="next-move"]');
+    expect(strip).toBeTruthy();
+    expect(strip.querySelectorAll(".pixel-world-command-cell")).toHaveLength(3);
+    const objective = strip.querySelector(".pixel-world-command-cell--objective");
+    const nextMove = strip.querySelector(".pixel-world-command-cell--next");
+    const leverage = strip.querySelector(".pixel-world-command-cell--leverage");
+    expect(objective).toHaveTextContent("Objective");
+    expect(leverage).toHaveTextContent("Player Leverage");
+    expect(objective.querySelectorAll("a,button")).toHaveLength(0);
+    expect(leverage.querySelectorAll("a,button")).toHaveLength(0);
+    const ctas = nextMove.querySelectorAll("a,button");
+    expect(ctas).toHaveLength(1);
+    expect(ctas[0]).toHaveAttribute("aria-label", expect.stringContaining("Next Move"));
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("shows the explicit unavailable surface when renderer deferral is requested", async () => {
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
@@ -507,19 +569,20 @@ describe("pixel world host", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Unavailable")).toBeInTheDocument();
+      expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
     });
 
     expect(runtimeMock.mountCalls).toBe(0);
     expect(screen.getByText("World Command Board")).toBeInTheDocument();
     expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
-    expect(document.querySelector('[data-renderer-state="unavailable"]')).toHaveTextContent("pixel_world_render_state_unavailable");
+    expect(document.querySelector('[data-viewer-overlay="renderer-unavailable"]')).toHaveTextContent("Graphics unavailable in this browser");
+    expect(document.querySelector('.pixel-world-render-diagnostics[data-renderer-state="unavailable"]')).toHaveTextContent("pixel_world_render_state_unavailable");
     expect(screen.queryByText("Recover sustainable capability")).not.toBeInTheDocument();
     expect(screen.queryByText("Build smelter mk1")).not.toBeInTheDocument();
     expect(screen.queryByText("Action Receipt")).not.toBeInTheDocument();
     const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
     expect(diagnostics.open).toBe(false);
-    expect(screen.getByText(/the page no longer keeps a second JS world renderer/i)).toBeInTheDocument();
+    expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
 
     screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
 
@@ -538,10 +601,10 @@ describe("pixel world host", () => {
     const { core } = await renderPixelWorldHost();
 
     await waitFor(() => {
-      expect(screen.getByText("Renderer Unavailable")).toBeInTheDocument();
+      expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
     });
 
-    expect(document.querySelector("[data-renderer-state='unavailable']")).toHaveTextContent(
+    expect(document.querySelector(".pixel-world-render-diagnostics[data-renderer-state='unavailable']")).toHaveTextContent(
       /canvas\.getContext\(\) returned null; webgl2 not available/i,
     );
     expect(document.querySelector("[data-renderer-ready='true']")).toBeNull();
@@ -550,6 +613,53 @@ describe("pixel world host", () => {
     expect(core.state.pixelWorldFatal).toEqual(expect.objectContaining({
       code: "pixel_world_webgl2_unavailable",
     }));
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("fails closed before bridge mount when the canvas cannot create a WebGL2 surface", async () => {
+    useTestRustRenderState();
+    canvasContextSpy.mockReturnValue(null);
+
+    try {
+      const { core } = await renderPixelWorldHost();
+
+      await waitFor(() => {
+        expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
+      });
+
+      expect(runtimeMock.mountCalls).toBe(0);
+      expect(document.querySelector("[data-renderer-ready='true']")).toBeNull();
+      expect(document.querySelector("#pixel-world-embedded-runtime-canvas")).toBeNull();
+      expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable");
+      expect(core.state.pixelWorldFatal).toEqual(expect.objectContaining({
+        code: "pixel_world_webgl2_unavailable",
+      }));
+    } finally {
+      canvasContextSpy.mockReturnValue({});
+    }
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps unavailable copy player-readable while raw fatal details stay folded", async () => {
+    useTestRustRenderState();
+    canvasContextSpy.mockReturnValue(null);
+
+    const { container } = await renderPixelWorldHost();
+
+    await waitFor(() => {
+      expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
+    });
+
+    const fallback = container.querySelector('[data-viewer-overlay="renderer-unavailable"]');
+    expect(fallback).toHaveTextContent("Graphics unavailable in this browser");
+    expect(fallback).not.toHaveTextContent("pixel_world_webgl2_unavailable");
+
+    const diagnostics = container.querySelector(".pixel-world-render-diagnostics");
+    expect(diagnostics).toHaveAttribute("data-renderer-state", "unavailable");
+    expect(diagnostics).toHaveTextContent("pixel_world_webgl2_unavailable");
+    expect(diagnostics).toHaveProperty("open", false);
+
+    const cinematicButton = screen.getByRole("button", { name: /Cinematic View.*unavailable/i });
+    expect(cinematicButton).toBeDisabled();
+    expect(cinematicButton).toHaveAttribute("aria-describedby", "pixel-world-renderer-unavailable-message");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
@@ -814,7 +924,7 @@ describe("pixel world host", () => {
       expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
 
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
     });
@@ -824,6 +934,60 @@ describe("pixel world host", () => {
     expect(document.querySelector("#viewer-focus-diagnostics-drawer")).toBeInTheDocument();
     expect(document.querySelector("#viewer-command-console")).toBeInTheDocument();
     expect(document.querySelector("#viewer-command-console").closest("#viewer-focus-command-drawer")).toBeTruthy();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("uses Cinematic View / Exit Cinematic as the player-facing presentation labels", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
+    });
+    expect(screen.getByRole("button", { name: "Exit Cinematic" })).toBeInTheDocument();
+    expect(screen.queryByText("World Focus")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("closes a local Cinematic drawer before Escape exits the presentation", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    const entry = screen.queryByRole("button", { name: "Cinematic View" })
+      || screen.getByRole("button", { name: "Cinematic View" });
+    entry.click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const commandInvoker = screen.getByRole("button", { name: "Command & Target" });
+    const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
+    commandInvoker.click();
+    expect(commandDrawer).toHaveProperty("open", true);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(host).toHaveAttribute("data-world-focus", "true");
+    expect(commandDrawer).toHaveProperty("open", false);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "false");
+    });
+    expect(screen.getByRole("button", { name: "Cinematic View" })).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("closes an open local Focus drawer before exiting Focus and restores the drawer invoker", async () => {
@@ -838,7 +1002,7 @@ describe("pixel world host", () => {
     });
 
     const host = document.querySelector(".pixel-world-host");
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
     });
@@ -873,7 +1037,7 @@ describe("pixel world host", () => {
     });
 
     const host = document.querySelector(".pixel-world-host");
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
     });
@@ -894,7 +1058,7 @@ describe("pixel world host", () => {
     expect(commandDrawer).toHaveProperty("open", true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("returns keyboard focus to the World Focus invoker after Focus exits", async () => {
+  it("returns keyboard focus to the Cinematic View invoker after presentation exits", async () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
@@ -906,14 +1070,14 @@ describe("pixel world host", () => {
     });
 
     const host = document.querySelector(".pixel-world-host");
-    const focusInvoker = screen.getByRole("button", { name: "Enter World Focus" });
+    const focusInvoker = screen.getByRole("button", { name: "Cinematic View" });
     focusInvoker.focus();
     focusInvoker.click();
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
     });
 
-    const exitButton = screen.getByRole("button", { name: "Leave Focus · Esc" });
+    const exitButton = screen.getByRole("button", { name: "Exit Cinematic" });
     exitButton.focus();
     exitButton.click();
     await waitFor(() => {
@@ -934,7 +1098,7 @@ describe("pixel world host", () => {
     });
 
     const host = document.querySelector(".pixel-world-host");
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
     });
@@ -948,7 +1112,8 @@ describe("pixel world host", () => {
     expect(commandButton).toHaveClass("pixel-world-focus-control--primary");
     expect(moreControls).toContainElement(screen.getByRole("button", { name: "World Status" }));
     expect(moreControls).toContainElement(screen.getByRole("button", { name: "Maximize" }));
-    expect(moreControls).toContainElement(screen.getByRole("button", { name: "Leave Focus · Esc" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Exit Cinematic" }));
+    expect(moreControls).not.toContainElement(screen.getByRole("button", { name: "Exit Cinematic" }));
 
     screen.getByRole("button", { name: "World Status" }).click();
     const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
@@ -979,7 +1144,7 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(screen.queryByText("World Focus")).not.toBeInTheDocument();
 
-    const worldFocusButton = screen.getByRole("button", { name: "Enter World Focus" });
+    const worldFocusButton = screen.getByRole("button", { name: "Cinematic View" });
     expect(screen.getByText("Pan, zoom, and inspect the world")).toBeInTheDocument();
     expect(worldFocusButton).toHaveAccessibleDescription("Pan, zoom, and inspect the world");
 
@@ -989,7 +1154,7 @@ describe("pixel world host", () => {
       expect(host).toHaveAttribute("data-world-focus", "true");
     });
     expect(document.body).toHaveClass("pixel-world-focus-active");
-    expect(screen.getByText("World Focus")).toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Cinematic View");
     expect(screen.queryByText("No blocker")).not.toBeInTheDocument();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Recover sustainable capability");
@@ -1031,7 +1196,7 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("targets=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=2");
-    expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
+    expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "Cinematic controls");
     expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command & Target" }));
     expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-world-tick", "12");
@@ -1068,7 +1233,7 @@ describe("pixel world host", () => {
     expect(screen.getByRole("button", { name: "Command & Target" })).toHaveClass("pixel-world-focus-control--primary");
     expect(screen.getByRole("button", { name: "World Status" })).toHaveClass("pixel-world-focus-control--secondary");
     expect(screen.getByRole("button", { name: "Maximize" })).toHaveClass("pixel-world-focus-control--secondary");
-    expect(screen.getByRole("button", { name: "Leave Focus · Esc" })).toHaveClass("pixel-world-focus-control--quiet");
+    expect(screen.getByRole("button", { name: "Exit Cinematic" })).toHaveClass("pixel-world-focus-control--quiet");
 
     expect(commandDrawer).toHaveTextContent("Agent Chat");
 
@@ -1130,7 +1295,7 @@ describe("pixel world host", () => {
       },
     });
 
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
 
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
@@ -1220,7 +1385,7 @@ describe("pixel world host", () => {
     await waitFor(() => {
       expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
     });
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(document.querySelector(".pixel-world-focus-drawer--command")).not.toBeNull();
     });
@@ -1254,7 +1419,7 @@ describe("pixel world host", () => {
 
     expect(document.querySelector('[data-focus-fallback-map="true"]')).toBeNull();
 
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(document.querySelector('[data-focus-minimap="true"]')).not.toBeNull();
     });
@@ -1292,7 +1457,7 @@ describe("pixel world host", () => {
     });
 
     const firstHost = document.querySelector(".pixel-world-host");
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => {
       expect(firstHost).toHaveAttribute("data-world-focus", "true");
     });

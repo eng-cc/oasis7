@@ -210,6 +210,10 @@ export function consumeWorldFeed(previous, feed) {
         stale: true,
         gapReason: gapReason || "cursor_invalid",
         unavailableReason: null,
+        // A gap invalidates the prior timeline. Keep the new epoch/status
+        // visible, but never carry events from the branch that must be
+        // replaced by the authoritative snapshot.
+        events: [],
         snapshotReloadRequired: true,
         requestInFlight: false,
         lastError: null,

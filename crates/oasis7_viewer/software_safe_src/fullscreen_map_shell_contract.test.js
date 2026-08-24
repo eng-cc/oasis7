@@ -160,15 +160,88 @@ describe("fullscreen map shell contract", () => {
     }
   });
 
-  it("hides raw pixel readouts in default Player mode", async () => {
+  it("keeps the compact authoritative world readout visible outside Cinematic View", async () => {
     const { viewerHtml, terminalShellCss } = await readViewerHtml();
     expect(viewerHtml).toMatch(/data-viewer-shell="player-fullscreen"/);
     const readoutRule = findRule(
       terminalShellCss,
       /\[data-viewer-shell=["']player-fullscreen["']\][^{}]*\.pixel-world-readout/,
     );
-    expect(readoutRule, "default Player shell must hide raw pixel readouts").not.toBeNull();
-    expect(hasDeclaration(readoutRule, "display", /none/)).toBe(true);
+    expect(readoutRule, "default Player shell must place the compact world readout").not.toBeNull();
+    expect(hasDeclaration(readoutRule, "display", /flex/)).toBe(true);
+
+    const cinematicRule = findRule(
+      terminalShellCss,
+      /\[data-viewer-shell=["']player-fullscreen["']\][^{}]*\.pixel-world-host--focus[^{}]*\.pixel-world-readout/,
+    );
+    expect(cinematicRule, "Cinematic View must hide the world readout").not.toBeNull();
+    expect(hasDeclaration(cinematicRule, "display", /none/)).toBe(true);
+  });
+
+  it("keeps an independent Cinematic View entry visible in the fullscreen Player shell", async () => {
+    const [hostSource, terminalShellCss] = await Promise.all([
+      readFile("software_safe_src/pixel_world_host.jsx", "utf8"),
+      readFile("viewer_terminal_shell.css", "utf8"),
+    ]);
+    expect(hostSource).toContain('data-viewer-overlay="cinematic-entry"');
+    const entryRule = findRule(
+      terminalShellCss,
+      /\[data-viewer-overlay=["']cinematic-entry["']\]/,
+    );
+    expect(entryRule, "fullscreen Player must position the Cinematic View entry independently").not.toBeNull();
+    expect(hasDeclaration(entryRule, "display", /flex|block|inline-flex/)).toBe(true);
+    expect(hasDeclaration(entryRule, "pointer-events", /auto/)).toBe(true);
+    expect(terminalShellCss).not.toMatch(
+      /\.pixel-world-host__summary[^{}]*\[data-viewer-overlay=["']cinematic-entry["'][^{}]*\{[^}]*display\s*:\s*none/i,
+    );
+  });
+
+  it("reserves the More safe area for desktop readout and Cinematic controls", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const readoutRule = findRule(
+      terminalShellCss,
+      /\[data-viewer-overlay=["']world-hud["']\]\s+\.pixel-world-canvas__selection/,
+    );
+    expect(readoutRule).not.toBeNull();
+    expect(hasDeclaration(readoutRule, "right", /280px/)).toBe(true);
+
+    const focusHudRule = findRule(terminalShellCss, /\.pixel-world-host--focus\s+\.pixel-world-focus-hud/);
+    expect(focusHudRule).not.toBeNull();
+    expect(hasDeclaration(focusHudRule, "right", /96px/)).toBe(true);
+  });
+
+  it("narrows the mobile Cinematic objective away from More without changing shell overflow", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(
+      /\.pixel-world-host--focus\s+\.pixel-world-focus-hud__cell--prompt\s*\{[^}]*margin-right:\s*80px/i,
+    );
+    expect(terminalShellCss).toMatch(/\.viewer-shell\s*\{[^}]*overflow-x:\s*hidden/i);
+  });
+
+  it("places unavailable fallback copy below navigation and keeps diagnostics folded", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const fallbackRule = findRule(terminalShellCss, /\[data-viewer-overlay=["']renderer-unavailable["']\]/);
+    expect(fallbackRule).not.toBeNull();
+    expect(hasDeclaration(fallbackRule, "top", /72px/)).toBe(true);
+    expect(hasDeclaration(fallbackRule, "right", /96px/)).toBe(true);
+    expect(hasDeclaration(fallbackRule, "white-space", /normal/)).toBe(true);
+    expect(hasDeclaration(fallbackRule, "overflow-wrap", /anywhere/)).toBe(true);
+
+    const diagnosticsRule = findRule(
+      terminalShellCss,
+      /\.pixel-world-render-diagnostics\[data-renderer-state=["']unavailable["']\]/,
+    );
+    expect(diagnosticsRule).not.toBeNull();
+    expect(hasDeclaration(diagnosticsRule, "display", /block/)).toBe(true);
+  });
+
+  it("moves unavailable fallback copy and diagnostics below the mobile navigation", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']feed["']\][^{]*\{[^}]*top:\s*104px/i);
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']renderer-unavailable["']\][^{]*\{[^}]*top:\s*158px/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-render-diagnostics\[data-renderer-state=["']unavailable["']\][^{]*\{[^}]*top:\s*232px/i);
   });
 
   it("keeps a mobile More route for secondary Diagnostics without a narrow-screen hide rule", async () => {

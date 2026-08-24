@@ -20,6 +20,10 @@
   仍从次级入口可达。
 
 ## 3. 当前实现与目标边界
+- 当前 `main` 的 Player 是 fullscreen、world-first 单舞台：世界棋盘为首屏主体，
+  `Objective / Next Move / Player Leverage` 是叠加 HUD，`World / Targets / Command`
+  由按需 drawer 提供。旧“左侧/中间/右侧”三栏只适用于显式、能力门控的 Director
+  工具密度，不能作为 Player 的当前 IA；三卡 HUD 也不等于旧三栏。
 - 当前实现保留 focus/right-panel 兼容 hooks，且 `#entity-search` 仍是 Targets
   过滤入口；这些是实现基线/债务，不是第二产品模式或终端 authority。
 - 当前页面仍以 Recent Events/Gameplay Feedback 等现有投影为准；它们不能被重命名为
@@ -32,6 +36,22 @@
   已实现安全边界而非已放行的 operator 能力。目标实现仍须由 Viewer/QA 以真实桌面、移动、
   键盘和空/不可用状态验证。
 
+### Expanded visual contract (target handoff)
+- Player HUD 的层级固定为条件性 attention、`Objective`、一个主导性的 `Next Move`
+  动作、`Player Leverage`/selection context、`Action Receipt`；World Feed 仍是收起的
+  ambient chip。`world_read` 的 `tick/agents/routes/fragments/hotspots` 只有在既有
+  projection 明确发布时才可作为次级摘要，不能假设 Power/Data/Consensus 等字段存在。
+- `Next Move` 目标是单一 CTA + 内联 blocker；不要复制 Stage Hero 文案或让 World Feed
+  代替 receipt。该层级是待实现的视觉目标，当前三卡 HUD 的实现边界仍以上文为准。
+- Agent Console 默认先显示 selected context、授权 command/chat、blocker 与 receipt；
+  raw snapshot/JSON、auth/capability、prompt override、world-scale 和 Director 工具
+  默认收起到 `Diagnostics / More`，不改变控制权或 fail-closed 语义。
+- Focus 的用户-facing 名称为 `Cinematic View / Minimal HUD`；保留 `focusMode` 兼容
+  hooks。显式进入后只保留世界、选择标记、当前 objective/blocker、存在中的 receipt 和
+  退出入口；Escape 按既有 local-surface → Focus 顺序处理，IME composition 优先。
+- 这些约束不新增协议/runtime 字段，不改变仿真、replay、renderer、Director capability、
+  ownership、经济或玩家权限；真实 headed 证据必须覆盖 `1440x1000` 与 `390x844`。
+
 ## 4. 约束与边界
 - 本设计只重排 Viewer 的视觉/交互，不改网络协议、仿真核心逻辑和 `third_party`。
 - Search/selection 只导航、居中和打开上下文；执行只能从已授权 Command/Console 路径发生。
@@ -41,7 +61,7 @@
 ## 5. 设计演进计划
 1. 先冻结配对 PRD 的 shell、dock、console、HUD、receipt/feed 语义和稳定锚点。
 2. 再由 `viewer_engineer` 在不新增协议字段前提下收敛当前实现的可见性/响应式布局。
-3. 最后由 `qa_engineer` 以真实浏览器截图、键盘、长文案和空/不可用状态验证；GPU-enabled
+3. 最后由 `qa_engineer` 以真实 headed 浏览器 `1440x1000` 与 `390x844` 截图、键盘、长文案和空/不可用状态验证；GPU-enabled
    WebGL2 `ready` 与 GPU-disabled `Renderer Unavailable` fallback 已有证据，但本设计不构成
    发行结论。
 
@@ -65,3 +85,24 @@ World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedu
 loading、empty、replay、gap/reorg 和
 unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fullscreen Player
 默认将其作为右上紧凑折叠 edge overlay/ambient chip，按需展开，不形成常驻列。
+
+### 已知 feed/readout 缺陷的修复状态（#3315）
+
+- **P1 cursor continuation：已修复。** `world_feed_transport.js` 会按返回 cursor
+  异步继续请求，并在世界活动后刷新最新 cursor；对应测试为
+  `world_feed_transport.test.js` 中的
+  `continues an initial page asynchronously from the returned cursor` 与
+  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`。
+- **P2 gap/reorg 旧事件保留：已修复。** `consumeWorldFeed()` 在 gap 时清空旧
+  `events`，再要求权威 snapshot reload；对应测试为
+  `world_feed_state.test.js` 的
+  `stops appending on gap/reorg and requires authoritative snapshot reload`。
+- **P2 多资源 raw fallback：已修复。** 资源 formatter 逐项解析 Host 以 ` · ` 拼接的
+  条目；对应 Rust 测试为
+  `render_selected_resource_readout.rs` 的
+  `resource_readout_formats_each_structured_entry_without_raw_json`。
+
+这些是 #3315 的 focused implementation/test evidence；外部 Chrome 另在 headed
+`1440x1000` 与 `390x844` 复核了 GPU 不可用 fallback。该浏览器证据不覆盖
+`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
+宽度，也不是发行放行结论；#3248 浏览器证据仍是历史记录。

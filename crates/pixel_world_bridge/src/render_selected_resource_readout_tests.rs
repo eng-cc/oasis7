@@ -38,6 +38,15 @@ fn selected_resource_readout_y(app: &mut App) -> f32 {
         .y
 }
 
+fn selected_resource_readout_texts(app: &mut App) -> Vec<String> {
+    let world = app.world_mut();
+    let mut readouts = world.query::<(&PixelWorldSelectedResourceReadout, &Text2d)>();
+    readouts
+        .iter(world)
+        .map(|(_, text)| text.0.clone())
+        .collect()
+}
+
 fn render_resource_readout_test_app_at_viewport(
     render_state: RenderState,
     width: f32,
@@ -120,6 +129,58 @@ fn selected_resource_readout_tracks_agent_location_empty_state_and_deselection()
         selected_resource_readouts(&mut app).is_empty(),
         "deselection must remove the selected resource readout"
     );
+}
+
+#[test]
+fn selected_resource_readout_reconciles_structured_agent_and_location_summary() {
+    const STRUCTURED_SUMMARY: &str =
+        r#"energy:{"amount":72,"unit":"%"} · ore:{"amount":5,"unit":"kg"}"#;
+    const PLAYER_FACING_SUMMARY: &str = "Energy 72% · Ore 5 kg";
+
+    let mut state = sample_render_state(12_000.0);
+    state.agents[0].resource_summary = STRUCTURED_SUMMARY.to_string();
+    state.locations[0].resource_summary = STRUCTURED_SUMMARY.to_string();
+    let mut app = render_test_app(state);
+
+    let assert_player_facing = |app: &mut App, target_kind: &str, target_id: &str| {
+        let readouts = selected_resource_readouts(app);
+        assert_eq!(
+            readouts,
+            vec![ResourceReadoutProbe {
+                target_kind: target_kind.to_string(),
+                target_id: target_id.to_string(),
+                display: PLAYER_FACING_SUMMARY.to_string(),
+            }],
+            "selected {target_kind} resource summary must be formatted for players"
+        );
+
+        let texts = selected_resource_readout_texts(app);
+        for display in readouts
+            .iter()
+            .map(|readout| readout.display.as_str())
+            .chain(texts.iter().map(String::as_str))
+        {
+            assert!(!display.contains('{'));
+            assert!(!display.contains('}'));
+            assert!(!display.contains('"'));
+        }
+        assert_eq!(texts, vec![PLAYER_FACING_SUMMARY]);
+    };
+
+    assert_player_facing(&mut app, "agent", "agent-0");
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let render_state = runtime.render_state.as_mut().expect("render state");
+        render_state.selection = Some(Selection {
+            kind: "location".to_string(),
+            id: "loc-0".to_string(),
+        });
+        runtime.render_version += 1;
+    }
+    app.update();
+
+    assert_player_facing(&mut app, "location", "loc-0");
 }
 
 #[test]

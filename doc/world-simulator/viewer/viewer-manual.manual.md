@@ -82,10 +82,31 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
   Diagnostics 保持次级，Recent Events/Feedback 仍按现名显示。Focus hooks 只服务
   Player 沉浸呈现，不是第二产品模式。World Feed v1 已有 runtime transport、状态机
   与 `#viewer-world-feed` panel，但仍是只读环境上下文，不是 Action Receipt 替代。
+- 当前 Player 已是 fullscreen world-first 单舞台；不要按旧“左侧/中间/右侧”三栏 IA
+  操作或编写说明。三张 `Objective / Next Move / Player Leverage` 卡片是 HUD，不是
+  旧三栏；密集三栏仅可能在显式、能力门控的 Director 工具视图出现。
 - Director 的 `#viewer-director-entry` / `#viewer-director-exit`、Viewer 状态机与
   `/api/public/director/capability` fail-closed endpoint 已实现。当前 endpoint 在没有
   可信 issuer 绑定 live `session_epoch` 时返回 `director_capability_unavailable`，
   因此生产环境成功进入仍是 `capability_blocked`；queued/accepted 也不等于完成。
+
+### Expanded Player visual contract (target handoff; not current release evidence)
+- 实现目标的阅读顺序是 attention（仅在需要时）→ `Objective` → 一个主导性的
+  `Next Move` 动作 → `Player Leverage`/selected context → `Action Receipt`；World Feed
+  继续作为收起的环境 chip。`world_read` 的 `tick/agents/routes/fragments/hotspots` 只
+  在既有权威 projection 提供时显示，不能补造 Power、Data、Consensus 或其他指标。
+- `Next Move` 的目标交互是单一 CTA 和内联 blocker；当前三卡 HUD 是实现基线，完成该
+  目标前不要把目标层级写成已经交付。
+- Agent Console 默认显示当前选择、已授权的 command/chat、blocker 与 receipt。无选择或
+  不可控时只提供 Targets/认领/等待 binding 的恢复说明；raw snapshot/JSON、auth/
+  capability、Prompt override、world-scale 和 Director 工具均保持在收起的
+  `Diagnostics / More` 中。
+- 用户-facing Focus 名称为 `Cinematic View / Minimal HUD`，内部 `focusMode` hooks
+  保留。显式进入后保留世界、选择标记、当前 objective/blocker、存在中的 receipt 和
+  退出入口；Escape 先关局部 drawer，再退出呈现层，IME composition 不被打断。
+- 这只是待实现的视觉 handoff，不改变 runtime/protocol、仿真/replay、renderer、权限、
+  Director capability 或 receipt 因果。后续 QA 必须提供 headed `1440x1000` 与 `390x844`
+  截图，并覆盖键盘、IME、CJK、长文本和无横向溢出。
 
 ### Terminal Player shell playbook
 This section describes the implemented Player-shell, World Feed, and Director
@@ -128,8 +149,31 @@ blocked until a trusted issuer is available.
    returning null), the page exposes `Renderer Unavailable` with a diagnostic reason and
    does not present a false ready canvas.
 
+### Resolved World Feed and resource-readout defects (#3315)
+
+The following focused implementation defects are resolved on this branch; use the
+named tests as the current evidence, not the historical browser artifacts:
+
+- **P1 cursor continuation:** `world_feed_transport.js` now continues an initial page
+  from the returned cursor and refreshes once after world activity. See
+  `world_feed_transport.test.js` tests
+  `continues an initial page asynchronously from the returned cursor` and
+  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`.
+- **P2 gap/reorg retention:** `consumeWorldFeed()` clears stale `events` on a gap before
+  snapshot reload. See `world_feed_state.test.js` test
+  `stops appending on gap/reorg and requires authoritative snapshot reload`.
+- **P2 multi-resource fallback:** the selected-resource formatter now parses every
+  ` · `-joined host entry. See Rust test
+  `render_selected_resource_readout.rs::resource_readout_formats_each_structured_entry_without_raw_json`.
+
+The #3248 browser evidence referenced by the surrounding Viewer docs is historical. For
+#3315, external Chrome freshly verified only the GPU-unavailable fallback at headed
+`1440x1000` and `390x844`; the `ready=true` WebGL2/Cinematic path, post-probe async GPU
+failure, and tablet widths `641–1240` remain unverified. This is browser evidence for the
+fallback surface, not a release-readiness claim.
+
 ### Target QA evidence checklist
-The implementation owner must supply headed evidence for desktop and 390x844 mobile
+The implementation owner must supply headed evidence for desktop `1440x1000` and mobile `390x844`
 shell hierarchy, Director allowed/denied/stale/revoked entry (the allowed path is
 currently blocked by the missing trusted issuer), duplicate-ID/anchor
 checks, keyboard/IME/Escape focus return, receipt states, feed loading/empty/replay/

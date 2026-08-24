@@ -845,20 +845,6 @@ function EmptyEntityRecoveryCard(props) {
           <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
         </div>
       </Show>
-      <Show when={firstAgentClaimAction()}>
-        {(action) => (
-          <div class="toolbar">
-            <button
-              class={gameplayActionButtonClass(action())}
-              aria-busy={gameplayActionButtonBusyAttrs(action())}
-              disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
-              onClick={() => renderGameplayAction(action())}
-            >
-              {gameplayActionDisplayLabel(action(), locale())}
-            </button>
-          </div>
-        )}
-      </Show>
       <div class="feedback-detail">
         {firstAgentClaimAction()
           ? tr(
@@ -868,8 +854,8 @@ function EmptyEntityRecoveryCard(props) {
             )
           : tr(
               locale(),
-              "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。",
-              "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
+              "如果页面仍提供“刷新快照”动作，先从当前入口重拉一次；如果数量仍然是 0，就需要修复或重启运行时世界引导流程。",
+              "If the page still exposes a refresh action, pull a fresh snapshot from the current entry first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
             )}
       </div>
     </CalloutCard>
@@ -2030,8 +2016,8 @@ function WorldStageHero() {
   };
   const selectionHint = () =>
     core.state.selectedKind && core.state.selectedId
-      ? tr(locale(), "右侧指挥面板会围绕这个对象展开。", "The command surface on the right now follows this target.")
-      : tr(locale(), "先从左侧锁定一个行动体或地点，再进入右侧指挥面板。", "Lock onto an agent or location from the left before entering the command surface.");
+      ? tr(locale(), "指挥面板会围绕这个对象展开。", "The command surface now follows this target.")
+      : tr(locale(), "先从 Targets 锁定一个行动体或地点，再进入指挥面板。", "Lock onto an agent or location in Targets before entering the command surface.");
   const stageLabel = () => gameplayStageLabel(gameplaySummary()?.stageStatus, locale());
   const nextStepCopy = () =>
     gameplaySummary()?.narrativeNextStep
@@ -2047,36 +2033,7 @@ function WorldStageHero() {
         `The current intent is centered on ${gameplaySummary().acceptedIntentTarget}.`,
       )
       : selectionHint();
-  const refreshSnapshotAction = () =>
-    (gameplaySummary()?.availableActions || []).find((action) => action.executeKind === "request_snapshot")
-    || {
-      actionId: "request_snapshot",
-      action_id: "request_snapshot",
-      label: "Request snapshot",
-      protocolAction: "request_snapshot",
-      protocol_action: "request_snapshot",
-      executeKind: "request_snapshot",
-      targetAgentId: null,
-      disabledReason: null,
-    };
-  const primaryActionContext = () =>
-    gameplaySummary()?.recommendedAction?.label
-    || gameplaySummary()?.narrativeNextStep
-    || gameplaySummary()?.nextStepHint
-    || gameplaySummary()?.objective
-    || "";
-  const primaryRefreshLabel = () => {
-    const context = primaryActionContext();
-    return context
-      ? tr(locale(), `刷新快照，确认：${context}`, `Refresh Snapshot to verify: ${context}`)
-      : tr(locale(), "刷新快照，确认当前玩法状态", "Refresh Snapshot to verify the current gameplay state");
-  };
-  const primaryStepLabel = () => {
-    const context = primaryActionContext();
-    return context
-      ? tr(locale(), `推进一步，尝试：${context}`, `Advance One Step toward: ${context}`)
-      : tr(locale(), "推进一步，尝试当前下一步", "Advance One Step toward the current next move");
-  };
+  const recommendedAction = () => gameplaySummary()?.recommendedAction || null;
 
   return (
     <div class="stage-hero stage-hero--compact" data-stage-state={gameplaySummary()?.blockerKind || "ready"}>
@@ -2146,32 +2103,39 @@ function WorldStageHero() {
           <div class="hero-focus-card__detail">{identityMeta()}</div>
         </div>
       </div>
-      <div class="toolbar" aria-label={tr(locale(), "主要玩法动作", "Primary gameplay actions")}>
-        <button
-          type="button"
-          data-testid="viewer-playthrough-action-request-snapshot"
-          aria-label={primaryRefreshLabel()}
-          class={gameplayActionButtonClass(refreshSnapshotAction())}
-          aria-busy={gameplayActionButtonBusyAttrs(refreshSnapshotAction())}
-          disabled={gameplayActionPendingFor(refreshSnapshotAction())}
-          onClick={() => renderGameplayAction(refreshSnapshotAction())}
-        >
-          {gameplayActionDisplayLabel(refreshSnapshotAction(), locale(), tr(locale(), "刷新快照", "Refresh Snapshot"))}
-        </button>
-        <button
-          type="button"
-          data-testid="viewer-playthrough-action-step"
-          aria-label={primaryStepLabel()}
-          onClick={() => core.sendControl("step", { count: 1 })}
-        >
-          {tr(locale(), "推进一步", "Advance One Step")}
-        </button>
-      </div>
-      <div class="feedback-detail" data-testid="viewer-primary-action-preview">
-        {primaryActionContext()
-          ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`)
-          : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.")}
-      </div>
+      <Show when={recommendedAction()}>
+        {(action) => (
+          <CalloutCard
+            title={tr(locale(), "推荐动作", "Recommended Action")}
+            badge={action().executeKind || "ready"}
+            badgeClass="badge badge--good"
+          >
+            <div class="feedback-summary">
+              {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
+            </div>
+            <div
+              class="feedback-detail"
+              id={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+            >
+              {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
+                || gameplayActionDetail(action(), gameplaySummary(), locale())}
+            </div>
+            <div class="toolbar" aria-label={tr(locale(), "下一步动作", "Next Move action")}>
+              <button
+                type="button"
+                data-testid={gameplayActionTestId(action(), "recommended")}
+                class={gameplayActionButtonClass(action())}
+                aria-busy={gameplayActionButtonBusyAttrs(action())}
+                disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
+                aria-describedby={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+                onClick={() => renderGameplayAction(action())}
+              >
+                {gameplayActionDisplayLabel(action(), locale())}
+              </button>
+            </div>
+          </CalloutCard>
+        )}
+      </Show>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
         <EmptyEntityRecoveryCard
           locale={locale()}
@@ -2240,8 +2204,8 @@ function TargetsPanel() {
       <EmptyState>
         {tr(
           locale(),
-          "先从这里锁定一个行动体或地点。中间查看局势，右侧只处理你当前选中的目标。",
-          "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.",
+          "先在 Targets 中锁定一个行动体或地点，再回到世界查看局势；指挥面板只处理当前选中的目标。",
+          "Lock onto an agent or location in Targets first, then read the world; the command surface handles only the selected target.",
         )}
       </EmptyState>
       <Show when={firstAgentClaimAction()}>
@@ -2448,7 +2412,7 @@ function WorldSummaryPanel(props = {}) {
         <PanelSection
           title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}
           eyebrow={tr(locale(), "玩家主路径", "Player Path")}
-          meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧指挥区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
+          meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入指挥面板。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
         >
         <Show
           when={gameplaySummary()}
@@ -2814,34 +2778,6 @@ function WorldSummaryPanel(props = {}) {
                 )}
               </Show>
               <ProductValidationQuoteGameplayPanel core={core} locale={locale()} tr={tr} />
-              <Show when={gameplay().recommendedAction}>
-                {(action) => (
-                  <CalloutCard
-                    title={tr(locale(), "推荐动作", "Recommended Action")}
-                    badge={action().executeKind || "ready"}
-                    badgeClass="badge badge--good"
-                  >
-                    <div class="feedback-summary">
-                      {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
-                    </div>
-                    <div class="feedback-detail">
-                      {gameplayActionDisabledReason(action(), gameplay(), locale())
-                        || gameplayActionDetail(action(), gameplay(), locale())}
-                    </div>
-                    <div class="toolbar">
-                      <button
-                        data-testid={gameplayActionTestId(action(), "recommended")}
-                        class={gameplayActionButtonClass(action())}
-                        aria-busy={gameplayActionButtonBusyAttrs(action())}
-                        disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
-                        onClick={() => renderGameplayAction(action())}
-                      >
-                        {gameplayActionDisplayLabel(action(), locale())}
-                      </button>
-                    </div>
-                  </CalloutCard>
-                )}
-              </Show>
               <Show when={!shouldShowStarterOcRequiredGate(gameplay()) && (gameplay().recommendedAction?.actionId === "claim_starter_oc" || starterOcAction(gameplay()))}>
                 <CalloutCard
                   title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
@@ -3321,13 +3257,12 @@ function InteractionPanel() {
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
-  const chatHistory = () =>
-    {
-      revision();
-      return core.state.chatHistory
-        .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
-        .slice(0, 12);
-    };
+  const chatHistory = () => {
+    revision();
+    return core.state.chatHistory
+      .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
+      .slice(0, 12);
+  };
   const interactionEnabled = () => promptCapability().enabled;
   const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
   const chatControlsEnabled = () => {
@@ -3428,7 +3363,9 @@ function InteractionPanel() {
         </div>
         <EmptyState class="command-surface__auth-boundary">{playerSessionReadyCopy()}</EmptyState>
       </Show>
-      <div class="badge-row command-surface__capability-row command-surface__diagnostic-strip">
+      <details class="diagnostic command-surface__capability-details">
+        <summary>{tr(locale(), "能力诊断", "Capability Diagnostics")}</summary>
+        <div class="badge-row command-surface__capability-row command-surface__diagnostic-strip">
         <Badge class="badge badge--diagnostic">{`boundPlayer=${binding()?.playerId || "-"}`}</Badge>
         <Badge class="badge badge--diagnostic">{`boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`}</Badge>
         <Badge class={promptControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
@@ -3440,8 +3377,8 @@ function InteractionPanel() {
         <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
           {`mainToken=${assetLaneStatusText()}`}
         </Badge>
-      </div>
-      <EmptyState class="command-surface__asset-boundary">{assetLaneDetail()}</EmptyState>
+        </div>
+      </details>
       <Show when={!starterOcGateOpen() && canControlSelectedAgent() && commandStarterOcAction()}>
         {(action) => (
           <div class="toolbar">
@@ -3509,12 +3446,9 @@ function InteractionPanel() {
           </div>
         </div>
       </PanelSection>
-      <PanelSection
-        class="command-surface__advanced-panel"
-        title={tr(locale(), "高级提示词设置", "Advanced Prompt Settings")}
-        eyebrow={tr(locale(), "高级控制", "Advanced Controls")}
-        meta={tr(locale(), "保留操作员级提示词控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.")}
-      >
+      <details class="diagnostic command-surface__advanced-details">
+        <summary>{tr(locale(), "高级提示词设置", "Advanced Prompt Settings")}</summary>
+        <PanelSection class="command-surface__advanced-panel" title={tr(locale(), "高级控制", "Advanced Controls")}>
         <div class="badge-row">
           <Badge>{`activePrompt=v${promptVersionState().currentVersion}`}</Badge>
           <Badge>{`nextRollback=v${promptVersionState().nextRollbackTargetVersion}`}</Badge>
@@ -3538,7 +3472,8 @@ function InteractionPanel() {
             {promptSettingsButtonLabel()}
           </button>
         </div>
-      </PanelSection>
+        </PanelSection>
+      </details>
       <Show when={promptOverridesVisible()}>
         <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
@@ -3661,12 +3596,9 @@ function InteractionPanel() {
           </Show>
         </PanelSection>
       </Show>
-      <PanelSection
-        class="command-surface__asset-panel"
-        title={tr(locale(), "资产 / 治理通道", "Asset / Governance Lane")}
-        eyebrow={tr(locale(), "后置能力", "Deferred Surface")}
-        meta={tr(locale(), "这类能力保留在右侧底部，只作为边界说明，不再抢占聊天与主玩法路径。", "These capabilities stay at the bottom of the right column as boundary guidance instead of competing with chat and the main player path.")}
-      >
+      <details class="diagnostic command-surface__asset-details">
+        <summary>{tr(locale(), "资产 / 治理通道", "Asset / Governance Lane")}</summary>
+        <PanelSection class="command-surface__asset-panel" title={tr(locale(), "后置能力", "Deferred Surface")}>
         <div class="badge-row">
           <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
             {`main_token_transfer=${assetLaneStatusText()}`}
@@ -3682,7 +3614,8 @@ function InteractionPanel() {
         <div class="toolbar">
           <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
         </div>
-      </PanelSection>
+        </PanelSection>
+      </details>
       </div>
     </Show>
   );
@@ -3769,7 +3702,7 @@ function DetailsPanel() {
                 title={tr(locale(), "对象明细暂时不可用", "Object Details Are Temporarily Unavailable")}
               />
             )
-            : <EmptyState>{tr(locale(), "请先从左侧列表选一个行动体或地点。", "Select an agent or location from the left list.")}</EmptyState>
+            : <EmptyState>{tr(locale(), "请先从 Targets 选择一个行动体或地点。", "Select an agent or location from Targets first.")}</EmptyState>
         }
       >
         {(selected) => (
@@ -3844,7 +3777,7 @@ function AppShell() {
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
-          <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div>
+          <div class="panel__meta-copy">{tr(locale(), "先在 Targets 中锁定对象，再进入世界舞台或指挥面板。", "Lock onto a target in Targets first, then move into the stage or command surface.")}</div>
           <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
             {tr(locale(), "返回世界", "Back to World")}
           </a>
@@ -3888,7 +3821,7 @@ function AppShell() {
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
           <div class="panel__meta-copy">
-            {tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
+            {tr(locale(), "只有锁定目标后才进入 Command。聊天优先，提示词与对象核查继续后置。", "Enter Command only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
           </div>
           <a class="panel__route-close" href="#viewer-stage-panel" onClick={focusViewerAnchor}>
             {tr(locale(), "返回世界", "Back to World")}

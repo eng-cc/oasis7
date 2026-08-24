@@ -19,6 +19,15 @@ function normalizeRuntimeModuleError(error) {
   return new Error(String(error || "unknown pixel world runtime import failure"));
 }
 
+export function probePixelWorldWebgl2Surface(canvas) {
+  try {
+    if (canvas?.getContext?.("webgl2", { antialias: false })) return null;
+    return { code: "pixel_world_webgl2_unavailable", message: "canvas.getContext() returned null; webgl2 not available or canvas already in use" };
+  } catch (error) {
+    return { code: "pixel_world_webgl2_unavailable", message: `canvas.getContext() threw exception: ${error instanceof Error ? error.message : String(error || "unknown WebGL2 error")}` };
+  }
+}
+
 async function tryLoadWasmBridgeModule(loadRuntimeModule = defaultLoadRuntimeModule) {
   try {
     const module = await loadRuntimeModule();
