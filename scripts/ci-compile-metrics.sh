@@ -18,9 +18,10 @@ Each checkout performs one dependency-tree query; closure counting and
 dependency-presence checks are derived from that shared result.
 
 Cargo registry/source downloads use the caller's CARGO_HOME (or the default
-$HOME/.cargo) and are shared by current and baseline measurements. Each
-checkout still receives an isolated target directory so compile timings remain
-cold and comparable.
+$HOME/.cargo) and are shared by current and baseline measurements. The
+pre-fetch is limited to the runner's host target because the measured commands
+compile only that surface. Each checkout still receives an isolated target
+directory so compile timings remain cold and comparable.
 
 Required:
   --package <name>          Cargo package to measure.
@@ -128,6 +129,12 @@ import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )
+
+host_target=$(rustc -vV | sed -n 's/^host: //p')
+if [[ -z "$host_target" ]]; then
+  echo "error: unable to resolve the Rust host target" >&2
+  exit 1
+fi
 
 measure_command_seconds() {
   local checkout_path="$1"
@@ -248,7 +255,8 @@ measure_checkout() {
   (
     cd "$checkout_path"
     export CARGO_HOME="$cargo_home"
-    cargo fetch --locked >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
+    cargo fetch --locked --target "$host_target" \
+      >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
   )
   check_seconds=$(
     measure_command_seconds \
