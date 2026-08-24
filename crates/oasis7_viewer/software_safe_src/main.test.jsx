@@ -1059,12 +1059,12 @@ describe("viewer web ui automation baseline", () => {
       }),
     });
 
-    const stagePanel = container.querySelector("#viewer-stage-panel");
-    const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
-    expect(claimButtons.length).toBeGreaterThan(0);
-    expect(container.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]')).toBeInTheDocument();
+    const stagePanel = container.querySelector("#viewer-stage-panel"); const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
+    expect(claimButtons).toHaveLength(1); expect(container.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]')).toBeInTheDocument();
 
-    fireEvent.click(claimButtons[0]);
+    const dispatchSpy = vi.spyOn(core, "sendGameplayAction"); fireEvent.click(claimButtons[0]);
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ actionId: "claim_first_agent", executeKind: "claim_first_agent" }));
 
     for (let attempt = 0; attempt < 50; attempt += 1) {
       if (core.state.lastGameplayActionFeedback?.stage !== "queued") {

@@ -845,20 +845,6 @@ function EmptyEntityRecoveryCard(props) {
           <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
         </div>
       </Show>
-      <Show when={firstAgentClaimAction()}>
-        {(action) => (
-          <div class="toolbar">
-            <button
-              class={gameplayActionButtonClass(action())}
-              aria-busy={gameplayActionButtonBusyAttrs(action())}
-              disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
-              onClick={() => renderGameplayAction(action())}
-            >
-              {gameplayActionDisplayLabel(action(), locale())}
-            </button>
-          </div>
-        )}
-      </Show>
       <div class="feedback-detail">
         {firstAgentClaimAction()
           ? tr(
