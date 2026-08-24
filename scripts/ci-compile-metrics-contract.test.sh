@@ -116,6 +116,11 @@ fi
 
 fake_bin="$tmp_dir/bin"
 mkdir -p "$fake_bin"
+host_target=$(rustc -vV | sed -n 's/^host: //p')
+if [[ -z "$host_target" ]]; then
+  echo "unable to resolve the Rust host target for the compile metrics contract" >&2
+  exit 1
+fi
 cat >"$fake_bin/cargo" <<'FAKE_CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -142,7 +147,14 @@ case "${1:-}" in
         ;;
     esac
     ;;
-  fetch|check)
+  fetch)
+    expected_target="${FAKE_HOST_TARGET:?}"
+    if [[ "$*" != *"--locked"* || "$*" != *"--target ${expected_target}"* ]]; then
+      echo "compile metrics fetch must be locked to the runner host target: $*" >&2
+      exit 1
+    fi
+    ;;
+  check)
     ;;
   build)
     echo "unexpected release build" >&2
@@ -178,6 +190,7 @@ expected_commit_oid=$(git rev-parse HEAD)
 FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/cargo-target.log" \
+FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
 FAKE_CARGO_TREE_FIXTURE=all \
 PATH="$fake_bin:$PATH" \
@@ -241,6 +254,7 @@ baseline_cargo_home="$tmp_dir/shared-cargo-home"
 FAKE_CARGO_LOG="$tmp_dir/baseline-cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/baseline-cargo-home.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
+FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
 FAKE_CARGO_TREE_FIXTURE=none \
 CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
