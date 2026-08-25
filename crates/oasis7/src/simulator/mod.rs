@@ -66,9 +66,9 @@ pub use decision_provider::{
     GoldenDecisionFixture, MemoryWriteIntent, MockDecisionProvider, MockDecisionProviderState,
     ObservationEnvelope, ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics,
     ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
-    ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
-    ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry, golden_decision_provider_fixtures,
+    ProviderMissionContext, ProviderModuleCommand, ProviderNavigationNode, ProviderNearbyEntity,
+    ProviderObservation, ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage,
+    ProviderTraceEnvelope, ProviderTranscriptEntry, golden_decision_provider_fixtures,
 };
 pub use fragment_physics::{
     CM3_PER_M3, CompoundComposition, CuboidSizeCm, FragmentBlock, FragmentBlockField,

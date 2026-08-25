@@ -1,17 +1,16 @@
 //! Module types and registry for WASM runtime integration.
 
-use serde::{Deserialize, Serialize};
-
 pub use oasis7_wasm_abi::{
     EconomyModuleKind, FactoryBuildDecision, FactoryBuildRequest, FactoryModuleApi,
     FactoryModuleSpec, FactoryProfileV1, GameplayContract, GameplayModuleKind,
     MaterialDefaultPriority, MaterialProfileV1, MaterialStack, MaterialTransportLossClass,
     ModuleAbiContract, ModuleActivation, ModuleArtifact, ModuleArtifactIdentity, ModuleCache,
-    ModuleChangeSet, ModuleDeactivation, ModuleEvent, ModuleEventKind, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi, ProductModuleSpec, ProductProfileV1,
-    ProductValidationDecision, ProductValidationRequest, RecipeExecutionPlan,
-    RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec, RecipeProfileV1,
+    ModuleChangeSet, ModuleCommandCatalogEntry, ModuleDeactivation, ModuleEvent, ModuleEventKind,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole,
+    ModuleSubscription, ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi,
+    ProductModuleSpec, ProductProfileV1, ProductValidationDecision, ProductValidationRequest,
+    RecipeExecutionPlan, RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec,
+    RecipeProfileV1,
 };
 
 /// A deterministic, read-only projection of commands exposed by active modules.
@@ -19,17 +18,6 @@ pub use oasis7_wasm_abi::{
 /// This is an Agent-facing discovery surface only. It describes which versioned
 /// module commands are available; it does not grant authority to invoke them or
 /// alter the simulator's closed `ActionCatalogEntry` surface.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ModuleCommandCatalogEntry {
-    pub module_id: String,
-    pub module_version: String,
-    pub namespace: String,
-    pub name: String,
-    pub schema_version: u32,
-    pub schema_hash: String,
-    pub max_payload_bytes: u64,
-}
-
 /// Project active module declarations into a deterministic Agent-facing catalog.
 ///
 /// The active map is authoritative: records without an active pointer are

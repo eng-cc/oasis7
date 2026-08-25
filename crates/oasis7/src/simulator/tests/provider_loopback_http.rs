@@ -38,6 +38,7 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
     };
     let expected_response = DecisionResponse {
         decision: fixture.expected_decision,
+        module_command: None,
         provider_error: None,
         diagnostics: ProviderDiagnostics {
             provider_id: Some("provider_local_bridge".to_string()),

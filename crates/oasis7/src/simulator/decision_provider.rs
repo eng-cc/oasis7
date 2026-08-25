@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::time::Instant;
 
+use oasis7_wasm_abi::ModuleCommandCatalogEntry;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -75,6 +76,20 @@ impl ActionCatalogEntry {
             summary: summary.into(),
         }
     }
+}
+
+/// A provider-produced module command. This stays separate from the closed
+/// core `Action` enum so an LLM cannot smuggle a module command through a core
+/// action parser. The runtime remains the only trusted executor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderModuleCommand {
+    pub module_id: String,
+    pub module_version: String,
+    pub namespace: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub schema_hash: String,
+    pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -183,6 +198,8 @@ pub struct ObservationEnvelope {
     pub memory_summary: Option<String>,
     #[serde(default)]
     pub action_catalog: Vec<ActionCatalogEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_command_catalog: Vec<ModuleCommandCatalogEntry>,
     pub timeout_budget_ms: u64,
 }
 
@@ -267,6 +284,9 @@ pub enum ProviderDecision {
         query_ref: String,
         query: AgentQuery,
     },
+    ModuleCommand {
+        module_command: ProviderModuleCommand,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -340,6 +360,11 @@ pub struct MemoryWriteIntent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecisionResponse {
     pub decision: ProviderDecision,
+    /// Optional typed module command carried by providers that use the
+    /// response extension field. It remains separate from core `decision` so
+    /// legacy providers can continue returning ordinary actions unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module_command: Option<ProviderModuleCommand>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_error: Option<ProviderErrorEnvelope>,
     #[serde(default)]
@@ -355,6 +380,7 @@ impl DecisionResponse {
         let provider_id = provider_id.into();
         Self {
             decision: ProviderDecision::Wait,
+            module_command: None,
             provider_error: None,
             diagnostics: ProviderDiagnostics {
                 provider_id: Some(provider_id.clone()),
@@ -443,6 +469,7 @@ pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
     agent_id: String,
     provider: P,
     action_catalog: Vec<ActionCatalogEntry>,
+    module_command_catalog: Vec<ModuleCommandCatalogEntry>,
     provider_config_ref: Option<String>,
     agent_profile: Option<String>,
     execution_mode: ProviderExecutionMode,
@@ -469,6 +496,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             agent_id: agent_id.into(),
             provider,
             action_catalog,
+            module_command_catalog: Vec::new(),
             provider_config_ref: None,
             agent_profile: None,
             execution_mode: ProviderExecutionMode::HeadlessAgent,
@@ -488,6 +516,16 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
 
     pub fn with_provider_config_ref(mut self, provider_config_ref: impl Into<String>) -> Self {
         self.provider_config_ref = Some(provider_config_ref.into());
+        self
+    }
+
+    /// Attach the current active-module command projection for provider
+    /// discovery. This is descriptive only; it does not grant authority.
+    pub fn with_module_command_catalog(
+        mut self,
+        module_command_catalog: Vec<ModuleCommandCatalogEntry>,
+    ) -> Self {
+        self.module_command_catalog = module_command_catalog;
         self
     }
 
@@ -615,6 +653,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
                 recent_event_summary: self.recent_event_summary.iter().cloned().collect(),
                 memory_summary: memory_summary.clone(),
                 action_catalog: self.action_catalog.clone(),
+                module_command_catalog: self.module_command_catalog.clone(),
                 timeout_budget_ms: self.timeout_budget_ms,
             },
             provider_config_ref: self.provider_config_ref.clone(),
@@ -1002,41 +1041,73 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
             .provider_error
             .as_ref()
             .map(|error| format!("{}: {}", error.code, error.message));
-        let (decision, parse_error) = match &response.decision {
-            ProviderDecision::Wait => (AgentDecision::Wait, None),
-            ProviderDecision::WaitTicks { ticks } => (AgentDecision::WaitTicks(*ticks), None),
-            ProviderDecision::Act { action_ref, action } => {
-                if self
-                    .action_catalog
-                    .iter()
-                    .any(|entry| entry.action_ref == *action_ref)
-                {
-                    (AgentDecision::Act(action.clone()), None)
-                } else {
-                    provider_error = provider_error
-                        .or_else(|| Some(format!("provider_invalid_action_ref: {action_ref}")));
-                    (
-                        AgentDecision::Wait,
-                        Some(format!(
-                            "unknown action_ref returned by provider: {action_ref}"
-                        )),
-                    )
+        let (decision, parse_error) = if let Some(module_command) = response.module_command.as_ref()
+        {
+            provider_error = provider_error.or_else(|| {
+                Some("module_command_unroutable: no trusted module executor".to_string())
+            });
+            (
+                AgentDecision::Wait,
+                Some(format!(
+                    "module_command_unroutable: {}:{}:{}:{}",
+                    module_command.module_id,
+                    module_command.module_version,
+                    module_command.namespace,
+                    module_command.name
+                )),
+            )
+        } else {
+            match &response.decision {
+                ProviderDecision::Wait => (AgentDecision::Wait, None),
+                ProviderDecision::WaitTicks { ticks } => (AgentDecision::WaitTicks(*ticks), None),
+                ProviderDecision::Act { action_ref, action } => {
+                    if self
+                        .action_catalog
+                        .iter()
+                        .any(|entry| entry.action_ref == *action_ref)
+                    {
+                        (AgentDecision::Act(action.clone()), None)
+                    } else {
+                        provider_error = provider_error
+                            .or_else(|| Some(format!("provider_invalid_action_ref: {action_ref}")));
+                        (
+                            AgentDecision::Wait,
+                            Some(format!(
+                                "unknown action_ref returned by provider: {action_ref}"
+                            )),
+                        )
+                    }
                 }
-            }
-            ProviderDecision::Query { query_ref, query } => {
-                if self
-                    .action_catalog
-                    .iter()
-                    .any(|entry| entry.action_ref == *query_ref)
-                {
-                    (AgentDecision::Query(query.clone()), None)
-                } else {
-                    provider_error = provider_error
-                        .or_else(|| Some(format!("provider_invalid_query_ref: {query_ref}")));
+                ProviderDecision::Query { query_ref, query } => {
+                    if self
+                        .action_catalog
+                        .iter()
+                        .any(|entry| entry.action_ref == *query_ref)
+                    {
+                        (AgentDecision::Query(query.clone()), None)
+                    } else {
+                        provider_error = provider_error
+                            .or_else(|| Some(format!("provider_invalid_query_ref: {query_ref}")));
+                        (
+                            AgentDecision::Wait,
+                            Some(format!(
+                                "unknown query_ref returned by provider: {query_ref}"
+                            )),
+                        )
+                    }
+                }
+                ProviderDecision::ModuleCommand { module_command } => {
+                    provider_error = provider_error.or_else(|| {
+                        Some("module_command_unroutable: no trusted module executor".to_string())
+                    });
                     (
                         AgentDecision::Wait,
                         Some(format!(
-                            "unknown query_ref returned by provider: {query_ref}"
+                            "module_command_unroutable: {}:{}:{}:{}",
+                            module_command.module_id,
+                            module_command.module_version,
+                            module_command.namespace,
+                            module_command.name
                         )),
                     )
                 }

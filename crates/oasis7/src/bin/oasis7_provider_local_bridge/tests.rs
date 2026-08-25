@@ -71,6 +71,30 @@ fn parse_model_decision_accepts_code_fence_and_maps_move_agent() {
 }
 
 #[test]
+fn parse_model_decision_accepts_typed_module_command_without_core_action_mapping() {
+    let request = sample_request();
+    let raw = r#"{
+        "decision":"module_command",
+        "module_command":{
+            "module_id":"m.weather",
+            "module_version":"0.1.0",
+            "namespace":"weather",
+            "name":"observe",
+            "schema_version":1,
+            "schema_hash":"0000000000000000000000000000000000000000000000000000000000000000",
+            "payload":[1,2,3]
+        }
+    }"#;
+    let (decision, repairs) =
+        parse_model_decision("agent-1", &request, raw).expect("typed module command");
+    assert_eq!(repairs, 0);
+    let encoded = serde_json::to_value(decision).expect("encode typed module command");
+    assert_eq!(encoded["decision"], "module_command");
+    assert!(encoded["module_command"].is_object());
+    assert!(encoded.get("action").is_none());
+}
+
+#[test]
 fn handle_decision_returns_wait_without_provider_error_on_invalid_json() {
     let state = ProviderState::new(CliOptions::default()).expect("provider state");
     let invoker = FakeInvoker {
@@ -1185,6 +1209,7 @@ fn sample_request() -> DecisionRequest {
                 ActionCatalogEntry::new("move_agent", "move to a visible location"),
                 ActionCatalogEntry::new("wait", "do nothing this tick"),
             ],
+            module_command_catalog: Vec::new(),
             timeout_budget_ms: 7000,
         },
         provider_config_ref: Some("provider://local-bridge".to_string()),

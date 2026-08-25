@@ -95,6 +95,7 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
                     "goal=巡游移动; recent_failure=none; location_hint=loc-2 visible".to_string(),
                 ),
                 action_catalog,
+                module_command_catalog: Vec::new(),
                 timeout_budget_ms: DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS,
             },
             provider_config_ref: Some("golden/mock-provider".to_string()),

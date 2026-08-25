@@ -482,6 +482,12 @@ impl ProviderState {
                 output.text.as_str(),
             ) {
                 Ok((decision, schema_repair_count)) => {
+                    let (decision, module_command) = match decision {
+                        ProviderDecision::ModuleCommand { module_command } => {
+                            (ProviderDecision::Wait, Some(module_command))
+                        }
+                        decision => (decision, None),
+                    };
                     let (decision, guardrail_note) = apply_profile_guardrails(&request, decision);
                     self.set_last_error(None);
                     let mut tool_trace = Vec::new();
@@ -493,6 +499,7 @@ impl ProviderState {
                     }
                     DecisionResponse {
                         decision,
+                        module_command,
                         provider_error: None,
                         diagnostics: ProviderDiagnostics {
                             provider_id: Some(self.provider_id().to_string()),
@@ -561,6 +568,7 @@ impl ProviderState {
                     }
                     DecisionResponse {
                         decision,
+                        module_command: None,
                         provider_error: None,
                         diagnostics: ProviderDiagnostics {
                             provider_id: Some(self.provider_id().to_string()),
@@ -630,6 +638,7 @@ impl ProviderState {
         let action_label = provider_decision_label(&decision);
         DecisionResponse {
             decision,
+            module_command: None,
             provider_error: None,
             diagnostics: ProviderDiagnostics {
                 provider_id: Some(self.provider_id().to_string()),
@@ -673,6 +682,7 @@ impl ProviderState {
     ) -> DecisionResponse {
         DecisionResponse {
             decision: ProviderDecision::Wait,
+            module_command: None,
             provider_error: Some(ProviderErrorEnvelope {
                 code: code.into(),
                 message: message.into(),

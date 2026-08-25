@@ -81,6 +81,7 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
                 to: "loc-2".to_string(),
             },
         },
+        module_command: None,
         provider_error: None,
         diagnostics: ProviderDiagnostics {
             provider_id: Some("mock-provider-local-bridge".to_string()),
@@ -250,6 +251,7 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
                 to: "loc-2".to_string(),
             },
         },
+        module_command: None,
         provider_error: None,
         diagnostics: ProviderDiagnostics {
             provider_id: Some("mock-provider-local-bridge".to_string()),

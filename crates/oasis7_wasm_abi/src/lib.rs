@@ -452,6 +452,21 @@ impl ModuleSchemaDeclarations {
     }
 }
 
+/// Agent-facing projection of a command declared by an active module.
+///
+/// This is a declaration DTO rather than a capability grant: consumers may
+/// use it for schema discovery, but it does not authorize invocation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ModuleCommandCatalogEntry {
+    pub module_id: String,
+    pub module_version: String,
+    pub namespace: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub schema_hash: String,
+    pub max_payload_bytes: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModuleCommandDeclaration {
     pub namespace: String,

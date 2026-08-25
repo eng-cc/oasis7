@@ -3,6 +3,10 @@ use super::{
     FeedbackEnvelope, ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient,
     ProviderLoopbackHttpError,
 };
+use oasis7_wasm_abi::{
+    ModuleCommandDeclaration, ModuleCommandValidationError, ModuleSchemaDeclarations,
+    validate_module_command_declarations,
+};
 
 const DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID: &str = "provider_loopback_http";
 const PHASE1_ALLOWED_ACTION_REFS: &[&str] = &[
@@ -79,6 +83,14 @@ impl ProviderLoopbackAdapter {
                 error.message.clone(),
                 error.retryable,
                 response.trace_payload.upstream_trace.clone(),
+            ));
+        }
+        if let Some(module_command) = response.module_command.as_ref() {
+            validate_module_command_response(request, module_command)?;
+            return Err(DecisionProviderError::new(
+                "module_command_unroutable",
+                "provider returned a valid module command but no trusted module executor is attached",
+                false,
             ));
         }
         match &response.decision {
@@ -160,6 +172,14 @@ impl ProviderLoopbackAdapter {
                     )),
                 }
             }
+            ProviderDecision::ModuleCommand { module_command } => {
+                validate_module_command_response(request, module_command)?;
+                Err(DecisionProviderError::new(
+                    "module_command_unroutable",
+                    "provider returned a valid module command but no trusted module executor is attached",
+                    false,
+                ))
+            }
         }
     }
 
@@ -203,6 +223,77 @@ impl ProviderLoopbackAdapter {
             false,
         ))
     }
+}
+
+fn validate_module_command_response(
+    request: &DecisionRequest,
+    command: &super::ProviderModuleCommand,
+) -> Result<(), DecisionProviderError> {
+    let declaration = ModuleCommandDeclaration {
+        namespace: command.namespace.clone(),
+        name: command.name.clone(),
+        schema_version: command.schema_version,
+        schema_hash: command.schema_hash.clone(),
+        max_payload_bytes: command.payload.len().max(1) as u64,
+    };
+    if let Err(error) = validate_module_command_declarations(&ModuleSchemaDeclarations {
+        commands: vec![declaration],
+    }) {
+        let code = match error {
+            ModuleCommandValidationError::ReservedNamespace(_) => {
+                "module_command_reserved_namespace"
+            }
+            ModuleCommandValidationError::InvalidNamespace(_)
+            | ModuleCommandValidationError::InvalidName(_)
+            | ModuleCommandValidationError::InvalidSchemaVersion
+            | ModuleCommandValidationError::InvalidSchemaHash(_)
+            | ModuleCommandValidationError::InvalidPayloadBound(_) => {
+                "module_command_invalid_declaration"
+            }
+            _ => "module_command_invalid_declaration",
+        };
+        return Err(DecisionProviderError::new(code, error.to_string(), false));
+    }
+
+    let Some(catalog_entry) = request
+        .observation
+        .module_command_catalog
+        .iter()
+        .find(|entry| {
+            entry.module_id == command.module_id
+                && entry.module_version == command.module_version
+                && entry.namespace == command.namespace
+                && entry.name == command.name
+                && entry.schema_version == command.schema_version
+        })
+    else {
+        return Err(DecisionProviderError::new(
+            "module_command_identity_mismatch",
+            "provider module command does not match an exact catalog identity",
+            false,
+        ));
+    };
+    if catalog_entry.schema_hash != command.schema_hash {
+        return Err(DecisionProviderError::new(
+            "module_command_schema_hash_mismatch",
+            "provider module command schema_hash does not match the catalog",
+            false,
+        ));
+    }
+    if command.payload.is_empty()
+        || command.payload.len() > catalog_entry.max_payload_bytes as usize
+    {
+        return Err(DecisionProviderError::new(
+            "module_command_payload_too_large",
+            format!(
+                "provider module command payload size {} exceeds catalog bound {}",
+                command.payload.len(),
+                catalog_entry.max_payload_bytes
+            ),
+            false,
+        ));
+    }
+    Ok(())
 }
 
 impl DecisionProvider for ProviderLoopbackAdapter {

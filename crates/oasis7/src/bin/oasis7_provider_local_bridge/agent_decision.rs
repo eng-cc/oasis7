@@ -1,6 +1,6 @@
 use oasis7::simulator::{
     Action, ActionCatalogEntry, AgentQuery, DecisionRequest, MicroDepotQuoteRequest,
-    ProviderDecision,
+    ProviderDecision, ProviderModuleCommand,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -69,6 +69,7 @@ pub(super) fn provider_decision_label(decision: &ProviderDecision) -> &'static s
             "quote_micro_depot_install"
         }
         ProviderDecision::Query { .. } => "query",
+        ProviderDecision::ModuleCommand { .. } => "module_command",
     }
 }
 
@@ -111,6 +112,21 @@ pub(super) fn build_decision_prompt(
         .iter()
         .map(|entry| json!({"action_ref": entry.action_ref, "summary": entry.summary}))
         .collect::<Vec<_>>();
+    let module_command_catalog = observation
+        .module_command_catalog
+        .iter()
+        .map(|entry| {
+            json!({
+                "module_id": entry.module_id,
+                "module_version": entry.module_version,
+                "namespace": entry.namespace,
+                "name": entry.name,
+                "schema_version": entry.schema_version,
+                "schema_hash": entry.schema_hash,
+                "max_payload_bytes": entry.max_payload_bytes,
+            })
+        })
+        .collect::<Vec<_>>();
     let current_location_id =
         estimated_current_location_id(&observation.observation).map(str::to_string);
     let nearest_non_current_location_id =
@@ -146,6 +162,7 @@ pub(super) fn build_decision_prompt(
         "memory_summary": observation.memory_summary,
         "recent_feedback": recent_feedback,
         "action_catalog": action_catalog,
+        "module_command_catalog": module_command_catalog,
     });
     format!(
         concat!(
@@ -164,6 +181,7 @@ pub(super) fn build_decision_prompt(
             "{{\"decision\":\"act\",\"action_ref\":\"inspect_target\",\"args\":{{\"target_kind\":\"agent|location|object\",\"target_id\":\"<id>\"}}}}\n",
             "{{\"decision\":\"act\",\"action_ref\":\"simple_interact\",\"args\":{{\"target_kind\":\"agent|location|object\",\"target_id\":\"<id>\",\"interaction\":\"<verb>\"}}}}\n",
             "{{\"decision\":\"query\",\"action_ref\":\"quote_micro_depot_install\",\"args\":<serialized InstallMicroDepot action>}}\n",
+            "{{\"decision\":\"module_command\",\"module_command\":{{\"module_id\":\"<module id>\",\"module_version\":\"<version>\",\"namespace\":\"<namespace>\",\"name\":\"<name>\",\"schema_version\":<u32>,\"schema_hash\":\"<sha256>\",\"payload\":<byte array>}}}}\n",
             "Profile guidance:\n{}\n",
             "Do not invent ids. Keep messages short. Context JSON follows:\n{}"
         ),
@@ -270,6 +288,8 @@ struct ModelDecisionEnvelope {
     action_ref: Option<String>,
     #[serde(default)]
     args: Option<Value>,
+    #[serde(default)]
+    module_command: Option<ProviderModuleCommand>,
 }
 
 pub(super) fn parse_model_decision(
@@ -355,6 +375,11 @@ pub(super) fn parse_model_decision(
                 query: build_query_from_args(agent_id, query_ref, &args)?,
             }
         }
+        "module_command" => ProviderDecision::ModuleCommand {
+            module_command: envelope
+                .module_command
+                .ok_or_else(|| "module_command requires module_command object".to_string())?,
+        },
         other => return Err(format!("unsupported decision `{other}`")),
     };
     Ok((decision, schema_repair_count))
@@ -487,6 +512,9 @@ pub(super) fn apply_profile_guardrails(
         },
         ProviderDecision::Query { query_ref, query } => {
             (ProviderDecision::Query { query_ref, query }, None)
+        }
+        ProviderDecision::ModuleCommand { module_command } => {
+            (ProviderDecision::ModuleCommand { module_command }, None)
         }
     }
 }
