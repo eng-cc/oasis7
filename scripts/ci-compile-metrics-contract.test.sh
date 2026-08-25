@@ -293,7 +293,7 @@ CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
     --check-only \
     --baseline-ref HEAD
 
-python3 - "$baseline_out_dir/baseline.metrics.json" <<'PY'
+python3 - "$baseline_out_dir/baseline.metrics.json" "$baseline_out_dir/comparison.json" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -301,6 +301,22 @@ import sys
 metrics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert metrics["wasmtime_present"] is False
 assert metrics["wasm_executor_present"] is False
+
+comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+expected_identity = {
+    "package": "fake_library",
+    "binary": None,
+    "check_only": True,
+    "no_default_features": False,
+}
+assert comparison["measurement_identity"] == expected_identity
+assert {
+    field: comparison["current"][field] for field in expected_identity
+} == expected_identity
+assert {
+    field: comparison["baseline"][field] for field in expected_identity
+} == expected_identity
+print("measurement identity matching contract: OK")
 PY
 
 python3 - "$tmp_dir/baseline-cargo-home.log" "$baseline_cargo_home" "$tmp_dir/baseline-cargo-target.log" <<'PY'
@@ -359,29 +375,63 @@ PY
 
 python3 - "$tmp_dir/comparison.json" <<'PY'
 import json
+from copy import deepcopy
 from pathlib import Path
 import subprocess
 import sys
 
 comparison_path = Path(sys.argv[1])
-comparison_path.write_text(
-    json.dumps(
+matching_comparison = {
+    "measurement_identity": {
+        "package": "fake_library",
+        "binary": None,
+        "check_only": True,
+        "no_default_features": False,
+    },
+    "current": {
+        "package": "fake_library",
+        "binary": None,
+        "check_only": True,
+        "no_default_features": False,
+        "wasmtime_present": False,
+    },
+    "baseline": {
+        "package": "fake_library",
+        "binary": None,
+        "check_only": True,
+        "no_default_features": False,
+        "package_count": 10,
+    },
+    "metric_rows": [
         {
-            "current": {"wasmtime_present": False},
-            "baseline": {"package_count": 10},
-            "metric_rows": [
-                {
-                    "metric": "package_count",
-                    "baseline": 10,
-                    "current": 20,
-                    "delta": 10,
-                    "percent": 100.0,
-                }
-            ],
+            "metric": "package_count",
+            "baseline": 10,
+            "current": 20,
+            "delta": 10,
+            "percent": 100.0,
         }
-    ),
-    encoding="utf-8",
-)
+    ],
+}
+
+
+def run_gate(payload):
+    comparison_path.write_text(json.dumps(payload), encoding="utf-8")
+    return subprocess.run(
+        [
+            "python3",
+            "scripts/ci-compile-metrics-gate.py",
+            "--comparison",
+            str(comparison_path),
+            "--max-package-count-regression-pct",
+            "100",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+comparison_path.write_text(json.dumps(matching_comparison), encoding="utf-8")
 
 for invalid in ("NaN", "inf", "-1"):
     result = subprocess.run(
@@ -405,23 +455,75 @@ for invalid in ("NaN", "inf", "-1"):
             f"{result.stderr!r}"
         )
 
-passing = subprocess.run(
-    [
-        "python3",
-        "scripts/ci-compile-metrics-gate.py",
-        "--comparison",
-        str(comparison_path),
-        "--max-package-count-regression-pct",
-        "100",
-    ],
-    capture_output=True,
-    text=True,
-    check=False,
-)
+passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
 
+missing_identity = dict(matching_comparison)
+missing_identity.pop("measurement_identity")
+missing = run_gate(missing_identity)
+if (
+    missing.returncode == 0
+    or "comparison is missing measurement_identity" not in missing.stdout
+):
+    raise SystemExit(
+        "missing measurement identity unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+mismatched_identity = json.loads(json.dumps(matching_comparison))
+mismatched_identity["baseline"]["no_default_features"] = True
+mismatched = run_gate(mismatched_identity)
+if (
+    mismatched.returncode == 0
+    or "current/baseline measurement identity mismatch" not in mismatched.stdout
+):
+    raise SystemExit(
+        "mismatched measurement identity unexpectedly passed or used wrong error: "
+        f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+invalid_identity_cases = (
+    (
+        "boolean-string",
+        {"check_only": "true"},
+        "check_only must be a boolean",
+    ),
+    (
+        "empty-package",
+        {"package": ""},
+        "package must be a non-empty string",
+    ),
+    (
+        "integer-binary",
+        {"binary": 7},
+        "binary must be null or a non-empty string",
+    ),
+    (
+        "check-only-with-binary",
+        {"check_only": True, "binary": "fake_binary"},
+        "check_only requires binary to be null",
+    ),
+    (
+        "release-without-binary",
+        {"check_only": False, "binary": None},
+        "release-build requires binary to be a non-empty string",
+    ),
+)
+for case_name, updates, expected_error in invalid_identity_cases:
+    invalid = deepcopy(matching_comparison)
+    for section in ("measurement_identity", "current", "baseline"):
+        invalid[section].update(updates)
+    result = run_gate(invalid)
+    if result.returncode == 0 or expected_error not in result.stdout:
+        raise SystemExit(
+            f"invalid {case_name} measurement identity unexpectedly passed or "
+            f"used wrong error: {result.stdout}{result.stderr}"
+        )
+
 print("ci-compile-metrics-gate threshold contract: OK")
+print("measurement identity missing/mismatch contract: OK")
+print("measurement identity semantic validation contract: OK")
 PY
 
 echo "ci-compile-metrics-contract.test: OK"
