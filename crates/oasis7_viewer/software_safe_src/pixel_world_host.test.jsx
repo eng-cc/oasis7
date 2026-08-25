@@ -1314,7 +1314,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-rail")).toBeNull();
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"]')).toBeNull();
-    expect(document.querySelector(".pixel-world-focus-receipt")).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-receipt")).not.toBeNull();
+    expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Restore Layout");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
