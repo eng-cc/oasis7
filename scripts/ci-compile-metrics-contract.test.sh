@@ -241,6 +241,10 @@ if not measured:
 unlocked = [command for command in measured if "--locked" not in command.split()]
 if unlocked:
     raise SystemExit(f"unlocked cargo invocations: {unlocked}")
+timed = [command for command in measured if command.split(maxsplit=1)[0] in {"check", "build"}]
+offline_missing = [command for command in timed if "--offline" not in command.split()]
+if offline_missing:
+    raise SystemExit(f"timed cargo invocations must be offline: {offline_missing}")
 tree_commands = [command for command in measured if command.split(maxsplit=1)[0] == "tree"]
 if len(tree_commands) != 1:
     raise SystemExit(f"expected one dependency-tree query for a check-only run: {tree_commands}")
@@ -248,6 +252,11 @@ if any("-i" in command.split() for command in tree_commands):
     raise SystemExit(f"dependency-tree query unexpectedly used inverse traversal: {tree_commands}")
 print("dependency-tree queries (current-only): 1")
 PY
+
+if ! grep -Fq 'cargo build --offline --locked' scripts/ci-compile-metrics.sh; then
+  echo "release compile metrics must run cargo build offline" >&2
+  exit 1
+fi
 
 baseline_out_dir="$tmp_dir/metrics-with-baseline"
 baseline_cargo_home="$tmp_dir/shared-cargo-home"
