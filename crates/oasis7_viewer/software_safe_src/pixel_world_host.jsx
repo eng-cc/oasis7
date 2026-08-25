@@ -303,6 +303,7 @@ function PixelWorldHostVisualLayer(props) {
             data-pixel-world-location-marker="true"
             data-location-id={location().id}
             data-selected={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"}
+            aria-pressed={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择地点", "Select Location")} ${location().label || location().id}`}
             data-marker-role={location().marker_role}
             style={{
               ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
@@ -328,7 +329,7 @@ function PixelWorldHostVisualLayer(props) {
             data-agent-id={agent().id}
             data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
             data-position-source={agent().position_source}
-            aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().id}`}
+            aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().label || agent().id}`}
             style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
             title={agent().label}
             onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
@@ -354,7 +355,7 @@ function PixelWorldCanvasAgentHitTargets(props) {
           data-pixel-world-agent-marker="true"
           data-agent-id={agent.id}
           data-position-source={agent.position_source}
-          aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
+          data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.label || agent.id}`}
           style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
           title={agent.label}
           onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
@@ -601,8 +602,7 @@ function PixelWorldCanvasRenderer(props) {
       </div>
       <div class="pixel-world-canvas__overlay">
         <PixelWorldCanvasAgentHitTargets
-          locale={props.locale}
-          renderState={props.renderState}
+          locale={props.locale} renderState={props.renderState} selection={props.selection}
           onSelect={props.onSelect}
           onHover={props.onHover}
         />
@@ -667,7 +667,7 @@ function PixelWorldActionReceipt(props) {
       </div>
       <Show when={receipt().present}>
         <div class="pixel-world-action-receipt__meta">
-          <span>{receipt().confidence}</span>
+          <span>{receiptConfidenceLabel(receipt().confidence, props.locale())}</span>
           <Show when={receipt().target_agent_id}>
             <span>{`agent=${receipt().target_agent_id}`}</span>
           </Show>
@@ -675,6 +675,18 @@ function PixelWorldActionReceipt(props) {
       </Show>
     </div>
   );
+}
+function receiptConfidenceLabel(confidence, locale) {
+  const value = String(confidence || "").trim().toLowerCase();
+  return value === "world_delta" ? tr(locale, "世界变化已确认", "World change confirmed") : value === "accepted_intent" ? tr(locale, "行动已接受", "Action accepted") : value === "none" ? tr(locale, "等待确认", "Waiting for confirmation") : tr(locale, "状态已记录", "Status recorded");
+}
+function worldReadoutStatus(locale, renderState) {
+  renderState?.(); const status = String(core.state.connectionStatus || "").toLowerCase(); const feed = core.state.worldFeed || {};
+  const warn = (label) => ({ label, className: "badge badge--warn" });
+  if (feed.stale) return warn(tr(locale, "陈旧", "STALE"));
+  if (status === "connecting" || status === "reconnecting") return warn(tr(locale, "正在重连", "RECONNECTING"));
+  if (status !== "connected") return warn(tr(locale, "离线", "OFFLINE"));
+  return ["ready", "replay", "empty"].includes(String(feed.status || "").toLowerCase()) ? { label: "LIVE", className: "badge badge--good" } : warn(tr(locale, "同步中", "SYNCING"));
 }
 
 const DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS = new Set(["claim_first_agent", "claim_starter_oc"]);
@@ -691,7 +703,7 @@ export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
 }
 
 function PixelWorldCommercialHud(props) {
-  const surface = () => props.renderState().commercial_surface;
+  const surface = () => props.renderState().commercial_surface; const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
   const executableNextMoveKinds = new Set([
     "gameplay_action",
     "claim_first_agent",
@@ -786,13 +798,9 @@ function PixelWorldCommercialHud(props) {
           </div>
         </div>
       </div>
-      <PixelWorldActionReceipt
-        id="viewer-action-receipt"
-        locale={props.locale}
-        surface={surface}
-      />
+      <Show when={!props.focusMode?.()}><PixelWorldActionReceipt id="viewer-action-receipt" locale={props.locale} surface={surface} /></Show>
       <div class="pixel-world-readout badge-row">
-        <span class="badge badge--good">LIVE</span>
+        <span class={readoutStatus().className}>{readoutStatus().label}</span>
         <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
           <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
         </Show>
@@ -855,7 +863,7 @@ function PixelWorldFocusHud(props) {
         >
           <span>{tr(props.locale(), "回执", "Receipt")}</span>
           <strong>{surface().action_receipt.title}</strong>
-          <em>{surface().action_receipt.confidence}</em>
+          <em>{receiptConfidenceLabel(surface().action_receipt.confidence, props.locale())}</em>
         </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "电影视图控制", "Cinematic controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
@@ -1511,7 +1519,7 @@ export function PixelWorldHost(props) {
         </Show>
       </Show>
       <Show when={renderState()}>
-        <PixelWorldCommercialHud locale={locale} renderState={renderState} />
+        <PixelWorldCommercialHud locale={locale} renderState={renderState} focusMode={focusMode}/>
       </Show>
       <Show when={rendererStatus() !== "fallback" && rendererStatus() !== "unavailable"}>
         <PixelWorldCanvasRenderer
@@ -1545,9 +1553,7 @@ export function PixelWorldHost(props) {
           data-viewer-overlay="renderer-unavailable"
           data-renderer-state={rendererStatus()}
         >
-          {rendererStatus() === "unavailable"
-            ? tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")
-            : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
+          {rendererStatus() === "unavailable" ? <><div>{tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")}</div><button type="button" class="pixel-world-render-unavailable__retry" onClick={requestReadyMode}>{tr(locale(), "重试 Renderer", "Retry Renderer")}</button></> : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
         </div>
       </Show>
       <Show when={focusMode() && renderState()?.commercial_surface && !maximized()}>

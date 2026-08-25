@@ -123,7 +123,11 @@ body {
   line-height: 1.35;
   white-space: normal;
   overflow-wrap: anywhere;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+[data-viewer-overlay="renderer-unavailable"] .pixel-world-render-unavailable__retry {
+  margin-top: 8px;
 }
 
 [data-viewer-overlay="world-hud"] .pixel-world-host__summary,
@@ -608,6 +612,15 @@ body {
     width: auto;
     max-width: none;
     max-height: min(72dvh, 560px);
+    overflow-y: auto;
+  }
+
+  #viewer-details-panel .command-surface__target-row {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-block: 8px;
+    background: var(--panel-bg, rgba(9, 13, 11, 0.96));
   }
 
   .director-surface {
@@ -661,7 +674,7 @@ body {
   }
 
   [data-viewer-shell="player-fullscreen"] .pixel-world-readout {
-    top: 96px;
+    top: 112px;
     left: 10px;
     max-width: calc(100vw - 20px);
   }

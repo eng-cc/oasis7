@@ -2268,6 +2268,7 @@ function TargetsPanel() {
             <For each={lists().agents}>
               {(agent, index) => {
                 const status = () => describeAgentSessionStatus(agent.id, locale());
+                const displayName = () => agent.name || agent.label || agent.id;
                 return (
                   <button
                     class="list-item"
@@ -2276,14 +2277,16 @@ function TargetsPanel() {
                     data-select-id={agent.id}
                     data-agent-session-status={status().kind}
                     data-selected={isSelectedTarget("agent", agent.id)}
+                    aria-pressed={isSelectedTarget("agent", agent.id) ? "true" : "false"}
                     onClick={() => core.applySelection({ kind: "agent", id: agent.id })}
                   >
                     <div class="list-item__header">
-                      <div class="list-item__title">{agent.id}</div>
+                      <div class="list-item__title">{displayName()}</div>
                       <Show when={isSelectedTarget("agent", agent.id)}>
                         <span class="list-item__selected-label">{tr(locale(), "已选中", "Selected")}</span>
                       </Show>
                     </div>
+                    <div class="list-item__meta"><span class="entity-id">{agent.id}</span></div>
                     <div class="badge-row">
                       <Badge class={status().badgeClass}>{status().badge}</Badge>
                       <Show when={status().binding.playerId}>
@@ -2320,6 +2323,7 @@ function TargetsPanel() {
                   data-select-kind="location"
                   data-select-id={location.id}
                   data-selected={isSelectedTarget("location", location.id)}
+                  aria-pressed={isSelectedTarget("location", location.id) ? "true" : "false"}
                   onClick={() => core.applySelection({ kind: "location", id: location.id })}
                 >
                   <div class="list-item__header">
@@ -3243,6 +3247,10 @@ function InteractionPanel() {
     revision();
     return core.selectedAgentBindingInfo();
   };
+  const selectedAgentLabel = () => {
+    const selected = core.state.snapshot?.model?.agents?.[agentId()];
+    return selected?.name || selected?.label || agentId();
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3342,6 +3350,7 @@ function InteractionPanel() {
       <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
       <div class="badge-row command-surface__target-row">
         <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
+        <Badge>{selectedAgentLabel()}</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
         <Badge class={selectedAgentStatus().badgeClass}>{selectedAgentStatus().badge}</Badge>
         <Badge class={chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
@@ -3473,7 +3482,6 @@ function InteractionPanel() {
           </button>
         </div>
         </PanelSection>
-      </details>
       <Show when={promptOverridesVisible()}>
         <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
@@ -3596,6 +3604,7 @@ function InteractionPanel() {
           </Show>
         </PanelSection>
       </Show>
+      </details>
       <details class="diagnostic command-surface__asset-details">
         <summary>{tr(locale(), "资产 / 治理通道", "Asset / Governance Lane")}</summary>
         <PanelSection class="command-surface__asset-panel" title={tr(locale(), "后置能力", "Deferred Surface")}>
