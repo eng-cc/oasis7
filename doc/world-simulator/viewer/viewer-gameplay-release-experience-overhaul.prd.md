@@ -213,9 +213,10 @@ These implementation findings are now resolved on the current branch; the target
 contract above remains the authority, and the tests below are the evidence for the
 bounded fixes:
 
-- **P1 cursor continuation — resolved:** `world_feed_transport.js` now schedules a
-  deferred request with the returned cursor and refreshes once after world activity,
-  without overlapping an in-flight request. Coverage is in
+- **P1 initial-page cursor continuation — resolved:** `world_feed_transport.js` now
+  schedules a deferred request with the returned cursor and refreshes once after world
+  activity, without overlapping an in-flight request. This historical #3315 result does
+  not cover the reconnect case recorded in the current follow-up backlog below. Coverage is in
   `crates/oasis7_viewer/software_safe_src/world_feed_transport.test.js`, tests
   `continues an initial page asynchronously from the returned cursor` and
   `refreshes the latest cursor once after world activity and does not overlap in-flight requests`.
@@ -233,6 +234,77 @@ Task #3248 browser screenshots and headed runs remain historical evidence. For #
 external Chrome freshly verified only the GPU-unavailable fallback at headed `1440x1000`
 and `390x844`; this does not verify the `ready=true` WebGL2/Cinematic path, post-probe
 async GPU failure, or tablet widths `641–1240`, and is not a release-readiness claim.
+
+### Current cleanup and bounded optimization backlog (2026-08-25)
+
+This backlog is the durable Viewer-domain handoff derived from the current implementation
+review. Priority labels describe player trust/readability risk; they are not release severity,
+task status, or evidence that an implementation has shipped. The paired design document owns
+the visual treatment. GitHub task evidence owns mutable execution status.
+
+#### Current cleanup before further shell refinement
+
+1. **World Feed reconnect continuation (P2 correctness).** The initial continuation fix above
+   remains valid, but reconnect can retain the prior response cursor while issuing a fresh
+   `cursor:null` request. Continuation must compare the returned cursor with the cursor used by
+   that request, not with the prior response cursor. Reconnect coverage must reproduce the case
+   where the fresh first-page cursor equals the retained cursor but later pages still exist.
+2. **Truthful world freshness (P1 player trust).** `LIVE` may appear only when an existing
+   authoritative connection/freshness projection supports it. Otherwise the Player surface must
+   show a non-deceptive current/stale/reconnecting/offline/unavailable state and the last trusted
+   logical position when available. Viewer must not invent freshness from wall-clock time,
+   renderer readiness, a successful reconnect, or a retained snapshot.
+3. **Advanced disclosure containment (P2 control safety).** Prompt Overrides, approval input,
+   auth/capability state, and raw controls must remain inside the same collapsed Advanced or
+   Diagnostics boundary. A persisted child preference must not expose editable controls while
+   its parent disclosure is closed.
+4. **Mobile overlay safe area (P2 readability).** Cinematic entry, compact world readout, feed,
+   renderer fallback, and diagnostics must occupy non-overlapping slots at `390x844`, including
+   CJK and long labels. Static CSS arithmetic is not sufficient proof; headed geometry or
+   screenshot evidence is required.
+
+#### Feasible with current authoritative Viewer data
+
+- **Receipt uniqueness (verify first; P1 visual trust).** Player and Cinematic must present one
+  causal receipt surface for the active presentation. Headed verification must first determine
+  whether the normal and compact receipt overlays are simultaneously visible; if so, make them
+  mutually exclusive rather than hiding the collision with z-index changes.
+- **Readable entity identity (P1).** Targets, Canvas markers, Command context, search results, and
+  accessible names use explicit `name`, then `label`, then stable `id` as fallback. Raw IDs and
+  binding metadata remain secondary metadata or Diagnostics; Viewer must never infer a role or
+  name from an ID.
+- **Semantic selection state (P1/P2 accessibility).** Targets and Canvas hit targets expose the
+  current selection with `aria-pressed`, `aria-current`, or an equivalent appropriate semantic,
+  plus visible keyboard focus. Existing `data-selected` hooks remain available for automation.
+- **Agent Context Lite (P1/P2).** The default Agent context may format only the selected Agent's
+  explicit identity/location plus already-published Objective, recommended Next Move, blocker,
+  Player Leverage/execution state, and most recent Action Receipt/feedback. It must not infer
+  internal intent, plan, progress, rationale, or success from World Feed or event text.
+- **Player-readable receipt state (P2).** Internal confidence/state values such as
+  `world_delta` or `none` remain in stable data attributes and Diagnostics, while visible copy
+  states whether a world change is confirmed, an action is pending, or no receipt exists.
+- **Visible renderer recovery (P2; P1 when the stage is unavailable).** Renderer Unavailable
+  presents an honest retry/reattach/reload action using existing Viewer capability. Copy must say
+  that retry cannot add WebGL2 support to an incapable browser; fatal codes remain in Diagnostics.
+- **Narrow Command continuity (P2).** While Command content scrolls, the selected readable Agent
+  identity, current truthful status, Objective, and close/back route remain visible.
+
+#### Agent Console V2: contract-gated backlog
+
+ETA, energy, cargo, module health, relationships/trust, plan or memory content and confidence,
+decision rationale, provider/cost/debug context, multi-Agent graphs, and new cancel/approve/retry/
+reprioritize controls are not Viewer presentation fields merely because related raw objects exist.
+Before Viewer implementation, `producer_system_designer`, `runtime_engineer`, and
+`agent_engineer` must define their player meaning, authoritative source, schema stability,
+freshness, missing/stale behavior, privacy/permission boundary, action idempotency, and receipt
+semantics. Prompt profiles, execution debug contexts, raw memory, metrics, events, cursor movement,
+or wall-clock time must not be repackaged as player-facing Agent truth.
+
+Any future Agent Context field binds to a stable `agent_id`, an authoritative snapshot or receipt
+position (`logical_time`/`event_seq` and, when applicable, `world_id`/`reorg_epoch`), a source class
+(`runtime_projection`, `receipt`, or explicitly local pending state), and a visible freshness state.
+Replay, gap/reorg, reconnect, or snapshot reload marks retained context stale or clears it until an
+authoritative replacement arrives.
 
 ### 可发现性增强
 - 为关键入口增加显式提示文案（例如：快捷键提示、模式提示）。
@@ -275,6 +347,12 @@ required after the corresponding implementation slice.
 | REC-01 | receipt states | accepted/queued, advanced, no-progress, blocked | Action Receipt alone expresses causality; no ambient success | runtime + viewer + QA |
 | FED-01 | feed states | loading/empty/replay/gap/unavailable/reorg | schema/order/cursor/dedup and snapshot-reload recovery are distinct | runtime + viewer + QA |
 | TXT-01 | copy and density | `locale=en`, `locale=zh`, long labels | matrix copy fits, wraps, and has no horizontal overflow | visual + QA |
+| FED-02 | reconnect continuation | disconnect before deferred continuation, then same first-page cursor | later pages are requested from the request cursor; no omitted events or stale-generation request | viewer + QA |
+| STA-01 | freshness truth | live/reconnecting/offline/stale/unavailable | visible state matches authoritative source; retained snapshot never remains green `LIVE` | runtime + viewer + QA |
+| REC-02 | Player/Cinematic receipt | headed `1440x1000`, `1024x768`, `768x1024`, `390x844` | exactly one visible causal receipt; no overlay collision; raw confidence enum is not player copy | viewer + visual + QA |
+| ENT-01 | Targets/Canvas/Command identity | keyboard + screen reader + long en/zh names | readable name is primary; stable ID remains metadata; selection is announced semantically | viewer + visual + QA |
+| CTX-01 | Agent Context Lite | current/stale/missing/replay/gap/reorg | only explicit published fields render; source/freshness is honest; no inferred plan, ETA, relationship, or success | agent + runtime + viewer + QA |
+| REN-01 | Renderer unavailable recovery | headed desktop/mobile, sync and post-probe failure | recovery action is reachable and honest; retry failure preserves usable Player fallback and diagnostics | viewer + QA |
 
 ## 目标验收指标（实现后）
 以下指标必须由后续 Viewer/runtime 实现与本页 terminal QA matrix 的真实证据证明；

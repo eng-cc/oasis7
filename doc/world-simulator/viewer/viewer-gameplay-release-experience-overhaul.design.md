@@ -52,6 +52,57 @@
 - 这些约束不新增协议/runtime 字段，不改变仿真、replay、renderer、Director capability、
   ownership、经济或玩家权限；真实 headed 证据必须覆盖 `1440x1000` 与 `390x844`。
 
+### Next optimization visual handoff (target; pending implementation)
+
+The next bounded visual pass uses this reading order:
+
+`connection/renderer/blocker attention → Objective → one dominant Next Move → selected Agent context / Player Leverage → Action Receipt → collapsed World Feed`.
+
+- Objective and Next Move must not repeat the same instruction. Objective and Player Leverage
+  may become typographic context; only Next Move needs the dominant actionable surface. This is a
+  target, not evidence that the current three-cell responsive HUD has already been flattened.
+- Action Receipt outranks ambient events and helper copy whenever present. Player and Cinematic
+  must not show duplicate causal receipts; first verify the current normal/compact overlay geometry
+  in a headed browser, then make presentation ownership explicit rather than masking overlap.
+- Player-facing identity uses `name → label → id`. Raw IDs, `boundPlayer`, internal enums, and raw
+  confidence values are secondary metadata or Diagnostics. Accessible names follow the same rule,
+  selection has semantic state, and visible focus cannot depend on color alone.
+- `LIVE` is a factual status, not decoration. The HUD must visually distinguish current, stale,
+  reconnecting, offline, and renderer-unavailable states only from authoritative existing state;
+  it must not synthesize liveness from an old snapshot or a running animation.
+- Renderer Unavailable keeps the world shell usable and offers an honest visible recovery action.
+  Retry does not promise that an incapable browser can acquire WebGL2 support.
+- On narrow screens, Command keeps the selected readable Agent identity, truthful status,
+  Objective, and close/back path visible while details scroll. Cinematic entry, readout, feed,
+  fallback, diagnostics, and receipt each need a distinct safe-area slot.
+
+#### Agent Context presentation boundary
+
+`Agent Context Lite` may present explicit selected identity/location, Objective, published Next
+Move, blocker, Player Leverage/execution state, and the latest authoritative receipt/feedback.
+Unknown, missing, local-pending, and stale values remain visibly distinct. World Feed, recent event
+text, cursor movement, wall-clock time, coordinates, or raw debug objects cannot create intent,
+progress, success, ETA, relationship, or rationale.
+
+`Agent Console V2` is a later contract-gated design surface. ETA, energy, cargo, module health,
+relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs, and new control
+verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
+idempotency, and receipt semantics before visual design is treated as implementable.
+
+#### Headed visual and interaction matrix
+
+- `1440x1000`: GPU-ready Player and Cinematic; one Receipt; default hierarchy and focus return.
+- `1440x1000`: Renderer Unavailable, visible recovery, and post-probe asynchronous failure.
+- `1024x768` and `768x1024`: tablet/narrow-desktop HUD, feed, drawer, receipt, and safe areas.
+- `390x844`: Player, Targets, Command, Cinematic, long entity names, long receipt copy, fallback.
+- Every viewport: English/Chinese/CJK, long labels, no horizontal overflow, Tab/Shift+Tab,
+  Escape priority, IME composition, visible focus, and semantic selected state.
+- Stateful regressions: reconnect continuation, gap/reorg recovery, stale/offline truth, duplicate
+  receipt, raw enum/ID leakage, and Advanced disclosure containment.
+
+These rows are target evidence requirements. Historical GPU-ready or GPU-unavailable screenshots,
+source tests, and CSS arithmetic do not prove exact-head headed readiness.
+
 ## 4. 约束与边界
 - 本设计只重排 Viewer 的视觉/交互，不改网络协议、仿真核心逻辑和 `third_party`。
 - Search/selection 只导航、居中和打开上下文；执行只能从已授权 Command/Console 路径发生。

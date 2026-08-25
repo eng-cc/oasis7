@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
   mountError: null,
+  mountGates: [],
+  mountResults: [],
   mountCalls: 0,
   onEvent: null,
 }));
@@ -22,6 +24,10 @@ vi.mock("./pixel_world_runtime_loader.js", async () => ({
           runtimeMock.mountCalls += 1;
           if (runtimeMock.mountError) {
             throw runtimeMock.mountError;
+          }
+          if (runtimeMock.mountGates.length) {
+            const gate = runtimeMock.mountGates.shift();
+            return gate.then(() => runtimeMock.mountResults.shift() || { status: "ready", fatal: null });
           }
           if (runtimeMock.deriveRenderState) {
             return {
@@ -429,6 +435,8 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
   runtimeMock.mountError = null;
+  runtimeMock.mountGates = [];
+  runtimeMock.mountResults = [];
   runtimeMock.mountCalls = 0;
   runtimeMock.onEvent = null;
   canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({});
@@ -534,6 +542,28 @@ describe("pixel world host", () => {
     const readout = worldHud.querySelector(".pixel-world-readout");
     expect(readout).toHaveTextContent("agents=7");
     expect(readout).not.toHaveTextContent(/routes=|fragments=|hotspots=|renderer=|runtime=/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not label a disconnected or stale world as LIVE", async () => {
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+    core.state.connectionStatus = "connecting";
+    core.state.worldFeed.stale = true;
+    core.requestRender();
+
+    await waitFor(() => {
+      const readout = document.querySelector(".pixel-world-readout");
+      expect(readout).not.toHaveTextContent(/\bLIVE\b/);
+      expect(readout.querySelector(".badge--good")).toBeNull();
+      expect(readout).toHaveTextContent(/stale|syncing|offline|reconnecting|unavailable/i);
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps Objective and Player Leverage as supporting cells around one labelled dominant Next Move CTA", async () => {
@@ -662,6 +692,46 @@ describe("pixel world host", () => {
     expect(cinematicButton).toHaveAttribute("aria-describedby", "pixel-world-renderer-unavailable-message");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("renders player-readable receipt state without leaking internal confidence enums", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(sampleSnapshot());
+
+    await waitFor(() => {
+      expect(screen.getByText("Action Receipt")).toBeInTheDocument();
+    });
+
+    const receipt = document.querySelector('[data-viewer-overlay="receipt"]');
+    await waitFor(() => {
+      expect(receipt).toHaveAttribute("data-receipt-confidence", "world_delta");
+    });
+    expect(receipt).not.toHaveTextContent(/\b(world_delta|accepted_intent|none)\b/i);
+    expect(receipt).toHaveTextContent(/blocked|confirmed|waiting|queued|accepted/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not bind raw receipt confidence enums directly into player-visible markup", () => {
+    const source = readFileSync("software_safe_src/pixel_world_host.jsx", "utf8");
+    expect(source).not.toMatch(/<span>\{receipt\(\)\.confidence\}<\/span>/);
+    expect(source).not.toMatch(/<em>\{surface\(\)\.action_receipt\.confidence\}<\/em>/);
+  });
+
+  it("exposes renderer recovery in the unavailable surface instead of Diagnostics only", async () => {
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
+    });
+
+    const fallback = document.querySelector('[data-viewer-overlay="renderer-unavailable"]');
+    const retryButton = fallback?.querySelector("button");
+    expect(retryButton).not.toBeNull();
+    expect(retryButton).toHaveTextContent(/Retry Renderer/i);
+    expect(retryButton.closest("details")).toBeNull();
+    expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
     const { core } = await renderPixelWorldHost();
 
@@ -786,8 +856,8 @@ describe("pixel world host", () => {
     const secondAgentMarker = canvas.querySelector("[data-pixel-world-agent-marker='true'][data-agent-id='agent-1']");
     expect(agentMarker).not.toBeNull();
     expect(secondAgentMarker).not.toBeNull();
-    expect(agentMarker).toHaveAttribute("aria-label", "Select Agent agent-0");
-    expect(secondAgentMarker).toHaveAttribute("aria-label", "Select Agent agent-1");
+    expect(agentMarker).toHaveAttribute("aria-label", "Select Agent Agent 0");
+    expect(secondAgentMarker).toHaveAttribute("aria-label", "Select Agent Agent 1");
     expect(agentMarker.style.transform).not.toEqual(secondAgentMarker.style.transform);
     agentMarker.click();
     expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
@@ -1244,7 +1314,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-rail")).toBeNull();
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"]')).toBeNull();
-    expect(document.querySelector(".pixel-world-focus-receipt")).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-receipt")).not.toBeNull();
+    expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Restore Layout");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
@@ -1273,6 +1344,24 @@ describe("pixel world host", () => {
     });
     expect(document.body).not.toHaveClass("pixel-world-focus-active");
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders exactly one Action Receipt surface while Cinematic View is active", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
+    });
+
+    expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("provides a test-only selected blocker visual fixture for comparable focus screenshots", async () => {
@@ -1497,7 +1586,7 @@ describe("pixel world host", () => {
     const fragments = Array.from(canvas.querySelectorAll(".pixel-world-fragment-terrain"));
     const route = canvas.querySelector(".pixel-world-route");
     const location = canvas.querySelector(".pixel-world-entity--location");
-    const agent = screen.getByRole("button", { name: "Select Agent agent-0" });
+    const agent = screen.getByRole("button", { name: "Select Agent Agent 0" });
 
     expect(screen.getByRole("img", { name: "World canvas overview" })).toBeInTheDocument();
     expect(fragments).toHaveLength(0);
@@ -1505,6 +1594,7 @@ describe("pixel world host", () => {
     expect(location).toBeNull();
     expect(agent).toHaveAttribute("data-pixel-world-agent-marker", "true");
     expect(agent).toHaveAttribute("data-position-source", "location_derived");
-    expect(agent).toHaveAttribute("aria-label", "Select Agent agent-0");
+    expect(agent).toHaveAttribute("aria-label", "Select Agent Agent 0");
   });
+
 });

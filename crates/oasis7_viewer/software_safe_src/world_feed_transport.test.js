@@ -217,6 +217,37 @@ describe("World Feed transport", () => {
     vi.clearAllTimers();
   });
 
+  it("continues after reconnect when the first page returns the same cursor as the stale local state", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor" }));
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0].receive(readyFeed({ cursor: "wf1.cursor" }));
+
+    sockets[0].close();
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(sockets).toHaveLength(2);
+    sockets[1].open();
+    sockets[1].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    const beforeResponse = sentMessages.filter((message) => message.type === "request_world_feed").length;
+    sockets[1].receive(readyFeed({ cursor: "wf1.cursor" }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const requests = sentMessages.filter((message) => message.type === "request_world_feed");
+    expect(requests.length).toBe(beforeResponse + 1);
+    expect(requests.at(-1)).toEqual({
+      type: "request_world_feed",
+      cursor: "wf1.cursor",
+      limit: 50,
+    });
+    vi.clearAllTimers();
+  });
+
   it("refreshes the latest cursor once after world activity and does not overlap in-flight requests", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");

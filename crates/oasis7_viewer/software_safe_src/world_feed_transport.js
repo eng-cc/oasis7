@@ -63,13 +63,15 @@ export function createWorldFeedTransport({ getSocket, getState, render, requestS
       requestSnapshot();
     }
     const returnedCursor = String(consumed.state.cursor || "");
-    const previousCursor = String(previous?.cursor || "");
+    const requestedCursor = previous?.requestCursor == null
+      ? ""
+      : String(previous.requestCursor);
     if (
       responseGeneration === generation
       && !consumed.requiresSnapshotReload
       && ["ready", "replay", "empty"].includes(status)
       && returnedCursor
-      && returnedCursor !== previousCursor
+      && returnedCursor !== requestedCursor
       && continuationTimer == null
     ) {
       continuationTimer = window.setTimeout(() => {

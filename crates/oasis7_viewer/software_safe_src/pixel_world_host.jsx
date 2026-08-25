@@ -1,16 +1,13 @@
 import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount } from "solid-js";
-
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge, probePixelWorldWebgl2Surface } from "./pixel_world_runtime_loader.js";
 import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js"; import { createPixelWorldFocusController } from "./pixel_world_focus_controller.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 export { pixelWorldSelectedBlockerVisualFixture };
-
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
 }
-
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
 const PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID = "pixel-world-renderer-unavailable-message";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
@@ -32,7 +29,6 @@ const FRAGMENT_TERRAIN_PALETTE = {
   thorium_bearing_ore: [244, 114, 182],
   unknown: [148, 163, 184],
 };
-
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     if (
@@ -47,12 +43,13 @@ async function waitForRuntimeCanvasAttachment(canvas) {
   }
   return false;
 }
-
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
-
+function pixelWorldAgentIdentity(agent, fallbackId = "") {
+  return String(agent?.name || agent?.label || agent?.id || fallbackId || "Agent").trim();
+}
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
     return null;
@@ -63,16 +60,13 @@ function snapshotTick(snapshot) {
   }
   return Math.max(0, Math.floor(tick));
 }
-
 function colorToCss(color, alpha = 0.36) {
   const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
-
 function clampRatio(value) {
   return Math.min(1, Math.max(0, Number(value) || 0));
 }
-
 function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
   if (!pos || !worldBounds) {
     return fallbackStyle;
@@ -83,7 +77,6 @@ function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
     top: `${point.y.toFixed(1)}%`,
   };
 }
-
 function agentMarkerStyle(agent, index, worldBounds) {
   const base = toWorldPercentStyle(agent.pos, worldBounds, {
     left: `${18 + ((index % 5) * 15)}%`,
@@ -107,7 +100,6 @@ function agentMarkerStyle(agent, index, worldBounds) {
     transform: `translate(${x}px, ${y}px)`,
   };
 }
-
 function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
   if (!pos || !worldBounds) {
     return { x: fallbackX, y: fallbackY };
@@ -117,9 +109,7 @@ function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
     y: 10 + (clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78),
   };
 }
-
 const FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO = 9 / 16;
-
 function routeStyle(link, worldBounds, index) {
   const fallbackFrom = {
     x: 14 + ((index % 5) * 15),
@@ -145,7 +135,6 @@ function routeStyle(link, worldBounds, index) {
     "transform-origin": "0 50%",
   };
 }
-
 function fragmentTerrainStyle(patch, worldBounds, index) {
   const sizePx = Math.max(12, Math.min(48, safeNumber(patch.footprint_cm, 1) / 840));
   return {
@@ -159,7 +148,6 @@ function fragmentTerrainStyle(patch, worldBounds, index) {
     transform: "translate(-50%, -50%)",
   };
 }
-
 function routeWaypointStyle(link, worldBounds, index, stop) {
   const fallbackFrom = {
     x: 14 + ((index % 5) * 15),
@@ -177,7 +165,6 @@ function routeWaypointStyle(link, worldBounds, index, stop) {
     top: `${(from.y + ((to.y - from.y) * ratio)).toFixed(1)}%`,
   };
 }
-
 function hotspotStyle(hotspot, worldBounds, index) {
   const sizePx = Math.max(14, Math.min(32, safeNumber(hotspot.size_hint_px, 16)));
   return {
@@ -190,7 +177,6 @@ function hotspotStyle(hotspot, worldBounds, index) {
     transform: "translate(-50%, -50%)",
   };
 }
-
 function fieldValue(value, snakeName, camelName, fallback = undefined) {
   if (!value || typeof value !== "object") {
     return fallback;
@@ -203,12 +189,10 @@ function fieldValue(value, snakeName, camelName, fallback = undefined) {
   }
   return fallback;
 }
-
 function arrayField(value, snakeName, camelName) {
   const candidate = fieldValue(value, snakeName, camelName, []);
   return Array.isArray(candidate) ? candidate : [];
 }
-
 function normalizeVisualEntity(entry) {
   if (!entry || typeof entry !== "object") {
     return entry;
@@ -223,7 +207,6 @@ function normalizeVisualEntity(entry) {
     footprint_cm: fieldValue(entry, "footprint_cm", "footprintCm", undefined),
   };
 }
-
 function pixelWorldVisualState(renderState) {
   const state = renderState || {};
   return {
@@ -238,7 +221,6 @@ function pixelWorldVisualState(renderState) {
     visualHotspots: arrayField(state, "visual_hotspots", "visualHotspots").map(normalizeVisualEntity),
   };
 }
-
 function PixelWorldHostVisualLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
   const selection = () => props.selection?.() || visualState().selection;
@@ -303,6 +285,7 @@ function PixelWorldHostVisualLayer(props) {
             data-pixel-world-location-marker="true"
             data-location-id={location().id}
             data-selected={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"}
+            aria-pressed={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择地点", "Select Location")} ${location().label || location().id}`}
             data-marker-role={location().marker_role}
             style={{
               ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
@@ -328,7 +311,7 @@ function PixelWorldHostVisualLayer(props) {
             data-agent-id={agent().id}
             data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
             data-position-source={agent().position_source}
-            aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().id}`}
+            aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().label || agent().id}`}
             style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
             title={agent().label}
             onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
@@ -342,7 +325,6 @@ function PixelWorldHostVisualLayer(props) {
     </>
   );
 }
-
 function PixelWorldCanvasAgentHitTargets(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
   return (
@@ -354,7 +336,7 @@ function PixelWorldCanvasAgentHitTargets(props) {
           data-pixel-world-agent-marker="true"
           data-agent-id={agent.id}
           data-position-source={agent.position_source}
-          aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
+          data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.label || agent.id}`}
           style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
           title={agent.label}
           onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
@@ -367,13 +349,11 @@ function PixelWorldCanvasAgentHitTargets(props) {
     </For>
   );
 }
-
 function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal }) {
   let bridge = null;
   let runtimeSource = "detached";
   let runtimeModuleUrl = null;
   let deriveRenderState = null;
-
   function withWorldTickReadout(renderState, renderInput) {
     if (!renderState || !renderInput) {
       return renderState;
@@ -396,7 +376,6 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
         : renderState.commercial_surface,
     };
   }
-
   function deriveRenderStateOrUnavailable(renderInput) {
     if (!deriveRenderState || !renderInput) {
       return {
@@ -432,7 +411,6 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
       };
     }
   }
-
   return {
     async mount(canvas, renderInput) {
       const runtime = await createPixelWorldRuntimeBridge({
@@ -541,7 +519,6 @@ function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal })
     },
   };
 }
-
 export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
   const worldScaleSurface = core.buildWorldScaleSurface(locale);
   return {
@@ -559,18 +536,15 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
     },
   };
 }
-
 function PixelWorldCanvasRenderer(props) {
   let canvasRef;
   const visualState = () => pixelWorldVisualState(props.renderState());
-
   createEffect(() => {
     if (!canvasRef) {
       return;
     }
     props.onCanvasMount?.(canvasRef);
   });
-
   createEffect(() => {
     props.renderInput?.();
     if (!canvasRef) {
@@ -578,7 +552,6 @@ function PixelWorldCanvasRenderer(props) {
     }
     props.onCanvasUpdate?.();
   });
-
   return (
     <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready={props.rendererStatus?.() === "ready" ? "true" : undefined}>
       <canvas
@@ -601,8 +574,7 @@ function PixelWorldCanvasRenderer(props) {
       </div>
       <div class="pixel-world-canvas__overlay">
         <PixelWorldCanvasAgentHitTargets
-          locale={props.locale}
-          renderState={props.renderState}
+          locale={props.locale} renderState={props.renderState} selection={props.selection}
           onSelect={props.onSelect}
           onHover={props.onHover}
         />
@@ -638,7 +610,6 @@ function PixelWorldCanvasRenderer(props) {
     </div>
   );
 }
-
 function PixelWorldActionReceipt(props) {
   const receipt = () => props.surface().action_receipt;
   return (
@@ -667,7 +638,7 @@ function PixelWorldActionReceipt(props) {
       </div>
       <Show when={receipt().present}>
         <div class="pixel-world-action-receipt__meta">
-          <span>{receipt().confidence}</span>
+          <span>{receiptConfidenceLabel(receipt().confidence, props.locale())}</span>
           <Show when={receipt().target_agent_id}>
             <span>{`agent=${receipt().target_agent_id}`}</span>
           </Show>
@@ -676,9 +647,33 @@ function PixelWorldActionReceipt(props) {
     </div>
   );
 }
-
+function receiptConfidenceLabel(confidence, locale) {
+  const value = String(confidence || "").trim().toLowerCase();
+  return value === "world_delta" ? tr(locale, "世界变化已确认", "World change confirmed") : value === "accepted_intent" ? tr(locale, "行动已接受", "Action accepted") : value === "none" ? tr(locale, "等待确认", "Waiting for confirmation") : tr(locale, "状态已记录", "Status recorded");
+}
+function worldReadoutStatus(locale, renderState) {
+  renderState?.(); const status = String(core.state.connectionStatus || "").toLowerCase(); const feed = core.state.worldFeed || {};
+  const warn = (label) => ({ label, className: "badge badge--warn" });
+  if (String(feed.status || "").toLowerCase() === "unavailable") return warn(tr(locale, "不可用", "UNAVAILABLE"));
+  if (feed.stale) return warn(tr(locale, "陈旧", "STALE"));
+  if (status === "connecting" || status === "reconnecting") return warn(tr(locale, "正在重连", "RECONNECTING"));
+  if (status !== "connected") return warn(tr(locale, "离线", "OFFLINE"));
+  return ["ready", "replay", "empty"].includes(String(feed.status || "").toLowerCase()) ? { label: "LIVE", className: "badge badge--good" } : warn(tr(locale, "同步中", "SYNCING"));
+}
 const DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS = new Set(["claim_first_agent", "claim_starter_oc"]);
-
+const PIXEL_WORLD_PENDING_GAMEPLAY_STAGES = new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
+const PIXEL_WORLD_BUSY_GAMEPLAY_STAGES = new Set(["queued", "registering", "signing", "sent"]);
+function pixelWorldGameplayActionKey(action) { if (!action) return ""; const actionId = String(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind || "").trim().toLowerCase(); const targetAgentId = String(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id || "").trim().toLowerCase(); return `${actionId}::${targetAgentId}`; }
+function pixelWorldGameplayActionMatches(action, feedback) { if (!action || !feedback || feedback.kind !== "gameplay_action") return false; const actionId = String(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind || "").trim().toLowerCase(); const feedbackAction = String(feedback.action || "").trim().toLowerCase(); const targetAgentId = String(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id || "").trim().toLowerCase(); const feedbackAgentId = String(feedback.agentId || feedback.targetAgentId || "").trim().toLowerCase(); return Boolean(actionId && feedbackAction && feedbackAction.includes(actionId) && (!targetAgentId || !feedbackAgentId || targetAgentId === feedbackAgentId)); }
+function pixelWorldNextMoveDisabledReason(action, gameplay, locale) {
+  if (!action) return null; if (action.disabledReason) return action.disabledReason;
+  const feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback) || gameplay?.recentFeedback; const feedbackStage = String(feedback?.stage || "").trim().toLowerCase();
+  if (pixelWorldGameplayActionMatches(action, feedback) && PIXEL_WORLD_PENDING_GAMEPLAY_STAGES.has(feedbackStage)) return tr(locale, "动作已提交，正在等待世界确认。", "Action submitted; waiting for world confirmation.");
+  const actionId = String(action.actionId || action.action_id || "").trim().toLowerCase(); const protocolAction = String(action.protocolAction || action.protocol_action || "").trim().toLowerCase(); const targetAgentId = String(action.targetAgentId || action.target_agent_id || "").trim(); const boundAgentId = String(core.state.auth.boundAgentId || "").trim();
+  if (targetAgentId && actionId !== "claim_first_agent" && !["request_snapshot", "live_control.step", "live_control.play"].includes(protocolAction)) { if (!boundAgentId) return tr(locale, "当前账号尚未绑定 Agent，不能执行共享快照动作。", "The current account has no bound Agent for this shared-snapshot action."); if (targetAgentId !== boundAgentId) return tr(locale, `这个动作目标是 ${targetAgentId}，但当前账号绑定的是 ${boundAgentId}。`, `This action targets ${targetAgentId}, but the current account is bound to ${boundAgentId}.`); }
+  return null;
+}
+function pixelWorldNextMovePending(action, gameplay) { if (!action) return false; const feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback) || gameplay?.recentFeedback; const feedbackStage = String(feedback?.stage || "").trim().toLowerCase(); const key = pixelWorldGameplayActionKey(action); return Boolean((key && core.state.gameplayActionPending?.actionKey === key) || (pixelWorldGameplayActionMatches(action, feedback) && PIXEL_WORLD_BUSY_GAMEPLAY_STAGES.has(feedbackStage))); }
 export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
   if (!DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS.has(executeKind)) {
     return null;
@@ -687,11 +682,13 @@ export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
   return actions.find((action) => (
     action?.executeKind === executeKind
     && !action?.disabledReason
+  )) || actions.find((action) => (
+    String(action?.actionId || action?.action_id || "") === executeKind
+    && !action?.disabledReason
   )) || null;
 }
-
 function PixelWorldCommercialHud(props) {
-  const surface = () => props.renderState().commercial_surface;
+  const surface = () => props.renderState().commercial_surface; const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
   const executableNextMoveKinds = new Set([
     "gameplay_action",
     "claim_first_agent",
@@ -706,7 +703,16 @@ function PixelWorldCommercialHud(props) {
   const directNextMoveAction = () => resolvePixelWorldDirectNextMoveAction(
     core.buildGameplaySummary(props.locale()),
     surface().next_action.execute_kind,
-  );
+  ) || (surface().next_action.execute_kind === "gameplay_action"
+    ? core.buildGameplaySummary(props.locale()).availableActions.find((action) => (
+      DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS.has(action?.actionId)
+      && action?.label === surface().next_action.label
+      && !action?.disabledReason
+    ))
+    : null);
+  const gameplay = () => core.buildGameplaySummary(props.locale());
+  const nextMoveDisabledReason = () => pixelWorldNextMoveDisabledReason(directNextMoveAction(), gameplay(), props.locale());
+  const nextMovePending = () => pixelWorldNextMovePending(directNextMoveAction(), gameplay());
   const openGameplayDetails = () => {
     if (!nextMoveRoutesToGameplayDetails()) {
       return;
@@ -719,6 +725,9 @@ function PixelWorldCommercialHud(props) {
   const activateNextMove = (event) => {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (nextMoveDisabledReason()) {
+      return;
+    }
     openGameplayDetails();
     const action = directNextMoveAction();
     if (action) {
@@ -765,6 +774,9 @@ function PixelWorldCommercialHud(props) {
             class="pixel-world-command-cell__action"
             href={nextMoveHref()}
             aria-label={`${tr(props.locale(), "下一步", "Next Move")}: ${surface().next_action.label}`}
+            aria-disabled={nextMoveDisabledReason() ? "true" : undefined}
+            aria-busy={nextMovePending() ? "true" : "false"}
+            tabIndex={nextMoveDisabledReason() ? -1 : undefined}
             onClick={activateNextMove}
           >
             {directNextMoveAction()
@@ -786,13 +798,9 @@ function PixelWorldCommercialHud(props) {
           </div>
         </div>
       </div>
-      <PixelWorldActionReceipt
-        id="viewer-action-receipt"
-        locale={props.locale}
-        surface={surface}
-      />
+      <Show when={!props.focusMode?.()}><PixelWorldActionReceipt id="viewer-action-receipt" locale={props.locale} surface={surface} /></Show>
       <div class="pixel-world-readout badge-row">
-        <span class="badge badge--good">LIVE</span>
+        <span class={readoutStatus().className}>{readoutStatus().label}</span>
         <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
           <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
         </Show>
@@ -801,7 +809,6 @@ function PixelWorldCommercialHud(props) {
     </Show>
   );
 }
-
 function PixelWorldFocusHud(props) {
   const surface = () => props.renderState().commercial_surface;
   return (
@@ -852,10 +859,11 @@ function PixelWorldFocusHud(props) {
           class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"
           data-receipt-confidence={surface().action_receipt.confidence}
           data-hud-priority={surface().action_receipt.present ? "receipt" : "waiting"}
+          hidden
         >
           <span>{tr(props.locale(), "回执", "Receipt")}</span>
           <strong>{surface().action_receipt.title}</strong>
-          <em>{surface().action_receipt.confidence}</em>
+          <em>{receiptConfidenceLabel(surface().action_receipt.confidence, props.locale())}</em>
         </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "电影视图控制", "Cinematic controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
@@ -876,7 +884,6 @@ function PixelWorldFocusHud(props) {
     </Show>
   );
 }
-
 function PixelWorldFocusCinematicBanner(props) {
   const surface = () => props.renderState().commercial_surface;
   return (
@@ -901,7 +908,6 @@ function PixelWorldFocusCinematicBanner(props) {
     </Show>
   );
 }
-
 function shouldShowFocusCinematic(renderState) {
   const surface = renderState?.commercial_surface;
   if (!surface) {
@@ -917,11 +923,13 @@ function shouldShowFocusCinematic(renderState) {
   );
   return !hasComparableFocusState;
 }
-
 function PixelWorldFocusRail(props) {
   const surface = () => props.renderState().commercial_surface;
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
+  const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id); const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
   const routeCount = () => props.renderState().links.length;
   const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
   return (
@@ -939,13 +947,15 @@ function PixelWorldFocusRail(props) {
         <Show when={activeAgent()}>
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "Agent", "Agent")}</span>
-            <strong>{activeAgent()}</strong>
+            <strong>{activeAgentName()}</strong>
+            <em>{`id=${activeAgent()}`}</em>
           </div>
         </Show>
         <Show when={selected()}>
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "选中", "Selected")}</span>
-            <strong>{`${selected().kind}/${selected().id}`}</strong>
+            <strong>{selectedName()}</strong>
+            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <Show when={routeCount() > 0}>
@@ -958,11 +968,14 @@ function PixelWorldFocusRail(props) {
     </Show>
   );
 }
-
 function PixelWorldFocusMinimapCard(props) {
   const surface = () => props.renderState().commercial_surface;
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
+  const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id);
+  const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
   const primaryLocation = () => props.renderState().locations[0] || null;
   return (
     <Show when={surface()}>
@@ -986,7 +999,8 @@ function PixelWorldFocusMinimapCard(props) {
         </div>
         <div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent">
           <span>{tr(props.locale(), "Agent", "Agent")}</span>
-          <strong>{activeAgent() || tr(props.locale(), "待分配", "Unassigned")}</strong>
+          <strong>{activeAgent() ? activeAgentName() : tr(props.locale(), "待分配", "Unassigned")}</strong>
+          <Show when={activeAgent()}><em>{`id=${activeAgent()}`}</em></Show>
         </div>
         <Show when={selected()}>
           <div
@@ -994,7 +1008,8 @@ function PixelWorldFocusMinimapCard(props) {
             data-selected="true"
           >
             <span>{tr(props.locale(), "选中", "Selected")}</span>
-            <strong>{`${selected().kind}/${selected().id}`}</strong>
+            <strong>{selectedName()}</strong>
+            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <div class="pixel-world-focus-minimap__meta" aria-label={tr(props.locale(), "世界摘要", "World summary")}>
@@ -1007,7 +1022,6 @@ function PixelWorldFocusMinimapCard(props) {
     </Show>
   );
 }
-
 function chatEntryTitle(entry, locale) {
   if (entry.source === "error") {
     return `${entry.targetAgentId || entry.agentId || "agent"} ${tr(locale, "回复失败", "reply failed")}`;
@@ -1017,13 +1031,11 @@ function chatEntryTitle(entry, locale) {
   }
   return `${entry.agentId || "agent"} ${tr(locale, "已发言", "spoke")}`;
 }
-
 function chatEntryCardClass(entry) {
   if (entry.source === "error") return "event-card event-card--chat-error";
   if (entry.source === "player") return "event-card event-card--chat-player";
   return "event-card event-card--chat-agent";
 }
-
 function chatEntryMeta(entry, locale) {
   if (entry.source === "error") {
     const code = entry.code ? ` · code=${entry.code}` : "";
@@ -1033,7 +1045,6 @@ function chatEntryMeta(entry, locale) {
   const location = entry.locationId || tr(locale, "未知地点", "unknown location");
   return `${speaker} · ${location} · tick=${Number(entry.tick || 0)}`;
 }
-
 function PixelRawDiagnostics(props) {
   const locale = () => props.locale();
   const [open, setOpen] = createSignal(false);
@@ -1047,13 +1058,14 @@ function PixelRawDiagnostics(props) {
     </details>
   );
 }
-
 function PixelWorldFocusCommandSurface(props) {
   const locale = () => props.locale();
   const agentId = () => {
     const id = String(core.selectedAgentId() || "").trim();
     return id && core.isAgentVisibleToCurrentSession(id) ? id : null;
   };
+  const agentEntity = () => core.state.snapshot?.model?.agents?.[agentId()] || null;
+  const agentName = () => pixelWorldAgentIdentity(agentEntity(), agentId());
   const authSurface = () => core.buildAuthSurfaceModel();
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const binding = () => core.selectedAgentBindingInfo();
@@ -1071,7 +1083,6 @@ function PixelWorldFocusCommandSurface(props) {
     core.state.chatHistory
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
       .slice(0, 12);
-
   return (
     <div id="viewer-command-console" class="pixel-world-focus-command-surface stack">
       <Show
@@ -1091,7 +1102,8 @@ function PixelWorldFocusCommandSurface(props) {
         <div class="pixel-world-focus-command-tray" data-chat-ready={chatControlsEnabled() ? "true" : "false"}>
           <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target">
             <span>{tr(locale(), "目标", "Target")}</span>
-            <strong>{`agent=${agentId()}`}</strong>
+            <strong>{agentName()}</strong>
+            <em>{`agent=${agentId()}`}</em>
           </div>
           <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker" data-blocker-present={blockerLabel() !== tr(locale(), "无阻塞", "No blocker") ? "true" : "false"}>
             <span>{tr(locale(), "阻塞", "Blocker")}</span>
@@ -1195,7 +1207,6 @@ function PixelWorldFocusCommandSurface(props) {
     </div>
   );
 }
-
 export function PixelWorldHost(props) {
   const locale = () => props.locale ?? core.state.uiLocale;
   const visualFixtureName = installPixelWorldVisualFixtureHook();
@@ -1235,31 +1246,25 @@ export function PixelWorldHost(props) {
     }
     return visualState().visualHotspots.find((hotspot) => hotspot.id === hover.id) || null;
   };
-
   function setPersistentFocusMode(next) {
     pixelWorldFocusUiSessionState.focusMode = next;
     setFocusMode(next);
   }
-
   function setPersistentCommandDrawerOpen(next) {
     pixelWorldFocusUiSessionState.commandDrawerOpen = next;
     setCommandDrawerOpen(next);
   }
-
   function setPersistentDiagnosticsDrawerOpen(next) {
     pixelWorldFocusUiSessionState.diagnosticsDrawerOpen = next;
     setDiagnosticsDrawerOpen(next);
   }
-
   function setPersistentMaximized(next) {
     pixelWorldFocusUiSessionState.maximized = next;
     setMaximized(next);
   }
-
   function toggleMaximized() {
     setPersistentMaximized(!maximized());
   }
-
   const focusController = createPixelWorldFocusController({
     focusMode,
     commandDrawerOpen,
@@ -1269,7 +1274,6 @@ export function PixelWorldHost(props) {
     setDiagnosticsDrawerOpen: setPersistentDiagnosticsDrawerOpen,
     setMaximized: setPersistentMaximized,
   });
-
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
       core.applySelection(selection);
@@ -1305,9 +1309,9 @@ export function PixelWorldHost(props) {
       core.reportFatalError(fatal.message, "pixel_world_host");
     },
   }));
-
   let mountedCanvas = null;
-
+  let rendererAttemptGeneration = 0;
+  const rendererAttemptIsCurrent = (canvas, generation) => generation === rendererAttemptGeneration && mountedCanvas === canvas;
   function applyRendererUpdate() {
     if (rendererStatus() === "unavailable") {
       return;
@@ -1327,9 +1331,11 @@ export function PixelWorldHost(props) {
       fatal: result?.fatal || rendererFatal(),
     });
   }
-
-  async function setReadyMode() {
-    if (!mountedCanvas) {
+  async function setReadyMode(canvas = mountedCanvas, generation = rendererAttemptGeneration) {
+    if (!rendererAttemptIsCurrent(canvas, generation)) {
+      return;
+    }
+    if (!canvas) {
       const fatal = {
         code: "pixel_world_renderer_mount_missing_canvas",
         message: "pixel world canvas is not mounted yet",
@@ -1350,7 +1356,10 @@ export function PixelWorldHost(props) {
     setRendererFatal(null);
     setRendererStatus("booting");
     setRuntimeSource("loading");
-    const attached = await waitForRuntimeCanvasAttachment(mountedCanvas);
+    const attached = await waitForRuntimeCanvasAttachment(canvas);
+    if (!rendererAttemptIsCurrent(canvas, generation)) {
+      return;
+    }
     if (!attached) {
       const fatal = {
         code: "pixel_world_renderer_canvas_detached",
@@ -1369,12 +1378,15 @@ export function PixelWorldHost(props) {
       });
       return;
     }
-    const surfaceFatal = probePixelWorldWebgl2Surface(mountedCanvas);
+    const surfaceFatal = probePixelWorldWebgl2Surface(canvas);
     if (surfaceFatal) {
       adapter().simulateFatal(surfaceFatal);
       return;
     }
-    const result = await adapter().mount(mountedCanvas, renderInput());
+    const result = await adapter().mount(canvas, renderInput());
+    if (!rendererAttemptIsCurrent(canvas, generation)) {
+      return;
+    }
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
@@ -1389,28 +1401,26 @@ export function PixelWorldHost(props) {
       fatal: result?.fatal || null,
     });
   }
-
   function requestReadyMode() {
+    const canvas = mountedCanvas?.isConnected ? mountedCanvas : null;
+    mountedCanvas = canvas;
+    const generation = ++rendererAttemptGeneration;
     setRendererFatal(null);
     setRendererStatus("booting");
     setRuntimeSource("loading");
-    if (mountedCanvas) {
-      void setReadyMode();
+    if (canvas) {
+      void setReadyMode(canvas, generation);
     }
   }
-
   function simulateFatal() {
     adapter().simulateFatal("simulated embedded renderer fatal");
   }
-
   onMount(() => {
     function handleKeyDown(event) {
       focusController.handleKeyDown(event);
     }
-
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-
     if (pixelWorldTestApiEnabled()) {
       core.setRenderHook(() => {
         setCoreRevision((revision) => revision + 1);
@@ -1420,12 +1430,10 @@ export function PixelWorldHost(props) {
       onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getLocationHitTargets: () => adapter().locationTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
     }
   });
-
   createEffect(() => {
     document.body.classList.toggle("pixel-world-focus-active", focusMode());
     document.body.classList.toggle("pixel-world-focus-maximized", focusMode() && maximized());
   });
-
   onCleanup(() => {
     document.body.classList.remove("pixel-world-focus-active");
     document.body.classList.remove("pixel-world-focus-maximized");
@@ -1438,7 +1446,6 @@ export function PixelWorldHost(props) {
       fatal: null,
     });
   });
-
   return (
     <div
       class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
@@ -1511,7 +1518,7 @@ export function PixelWorldHost(props) {
         </Show>
       </Show>
       <Show when={renderState()}>
-        <PixelWorldCommercialHud locale={locale} renderState={renderState} />
+        <PixelWorldCommercialHud locale={locale} renderState={renderState} focusMode={focusMode}/>
       </Show>
       <Show when={rendererStatus() !== "fallback" && rendererStatus() !== "unavailable"}>
         <PixelWorldCanvasRenderer
@@ -1527,8 +1534,9 @@ export function PixelWorldHost(props) {
           onFatal={(message) => adapter().simulateFatal(message)}
           onCanvasMount={(canvas) => {
             mountedCanvas = canvas;
+            const generation = ++rendererAttemptGeneration;
             if (rendererStatus() !== "ready") {
-              void setReadyMode();
+              void setReadyMode(canvas, generation);
             }
           }}
           onCanvasUpdate={() => {
@@ -1545,12 +1553,10 @@ export function PixelWorldHost(props) {
           data-viewer-overlay="renderer-unavailable"
           data-renderer-state={rendererStatus()}
         >
-          {rendererStatus() === "unavailable"
-            ? tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")
-            : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
+          {rendererStatus() === "unavailable" ? <><div>{tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")}</div><button type="button" class="pixel-world-render-unavailable__retry" onClick={requestReadyMode}>{tr(locale(), "重试 Renderer", "Retry Renderer")}</button></> : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
         </div>
       </Show>
-      <Show when={focusMode() && renderState()?.commercial_surface && !maximized()}>
+      <Show when={focusMode() && renderState()?.commercial_surface}>
         <div class="pixel-world-focus-receipt">
           <PixelWorldActionReceipt
             class="pixel-world-action-receipt--focus-compact"

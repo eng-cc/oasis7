@@ -219,6 +219,28 @@ describe("fullscreen map shell contract", () => {
     expect(terminalShellCss).toMatch(/\.viewer-shell\s*\{[^}]*overflow-x:\s*hidden/i);
   });
 
+  it("keeps the mobile Cinematic entry and compact world readout in separate safe-area bands", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    const entryTop = Number(mobileBlock.match(/\[data-viewer-overlay=["']cinematic-entry["']\][^{]*\{[^}]*top:\s*(\d+)px/i)?.[1]);
+    const readoutTop = Number(mobileBlock.match(/\[data-viewer-shell=["']player-fullscreen["']\] \.pixel-world-readout[^{}]*\{[^}]*top:\s*(\d+)px/i)?.[1]);
+    expect(Number.isFinite(entryTop)).toBe(true);
+    expect(Number.isFinite(readoutTop)).toBe(true);
+    expect(readoutTop).toBeGreaterThanOrEqual(entryTop + 44);
+  });
+
+  it("keeps the narrow Command context row sticky while the route panel scrolls independently", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
+    expect(terminalShellCss).toMatch(/overflow-y:\s*auto/i);
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*position:\s*sticky/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*top:\s*0/i,
+    );
+  });
+
   it("places unavailable fallback copy below navigation and keeps diagnostics folded", async () => {
     const { terminalShellCss } = await readViewerHtml();
     const fallbackRule = findRule(terminalShellCss, /\[data-viewer-overlay=["']renderer-unavailable["']\]/);
