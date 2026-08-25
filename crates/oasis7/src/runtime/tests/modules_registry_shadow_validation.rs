@@ -1,3 +1,86 @@
+const VALID_COMMAND_SCHEMA_HASH: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn command_manifest(world: &mut World, namespace: &str) -> ModuleManifest {
+    let wasm_bytes = format!("dummy-wasm-command-{namespace}").into_bytes();
+    let wasm_hash = util::sha256_hex(&wasm_bytes);
+    world
+        .register_module_artifact(wasm_hash.clone(), &wasm_bytes)
+        .unwrap();
+
+    ModuleManifest {
+        module_id: "m.commands".to_string(),
+        name: "Commands".to_string(),
+        version: "0.1.0".to_string(),
+        kind: ModuleKind::Pure,
+        role: ModuleRole::Domain,
+        wasm_hash: wasm_hash.clone(),
+        interface_version: "wasm-1".to_string(),
+        abi_contract: ModuleAbiContract {
+            declarations: oasis7_wasm_abi::ModuleSchemaDeclarations {
+                commands: vec![oasis7_wasm_abi::ModuleCommandDeclaration {
+                    namespace: namespace.to_string(),
+                    name: "open_account".to_string(),
+                    schema_version: 1,
+                    schema_hash: VALID_COMMAND_SCHEMA_HASH.to_string(),
+                    max_payload_bytes: 4096,
+                }],
+            },
+            ..ModuleAbiContract::default()
+        },
+        exports: vec!["call".to_string()],
+        subscriptions: Vec::new(),
+        required_caps: Vec::new(),
+        artifact_identity: Some(super::signed_test_artifact_identity(wasm_hash.as_str())),
+        limits: ModuleLimits::default(),
+    }
+}
+
+fn command_proposal(world: &mut World, module_manifest: ModuleManifest) -> u64 {
+    let changes = ModuleChangeSet {
+        register: vec![module_manifest],
+        ..ModuleChangeSet::default()
+    };
+    let mut content = serde_json::Map::new();
+    content.insert(
+        "module_changes".to_string(),
+        serde_json::to_value(&changes).unwrap(),
+    );
+    world
+        .propose_manifest_update(
+            Manifest {
+                version: 2,
+                content: serde_json::Value::Object(content),
+            },
+            "alice",
+        )
+        .unwrap()
+}
+
+#[test]
+fn shadow_accepts_valid_module_command_declaration() {
+    let mut world = World::new();
+    let module_manifest = command_manifest(&mut world, "bank.acme");
+    let proposal_id = command_proposal(&mut world, module_manifest);
+
+    world.shadow_proposal(proposal_id).unwrap();
+}
+
+#[test]
+fn shadow_rejects_reserved_module_command_namespace_before_mutation() {
+    let mut world = World::new();
+    let module_manifest = command_manifest(&mut world, "core");
+    let proposal_id = command_proposal(&mut world, module_manifest);
+
+    let err = world.shadow_proposal(proposal_id).unwrap_err();
+    let WorldError::ModuleChangeInvalid { reason } = err else {
+        panic!("expected ModuleChangeInvalid");
+    };
+    assert!(reason.contains("reserved"), "unexpected reason: {reason}");
+    assert!(world.module_registry().records.is_empty());
+    assert!(world.module_registry().active.is_empty());
+}
+
 #[test]
 fn shadow_rejects_missing_module_artifact() {
     let mut world = World::new();
@@ -232,6 +315,7 @@ fn shadow_rejects_unsupported_module_abi_version() {
             cap_slots: Default::default(),
             policy_hooks: Vec::new(),
             gameplay: None,
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),
@@ -288,6 +372,7 @@ fn shadow_rejects_partial_module_schema_contract() {
             cap_slots: Default::default(),
             policy_hooks: Vec::new(),
             gameplay: None,
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),
@@ -347,6 +432,7 @@ fn shadow_rejects_cap_slot_binding_to_unknown_required_cap() {
             )]),
             policy_hooks: Vec::new(),
             gameplay: None,
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),

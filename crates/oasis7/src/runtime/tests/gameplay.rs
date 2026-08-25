@@ -36,6 +36,7 @@ fn gameplay_manifest(
                 min_players: 1,
                 max_players: None,
             }),
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),
