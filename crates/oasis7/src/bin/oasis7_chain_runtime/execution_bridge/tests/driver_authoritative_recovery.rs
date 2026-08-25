@@ -12,7 +12,7 @@ use super::*;
 use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
-use oasis7::runtime::LocalCasStore;
+use oasis7::runtime::{LocalCasStore, blake3_hex};
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{
     NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
@@ -103,6 +103,54 @@ fn node_runtime_execution_driver_rolls_back_in_memory_worlds_after_state_persist
     let persisted = load_execution_bridge_state(state_path.as_path()).expect("persisted state");
     assert_eq!(persisted.last_applied_committed_height, 1);
     assert_eq!(persisted.last_node_block_hash.as_deref(), Some("node-h1"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_recovers_when_bridge_state_metadata_is_lost() {
+    let dir = temp_dir("execution-driver-missing-state-recovery");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let context = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(context).expect("commit");
+    assert_eq!(driver.state.last_applied_committed_height, 1);
+
+    fs::remove_file(state_path.as_path()).expect("simulate lost bridge state metadata");
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("startup must recover from the authoritative execution record");
+
+    assert_eq!(restarted.state.last_applied_committed_height, 1);
+    assert_eq!(
+        restarted.state.last_node_block_hash.as_deref(),
+        Some("node-h1")
+    );
+    let record = load_execution_bridge_record(
+        execution_bridge_record_path(
+            restarted.records_dir.as_path(),
+            restarted.state.last_applied_committed_height,
+        )
+        .as_path(),
+    )
+    .expect("authoritative record");
+    let snapshot_ref = record.snapshot_ref.as_deref().expect("snapshot ref");
+    let snapshot_bytes = LocalCasStore::new(dir.join("store"))
+        .get_verified(snapshot_ref)
+        .expect("recovered snapshot");
+    assert_eq!(
+        blake3_hex(snapshot_bytes.as_slice()),
+        record.execution_state_root
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -609,6 +657,86 @@ fn node_runtime_execution_driver_startup_restores_lower_authoritative_head_when_
         Some("node-h1")
     );
     assert_eq!(restarted.state.last_applied_committed_height, 1);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_startup_uses_higher_durable_record_when_latest_pointer_is_stale() {
+    let dir = temp_dir("execution-driver-startup-stale-latest-pointer");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit height one");
+    let height_two = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "node-h2".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 2_000,
+        })
+        .expect("commit height two");
+    drop(driver);
+
+    let height_two_path = execution_bridge_record_path(records_dir.as_path(), 2);
+    let height_two_bytes = fs::read(height_two_path.as_path()).expect("read durable height two");
+    let stale_latest = fs::read(execution_bridge_record_path(records_dir.as_path(), 1))
+        .expect("read durable height one");
+    fs::write(records_dir.join("latest.json"), stale_latest).expect("install stale latest pointer");
+    fs::remove_file(state_path.as_path()).expect("remove bridge state cache");
+
+    let restarted = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir,
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("startup must recover the highest valid durable record");
+    assert_eq!(restarted.state.last_applied_committed_height, 2);
+    assert_eq!(
+        restarted.state.last_execution_block_hash.as_deref(),
+        Some(height_two.execution_block_hash.as_str())
+    );
+    assert_eq!(
+        restarted.state.last_execution_state_root.as_deref(),
+        Some(height_two.execution_state_root.as_str())
+    );
+    assert_eq!(
+        restarted.state.last_node_block_hash.as_deref(),
+        Some("node-h2")
+    );
+    assert_eq!(
+        fs::read(height_two_path).expect("read height two after startup"),
+        height_two_bytes
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

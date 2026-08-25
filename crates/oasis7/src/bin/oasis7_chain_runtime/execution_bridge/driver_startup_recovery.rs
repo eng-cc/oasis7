@@ -12,7 +12,8 @@ use oasis7::simulator::{
 use super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
     execution_checkpoint_root_dir, load_execution_bridge_record,
-    load_execution_checkpoint_manifest, persist_execution_bridge_record_only,
+    load_execution_checkpoint_manifest, load_highest_valid_execution_bridge_record,
+    persist_execution_bridge_record_only,
 };
 use super::driver::{ExecutionHashPayload, NodeRuntimeExecutionDriver};
 use super::driver_observability::{
@@ -136,87 +137,17 @@ impl NodeRuntimeExecutionDriver {
 
     pub(super) fn restore_startup_execution_head(&mut self) -> Result<(), String> {
         let target_height = self.state.last_applied_committed_height;
-        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
-        let latest_path = self.records_dir.join("latest.json");
-        let latest_record = latest_path.exists().then(|| {
-            load_execution_bridge_record(latest_path.as_path()).map_err(|err| {
+        let record = load_highest_valid_execution_bridge_record(self.records_dir.as_path())?
+            .ok_or_else(|| {
                 format!(
-                    "execution driver authoritative startup latest record unavailable while reconciling state head {}: {}",
-                    target_height, err
-                )
-            })
-        }).transpose()?;
-        if let Some(latest_record) = latest_record.as_ref()
-            && latest_record.height > target_height
-        {
-            if latest_record.world_id.trim().is_empty() {
-                return Err(format!(
-                    "execution driver authoritative startup newer latest record has empty world_id at height {}",
-                    latest_record.height
-                ));
-            }
-            if !self.restore_execution_head_from_record(
-                latest_record.world_id.as_str(),
-                latest_record.height,
-            )? {
-                return Err(format!(
-                    "execution driver authoritative startup newer latest record missing at height {} while state head is {}",
-                    latest_record.height, target_height
-                ));
-            }
-            return Ok(());
-        }
-        if !record_path.exists() {
-            let latest_record = latest_record.ok_or_else(|| {
-                format!(
-                    "execution driver authoritative startup latest record unavailable while state head {} lacks exact record",
+                    "execution driver authoritative startup has no valid durable record while reconciling state head {}",
                     target_height
                 )
             })?;
-            if latest_record.height >= target_height || latest_record.world_id.trim().is_empty() {
-                return Err(format!(
-                    "execution driver authoritative startup latest record cannot reconcile missing state head {}: record_height={} world_id={}",
-                    target_height, latest_record.height, latest_record.world_id
-                ));
-            }
-            if !self.restore_execution_head_from_record(
-                latest_record.world_id.as_str(),
-                latest_record.height,
-            )? {
-                return Err(format!(
-                    "execution driver authoritative startup latest record missing at height {} while state head {} lacks exact record",
-                    latest_record.height, target_height
-                ));
-            }
-            return Ok(());
-        }
-        let record = load_execution_bridge_record(record_path.as_path()).map_err(|err| {
-            format!(
-                "execution driver authoritative startup record unavailable at height {}: {}",
-                target_height, err
-            )
-        })?;
-        if record.height != target_height || record.world_id.trim().is_empty() {
+        if !self.restore_execution_head_from_record(record.world_id.as_str(), record.height)? {
             return Err(format!(
-                "execution driver authoritative startup record mismatch at height {}: record_height={} world_id={}",
-                target_height, record.height, record.world_id
-            ));
-        }
-        if self.state.last_execution_block_hash.as_deref()
-            != Some(record.execution_block_hash.as_str())
-            || self.state.last_execution_state_root.as_deref()
-                != Some(record.execution_state_root.as_str())
-            || self.state.last_node_block_hash.as_deref() != record.node_block_hash.as_deref()
-        {
-            return Err(format!(
-                "execution driver authoritative startup state head mismatch at height {}",
-                target_height
-            ));
-        }
-        if !self.restore_execution_head_from_record(record.world_id.as_str(), target_height)? {
-            return Err(format!(
-                "execution driver authoritative startup record missing at height {}",
-                target_height
+                "execution driver authoritative startup durable record missing at height {} while state head is {}",
+                record.height, target_height
             ));
         }
         Ok(())
