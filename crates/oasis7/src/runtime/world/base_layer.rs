@@ -5,7 +5,8 @@ use oasis7_wasm_abi::validate_module_command_declarations;
 use oasis7_wasm_router::{validate_subscription_filters, validate_subscription_stage};
 
 use super::super::{
-    ModuleArtifactIdentity, ModuleLimits, ModuleManifest, ModuleRegistry, WorldError,
+    ModuleArtifactIdentity, ModuleCommandCatalogEntry, ModuleLimits, ModuleManifest,
+    ModuleRegistry, WorldError, module_command_catalog,
 };
 use super::World;
 
@@ -13,6 +14,11 @@ const IDENTITY_HASH_SIGNATURE_SCHEME: &str = "identity_hash_v1";
 const IDENTITY_HASH_SIGNATURE_PREFIX: &str = "idhash:";
 
 impl World {
+    /// Return the deterministic Agent-facing catalog for active module commands.
+    pub fn module_command_catalog(&self) -> Vec<ModuleCommandCatalogEntry> {
+        module_command_catalog(&self.module_registry)
+    }
+
     pub(super) fn validate_module_changes(
         &self,
         changes: &super::super::ModuleChangeSet,

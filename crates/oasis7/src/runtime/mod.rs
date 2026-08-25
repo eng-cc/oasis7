@@ -133,11 +133,12 @@ pub use modules::{
     FactoryModuleSpec, FactoryProfileV1, GameplayContract, GameplayModuleKind,
     MaterialDefaultPriority, MaterialProfileV1, MaterialStack, MaterialTransportLossClass,
     ModuleAbiContract, ModuleActivation, ModuleArtifact, ModuleArtifactIdentity, ModuleCache,
-    ModuleChangeSet, ModuleDeactivation, ModuleEvent, ModuleEventKind, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi, ProductModuleSpec, ProductProfileV1,
-    ProductValidationDecision, ProductValidationRequest, RecipeExecutionPlan,
-    RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec, RecipeProfileV1,
+    ModuleChangeSet, ModuleCommandCatalogEntry, ModuleDeactivation, ModuleEvent, ModuleEventKind,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole,
+    ModuleSubscription, ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi,
+    ProductModuleSpec, ProductProfileV1, ProductValidationDecision, ProductValidationRequest,
+    RecipeExecutionPlan, RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec,
+    RecipeProfileV1, module_command_catalog,
 };
 
 // Node points
