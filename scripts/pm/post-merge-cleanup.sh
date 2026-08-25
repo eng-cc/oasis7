@@ -48,8 +48,9 @@ done
 [[ "$DRY_RUN" == "1" || -n "$TERMINAL_RECEIPT_OUTPUT" ]] || die "missing --terminal-receipt-output"
 # Crash journal schema: oasis7_cleanup_intent with monotonic states
 # worktree_removed, branch_deleted, terminal_receipt_committed. A retry may
-# accept an already missing worktree/branch only after this matching journal
-# and fresh live merge/main-sync proof have been revalidated.
+# accept an already missing worktree/branch, or reconcile an exact canonical
+# worktree reappearance, only after this matching journal and fresh live
+# merge/main-sync proof have been revalidated.
 # Read the complete cached identity before any network call, fetch, worktree
 # inspection, or cleanup effect.  Partial terminal authority is never repaired
 # from caller flags.
@@ -103,6 +104,8 @@ WORKTREE="$(normalize_path_identity "$WORKTREE")"
 [[ "$MAIN_REF" == "$RECORDED_DEFAULT_BRANCH" ]] || die "caller main ref disagrees with canonical task truth"
 git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null || die "invalid repo root"
 REPO_ROOT="$(git -C "$REPO_ROOT" rev-parse --show-toplevel)"
+REPO_COMMON_DIR="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
+  || die "canonical repository common-dir cannot be resolved"
 
 INTENT_JOURNAL="$(dirname "$TERMINAL_RECEIPT_OUTPUT")/cleanup-intent.json"
 INTENT_STATE="0 0 0"
@@ -116,22 +119,56 @@ for key,value in expected.items():
 print(int(bool(r.get('worktree_removed'))),int(bool(r.get('branch_deleted'))),int(bool(r.get('terminal_receipt_committed'))))
 PY
 )" || die "cleanup intent validation failed"
+  JOURNAL_WORKTREE_COMMON_DIR="$(python3 - "$INTENT_JOURNAL" <<'PY'
+import json,sys
+print(json.load(open(sys.argv[1],encoding='utf-8')).get('worktree_common_dir') or '')
+PY
+)"
+  JOURNAL_BRANCH_TIP="$(python3 - "$INTENT_JOURNAL" <<'PY'
+import json,sys
+print(json.load(open(sys.argv[1],encoding='utf-8')).get('branch_tip') or '')
+PY
+)"
+else
+  JOURNAL_WORKTREE_COMMON_DIR=""
+  JOURNAL_BRANCH_TIP=""
 fi
 WORKTREE_REMOVED="$(printf '%s' "$INTENT_STATE" | awk '{print $1}')"
 BRANCH_DELETED="$(printf '%s' "$INTENT_STATE" | awk '{print $2}')"
 TERMINAL_COMMITTED="$(printf '%s' "$INTENT_STATE" | awk '{print $3}')"
+WORKTREE_REAPPEARED=0
 if [[ "$WORKTREE_REMOVED" == 1 ]]; then
-  [[ ! -e "$WORKTREE" ]] || die "cleanup journal says worktree_removed but path still exists"
-  ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
-    || die "cleanup journal says worktree_removed but git still registers it"
-  ACTUAL_BRANCH="$RECORDED_BRANCH"
-  if [[ "$BRANCH_DELETED" == 1 ]]; then
-    # A prior retry already deleted the branch; the receipt head remains the
-    # only available tip identity for the terminal-receipt retry.
-    BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
+  if [[ -e "$WORKTREE" ]]; then
+    # A crash/retry race may recreate the exact canonical worktree.  Reconcile
+    # it by live identity rather than treating the journal bit as permission
+    # to trust an arbitrary path.
+    WORKTREE_REAPPEARED=1
+    worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
+      || die "cleanup journal says worktree_removed but path is not registered"
+    git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      || die "reappeared cleanup worktree is not a git worktree"
+    WORKTREE_COMMON_DIR="$(cd "$WORKTREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
+      || die "reappeared cleanup worktree common-dir cannot be resolved"
+    [[ "$WORKTREE_COMMON_DIR" == "$REPO_COMMON_DIR" ]] \
+      || die "reappeared cleanup worktree common-dir mismatch against canonical repository"
+    [[ -z "$(git -C "$WORKTREE" status --porcelain --untracked-files=all)" ]] \
+      || die "reappeared cleanup worktree is dirty"
+    ACTUAL_BRANCH="$(git -C "$WORKTREE" symbolic-ref --quiet --short HEAD)" \
+      || die "reappeared cleanup worktree must be on a named branch"
+    BRANCH_TIP="$(git -C "$WORKTREE" rev-parse HEAD)" \
+      || die "reappeared cleanup worktree tip cannot be resolved"
   else
-    BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$ACTUAL_BRANCH^{commit}")" \
-      || die "task branch tip cannot be resolved during cleanup resume"
+    ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
+      || die "cleanup journal says worktree_removed but git still registers it"
+    ACTUAL_BRANCH="$RECORDED_BRANCH"
+    if [[ "$BRANCH_DELETED" == 1 ]]; then
+      # A prior retry already deleted the branch; the receipt head remains the
+      # only available tip identity for the terminal-receipt retry.
+      BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
+    else
+      BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$ACTUAL_BRANCH^{commit}")" \
+        || die "task branch tip cannot be resolved during cleanup resume"
+    fi
   fi
 else
   [[ -e "$WORKTREE" ]] || die "worktree path is absent and no matching cleanup intent proves removal"
@@ -139,8 +176,6 @@ else
   worktree_is_registered "$REPO_ROOT" "$WORKTREE" || die "task worktree is not registered under repo root"
   WORKTREE_COMMON_DIR="$(cd "$WORKTREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
     || die "task worktree common-dir cannot be resolved"
-  REPO_COMMON_DIR="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
-    || die "canonical repository common-dir cannot be resolved"
   [[ "$WORKTREE_COMMON_DIR" == "$REPO_COMMON_DIR" ]] || die "task worktree common-dir mismatch against canonical repository"
   [[ -z "$(git -C "$WORKTREE" status --porcelain --untracked-files=all)" ]] || die "task worktree is dirty"
   ACTUAL_BRANCH="$(git -C "$WORKTREE" symbolic-ref --quiet --short HEAD)" || die "task worktree must be on a named branch"
@@ -148,6 +183,16 @@ else
   BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$ACTUAL_BRANCH")"
 fi
 [[ "$ACTUAL_BRANCH" == "$RECORDED_BRANCH" ]] || die "branch identity disagrees with canonical task truth"
+if [[ -n "$JOURNAL_WORKTREE_COMMON_DIR" && -n "${WORKTREE_COMMON_DIR:-}" ]]; then
+  [[ "$JOURNAL_WORKTREE_COMMON_DIR" == "$WORKTREE_COMMON_DIR" ]] \
+    || die "cleanup journal worktree common-dir identity mismatch"
+fi
+if [[ -n "$JOURNAL_BRANCH_TIP" ]]; then
+  [[ "$JOURNAL_BRANCH_TIP" == "$BRANCH_TIP" ]] \
+    || die "cleanup journal branch tip identity mismatch"
+fi
+[[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" != 1 ]] \
+  || die "cleanup journal says branch_deleted but canonical worktree reappeared"
 if [[ "$BRANCH_DELETED" == 1 ]]; then
   ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
     || die "cleanup journal says branch_deleted but branch still exists"
@@ -229,6 +274,7 @@ if git -C "$REPO_ROOT" remote get-url origin >/dev/null 2>&1; then
   REMOTE_MAIN="$(git -C "$REPO_ROOT" rev-parse "refs/remotes/origin/$RECEIPT_DEFAULT_BRANCH")"
   [[ "$MAIN_COMMIT" == "$REMOTE_MAIN" ]] || die "local default branch is not synchronized with origin"
 fi
+PATCH_EQUIVALENCE_PROVEN=0
 if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$BRANCH_TIP" "$MAIN_COMMIT"; then
   [[ -n "$PATCH_RECEIPT" && -f "$PATCH_RECEIPT" ]] || die "$MAIN_REF does not contain task branch tip and no patch-equivalence receipt was supplied"
   SYNC_PATCH_FIELDS="$(python3 - "$MAIN_SYNC_RECEIPT" "$PATCH_RECEIPT" <<'PY'
@@ -275,34 +321,57 @@ PY
   RECOMPUTED_MAIN_TREE="$(git -C "$REPO_ROOT" rev-parse "$SYNC_INTEGRATION_COMMIT^{tree}")"
   [[ "$RECOMPUTED_PROJECTED_TREE" == "$RECOMPUTED_MAIN_TREE" && "$RECOMPUTED_PROJECTED_TREE" == "$EXPECTED_PROJECTED_TREE" && "$RECOMPUTED_MAIN_TREE" == "$EXPECTED_MAIN_TREE" ]] \
     || die "patch-equivalence projected tree failed recomputation"
+  PATCH_EQUIVALENCE_PROVEN=1
 else
   [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("integration_mode") or "")' "$MAIN_SYNC_RECEIPT")" == "ancestry" ]] || die "ancestry cleanup requires ancestry main-sync receipt"
   [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when main contains the task branch tip"
 fi
 
 printf 'git -C %q worktree remove %q\n' "$REPO_ROOT" "$WORKTREE"
-printf 'git -C %q branch -d %q\n' "$REPO_ROOT" "$BRANCH"
+if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
+  printf 'git -C %q branch -D %q # patch-equivalence proof\n' "$REPO_ROOT" "$BRANCH"
+else
+  printf 'git -C %q branch -d %q\n' "$REPO_ROOT" "$BRANCH"
+fi
 if [[ "$DRY_RUN" == "0" ]]; then
   INTENT_JOURNAL="$(dirname "$TERMINAL_RECEIPT_OUTPUT")/cleanup-intent.json"
-  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" <<'PY'
+  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "${WORKTREE_COMMON_DIR:-}" "$BRANCH_TIP" <<'PY'
 import json,pathlib,sys
 p=pathlib.Path(sys.argv[1]); expected={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
  "repository":sys.argv[3],"worktree":sys.argv[4],"branch":sys.argv[5]}
+if sys.argv[6]: expected["worktree_common_dir"]=sys.argv[6]
+if sys.argv[7]: expected["branch_tip"]=sys.argv[7]
 if p.exists():
  old=json.loads(p.read_text());
  if any(old.get(k)!=v for k,v in expected.items()): raise SystemExit('post-merge-cleanup: cleanup intent mismatch on retry')
+ for key in ('worktree_common_dir','branch_tip'):
+  if key in old: expected[key]=old[key]
  expected.update({k:bool(old.get(k)) for k in ('worktree_removed','branch_deleted','terminal_receipt_committed')})
 else: expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
 expected['revision']=int((json.loads(p.read_text()).get('revision',0) if p.exists() else 0))+1
 print(json.dumps(expected))
 PY
-)"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
+  )"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
   if [[ "$WORKTREE_REMOVED" != 1 ]]; then
     git -C "$REPO_ROOT" worktree remove "$WORKTREE"
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["worktree_removed"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
+  elif [[ "$WORKTREE_REAPPEARED" == 1 ]]; then
+    # The journal proves a prior removal, not this newly registered instance;
+    # remove the reconciled canonical worktree before deleting its branch.
+    git -C "$REPO_ROOT" worktree remove "$WORKTREE"
   fi
   if [[ "$BRANCH_DELETED" != 1 ]]; then
-    git -C "$REPO_ROOT" branch -d "$BRANCH"
+    if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
+      # -D is safe only after the repository-generated patch proof above has
+      # bound this exact branch tip to the integration tree.
+      CURRENT_BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$BRANCH^{commit}")" \
+        || die "patch-equivalence branch tip cannot be revalidated before deletion"
+      [[ "$CURRENT_BRANCH_TIP" == "$BRANCH_TIP" ]] \
+        || die "patch-equivalence branch tip changed before deletion"
+      git -C "$REPO_ROOT" branch -D "$BRANCH"
+    else
+      git -C "$REPO_ROOT" branch -d "$BRANCH"
+    fi
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["branch_deleted"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
   fi
   mkdir -p "$(dirname "$TERMINAL_RECEIPT_OUTPUT")"
