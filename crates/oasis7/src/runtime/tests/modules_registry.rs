@@ -3,8 +3,8 @@ use super::pos;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallRequest,
-    ModuleCommandDeclaration, ModuleEffectIntent, ModuleEmit, ModuleOutput, ModuleSandbox,
-    ModuleSchemaDeclarations, ModuleTickLifecycleDirective,
+    ModuleCommandDeclaration, ModuleCommandEnvelope, ModuleEffectIntent, ModuleEmit, ModuleOutput,
+    ModuleSandbox, ModuleSchemaDeclarations, ModuleTickLifecycleDirective,
 };
 use oasis7_wasm_executor::FixedSandbox;
 #[cfg(not(feature = "wasmtime"))]
@@ -151,6 +151,157 @@ fn module_command_catalog_is_active_sorted_and_defensively_filters_invalid() {
 fn world_module_command_catalog_is_empty_without_active_modules() {
     let world = World::new();
     assert!(world.module_command_catalog().is_empty());
+}
+
+fn execution_command_manifest(
+    module_id: &str,
+    wasm_hash: &str,
+    schema_hash: &str,
+) -> ModuleManifest {
+    ModuleManifest {
+        module_id: module_id.to_string(),
+        name: module_id.to_string(),
+        version: "0.1.0".to_string(),
+        kind: ModuleKind::Pure,
+        role: ModuleRole::AgentInternal,
+        wasm_hash: wasm_hash.to_string(),
+        interface_version: "wasm-1".to_string(),
+        exports: vec!["call".to_string()],
+        subscriptions: Vec::new(),
+        required_caps: Vec::new(),
+        abi_contract: ModuleAbiContract {
+            declarations: ModuleSchemaDeclarations {
+                commands: vec![command_declaration(
+                    "weather",
+                    "observe",
+                    1,
+                    schema_hash,
+                    128,
+                )],
+            },
+            ..ModuleAbiContract::default()
+        },
+        artifact_identity: Some(super::signed_test_artifact_identity(wasm_hash)),
+        limits: ModuleLimits {
+            max_mem_bytes: 1024,
+            max_gas: 10_000,
+            max_call_rate: 1,
+            max_output_bytes: 128,
+            max_effects: 0,
+            max_emits: 0,
+        },
+    }
+}
+
+fn command_envelope(schema_hash: &str) -> ModuleCommandEnvelope {
+    ModuleCommandEnvelope {
+        namespace: "weather".to_string(),
+        name: "observe".to_string(),
+        schema_version: 1,
+        schema_hash: schema_hash.to_string(),
+        payload: b"{}".to_vec(),
+    }
+}
+
+#[test]
+fn execute_module_command_rejects_inactive_before_sandbox_or_world_mutation() {
+    let mut world = World::new();
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    let baseline_events = world.journal().events.len();
+    let baseline_cache = world.module_cache_len();
+
+    let err = world
+        .execute_module_command(
+            "m.inactive",
+            "trace-inactive",
+            command_envelope(&"00".repeat(32)),
+            &mut sandbox,
+        )
+        .unwrap_err();
+
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert!(sandbox.requests.is_empty());
+    assert_eq!(world.journal().events.len(), baseline_events);
+    assert_eq!(world.module_cache_len(), baseline_cache);
+}
+
+#[test]
+fn execute_module_command_rejects_undeclared_and_schema_mismatch_before_invocation() {
+    let wasm_bytes = b"module-command-validation";
+    let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "00".repeat(32);
+    let mut world = World::new();
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        execution_command_manifest("m.commands", &wasm_hash, &schema_hash),
+    );
+
+    let baseline_events = world.journal().events.len();
+    let baseline_cache = world.module_cache_len();
+
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    let mut undeclared = command_envelope(&schema_hash);
+    undeclared.name = "unknown".to_string();
+    let err = world
+        .execute_module_command("m.commands", "trace-undeclared", undeclared, &mut sandbox)
+        .unwrap_err();
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert!(sandbox.requests.is_empty());
+
+    let mut mismatched = command_envelope(&schema_hash);
+    mismatched.schema_hash = "ff".repeat(32);
+    let err = world
+        .execute_module_command("m.commands", "trace-mismatch", mismatched, &mut sandbox)
+        .unwrap_err();
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert!(sandbox.requests.is_empty());
+
+    let mut malformed = command_envelope(&schema_hash);
+    malformed.namespace = "Weather".to_string();
+    let err = world
+        .execute_module_command("m.commands", "trace-malformed", malformed, &mut sandbox)
+        .unwrap_err();
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert!(sandbox.requests.is_empty());
+    assert_eq!(world.journal().events.len(), baseline_events);
+    assert_eq!(world.module_cache_len(), baseline_cache);
+}
+
+#[test]
+fn execute_module_command_passes_canonical_envelope_through_existing_call_pipeline() {
+    let wasm_bytes = b"module-command-success";
+    let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "11".repeat(32);
+    let mut world = World::new();
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        execution_command_manifest("m.commands", &wasm_hash, &schema_hash),
+    );
+
+    let envelope = command_envelope(&schema_hash);
+    let canonical = envelope.encode_canonical().unwrap();
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    }]);
+
+    world
+        .execute_module_command("m.commands", "trace-command", envelope, &mut sandbox)
+        .unwrap();
+
+    assert_eq!(sandbox.requests.len(), 1);
+    assert_eq!(sandbox.requests[0].input, canonical);
+    assert_eq!(sandbox.requests[0].trace_id, "trace-command");
+    assert_eq!(world.module_cache_len(), 1);
 }
 
 #[test]
