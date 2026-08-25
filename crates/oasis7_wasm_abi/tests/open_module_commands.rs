@@ -1,14 +1,16 @@
-//! RED contract for the governed open-module command ABI.
+//! Contract tests for the governed open-module command ABI.
 //!
-//! These tests deliberately describe the next versioned command surface.  The
-//! current `wasm-1` ABI has no command declarations or command envelope yet;
-//! the implementation slice must make these tests pass without weakening the
-//! legacy manifest decoding assertions.
+//! These tests pin the versioned command surface without weakening the legacy
+//! manifest decoding assertions.  The deterministic-encoding fixture exercises
+//! the ABI's production canonical-CBOR helper rather than relying on
+//! `serde_cbor::to_vec`.
+
+use std::collections::BTreeMap;
 
 use oasis7_wasm_abi::{
-    validate_module_command_declarations, validate_module_command_envelope, ModuleAbiContract,
-    ModuleCommandDeclaration, ModuleCommandEnvelope, ModuleKind, ModuleLimits, ModuleManifest,
-    ModuleRole, ModuleSchemaDeclarations,
+    ModuleAbiContract, ModuleCommandDeclaration, ModuleCommandEnvelope, ModuleKind, ModuleLimits,
+    ModuleManifest, ModuleRole, ModuleSchemaDeclarations, encode_canonical_cbor,
+    validate_module_command_declarations, validate_module_command_envelope,
 };
 
 const VALID_SCHEMA_HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -145,6 +147,15 @@ fn command_envelope_roundtrips_canonically_and_rejects_before_execution() {
         ModuleCommandEnvelope::decode_canonical(&encoded).unwrap(),
         envelope
     );
+    let declaration_order = serde_cbor::to_vec(&envelope).expect("encode declaration order");
+    assert_ne!(
+        declaration_order, encoded,
+        "serde_cbor struct order must not be accepted as canonical"
+    );
+    assert!(matches!(
+        ModuleCommandEnvelope::decode_canonical(&declaration_order),
+        Err(oasis7_wasm_abi::ModuleCommandValidationError::NonCanonicalEncoding)
+    ));
     assert!(
         validate_module_command_envelope(&envelope, &manifest.abi_contract.declarations).is_ok()
     );
@@ -177,7 +188,37 @@ fn command_envelope_roundtrips_canonically_and_rejects_before_execution() {
         },
     ] {
         assert!(
-            validate_module_command_envelope(&invalid, &manifest.abi_contract.declarations).is_err()
+            validate_module_command_envelope(&invalid, &manifest.abi_contract.declarations)
+                .is_err()
         );
     }
+}
+
+#[test]
+fn canonical_cbor_orders_map_keys_by_encoded_key_length() {
+    // RFC 8949 deterministic encoding orders map keys by the length of their
+    // encoded key first, then by the encoded bytes.  The encoded text key
+    // "b" is two bytes (`61 62`), while "aa" is three (`62 61 61`), so the
+    // deterministic order is "b", "aa" even though Rust's BTreeMap order is
+    // "aa", "b".
+    let mut payload = BTreeMap::new();
+    payload.insert("aa".to_string(), 1_u8);
+    payload.insert("b".to_string(), 2_u8);
+
+    let expected_rfc8949_bytes = [
+        0xa2, // map(2)
+        0x61, 0x62, 0x02, // "b": 2
+        0x62, 0x61, 0x61, 0x01, // "aa": 1
+    ];
+
+    let serde_cbor_encoded = serde_cbor::to_vec(&payload).expect("encode map payload");
+    assert_ne!(
+        serde_cbor_encoded, expected_rfc8949_bytes,
+        "serde_cbor::to_vec must not be treated as the ABI canonical encoder"
+    );
+    let encoded = encode_canonical_cbor(&payload).expect("encode canonical map payload");
+    assert_eq!(
+        encoded, expected_rfc8949_bytes,
+        "canonical helper must use RFC 8949 deterministic map ordering; actual={encoded:02x?}"
+    );
 }

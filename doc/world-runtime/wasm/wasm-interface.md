@@ -168,12 +168,16 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 现有 `wasm-1` ABI 的可选扩展，不是立即把 `WorldState` 改成 ECS、删除既有
 native action，或允许任意未治理工件进入生产执行路径。
 
-> **状态边界：目标合同与试点前置条件。** 本节的 schema、command、component、
-> receipt、migration 和 capability scope 均是未来版本化扩展的目标合同，不是当前
-> `wasm-1` ABI、当前 journal event 或当前 `serde` 反序列化已经支持的字段。下面的
-> 结构和字段名是语义草图，不能直接当作现行 wire 定义；在试点实现前必须先补齐
-> ABI 版本、canonical 编码、hash/receipt 绑定、迁移策略和失败路径测试。未完成这些
-> 前置条件时，生产路径只承诺本文件前文定义的现有 `wasm-1` 行为。
+> **状态边界：command 子集已落地，其余仍是目标合同。** 当前
+> `ModuleAbiContract.declarations.commands` 已提供版本化 command 声明；manifest
+> admission 会校验声明，active module 可投影为确定性的 command catalog，
+> `World::execute_module_command` 会在触碰 sandbox 前校验 active 状态、声明匹配、
+> schema/hash/payload 边界，并复用现有计量调用链。这是开放 command 的基础切片，
+> 不是完整协议：component、event、migration、execution receipt、完整 capability
+> scope、Agent/provider 接入和 staged atomic commit 仍是未来扩展。下面的完整结构和
+> 字段名仍是语义草图，不能直接当作现行 wire 定义；试点实现前还必须补齐 ABI 版本、
+> 编码规范、hash/receipt 绑定、迁移策略和失败路径测试。当前生产路径仍同时承诺
+> 本文件前文定义的现有 `wasm-1` 行为与上述已落地的 command 子集。
 
 试点只选择一个有界制度（例如 Alliance 或 EconomicContract，由跨角色治理
 确定），以现有 native vertical slice 作为兼容基线；试点成功前不得把所有
@@ -183,13 +187,14 @@ approve -> apply` 闭环。
 
 ### 1. 命名空间、声明和版本
 
-模块的开放对象**目标上**必须在 manifest 中声明。声明是未来版本化 ABI 的
-扩展前置条件；当前 `ModuleManifest` 没有这些 declaration 类型或解析语义，不能
-宣称它们已经是可选的、serde-defaulted 字段。实现前必须定义旧 manifest 的读取方式、
-新旧 ABI 的 admission/migration 规则，并证明历史 `wasm-1` 模块仍走原有路径。
+模块的开放对象**目标上**必须在 manifest 中声明。当前 command 已是
+`ModuleAbiContract.declarations.commands` 中 serde-defaulted 的版本化字段，并有
+声明 admission；但当前声明集合仍只覆盖 command，不包含 component、event 或
+migration。扩展这些对象前必须定义旧 manifest 的读取方式、新旧 ABI 的
+admission/migration 规则，并证明历史 `wasm-1` 模块仍走原有路径。
 
 ```rust
-// Target sketch only; not a current oasis7_wasm_abi wire type.
+// Target sketch for the full declaration set; the current wire type only supports commands.
 struct ModuleSchemaDeclarations {
     commands: Vec<CommandSchema>,
     components: Vec<ComponentSchema>,
@@ -219,8 +224,9 @@ struct SchemaMigration {
 }
 ```
 
-未来版本可在 `ModuleManifest.abi_contract` 下承载等价的 declarations；当前
-`ModuleAbiContract` 尚未定义该字段或这些类型。它们不能替代
+未来版本可在 `ModuleManifest.abi_contract` 下继续承载等价的 declarations；当前
+`ModuleAbiContract.declarations.commands` 已定义并参与 admission，但当前 wire 尚未
+定义 component、event 或 migration declarations。这些声明不能替代
 `interface_version`、`input_schema`、`output_schema`、`required_caps` 或
 `cap_slots`。ABI 版本、对象 schema 版本、manifest hash 和工件 `wasm_hash`
 是四个不同的目标身份维度：任一声明、权限、limits 或 metering schedule 的
@@ -243,16 +249,20 @@ hash 影响规则，都必须在版本化 ABI 和 canonical hash 规范中先定
 
 ### 2. Command / component / event wire
 
-未来的受治理 module-call/router 入口可以不为每一种银行、联盟或合约操作新增
-一个闭合的 Rust `Action` 变体，而承载如下 Canonical-CBOR command envelope。
-这是目标 admission contract；当前 `ModuleCallInput.action` 是现有 runtime 的
-兼容槽位，不能据此宣称已经支持动态 namespace/command 路由或以下 schema 语义。
+当前已经落地一个受界限的 module-command 入口，不要求为每一种银行、联盟或合约
+操作新增闭合的 Rust `Action` 变体。`ModuleCommandEnvelope` 承载如下 command
+字段；runtime 会在进入 sandbox 前校验 active module 的声明、namespace/name、
+schema version/hash 和 payload 边界，再复用现有计量调用链。该入口仍只是基础切片，
+尚未接入 Agent/provider 的动态调用，也不等于完整的 caller capability、通用
+action/router、component/event/migration wire、staged atomic commit 或 execution
+receipt 协议。
 
 ```text
 {
   "namespace": "bank.acme",
   "command": "open_account",
   "schema_version": 1,
+  "schema_hash": "<sha256-hex>",
   "payload": <canonical-cbor bytes>
 }
 ```

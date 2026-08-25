@@ -471,10 +471,9 @@ pub struct ModuleCommandEnvelope {
 }
 
 impl ModuleCommandEnvelope {
-    /// Encode the envelope with serde-cbor's deterministic struct encoding.
+    /// Encode the envelope using RFC 8949 deterministic CBOR map ordering.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, ModuleCommandValidationError> {
-        serde_cbor::to_vec(self)
-            .map_err(|error| ModuleCommandValidationError::CanonicalEncoding(error.to_string()))
+        encode_canonical_cbor(self)
     }
 
     /// Decode only canonical CBOR: decoding and re-encoding must be byte exact.
@@ -487,6 +486,23 @@ impl ModuleCommandEnvelope {
         }
         Ok(envelope)
     }
+}
+
+/// Encode a serializable value using the canonical map ordering required by
+/// the module ABI.
+///
+/// `serde_cbor::to_vec` preserves a struct's declaration order and iterates a
+/// Rust map in its native order.  Neither is the RFC 8949 deterministic map
+/// order, which sorts encoded keys by length and then by their encoded bytes.
+/// Materializing a `serde_cbor::Value` first gives its `BTreeMap<Value, Value>`
+/// the crate's canonical key ordering before the final wire encoding.
+pub fn encode_canonical_cbor<T: Serialize>(
+    value: &T,
+) -> Result<Vec<u8>, ModuleCommandValidationError> {
+    let value = serde_cbor::value::to_value(value)
+        .map_err(|error| ModuleCommandValidationError::CanonicalEncoding(error.to_string()))?;
+    serde_cbor::to_vec(&value)
+        .map_err(|error| ModuleCommandValidationError::CanonicalEncoding(error.to_string()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
