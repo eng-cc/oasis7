@@ -140,6 +140,10 @@ if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
 fi
 case "${1:-}" in
   tree)
+    if [[ "$*" != *"--offline"* || "$*" != *"--locked"* ]]; then
+      echo "dependency-tree query must be locked and offline: $*" >&2
+      exit 1
+    fi
     if [[ "$*" == *"-i wasmtime"* || "$*" == *"-i oasis7_wasm_executor"* ]]; then
       exit 1
     fi
@@ -257,6 +261,13 @@ if offline_missing:
 tree_commands = [command for command in measured if command.split(maxsplit=1)[0] == "tree"]
 if len(tree_commands) != 1:
     raise SystemExit(f"expected one dependency-tree query for a check-only run: {tree_commands}")
+tree_offline_missing = [command for command in tree_commands if "--offline" not in command.split()]
+if tree_offline_missing:
+    raise SystemExit(f"dependency-tree queries must be offline: {tree_offline_missing}")
+fetch_positions = [index for index, command in enumerate(measured) if command.split(maxsplit=1)[0] == "fetch"]
+tree_positions = [index for index, command in enumerate(measured) if command.split(maxsplit=1)[0] == "tree"]
+if not fetch_positions or not tree_positions or fetch_positions[0] > tree_positions[0]:
+    raise SystemExit(f"host-target fetch must precede dependency-tree query: {measured}")
 if any("-i" in command.split() for command in tree_commands):
     raise SystemExit(f"dependency-tree query unexpectedly used inverse traversal: {tree_commands}")
 print("dependency-tree queries (current-only): 1")
@@ -313,7 +324,8 @@ from pathlib import Path
 import sys
 
 commands = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
-tree_commands = [command for command in commands if command.split(maxsplit=1)[0] == "tree"]
+tree_positions = [index for index, command in enumerate(commands) if command.split(maxsplit=1)[0] == "tree"]
+tree_commands = [commands[index] for index in tree_positions]
 if len(tree_commands) != 2:
     raise SystemExit(
         "expected one dependency-tree query per checkout in a baseline run: "
@@ -321,6 +333,27 @@ if len(tree_commands) != 2:
     )
 if any("-i" in command.split() for command in tree_commands):
     raise SystemExit(f"dependency-tree queries unexpectedly used inverse traversal: {tree_commands}")
+if any("--offline" not in command.split() for command in tree_commands):
+    raise SystemExit(f"dependency-tree queries must be offline: {tree_commands}")
+fetch_positions = [index for index, command in enumerate(commands) if command.split(maxsplit=1)[0] == "fetch"]
+if len(fetch_positions) != len(tree_commands):
+    raise SystemExit(
+        "expected one host-target fetch per checkout in a baseline run: "
+        f"fetches={fetch_positions}, trees={tree_commands}"
+    )
+for checkout_index, tree_position in enumerate(tree_positions):
+    segment_start = 0 if checkout_index == 0 else tree_positions[checkout_index - 1] + 1
+    segment = commands[segment_start : tree_position + 1]
+    segment_fetches = [
+        index
+        for index, command in enumerate(segment, start=segment_start)
+        if command.split(maxsplit=1)[0] == "fetch"
+    ]
+    if len(segment_fetches) != 1 or segment_fetches[0] >= tree_position:
+        raise SystemExit(
+            "each checkout segment must fetch before its dependency-tree query: "
+            f"segment={segment}"
+        )
 print("dependency-tree queries (current+baseline): 2")
 PY
 

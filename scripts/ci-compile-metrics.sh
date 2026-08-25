@@ -222,11 +222,26 @@ measure_checkout() {
   local release_target="$tmp_root/${label}-release-target"
   mkdir -p "$check_target" "$release_target"
 
+  local check_seconds
+  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --offline --locked -p "$package_name")
+  if [[ "$no_default_features" == true ]]; then
+    cargo_check_args+=(--no-default-features)
+  fi
+  (
+    cd "$checkout_path"
+    export CARGO_HOME="$cargo_home"
+    cargo fetch --locked --target "$host_target" \
+      >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
+  )
+
   local dependency_tree_path="$tmp_root/${label}-dependency-tree.txt"
-  local tree_args=(cargo tree --locked -p "$package_name")
+  local tree_args=(cargo tree --offline --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     tree_args+=(--no-default-features)
   fi
+  # Fetch the host-target dependency metadata before the tree query and keep
+  # the query offline.  This makes closure evidence deterministic instead of
+  # allowing an unbounded registry/index lookup before the timed commands.
   # One forward dependency-tree query is enough for both closure counting and
   # the presence checks below.  The prior inverse queries repeated Cargo's
   # dependency resolution for the same checkout, adding compile-metrics
@@ -254,17 +269,6 @@ measure_checkout() {
     wasm_executor_present="true"
   fi
 
-  local check_seconds
-  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --offline --locked -p "$package_name")
-  if [[ "$no_default_features" == true ]]; then
-    cargo_check_args+=(--no-default-features)
-  fi
-  (
-    cd "$checkout_path"
-    export CARGO_HOME="$cargo_home"
-    cargo fetch --locked --target "$host_target" \
-      >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
-  )
   check_seconds=$(
     measure_command_seconds \
       "$checkout_path" \
