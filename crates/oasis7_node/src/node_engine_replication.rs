@@ -566,8 +566,14 @@ impl PosNodeEngine {
             return Ok(false);
         }
         if fresh_execution_bootstrap && !expected_head_matches_candidate {
+            let discovered_head_lineage = self.checkpoint_bootstrap_enabled
+                && execution_hook.is_some()
+                && self.network_committed_height <= 1
+                && expected_checkpoint_head
+                    .is_some_and(|expected_head| checkpoint_height < expected_head.height);
             if payload.lineage_envelope.is_none()
-                && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
+                && (discovered_head_lineage
+                    || !self.authenticated_checkpoint_writer_has_supermajority_stake(&message))
             {
                 return Ok(false);
             }
