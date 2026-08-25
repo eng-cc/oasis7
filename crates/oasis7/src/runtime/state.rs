@@ -70,6 +70,10 @@ fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<String, i64
     state_defaults::default_material_ledgers()
 }
 
+fn default_material_transit_priority() -> MaterialTransitPriority {
+    state_defaults::default_material_transit_priority()
+}
+
 fn default_module_market_order_id() -> u64 {
     state_defaults::default_module_market_order_id()
 }
@@ -364,6 +368,26 @@ pub struct LogisticsSettlementReceiptV1 {
     pub governance_tax_electricity: i64,
 }
 
+/// Comparable one-time receipt for an immediate material transfer.
+///
+/// The transfer action id is the stable identity. Keeping the settled payload
+/// alongside it lets replay treat an exact duplicate as a no-op while rejecting
+/// a same-id event whose material effect was tampered with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterialTransferReceiptV1 {
+    pub transfer_id: ActionId,
+    pub requester_agent_id: String,
+    pub from_ledger: MaterialLedgerId,
+    pub to_ledger: MaterialLedgerId,
+    pub kind: String,
+    pub amount: i64,
+    pub distance_km: i64,
+    #[serde(default = "default_material_transit_priority")]
+    pub priority: MaterialTransitPriority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+}
+
 /// Lightweight observability state for industry progression and market snapshots.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IndustryProgressState {
@@ -559,6 +583,10 @@ pub struct WorldState {
     pub settled_logistics_transit_ids: BTreeSet<ActionId>,
     #[serde(default)]
     pub logistics_settlement_receipts: BTreeMap<ActionId, LogisticsSettlementReceiptV1>,
+    /// Direct material transfer action ids are single-use. The comparable
+    /// receipt distinguishes an exact replay from a tampered same-id event.
+    #[serde(default)]
+    pub direct_material_transfer_receipts: BTreeMap<ActionId, MaterialTransferReceiptV1>,
     #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

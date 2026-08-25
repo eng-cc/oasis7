@@ -7,6 +7,112 @@ fn test_agent_cell(agent_id: &str) -> AgentCell {
     AgentCell::new(AgentState::new(agent_id, pos(0, 0)), 0)
 }
 
+fn direct_material_transfer(transfer_id: Option<ActionId>, amount: i64) -> DomainEvent {
+    DomainEvent::MaterialTransferred {
+        transfer_id,
+        requester_agent_id: "operator-a".to_string(),
+        from_ledger: MaterialLedgerId::site("site-a"),
+        to_ledger: MaterialLedgerId::site("site-b"),
+        kind: "iron_ingot".to_string(),
+        amount,
+        distance_km: 0,
+        priority: MaterialTransitPriority::Standard,
+        route_id: None,
+    }
+}
+
+fn direct_material_transfer_state() -> WorldState {
+    let mut state = WorldState::default();
+    state
+        .material_ledgers
+        .entry(MaterialLedgerId::site("site-a"))
+        .or_default()
+        .insert("iron_ingot".to_string(), 40);
+    state
+}
+
+fn direct_material_balance(state: &WorldState, ledger: &MaterialLedgerId) -> i64 {
+    state
+        .material_ledgers
+        .get(ledger)
+        .and_then(|balances| balances.get("iron_ingot"))
+        .copied()
+        .unwrap_or_default()
+}
+
+#[test]
+fn direct_material_transfer_duplicate_is_byte_stable() {
+    let mut state = direct_material_transfer_state();
+    let event = direct_material_transfer(Some(41), 8);
+    state
+        .apply_domain_event(&event, 1)
+        .expect("first direct transfer settles");
+    let settled = state.clone();
+
+    state
+        .apply_domain_event(&event, 2)
+        .expect("exact duplicate is an idempotent no-op");
+
+    assert_eq!(state, settled);
+}
+
+#[test]
+fn direct_material_transfer_tampered_duplicate_fails_before_mutation() {
+    let mut state = direct_material_transfer_state();
+    state
+        .apply_domain_event(&direct_material_transfer(Some(42), 8), 1)
+        .expect("first direct transfer settles");
+    let settled = state.clone();
+
+    let result = state.apply_domain_event(&direct_material_transfer(Some(42), 7), 2);
+
+    assert!(matches!(
+        result,
+        Err(WorldError::ResourceBalanceInvalid { .. })
+    ));
+    assert_eq!(state, settled);
+}
+
+#[test]
+fn distinct_direct_material_transfer_ids_may_share_the_same_payload() {
+    let mut state = direct_material_transfer_state();
+    state
+        .apply_domain_event(&direct_material_transfer(Some(43), 8), 1)
+        .expect("first direct transfer settles");
+    state
+        .apply_domain_event(&direct_material_transfer(Some(44), 8), 2)
+        .expect("distinct identity settles independently");
+
+    assert_eq!(
+        direct_material_balance(&state, &MaterialLedgerId::site("site-a")),
+        24
+    );
+    assert_eq!(
+        direct_material_balance(&state, &MaterialLedgerId::site("site-b")),
+        16
+    );
+}
+
+#[test]
+fn legacy_direct_material_transfer_without_identity_still_deserializes() {
+    let event = direct_material_transfer(Some(45), 8);
+    let mut legacy = serde_json::to_value(event).expect("serialize direct transfer");
+    legacy["data"]
+        .as_object_mut()
+        .expect("domain event variant data serializes as an object")
+        .remove("transfer_id");
+
+    let decoded: DomainEvent =
+        serde_json::from_value(legacy).expect("legacy direct transfer remains compatible");
+    assert!(matches!(
+        decoded,
+        DomainEvent::MaterialTransferred {
+            transfer_id: None,
+            ..
+        }
+    ));
+}
+
 fn sample_contract(creator_agent_id: &str, counterparty_agent_id: &str) -> EconomicContractState {
     EconomicContractState {
         contract_id: "contract.guard".to_string(),

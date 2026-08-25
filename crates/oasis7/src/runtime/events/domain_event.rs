@@ -482,6 +482,8 @@ pub enum DomainEvent {
         refunded_bond_restricted_sink_bucket_id: String,
     },
     MaterialTransferred {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transfer_id: Option<ActionId>,
         requester_agent_id: String,
         from_ledger: MaterialLedgerId,
         to_ledger: MaterialLedgerId,

@@ -80,14 +80,43 @@ impl WorldState {
             }
             DomainEvent::LogisticsPathRerouted { .. } => {}
             DomainEvent::MaterialTransferred {
+                transfer_id,
                 requester_agent_id,
                 from_ledger,
                 to_ledger,
                 kind,
                 amount,
+                distance_km,
+                priority,
                 route_id,
-                ..
             } => {
+                let receipt = transfer_id.map(|transfer_id| MaterialTransferReceiptV1 {
+                    transfer_id,
+                    requester_agent_id: requester_agent_id.clone(),
+                    from_ledger: from_ledger.clone(),
+                    to_ledger: to_ledger.clone(),
+                    kind: kind.clone(),
+                    amount: *amount,
+                    distance_km: *distance_km,
+                    priority: *priority,
+                    route_id: route_id.clone(),
+                });
+                if let Some(receipt) = receipt.as_ref() {
+                    if let Some(existing) = self
+                        .direct_material_transfer_receipts
+                        .get(&receipt.transfer_id)
+                    {
+                        if existing == receipt {
+                            return Ok(());
+                        }
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "direct material transfer receipt mismatch: transfer_id={}",
+                                receipt.transfer_id
+                            ),
+                        });
+                    }
+                }
                 preflight_material_balance_additions(
                     &self.material_ledgers,
                     to_ledger,
@@ -116,6 +145,10 @@ impl WorldState {
                 })?;
                 if let Some(route_id) = route_id {
                     self.completed_logistics_route_ids.insert(route_id.clone());
+                }
+                if let Some(receipt) = receipt {
+                    self.direct_material_transfer_receipts
+                        .insert(receipt.transfer_id, receipt);
                 }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
                     cell.last_active = now;
