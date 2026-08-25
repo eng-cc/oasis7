@@ -2,16 +2,41 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeError {
-    InvalidRole { role: String },
-    InvalidConfig { reason: String },
-    Consensus { reason: String },
-    Gossip { reason: String },
-    Replication { reason: String },
-    Execution { reason: String },
-    AlreadyRunning { node_id: String },
-    NotRunning { node_id: String },
-    ThreadSpawnFailed { reason: String },
-    ThreadJoinFailed { node_id: String },
+    InvalidRole {
+        role: String,
+    },
+    InvalidConfig {
+        reason: String,
+    },
+    Consensus {
+        reason: String,
+    },
+    Gossip {
+        reason: String,
+    },
+    Replication {
+        reason: String,
+    },
+    ExecutionMismatchRollbackUnavailable {
+        payload_height: u64,
+        rollback_height: u64,
+        reason: String,
+    },
+    Execution {
+        reason: String,
+    },
+    AlreadyRunning {
+        node_id: String,
+    },
+    NotRunning {
+        node_id: String,
+    },
+    ThreadSpawnFailed {
+        reason: String,
+    },
+    ThreadJoinFailed {
+        node_id: String,
+    },
 }
 
 impl fmt::Display for NodeError {
@@ -24,6 +49,15 @@ impl fmt::Display for NodeError {
             NodeError::Consensus { reason } => write!(f, "node consensus error: {}", reason),
             NodeError::Gossip { reason } => write!(f, "node gossip error: {}", reason),
             NodeError::Replication { reason } => write!(f, "node replication error: {}", reason),
+            NodeError::ExecutionMismatchRollbackUnavailable {
+                payload_height,
+                rollback_height,
+                reason,
+            } => write!(
+                f,
+                "node replication error: synced replication height {} execution hash validation failed: {}; rollback record for height {} is unavailable",
+                payload_height, reason, rollback_height
+            ),
             NodeError::Execution { reason } => write!(f, "node execution error: {}", reason),
             NodeError::AlreadyRunning { node_id } => {
                 write!(f, "node runtime already running: {}", node_id)
@@ -40,3 +74,9 @@ impl fmt::Display for NodeError {
 }
 
 impl std::error::Error for NodeError {}
+
+impl NodeError {
+    pub(crate) fn is_fresh_observer_checkpoint_fallback_eligible(&self) -> bool {
+        matches!(self, Self::ExecutionMismatchRollbackUnavailable { .. })
+    }
+}

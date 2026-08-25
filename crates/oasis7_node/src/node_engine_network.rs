@@ -548,6 +548,7 @@ impl PosNodeEngine {
                 previous_execution_block_hash.as_deref(),
                 previous_execution_state_root.as_deref(),
                 execution_hook.as_deref_mut(),
+                peer_mismatch,
                 &err,
             )?;
             if !peer_mismatch {
@@ -578,6 +579,7 @@ impl PosNodeEngine {
                 previous_execution_block_hash.as_deref(),
                 previous_execution_state_root.as_deref(),
                 execution_hook.as_deref_mut(),
+                true,
                 &err,
             )?;
             return Err(err);
@@ -607,6 +609,7 @@ impl PosNodeEngine {
         previous_execution_block_hash: Option<&str>,
         previous_execution_state_root: Option<&str>,
         execution_hook: Option<&mut (dyn NodeExecutionHook + '_)>,
+        execution_mismatch: bool,
         err: &NodeError,
     ) -> Result<(), NodeError> {
         self.last_execution_height = previous_execution_height;
@@ -625,6 +628,13 @@ impl PosNodeEngine {
                 },
             )?;
             if !restored {
+                if execution_mismatch {
+                    return Err(NodeError::ExecutionMismatchRollbackUnavailable {
+                        payload_height,
+                        rollback_height: previous_execution_height,
+                        reason: err.to_string(),
+                    });
+                }
                 return Err(NodeError::Replication {
                     reason: format!(
                         "synced replication height {} execution hash validation failed: {}; rollback record for height {} is unavailable",
