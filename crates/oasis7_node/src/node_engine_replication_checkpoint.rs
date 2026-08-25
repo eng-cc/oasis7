@@ -97,7 +97,7 @@ impl PosNodeEngine {
         false
     }
 
-    fn cached_high_checkpoint_head(&self, world_id: &str) -> Option<WorldHeadAnnounce> {
+    pub(super) fn cached_high_checkpoint_head(&self, world_id: &str) -> Option<WorldHeadAnnounce> {
         self.peer_heads
             .iter()
             .filter_map(|(node_id, head)| {
@@ -253,8 +253,7 @@ impl PosNodeEngine {
         for checkpoint_candidate in
             Self::high_replication_checkpoint_candidates(advertised_head.height, 0)
         {
-            let expected_candidate_head =
-                (checkpoint_candidate == advertised_head.height).then_some(&advertised_head);
+            let expected_candidate_head = Some(&advertised_head);
             match self.try_sync_high_replication_checkpoint_boundary(
                 endpoint,
                 node_id,
@@ -314,16 +313,30 @@ impl PosNodeEngine {
             return Ok(false);
         }
 
-        let Some(cached_head) = self.cached_high_checkpoint_head(world_id) else {
+        let cached_head = self.cached_high_checkpoint_head(world_id);
+        // FetchHead is an unsigned, bounded discovery hint only.  It may fill
+        // the candidate window when the authenticated peer-head cache is
+        // absent, but it never supplies checkpoint authority by itself.
+        let fetch_head = if cached_head.is_none() {
+            endpoint.lookup_world_head(world_id)?
+        } else {
+            None
+        };
+        let Some(candidate_head) = cached_head.as_ref().or(fetch_head.as_ref()) else {
             return Ok(false);
         };
+        if candidate_head.height < REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL
+            || candidate_head.block_hash.trim().is_empty()
+            || candidate_head.state_root.trim().is_empty()
+        {
+            return Ok(false);
+        }
         let now_ms = crate::runtime_util::now_unix_ms();
         let mut retry_pending = false;
         for checkpoint_candidate in
-            Self::high_replication_checkpoint_candidates(cached_head.height, next_height)
+            Self::high_replication_checkpoint_candidates(candidate_head.height, next_height)
         {
-            let expected_candidate_head =
-                (checkpoint_candidate == cached_head.height).then_some(&cached_head);
+            let expected_candidate_head = Some(candidate_head);
             match self.try_sync_high_replication_checkpoint_boundary(
                 endpoint,
                 node_id,
@@ -412,8 +425,9 @@ impl PosNodeEngine {
         {
             return false;
         }
-        if !(unsigned_exact_head
-            || (fresh_execution_bootstrap && expected_checkpoint_head.is_none()))
+        let expected_head_matches_candidate = expected_checkpoint_head
+            .is_some_and(|expected_head| expected_head.height == payload.height);
+        if !(unsigned_exact_head || (fresh_execution_bootstrap && !expected_head_matches_candidate))
         {
             return true;
         }
@@ -428,6 +442,18 @@ impl PosNodeEngine {
                 || envelope.head.height != expected_head.height
                 || envelope.head.block_hash != expected_head.block_hash
                 || envelope.head.state_root != expected_head.state_root
+            {
+                return false;
+            }
+            envelope.head.clone()
+        } else if let Some(discovery_head) = expected_checkpoint_head {
+            // FetchHead can constrain the signed envelope to the discovered
+            // public H identity, but the envelope votes remain the authority
+            // for H and C.  Do not accept a candidate merely because FetchHead
+            // reported its height/hash/state.
+            if envelope.head.height != discovery_head.height
+                || envelope.head.block_hash != discovery_head.block_hash
+                || envelope.head.state_root != discovery_head.state_root
             {
                 return false;
             }

@@ -557,20 +557,25 @@ impl PosNodeEngine {
         if payload.execution_block_hash.is_none() || payload.execution_state_root.is_none() {
             return Ok(false);
         }
-        let unsigned_exact_head = expected_checkpoint_head.is_some_and(|expected_head| {
-            expected_head.signature.trim().is_empty() && checkpoint_height == expected_head.height
-        });
+        let expected_head_matches_candidate = expected_checkpoint_head
+            .is_some_and(|expected_head| checkpoint_height == expected_head.height);
+        let unsigned_exact_head = expected_head_matches_candidate
+            && expected_checkpoint_head
+                .is_some_and(|expected_head| expected_head.signature.trim().is_empty());
         if unsigned_exact_head && payload.lineage_envelope.is_none() {
             return Ok(false);
         }
-        if fresh_execution_bootstrap && expected_checkpoint_head.is_none() {
+        if fresh_execution_bootstrap && !expected_head_matches_candidate {
             if payload.lineage_envelope.is_none()
                 && !self.authenticated_checkpoint_writer_has_supermajority_stake(&message)
             {
                 return Ok(false);
             }
         }
-        if let Some(expected_head) = expected_checkpoint_head {
+        if expected_head_matches_candidate {
+            let Some(expected_head) = expected_checkpoint_head else {
+                return Ok(false);
+            };
             if Self::validate_world_head_checkpoint_payload(world_id, &payload, expected_head)
                 .is_err()
             {
@@ -787,8 +792,7 @@ impl PosNodeEngine {
                 advertised_network_height,
                 self.replication_persisted_height,
             ) {
-                let expected_candidate_head =
-                    expected_checkpoint_head.filter(|head| head.height == checkpoint_candidate);
+                let expected_candidate_head = expected_checkpoint_head;
                 match self.try_sync_high_replication_checkpoint_boundary(
                     endpoint,
                     node_id,
@@ -1059,8 +1063,7 @@ impl PosNodeEngine {
                     advertised_network_height,
                     next_height,
                 ) {
-                    let expected_candidate_head =
-                        expected_checkpoint_head.filter(|head| head.height == checkpoint_candidate);
+                    let expected_candidate_head = expected_checkpoint_head;
                     match self.try_sync_high_replication_checkpoint_boundary(
                         endpoint,
                         node_id,

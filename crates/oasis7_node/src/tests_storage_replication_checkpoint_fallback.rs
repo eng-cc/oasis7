@@ -9,6 +9,51 @@ use super::storage_replication_first_ready_checkpoint_tests::{
     FirstReadyHeadCheckpointNetwork, CheckpointProbeNonceGuard, lock_checkpoint_probe_nonce,
 };
 
+#[derive(Clone)]
+struct FetchHeadOnlyCheckpointNetwork {
+    inner: Arc<TestInMemoryNetwork>,
+    advertised_head: super::replication::FetchHeadResponse,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for FetchHeadOnlyCheckpointNetwork
+{
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        if protocol == REPLICATION_GET_HEAD_PROTOCOL {
+            return serde_json::to_vec(&self.advertised_head).map_err(|err| {
+                WorldError::DistributedValidationFailed {
+                    reason: format!("encode FetchHead-only response failed: {err}"),
+                }
+            });
+        }
+        self.inner.request(protocol, payload)
+    }
+
+    fn connected_peer_ids(&self) -> Vec<String> {
+        vec!["node-a".to_string()]
+    }
+
+    fn known_peer_ids(&self) -> Vec<String> {
+        vec!["node-a".to_string()]
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
 #[test]
 fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkpoint() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
@@ -201,6 +246,184 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
             .join(format!("{checkpoint_height}.json"))
             .exists(),
         "checkpoint probe receipt must be retained"
+    );
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn fresh_observer_checkpoint_candidate_discovery_from_fetch_head_only_without_cached_peer_head()
+{
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
+    let world_id = "world-fetch-head-only-retained-checkpoint-784";
+    let dir_a = temp_dir("fetch-head-only-retained-checkpoint-784-a");
+    let dir_b = temp_dir("fetch-head-only-retained-checkpoint-784-b");
+    let (_, public_key_a) = deterministic_keypair_hex(194);
+    let (_, public_key_b) = deterministic_keypair_hex(195);
+    let advertised_height = 784;
+    let checkpoint_height = 768;
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 194)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 194)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 195)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("source replication runtime");
+    replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            7_784,
+            &committed_decision(1),
+            Some("peer-execution-block-1"),
+            Some("peer-execution-state-1"),
+        )
+        .expect("build height-one commit")
+        .expect("height-one commit");
+    let checkpoint_execution_block_hash = format!("execution-block-{checkpoint_height}");
+    let checkpoint_execution_state_root = format!("execution-state-{checkpoint_height}");
+    replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            7_784,
+            &committed_decision(checkpoint_height),
+            Some(checkpoint_execution_block_hash.as_str()),
+            Some(checkpoint_execution_state_root.as_str()),
+            Some(checkpoint_bundle(
+                checkpoint_height,
+                checkpoint_execution_block_hash.as_str(),
+                checkpoint_execution_state_root.as_str(),
+            )),
+        )
+        .expect("build retained checkpoint")
+        .expect("retained checkpoint");
+    let engine_a = PosNodeEngine::new(&config_a).expect("lineage authority engine");
+    let checkpoint_head = CheckpointLineageHeadV1 {
+        height: advertised_height,
+        block_hash: format!("block-{advertised_height}"),
+        state_root: format!("execution-state-{advertised_height}"),
+        execution_block_hash: format!("execution-block-{advertised_height}"),
+        execution_state_root: format!("execution-state-{advertised_height}"),
+    };
+    let lineage_envelope =
+        super::storage_replication_live_retained_boundary_tests::attach_production_lineage_envelope(
+            &mut replication_a,
+            world_id,
+            checkpoint_height,
+            checkpoint_head.clone(),
+            &[&engine_a],
+        );
+    assert_eq!(lineage_envelope.head, checkpoint_head);
+    let persisted_checkpoint = replication_a
+        .load_commit_message_by_height(world_id, checkpoint_height)
+        .expect("load retained checkpoint")
+        .expect("retained checkpoint persisted");
+    assert!(
+        parse_replication_commit_payload(persisted_checkpoint.payload.as_slice())
+            .expect("decode retained checkpoint")
+            .lineage_envelope
+            .is_some(),
+        "fixture must carry the authenticated C-to-H lineage envelope"
+    );
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FetchHeadOnlyCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        advertised_head: super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: advertised_height,
+                block_hash: format!("block-{advertised_height}"),
+                state_root: format!("execution-state-{advertised_height}"),
+                timestamp_ms: 7_784,
+            }),
+        },
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register authenticated checkpoint provider");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer replication runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    // Match the public-testnet probe: the observer already saw the height-one
+    // tail, but only FetchHead exposes the current high head. No usable
+    // authenticated peer-head cache is available for lineage lookup.
+    engine_b.network_committed_height = 1;
+    assert!(engine_b.peer_heads.is_empty());
+    let mut execution_hook = BootstrapBeforeIncrementalHook {
+        installed: Vec::new(),
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+
+    let result = engine_b.sync_missing_replication_commits(
+        &endpoint_b,
+        "node-b",
+        world_id,
+        Some(&mut replication_b),
+        Some(&mut execution_hook),
+    );
+    assert!(
+        result.is_ok(),
+        "FetchHead-only discovery must install the authenticated retained checkpoint before height-one replay: result={result:?} installed={:?} incremental={:?}",
+        execution_hook.installed,
+        execution_hook.incremental_commits
+    );
+    assert_eq!(execution_hook.installed, vec![checkpoint_height]);
+    assert!(execution_hook.incremental_commits.is_empty());
+    assert_eq!(engine_b.committed_height, checkpoint_height);
+    assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
+    assert_eq!(engine_b.last_execution_height, checkpoint_height);
+    assert!(
+        replication_b
+            .load_commit_message_by_height(world_id, checkpoint_height)
+            .expect("inspect checkpoint persistence")
+            .is_some(),
+        "verified retained checkpoint must be persisted"
+    );
+    assert!(
+        dir_b
+            .join("checkpoint-verification")
+            .join(format!("{checkpoint_height}.json"))
+            .exists(),
+        "checkpoint verification receipt must be retained"
     );
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
