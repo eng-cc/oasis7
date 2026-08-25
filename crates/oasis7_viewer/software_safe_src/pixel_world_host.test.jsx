@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
   mountError: null,
+  mountGates: [],
+  mountResults: [],
   mountCalls: 0,
   onEvent: null,
 }));
@@ -22,6 +24,10 @@ vi.mock("./pixel_world_runtime_loader.js", async () => ({
           runtimeMock.mountCalls += 1;
           if (runtimeMock.mountError) {
             throw runtimeMock.mountError;
+          }
+          if (runtimeMock.mountGates.length) {
+            const gate = runtimeMock.mountGates.shift();
+            return gate.then(() => runtimeMock.mountResults.shift() || { status: "ready", fatal: null });
           }
           if (runtimeMock.deriveRenderState) {
             return {
@@ -429,6 +435,8 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
   runtimeMock.mountError = null;
+  runtimeMock.mountGates = [];
+  runtimeMock.mountResults = [];
   runtimeMock.mountCalls = 0;
   runtimeMock.onEvent = null;
   canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({});
@@ -614,6 +622,28 @@ describe("pixel world host", () => {
     expect(runtimeMock.mountCalls).toBe(0);
     expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
     expect(core.state.lastError).toContain("pixel world Rust render-state derivation is unavailable");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps a stale renderer mount result from replacing the current retry", async () => {
+    useTestRustRenderState();
+    let resolveFirst;
+    let resolveSecond;
+    runtimeMock.mountGates = [
+      new Promise((resolve) => { resolveFirst = resolve; }),
+      new Promise((resolve) => { resolveSecond = resolve; }),
+    ];
+    runtimeMock.mountResults = [
+      { status: "unavailable", fatal: { code: "stale_attempt", message: "stale renderer attempt" } },
+      { status: "ready", fatal: null },
+    ];
+    const { core } = await renderPixelWorldHost(sampleSnapshot());
+    await waitFor(() => expect(runtimeMock.mountCalls).toBe(1));
+    screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
+    await waitFor(() => expect(runtimeMock.mountCalls).toBe(2));
+    resolveFirst();
+    resolveSecond();
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("ready"));
+    expect(screen.queryByText("Graphics unavailable in this browser")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("fails closed when the embedded WebGL2 mount rejects instead of exposing a ready canvas", async () => {
@@ -1587,4 +1617,141 @@ describe("pixel world host", () => {
     expect(agent).toHaveAttribute("data-position-source", "location_derived");
     expect(agent).toHaveAttribute("aria-label", "Select Agent Agent 0");
   });
+
+  it("renders exactly one visible receipt representation in Cinematic View", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => {
+      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const visibleReceipts = [
+      ...document.querySelectorAll('[data-viewer-overlay="receipt"]'),
+      ...document.querySelectorAll(".pixel-world-focus-hud__cell--receipt"),
+    ].filter((element) => !element.closest("[hidden]"));
+    expect(visibleReceipts).toHaveLength(1);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("uses Agent name before label before id in the Cinematic focus surfaces", async () => {
+    const snapshot = clone(sampleSnapshot());
+    snapshot.model.agents["agent-0"].name = "Surveyor Seven";
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const state = buildTestRustRenderState(input);
+      state.agents = state.agents.map((agent) => (
+        agent.id === "agent-0"
+          ? { ...agent, name: "Surveyor Seven", label: "Fallback Label" }
+          : agent
+      ));
+      return state;
+    });
+    await renderPixelWorldHost(
+      snapshot,
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => {
+      expect(document.querySelector('[data-focus-minimap="true"]')).not.toBeNull();
+    });
+
+    const railAgent = Array.from(document.querySelectorAll(".pixel-world-focus-rail__item"))
+      .find((item) => item.querySelector("span")?.textContent === "Agent");
+    expect(railAgent).toBeTruthy();
+    expect(railAgent.querySelector("strong")).toHaveTextContent("Surveyor Seven");
+    expect(railAgent.querySelector("strong")).not.toHaveTextContent("agent-0");
+    expect(document.querySelector(".pixel-world-focus-minimap__node--agent strong"))
+      .toHaveTextContent("Surveyor Seven");
+
+    screen.getByRole("button", { name: "Command & Target" }).click();
+    const commandTarget = document.querySelector(".pixel-world-focus-command-chip--target strong");
+    expect(commandTarget).toHaveTextContent("Surveyor Seven");
+    expect(commandTarget).not.toHaveTextContent("agent-0");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("guards a pending or out-of-bound Next Move against repeat activation", async () => {
+    const snapshot = clone(sampleSnapshot());
+    snapshot.model.agents["agent-1"] = {
+      id: "agent-1",
+      name: "Other Agent",
+      location_id: "loc-0",
+      resources: {},
+    };
+    snapshot.model.agent_player_bindings["agent-1"] = "player-one";
+    snapshot.model.agent_player_public_key_bindings["agent-1"] = "1234567890abcdef1234567890abcdef";
+    snapshot.player_gameplay.intent_target = "agent-1";
+    snapshot.player_gameplay.available_actions = [{
+      action_id: "claim_starter_oc",
+      target_agent_id: "agent-1",
+      label: "Claim starter OC",
+      protocol_action: "gameplay_action.submit",
+      disabled_reason: null,
+    }];
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(
+      snapshot,
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Claim starter OC")).toBeInTheDocument();
+    });
+    const dispatchSpy = vi.spyOn(core, "sendGameplayAction");
+    core.state.lastGameplayActionFeedback = {
+      kind: "gameplay_action",
+      action: "claim_starter_oc",
+      agentId: "agent-1",
+      stage: "registering",
+      accepted: false,
+    };
+    core.requestRender();
+
+    const nextMove = screen.getByRole("link", { name: "Next Move: Claim starter OC" });
+    expect(nextMove).toHaveAttribute("aria-disabled", "true");
+    nextMove.click();
+    nextMove.click();
+    expect(dispatchSpy).not.toHaveBeenCalled();
+
+    core.state.lastGameplayActionFeedback = null;
+    core.requestRender();
+    await waitFor(() => expect(nextMove).toHaveAttribute("aria-disabled", "true"));
+    nextMove.click();
+    expect(dispatchSpy).not.toHaveBeenCalled();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("shows connected world-feed unavailability separately from stale data", async () => {
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+    core.state.connectionStatus = "connected";
+    core.state.worldFeed = {
+      ...core.state.worldFeed,
+      status: "unavailable",
+      stale: true,
+      unavailableReason: "source_unavailable",
+    };
+    core.requestRender();
+
+    await waitFor(() => {
+      const readout = document.querySelector(".pixel-world-readout");
+      expect(readout).toHaveTextContent("UNAVAILABLE");
+      expect(readout).not.toHaveTextContent("STALE");
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 });
