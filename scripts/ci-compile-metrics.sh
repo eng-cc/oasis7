@@ -14,6 +14,9 @@ compare them with a baseline git ref on the same runner family.
 All Cargo invocations are lockfile-pinned so dependency resolution cannot
 silently change the compile surface being measured.
 
+The timed compile commands run offline after the host-target pre-fetch, so a
+registry or network miss cannot contaminate the wall-clock measurements.
+
 Each checkout performs one dependency-tree query; closure counting and
 dependency-presence checks are derived from that shared result.
 
@@ -248,7 +251,7 @@ measure_checkout() {
   fi
 
   local check_seconds
-  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --locked -p "$package_name")
+  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --offline --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     cargo_check_args+=(--no-default-features)
   fi
@@ -276,7 +279,7 @@ measure_checkout() {
         "$release_target" \
         "$cargo_home" \
         "$out_dir/logs/${label}-cargo-build-release.log" \
-        env -u RUSTC_WRAPPER cargo build --locked -p "$package_name" --release --bin "$binary_name"
+        env -u RUSTC_WRAPPER cargo build --offline --locked -p "$package_name" --release --bin "$binary_name"
     )
 
     local binary_path
