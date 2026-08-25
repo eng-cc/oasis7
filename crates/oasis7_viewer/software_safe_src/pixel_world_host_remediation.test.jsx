@@ -252,6 +252,7 @@ describe("pixel world host remediation contracts", () => {
     runtimeMock.deriveRenderState = vi.fn((input) => {
       const state = renderStateFor(input);
       state.agents[0] = { ...state.agents[0], name: "Surveyor Seven", label: "Fallback Label" };
+      state.selection = { kind: "agent", id: "agent-0" };
       return state;
     });
     await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
@@ -263,8 +264,31 @@ describe("pixel world host remediation contracts", () => {
     expect(railAgent).toBeTruthy();
     expect(railAgent.querySelector("strong")).toHaveTextContent("Surveyor Seven");
     expect(document.querySelector(".pixel-world-focus-minimap__node--agent strong")).toHaveTextContent("Surveyor Seven");
+    const railSelected = Array.from(document.querySelectorAll(".pixel-world-focus-rail__item"))
+      .find((item) => item.querySelector("span")?.textContent === "Selected");
+    expect(railSelected.querySelector("strong")).toHaveTextContent("Surveyor Seven");
+    expect(document.querySelector(".pixel-world-focus-minimap__node--selected strong")).toHaveTextContent("Surveyor Seven");
     screen.getByRole("button", { name: "Command & Target" }).click();
     expect(document.querySelector(".pixel-world-focus-command-chip--target strong")).toHaveTextContent("Surveyor Seven");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("labels an enabled direct Next Move with the gameplay verb it submits", async () => {
+    const snapshot = clone(sampleSnapshot());
+    snapshot.player_gameplay.available_actions = [{
+      action_id: "claim_starter_oc",
+      target_agent_id: "agent-0",
+      label: "Claim starter OC",
+      protocol_action: "gameplay_action.submit",
+      disabled_reason: null,
+    }];
+    runtimeMock.deriveRenderState = vi.fn(renderStateFor);
+    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    await waitFor(() => expect(screen.getAllByText("Claim starter OC")).toHaveLength(2));
+    const dispatchSpy = vi.spyOn(core, "sendGameplayAction");
+    const nextMove = screen.getByRole("link", { name: "Next Move: Claim starter OC" });
+    expect(nextMove).toHaveTextContent("Claim starter OC");
+    nextMove.click();
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("guards a pending or out-of-bound Next Move against repeat activation", async () => {
@@ -282,7 +306,7 @@ describe("pixel world host remediation contracts", () => {
     }];
     runtimeMock.deriveRenderState = vi.fn(renderStateFor);
     const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
-    await waitFor(() => expect(screen.getByText("Claim starter OC")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Claim starter OC")).toHaveLength(2));
     const dispatchSpy = vi.spyOn(core, "sendGameplayAction");
     core.state.lastGameplayActionFeedback = { kind: "gameplay_action", action: "claim_starter_oc", agentId: "agent-1", stage: "registering", accepted: false };
     core.requestRender();

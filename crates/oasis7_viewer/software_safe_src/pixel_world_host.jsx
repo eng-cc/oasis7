@@ -780,7 +780,7 @@ function PixelWorldCommercialHud(props) {
             onClick={activateNextMove}
           >
             {directNextMoveAction()
-              ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
+              ? surface().next_action.label
               : nextMoveRoutesToGameplayDetails()
                 ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
                 : tr(props.locale(), "去指挥面板", "Go to Command")}
@@ -929,6 +929,7 @@ function PixelWorldFocusRail(props) {
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
   const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id); const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
   const routeCount = () => props.renderState().links.length;
   const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
   return (
@@ -953,7 +954,8 @@ function PixelWorldFocusRail(props) {
         <Show when={selected()}>
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "选中", "Selected")}</span>
-            <strong>{`${selected().kind}/${selected().id}`}</strong>
+            <strong>{selectedName()}</strong>
+            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <Show when={routeCount() > 0}>
@@ -972,6 +974,8 @@ function PixelWorldFocusMinimapCard(props) {
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
   const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id);
+  const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
   const primaryLocation = () => props.renderState().locations[0] || null;
   return (
     <Show when={surface()}>
@@ -1004,7 +1008,8 @@ function PixelWorldFocusMinimapCard(props) {
             data-selected="true"
           >
             <span>{tr(props.locale(), "选中", "Selected")}</span>
-            <strong>{`${selected().kind}/${selected().id}`}</strong>
+            <strong>{selectedName()}</strong>
+            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <div class="pixel-world-focus-minimap__meta" aria-label={tr(props.locale(), "世界摘要", "World summary")}>
