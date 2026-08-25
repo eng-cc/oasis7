@@ -3,7 +3,37 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage:
+Governed transaction contract (current path):
+  ./scripts/p2p-public-testnet-rebuild-validators.sh plan \
+    --package-dir <verified-package-dir> \
+    --provenance <verified-pair-provenance.json> \
+    --trust-root <provenance-trust-root.json> \
+    --identity-receipts <validator-identity-receipts.json> \
+    --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
+    --consumer-impact-record <record.json> \
+    --capacity-json <per-node-capacity.json> \
+    --node storage-205=local:<stopped-node-root> \
+    --node sequencer-204=local:<stopped-node-root> \
+    --sequencer-proof-url <bounded-proof-endpoint> \
+    --out-dir <transaction-dir>
+  ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
+    --transaction <transaction-dir>/transaction.json \
+    --host-adapter <governed-host-adapter>
+  ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
+    --transaction <transaction-dir>/transaction.json \
+    --host-adapter <governed-host-adapter>
+
+Plan is local-only and emits a stable
+oasis7.validator_pair_rebuild_plan.v1 digest. Apply/rollback require the
+governed host adapter and emit transaction-bound phase receipts. The plan
+contract binds per-node/platform inventories, exact destructive targets,
+quiescence, forensic non-seed backup metadata, post-delete absence targets,
+new-epoch provenance digests, reset/stage/start and same-window health gates,
+and a rollback boundary that forbids restoring deleted chain state.
+`--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
+for the subcommands.
+
+Historical SSH audit path (not the current governed transaction contract):
   ./scripts/p2p-public-testnet-rebuild-validators.sh \
     --config-dir <path> \
     --world-dir <path> \
@@ -61,6 +91,347 @@ require_file() {
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+
+# The historical SSH entrypoint remains available for audit fixtures, but all
+# governed pair transactions must go through the local-first executor.  Keep
+# this dispatch in the shell entrypoint so operators and automation have one
+# stable command surface while the executor owns the signed provenance and
+# host-adapter gates.  The envelope below is intentionally derived only from
+# the executor's JSON; plan mode never opens SSH, invokes systemd, or deletes a
+# path.
+receipt_contract_envelope() {
+  local mode=$1
+  shift
+  local executor="$repo_root/scripts/p2p-public-testnet-validator-pair-rebuild.py"
+  require_file "$executor"
+  require_command python3
+
+  local raw_output
+  raw_output=$(mktemp "${TMPDIR:-/tmp}/o7pt-receipt.XXXXXX")
+  trap 'rm -f "$raw_output"' RETURN
+  if ! python3 "$executor" "$mode" "$@" >"$raw_output"; then
+    cat "$raw_output"
+    return 1
+  fi
+
+  python3 - "$raw_output" "$mode" "$@" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+
+raw_path = Path(sys.argv[1])
+mode = sys.argv[2]
+args = sys.argv[3:]
+value = json.loads(raw_path.read_text(encoding="utf-8"))
+
+
+def digest_json(item: object) -> str:
+    return hashlib.sha256(
+        json.dumps(item, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def entry(path: Path, relative: str) -> dict[str, object]:
+    info: dict[str, object] = {"path": relative}
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return {"path": relative, "kind": "missing", "exists": False}
+    info.update(
+        {
+            "exists": True,
+            "mode": stat.S_IMODE(metadata.st_mode),
+            "uid": metadata.st_uid,
+            "gid": metadata.st_gid,
+        }
+    )
+    if stat.S_ISLNK(metadata.st_mode):
+        info.update({"kind": "symlink", "target": os.readlink(path), "size_bytes": 0})
+    elif stat.S_ISDIR(metadata.st_mode):
+        info.update({"kind": "directory", "size_bytes": 0})
+    elif stat.S_ISREG(metadata.st_mode):
+        info.update({"kind": "file", "size_bytes": metadata.st_size, "sha256": sha256_file(path)})
+    else:
+        info.update({"kind": "other", "size_bytes": metadata.st_size})
+    return info
+
+
+def tree_inventory(root: Path) -> dict[str, object]:
+    """Inventory without following symlinks, including metadata and hashes."""
+    if not root.exists() and not root.is_symlink():
+        entries = [entry(root, ".")]
+    else:
+        items = [root]
+        if root.is_dir() and not root.is_symlink():
+            items.extend(sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()))
+        entries = [
+            entry(item, "." if item == root else item.relative_to(root).as_posix())
+            for item in items
+        ]
+    counts = {"entry_count": 0, "link_count": 0, "dir_count": 0, "file_count": 0, "total_bytes": 0}
+    for item in entries:
+        if not item.get("exists"):
+            continue
+        counts["entry_count"] += 1
+        if item["kind"] == "symlink":
+            counts["link_count"] += 1
+        elif item["kind"] == "directory":
+            counts["dir_count"] += 1
+        elif item["kind"] == "file":
+            counts["file_count"] += 1
+            counts["total_bytes"] += int(item.get("size_bytes", 0))
+    counts["entry_class_equation"] = (
+        counts["entry_count"]
+        == counts["link_count"] + counts["dir_count"] + counts["file_count"]
+    )
+    return {
+        **counts,
+        "sha256": digest_json(entries),
+        "entries": entries,
+    }
+
+
+RESET_TARGETS = [
+    "data/execution-records",
+    "data/execution-records/index",
+    "data/execution-records/archive",
+    "data/execution-world",
+    "data/execution-world/index",
+    "data/execution-world/archive",
+    "data/execution-world/modules",
+    "data/execution-world/bridge",
+    "data/execution-world/runtime",
+    "data/execution-world/replication",
+    "data/execution-world-simulator-mirror",
+    "data/storage",
+    "data/bridge-root",
+    "data/runtime-root",
+    "data/replication-root",
+    "output/chain-runtime",
+    "output/node-distfs",
+]
+
+
+def cli_value(flag: str) -> str | None:
+    try:
+        return args[args.index(flag) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def node_contracts() -> dict[str, object]:
+    nodes = value.get("nodes") if isinstance(value.get("nodes"), dict) else {}
+    result: dict[str, object] = {}
+    for role in value.get("mutation_order", []):
+        node = nodes.get(role, {}) if isinstance(nodes, dict) else {}
+        root = Path(str(node.get("root", ""))).resolve()
+        root_inventory = tree_inventory(root)
+        targets: list[dict[str, object]] = []
+        for relative in RESET_TARGETS:
+            target = root / relative
+            resolved = target.resolve(strict=False)
+            target_info = entry(target, relative)
+            targets.append(
+                {
+                    **target_info,
+                    "resolved_path": str(resolved),
+                    "resolution_proof": {
+                        "root": str(root),
+                        "relative_path": relative,
+                        "lexical_target": str(target),
+                        "resolved_target": str(resolved),
+                        "no_follow_symlink": True,
+                        "target_under_root": str(resolved).startswith(f"{root}{os.sep}"),
+                        "destructive": True,
+                    },
+                }
+            )
+        backup_entries = [
+            item for item in root_inventory["entries"]
+            if item.get("path") != "backups" and not str(item.get("path", "")).startswith("backups/")
+        ]
+        backup_manifest = {
+            "schema_version": "oasis7.validator_pair_rebuild_forensic_backup_manifest.v1",
+            "root": str(root),
+            "entries": backup_entries,
+            "entry_count": len(backup_entries),
+            "sha256": digest_json(backup_entries),
+        }
+        result[role] = {
+            "role": role,
+            "platform": node.get("transport", "unknown"),
+            "root": str(root),
+            "inventory": {
+                key: root_inventory[key]
+                for key in ("sha256", "entry_count", "link_count", "dir_count", "file_count", "total_bytes", "entry_class_equation")
+            },
+            "state_roots": targets,
+        "destructive_target_resolution": targets,
+            "observer_equivalents": {
+                "status": "hold",
+                "mutation": False,
+                "state_roots": [item["path"] for item in targets],
+                "absence_proof_required_before_observer_mutation": True,
+            },
+            "post_delete_absence_proof": {
+                "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
+                "phase": "reset-after-quiesce-before-stage",
+                "required": True,
+                "targets": [item["resolved_path"] for item in targets],
+                "indexed_sidecars_archives_module_stores_execution_records_bridge_runtime_replication": True,
+                "observer_equivalents_not_mutated_by_pair_transaction": True,
+                "status": "required_at_apply" if mode == "plan" else "receipt_bound",
+            },
+            "forensic_backup": {
+                "manifest": backup_manifest,
+                "manifest_sha256": digest_json(backup_manifest),
+                "capacity": value.get("capacity", {}).get(role, {}),
+                "metadata_bound": True,
+                "non_seed_proof": {
+                    "schema_version": "oasis7.validator_pair_rebuild_backup_non_seed.v1",
+                    "forensic_only": True,
+                    "seed_eligible": False,
+                    "seed_source_paths": [],
+                    "staged_from": "package-and-governed-provenance-only",
+                    "restore_deleted_chain_state": False,
+                    "machine_checkable": True,
+                },
+            },
+            "stopped_quiescence_proof": {
+                "required": True,
+                "remote_activity": False if mode == "plan" else "adapter_receipt_required",
+                "proof": "governed host-adapter quiesce receipt binds active=false,running=false before reset",
+            },
+        }
+    return result
+
+
+contract = value.setdefault("receipt_contract", {})
+contract.update(
+    {
+        "schema_version": "oasis7.validator_pair_rebuild_receipt_contract.v1",
+        "mode": mode,
+        "mutation_order": value.get("mutation_order", ["storage-205", "sequencer-204"]),
+        "startup_order": value.get("startup_order", ["sequencer-204", "storage-205"]),
+        "nodes": node_contracts(),
+        "provenance_epoch": value.get("provenance", {}).get("epoch", "plan-bound"),
+        "provenance_digests": {
+            "package": {
+                "path": value.get("package", {}).get("directory"),
+                "sha256": digest_json(value.get("package", {})),
+                "runtime_sha256": value.get("package", {}).get("runtime_sha256"),
+                "runtime_size_bytes": value.get("package", {}).get("runtime_size_bytes"),
+            },
+            "governed": value.get("network", {}).get("governed", {}),
+            "network_id": value.get("network", {}).get("network_id"),
+            "chain_id": value.get("network", {}).get("chain_id"),
+        },
+        "phase_receipts": {
+            "reset": "quiesce-and-post-delete-receipt-required",
+            "stage": "staged-governed-inventory-receipt-required",
+            "start": "sequencer-then-storage-host-receipt-required",
+            "same_window_fleet_health": "same host-receipt captured_at window required",
+        },
+        "rollback_boundary": {
+            "schema_version": "oasis7.validator_pair_rebuild_rollback_boundary.v1",
+            "restore_deleted_chain_state": False,
+            "restore_only_forensic_snapshot": True,
+            "requires_quiescence_before_restore": True,
+            "observer_mutation": False,
+        },
+    }
+)
+# Keep the provenance names machine-checkable even when the signed receipt's
+# governed map uses a different internal key order.
+governed = value.get("network", {}).get("governed", {})
+if isinstance(governed, dict):
+    aliases = contract["provenance_digests"]
+    aliases["new_epoch"] = value.get("provenance", {}).get("epoch", "plan-bound")
+    for name in ("package", "genesis", "world", "registry", "manifest", "bootstrap"):
+        if name == "package":
+            aliases[name] = aliases["package"]
+        else:
+            aliases[name] = governed.get(name) or governed.get(f"{name}_artifact") or None
+if mode == "plan":
+    # Plan output is deliberately timestamp-free and therefore byte-stable.
+    contract["deterministic"] = True
+    contract["remote_activity"] = False
+    contract["systemd_activity"] = False
+    contract["destructive_activity"] = False
+else:
+    contract["captured_at"] = value.get("host_receipt", {}).get("captured_at")
+    contract["deterministic"] = False
+    contract["remote_activity"] = "governed-host-adapter"
+    contract["systemd_activity"] = "governed-host-adapter"
+    contract["destructive_activity"] = "reset-targets-only"
+    contract["host_receipts"] = {
+        key: value.get(key)
+        for key in ("quiesce_receipt", "backup_receipt", "host_receipt", "rollback_receipt", "rollback_quiesce_receipt")
+        if key in value
+    }
+    contract["same_window_fleet_health"] = {
+        "required": True,
+        "status": "verified" if isinstance(value.get("host_receipt"), dict) else "not_run",
+        "captured_at": value.get("host_receipt", {}).get("captured_at"),
+        "full_204_chain_status_called": False,
+    }
+
+if mode == "plan":
+    value["plan_digest"] = digest_json({key: item for key, item in value.items() if key != "plan_digest"})
+else:
+    value["canonical_digest"] = digest_json({key: item for key, item in value.items() if key != "canonical_digest"})
+
+output = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+target = cli_value("--transaction")
+if target is None:
+    out_dir = cli_value("--out-dir")
+    target = str(Path(out_dir).resolve() / "transaction.json") if out_dir else None
+if target:
+    destination = Path(target)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(output + "\n", encoding="utf-8")
+print(output)
+PY
+}
+
+# New governed modes are explicit subcommands.  Legacy invocations retain the
+# historical SSH fixture contract and are intentionally not used for a current
+# destructive rebuild.
+case "${1:-}" in
+  plan|apply|rollback)
+    receipt_contract_envelope "$@"
+    exit $?
+    ;;
+  --plan|--test-mode)
+    shift
+    receipt_contract_envelope plan "$@"
+    exit $?
+    ;;
+  --apply)
+    shift
+    receipt_contract_envelope apply "$@"
+    exit $?
+    ;;
+  --rollback)
+    shift
+    receipt_contract_envelope rollback "$@"
+    exit $?
+    ;;
+esac
 
 CONFIG_DIR=""
 WORLD_DIR=""

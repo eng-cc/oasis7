@@ -917,7 +917,11 @@ impl World {
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
             }
             let mut world = Self::from_snapshot(snapshot, journal)?;
-            world.load_module_store_from_dir(dir)?;
+            if has_indexed_generation {
+                world.load_selected_generation_module_artifacts_from_dir(dir)?;
+            } else {
+                world.load_module_store_from_dir(dir)?;
+            }
             return Ok(world);
         }
         let journal_path = dir.join(JOURNAL_FILE);
@@ -987,6 +991,32 @@ impl World {
             }
             self.validate_module_artifact_identity(&record.manifest)?;
             self.module_artifacts.insert(wasm_hash.clone());
+            self.module_artifact_bytes
+                .insert(wasm_hash.clone(), bytes.into());
+        }
+        Ok(())
+    }
+
+    fn load_selected_generation_module_artifacts_from_dir(
+        &mut self,
+        dir: impl AsRef<Path>,
+    ) -> Result<(), WorldError> {
+        let store = ModuleStore::new(dir);
+        if !store.modules_dir().exists() {
+            return Ok(());
+        }
+        self.module_artifact_bytes.clear();
+
+        for record in self.module_registry.records.values() {
+            let wasm_hash = &record.manifest.wasm_hash;
+            let bytes = store.read_artifact(wasm_hash)?;
+            let actual_hash = super::super::util::sha256_hex(&bytes);
+            if actual_hash != *wasm_hash {
+                return Err(WorldError::ModuleStoreManifestMismatch {
+                    wasm_hash: wasm_hash.clone(),
+                });
+            }
+            self.validate_module_artifact_identity(&record.manifest)?;
             self.module_artifact_bytes
                 .insert(wasm_hash.clone(), bytes.into());
         }

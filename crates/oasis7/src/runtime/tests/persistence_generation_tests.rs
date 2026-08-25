@@ -179,6 +179,73 @@ fn indexed_rollback_generation_wins_over_mutable_external_json_context() {
 }
 
 #[test]
+fn indexed_sidecar_generation_does_not_load_newer_top_level_module_state() {
+    let mut older_world = World::new();
+    let older_wasm_hash = super::install_test_module(
+        &mut older_world,
+        "m.persistence.generation.older",
+        b"generation-older-module",
+    );
+
+    let mut newer_world = World::new();
+    let newer_wasm_hash = super::install_test_module(
+        &mut newer_world,
+        "m.persistence.generation.newer",
+        b"generation-newer-module",
+    );
+
+    let dir = temp_dir("persist-indexed-generation-module-state");
+    older_world
+        .save_to_dir(&dir)
+        .expect("save older generation");
+    let index_path = dir
+        .join(".distfs-state")
+        .join("sidecar-generations")
+        .join("index.json");
+    let older_generation_id = serde_json::from_slice::<serde_json::Value>(
+        &fs::read(&index_path).expect("read older generation index"),
+    )
+    .expect("decode older generation index")["latest_generation"]
+        .as_str()
+        .expect("older generation id")
+        .to_string();
+
+    newer_world
+        .save_to_dir(&dir)
+        .expect("save newer generation");
+
+    let mut index: serde_json::Value =
+        serde_json::from_slice(&fs::read(&index_path).expect("read generation index"))
+            .expect("decode generation index");
+    index["latest_generation"] = serde_json::Value::String(older_generation_id);
+    fs::write(
+        &index_path,
+        serde_json::to_vec_pretty(&index).expect("encode generation index"),
+    )
+    .expect("select older generation");
+
+    let mut restored = World::load_from_dir(&dir).expect("restore selected generation");
+    let older_key = ModuleRegistry::record_key("m.persistence.generation.older", "0.1.0");
+    let newer_key = ModuleRegistry::record_key("m.persistence.generation.newer", "0.1.0");
+    assert!(restored.module_registry().records.contains_key(&older_key));
+    assert!(!restored.module_registry().records.contains_key(&newer_key));
+    assert_eq!(
+        restored.snapshot().module_artifacts,
+        older_world.snapshot().module_artifacts
+    );
+    let restored_older_artifact = restored
+        .load_module(&older_wasm_hash)
+        .expect("selected generation keeps its module artifact");
+    assert_eq!(
+        restored_older_artifact.bytes,
+        b"generation-older-module".to_vec().into()
+    );
+    assert!(restored.load_module(&newer_wasm_hash).is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn verify_tick_consensus_archive_uses_selected_indexed_generation() {
     let mut older_world = World::new();
     for _ in 0..140 {

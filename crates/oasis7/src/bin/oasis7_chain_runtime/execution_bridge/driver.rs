@@ -296,8 +296,9 @@ impl NodeRuntimeExecutionDriver {
         // replaced, or the cache can be lost independently. In either case,
         // bootstrapping the world from disk would replay the next commit on a
         // different generation than the durable execution record. Reconcile
-        // from the record chain whenever one exists and fail closed if its
-        // latest pointer is missing/corrupt.
+        // from the highest valid durable per-height record whenever one exists.
+        // The latest pointer is only a convenience pointer and may lag the
+        // numbered records after a crash.
         let has_execution_records =
             !list_execution_bridge_record_heights(driver.records_dir.as_path())?.is_empty()
                 || driver.records_dir.join("latest.json").exists();
