@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest,
-    ModuleContext, ModuleEmitEvent, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
+    ModuleCommandEnvelope, ModuleContext, ModuleEmitEvent, ModuleOutput, ModuleSandbox,
+    ModuleStateUpdate, validate_module_command_declarations, validate_module_command_envelope,
 };
 use oasis7_wasm_router::{
     PreparedSubscription, prepare_subscriptions, prepared_module_subscribes_to_action,
@@ -182,6 +183,45 @@ impl World {
             input,
             sandbox,
         )
+    }
+
+    /// Execute a declared module command through the existing metered call path.
+    ///
+    /// Command admission is intentionally completed before the sandbox is
+    /// touched: the active manifest and its declarations are checked, the
+    /// envelope is checked against those declarations, and the canonical CBOR
+    /// representation is produced while the world is still unchanged. The
+    /// existing `execute_module_call` remains authoritative for artifact
+    /// loading, sandbox invocation, metering, policy hooks, and output events.
+    pub fn execute_module_command(
+        &mut self,
+        module_id: &str,
+        trace_id: impl Into<String>,
+        envelope: ModuleCommandEnvelope,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<ModuleOutput, WorldError> {
+        let manifest = self.active_module_manifest(module_id)?.clone();
+        validate_module_command_declarations(&manifest.abi_contract.declarations).map_err(
+            |error| WorldError::ModuleChangeInvalid {
+                reason: format!(
+                    "module command declarations invalid for {}: {error}",
+                    manifest.module_id
+                ),
+            },
+        )?;
+        validate_module_command_envelope(&envelope, &manifest.abi_contract.declarations).map_err(
+            |error| WorldError::ModuleChangeInvalid {
+                reason: format!("module command envelope invalid for {module_id}: {error}"),
+            },
+        )?;
+        let canonical_input =
+            envelope
+                .encode_canonical()
+                .map_err(|error| WorldError::ModuleChangeInvalid {
+                    reason: format!("module command envelope canonical encoding failed: {error}"),
+                })?;
+
+        self.execute_module_call(module_id, trace_id, canonical_input, sandbox)
     }
 
     pub(super) fn execute_module_call_with_manifest_and_state_key(
