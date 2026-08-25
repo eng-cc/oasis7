@@ -134,6 +134,41 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
+# Workflow/PM changes should select the workflow and operational contract
+# checks without inheriting unrelated Rust crates.  This fixture is RED until
+# the planner has an explicit non-Rust workflow-governance capability.
+workflow_governance_output="$(plan_for_paths \
+  scripts/new-task-worktree.sh \
+  scripts/pm/finalize-task.sh \
+  scripts/pm/finalize-task.test.sh \
+  scripts/pm/review-closeout.sh \
+  scripts/pm/review-closeout-facade.test.sh \
+  scripts/pm/new-task-worktree-acceptance-pre-mutation.test.sh \
+  scripts/pm/new-task-worktree-partial-bootstrap.test.sh \
+  scripts/pm/workflow-behavior-eval.sh \
+  scripts/launcher-help-contract.sh \
+  scripts/launcher-help-contract.test.sh \
+  scripts/prepare-task-pr.sh \
+  scripts/pm/prepare-task-pr-review-risk.test.py \
+  .agents/skills/requesting-repo-owned-review/SKILL.md \
+  doc/engineering/workflow/source-of-truth.md)"
+assert_key_equals "$workflow_governance_output" scope targeted
+assert_key_equals "$workflow_governance_output" run_operational_contracts true
+assert_key_equals "$workflow_governance_output" run_rust_baseline false
+assert_key_equals "$workflow_governance_output" needs_rust_toolchain false
+assert_key_equals "$workflow_governance_output" run_oasis7_required_tests false
+assert_key_equals "$workflow_governance_output" run_launcher_web_build false
+assert_key_equals "$workflow_governance_output" selected_capabilities workflow_governance
+assert_reason_contains "$workflow_governance_output" \
+  "workflow_governance:scripts/new-task-worktree.sh"
+assert_reason_absent "$workflow_governance_output" "unclassified_or_unresolvable:"
+
+planner_semantic_output="$(plan_for_path scripts/plan-rust-required-scope.py)"
+assert_key_equals "$planner_semantic_output" scope full
+assert_key_equals "$planner_semantic_output" run_rust_baseline true
+assert_reason_contains "$planner_semantic_output" \
+  "shared_required_gate:scripts/plan-rust-required-scope.py"
+
 compile_metrics_output="$(plan_for_paths \
   scripts/ci-compile-metrics.sh \
   scripts/ci-compile-metrics-gate.py \
@@ -174,9 +209,7 @@ viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
   scripts/worktree-harness.sh \
-  scripts/worktree-harness-contract.test.sh \
-  scripts/launcher-help-contract.sh \
-  scripts/launcher-help-contract.test.sh)"
+  scripts/worktree-harness-contract.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
@@ -186,8 +219,6 @@ assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrappe
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
-assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/launcher-help-contract.sh"
-assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/launcher-help-contract.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
 
 viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"
