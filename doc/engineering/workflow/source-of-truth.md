@@ -531,10 +531,10 @@ executor is limited by the [unattended invariants](#appendix-a-target-supervisor
   recorded first-parent integration base exactly equals the integration
   commit tree. The receipt also binds the branch patch identity for exact-tip
   recomputation, but context-sensitive branch/main patch-ID equality is not
-  authority; literal CLI state or
-  mutable cache fields are not proof. The helper uses non-force
-  `git worktree remove` and `git branch -d`; it never prints or executes
-  `worktree remove --force` / `branch -D` as normal workflow guidance.
+  authority; literal CLI state or mutable cache fields are not proof. Patch-equivalence cleanup may use `git branch -D` only
+  after complete repository proof plus deletion-time exact-tip reread; ancestry remains `git branch -d`,
+  and neither path may use `git worktree remove --force`. Legacy journals missing derived common-dir/tip
+  fields may be backfilled once by the helper after live identity, fresh receipt, and applicable proof; caller edits are not authority.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 - When Rust commands encounter Cargo package-cache or build-directory locks, wait for the shared repo-family cache to become available; do not switch ad hoc to a fresh temporary `CARGO_TARGET_DIR` just to bypass the lock.
 

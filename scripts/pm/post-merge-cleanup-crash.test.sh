@@ -27,7 +27,7 @@ EOF
   python3 - "$receipts/merge-receipt.json" "$receipts/main-sync-receipt.json" "$uid" "$main" "$now" <<'PY'
 import hashlib,json,pathlib,sys
 m=pathlib.Path(sys.argv[1]); pathlib.Path(sys.argv[2]).write_text(json.dumps({
-"receipt_type":"oasis7_main_sync","issuer":"post-merge-main-sync","task_uid":sys.argv[3],"repository":"eng-cc/oasis7",
+"receipt_type":"oasis7_main_sync","issuer":"post-merge-main-sync","integration_mode":"ancestry","task_uid":sys.argv[3],"repository":"eng-cc/oasis7",
 "default_branch":"main","main_commit":sys.argv[4],"remote_main_commit":sys.argv[4],
 "merge_receipt_sha256":hashlib.sha256(m.read_bytes()).hexdigest(),"observed_at":sys.argv[5]})+'\n')
 PY
