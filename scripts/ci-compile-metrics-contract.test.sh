@@ -136,7 +136,7 @@ case "${1:-}" in
     fi
     case "${FAKE_CARGO_TREE_FIXTURE:-none}" in
       all)
-        printf 'fake-package\nfake-dependency\nwasmtime v99.0.0\noasis7_wasm_executor v0.1.0\n'
+        printf 'fake-package\nfake-dependency\nfake-dependency (*)\nwasmtime v99.0.0\noasis7_wasm_executor v0.1.0\n'
         ;;
       none)
         printf 'fake-package\nfake-dependency\n'
