@@ -864,10 +864,44 @@ pub struct ModuleCallRequest {
     pub wasm_bytes: Arc<[u8]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModuleCallOrigin {
     pub kind: String,
     pub id: String,
+}
+
+/// The trusted host-side identity that initiated a module invocation.
+///
+/// Caller provenance is deliberately carried by [`ModuleContext`] rather than
+/// [`ModuleCommandEnvelope`].  The envelope is untrusted command data and may
+/// be supplied by an Agent or another module; the host must inject this value
+/// at the invocation boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ModuleCallCaller {
+    /// An invocation produced through a legacy host path that has no caller
+    /// identity yet.  This is the serde default for pre-provenance inputs.
+    #[default]
+    LegacyUnspecified,
+    System {
+        system_id: String,
+    },
+    Agent {
+        agent_id: String,
+    },
+    Module {
+        module_id: String,
+    },
+}
+
+/// Trusted host-side provenance for a module invocation.
+///
+/// This type is not part of [`ModuleCommandEnvelope`]: command payloads must
+/// not be able to self-assert their caller or origin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleInvocationProvenance {
+    pub caller: ModuleCallCaller,
+    pub origin: ModuleCallOrigin,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -877,6 +911,10 @@ pub struct ModuleContext {
     pub trace_id: String,
     pub time: u64,
     pub origin: ModuleCallOrigin,
+    /// Host-injected caller identity.  Missing on legacy serialized contexts
+    /// decodes as `LegacyUnspecified` for wire compatibility.
+    #[serde(default)]
+    pub caller: ModuleCallCaller,
     pub limits: ModuleLimits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<String>,

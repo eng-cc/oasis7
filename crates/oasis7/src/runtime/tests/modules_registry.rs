@@ -2,7 +2,8 @@ use super::super::*;
 use super::pos;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::{
-    ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallRequest,
+    ModuleCallCaller, ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin,
+    ModuleCallRequest, ModuleInvocationProvenance,
     ModuleCommandDeclaration, ModuleCommandEnvelope, ModuleEffectIntent, ModuleEmit, ModuleOutput,
     ModuleSandbox, ModuleSchemaDeclarations, ModuleTickLifecycleDirective,
 };
@@ -299,9 +300,156 @@ fn execute_module_command_passes_canonical_envelope_through_existing_call_pipeli
         .unwrap();
 
     assert_eq!(sandbox.requests.len(), 1);
-    assert_eq!(sandbox.requests[0].input, canonical);
+    let input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[0].input).expect("decode module call input");
+    assert_eq!(input.action.as_deref(), Some(canonical.as_slice()));
+    assert!(input.event.is_none());
+    assert!(input.state.is_none());
     assert_eq!(sandbox.requests[0].trace_id, "trace-command");
     assert_eq!(world.module_cache_len(), 1);
+}
+
+#[test]
+fn execute_module_command_with_provenance_injects_agent_identity_outside_payload() {
+    let wasm_bytes = b"module-command-provenance";
+    let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "22".repeat(32);
+    let mut world = World::new();
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        execution_command_manifest("m.provenance", &wasm_hash, &schema_hash),
+    );
+
+    // The command payload is untrusted data. It deliberately contains a
+    // spoofed context-shaped value; the host must inject the real provenance.
+    let spoofed_payload = serde_cbor::to_vec(&json!({
+        "ctx": {
+            "caller": {"agent_id": "spoofed-agent"},
+            "origin": {"kind": "spoofed", "id": "spoofed-decision"}
+        }
+    }))
+    .unwrap();
+    let envelope = ModuleCommandEnvelope {
+        payload: spoofed_payload,
+        ..command_envelope(&schema_hash)
+    };
+    let provenance = ModuleInvocationProvenance {
+        caller: ModuleCallCaller::Agent {
+            agent_id: "agent-7".to_string(),
+        },
+        origin: ModuleCallOrigin {
+            kind: "agent_decision".to_string(),
+            id: "decision-7".to_string(),
+        },
+    };
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    }]);
+
+    world
+        .execute_module_command_with_provenance(
+            "m.provenance",
+            "trace-provenance",
+            envelope,
+            provenance.clone(),
+            &mut sandbox,
+        )
+        .unwrap();
+
+    let input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[0].input).expect("decode module call input");
+    assert_eq!(input.ctx.caller, provenance.caller);
+    assert_eq!(input.ctx.origin, provenance.origin);
+    assert_ne!(input.ctx.origin.id, "spoofed-decision");
+}
+
+#[test]
+fn legacy_execute_module_command_has_explicit_unspecified_provenance() {
+    let wasm_bytes = b"module-command-legacy-provenance";
+    let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "33".repeat(32);
+    let mut world = World::new();
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        execution_command_manifest("m.legacy", &wasm_hash, &schema_hash),
+    );
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    }]);
+
+    world
+        .execute_module_command(
+            "m.legacy",
+            "trace-legacy",
+            command_envelope(&schema_hash),
+            &mut sandbox,
+        )
+        .unwrap();
+
+    let input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[0].input).expect("decode module call input");
+    assert_eq!(input.ctx.caller, ModuleCallCaller::LegacyUnspecified);
+    assert_eq!(input.ctx.origin.kind, "legacy_unspecified");
+}
+
+#[test]
+fn expired_required_capability_is_rejected_before_module_side_effects() {
+    let wasm_bytes = b"module-command-expired-cap";
+    let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "44".repeat(32);
+    let mut world = World::new();
+    world.add_capability(CapabilityGrant {
+        name: "cap.expiring".to_string(),
+        effect_kinds: vec!["*".to_string()],
+        expiry: Some(0),
+    });
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .unwrap();
+    let mut module = execution_command_manifest("m.expiring", &wasm_hash, &schema_hash);
+    module.required_caps = vec!["cap.expiring".to_string()];
+    activate_module_manifest(&mut world, module);
+    world.step().unwrap();
+
+    let baseline_events = world.journal().events.len();
+    let baseline_cache = world.module_cache_len();
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    let err = world
+        .execute_module_command_with_provenance(
+            "m.expiring",
+            "trace-expired-cap",
+            command_envelope(&schema_hash),
+            ModuleInvocationProvenance {
+                caller: ModuleCallCaller::System {
+                    system_id: "runtime-test".to_string(),
+                },
+                origin: ModuleCallOrigin {
+                    kind: "system".to_string(),
+                    id: "runtime-test".to_string(),
+                },
+            },
+            &mut sandbox,
+        )
+        .unwrap_err();
+
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert!(sandbox.requests.is_empty());
+    assert_eq!(world.journal().events.len(), baseline_events);
+    assert_eq!(world.module_cache_len(), baseline_cache);
 }
 
 #[test]

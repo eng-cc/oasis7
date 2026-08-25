@@ -1,5 +1,5 @@
 use oasis7_wasm_abi::{
-    ModuleCallInput, ModuleCallOrigin, ModuleSandbox, ModuleSubscriptionStage,
+    ModuleCallCaller, ModuleCallInput, ModuleCallOrigin, ModuleSandbox, ModuleSubscriptionStage,
     ModuleTickLifecycleDirective,
 };
 use serde::{Deserialize, Serialize};
@@ -210,6 +210,9 @@ impl World {
                     origin: ModuleCallOrigin {
                         kind: origin_kind,
                         id: origin_id,
+                    },
+                    caller: ModuleCallCaller::System {
+                        system_id: "module_tick".to_string(),
                     },
                     limits: manifest.limits.clone(),
                     stage: Some(

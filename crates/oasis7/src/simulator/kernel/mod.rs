@@ -23,8 +23,8 @@ mod step;
 mod types;
 
 use oasis7_wasm_abi::{
-    ModuleCallInput, ModuleCallOrigin, ModuleCallRequest, ModuleContext, ModuleLimits,
-    ModuleOutput, ModuleSandbox,
+    ModuleCallCaller, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest, ModuleContext,
+    ModuleLimits, ModuleOutput, ModuleSandbox,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
@@ -558,6 +558,9 @@ fn build_pre_action_wasm_call_request(
             origin: ModuleCallOrigin {
                 kind: "simulator_action".to_string(),
                 id: input.action_id.to_string(),
+            },
+            caller: ModuleCallCaller::System {
+                system_id: "simulator_action".to_string(),
             },
             limits: limits.clone(),
             stage: Some("simulator_pre_action".to_string()),
