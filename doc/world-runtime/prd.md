@@ -30,6 +30,78 @@
 | 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 immutable identity manifest -> finalized checkpoint certificate -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
 | 工业 operation identity | 当前 `ActionEnvelope.id` 是单次 action identity；部分异步过程把该 `ActionId` 复用为 `job_id`，`WorldEvent.caused_by` 只提供可选的 action/effect 审计原因。因此当前能追踪单个 action、job 与直接 cause，但不能表达跨 stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/receipt 的 immutable root、owning revision/segment、直接 parent/child role 或 terminal finality。 | 在 authoritative accepted outcome 边界原子签发一次 immutable root operation identity；atomic reject 且无 accepted intent 时不签发。所有 child effect/receipt 持久化 root、owning revision/segment 与直接 parent/child role，并在 first sink/credit/progress 前对缺失或冲突 identity fail closed；retry、recovery 与 replay 重读同一 identity 和 terminal disposition。 |
 
+### Kernel、governed physics 与 institution module 边界
+
+本节把 issue #3370 的架构建议落为 world-runtime 的执行约束。它不定义产品规则、WASM wire ABI、Agent tool schema 或 p2p finality 算法；产品规则仍由产品/gameplay authority 拥有，ABI 细节由 [`wasm-interface.md`](wasm/wasm-interface.md) 拥有，finality 由 [`doc/p2p/`](../p2p/) 拥有。
+
+运行时采用四层边界：
+
+| 层 | world-runtime 责任 | 允许的扩展方式 | 明确禁止 |
+| --- | --- | --- | --- |
+| L0 Kernel | 身份与 world 边界、逻辑时间、空间/占用合法性、资源守恒、权限与执行 provenance 的强制校验；统一状态提交与拒绝 | 只通过经过版本化的 kernel command / event 进入 | WASM、native gameplay 或 Agent 直接写 canonical state、跳过校验或凭 host wall clock 改变结果 |
+| L1 Governed physics parameters | 受治理、版本化、可回放的数值模型与限制，例如移动成本、速度、容量和损耗参数 | 通过 content-addressed runtime manifest、activation boundary 与配置版本更新 | 把 L0 不变量降级为可选 module；运行中任意改变参数或在 receipt 外隐式读取配置 |
+| L2 Institution modules | module command/event/state 的路由、沙箱、预算、权限、生命周期与持久化；为文明制度提供可组合扩展点 | WASM module 的 namespace、schema/version 与受限 host effects | 为每个新制度继续扩大核心 `Action` enum / `WorldState` 专属字段，或从 module 绕过 Kernel 直接结算 |
+| L3 Agent strategy | 接受 Agent intent，提供受治理 capability discovery 的输入边界，并把调用送入同一执行管线 | 安全 Kernel commands 与已激活 module capabilities | Agent 成为第二执行权威、携带未声明字段改变状态、绕过 command/event/replay 合同 |
+
+L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位置、world 和占用关系必须合法；移动或其他物理效果不得无成本瞬移或制造未记录的资源；所有 debit/credit、费用、产出与销毁都必须在同一可审计状态转换中有明确来源；模块超限、权限失败、缺少 artifact 或输入不确定时必须原子拒绝并留下结构化原因。L1 可以调整模型参数，L2 可以增加收费、许可、道路、租赁或其他制度效果，但不能豁免 L0。具体数值与玩家后果不在本节定义。
+
+这一区分不否定现有可玩的 native vertical slice。现有 Alliance、War、Governance、EconomicContract 等能力在迁移完成前继续作为兼容 surface；兼容存在不等于它们成为未来新增制度的默认扩展方式。任何新增文明制度 action/state 进入实现前，必须先经跨角色分类并选择迁移策略。
+
+#### Native surface 分类与冻结规则
+
+| 分类 | 当前/示例 | 迁移规则 |
+| --- | --- | --- |
+| Kernel 保留 | time、space、identity、ownership、资源守恒、通用执行成本与模块边界 | 由 runtime 强制；只能做版本化参数或安全修复，不能由 module 关闭 |
+| Module candidate | market、tax、currency、bank、corporation、alliance、war、governance、reputation、contract、crisis 等制度语义 | 默认进入开放 module 试点候选；需 command/event/state、权限、预算、snapshot/replay 与 receipt conformance 证据 |
+| Compatibility keep | 当前已经支撑 vertical slice 的 native Alliance/War/Governance/EconomicContract 及其旧 snapshot/event/replay shape | 冻结新增语义扩张；保留兼容读写或显式 adapter，直到有版本化迁移和消费者切换证据 |
+| Defer | big-bang ECS、完整动态 World Database、independent region/shard finality | 本任务不实现、不作为当前产品或 runtime 承诺；先保留逻辑 namespace/region 的未来扩展位置 |
+
+冻结规则是“先分类、后实现”：未通过上述矩阵的制度需求不得新增核心 enum、专属 `WorldState` 顶层字段或第二套执行路径。首个试点由 producer、runtime 与 WASM 角色共同选择 Alliance 或 EconomicContract；试点成功的最低信号是新增/迁移 module 不需要继续修改 Kernel 核心状态转换，并能通过同一 replay、snapshot、receipt 与权限验证。试点不改变现有 vertical slice 的产品承诺。
+
+#### Open extension 的 runtime 合同（不展开 ABI）
+
+目标扩展由 module-owned namespace 中的 versioned command、event 与 state 组成。runtime 只负责校验 module identity/manifest、确定性排序、权限与资源预算、调用结果的结构化收集、Kernel apply、持久化及 replay；namespace 的 wire shape、schema 编码、capability/export 名称与 ABI 迁移规则由 WASM 专题定义。module state 必须随 module instance identity、artifact hash、schema/version 和 activation 状态持久化，不能只依赖全局 `module_id` 或进程内 cache。
+
+扩展事件与 native compatibility event 必须进入同一 canonical journal；任何 module effect 都必须经过 Kernel apply，失败不得留下半个 debit、credit、event 或 schedule。这样可以让 module 成为一等执行负载，同时保留现有 `WorldState`、legacy event 和 snapshot 的兼容读取；本节不要求立即把当前 struct 改造成传统 ECS。
+
+### 单一内部 execution pipeline
+
+native、WASM、tick module 和 compatibility fallback 必须最终进入一条内部确定性 pipeline。外部 `step()`、`step_with_modules()` 或 dev/committed wrapper 可以继续存在，但只能表达输入适配、模块集合或持久化模式差异，不能产生不同的状态转换语义。统一 pipeline 的阶段顺序为：
+
+1. 解析并校验 world/runtime manifest、parent committed state 与 action envelope。
+2. 以确定排序建立 action root；拒绝重复、越界、未授权或无法解释的输入。
+3. 执行 L0/L1 Kernel preflight，先验证物理不变量、权限、资源与执行预算。
+4. 通过同一 dispatcher 路由 native compatibility action、module command 与 tick directive。
+5. 在受限上下文中调用 module，收集结构化 event/effect/output；不得直接持久化状态。
+6. 由统一 Kernel apply 依次应用 event/effect，形成下一状态；任一 invariant failure 原子失败。
+7. 按确定顺序运行已启用的系统/tick schedule，并把 schedule 变化纳入同一状态转换。
+8. 计算 event/state/执行 commitment，写 canonical journal、receipt 与必要 checkpoint。
+
+`step_with_modules()` 不是绕过 native 规则的特殊真值；当前 gameplay module 激活时的整体 directive/fallback 语义继续兼容，但其结果仍走上述 dispatcher、Kernel apply 和 receipt。后续拆分 `WorldExecutor`、`KernelSystem`、`PhysicsSystem`、`ResourceSystem`、`ModuleSystem`、`JobSystem`、`CommitSystem` 应按阶段逐步完成，保留固定顺序与既有 replay fixture；不进行一次性 ECS 或 WorldState 大迁移。
+
+### ExecutionReceipt、tick compatibility 与 finality 边界
+
+world-runtime 的权威输出是 deterministic `ExecutionReceipt`/execution commitment，而不是共识证书。receipt 至少绑定 `world_id`、runtime/manifest version、parent state identity、确定排序的 `action_root`、执行/事件 commitment、next `state_root`、逻辑 tick/执行高度、journal/checkpoint references，以及 accepted/rejected/fault 的结构化结果。字段的具体编码和签名方式由对应接口/共识专题约束；runtime 不以本地 threshold 或 process-local 签名宣称 finality。
+
+proposer 可以提交候选 receipt；active validator 必须从同一 committed parent state 重执行同一 action sequence，并比较 action root、execution commitment、event root 与 next state root。投票、锁定、round/view-change、stake threshold、partition recovery 与 `FinalityCertificate` 属于 p2p/consensus authority。runtime 只持久化可复现执行产物，并在 mismatch、缺失 artifact、超限或 fault 时阻断提交，不能以本地修补越过差异。
+
+现有 `tick_consensus_records`、`TickBlock`、`TickCertificate` 是 legacy compatibility records：可用于旧 snapshot、replay 与诊断，但不再被解释为分布式 finality。迁移按以下顺序进行：
+
+1. 冻结旧记录的语义边界，禁止新增消费者把本地 threshold-1 certificate 当成 p2p finality。
+2. 为同一输入建立 receipt/legacy record conformance fixture，并在迁移窗口同时保留可回读的旧字段与新的 execution commitment。
+3. 将新的 runtime/replication reader 切换到 receipt；旧字段变为只读兼容投影，直到 retention window 与所有消费者完成切换。
+4. 只有在版本化 snapshot/replay migration、receipt equivalence 和下游读者证据齐全后，才允许停止生成 legacy 写入；删除旧读取路径另行走兼容周期。
+
+迁移窗口内，`WorldTick`、consensus height 与 wall-clock slot 可以继续沿用当前实现的兼容耦合，但文档与 receipt 必须能区分三者。未来批量 tick、快进、停滞恢复或逻辑 region 不得借此隐式改变 single canonical timeline；解耦应通过版本化 execution protocol 与 replay fixture 另行验证。
+
+### Snapshot、replay、version 与 canonical timeline 兼容
+
+- snapshot 必须保留 runtime/manifest version、state root、parent/height/tick identity、module instance identity/version/artifact hash、module state、tick schedule、journal/checkpoint references 与必要的 compatibility marker；新字段采用可回读默认值，旧目录不得静默替换 artifact 或状态。
+- schema、runtime 或 module 升级必须先验证 artifact/interface/owner/namespace compatibility，再原子写入 registry、instance state、journal 与 migration marker；失败时不产生部分升级。legacy snapshot 通过显式 adapter 进入同一 pipeline，不重写历史 receipt。
+- replay 以 checkpoint + canonical journal 重建，在每个 receipt 边界比较 action/event/next-state commitment；遇到首个差异、缺失 artifact 或旧 schema 不可解释时返回结构化 mismatch/fault，保留原始证据并阻止不一致状态重新对外暴露。
+- retry、restart、restore、GC 后恢复与跨 adapter replay 必须对同一 accepted input 生成同一 receipt/state root；被拒绝 action 也必须有稳定 disposition，不能静默丢失。
+- 当前产品与 runtime 仍只有一条 `world_id` 对应的 canonical world timeline。dev/local 或测试 world 必须使用独立 `world_id`，不得把离线历史合并回 global world。region/partition 先作为逻辑 scope 或存储/调度边界，独立 shard finality、跨 shard commit 与动态 World Database 均暂缓，不构成当前实现承诺。
+
 ### Consumer compatibility: industrial profile and stage execution
 
 - `MaterialProfileV1`、`ProductProfileV1`、`RecipeProfileV1` 与 `FactoryProfileV1` 是 ABI 类型；对应目录随 `WorldState` 持久化，治理变更通过可回放事件生效。字段结构以 `oasis7_wasm_abi` 为准，不在产品文档复制代码清单。

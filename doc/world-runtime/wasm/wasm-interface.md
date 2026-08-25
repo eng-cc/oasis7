@@ -162,6 +162,207 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 **错误约定**
 - 模块返回非规范 CBOR、输出超限或字段缺失时，宿主记录 `ModuleCallFailed` 事件并拒绝输出。
 
+## 开放制度扩展合同（试点，非全面迁移）
+
+本节把“制度能力由 WASM 扩展”的合理部分落成一个可审计的增量合同。它是
+现有 `wasm-1` ABI 的可选扩展，不是立即把 `WorldState` 改成 ECS、删除既有
+native action，或允许任意未治理工件进入生产执行路径。
+
+试点只选择一个有界制度（例如 Alliance 或 EconomicContract，由跨角色治理
+确定），以现有 native vertical slice 作为兼容基线；试点成功前不得把所有
+经济、战争或治理能力迁出内核。模块治理、工件发布和实例生命周期继续遵循
+`doc/world-runtime/module/module-lifecycle.md` 的 `propose -> shadow ->
+approve -> apply` 闭环。
+
+### 1. 命名空间、声明和版本
+
+模块的开放对象必须在 manifest 中声明。声明是可选的、serde-defaulted ABI
+扩展；缺省时等同于“没有开放制度对象”，历史 manifest 和已有 `wasm-1`
+模块无需修改即可读取。
+
+```rust
+struct ModuleSchemaDeclarations {
+    commands: Vec<CommandSchema>,
+    components: Vec<ComponentSchema>,
+    events: Vec<EventSchema>,
+    migrations: Vec<SchemaMigration>,
+}
+
+struct SchemaRef {
+    name: String,
+    schema_version: u32,
+    schema_hash: String, // SHA-256 of the canonical schema descriptor
+    max_payload_bytes: u64,
+}
+
+struct SchemaMigration {
+    object_kind: String, // "component" or "event"
+    namespace: String,
+    name: String,
+    from_schema_version: u32,
+    to_schema_version: u32,
+    from_schema_hash: String,
+    to_schema_hash: String,
+    migration_wasm_hash: String,
+}
+```
+
+`ModuleSchemaDeclarations` 由当前 `ModuleManifest.abi_contract` 的可选扩展
+承载；它不能替代 `interface_version`、`input_schema`、`output_schema`、
+`required_caps` 或 `cap_slots`。ABI 版本、对象 schema 版本、manifest hash
+和工件 `wasm_hash` 是四个不同的身份维度：任一声明、权限、limits 或
+metering schedule 改变，都必须产生新的 manifest hash；工件字节变化必须
+产生新的 `wasm_hash`，不得同名覆盖。
+
+命名约束如下：
+
+- `namespace` 是由治理绑定到 module identity 的小写、稳定标识（示例
+  `bank.acme`）；`command`、`component`、`event` 是 namespace 内的本地名，
+  三者的完整键分别为 `namespace:command`、`namespace:component`、
+  `namespace:event`。
+- `core.*`、`kernel.*` 和内核保留对象不可由模块注册或覆盖。命名空间不能
+  通过上传新工件重新归属；归属变更必须走新的治理提案和 manifest hash。
+- 同一完整键的 schema 版本必须显式递增。旧版本仍可用于历史事件和回放；
+  未知的未来版本在边界处 fail closed，不能按“最接近字段”猜测解码。
+- schema descriptor、声明列表、capability 绑定和 limits 在计算 manifest
+  hash 前按完整键和版本排序；模块执行时的访问集合也必须按同一稳定顺序
+  处理，不能依赖 map/hash iteration 顺序。
+
+### 2. Command / component / event wire
+
+开放制度命令不为每一种银行、联盟或合约操作新增一个闭合的 Rust `Action`
+变体。受治理的 module-call/router 入口承载如下 Canonical-CBOR command
+envelope；现有 `ModuleCallInput.action` 仍是兼容承载槽位。
+
+```text
+{
+  "namespace": "bank.acme",
+  "command": "open_account",
+  "schema_version": 1,
+  "payload": <canonical-cbor bytes>
+}
+```
+
+宿主从 `ModuleContext` 注入 caller、origin、logical time、trace/journal
+位置；模块不得在 payload 中伪造这些字段。宿主必须先确认模块处于 active
+状态、完整命中 manifest 声明、`payload` 哈希/大小和 schema 版本有效，再进
+入 WASM；未知 namespace、command 或版本均结构化拒绝。
+
+模块状态采用逻辑 component 记录，但这不是本期承诺的完整 ECS 或
+`WorldState` 重写：
+
+```text
+ComponentKey   = { namespace, component, schema_version, entity_id }
+ComponentValue = { schema_version, data: canonical-cbor bytes }
+```
+
+模块只能读写自己声明且被授予 capability 的 namespace；模块局部 singleton
+使用稳定的 instance/entity key。核心位置、身份、所有权、时间、资源守恒和
+其他 Kernel invariant 不作为可写 component 暴露。需要改变核心状态时，模
+块只能产生经过 capability/policy 校验的 `EffectIntent`，由 Kernel 原子应用
+或拒绝。
+
+模块发出的事件必须匹配 manifest 的 event declaration，且完整键为
+`namespace:event`；宿主负责填充 event id、logical time、caused-by 和当前
+manifest hash。payload 按声明的 schema 以 Canonical CBOR 校验；现有
+`ModuleEmit`/legacy event 表示可作为兼容 adapter，但不得因为 legacy JSON
+形状而跳过 schema/hash 校验。事件的版本和原始 payload 保留在事件日志中，
+不得原地重写旧事件。
+
+### 3. Capability、权限和 Kernel 边界
+
+- command、component read/write、event emit 都必须在 manifest 中声明所需
+  `cap_ref`；`cap_slot` 只能解析到 manifest 中唯一且已授予的 capability。
+  模块不能自授予 capability、扩大 entity 范围或把 read 提升为 write。
+- capability 是最小作用域的治理授予（namespace、对象类型、实体范围和
+  expiry 可选）；缺失、过期、冲突或 policy deny 在执行前返回结构化
+  `CapsDenied`/`PolicyDenied`，不应用 state、effect、emit，也不产生部分扣费。
+- 默认 host 不暴露真实时间、随机数、网络、文件或任意 I/O。所有外部影响
+  必须表达成带 `cap_ref` 的 `EffectIntent`，由宿主 policy 决定是否落账。
+- 模块永远不能覆盖 Kernel invariant、绕过资源守恒、跳过 logical time、
+  直接移动/写入核心 component，或把制度权限转化为共识/节点权限。制度语义
+  仍由其领域治理和试点分册拥有，本合同只定义可验证的扩展边界。
+
+### 4. 确定性计量和执行收据
+
+执行必须同时受 WASM fuel/`ModuleLimits.max_gas` 和资源计量 schedule 约束。
+当前基线 `wasm-runtime-v1` 沿用 executor 权威中的确定性费用口径：
+
+```text
+compute = ceil(input_bytes / 1024)
+        + ceil(output_bytes / 1024)
+        + 2 * effect_count
+        + emit_count
+electricity = 1 + effect_count + emit_count + has_new_state
+```
+
+若试点增加 component read/write 或 schema decode 费用，必须使用新的、明确
+命名的 `metering_schedule_version`；费用只能由 canonical 字节长度、声明的
+访问数量、WASM fuel、effect/emit 数等确定性输入计算，不得使用 wall-clock
+耗时或未排序的集合。执行收据至少绑定 module/instance、manifest hash、
+`wasm_hash`、schedule version、输入/输出大小、fuel/费用、effect/emit 数、
+状态前后 hash 和 journal position。
+
+余额或 fuel 不足必须在提交前返回结构化拒绝；成功调用才产生计费和状态/事件
+变更。回放消费已记录的执行结果与计量收据，不重新按当前价格或当前 schedule
+计算历史费用；新 schedule 只影响新 manifest/新执行。
+
+### 5. 安装、升级、禁用和迁移
+
+开放对象的 install/register、activate、upgrade、deactivate 必须与 manifest、
+artifact identity 和 `ModuleChangeSet` 同一治理闭环绑定：
+
+- install 只接受已计算并重新校验的 SHA-256 `wasm_hash`，以及发布链提供的
+  artifact identity/build receipt；本地任意源码编译或上传不会自动激活模块。
+- upgrade 必须引用当前 `base_manifest_hash` 和 active version。保持同一
+  ABI/schema 的兼容升级可复用已有 state；若 component/event schema hash
+  改变，manifest 必须声明对应对象类型的确定性 `SchemaMigration`，否则拒绝
+  升级。也可以注册一个新的完整 event key，让旧 event 保持原 schema。
+- disable 在逻辑 tick 边界停止新调用，但保留 module state、旧 manifest、
+  artifact hash 和完整事件历史；禁用不是删除，也不能让回放选择另一版本。
+- apply 失败是原子的：不写半套 register/activate/upgrade/deactivate 事件，
+  不更新 active registry，不覆盖旧 artifact/state。事件序列和同类排序继续
+  服从 `module-lifecycle.md` 的现有合同。
+
+迁移声明至少绑定对象类型、`namespace/name`、from/to schema version/hash、
+迁移工件 `wasm_hash` 和迁移 manifest hash。component 迁移函数必须是确定性、
+受限、无外部 I/O 的纯 state 转换，只能产生目标 namespace 的 state；event
+迁移只能把历史 payload 转成已声明的 reducer 输入，不能伪造 caller、time、
+caused-by 或 Kernel event。宿主在提交 component 迁移时记录：
+
+```text
+ModuleStateMigrated {
+  instance_id, entity_id, namespace, component,
+  from_schema_version, to_schema_version,
+  from_state_hash, to_state_hash,
+  migration_wasm_hash, manifest_hash, caused_by,
+}
+```
+
+回放先按旧 schema 重放历史事件，到迁移边界应用 state/event 的声明迁移，再
+按新 schema 继续；历史 event/state bytes 不重写。没有 event migration 时，
+旧 event 必须按其原版本交给仍声明支持它的 reducer，不能静默按新 schema
+重新解释。迁移失败、hash 不匹配或输出超限时保留旧版本并结构化拒绝。
+manifest 自身的版本迁移仍沿用
+`module-lifecycle.md` 的 `ManifestMigrated` 语义，并要求 from/to hash 可追溯。
+
+### 6. 试点验收与非目标
+
+一个 Alliance 或 EconomicContract 试点在进入实现前，至少需要证明：
+
+1. 一个 namespace 能声明 command/component/event schema，并以 canonical
+   envelope 被发现、校验、调用和拒绝未知版本。
+2. capability 不足、Kernel component 写入、fuel/limits 超限、余额不足和
+   artifact/manifest hash 不一致均 fail closed，且无部分 state/effect/event。
+3. register/activate/upgrade/deactivate、state migration、snapshot/replay
+   在同一 journal 上得到一致 state/event/hash/计量收据。
+4. 既有 native vertical slice、旧 `wasm-1` manifest 和未参与试点的模块行为
+   保持兼容。
+
+本试点不承诺全面 ECS、删除 `tick_consensus`、把所有制度迁入 WASM、动态
+  world database、分片，或接受任意未治理上传；这些仍需独立的 runtime、
+  consensus、产品和安全评审。
+
 ## 关键数据结构（草案）
 - `WorldEvent`：`{ id, time, kind, payload, caused_by }`
 - `EffectIntent`：`{ intent_id, kind, params, cap_ref, origin }`

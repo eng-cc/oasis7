@@ -457,6 +457,43 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 - 玩家前台始终围绕一个当前主目标：系统基于权威世界状态给出可达推荐与“继续”路径，玩家只在阶段性方向、主动换向或实际影响共同资源/权限的事项上作出必要选择。目标作用域、canonical 转译、资源/权限校验、共同治理、反支配与审计是后台护栏，只在实质改变当前选择时以原因和替代路径出现；不得把它们扩张为逐动作的表单或确认负担。
 - 当前不支持的细粒度请求必须转换为 canonical 可执行替代动作；没有安全替代时明确停止并说明下一次可决策点。具体规则、确定性执行、Agent 行为与网络/治理合同分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护。
 
+### Kernel、治理参数、制度模块与 Agent strategy 的分层边界
+
+本产品层采用四层边界来判断一个新能力属于世界的什么部分。分层是产品语义和决策顺序，不是对 runtime 类型、存储 schema、WASM ABI 或 Action 名称的冻结；这些实现合同仍由对应专业域拥有。一个能力只有在低层护栏满足后，才能向上层开放选择。
+
+| 层级 | 产品职责 | 可被改变的范围 | 不可被改变的边界 |
+| --- | --- | --- | --- |
+| **L0 Kernel** | 时间推进、空间与身份、所有权、资源守恒、行动/计算成本、权限校验、权威状态转换与可审计结果 | 仅由世界规则和兼容迁移共同维护 | 不得瞬移、凭空创造或复制资源、绕过所有权/权限、重复结算或改写已确认因果；任何制度和 Agent 都不能绕过 L0 |
+| **L1 Governed parameters** | 在治理和版本规则内调节基础物理/经济参数，例如成本、容量、速度、损耗、配额或费用边界 | 可由明确治理程序、版本和生效窗口调整，并保留前后因果和恢复边界 | 不能把 L0 约束调成无成本、无限量、无权限或无时间；参数变化不能静默改变既有 receipt、快照或历史结果 |
+| **L2 Institution modules** | 市场、联盟、公司、战争制度、货币、税收、声誉、合同、法院等文明制度，以及玩家/Agent 在约束内创建的扩展 | 可以通过受治理、可审计、版本化的模块提供新制度行为、状态和事件；模块可竞争、退役或由 successor 接替 | 只能使用被授权的 L0/L1 能力，不能重写物理真值、治理底线、所有权或已结算历史；模块失效时必须有明确的待决、恢复或退役路径 |
+| **L3 Agent strategy** | Agent 对目标、计划、资源取舍、模块选择和制度参与方式作出策略决定 | 可发现当前有效能力并组合策略，也可提出或部署受治理的制度模块 | 策略、提示词、缓存、推荐或离线计划都不是世界效果；必须经有效授权、权威校验和一次性结算才能产生 L0/L1/L2 结果 |
+
+这四层保持 **world-first、emergence-first、persistent、auditable、extensible** 的同一口径：世界物理和历史先成立，文明制度在护栏内涌现，Agent 只能在可读且有代价的选择空间中行动；重连、snapshot restore、replay 或版本切换不得制造第二条时间线或第二次效果。玩家应当能分辨“物理/治理约束”“制度提供的服务”与“Agent 的策略建议”，但产品层不要求玩家理解底层实现细节。
+
+#### 现有 native 制度能力的兼容定位与新增冻结
+
+现有 native `Alliance`、`War`、`Governance`、`Contract` 能力是当前可玩 vertical slice 和兼容读取/回放的基线。它们证明当前玩家路径可以被验证，不构成“凡是制度都应继续进入 native Action/State”的扩展先例；在迁移完成前，不得因追求架构纯粹而删除、重置或改变既有玩家结果。
+
+从本 PRD 生效起，新增银行、公司、保险、私人货币、法院或同类文明制度时，默认**冻结新增 native 制度 action/state**。任何候选必须先完成以下分类，再由对应专业角色确认合同和验证范围：
+
+- **Kernel keep**：不可绕过的世界不变量，留在 L0/L1 的产品边界内；
+- **Module candidate**：应优先作为 L2 first-party 或 Agent-created module 试验，不直接扩张 native core；
+- **Compatibility keep**：为现有 vertical slice、历史快照、回放或玩家连续性暂时保留，不视为未来扩展模板；
+- **Defer**：当前证据不足、跨域风险过高或属于后期扩展，进入后续版本，不以临时 native 字段填补。
+
+首个开放扩展试点从 `Alliance` 或 `EconomicContract` 中择一，目标是验证现有制度的玩家语义能否在不扩大 Kernel 状态/动作集合的前提下，沿开放的 command/event/state 合同迁移或互操作。试点必须保留既有历史和玩家可玩路径，并由 `world-runtime`、WASM、Agent 与 QA 专业文档分别定义实现、ABI、能力发现和回放验证；本 PRD 不复制这些 schema。
+
+### 版本优先级与渐进迁移
+
+版本排序服从“先稳定边界，再证明开放扩展，最后扩大表达能力”的原则：
+
+1. **P0 — 边界冻结与分类**：冻结新增 native 制度 action/state，建立现有 Action/State 的四类分类矩阵，并把每个跨层主张链接到产品/专业 owner；L0 物理、治理底线和 receipt/replay 连续性先于新制度数量。
+2. **P0 — 单一制度试点**：选择 `Alliance` 或 `EconomicContract` 做最小开放扩展试点，验证在 replay、snapshot、版本/ABI 兼容和一次性 receipt 约束下仍保持玩家可读、可恢复、可审计。
+3. **P1 — 渐进执行与能力发现**：在专业域合同成熟后，逐步收敛单一执行管线、开放模块边界和受治理的 Agent capability discovery；保留兼容 wrapper/读取路径，直到迁移证据闭合。
+4. **P2 — 后期结构扩展**：只有在单一时间线、扩展协议、恢复和可观测性证据成熟后，才评估更广泛的 World Database/ECS/Region/Partition 结构；它们不是当前产品承诺，也不能提前改变玩家的世界连续性。
+
+每一阶段都必须满足“旧结果可读、新结果可追溯、失败可恢复、重复不生效”的迁移门槛。产品层只规定玩家与世界的可观察承诺；执行顺序、模块 ABI、快照编码、receipt 字段和共识最终性分别由专业 authority 定义。
+
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业域权威 |
@@ -504,13 +541,15 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
   - 改变产出因果的能力、支持 recipe version、输入规格、阶段/边、output branch、power/logistics 或 terminal fit 必须创建 parent-linked 新 capability candidate，并在单一 canonical cutover 边界生效；cutover 前的 hold、accepted-unstarted、WIP、in-transit、buffer 与 receipt 保留旧 candidate 身份，cutover 后的新意图只能归属新 candidate，且新 candidate 从 `W=0` 开始，不继承旧 queue 顺位、reservation、稳定窗口、receipt、里程碑或奖励。只改变非因果展示元数据才可保留身份，无法证明时 fail closed。
   - `upgrade/reconfigure` 或 `retiring/retired` 不能静默迁移既有工作：accepted-unstarted 只能按 profile `hold/release/replan/terminate`，WIP 只能按 profile `finish/pause/hold/rework/salvage/terminate`，in-transit 只能使用已声明的 `finish/hold/return/reroute/reject`，buffer 只能使用已声明的 `hold/handoff/conversion/reject`；每项旧工作至多一个处置 receipt。`retiring/retired` 禁止新排程并保留历史；successor 不能自动继承旧任务，只有在明确授权、fresh revalidation 和 parent-linked conversion 成立时才可转换。不得免费补发产出、隐式退款、销毁/瞬移/转卖库存，或同时产生退款与完成。
   - 工厂能力的玩家可读状态类至少区分 `operational`、`reconfiguration_pending`、`reconfiguring`、`degraded`、`retiring` 与 `retired`；这些是产品表达，不冻结 runtime enum。`degraded` 只有在专业 profile 明确允许且标注 `at-risk` 时才能接受新工作。所有升级、退役、处置、释放和转换必须沿同一 factory/capability/recipe/lineage identity 至多生效一次；重连、重试、重复提交、Agent 推荐或 replay 不得重复 cutover、释放 hold、复制产出/奖励、改变稳定窗口或复活旧 candidate。该规则强化 world-first 的真实能力变化、emergence-first 的有边界玩家选择、persistent 的历史连续性、auditable 的 parent receipt/cutover/成本 provenance 与 extensible 的 profile/治理扩展边界。
-  - `test_tier_required` 覆盖 preview 无效果、报价后 drift 的拒绝/重报价、上述四类旧工作 bucket 的逐项处置、升级/退役单次 cutover、recipe-fit 与 candidate/receipt/reservation/W 隔离、unknown authority、retired 不可复活，以及 Viewer 与 pure API 的状态/机会成本/下一动作一致性；`test_tier_full` 覆盖并发工作与共享容量、连续升级、cutover 部分失败、crash/restore/replay、持久化、多阶段 WIP/transit/buffer、Agent 重试和 successor conversion。产品承诺链接 `doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 与 `doc/testing/prd.md`，不复制其 runtime、WASM、物流算法或测试实现。
+   - `test_tier_required` 覆盖 preview 无效果、报价后 drift 的拒绝/重报价、上述四类旧工作 bucket 的逐项处置、升级/退役单次 cutover、recipe-fit 与 candidate/receipt/reservation/W 隔离、unknown authority、retired 不可复活，以及 Viewer 与 pure API 的状态/机会成本/下一动作一致性；`test_tier_full` 覆盖并发工作与共享容量、连续升级、cutover 部分失败、crash/restore/replay、持久化、多阶段 WIP/transit/buffer、Agent 重试和 successor conversion。产品承诺链接 `doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 与 `doc/testing/prd.md`，不复制其 runtime、WASM、物流算法或测试实现。
+
 
 - SC-27：代表性 `factory-ready/recipe-missing → recipe candidate discovery → recipe_selection_preview → ScheduleRecipe` 路径证明候选只从同一权威快照派生，并区分 `candidate_available`、`candidate_blocked` 与 `candidate_unknown`；候选能同时说明当前目标、recipe version/authority、factory fit、原料适用/缺口、物流/容量、power/maintenance、output bundle/终端、机会成本、主要风险、`next_action` 与 `next_recheck`。同名版本不合并，只有 `candidate_available` 可进入 `ScheduleRecipe` 排程预览，最终提交仍须新鲜校验；选择 preview 不产生 activation、hold、input sink、queue、物流 reservation、产出、稳定进度或奖励；准入/原料/物流/电力/终端漂移必须重发现、重报价或原子拒绝，不能自动换配方。无候选时玩家获得明确原因与补料、补证、改路、改厂、等待或延期中的真实路径；选择、排程、生产、稳定与交付结果分层，重连、重试、恢复与 replay 不自动选择或复制效果，Viewer、pure API 与 Agent 对候选和下一步保持同义。产品层不冻结 recipe catalog、解锁树、兼容算法、runtime schema、UI 或当前实现完成声明。
 - SC-28：至少一份代表性配方执行档案把同一 candidate 的 factory capability、pinned recipe、两类 required raw-material inputs 及其 batch/quality/custody、effective logistics path/loss/capacity、canonical executable cycle、power mode、主/副产物 output bundle、terminal purpose 与 progression boundary 收成完整只读投影；缺失任一 authority 时为 `incomplete/unknown/blocked`，不宣称可排程、稳定或交付。单一 deterministic fixture 覆盖齐套成功、input 不适用、物流满后重评、power 漂移、mandatory output destination 失效以及 production-only/terminal-admission 两种完成边界；失败在首个不可逆 sink 前延期/原子拒绝，已发生 WIP/transit/branch effect 只按 profile 单次处置。未选路径不取得 hold/优先级/进度，因果改变建立 parent-linked 新 candidate 并从 `W=0` 开始；retry/reconnect/replay 不复制材料、容量、产出、交付或奖励，Viewer/pure API 对完整档案、blocker、机会成本和下一步保持同义。产品层不新增 runtime schema，不冻结配比、产率、价格、容量、tick、队列或 UI。
 - SC-29：代表性 `BuildFactory` 选址路径证明同一工业目标下至少两个合法 site candidate 可比较原材料输入与产物/终端输出路径、容量/损耗、power 前置、终端适配、建设成本、交付风险和扩张机会成本，并区分 `site_available`、`site_blocked`、`site_unknown`。未固定 recipe 时，recipe-specific 输入/输出拓扑、容量/损耗与 terminal/power fit 仅为 advisory estimate，不得成为普遍建厂前置；只有 site-level facts 与 profile 明示的 construction prerequisite 进入 `BuildFactory` fresh revalidation，recipe 固定或进入 `ScheduleRecipe` 后再验证其余 topology。预览只读且不创建设施、扣资源、锁定 site/edge/buffer 或改变顺位；建设提交时只有 site-level facts、profile 明示的 construction prerequisite 或已固定 recipe 的建设前置发生漂移，才触发当前条件重报价或无副作用原子拒绝；未固定 recipe 的 advisory topology 漂移不阻断建厂，而在 recipe candidate discovery/`ScheduleRecipe` 时重读。改变产出因果的 site/topology 必须建立 parent-linked 新 factory/capability candidate 并从 `W=0` 开始，不得自动迁厂、改道、降级路线或迁移旧 accepted-unstarted/WIP/in-transit/buffer 工作；玩家可读 primary blocker、机会成本、下一复查点与真实的等待容量、补料/补电、改路、改站点或延期路径，无合法恢复时明确停止。`test_tier_required` 覆盖双站点比较、上述建设前置报价后漂移、advisory topology 漂移不阻断建厂且在 recipe discovery/`ScheduleRecipe` 重读、因果换站点、无合法站点和 retry/reconnect/replay 单次效果；`test_tier_full` 覆盖拓扑争用、存量处置、恢复与 relocation/cutover profile。产品层不冻结选址/寻路算法、站点数值或 UI。
 - SC-31：代表性 demand goal 证明玩家在提交前能从同一权威快照比较目标量、已承诺/生产/交付量、canonical batch quantum、预计缺口/匹配/盈余、输入/电力/物流/buffer/terminal 占用、机会成本与下一复查点，并只看到专业合同真实支持的 full/reduced、补料/调运、持有盈余、停止/延期或 parent-linked 补产路径。Production receipt 不减少需求或发放交付奖励；profile 唯一声明的 matching delivery 或 terminal settlement 才更新目标满足量，非 matching settlement 不重复减少需求。目标已满足后不得由旧 schedule、后台循环或 Agent retry 静默追加生产；合法批量造成盈余时不得自动倾销、销毁、伪造成交或计为成长；matching settlement 不足时，选择补产形成一次可追溯 supplemental revision 并保留原 baseline、actual、损耗、已满足量与剩余缺口，选择停止或延期则保留 shortage 且不创建 revision。目标、库存、批量、产率或终端容量漂移触发重报价、无副作用原子拒绝或 profile 明示的有界 pending；重复 submit/delivery、重连、乱序、恢复与 replay 不复制生产、交付、需求减少、盈余处置、奖励或容量释放。Viewer、pure API 与 Agent 对 demand 状态、数量分层、blocker、动作与复查点保持同义；产品层不冻结预测、阈值、价格、自动补货/停机、订单簿、runtime schema、队列或 UI。
 - SC-30：代表性输入阻塞样例能区分同料换来源、profile 明示的异料替代与换配方，并比较等待/补料、合法替代、换配方、减量/延期或 pivot 的数量、比例/rounding/residual、损耗、power/物流/terminal 占用、已持有/消费价值、产出/value class、风险、`W` 影响与下一复查点。异料替代默认禁止；缺失 authority/provenance/ratio/适用性显示 `unknown/blocked` 或 `no_legal_substitute`，不会被 `degraded`、同名材料或 Agent 推荐包装为安全候选。预览无世界效果，明确确认后按新鲜权威状态只建立一次 decision；decision-only 样例无 sink/credit/conversion/`W`/奖励，只有 profile 明示且实际结算 conversion 时才另有一个 linked exactly-once settlement/provenance receipt。只有产出因果、质量、power、时间、副产物、terminal 与 value class 全部不变的 profile-declared substitute 才可保持 pinned recipe 并建立一个 child decision，其他替代或换配方建立 parent-linked 新 candidate 且 `W=0`。首个不可逆 sink 后只允许专业合同支持的单次 rework/conversion/return/hold/salvage；retry/reconnect/restore/replay 不复制 sink、conversion、receipt、产出、进度或奖励，也不能通过廉价替代、反复切换或拆分提交套利。
+- SC-31：代表性制度扩展样例证明现有 native `Alliance`、`War`、`Governance`、`Contract` 已明确标为可玩 vertical slice/兼容基线，并逐项落入 `Kernel keep`、`Module candidate`、`Compatibility keep` 或 `Defer`；未完成分类前不得新增 native 制度 action/state。`Alliance` 或 `EconomicContract` 的一个开放扩展试点必须在不绕过 L0 物理守恒、L1 治理边界和 receipt/审计约束的情况下保留旧快照、旧回放、既有玩家结果和单一权威时间线；迁移验收覆盖 replay、snapshot、版本/ABI 兼容、单次结算与失败恢复。该验收只约束玩家可观察的连续性和跨域合同，不冻结 ECS、World Database、分片、runtime schema 或模块 ABI。
 
 ### 5.1 验收追踪
 
@@ -548,6 +587,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 | SC-29 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 双站点候选比较与 `site_available/blocked/unknown`、输入/输出路径与容量/损耗/power/终端/机会成本可读、预览无副作用、提交 fresh revalidation、因果换站点 parent-linked candidate/`W=0`、无自动迁厂/改道、旧工作不静默迁移、Viewer/pure API parity 与 retry/reconnect/replay 单次效果；`test_tier_full` 覆盖拓扑争用、存量处置、恢复与 relocation/cutover profile | test_tier_full |
 | SC-31 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖 demand goal authority/goal_authority_ref、target/committed/produced/delivery-settled/terminal-settled/remaining 分层、batch quantum 与 shortage/matched/surplus/unknown、unknown/expired/conflict fail-closed、full/reduced/补料/调运/hold/stop/supplemental 取舍、profile matching settlement 单次减少需求、目标满足后显式停止、盈余不自动处置、matching settlement 不足时可选择一次 parent-linked 补产或保留 shortage 并停止/延期、非 matching settlement 不减需求、drift 重报价/原子拒绝及 retry/reconnect/replay 单次效果；`test_tier_full` 覆盖并发目标、跨窗口到期/取消、三阶段多批次/损耗、partial matching settlement（delivery 或 terminal）、补产 revision 链、容量争用、持久化/补偿与 Viewer/pure API/Agent parity | test_tier_full |
 | SC-30 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖默认禁止异料替代、同料换来源/合法异料替代/换配方的候选隔离与机会成本、preview 无效果、decision-only 无 sink/credit/conversion/`W`/奖励、实际 conversion 的 linked exactly-once settlement/provenance receipt、ratio/rounding/residual 守恒、unknown/blocked 与 `degraded` 分离、same-recipe 全因果不变条件、causal change parent-linked candidate/`W=0`、stale/owner/quality/route 负例及 retry/reconnect/replay 幂等；`test_tier_full` 覆盖多阶段 join、并发替代批次争用、品质/保管漂移、in-transit/buffer、跨窗口 cutover、持久化恢复、Viewer/pure API/Agent parity 与反套利 | test_tier_full |
+| SC-31 | producer_system_designer / gameplay_designer / runtime_engineer / wasm_platform_engineer / agent_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-002 / PRD-WORLD_SIMULATOR-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | native 制度四类分类、冻结新增 native action/state、Alliance 或 EconomicContract 开放扩展试点，以及旧玩家结果/快照/replay、版本/ABI、receipt 单次结算和失败恢复兼容性证据；不把 ECS、World Database 或分片当作本阶段完成条件 | test_tier_full |
 
 ## 6. Non-Goals
 
@@ -558,3 +598,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 - 不冻结配方比例、产率/损耗、授权/版税公式、兼容算法、审批角色、runtime schema、队列或 UI；本节也不宣称配方治理、退役迁移或当前工业闭环已经实现。
 - 不冻结工厂能力状态的 runtime 枚举、升级/降级/退役成本、停机/吞吐/维护公式、自动迁移或补偿算法；工厂 candidate、cutover、receipt、幂等与恢复实现仍由 `world-runtime`、M4 工业合同及其他专业 authority 拥有。
 - 不定义站点产权/租约/区域 charter 治理、选址或寻路算法、地形/车队模拟、容量/损耗/电力/建设数值、自动迁厂/改道或 relocation 实现；这些分别由区域治理、`world-runtime`/M4、`game` 与相关专业合同拥有。
+- 不进行一次性 ECS/World Database 重构，不把所有 native 制度或 `WorldState`/`Action` 在单个版本内推倒重写；开放扩展必须沿分类、试点和兼容门槛渐进迁移。
+- 不在本阶段立即引入 Region/Partition/Shard 或多条世界时间线；单一 canonical world timeline 仍是产品承诺。
+- 不因模块化或 WASM 扩展而弱化 L0 物理不变量、L1 治理/反滥用边界、所有权权限校验、receipt 单次结算、snapshot/replay 连续性或历史审计。
+- 不把现有 native `Alliance`、`War`、`Governance`、`Contract` 兼容基线误删、重置或包装成无限扩展先例；迁移未完成前，旧玩家结果和可玩路径必须保持可读。
