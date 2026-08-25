@@ -238,7 +238,11 @@ measure_checkout() {
   ) >"$dependency_tree_path"
 
   local package_count
-  package_count=$(sort -u "$dependency_tree_path" | wc -l | tr -d '[:space:]')
+  # Cargo marks a de-duplicated dependency edge with a trailing `(*)`.  That
+  # marker is presentation metadata, not part of the package identity; strip
+  # it before counting so shared dependencies do not inflate the closure
+  # metric and create false compile-surface regressions.
+  package_count=$(sed -E 's/[[:space:]]+\(\*\)$//' "$dependency_tree_path" | sort -u | wc -l | tr -d '[:space:]')
 
   local wasmtime_present="false"
   if grep -Eq '(^|[[:space:]])wasmtime([[:space:]]|$)' "$dependency_tree_path"; then
