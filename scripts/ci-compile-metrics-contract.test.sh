@@ -31,6 +31,15 @@ if grep -Eq 'fetch-depth:[[:space:]]*0' .github/workflows/compile-metrics.yml; t
   echo "compile metrics workflow must not request a full-history checkout" >&2
   exit 1
 fi
+compile_metrics_timeout=$(awk '
+/^  compile-metrics:/ { in_job=1; next }
+in_job && /^  [^[:space:]]/ { exit }
+in_job && /^[[:space:]]+timeout-minutes:/ { print $2; exit }
+' .github/workflows/compile-metrics.yml)
+if [[ "$compile_metrics_timeout" != "45" ]]; then
+  echo "compile metrics matrix job must cap runner time at 45 minutes" >&2
+  exit 1
+fi
 if ! grep -Eq '^[[:space:]]*CARGO_REGISTRIES_CRATES_IO_PROTOCOL:[[:space:]]*sparse[[:space:]]*$' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must pin the sparse crates.io protocol" >&2
   exit 1
