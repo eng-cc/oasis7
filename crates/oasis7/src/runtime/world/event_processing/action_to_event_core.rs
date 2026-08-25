@@ -737,6 +737,7 @@ impl World {
 
                 if effective_distance_km == 0 && path_selection.is_none() {
                     return Ok(WorldEventBody::Domain(DomainEvent::MaterialTransferred {
+                        transfer_id: Some(action_id),
                         requester_agent_id: requester_agent_id.clone(),
                         from_ledger: from_ledger.clone(),
                         to_ledger: to_ledger.clone(),

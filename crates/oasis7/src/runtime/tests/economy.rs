@@ -434,7 +434,7 @@ fn transfer_material_distance_zero_moves_immediately() {
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-a"), "iron_ingot", 20)
         .expect("seed source");
-    world.submit_action(Action::TransferMaterial {
+    let transfer_id = world.submit_action(Action::TransferMaterial {
         requester_agent_id: "operator-a".to_string(),
         from_ledger: MaterialLedgerId::site("site-a"),
         to_ledger: MaterialLedgerId::site("site-b"),
@@ -464,8 +464,66 @@ fn transfer_material_distance_zero_moves_immediately() {
             .last()
             .expect("material transfer event")
             .body,
-        WorldEventBody::Domain(DomainEvent::MaterialTransferred { .. })
+        WorldEventBody::Domain(DomainEvent::MaterialTransferred {
+            transfer_id: Some(event_transfer_id),
+            ..
+        }) if event_transfer_id == transfer_id
     ));
+}
+
+#[test]
+fn duplicate_direct_material_transfer_journal_event_replays_once_from_snapshot() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "operator-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register operator");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-a"), "iron_ingot", 20)
+        .expect("seed source");
+    let snapshot = world.snapshot();
+
+    world.submit_action(Action::TransferMaterial {
+        requester_agent_id: "operator-a".to_string(),
+        from_ledger: MaterialLedgerId::site("site-a"),
+        to_ledger: MaterialLedgerId::site("site-b"),
+        kind: "iron_ingot".to_string(),
+        amount: 8,
+        distance_km: 0,
+        priority: None,
+        route_id: None,
+        route_ids: Vec::new(),
+        auto_reroute: false,
+    });
+    world.step().expect("settle direct transfer");
+
+    let mut journal = world.journal().clone();
+    let mut duplicate = journal
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.body,
+                WorldEventBody::Domain(DomainEvent::MaterialTransferred { .. })
+            )
+        })
+        .expect("direct material transfer event")
+        .clone();
+    duplicate.id = journal.events.last().expect("journal event").id + 1;
+    journal.append(duplicate);
+
+    let restored = World::from_snapshot(snapshot, journal).expect("replay duplicate transfer");
+    assert_eq!(
+        restored.ledger_material_balance(&MaterialLedgerId::site("site-a"), "iron_ingot"),
+        12
+    );
+    assert_eq!(
+        restored.ledger_material_balance(&MaterialLedgerId::site("site-b"), "iron_ingot"),
+        8
+    );
+    assert_eq!(restored.state().direct_material_transfer_receipts.len(), 1);
 }
 
 #[test]
