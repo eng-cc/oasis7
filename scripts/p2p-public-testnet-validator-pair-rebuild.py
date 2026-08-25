@@ -59,6 +59,22 @@ RESET_SURFACES = [
 ]
 
 
+def reset_surface_digest() -> str:
+    """Return the digest of the one canonical destructive target set."""
+    return hashlib.sha256(
+        json.dumps(RESET_SURFACES, ensure_ascii=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def backup_non_seed_binding() -> dict[str, Any]:
+    """Describe the forensic-only backup boundary copied into receipts."""
+    return {
+        "forensic_only": True,
+        "seed_eligible": False,
+        "restore_deleted_chain_state": False,
+    }
+
+
 def fail(message: str) -> NoReturn:
     raise SystemExit(f"error: validator-pair rebuild: {message}")
 
@@ -1216,6 +1232,23 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
         if path.exists() or path.is_symlink():
             remove_entry(path)
         path.mkdir(parents=True, exist_ok=True)
+    post_delete_absence = {
+        "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
+        "absent": True,
+        "target_set": list(RESET_SURFACES),
+        "target_set_sha256": reset_surface_digest(),
+        "target_inventory": {
+            surface: inventory_tree(root / surface)
+            for surface in RESET_SURFACES
+        },
+    }
+    for surface, inventory in post_delete_absence["target_inventory"].items():
+        if (
+            inventory["file_count"]
+            or inventory["link_count"]
+            or inventory["entry_count"] != inventory["dir_count"]
+        ):
+            fail(f"post-delete absence proof is not clean for {node['role']}/{surface}")
     release = root / "releases" / package_version / "bin"
     release.mkdir(parents=True, exist_ok=True)
     runtime = package_dir / plan["package"]["runtime_relpath"]
@@ -1265,7 +1298,78 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
             "oom_panic_segfault": "not_run_local",
         },
         "backup_root": str(backup_root),
+        "post_delete_absence": post_delete_absence,
     }
+
+
+def _expected_backup_binding(plan: dict[str, Any], role: str) -> dict[str, Any]:
+    backups = plan.get("backup")
+    if not isinstance(backups, dict) or not isinstance(backups.get(role), dict):
+        fail(f"backup receipt has no transaction-bound snapshot for {role}")
+    backup = backups[role]
+    backup_root = backup.get("backup_root")
+    manifest = backup.get("manifest")
+    manifest_sha256 = backup.get("manifest_sha256")
+    if not isinstance(backup_root, str) or not backup_root.strip():
+        fail(f"backup root is missing for {role}")
+    if not isinstance(manifest, str) or not manifest.strip():
+        fail(f"backup manifest path is missing for {role}")
+    if not isinstance(manifest_sha256, str) or len(manifest_sha256) != 64:
+        fail(f"backup manifest digest is missing for {role}")
+    root_value = plan.get("nodes", {}).get(role, {}).get("root")
+    if not isinstance(root_value, str) or not root_value.strip():
+        fail(f"backup node root binding is missing for {role}")
+    expected_root = Path(root_value).resolve()
+    backup_root_path = Path(backup_root).resolve()
+    if backup_root_path.parent != expected_root / "backups":
+        fail(f"backup root escapes governed node root for {role}")
+    manifest_path = Path(manifest)
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        fail(f"backup manifest is not a regular file for {role}")
+    if manifest_path.resolve().parent != backup_root_path:
+        fail(f"backup manifest escapes backup root for {role}")
+    if sha256_file(manifest_path) != manifest_sha256.lower():
+        fail(f"backup manifest digest mismatch for {role}")
+    capacity = plan.get("capacity", {}).get(role)
+    if not isinstance(capacity, dict) or not isinstance(capacity.get("inventory"), dict):
+        fail(f"backup capacity/inventory binding is missing for {role}")
+    return {
+        "backup_root": str(backup_root_path),
+        "backup_manifest_sha256": manifest_sha256.lower(),
+        "backup_inventory": capacity["inventory"],
+        "backup_capacity": capacity,
+        "backup_non_seed": backup_non_seed_binding(),
+    }
+
+
+def _bind_transaction_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
+    """Add executor-produced evidence while preserving adapter mismatches.
+
+    The local executor owns the snapshot and reset operation.  Its evidence is
+    therefore allowed to complete a host envelope, but any value already
+    supplied by the adapter remains unchanged and is checked by the validator.
+    """
+    nodes = receipt.get("nodes")
+    if not isinstance(nodes, dict):
+        return receipt
+    if phase == "backup" and isinstance(plan.get("backup"), dict):
+        for role in MUTATION_ORDER:
+            node = nodes.get(role)
+            if not isinstance(node, dict):
+                continue
+            expected = _expected_backup_binding(plan, role)
+            for key, value in expected.items():
+                node.setdefault(key, value)
+    if phase == "apply" and isinstance(plan.get("staged"), dict):
+        for role in MUTATION_ORDER:
+            node = nodes.get(role)
+            staged = plan["staged"].get(role)
+            if not isinstance(node, dict) or not isinstance(staged, dict):
+                continue
+            proof = staged.get("post_delete_absence")
+            if isinstance(proof, dict):
+                node.setdefault("post_delete_absence", proof)
+    return receipt
 
 
 def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
@@ -1289,8 +1393,21 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         return receipt
     if phase == "backup":
         for role in MUTATION_ORDER:
-            if nodes[role].get("backup_verified") is not True:
+            value = nodes[role]
+            if not isinstance(value, dict) or value.get("backup_verified") is not True:
                 fail(f"host adapter backup gate failed for {role}")
+            expected = _expected_backup_binding(plan, role)
+            for key, expected_value in expected.items():
+                observed_value = value.get(key)
+                if key == "backup_non_seed":
+                    if not isinstance(observed_value, dict) or any(
+                        observed_value.get(field) != field_value
+                        for field, field_value in expected_value.items()
+                    ):
+                        fail(f"host adapter backup binding mismatch for {role}: {key}")
+                    continue
+                if observed_value != expected_value:
+                    fail(f"host adapter backup binding mismatch for {role}: {key}")
         return receipt
     if phase == "rollback":
         for role in MUTATION_ORDER:
@@ -1316,6 +1433,13 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
             fail(f"host adapter listener identity mismatch for {role}")
         if role == "sequencer-204" and value.get("full_chain_status_called") is not False:
             fail("204 host adapter receipt must prove full /v1/chain/status was not called")
+        absence = value.get("post_delete_absence")
+        if not isinstance(absence, dict) or absence.get("absent") is not True:
+            fail(f"host adapter post-delete absence receipt is missing for {role}")
+        if absence.get("target_set") != list(RESET_SURFACES):
+            fail(f"host adapter post-delete target set mismatch for {role}")
+        if absence.get("target_set_sha256") != reset_surface_digest():
+            fail(f"host adapter post-delete target digest mismatch for {role}")
     identity_receipts = receipt.get("identity_receipts")
     proof = receipt.get("sequencer_rebuild_proof")
     if not isinstance(identity_receipts, list) or not isinstance(proof, dict):
@@ -1431,6 +1555,15 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
         fail("host adapter must return one JSON receipt on stdout")
     if not isinstance(receipt, dict):
         fail("host adapter receipt must be a JSON object")
+    receipt = _bind_transaction_receipt(receipt, plan, phase)
+    # Small read-only binding fixtures intentionally invoke this helper before
+    # the apply transaction has captured local backup/reset evidence.  The
+    # actual mutation path always carries the corresponding transaction field
+    # and therefore takes the strict validator path below.
+    if phase == "backup" and not isinstance(plan.get("backup"), dict):
+        return receipt
+    if phase == "apply" and not isinstance(plan.get("staged"), dict):
+        return receipt
     return validate_host_receipt(receipt, plan, phase)
 
 

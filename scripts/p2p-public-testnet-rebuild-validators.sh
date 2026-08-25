@@ -207,23 +207,18 @@ def tree_inventory(root: Path) -> dict[str, object]:
 
 RESET_TARGETS = [
     "data/execution-records",
-    "data/execution-records/index",
-    "data/execution-records/archive",
     "data/execution-world",
-    "data/execution-world/index",
-    "data/execution-world/archive",
-    "data/execution-world/modules",
-    "data/execution-world/bridge",
-    "data/execution-world/runtime",
-    "data/execution-world/replication",
     "data/execution-world-simulator-mirror",
     "data/storage",
-    "data/bridge-root",
     "data/runtime-root",
     "data/replication-root",
     "output/chain-runtime",
     "output/node-distfs",
 ]
+
+
+def reset_target_digest() -> str:
+    return digest_json(RESET_TARGETS)
 
 
 def cli_value(flag: str) -> str | None:
@@ -271,6 +266,56 @@ def node_contracts() -> dict[str, object]:
             "entry_count": len(backup_entries),
             "sha256": digest_json(backup_entries),
         }
+        post_delete_targets = [item["resolved_path"] for item in targets]
+        post_delete_proof = {
+            "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
+            "phase": "reset-after-quiesce-before-stage",
+            "required": True,
+            "target_set": list(RESET_TARGETS),
+            "target_set_sha256": reset_target_digest(),
+            "targets": post_delete_targets,
+            "indexed_sidecars_archives_module_stores_execution_records_bridge_runtime_replication": True,
+            "observer_equivalents_not_mutated_by_pair_transaction": True,
+            "status": "required_at_apply" if mode == "plan" else "receipt_bound",
+        }
+        if mode != "plan":
+            staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
+            observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
+            if not isinstance(observed, dict):
+                raise SystemExit(f"missing post-delete absence receipt for {role}")
+            if observed.get("absent") is not True or observed.get("target_set") != list(RESET_TARGETS) or observed.get("target_set_sha256") != reset_target_digest():
+                raise SystemExit(f"post-delete absence target binding mismatch for {role}")
+            post_delete_proof["receipt"] = observed
+        backup_receipt = None
+        backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
+        if mode != "plan":
+            observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
+            if not isinstance(observed_backup, dict):
+                raise SystemExit(f"missing forensic backup receipt for {role}")
+            manifest_path = observed_backup.get("manifest")
+            backup_root = observed_backup.get("backup_root")
+            manifest_sha256 = observed_backup.get("manifest_sha256")
+            if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
+                raise SystemExit(f"incomplete forensic backup receipt for {role}")
+            manifest_file = Path(manifest_path)
+            backup_root_path = Path(backup_root).resolve()
+            if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
+                raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
+            if sha256_file(manifest_file) != manifest_sha256.lower():
+                raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
+            if backup_root_path.parent != root / "backups":
+                raise SystemExit(f"forensic backup root binding mismatch for {role}")
+            backup_receipt = {
+                "backup_root": str(backup_root_path),
+                "backup_manifest_sha256": manifest_sha256,
+                "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
+                "backup_capacity": value.get("capacity", {}).get(role, {}),
+                "backup_non_seed": {
+                    "forensic_only": True,
+                    "seed_eligible": False,
+                    "restore_deleted_chain_state": False,
+                },
+            }
         result[role] = {
             "role": role,
             "platform": node.get("transport", "unknown"),
@@ -287,15 +332,7 @@ def node_contracts() -> dict[str, object]:
                 "state_roots": [item["path"] for item in targets],
                 "absence_proof_required_before_observer_mutation": True,
             },
-            "post_delete_absence_proof": {
-                "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
-                "phase": "reset-after-quiesce-before-stage",
-                "required": True,
-                "targets": [item["resolved_path"] for item in targets],
-                "indexed_sidecars_archives_module_stores_execution_records_bridge_runtime_replication": True,
-                "observer_equivalents_not_mutated_by_pair_transaction": True,
-                "status": "required_at_apply" if mode == "plan" else "receipt_bound",
-            },
+            "post_delete_absence_proof": post_delete_proof,
             "forensic_backup": {
                 "manifest": backup_manifest,
                 "manifest_sha256": digest_json(backup_manifest),
@@ -317,6 +354,8 @@ def node_contracts() -> dict[str, object]:
                 "proof": "governed host-adapter quiesce receipt binds active=false,running=false before reset",
             },
         }
+        if backup_receipt is not None:
+            result[role]["forensic_backup"]["receipt"] = backup_receipt
     return result
 
 
