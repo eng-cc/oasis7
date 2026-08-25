@@ -46,7 +46,8 @@ Outputs:
 
 Each metrics JSON and the summary records the resolved commit OID for the
 checkout it measured, so a movable baseline ref cannot make the evidence
-ambiguous after the run.
+ambiguous after the run.  comparison.json also records the package, binary,
+and feature-mode identity used for both measurements and rejects mismatches.
 USAGE
 }
 
@@ -394,6 +395,53 @@ def fmt_pct(value: float | None) -> str:
     return f"{value:+.2f}%"
 
 
+# These fields define whether current and baseline compile measurements are
+# comparable, independent of their commit provenance.
+IDENTITY_FIELDS = (
+    "package",
+    "binary",
+    "check_only",
+    "no_default_features",
+)
+
+
+def measurement_identity(metrics: dict, label: str) -> dict:
+    if not isinstance(metrics, dict):
+        raise SystemExit(f"{label} metrics must be a JSON object")
+    missing = [field for field in IDENTITY_FIELDS if field not in metrics]
+    if missing:
+        raise SystemExit(
+            f"{label} metrics missing measurement identity fields: {', '.join(missing)}"
+        )
+
+    package = metrics["package"]
+    if type(package) is not str or not package:
+        raise SystemExit(
+            f"{label} measurement identity package must be a non-empty string"
+        )
+
+    binary = metrics["binary"]
+    if binary is not None and (type(binary) is not str or not binary):
+        raise SystemExit(
+            f"{label} measurement identity binary must be null or a non-empty string"
+        )
+
+    for field in ("check_only", "no_default_features"):
+        if type(metrics[field]) is not bool:
+            raise SystemExit(f"{label} measurement identity {field} must be a boolean")
+
+    if metrics["check_only"] and binary is not None:
+        raise SystemExit(
+            f"{label} measurement identity check_only requires binary to be null"
+        )
+    if not metrics["check_only"] and binary is None:
+        raise SystemExit(
+            f"{label} measurement identity release-build requires binary to be a non-empty string"
+        )
+
+    return {field: metrics[field] for field in IDENTITY_FIELDS}
+
+
 current = load_json(sys.argv[1])
 baseline = load_json(sys.argv[2])
 comparison_path = Path(sys.argv[3])
@@ -403,9 +451,24 @@ baseline_ref = sys.argv[5]
 if current is None:
     raise SystemExit("current metrics JSON is missing")
 
+current_identity = measurement_identity(current, "current")
+baseline_identity = (
+    measurement_identity(baseline, "baseline") if baseline is not None else None
+)
+if baseline_identity is not None and current_identity != baseline_identity:
+    mismatches = [
+        f"{field}: current={current_identity[field]!r}, baseline={baseline_identity[field]!r}"
+        for field in IDENTITY_FIELDS
+        if current_identity[field] != baseline_identity[field]
+    ]
+    raise SystemExit(
+        "current/baseline measurement identity mismatch: " + "; ".join(mismatches)
+    )
+
 comparison = {
     "package": current["package"],
     "binary": current["binary"],
+    "measurement_identity": current_identity,
     "current_commit_oid": current["commit_oid"],
     "current": current,
     "baseline_ref": baseline_ref or None,

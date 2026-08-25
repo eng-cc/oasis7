@@ -8,6 +8,16 @@ import sys
 from pathlib import Path
 
 
+# These fields define whether current and baseline compile measurements are
+# comparable, independent of their commit provenance.
+IDENTITY_FIELDS = (
+    "package",
+    "binary",
+    "check_only",
+    "no_default_features",
+)
+
+
 def load_comparison(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -68,6 +78,84 @@ def main() -> int:
     current = comparison["current"]
     baseline = comparison.get("baseline")
     failures: list[str] = []
+
+    def identity_for(metrics: object, label: str) -> dict | None:
+        if not isinstance(metrics, dict):
+            failures.append(f"{label} metrics must be a JSON object")
+            return None
+        missing = [field for field in IDENTITY_FIELDS if field not in metrics]
+        if missing:
+            failures.append(
+                f"{label} metrics missing measurement identity fields: {', '.join(missing)}"
+            )
+            return None
+
+        valid = True
+        package = metrics["package"]
+        if type(package) is not str or not package:
+            valid = False
+            failures.append(
+                f"{label} measurement identity package must be a non-empty string"
+            )
+
+        binary = metrics["binary"]
+        binary_valid = binary is None or (type(binary) is str and bool(binary))
+        if not binary_valid:
+            valid = False
+            failures.append(
+                f"{label} measurement identity binary must be null or a non-empty string"
+            )
+
+        for field in ("check_only", "no_default_features"):
+            if type(metrics[field]) is not bool:
+                valid = False
+                failures.append(
+                    f"{label} measurement identity {field} must be a boolean"
+                )
+
+        check_only = metrics["check_only"]
+        if type(check_only) is bool and binary_valid:
+            if check_only and binary is not None:
+                valid = False
+                failures.append(
+                    f"{label} measurement identity check_only requires binary to be null"
+                )
+            if not check_only and binary is None:
+                valid = False
+                failures.append(
+                    f"{label} measurement identity release-build requires binary to be a non-empty string"
+                )
+
+        if not valid:
+            return None
+        return {field: metrics[field] for field in IDENTITY_FIELDS}
+
+    current_identity = identity_for(current, "current")
+    comparison_identity = comparison.get("measurement_identity")
+    if comparison_identity is None:
+        failures.append("comparison is missing measurement_identity")
+    elif current_identity is not None and comparison_identity != current_identity:
+        failures.append(
+            "comparison measurement identity does not match current metrics"
+        )
+
+    baseline_identity = (
+        identity_for(baseline, "baseline") if baseline is not None else None
+    )
+    if (
+        current_identity is not None
+        and baseline_identity is not None
+        and current_identity != baseline_identity
+    ):
+        mismatches = [
+            field
+            for field in IDENTITY_FIELDS
+            if current_identity[field] != baseline_identity[field]
+        ]
+        failures.append(
+            "current/baseline measurement identity mismatch: "
+            + ", ".join(mismatches)
+        )
 
     if args.require_wasmtime_absent and current.get("wasmtime_present"):
         failures.append("current package closure still includes wasmtime")
