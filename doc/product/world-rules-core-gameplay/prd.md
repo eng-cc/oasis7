@@ -472,7 +472,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 #### 现有 native 制度能力的兼容定位与新增冻结
 
-现有 native `Alliance`、`War`、`Governance`、`Contract` 能力是当前可玩 vertical slice 和兼容读取/回放的基线。它们证明当前玩家路径可以被验证，不构成“凡是制度都应继续进入 native Action/State”的扩展先例；在迁移完成前，不得因追求架构纯粹而删除、重置或改变既有玩家结果。
+现有 native `Alliance`、`War`、`Governance`、`EconomicContract` 能力是当前可玩 vertical slice 和兼容读取/回放的基线。它们证明当前玩家路径可以被验证，不构成“凡是制度都应继续进入 native Action/State”的扩展先例；在迁移完成前，不得因追求架构纯粹而删除、重置或改变既有玩家结果。
 
 从本 PRD 生效起，新增银行、公司、保险、私人货币、法院或同类文明制度时，默认**冻结新增 native 制度 action/state**。任何候选必须先完成以下分类，再由对应专业角色确认合同和验证范围：
 
@@ -601,4 +601,4 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 - 不进行一次性 ECS/World Database 重构，不把所有 native 制度或 `WorldState`/`Action` 在单个版本内推倒重写；开放扩展必须沿分类、试点和兼容门槛渐进迁移。
 - 不在本阶段立即引入 Region/Partition/Shard 或多条世界时间线；单一 canonical world timeline 仍是产品承诺。
 - 不因模块化或 WASM 扩展而弱化 L0 物理不变量、L1 治理/反滥用边界、所有权权限校验、receipt 单次结算、snapshot/replay 连续性或历史审计。
-- 不把现有 native `Alliance`、`War`、`Governance`、`Contract` 兼容基线误删、重置或包装成无限扩展先例；迁移未完成前，旧玩家结果和可玩路径必须保持可读。
+- 不把现有 native `Alliance`、`War`、`Governance`、`EconomicContract` 兼容基线误删、重置或包装成无限扩展先例；迁移未完成前，旧玩家结果和可玩路径必须保持可读。
