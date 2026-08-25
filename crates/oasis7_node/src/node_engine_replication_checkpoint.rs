@@ -305,20 +305,12 @@ impl PosNodeEngine {
         // clean local execution disagrees with the peer binding.  If height-zero
         // rollback is unavailable, only the authenticated retained-checkpoint path
         // can recover; unrelated execution failures must stay fail-closed.
-        let reason = err.to_string();
         let fresh_observer = self.checkpoint_bootstrap_enabled
             && self.committed_height == 0
             && self.replication_persisted_height == 0
             && self.last_execution_height == 0
             && next_height == 1;
-        let execution_mismatch = reason.contains("execution hash validation failed")
-            || reason.contains("execution driver peer mismatch");
-        let rollback_unavailable = reason.contains("rollback record for height 0 is unavailable");
-        if !fresh_observer
-            || !execution_mismatch
-            || !rollback_unavailable
-            || !Self::replication_gap_sync_local_state_blocked_reason(reason.as_str())
-        {
+        if !fresh_observer || !err.is_fresh_observer_checkpoint_fallback_eligible() {
             return Ok(false);
         }
 

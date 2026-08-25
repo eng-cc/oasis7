@@ -2,6 +2,14 @@ use super::*;
 
 impl PosNodeEngine {
     pub(super) fn replication_gap_sync_local_state_blocked_reason(reason: &str) -> bool {
+        // A rendered rollback-unavailable diagnostic is not a checkpoint
+        // authority signal.  The fresh-observer fallback consumes the
+        // structured NodeError variant directly; keeping this generic state
+        // marker from recognizing the legacy phrase prevents callers from
+        // turning arbitrary Display text into recovery authority.
+        if reason.contains("rollback record for height") {
+            return false;
+        }
         reason.contains("execution hash validation failed")
             || reason.contains("execution driver peer mismatch")
             || reason.contains("forced execution failure")

@@ -19,7 +19,7 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
     let (_, public_key_a) = deterministic_keypair_hex(192);
     let (_, public_key_b) = deterministic_keypair_hex(193);
     let checkpoint_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
-    let peer_head_height = checkpoint_height + 36;
+    let peer_head_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL + 36;
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
@@ -204,4 +204,182 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
     );
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
+fn rendered_replication_or_execution_error_cannot_qualify_checkpoint_fallback() {
+    // The recovery decision must consume a structured execution outcome.  A
+    // caller-controlled Display string that happens to contain the old
+    // diagnostic phrases must not become checkpoint authority.
+    let rendered_errors = [
+        NodeError::Replication {
+            reason: "execution hash validation failed; rollback record for height 0 is unavailable"
+                .to_string(),
+        },
+        NodeError::Execution {
+            reason: "execution driver peer mismatch; rollback record for height 0 is unavailable"
+                .to_string(),
+        },
+    ];
+
+    for error in rendered_errors {
+        assert!(
+            !PosNodeEngine::replication_gap_sync_local_state_blocked_reason(
+                error.to_string().as_str()
+            ),
+            "rendered error text must not qualify checkpoint recovery: {error}"
+        );
+    }
+}
+
+struct FreshObserverWithoutCheckpointFixture {
+    world_id: String,
+    dir_a: std::path::PathBuf,
+    dir_b: std::path::PathBuf,
+    endpoint_b: ReplicationNetworkEndpoint,
+    replication_b: ReplicationRuntime,
+    engine_b: PosNodeEngine,
+}
+
+fn fresh_observer_without_authenticated_checkpoint_fixture() ->
+    FreshObserverWithoutCheckpointFixture {
+    let world_id = "world-fresh-observer-no-authenticated-checkpoint".to_string();
+    let dir_a = temp_dir("fresh-observer-no-authenticated-checkpoint-a");
+    let dir_b = temp_dir("fresh-observer-no-authenticated-checkpoint-b");
+    let (_, public_key_a) = deterministic_keypair_hex(194);
+    let (_, public_key_b) = deterministic_keypair_hex(195);
+    let peer_head_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL + 36;
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 194)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 194)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 195)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id.as_str(), NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id.as_str(), NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("remote replication runtime");
+    replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id.as_str(),
+            7_100,
+            &committed_decision(1),
+            Some("peer-execution-block-1"),
+            Some("peer-execution-state-1"),
+        )
+        .expect("build valid height-one commit")
+        .expect("height-one commit");
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FirstReadyHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols: Arc::new(Mutex::new(Vec::new())),
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id.as_str(),
+        &config_a.network_policy,
+    )
+    .expect("register authenticated provider without checkpoint");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id.as_str(), true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer replication runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    engine_b.network_committed_height = 1;
+    engine_b.peer_heads.insert(
+        "node-a".to_string(),
+        PeerCommittedHead {
+            height: peer_head_height,
+            block_hash: format!("block-{peer_head_height}"),
+            committed_at_ms: 7_164,
+            observed_at_ms: 7_200,
+            execution_block_hash: Some(format!("execution-block-{peer_head_height}")),
+            execution_state_root: Some(format!("execution-state-{peer_head_height}")),
+            action_root: empty_action_root(),
+            public_key_hex: Some(public_key_a),
+            signature_hex: Some(format!("signed-node-a-{peer_head_height}")),
+        },
+    );
+    engine_b.checkpoint_bootstrap_enabled = true;
+    FreshObserverWithoutCheckpointFixture {
+        world_id,
+        dir_a,
+        dir_b,
+        endpoint_b,
+        replication_b,
+        engine_b,
+    }
+}
+
+#[test]
+fn execution_mismatch_without_authenticated_checkpoint_remains_fail_closed() {
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let fixture = fresh_observer_without_authenticated_checkpoint_fixture();
+    let mut replication_b = fixture.replication_b;
+    let mut engine_b = fixture.engine_b;
+    let mut execution_hook = BootstrapBeforeIncrementalHook {
+        installed: Vec::new(),
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+
+    let result = engine_b.sync_missing_replication_commits(
+        &fixture.endpoint_b,
+        "node-b",
+        fixture.world_id.as_str(),
+        Some(&mut replication_b),
+        Some(&mut execution_hook),
+    );
+    let error = result.expect_err(
+        "a target mismatch without an authenticated checkpoint must remain fail-closed",
+    );
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("execution hash validation failed"),
+        "original execution mismatch must be preserved: {rendered}"
+    );
+    assert!(
+        rendered.contains("rollback record for height 0 is unavailable"),
+        "original rollback failure must be preserved: {rendered}"
+    );
+    assert!(
+        execution_hook.installed.is_empty(),
+        "no unauthenticated checkpoint may be installed: {:?}",
+        execution_hook.installed
+    );
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert!(
+        !fixture.dir_b.join("checkpoint-verification").exists(),
+        "no checkpoint receipt may be emitted without authenticated closure"
+    );
+    let _ = fs::remove_dir_all(&fixture.dir_a);
+    let _ = fs::remove_dir_all(&fixture.dir_b);
 }
