@@ -74,8 +74,17 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 ## Post-Merge Cleanup
 
-10. Follow the linked canonical terminal runbook; this skill does not maintain a
-second copy of its order or commands.
+10. From the canonical default worktree, use the terminal runbook's resumable
+operator entry:
+
+```bash
+./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> \
+  --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json
+```
+
+The linked canonical terminal runbook remains authoritative for order,
+receipts, recovery, and fail-closed behavior; this skill does not maintain a
+second copy.
 
 ## Return Contract
 

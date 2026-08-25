@@ -136,6 +136,7 @@ Options:
                            Print resolved provider config as JSON and exit
   -h, --help               Show this help
 USAGE
+  "$ROOT_DIR/scripts/launcher-help-contract.sh" shared
 }
 
 while [[ $# -gt 0 ]]; do

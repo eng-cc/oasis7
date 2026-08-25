@@ -40,7 +40,7 @@ Options:
   --pm-source-ref <ref>   Required when using --pm-owner-role; may be passed multiple times
   --pm-doc-ref <ref>      Optional task doc ref; may be passed multiple times
   --pm-related-prd <id>   Optional .pm related PRD; may be passed multiple times
-  --pm-acceptance <text>  Optional .pm acceptance item; may be passed multiple times
+  --pm-acceptance <text>  Required .pm acceptance item when bootstrapping; repeatable
   --pm-handoff-to <role>  Optional .pm handoff target; may be passed multiple times
   --json                  Print machine-readable JSON summary only
   -h, --help              Show this help
@@ -329,6 +329,18 @@ PY
     echo "supported values: ${CANONICAL_MODULES//$'\n'/, }" >&2
     exit 2
   fi
+fi
+if [[ "$PM_BOOTSTRAP" == "1" && "${#PM_ACCEPTANCE[@]}" -eq 0 ]]; then
+  echo "error: at least one --pm-acceptance is required when bootstrapping .pm" >&2
+  exit 2
+fi
+if [[ "$PM_BOOTSTRAP" == "1" ]]; then
+  for acceptance in "${PM_ACCEPTANCE[@]}"; do
+    if [[ -z "${acceptance//[[:space:]]/}" ]]; then
+      echo "error: --pm-acceptance cannot be blank or whitespace when bootstrapping .pm" >&2
+      exit 2
+    fi
+  done
 fi
 
 REPO_ROOT="$(wh_repo_root)"

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$ROOT_DIR"
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <json> --role-returns <ledger.jsonl> [options]
+
+Reconcile structured role returns for one immutable review plan, collect the
+role-complete ledger, and generate the canonical pre-PR review packet.
+
+Options:
+  --task-uid <uid>          Bound GitHub-backed task UID
+  --review-plan <json>      Immutable oasis7 review plan
+  --role-returns <jsonl>    Preflight slice ledger whose artifacts contain completed returns
+  --verification <text>     Verification matrix summary (default: derived from immutable plan)
+  --residual-risk <text>    Optional additional residual-risk context
+  --print-only              Print the packet instead of posting it to the task issue
+  --json                    Print a machine-readable facade result
+  -h, --help                Show this help
+EOF
+}
+
+die() { echo "review-closeout: $*" >&2; exit 1; }
+resolve_repo_file() {
+  local label="$1"
+  local raw="$2"
+  python3 - "$ROOT_DIR" "$raw" "$label" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve()
+candidate = Path(sys.argv[2]).expanduser()
+if not candidate.is_absolute():
+    candidate = root / candidate
+try:
+    resolved = candidate.resolve(strict=True)
+except OSError as exc:
+    raise SystemExit(f"review-closeout: {sys.argv[3]} cannot be resolved: {exc}")
+try:
+    resolved.relative_to(root)
+except ValueError:
+    raise SystemExit(f"review-closeout: {sys.argv[3]} escapes repository root: {sys.argv[2]}")
+if not resolved.is_file():
+    raise SystemExit(f"review-closeout: {sys.argv[3]} is not a file: {sys.argv[2]}")
+print(resolved)
+PY
+}
+TASK_UID="" REVIEW_PLAN="" ROLE_RETURNS="" VERIFICATION="" EXTRA_RISK="" PRINT_ONLY=0 OUTPUT_JSON=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --task-uid) TASK_UID="${2:-}"; shift 2 ;;
+    --review-plan) REVIEW_PLAN="${2:-}"; shift 2 ;;
+    --role-returns) ROLE_RETURNS="${2:-}"; shift 2 ;;
+    --verification) VERIFICATION="${2:-}"; shift 2 ;;
+    --residual-risk) EXTRA_RISK="${2:-}"; shift 2 ;;
+    --print-only) PRINT_ONLY=1; shift ;;
+    --json) OUTPUT_JSON=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+[[ -n "$TASK_UID" ]] || die "--task-uid is required"
+REVIEW_PLAN="$(resolve_repo_file "review plan" "$REVIEW_PLAN")" || exit 1
+ROLE_RETURNS="$(resolve_repo_file "role-return ledger" "$ROLE_RETURNS")" || exit 1
+
+PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1]).resolve(); plan_path=pathlib.Path(sys.argv[2]).resolve()
+try: plan_path.relative_to(root)
+except ValueError: raise SystemExit("review-closeout: review plan escapes repository root")
+p=json.loads(plan_path.read_text())
+if p.get("schema")!="oasis7-review-plan/v1" or p.get("task_uid")!=sys.argv[3]:
+ raise SystemExit("review-closeout: review plan identity mismatch")
+for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","relevant_evidence_digest"):
+ if not p.get(key): raise SystemExit(f"review-closeout: review plan is missing {key}")
+print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["relevant_evidence_digest"])
+PY
+)"
+BATCH_PATH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
+BATCH_PATH="$(resolve_repo_file "review batch" "$BATCH_PATH")" || exit 1
+
+python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
+  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
+  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+
+SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" <<'PY'
+import json, pathlib, sys
+rows=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines() if x.strip()]
+if not rows: raise SystemExit("review-closeout: role-return ledger is empty")
+roles=",".join(str(r["role"]) for r in rows)
+evidence="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
+verdicts="; ".join(f'{r["role"]} scope={r["scope_verdict"]} risk={r["risk_verdict"]}' for r in rows)
+disposition="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
+risks=[f'{r["role"]}: {r["residual_risk"]}' for r in rows]
+if sys.argv[2]: risks.append(sys.argv[2])
+print(roles); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
+PY
+)"
+[[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\n' "$SUMMARIES" | sed -n '1p')"
+  --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"
+  --finding-disposition-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '4p')" --verification "$VERIFICATION"
+  --residual-risk "$(printf '%s\n' "$SUMMARIES" | sed -n '5p')" --slice-ledger "$ROLE_RETURNS")
+[[ "$PRINT_ONLY" == 0 ]] || ARGS+=(--print-only)
+PACKET="$("$SCRIPT_DIR/record-pre-pr-review.sh" "${ARGS[@]}")"
+if [[ "$OUTPUT_JSON" == 1 ]]; then
+  python3 - "$TASK_UID" "$REVIEW_PLAN" "$ROLE_RETURNS" "$PACKET" <<'PY'
+import json,sys
+print(json.dumps({"status":"passed","task_uid":sys.argv[1],"review_plan":sys.argv[2],"role_returns":sys.argv[3],"packet":sys.argv[4]}))
+PY
+else
+  printf '%s\n' "$PACKET"
+fi

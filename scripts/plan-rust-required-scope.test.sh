@@ -171,17 +171,23 @@ assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/
 assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:"
 
 viewer_launcher_wrapper_output="$(plan_for_paths \
+  scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
   scripts/worktree-harness.sh \
-  scripts/worktree-harness-contract.test.sh)"
+  scripts/worktree-harness-contract.test.sh \
+  scripts/launcher-help-contract.sh \
+  scripts/launcher-help-contract.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
 assert_key_equals "$viewer_launcher_wrapper_output" run_launcher_web_build true
 assert_key_equals "$viewer_launcher_wrapper_output" needs_trunk true
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/launcher-help-contract.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/launcher-help-contract.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
 
 viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"

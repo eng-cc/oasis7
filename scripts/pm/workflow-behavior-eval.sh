@@ -87,6 +87,10 @@ run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/
 bash "$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/review-closeout-facade.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/new-task-worktree-acceptance-pre-mutation.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/finalize-task-red.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/finalize-task.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-transition.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/task-closeout-profile.test.sh" >/dev/null
 bash "$ROOT_DIR/scripts/pm/closeout-tmpdir-portability.test.sh" >/dev/null
@@ -789,7 +793,8 @@ scenarios = [
         "required_markers": [
             "a branch is about to create a PR",
             "Use after implementation freeze and before the canonical Pre-PR Ready gate.",
-            "Record the canonical packet with `record-pre-pr-review.sh --review-plan <plan>` in the GitHub task issue.",
+            "./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <plan>",
+            "generation to `record-pre-pr-review.sh`",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
             "Record plan/batch paths and digests in GitHub task issue evidence comments.",

@@ -148,7 +148,7 @@
   - `provider_gateway_unreachable`: 本地兼容桥无法通过 `provider agent` / Gateway 拿到响应时，provider health 需暴露最近错误，launcher / parity bench 必须明确提示“Local Provider Gateway 未就绪”。
   - `bundle_cache_path_unexpanded`: `oasis7` 的 bundle-first 下载辅助必须先展开当前用户 `~`，再落缓存与返回 `bundle_dir`；若解析后的 bundle 缺少 `run-game.sh`，`doctor` 必须输出解析后的绝对路径，避免把产物误写到 repo-local `~/...`。
   - `repo_bootstrap_unavailable`: `oasis7 doctor` 必须把 bundle-first no-`cargo` 可玩性（bundle + bridge 是否就绪）与 repo-backed bridge/bootstrap 能力（repo root + `cargo`）分开汇报；缺少 `cargo` 或 repo root 时，若 bundle-first reuse path 仍可用，不得把其伪装成通用阻断。`play` 若落到 repo-backed bridge/bootstrap 依赖，必须输出可执行指引：安装 `cargo` / 提供 `--repo-root`，或改走 `--reuse-bridge --skip-agent-setup`。
-  - `play_wrapper_orphan_subtree`: `oasis7-run.sh play` 被中断或 wrapper 退出时，必须尽最大努力终止其启动的 launcher 子树；不能出现 wrapper 已退但 `oasis7_game_launcher` / `oasis7_chain_runtime` / `oasis7_viewer_live` 继续常驻并占端口的假停止状态。
+  - `play_wrapper_orphan_subtree`: `run-local-letai-game-test.sh`、`run-producer-playtest.sh` 或 `worktree-harness.sh` 被中断/退出时，必须尽最大努力终止其启动的 launcher 子树；不能出现 wrapper 已退但 `oasis7_game_launcher` / `oasis7_chain_runtime` / `oasis7_viewer_live` 继续常驻并占端口的假停止状态。
   - `bundle_download_observability_gap`: `oasis7` 的 bundle-first 下载辅助必须输出可见阶段日志（至少覆盖 asset download / checksum / extract / bundle ready）；当 stderr 非 TTY 且下载耗时较长时，必须持续输出周期性 heartbeat，避免首轮下载被误判为卡死。
   - `bridge_model_output_invalid`: 兼容桥若拿到非 JSON、缺字段或超出 phase-1 白名单的输出，必须在 provider 侧记录结构化 diagnostics/trace；若当前 profile/fixture 已明确给出低风险可达动作（如 `P0-001` 巡游移动），允许通过 profile guardrail 把无效输出重路由到最近可达的合法动作，否则才降级为 `Wait`。
   - `session_cross_talk`: 兼容桥必须使用 `provider_config_ref + agent_profile + agent_id` 派生 Local Provider session scope，防止不同 benchmark run / runtime live 进程复用同一 session 造成旧世界状态串线。
@@ -164,7 +164,7 @@
   - NFR-9: 兼容桥派生的 Local Provider session id 必须带上 `provider_config_ref` 作用域，至少要把 benchmark run / runtime live 进程彼此隔离，避免 `loc-2` 之类的历史上下文泄漏到新的世界样本。
   - NFR-10: 仓库必须提供可复用的轻量 Local Provider runtime agent bootstrap（workspace 模板 + setup 脚本），用于把 world-simulator 决策路径与用户日常聊天/运营 workspace 隔离，降低 system prompt 体积与 session 污染风险。
   - NFR-11: world-simulator 兼容桥派生的 Local Provider `sessionKey` 应优先使用 `subagent:` 作用域，显式触发 Local Provider minimal prompt mode，避免把 NPC 决策误走成 full personal-assistant prompt。
-  - NFR-12: `oasis7-run.sh download` 在 release bundle 检测失败时必须立即非零退出；禁止在 `detected_bundle` 为空、非绝对路径或缺少 `run-game.sh` 时创建/填充缓存 `bundle/`，避免误复制宿主 `/.`。
+  - NFR-12: `run-launcher-stack.sh --bundle-dir` 在 release bundle 检测失败时必须立即非零退出；禁止在 bundle 路径为空、无法规范化或缺少 `run-game.sh` 时继续启动，避免把错误目录伪装成可用 bundle。
 - Security & Privacy:
   - 仅接受 loopback 地址；launcher 对 base URL 做 host allowlist 校验。
   - 不向 provider 暴露私钥、完整 auth proof 或内部存储路径。

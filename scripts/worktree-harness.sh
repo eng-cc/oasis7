@@ -34,6 +34,7 @@ Options for `status`:
 Options for `smoke`:
   --timeout <secs>         Smoke timeout (default: 30)
 USAGE
+  "$ROOT_DIR/scripts/launcher-help-contract.sh" shared
 }
 
 wh_require_git_worktree

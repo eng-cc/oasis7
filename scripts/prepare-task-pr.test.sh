@@ -151,11 +151,11 @@ fi
 if [[ "$*" == "project field-list 1 --owner eng-cc --format json" ]]; then
   cat <<'JSON'
 {"fields":[
-{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH","name":"PR Watch"}]},
+{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_PR_WATCH","name":"PR Watch"}]},
 {"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
-{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH_PM","name":"pr_watch"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_COMMITTED_PM","name":"committed"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_VERIFICATION_PHASE","name":"verification"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P3","name":"P3"}]},
 {"id":"FIELD_PR","name":"PR","type":"ProjectV2Field"},
 {"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
@@ -729,11 +729,12 @@ if "Created PR:" not in out:
 if "pre-PR local role-return validation failed" in err or "machine-checkable role-return ledger" in err:
     raise SystemExit(f"draft candidate incorrectly required review provenance: {err}")
 project_writes=[line for line in gh.splitlines() if line.startswith("project item-edit ")]
-if len(project_writes)!=1 or "--field-id FIELD_PR" not in project_writes[0] or "--text https://github.com/example/oasis7/pull/999" not in project_writes[0]:
-    raise SystemExit(f"draft candidate must update exactly the Project PR field: {project_writes}")
-for forbidden in ("FIELD_STATUS","FIELD_PM_STATUS","FIELD_WORKFLOW_PHASE"):
+pr_writes=[line for line in project_writes if "--field-id FIELD_PR " in line]
+if len(pr_writes)!=1 or "--text https://github.com/example/oasis7/pull/999" not in pr_writes[0]:
+    raise SystemExit(f"draft candidate must update exactly one Project PR field: {project_writes}")
+for forbidden in ("OPT_PR_WATCH", "OPT_PR_WATCH_PM", "OPT_PR_WATCH_PHASE"):
     if any(forbidden in line for line in project_writes):
-        raise SystemExit(f"draft candidate advanced lifecycle field {forbidden}: {project_writes}")
+        raise SystemExit(f"draft candidate advanced lifecycle to pr_watch via {forbidden}: {project_writes}")
 PY
 
 # A migrated task retains historical compatibility hints, but its canonical

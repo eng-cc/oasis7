@@ -53,6 +53,7 @@ Examples:
   ./scripts/run-producer-playtest.sh --bundle-dir output/release/game-launcher-local
   ./scripts/run-producer-playtest.sh --no-llm   # negative-path only; launcher boot is expected to fail
 USAGE
+  "$ROOT_DIR/scripts/launcher-help-contract.sh" shared
 }
 
 while [[ $# -gt 0 ]]; do
