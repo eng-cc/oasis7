@@ -2,8 +2,10 @@
 set -euo pipefail
 
 # Regression coverage for terminal cleanup resume identities.  Each case uses
-# the production helper through the isolated crash fixture; no receipt or
-# journal is hand-edited by the test after the fault point.
+# the production helper through the isolated crash fixture.  The legacy case
+# intentionally projects the durable journal to its historical schema so the
+# test can prove one-time migration without granting production callers a
+# journal-editing channel.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REAL_GIT="$(command -v git)"
@@ -75,7 +77,7 @@ EOF
 }
 
 run_case() {
-  local name="$1" mode="$2" reappear="$3"
+  local name="$1" mode="$2" reappear="$3" legacy="$4"
   local root="$TMPDIR/$name"
   local repo="$root/repo" worktree="$root/task-worktree"
   local branch="task/cleanup-$name" uid="task_11111111111111111111111111111111"
@@ -145,6 +147,21 @@ assert journal["branch_deleted"] is False, journal
 assert journal["terminal_receipt_committed"] is False, journal
 PY
 
+  if [[ "$legacy" == 1 ]]; then
+    python3 - "$receipts/cleanup-intent.json" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+journal = json.load(open(path, encoding="utf-8"))
+# Historical cleanup-intent.json had only the identity and boolean state
+# fields.  This fixture models that durable artifact; production cleanup must
+# backfill only after live identity/proof validation.
+for key in ("worktree_common_dir", "branch_tip"):
+    journal.pop(key, None)
+open(path, "w", encoding="utf-8").write(json.dumps(journal) + "\n")
+PY
+  fi
+
   if [[ "$reappear" == 1 ]]; then
     git -C "$repo" worktree add -q "$worktree" "$branch"
   fi
@@ -159,13 +176,32 @@ import sys
 journal = json.load(open(sys.argv[1], encoding="utf-8"))
 assert all(journal[key] for key in ("worktree_removed", "branch_deleted", "terminal_receipt_committed")), journal
 PY
+  if [[ "$legacy" == 1 ]]; then
+    python3 - "$receipts/cleanup-intent.json" "$repo" "$branch_tip" <<'PY'
+import json
+import os
+import subprocess
+import sys
+journal = json.load(open(sys.argv[1], encoding="utf-8"))
+repo, branch_tip = sys.argv[2:]
+raw_common = subprocess.check_output(
+    ["git", "-C", repo, "rev-parse", "--git-common-dir"], text=True
+).strip()
+common = os.path.realpath(raw_common if os.path.isabs(raw_common) else os.path.join(repo, raw_common))
+assert journal["branch_tip"] == branch_tip, journal
+assert journal["worktree_common_dir"] == common, (journal, common)
+PY
+  fi
 }
 
 # Squash/rebase cleanup must resume with a force-delete only after the exact
 # patch-equivalence proof has passed; plain branch -d cannot prove that state.
-run_case patch_equivalence patch_equivalence 0
+run_case patch_equivalence patch_equivalence 0 0
+# A real #2692-style journal predates the identity fields and must resume only
+# after the fresh patch-equivalence proof, then persist the derived identity.
+run_case legacy_patch_equivalence patch_equivalence 0 1
 # An exact canonical worktree may be recreated between journaled removal and
 # retry; identity readback must reconcile it before the normal safe removal.
-run_case reappeared_worktree ancestry 1
+run_case reappeared_worktree ancestry 1 0
 
 echo "post-merge-cleanup-resume.test: OK"

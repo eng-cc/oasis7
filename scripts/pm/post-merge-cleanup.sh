@@ -183,9 +183,13 @@ else
   BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$ACTUAL_BRANCH")"
 fi
 [[ "$ACTUAL_BRANCH" == "$RECORDED_BRANCH" ]] || die "branch identity disagrees with canonical task truth"
-if [[ -n "$JOURNAL_WORKTREE_COMMON_DIR" && -n "${WORKTREE_COMMON_DIR:-}" ]]; then
-  [[ "$JOURNAL_WORKTREE_COMMON_DIR" == "$WORKTREE_COMMON_DIR" ]] \
+if [[ -n "$JOURNAL_WORKTREE_COMMON_DIR" ]]; then
+  [[ "$JOURNAL_WORKTREE_COMMON_DIR" == "$REPO_COMMON_DIR" ]] \
     || die "cleanup journal worktree common-dir identity mismatch"
+  if [[ -n "${WORKTREE_COMMON_DIR:-}" ]]; then
+    [[ "$JOURNAL_WORKTREE_COMMON_DIR" == "$WORKTREE_COMMON_DIR" ]] \
+      || die "cleanup journal worktree common-dir identity mismatch"
+  fi
 fi
 if [[ -n "$JOURNAL_BRANCH_TIP" ]]; then
   [[ "$JOURNAL_BRANCH_TIP" == "$BRANCH_TIP" ]] \
@@ -335,19 +339,32 @@ else
 fi
 if [[ "$DRY_RUN" == "0" ]]; then
   INTENT_JOURNAL="$(dirname "$TERMINAL_RECEIPT_OUTPUT")/cleanup-intent.json"
-  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "${WORKTREE_COMMON_DIR:-}" "$BRANCH_TIP" <<'PY'
+  # A removed task path cannot be re-read; its linked-worktree identity is the
+  # live canonical repository common-dir already checked above.
+  JOURNAL_BACKFILL_COMMON_DIR="${WORKTREE_COMMON_DIR:-$REPO_COMMON_DIR}"
+  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" <<'PY'
 import json,pathlib,sys
-p=pathlib.Path(sys.argv[1]); expected={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
+p=pathlib.Path(sys.argv[1]); identity={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
  "repository":sys.argv[3],"worktree":sys.argv[4],"branch":sys.argv[5]}
-if sys.argv[6]: expected["worktree_common_dir"]=sys.argv[6]
-if sys.argv[7]: expected["branch_tip"]=sys.argv[7]
+derived={"worktree_common_dir":sys.argv[6],"branch_tip":sys.argv[7]}
+expected=dict(identity)
 if p.exists():
  old=json.loads(p.read_text());
- if any(old.get(k)!=v for k,v in expected.items()): raise SystemExit('post-merge-cleanup: cleanup intent mismatch on retry')
- for key in ('worktree_common_dir','branch_tip'):
-  if key in old: expected[key]=old[key]
+ for key,value in identity.items():
+  if old.get(key)!=value: raise SystemExit(f'post-merge-cleanup: cleanup intent mismatch on retry: {key}')
+ # Legacy journals intentionally lack the derived identity fields.  Preserve
+ # existing values exactly; only after all live receipt/proof checks above may
+ # this transaction add a missing field as a one-time backfill.
+ for key,value in derived.items():
+  if key in old:
+   if old[key]!=value: raise SystemExit(f'post-merge-cleanup: cleanup intent mismatch on retry: {key}')
+   expected[key]=old[key]
+  elif value:
+   expected[key]=value
  expected.update({k:bool(old.get(k)) for k in ('worktree_removed','branch_deleted','terminal_receipt_committed')})
-else: expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
+else:
+ expected.update(derived)
+ expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
 expected['revision']=int((json.loads(p.read_text()).get('revision',0) if p.exists() else 0))+1
 print(json.dumps(expected))
 PY
