@@ -434,12 +434,12 @@ any additional signing requirements.
 
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
-新的受治理入口是 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 阶段不得建立 SSH、调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
+新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 阶段不得建立 SSH、调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
 
 每个 governed tree 在进入容量预算前都必须先完成无跟随 symlink 的完整 inventory：`entry_count` 必须等于 `link_count + dir_count + file_count`，并同时绑定 `total_bytes`。world tree 的任何嵌套 symlink（包括目录或 broken link）都直接拒绝；inode 预算覆盖备份、package、governed entries 以及允许复制的目录、文件和 symlink。apply 阶段重新采集并比对同一 inventory，staged governed receipt 也必须逐项一致。
 
 ```bash
-python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
+scripts/p2p-public-testnet-rebuild-validators.sh plan \
   --package-dir <verified-package-dir> \
   --provenance <verified-pair-provenance.json> \
   --trust-root <governed-provenance-trust-root.json> \
@@ -453,7 +453,7 @@ python3 scripts/p2p-public-testnet-validator-pair-rebuild.py plan \
   --node sequencer-204=local:<stopped-node-root-204> \
   --sequencer-proof-url <bounded-proof-endpoint> \
   --out-dir <transaction-dir>
-python3 scripts/p2p-public-testnet-validator-pair-rebuild.py apply \
+scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --transaction <transaction-dir>/transaction.json \
   --host-adapter <governed-host-adapter>
 ```
@@ -494,6 +494,17 @@ must invoke the recorded same-filesystem snapshot rollback and retain the
 receipt. The pair executor never mutates an observer. A sequencer/204 proof
 must use a bounded endpoint; calling full `/v1/chain/status` on 204 is
 forbidden in this contract.
+
+壳脚本的 `oasis7.validator_pair_rebuild_receipt_contract.v1` envelope 将
+plan/transaction digest 绑定到每台节点的 platform 与完整无跟随
+symlink 的 state-root inventory，并记录精确 destructive target 解析、
+indexed sidecar/archive/module store、execution/bridge/runtime/replication root
+及 observer 等价物、stopped/quiescence proof、带 metadata/capacity 的
+forensic backup manifest hash 与 machine-checkable `seed_eligible=false` proof。
+Apply receipt 必须包含 reset/stage/start 与 same-window fleet-health phase
+references。rollback boundary 明确禁止把已删除的 chain state 恢复为新
+chain seed；plan 输出不包含 timestamp，并且不执行 SSH、systemd 或
+destructive activity。
 
 ### C0. Consumer-impact record (hard gate)
 

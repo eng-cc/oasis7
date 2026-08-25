@@ -24,6 +24,8 @@ pub use authoritative_recovery_generation::{
 };
 #[path = "persistence_support.rs"]
 mod persistence_support;
+#[path = "persistence_tail.rs"]
+mod persistence_tail;
 use self::persistence_support::{
     distfs_world_id, now_unix_ms, persist_sidecar_generation_index, write_distfs_recovery_audit,
 };
@@ -107,6 +109,8 @@ struct SidecarGenerationRecord {
     recovery_metadata_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recovery_metadata_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tick_consensus_archive_ref: Option<String>,
     pinned_blob_hashes: Vec<String>,
     created_at_ms: i64,
 }
@@ -130,6 +134,8 @@ struct SidecarGenerationHashPayload<'a> {
     journal_segment_hashes: &'a [String],
     recovery_metadata_path: &'a Option<String>,
     recovery_metadata_hash: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tick_consensus_archive_ref: &'a Option<String>,
     pinned_blob_hashes: &'a [String],
     created_at_ms: i64,
 }
@@ -527,6 +533,13 @@ fn hydrate_tick_consensus_snapshot_from_archive(
         }
         Err(err) => return Err(err),
     };
+    hydrate_tick_consensus_snapshot_from_archived_records(snapshot, archived_records)
+}
+
+fn hydrate_tick_consensus_snapshot_from_archived_records(
+    snapshot: &mut Snapshot,
+    archived_records: Vec<TickConsensusRecord>,
+) -> Result<(), WorldError> {
     let mut records = archived_records;
     records.extend(snapshot.tick_consensus_records.clone());
     if records.len() != snapshot.tick_consensus_total_record_count {
@@ -539,17 +552,56 @@ fn hydrate_tick_consensus_snapshot_from_archive(
         });
     }
     snapshot.tick_consensus_records = records;
+    // This counter describes the on-disk split only. Once the archive is
+    // materialized, the in-memory snapshot is complete and a second hydration
+    // pass must be a no-op.
+    snapshot.tick_consensus_archived_record_count = 0;
+    snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
+    let (hot_from_tick, hot_to_tick) =
+        tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
+    snapshot.tick_consensus_hot_from_tick = hot_from_tick;
+    snapshot.tick_consensus_hot_to_tick = hot_to_tick;
     Ok(())
 }
 
 fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapshot, WorldError> {
     if let Some((mut snapshot, _)) = World::try_load_from_distfs_sidecar(dir)? {
-        hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+        if !World::has_indexed_sidecar_generation(dir)? {
+            hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+        }
         return Ok(snapshot);
     }
     let mut snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
     hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
     Ok(snapshot)
+}
+
+fn validate_compatible_legacy_distfs_payloads(
+    dir: &Path,
+    selected_manifest: &SnapshotManifest,
+    selected_journal_segments: &[JournalSegmentRef],
+) -> Result<(), WorldError> {
+    let manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
+    if !manifest_path.exists() {
+        return Ok(());
+    }
+    let legacy_manifest: SnapshotManifest = read_json_from_path(manifest_path.as_path())?;
+    if hash_json(&legacy_manifest)? != hash_json(selected_manifest)? {
+        // A valid but different top-level payload can belong to a newer
+        // generation while an older sidecar generation is being restored.
+        return Ok(());
+    }
+    let journal_path = dir.join(DISTFS_JOURNAL_SEGMENTS_FILE);
+    if !journal_path.exists() {
+        return Ok(());
+    }
+    let legacy_journal: Vec<JournalSegmentRef> = read_json_from_path(journal_path.as_path())?;
+    if legacy_journal != selected_journal_segments {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "selected sidecar generation conflicts with legacy journal payload".to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn load_json_snapshot_if_newer_chain_resource_context(
@@ -810,7 +862,14 @@ impl World {
         self.journal.save_json(journal_path)?;
         persisted_snapshot.save_json(snapshot_path)?;
         persist_tick_consensus_archive(dir, &persisted_snapshot, tick_consensus_archive.as_ref())?;
-        self.save_distfs_sidecar(dir, &persisted_snapshot, None)?;
+        let archive_bytes = tick_consensus_archive
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("serialize tick consensus generation archive failed: {err}"),
+            })?;
+        self.save_distfs_sidecar(dir, &persisted_snapshot, archive_bytes.as_deref(), None)?;
         self.save_module_store_to_dir(dir)?;
         Ok(())
     }
@@ -838,8 +897,8 @@ impl World {
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
-            let has_committed_generation = Self::has_authoritative_recovery_generation(dir)?;
-            if !has_committed_generation
+            let has_indexed_generation = Self::has_indexed_sidecar_generation(dir)?;
+            if !has_indexed_generation
                 && let Some(mut json_snapshot) =
                     load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
             {
@@ -854,9 +913,15 @@ impl World {
                 world.load_module_store_from_dir(dir)?;
                 return Ok(world);
             }
-            hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+            if !has_indexed_generation {
+                hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+            }
             let mut world = Self::from_snapshot(snapshot, journal)?;
-            world.load_module_store_from_dir(dir)?;
+            if has_indexed_generation {
+                world.load_selected_generation_module_artifacts_from_dir(dir)?;
+            } else {
+                world.load_module_store_from_dir(dir)?;
+            }
             return Ok(world);
         }
         let journal_path = dir.join(JOURNAL_FILE);
@@ -894,8 +959,9 @@ impl World {
     }
 
     pub fn verify_tick_consensus_archive_from_dir(dir: impl AsRef<Path>) -> Result<(), WorldError> {
-        let records = Self::load_tick_consensus_records_from_dir(dir, None, None)?;
-        verify_tick_consensus_record_slice(records.as_slice())
+        let dir = dir.as_ref();
+        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir)?;
+        verify_tick_consensus_record_slice(snapshot.tick_consensus_records.as_slice())
     }
 
     pub fn load_module_store_from_dir(&mut self, dir: impl AsRef<Path>) -> Result<(), WorldError> {
@@ -925,6 +991,32 @@ impl World {
             }
             self.validate_module_artifact_identity(&record.manifest)?;
             self.module_artifacts.insert(wasm_hash.clone());
+            self.module_artifact_bytes
+                .insert(wasm_hash.clone(), bytes.into());
+        }
+        Ok(())
+    }
+
+    fn load_selected_generation_module_artifacts_from_dir(
+        &mut self,
+        dir: impl AsRef<Path>,
+    ) -> Result<(), WorldError> {
+        let store = ModuleStore::new(dir);
+        if !store.modules_dir().exists() {
+            return Ok(());
+        }
+        self.module_artifact_bytes.clear();
+
+        for record in self.module_registry.records.values() {
+            let wasm_hash = &record.manifest.wasm_hash;
+            let bytes = store.read_artifact(wasm_hash)?;
+            let actual_hash = super::super::util::sha256_hex(&bytes);
+            if actual_hash != *wasm_hash {
+                return Err(WorldError::ModuleStoreManifestMismatch {
+                    wasm_hash: wasm_hash.clone(),
+                });
+            }
+            self.validate_module_artifact_identity(&record.manifest)?;
             self.module_artifact_bytes
                 .insert(wasm_hash.clone(), bytes.into());
         }
@@ -1001,6 +1093,7 @@ impl World {
         &self,
         dir: &Path,
         snapshot: &Snapshot,
+        tick_consensus_archive_bytes: Option<&[u8]>,
         recovery_metadata: Option<&[u8]>,
     ) -> Result<(), WorldError> {
         let inherited_recovery_metadata = if recovery_metadata.is_none() {
@@ -1037,6 +1130,7 @@ impl World {
             store_root.as_path(),
             &manifest,
             journal_segments.as_slice(),
+            tick_consensus_archive_bytes,
             recovery_metadata,
         )?;
         let snapshot_manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
@@ -1044,105 +1138,5 @@ impl World {
         write_json_to_path(&manifest, snapshot_manifest_path.as_path())?;
         write_json_to_path(&journal_segments, journal_segments_path.as_path())?;
         Ok(())
-    }
-
-    fn try_load_from_distfs_sidecar(dir: &Path) -> Result<Option<(Snapshot, Journal)>, WorldError> {
-        let snapshot_manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
-        let journal_segments_path = dir.join(DISTFS_JOURNAL_SEGMENTS_FILE);
-        let store_root = dir.join(DISTFS_STATE_DIR);
-        if store_root.exists()
-            && let Some(index) = persistence_support::load_sidecar_generation_index(&store_root)?
-            && index
-                .generations
-                .get(index.latest_generation.as_str())
-                .is_some_and(|record| record.recovery_metadata_path.is_some())
-        {
-            for generation_id in std::iter::once(index.latest_generation.as_str())
-                .chain(index.rollback_safe_generation.as_deref())
-            {
-                let Some(record) = index.generations.get(generation_id) else {
-                    continue;
-                };
-                if persistence_support::validate_sidecar_generation_record(&store_root, record)
-                    .is_err()
-                {
-                    continue;
-                }
-                let (manifest, journal_segments) =
-                    persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
-                let store = LocalCasStore::new(&store_root);
-                let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
-                let events: Vec<WorldEvent> =
-                    assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
-                let _ = write_distfs_recovery_audit(
-                    dir,
-                    if generation_id == index.latest_generation {
-                        "generation_restored"
-                    } else {
-                        "rollback_safe_generation_restored"
-                    },
-                    None,
-                );
-                return Ok(Some((snapshot, Journal { events })));
-            }
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "sidecar generation index has no valid latest or rollback-safe generation"
-                    .to_string(),
-            });
-        }
-        if !snapshot_manifest_path.exists()
-            || !journal_segments_path.exists()
-            || !store_root.exists()
-        {
-            return Ok(None);
-        }
-
-        let restored = Self::load_from_distfs_sidecar(
-            snapshot_manifest_path.as_path(),
-            journal_segments_path.as_path(),
-            store_root.as_path(),
-        );
-        match restored {
-            Ok(value) => {
-                let _ = write_distfs_recovery_audit(dir, "distfs_restored", None);
-                Ok(Some(value))
-            }
-            Err(err) => {
-                let _ = write_distfs_recovery_audit(
-                    dir,
-                    "fallback_json",
-                    Some(format!("distfs_restore_failed: {:?}", err)),
-                );
-                Ok(None)
-            }
-        }
-    }
-
-    fn has_authoritative_recovery_generation(dir: &Path) -> Result<bool, WorldError> {
-        let store_root = dir.join(DISTFS_STATE_DIR);
-        Ok(
-            persistence_support::load_sidecar_generation_index(&store_root)?
-                .and_then(|index| {
-                    index
-                        .generations
-                        .get(index.latest_generation.as_str())
-                        .cloned()
-                })
-                .is_some_and(|record| record.recovery_metadata_path.is_some()),
-        )
-    }
-
-    fn load_from_distfs_sidecar(
-        snapshot_manifest_path: &Path,
-        journal_segments_path: &Path,
-        store_root: &Path,
-    ) -> Result<(Snapshot, Journal), WorldError> {
-        let manifest: SnapshotManifest = read_json_from_path(snapshot_manifest_path)?;
-        let journal_segments: Vec<JournalSegmentRef> = read_json_from_path(journal_segments_path)?;
-        let store = LocalCasStore::new(store_root);
-        let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
-        let events: Vec<WorldEvent> =
-            assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
-        Ok((snapshot, Journal { events }))
     }
 }

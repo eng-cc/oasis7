@@ -1,4 +1,5 @@
 use super::*;
+use oasis7_distfs::BlobStore;
 
 fn sidecar_generation_root_dir(store_root: &Path) -> std::path::PathBuf {
     store_root.join(SIDECAR_GENERATION_ROOT_DIR)
@@ -49,6 +50,7 @@ pub(super) fn load_sidecar_generation_index(
 fn build_sidecar_generation_pinned_blob_hashes(
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    tick_consensus_archive_ref: Option<&str>,
 ) -> Vec<String> {
     let mut pinned_blob_hashes = manifest
         .chunks
@@ -60,6 +62,9 @@ fn build_sidecar_generation_pinned_blob_hashes(
             .iter()
             .map(|segment| segment.content_hash.clone()),
     );
+    if let Some(archive_ref) = tick_consensus_archive_ref {
+        pinned_blob_hashes.insert(archive_ref.to_string());
+    }
     pinned_blob_hashes.into_iter().collect()
 }
 
@@ -105,6 +110,7 @@ fn build_sidecar_generation_record(
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
     recovery_metadata: Option<&[u8]>,
+    tick_consensus_archive_ref: Option<String>,
     created_at_ms: i64,
 ) -> Result<SidecarGenerationRecord, WorldError> {
     let snapshot_manifest_hash = hash_json(manifest)?;
@@ -112,8 +118,11 @@ fn build_sidecar_generation_record(
         .iter()
         .map(|segment| segment.content_hash.clone())
         .collect::<Vec<_>>();
-    let pinned_blob_hashes =
-        build_sidecar_generation_pinned_blob_hashes(manifest, journal_segments);
+    let pinned_blob_hashes = build_sidecar_generation_pinned_blob_hashes(
+        manifest,
+        journal_segments,
+        tick_consensus_archive_ref.as_deref(),
+    );
     let recovery_metadata_path = recovery_metadata.map(|_| {
         sidecar_generation_recovery_metadata_rel_path(
             generation_id.as_str(),
@@ -129,6 +138,7 @@ fn build_sidecar_generation_record(
         journal_segment_hashes: journal_segment_hashes.as_slice(),
         recovery_metadata_path: &recovery_metadata_path,
         recovery_metadata_hash: &recovery_metadata_hash,
+        tick_consensus_archive_ref: &tick_consensus_archive_ref,
         pinned_blob_hashes: pinned_blob_hashes.as_slice(),
         created_at_ms,
     })?;
@@ -142,6 +152,7 @@ fn build_sidecar_generation_record(
         journal_segment_hashes,
         recovery_metadata_path,
         recovery_metadata_hash,
+        tick_consensus_archive_ref,
         pinned_blob_hashes,
         created_at_ms,
     })
@@ -190,8 +201,21 @@ fn validate_sidecar_generation_record_payloads(
         });
     }
 
-    let pinned_blob_hashes =
-        build_sidecar_generation_pinned_blob_hashes(manifest, journal_segments);
+    let pinned_blob_hashes = build_sidecar_generation_pinned_blob_hashes(
+        manifest,
+        journal_segments,
+        generation_record.tick_consensus_archive_ref.as_deref(),
+    );
+    if let Some(archive_ref) = generation_record.tick_consensus_archive_ref.as_deref() {
+        let archive_bytes = LocalCasStore::new(store_root).get_verified(archive_ref)?;
+        let _: TickConsensusArchiveFile = serde_json::from_slice(archive_bytes.as_slice())
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "sidecar tick consensus archive decode failed: generation_id={} err={err}",
+                    generation_record.generation_id
+                ),
+            })?;
+    }
     if pinned_blob_hashes != generation_record.pinned_blob_hashes {
         return Err(WorldError::DistributedValidationFailed {
             reason: format!(
@@ -225,6 +249,7 @@ fn validate_sidecar_generation_record_payloads(
         journal_segment_hashes: journal_segment_hashes.as_slice(),
         recovery_metadata_path: &generation_record.recovery_metadata_path,
         recovery_metadata_hash: &generation_record.recovery_metadata_hash,
+        tick_consensus_archive_ref: &generation_record.tick_consensus_archive_ref,
         pinned_blob_hashes: pinned_blob_hashes.as_slice(),
         created_at_ms: generation_record.created_at_ms,
     })?;
@@ -252,6 +277,25 @@ pub(super) fn validate_sidecar_generation_record(
         &manifest,
         journal_segments.as_slice(),
     )
+}
+
+pub(super) fn load_sidecar_tick_consensus_archive(
+    store_root: &Path,
+    generation_record: &SidecarGenerationRecord,
+) -> Result<Option<TickConsensusArchiveFile>, WorldError> {
+    let Some(archive_ref) = generation_record.tick_consensus_archive_ref.as_deref() else {
+        return Ok(None);
+    };
+    let bytes = LocalCasStore::new(store_root).get_verified(archive_ref)?;
+    let archive = serde_json::from_slice(bytes.as_slice()).map_err(|err| {
+        WorldError::DistributedValidationFailed {
+            reason: format!(
+                "sidecar tick consensus archive decode failed: generation_id={} err={err}",
+                generation_record.generation_id
+            ),
+        }
+    })?;
+    Ok(Some(archive))
 }
 
 fn sidecar_active_generation_ids(
@@ -401,6 +445,7 @@ fn stage_sidecar_generation(
     store_root: &Path,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    tick_consensus_archive_bytes: Option<&[u8]>,
     recovery_metadata: Option<&[u8]>,
 ) -> Result<(String, SidecarGenerationRecord), WorldError> {
     cleanup_stale_sidecar_generation_staging(store_root)?;
@@ -423,6 +468,9 @@ fn stage_sidecar_generation(
     let staging_payload_dir =
         sidecar_generation_staging_payload_dir(store_root, generation_id.as_str());
     fs::create_dir_all(staging_payload_dir.as_path())?;
+    let tick_consensus_archive_ref = tick_consensus_archive_bytes
+        .map(|bytes| LocalCasStore::new(store_root).put_bytes(bytes))
+        .transpose()?;
     super::super::super::util::atomic_write_json_to_path(
         manifest,
         staging_payload_dir
@@ -450,6 +498,7 @@ fn stage_sidecar_generation(
         manifest,
         journal_segments,
         recovery_metadata,
+        tick_consensus_archive_ref,
         created_at_ms,
     )?;
     super::super::super::util::atomic_write_json_to_path(
@@ -488,6 +537,7 @@ fn finalize_sidecar_generation(
     generation_id: &str,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    tick_consensus_archive_ref: Option<String>,
     recovery_metadata: Option<&[u8]>,
 ) -> Result<SidecarGenerationRecord, WorldError> {
     let staging_payload_dir = sidecar_generation_staging_payload_dir(store_root, generation_id);
@@ -510,6 +560,7 @@ fn finalize_sidecar_generation(
         manifest,
         journal_segments,
         recovery_metadata,
+        tick_consensus_archive_ref,
         now_unix_ms(),
     )
 }
@@ -518,10 +569,16 @@ pub(super) fn persist_sidecar_generation_index(
     store_root: &Path,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    tick_consensus_archive_bytes: Option<&[u8]>,
     recovery_metadata: Option<&[u8]>,
 ) -> Result<(), WorldError> {
-    let (generation_id, staged_record) =
-        stage_sidecar_generation(store_root, manifest, journal_segments, recovery_metadata)?;
+    let (generation_id, staged_record) = stage_sidecar_generation(
+        store_root,
+        manifest,
+        journal_segments,
+        tick_consensus_archive_bytes,
+        recovery_metadata,
+    )?;
     maybe_fail_after_sidecar_stage(store_root)?;
     validate_staged_sidecar_generation(store_root, &staged_record)?;
     maybe_fail_sidecar_commit_seam(store_root, "after-stage-validation")?;
@@ -530,6 +587,7 @@ pub(super) fn persist_sidecar_generation_index(
         generation_id.as_str(),
         manifest,
         journal_segments,
+        staged_record.tick_consensus_archive_ref.clone(),
         recovery_metadata,
     )?;
     super::super::super::util::atomic_write_json_to_path(

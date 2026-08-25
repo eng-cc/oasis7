@@ -36,6 +36,18 @@ def canonical_digest(value: dict) -> str:
     return hashlib.sha256(json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+CANONICAL_RESET_SURFACES = [
+    "data/execution-records",
+    "data/execution-world",
+    "data/execution-world-simulator-mirror",
+    "data/storage",
+    "data/runtime-root",
+    "data/replication-root",
+    "output/chain-runtime",
+    "output/node-distfs",
+]
+
+
 class ValidatorPairRebuildContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="oasis7-pair-rebuild-contract-")
@@ -643,7 +655,7 @@ print(json.dumps({
         with self.assertRaises(SystemExit):
             module.validate_host_receipt(receipt, plan, "apply")
 
-    def _bound_host_receipt(self):
+    def _bound_phase_receipt(self, phase: str):
         spec = importlib.util.spec_from_file_location("pair_rebuild_host_binding_fixture", EXECUTOR)
         self.assertIsNotNone(spec)
         self.assertIsNotNone(spec.loader)
@@ -651,12 +663,68 @@ print(json.dumps({
         spec.loader.exec_module(module)
         plan = json.loads(subprocess.run(self._base_args(), text=True, capture_output=True, check=True).stdout)
         plan["schema_version"] = "oasis7.validator_pair_rebuild_transaction.v1"
-        plan["transaction_id"] = "pair-rebuild-test-binding"
-        plan["phase"] = "staged"
-        plan_path = self.out / "binding-transaction.json"
+        plan["transaction_id"] = f"pair-rebuild-test-{phase}"
+        plan["phase"] = "staged" if phase == "apply" else "prepared"
+        plan_path = self.out / f"{phase}-transaction.json"
         plan_path.write_text(json.dumps(plan), encoding="utf-8")
-        receipt = module.run_host_adapter(self._write_host_adapter(), plan_path, plan, "apply")
+        receipt = module.run_host_adapter(self._write_host_adapter(), plan_path, plan, phase)
         return module, plan, receipt
+
+    def _bound_host_receipt(self):
+        return self._bound_phase_receipt("apply")
+
+    def test_apply_rejects_missing_per_node_post_delete_absence_receipts(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        for role in ("storage-205", "sequencer-204"):
+            receipt["nodes"][role].pop("post_delete_absence", None)
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def test_apply_rejects_target_surface_mismatch_including_advertised_bridge_root(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        advertised_targets = [*CANONICAL_RESET_SURFACES, "data/bridge-root"]
+        target_digest = hashlib.sha256(
+            json.dumps(advertised_targets, ensure_ascii=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        for role in ("storage-205", "sequencer-204"):
+            receipt["nodes"][role]["post_delete_absence"] = {
+                "absent": True,
+                "target_set": advertised_targets,
+                "target_set_sha256": target_digest,
+            }
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def test_backup_rejects_each_incomplete_hashed_manifest_binding(self) -> None:
+        module, plan, receipt = self._bound_phase_receipt("backup")
+        required_fields = (
+            "backup_root",
+            "backup_manifest_sha256",
+            "backup_inventory",
+            "backup_capacity",
+            "backup_non_seed",
+        )
+        for missing_field in required_fields:
+            incomplete = copy.deepcopy(receipt)
+            for role in ("storage-205", "sequencer-204"):
+                node = incomplete["nodes"][role]
+                node.update(
+                    {
+                        "backup_root": str(Path(plan["nodes"][role]["root"]) / "backups" / "pair-rebuild-test-backup"),
+                        "backup_manifest_sha256": "a" * 64,
+                        "backup_inventory": plan["capacity"][role]["inventory"],
+                        "backup_capacity": plan["capacity"][role],
+                        "backup_non_seed": {
+                            "forensic_only": True,
+                            "seed_eligible": False,
+                            "restore_deleted_chain_state": False,
+                        },
+                    }
+                )
+                node.pop(missing_field)
+            with self.subTest(missing_field=missing_field):
+                with self.assertRaises(SystemExit):
+                    module.validate_host_receipt(incomplete, plan, "backup")
 
     def test_host_receipt_rejects_incomplete_swapped_or_stale_evidence(self) -> None:
         module, plan, receipt = self._bound_host_receipt()

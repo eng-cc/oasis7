@@ -261,6 +261,34 @@ pub(super) fn list_execution_bridge_record_heights(
     Ok(heights)
 }
 
+pub(super) fn load_highest_valid_execution_bridge_record(
+    execution_records_dir: &Path,
+) -> Result<Option<ExecutionBridgeRecord>, String> {
+    for height in list_execution_bridge_record_heights(execution_records_dir)?
+        .into_iter()
+        .rev()
+    {
+        let path = execution_bridge_record_path(execution_records_dir, height);
+        let Ok(record) = load_execution_bridge_record(path.as_path()) else {
+            continue;
+        };
+        if record.height != height || record.world_id.trim().is_empty() {
+            continue;
+        }
+        return Ok(Some(record));
+    }
+
+    let latest_path = execution_records_dir.join("latest.json");
+    if !latest_path.exists() {
+        return Ok(None);
+    }
+    let record = load_execution_bridge_record(latest_path.as_path())?;
+    if record.world_id.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(record))
+}
+
 fn maybe_insert_pin_ref(pinned_refs: &mut BTreeSet<String>, content_ref: Option<&str>) {
     if let Some(content_ref) = content_ref.filter(|content_ref| !content_ref.is_empty()) {
         pinned_refs.insert(content_ref.to_string());
