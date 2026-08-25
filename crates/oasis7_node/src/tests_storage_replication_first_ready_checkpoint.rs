@@ -7,9 +7,9 @@ use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_checkpoint_lineage::CheckpointLineageHeadV1;
 use oasis7_proto::distributed_dht::DistributedDht;
 #[derive(Clone)]
-struct FirstReadyHeadCheckpointNetwork {
-    inner: Arc<TestInMemoryNetwork>,
-    fetch_protocols: Arc<Mutex<Vec<String>>>,
+pub(super) struct FirstReadyHeadCheckpointNetwork {
+    pub(super) inner: Arc<TestInMemoryNetwork>,
+    pub(super) fetch_protocols: Arc<Mutex<Vec<String>>>,
 }
 
 #[derive(Clone)]
@@ -130,10 +130,10 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerHeadC
 
 include!("tests_storage_replication_first_ready_checkpoint_support.rs");
 
-struct BootstrapBeforeIncrementalHook {
-    installed: Vec<u64>,
-    incremental_commits: Vec<u64>,
-    rollback_heights: Vec<u64>,
+pub(super) struct BootstrapBeforeIncrementalHook {
+    pub(super) installed: Vec<u64>,
+    pub(super) incremental_commits: Vec<u64>,
+    pub(super) rollback_heights: Vec<u64>,
 }
 
 impl NodeExecutionHook for BootstrapBeforeIncrementalHook {
@@ -174,7 +174,7 @@ impl NodeExecutionHook for BootstrapBeforeIncrementalHook {
     }
 }
 
-fn checkpoint_bundle(
+pub(super) fn checkpoint_bundle(
     height: u64,
     execution_block_hash: &str,
     execution_state_root: &str,
@@ -193,7 +193,7 @@ fn checkpoint_bundle(
     }
 }
 
-fn committed_decision(height: u64) -> PosDecision {
+pub(super) fn committed_decision(height: u64) -> PosDecision {
     PosDecision {
         height,
         slot: height,
@@ -867,6 +867,7 @@ fn fresh_observer_bootstraps_checkpoint_at_boundary_before_height_one_peer_misma
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum InitialPeerHead {
     Unavailable,

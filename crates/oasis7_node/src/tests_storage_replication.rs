@@ -8,6 +8,8 @@ mod storage_replication_core_tests;
 mod storage_replication_high_checkpoint_tests;
 #[path = "tests_storage_replication_first_ready_checkpoint.rs"]
 mod storage_replication_first_ready_checkpoint_tests;
+#[path = "tests_storage_replication_checkpoint_fallback.rs"]
+mod storage_replication_checkpoint_fallback_tests;
 #[path = "tests_storage_replication_high_checkpoint_retained.rs"]
 mod storage_replication_high_checkpoint_retained_tests;
 #[path = "tests_storage_replication_live_retained_boundary.rs"]

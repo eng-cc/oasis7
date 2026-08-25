@@ -288,6 +288,89 @@ impl PosNodeEngine {
         })
     }
 
+    pub(super) fn try_fresh_observer_checkpoint_fallback_after_execution_mismatch(
+        &mut self,
+        endpoint: &ReplicationNetworkEndpoint,
+        node_id: &str,
+        world_id: &str,
+        replication_runtime: &mut ReplicationRuntime,
+        next_height: u64,
+        execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
+        progress_callback: &mut Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
+        err: &NodeError,
+    ) -> Result<bool, NodeError> {
+        // A fresh observer may have a valid successor commit in transport while its
+        // clean local execution disagrees with the peer binding.  If height-zero
+        // rollback is unavailable, only the authenticated retained-checkpoint path
+        // can recover; unrelated execution failures must stay fail-closed.
+        let reason = err.to_string();
+        let fresh_observer = self.checkpoint_bootstrap_enabled
+            && self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0
+            && next_height == 1;
+        let execution_mismatch = reason.contains("execution hash validation failed")
+            || reason.contains("execution driver peer mismatch");
+        let rollback_unavailable = reason.contains("rollback record for height 0 is unavailable");
+        if !fresh_observer
+            || !execution_mismatch
+            || !rollback_unavailable
+            || !Self::replication_gap_sync_local_state_blocked_reason(reason.as_str())
+        {
+            return Ok(false);
+        }
+
+        let Some(cached_head) = self.cached_high_checkpoint_head(world_id) else {
+            return Ok(false);
+        };
+        let now_ms = crate::runtime_util::now_unix_ms();
+        let mut retry_pending = false;
+        for checkpoint_candidate in
+            Self::high_replication_checkpoint_candidates(cached_head.height, next_height)
+        {
+            let expected_candidate_head =
+                (checkpoint_candidate == cached_head.height).then_some(&cached_head);
+            match self.try_sync_high_replication_checkpoint_boundary(
+                endpoint,
+                node_id,
+                world_id,
+                replication_runtime,
+                checkpoint_candidate,
+                next_height,
+                expected_candidate_head,
+                execution_hook,
+                progress_callback,
+            ) {
+                Ok(true) => return Ok(true),
+                Ok(false) => {}
+                Err(probe_err)
+                    if Self::high_replication_checkpoint_probe_can_continue(&probe_err) =>
+                {
+                    retry_pending = true;
+                    self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+                    if self.record_high_replication_checkpoint_probe_failure(
+                        next_height,
+                        checkpoint_candidate,
+                        now_ms,
+                        &probe_err,
+                    ) {
+                        return Ok(false);
+                    }
+                }
+                Err(probe_err) => return Err(probe_err),
+            }
+        }
+        self.fresh_observer_checkpoint_bootstrap_retry_pending = true;
+        if retry_pending {
+            self.last_replication_gap_sync_repair_attempt_summary = Some(
+                "fresh observer execution mismatch retained checkpoint retry pending".to_string(),
+            );
+        }
+        Ok(false)
+    }
+
     pub(super) fn validate_world_head_checkpoint_payload(
         world_id: &str,
         payload: &ReplicationCommitPayload,

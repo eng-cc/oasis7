@@ -962,6 +962,18 @@ impl PosNodeEngine {
                 let (block_hash, committed_at_ms) = match execution_result {
                     Ok(result) => result,
                     Err(err) => {
+                        if self.try_fresh_observer_checkpoint_fallback_after_execution_mismatch(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication_runtime,
+                            next_height,
+                            &mut execution_hook,
+                            &mut progress_callback,
+                            &err,
+                        )? {
+                            return Ok(());
+                        }
                         self.record_replication_gap_sync_local_state_block(
                             next_height,
                             advertised_network_height,
