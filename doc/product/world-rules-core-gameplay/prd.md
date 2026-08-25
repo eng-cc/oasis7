@@ -290,6 +290,29 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该缺口的 `test_tier_required` 至少覆盖：工厂建成但无候选、单一可用候选、多个候选可比较、仅有 blocked/unknown 候选、同名不同版本、候选在预览后发生准入/原料/物流/电力/终端漂移；只有 `candidate_available` 能进入 `ScheduleRecipe` 排程预览，最终提交仍须在新鲜快照上重新校验，其余结果不产生 sink/hold/queue/W/奖励；选择预览保持只读，提交后只固定一次当前 recipe version，失败提供补料、补证、改路、改厂、等待或延期中的真实动作；重复查看、重连、retry、restore 与 replay 不自动选择、不复制效果，Viewer/pure API/Agent 对候选与下一步保持一致。
 
+#### 代表性配方执行档案（把分散规则收成一条可验收工业链）
+
+候选字段齐全不等于一条工业链已经设计完整。每个作为产品验收基准的代表性配方，必须提供一份**配方执行档案**，把同一 candidate 下的工厂能力、原材料批次、物流边、合法执行单位、输出分支和终端用途收成一个完整声明；任何一项只能从别处“猜到”或由 surface 临时拼接时，该档案为 `incomplete`，不得用于宣称流水线可排程、可稳定或可交付。档案是跨专业合同的只读投影与验收夹具，不是新的 runtime schema、recipe catalog 或第二套材料/物流权威。
+
+最小代表性档案必须同时回答以下问题：
+
+| 决策面 | 最小完整声明 | 玩家由此能判断什么 |
+| --- | --- | --- |
+| 工厂与配方 | pinned recipe version/authority、factory capability fit、作用域与当前 lifecycle state | 这座工厂为何能执行该版本，以及准入/退役或能力变化是否会阻止开工 |
+| 原材料与齐套 | 至少两条 required input edge；每条绑定来源 ledger、batch/quality/custody 适用结论、数量与 join policy | 哪些原料已可消费、哪些仍缺失/未知，以及 full-only 或 staged intake 会占用什么 |
+| 物流与容量 | 每条跨地点输入/中间品边的 effective path、预计实际到达量/损耗、吞吐或 buffer obligation 与复查边界 | 是立即调运、减量、换来源/路径还是等待容量，且“已发出”不等于“已到达” |
+| 执行与能源 | canonical executable cycle/quantum、full/partial policy、stage capacity、power mode 与预计时间/风险 | 本次究竟承诺多少、哪些资源会在何时变得不可逆，以及不足一个合法单位时为何不能产出半批 |
+| 产出与去向 | 一个 output bundle 内的主产物和每个副产物 branch、owner/destination、atomic 或 split fan-out policy | 某个副产物去向失效时是整批阻塞还是只保留未决 branch，不会出现主产物成功而副产物消失 |
+| 终端与成长 | production-only 或 terminal-admission 完成边界、terminal owner/capacity/purpose、首次成果与后续目标 | 一次生产 receipt 是否只证明产出，何时才完成交付、减少需求、获得里程碑并打开下一选择 |
+
+代表性最小样例固定为“一座具备目标 capability 的工厂 + 一个 active/restricted 配方版本 + 两类独立原材料 + 至少一条有损或有容量约束的物流边 + 一个主产物与一个必须处置的副产物 + 一个终端用途”。这里冻结的是覆盖形状，不冻结材料名称、配比、产率、价格、绝对容量、tick 数或字段编码。档案必须引用 M4、Recipe/Factory 与 `world-runtime` 的当前权威事实；缺少 authority、批次 provenance、路径、power mode、output policy 或 terminal boundary 时显示对应 `unknown/blocked`，不能用默认零值、同名材料、最近路径或“推荐配置”补齐。
+
+玩家在同一档案上至少可以比较 `schedule_declared_cycle`、`prepare_or_source_missing_inputs`、`transfer_or_wait_for_capacity`、profile 支持时的 `reduce_to_legal_unit`、`repair_power_or_factory_fit`、`resolve_output_destination` 与 `defer`。每个候选必须说明即时收益、仍占用/将消费的价值、主要失败成本、对稳定窗口和交付的影响、下一次权威复查点与推荐理由；确认只固定所选 candidate/cycle 的一次承诺，未选路径不取得 hold、吞吐顺位、input sink 或稳定进度。任何改变配方版本、工厂能力、required edge、输出 branch 或 terminal purpose 的修复都是 parent-linked 新 candidate，并从 `W=0` 开始；仅补齐同一 candidate 的原料、容量或电力前置才保持 root continuation。
+
+失败与恢复必须用这份完整档案做守恒判断：任一 required input 不适用、join 未齐套、effective path/容量不足、power/factory fit 漂移或 mandatory output/terminal 失效时，在首个不可逆 sink 前延期或原子拒绝；已经存在 WIP、在途或已结算 branch 时，只能沿 profile 支持的等待、释放、改道、隔离、返工、return、salvage 或终止路径各处置一次。不得静默换配方、把 full-only 降为 partial、让同一批原料加入两个 join、自动补货/退款，或在 output branch 失败时丢弃副产物并保留完整奖励。
+
+该档案的 `test_tier_required` 至少以同一 deterministic fixture 覆盖：两类输入齐套后只启动一个合法 cycle 并产生一次 bundle；其中一类 input 为 `unknown/not_applicable` 时无 sink/WIP；物流满时保持可读 blocked，容量释放后仅重评未决 edge；power 在报价后不足时原子拒绝或按声明 mode 延期；mandatory 副产物 destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自声明边界完成目标。Viewer 与 pure API 必须从同一档案读出 factory/recipe、两类输入、path/loss/capacity、cycle、bundle/branch、terminal、primary blocker、机会成本、`next_action` 和 `next_recheck`；重复提交、重连、arrival reorder、Agent retry、snapshot restore 与 replay 不复制材料消费、hold、产出、交付、稳定进度或奖励。`test_tier_full` 再扩展到三阶段、三个以上输入/输出分支、cutover、长期持久化恢复和跨窗口 lineage。
+
 #### 配方生命周期、版本兼容与受控退役
 
 配方不是可被客户端或 Agent 就地修改的库存标签，而是具有来源、作用域和版本身份的受治理工业能力。配方生命周期使用六个且仅六个产品状态：`pending_validation`（待验证）、`validated_pending_admission`（已验证待准入）、`active`（已生效）、`restricted`（受限生效）、`retiring`（退役中）和 `retired`（已退役）。只有 `active` 或在声明作用域内的 `restricted` 版本，且当前授权、工厂能力、原材料规格/品质、物流路径、电力与终端前置均满足时，才能成为新的生产候选；提案、模拟结果、同名配方推荐或“已下载”状态都不产生预留、输入 sink、产出、稳定窗口或交付资格。
@@ -395,6 +418,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
   - `test_tier_required` 覆盖 preview 无效果、报价后 drift 的拒绝/重报价、上述四类旧工作 bucket 的逐项处置、升级/退役单次 cutover、recipe-fit 与 candidate/receipt/reservation/W 隔离、unknown authority、retired 不可复活，以及 Viewer 与 pure API 的状态/机会成本/下一动作一致性；`test_tier_full` 覆盖并发工作与共享容量、连续升级、cutover 部分失败、crash/restore/replay、持久化、多阶段 WIP/transit/buffer、Agent 重试和 successor conversion。产品承诺链接 `doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 与 `doc/testing/prd.md`，不复制其 runtime、WASM、物流算法或测试实现。
 
 - SC-27：代表性 `factory-ready/recipe-missing → recipe candidate discovery → recipe_selection_preview → ScheduleRecipe` 路径证明候选只从同一权威快照派生，并区分 `candidate_available`、`candidate_blocked` 与 `candidate_unknown`；候选能同时说明当前目标、recipe version/authority、factory fit、原料适用/缺口、物流/容量、power/maintenance、output bundle/终端、机会成本、主要风险、`next_action` 与 `next_recheck`。同名版本不合并，只有 `candidate_available` 可进入 `ScheduleRecipe` 排程预览，最终提交仍须新鲜校验；选择 preview 不产生 activation、hold、input sink、queue、物流 reservation、产出、稳定进度或奖励；准入/原料/物流/电力/终端漂移必须重发现、重报价或原子拒绝，不能自动换配方。无候选时玩家获得明确原因与补料、补证、改路、改厂、等待或延期中的真实路径；选择、排程、生产、稳定与交付结果分层，重连、重试、恢复与 replay 不自动选择或复制效果，Viewer、pure API 与 Agent 对候选和下一步保持同义。产品层不冻结 recipe catalog、解锁树、兼容算法、runtime schema、UI 或当前实现完成声明。
+- SC-28：至少一份代表性配方执行档案把同一 candidate 的 factory capability、pinned recipe、两类 required raw-material inputs 及其 batch/quality/custody、effective logistics path/loss/capacity、canonical executable cycle、power mode、主/副产物 output bundle、terminal purpose 与 progression boundary 收成完整只读投影；缺失任一 authority 时为 `incomplete/unknown/blocked`，不宣称可排程、稳定或交付。单一 deterministic fixture 覆盖齐套成功、input 不适用、物流满后重评、power 漂移、mandatory output destination 失效以及 production-only/terminal-admission 两种完成边界；失败在首个不可逆 sink 前延期/原子拒绝，已发生 WIP/transit/branch effect 只按 profile 单次处置。未选路径不取得 hold/优先级/进度，因果改变建立 parent-linked 新 candidate 并从 `W=0` 开始；retry/reconnect/replay 不复制材料、容量、产出、交付或奖励，Viewer/pure API 对完整档案、blocker、机会成本和下一步保持同义。产品层不新增 runtime schema，不冻结配比、产率、价格、容量、tick、队列或 UI。
 
 ### 5.1 验收追踪
 
@@ -428,6 +452,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 | SC-25 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖工厂能力预览无效果、成本/停机/容量机会成本、authority drift/unknown、parent-linked candidate 与单一 cutover、accepted-unstarted/WIP/in-transit/buffer 逐项处置、retiring/retired 无新排程、successor 不自动迁移、W/queue/reservation/receipt/reward 隔离、retry/reconnect/replay 不重复或复活，以及 Viewer/pure API parity；`test_tier_full` 覆盖并发/连续升级、共享容量、部分失败、crash/restore/replay、持久化、多阶段工作与 successor conversion | test_tier_full |
 | SC-26 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖四类产品读面、同一三阶段路径的 blocker/占用/下一动作/复查/进度影响、production 与 delivery/terminal settlement 分离、结算后下一目标候选、因果换线 `W=0` 与 root continuation、unknown/fail-closed、Viewer/pure API/Agent/replay 一致及单次完成效果 | test_tier_required |
 | SC-27 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 配方候选发现的 `candidate_available`/`candidate_blocked`/`candidate_unknown`、同名版本隔离、目标/工厂/原料/物流/power/terminal 事实比较、只读 `recipe_selection_preview`、漂移后重发现或原子拒绝、仅可用候选进入 `ScheduleRecipe` 排程预览且提交前 fresh revalidation、选择/排程/生产/稳定/交付分层，以及 Viewer/pure API/Agent/replay 不自动选择或复制效果 | test_tier_required |
+| SC-28 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 一份两输入、一受限物流边、主/副产物与终端用途齐全的代表性配方执行档案；完整/unknown/blocked 判定、合法 cycle 与 power mode、join/物流/branch/terminal 失败恢复、production-only/terminal-admission 边界、parent-linked 因果换线、Viewer/pure API parity 及 retry/reconnect/replay 幂等 | test_tier_full |
 
 ## 6. Non-Goals
 
