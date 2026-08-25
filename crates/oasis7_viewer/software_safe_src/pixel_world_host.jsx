@@ -1556,7 +1556,7 @@ export function PixelWorldHost(props) {
           {rendererStatus() === "unavailable" ? <><div>{tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")}</div><button type="button" class="pixel-world-render-unavailable__retry" onClick={requestReadyMode}>{tr(locale(), "重试 Renderer", "Retry Renderer")}</button></> : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
         </div>
       </Show>
-      <Show when={focusMode() && renderState()?.commercial_surface && !maximized()}>
+      <Show when={focusMode() && renderState()?.commercial_surface}>
         <div class="pixel-world-focus-receipt">
           <PixelWorldActionReceipt
             class="pixel-world-action-receipt--focus-compact"

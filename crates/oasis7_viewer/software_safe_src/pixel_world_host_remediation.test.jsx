@@ -244,6 +244,13 @@ describe("pixel world host remediation contracts", () => {
       ...document.querySelectorAll(".pixel-world-focus-hud__cell--receipt"),
     ].filter((element) => !element.closest("[hidden]"));
     expect(visibleReceipts).toHaveLength(1);
+    screen.getByRole("button", { name: "Maximize" }).click();
+    await waitFor(() => expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus-maximized", "true"));
+    const maximizedReceipts = [
+      ...document.querySelectorAll('[data-viewer-overlay="receipt"]'),
+      ...document.querySelectorAll(".pixel-world-focus-hud__cell--receipt"),
+    ].filter((element) => !element.closest("[hidden]"));
+    expect(maximizedReceipts).toHaveLength(1);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("uses Agent name before label before id in the Cinematic focus surfaces", async () => {

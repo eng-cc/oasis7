@@ -11655,7 +11655,7 @@ function PixelWorldHost(props) {
     }), _el$220);
     insert(_el$176, createComponent(Show, {
       get when() {
-        return memo(() => !!(focusMode() && renderState()?.commercial_surface))() && !maximized();
+        return memo(() => !!focusMode())() && renderState()?.commercial_surface;
       },
       get children() {
         var _el$185 = _tmpl$49$1();
