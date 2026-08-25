@@ -263,6 +263,7 @@ jobs:
         if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}
         run: >-
           env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime
+          --features test_tier_required
           execution_bridge_real_tests::real_execution_bridge::tests
 
   windows-package-rollout-behavior:
