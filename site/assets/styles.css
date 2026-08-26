@@ -1475,6 +1475,10 @@ code {
   display: none;
 }
 
+.proof-causal-card[data-proof-visible="false"] {
+  display: none;
+}
+
 .proof-log-details {
   margin-top: 0.86rem;
   border: 1px solid rgba(131, 188, 220, 0.22);
@@ -3044,6 +3048,7 @@ code {
 main:has(.landing-chapter) {
   max-width: 1280px;
   padding-inline: clamp(1rem, 3vw, 2.5rem);
+  min-width: 0;
 }
 
 .landing-chapter {
@@ -3052,6 +3057,15 @@ main:has(.landing-chapter) {
   box-shadow: none;
   background: transparent;
   overflow: visible;
+  min-width: 0;
+}
+
+.landing-chapter > *,
+.landing-chapter .hero-grid > *,
+.landing-chapter .proof-grid > *,
+.landing-chapter .world-layout > *,
+.landing-chapter .download-surface > * {
+  min-width: 0;
 }
 
 .landing-chapter::before {
@@ -3062,6 +3076,10 @@ main:has(.landing-chapter) {
   margin-top: 0;
   min-height: min(680px, calc(100vh - 1.5rem));
   padding-inline: clamp(0.5rem, 3vw, 2.5rem);
+}
+
+.landing-hero::after {
+  right: 0;
 }
 
 .landing-hero .hero-grid {

@@ -32,8 +32,8 @@
     <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/en/" />
     <link rel="alternate" hreflang="x-default" href="https://eng-cc.github.io/oasis7/" />
     <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
-    <link rel="stylesheet" href="assets/styles.css?v=20260722-visual-convergence" />
-    <script defer src="assets/app.js?v=20260722-visual-convergence"></script>
+    <link rel="stylesheet" href="assets/styles.css?v=20260826-homepage-completeness" />
+    <script defer src="assets/app.js?v=20260826-homepage-completeness"></script>
   </head>
   <body>
     <a class="skip-link" href="#top">跳到正文</a>
@@ -123,16 +123,16 @@
       <section id="proof" class="section landing-chapter landing-proof" data-reveal>
         <p class="eyebrow">受控场景证据</p>
         <h2>看一条后果链：压力出现，Agent 选择，世界留下变化。</h2>
-        <p class="section-intro" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">这是一段来源明确的受控验证场景回放：先出现压力，再由 Agent 作出选择，最后把变化留在可追看的世界记录里。当前页面展示的是受控场景证据，不是实时遥测。</p>
-        <div class="provenance-story" data-homepage-claim="provenance-story">
+        <p class="section-intro" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">这是一段标注为示例的受控验证场景回放：先出现压力，再由 Agent 作出选择，最后把变化留在可追看的世界记录里。Tick 与事件文案是说明性样例，不是仓库内已绑定 receipt 的实时证明；当前页面展示的是受控场景证据，不是实时遥测。</p>
+        <div class="provenance-story" data-homepage-claim="provenance-story" data-evidence-provenance="illustrative">
           <div class="provenance-story-heading">
             <p class="eyebrow">一段可追溯的回放</p>
             <p class="provenance-label">来源：受控验证场景回放</p>
           </div>
-          <p class="provenance-story-copy">你先给出方向与约束，Agent 在已有资源和规则内作出选择；默认 <code>minimal</code> 场景日志记录 <code>Tick 128: harvest accepted</code> 与 <code>Tick 136: price spike warning</code>，用来追踪事件如何落成可审计的世界状态后果。截图只标示受控回放来源，不宣称展示后续事件。</p>
+          <p class="provenance-story-copy">你先给出方向与约束，Agent 在已有资源和规则内作出选择；这里用默认 <code>minimal</code> 场景的示例性日志样例（<code>Tick 128: harvest accepted</code>、<code>Tick 136: price spike warning</code>）演示如何追踪事件落成世界状态后果。它们尚未绑定仓库内的 replay artifact 或 receipt，不应当作实时证明；截图只标示受控回放来源，不宣称展示后续事件。</p>
           <div class="provenance-story-facts" aria-label="后果链证据摘要">
-            <span>事件后果：Agent 的选择已经改变世界状态</span>
-            <span>证据可追溯：截图、事件日志与审计轨迹</span>
+            <span>说明性后果链：Agent 选择 → 世界状态变化</span>
+            <span>待绑定来源：截图、事件日志与审计轨迹</span>
           </div>
         </div>
         <div class="proof-switcher" data-proof-switcher>
@@ -181,44 +181,44 @@
         <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：viewer</span>。也就是首页默认展示的这条唯一 UI 网页验证面；如果你要继续深挖，更底层的兼容入口和程序化访问方式都放在文档中心说明。</p>
 
         <details class="proof-log-details">
-          <summary>展开查看对应事件日志（辅助证据）</summary>
+          <summary>展开查看对应事件日志样例（说明性证据）</summary>
           <div class="proof-log-body">
-            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
-[tick=133] minimal::scheduler stable -> next decision window
-[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
-            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
-[tick=091] twin_region::agent-2 accepted -> shared production boost
-[tick=097] twin_region::supply pact revised -> maintenance priority shifts</code></pre>
-            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
-[tick=149] triad_region::multi-party pact signed
-[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
+            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[sample tick=128] minimal::harvest accepted -> +power
+[sample tick=133] minimal::scheduler stable -> next decision window
+[sample tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
+            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[sample tick=084] twin_region::agent-1 request trade(energy)
+[sample tick=091] twin_region::agent-2 accepted -> shared production boost
+[sample tick=097] twin_region::supply pact revised -> maintenance priority shifts</code></pre>
+            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[sample tick=142] triad_region::agent-3 reroute logistics via neutral node
+[sample tick=149] triad_region::multi-party pact signed
+[sample tick=155] triad_region::policy vote closes -> regime shift</code></pre>
           </div>
         </details>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 128</span>
-            <p>minimal：采集动作通过，说明你的输入已经能被世界动作链接住。</p>
+            <span>Tick 128 · 样例</span>
+            <p>说明性 minimal 样例：采集动作通过，演示输入如何接入世界动作链。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 136</span>
-            <p>minimal：价格波动被记录，说明后果链不只停在“动作已执行”。</p>
+            <span>Tick 136 · 样例</span>
+            <p>说明性 minimal 样例：价格波动被记录，演示后果链如何不只停在“动作已执行”。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 91</span>
-            <p>twin_region：交易事件完成，能追到多 Agent 协同带来的生产后果。</p>
+            <span>Tick 91 · 样例</span>
+            <p>说明性 twin_region 样例：交易事件完成，演示如何追到多 Agent 协同带来的生产后果。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 97</span>
-            <p>twin_region：供给协议被重新调整，说明策略输入已经开始改变协作结构。</p>
+            <span>Tick 97 · 样例</span>
+            <p>说明性 twin_region 样例：供给协议被重新调整，演示策略输入如何改变协作结构。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 149</span>
-            <p>triad_region：多方协定事件落盘，治理信号已经能进入可审计轨迹。</p>
+            <span>Tick 149 · 样例</span>
+            <p>说明性 triad_region 样例：多方协定事件落盘，演示治理信号如何进入可审计轨迹。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 155</span>
-            <p>triad_region：治理投票结束，说明制度层后果也能被持续观测。</p>
+            <span>Tick 155 · 样例</span>
+            <p>说明性 triad_region 样例：治理投票结束，演示制度层后果如何被持续观测。</p>
           </article>
         </div>
       </section>
@@ -464,7 +464,7 @@
               </li>
               <li>
                 <a
-                  href="https://github.com/eng-cc/oasis7/blob/main/doc/game/gameplay/gameplay-top-level-design.prd.md"
+                  href="https://github.com/eng-cc/oasis7/blob/main/doc/engineering/design.md"
                   target="_blank"
                   rel="noreferrer"
                   >引擎与模块化架构文档</a

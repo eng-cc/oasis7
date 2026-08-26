@@ -32,8 +32,8 @@
     <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/en/" />
     <link rel="alternate" hreflang="x-default" href="https://eng-cc.github.io/oasis7/" />
     <link rel="icon" type="image/svg+xml" href="../assets/images/favicon.svg" />
-    <link rel="stylesheet" href="../assets/styles.css" />
-    <script defer src="../assets/app.js"></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260826-homepage-completeness" />
+    <script defer src="../assets/app.js?v=20260826-homepage-completeness"></script>
   </head>
   <body>
     <a class="skip-link" href="#top">Skip to main content</a>
@@ -71,7 +71,7 @@
     </header>
 
     <main id="top" tabindex="-1">
-      <section class="hero section section-hero" id="hero" data-reveal>
+      <section class="hero section section-hero landing-chapter landing-hero" id="hero" data-reveal>
         <canvas class="hero-canvas" data-hero-canvas aria-hidden="true"></canvas>
         <div class="hero-grid">
           <div>
@@ -97,7 +97,7 @@
         </div>
       </section>
 
-      <section id="what" class="section" data-reveal>
+      <section id="what" class="section landing-chapter landing-consequence" data-reveal>
         <p class="eyebrow">One consequence</p>
         <h2>Pressure arrives. Agents respond. The world keeps the result.</h2>
         <p class="section-intro" data-homepage-claim="indirect-agency">You set direction and constraints, but you do not directly arrange every Agent action.</p>
@@ -123,16 +123,16 @@
       <section id="proof" class="section landing-chapter landing-proof" data-reveal>
         <p class="eyebrow">Controlled-scenario evidence</p>
         <h2>Follow one consequence: pressure arrives, Agents choose, the world keeps the change.</h2>
-        <p class="section-intro" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">This is a provenance-bound controlled validation scenario replay: pressure arrives, an Agent chooses within the rules, and the world records the resulting change. This page shows controlled-scenario evidence, not live telemetry.</p>
-        <div class="provenance-story" data-homepage-claim="provenance-story">
+        <p class="section-intro" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">This is an explicitly illustrative controlled validation scenario replay: pressure arrives, an Agent chooses within the rules, and the world records the resulting change. The Tick and event text below are explanatory samples, not live proof bound to a checked-in receipt; this page shows controlled-scenario evidence, not live telemetry.</p>
+        <div class="provenance-story" data-homepage-claim="provenance-story" data-evidence-provenance="illustrative">
           <div class="provenance-story-heading">
             <p class="eyebrow">A replay you can trace</p>
             <p class="provenance-label">Source: controlled validation scenario replay</p>
           </div>
-          <p class="provenance-story-copy">You provide direction and constraints; an Agent chooses within the available resources and rules. The default <code>minimal</code> scenario log records <code>Tick 128: harvest accepted</code> and <code>Tick 136: price spike warning</code>, tracing how the event chain becomes an auditable world-state consequence. The screenshot marks the controlled replay source; it does not claim to show later events.</p>
+          <p class="provenance-story-copy">You provide direction and constraints; an Agent chooses within the available resources and rules. The default <code>minimal</code> scenario uses illustrative log samples (<code>Tick 128: harvest accepted</code> and <code>Tick 136: price spike warning</code>) to show how an event chain could become a world-state consequence. They are not bound to a checked-in replay artifact or receipt, so they are not live proof; the screenshot marks the controlled replay source and does not claim to show later events.</p>
           <div class="provenance-story-facts" aria-label="Consequence-chain evidence summary">
-            <span>Consequence: an Agent choice has changed world state</span>
-            <span>Auditable evidence: screenshot, event log, and audit trace</span>
+            <span>Illustrative chain: Agent choice → world-state change</span>
+            <span>Source binding pending: screenshot, event log, and audit trace</span>
           </div>
         </div>
         <div class="proof-switcher" data-proof-switcher>
@@ -147,31 +147,50 @@
         </div>
 
         <div class="proof-grid">
-          <article class="proof-card proof-card-key">
-            <h3>Minimal Verifiable Case</h3>
-            <ol class="proof-list">
-              <li>You provide a goal, constraint, or governance boundary</li>
-              <li>Agents decide how to execute within resource limits and the world's rules</li>
-              <li>The world records changes in prices, cooperation, and governance as events</li>
-              <li>You can replay the chain through replay, live runtime, and audit traces</li>
+          <figure class="proof-figure" data-proof-panel="minimal" data-proof-visible="true">
+            <img src="../assets/images/screenshots/minimal.webp" alt="Controlled single-front Viewer capture showing observable world state in the asteroid belt" width="2400" height="1600" />
+            <figcaption>Single-front: illustrative controlled-scenario Viewer capture, not a concept image or public game mode.</figcaption>
+          </figure>
+          <figure class="proof-figure" data-proof-panel="twin" data-proof-visible="false">
+            <img src="../assets/images/screenshots/twin_region_bootstrap.webp" alt="Controlled dual-region Viewer capture showing two regions and their observable world state" width="2400" height="1600" />
+            <figcaption>Dual-region: illustrative controlled-scenario Viewer capture, not a concept image or public game mode.</figcaption>
+          </figure>
+          <figure class="proof-figure" data-proof-panel="triad" data-proof-visible="false">
+            <img src="../assets/images/screenshots/triad_region_bootstrap.webp" alt="Controlled three-party governance Viewer capture showing multiple regions and observable world state" width="2400" height="1600" />
+            <figcaption>Three-party: illustrative controlled-scenario Viewer capture, not a concept image or public game mode.</figcaption>
+          </figure>
+          <article class="proof-card proof-card-key proof-causal-card" data-proof-panel="minimal" data-proof-visible="true">
+            <p class="proof-causal-kicker" data-proof-causal-kicker>Single-front · causal trace</p>
+            <h3 data-proof-causal-title>How this illustrative chain is read</h3>
+            <ol class="proof-list proof-causal-list">
+              <li><span>01</span><div><strong data-proof-causal-step="0-title">Pressure arrives</strong><p data-proof-causal-step="0-copy">Resources, goals, or existing rules narrow the available choices.</p></div></li>
+              <li><span>02</span><div><strong data-proof-causal-step="1-title">Agents respond</strong><p data-proof-causal-step="1-copy">They choose production, trade, or cooperation within the current constraints.</p></div></li>
+              <li><span>03</span><div><strong data-proof-causal-step="2-title">Consequences remain</strong><p data-proof-causal-step="2-copy">World changes can enter events, replays, and audit-readable traces.</p></div></li>
             </ol>
             <a class="button secondary" href="#download">Get the Preview Build</a>
           </article>
-
-          <article class="proof-card">
-            <h3>Event Slice (Auto-switched)</h3>
-            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
-[tick=133] minimal::scheduler stable -> next decision window
-[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
-            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
-[tick=091] twin_region::agent-2 accepted -> shared production boost
-[tick=097] twin_region::supply pact revised -> maintenance priority shifts</code></pre>
-            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
-[tick=149] triad_region::multi-party pact signed
-[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
+          <article class="proof-card proof-card-key proof-causal-card" data-proof-panel="twin" data-proof-visible="false">
+            <p class="proof-causal-kicker">Dual-region · causal trace</p>
+            <h3>How cooperation crosses two regions</h3>
+            <ol class="proof-list proof-causal-list">
+              <li><span>01</span><div><strong>Supply tightens</strong><p>Two regions face resources and maintenance pressure that need redistribution.</p></div></li>
+              <li><span>02</span><div><strong>Agents coordinate</strong><p>Agents negotiate trade and shared production within the current conditions.</p></div></li>
+              <li><span>03</span><div><strong>Structure changes</strong><p>The supply pact and production result become a world-state trail to revisit.</p></div></li>
+            </ol>
+            <a class="button secondary" href="#download">Get the Preview Build</a>
+          </article>
+          <article class="proof-card proof-card-key proof-causal-card" data-proof-panel="triad" data-proof-visible="false">
+            <p class="proof-causal-kicker">Three-party governance · causal trace</p>
+            <h3>How a pact becomes an observable institution</h3>
+            <ol class="proof-list proof-causal-list">
+              <li><span>01</span><div><strong>Pressure multiplies</strong><p>Logistics and priority conflicts between regions call for a new boundary.</p></div></li>
+              <li><span>02</span><div><strong>Agents negotiate</strong><p>Multiple parties adjust routes, pacts, and governance choices within existing constraints.</p></div></li>
+              <li><span>03</span><div><strong>Governance is recorded</strong><p>Votes and pacts enter an auditable trail for later observation and review.</p></div></li>
+            </ol>
+            <a class="button secondary" href="#download">Get the Preview Build</a>
           </article>
         </div>
-        <p class="doc-entry-note" data-homepage-claim="telemetry-boundary">This page shows controlled-scenario evidence, not live telemetry. `minimal / twin_region / triad_region` are labels from controlled validation scenario replays. They show inspectable consequence chains, not public-facing game mode names.</p>
+        <p class="doc-entry-note" data-homepage-claim="telemetry-boundary">This page shows illustrative controlled-scenario evidence, not live telemetry. `minimal / twin_region / triad_region` are labels from controlled validation scenario replay examples. They show how an inspectable consequence chain is presented, not a claim that these hard-coded Tick values are backed by a live receipt or a public-facing game mode.</p>
 
         <div class="proof-strip">
           <span class="proof-chip">Coverage: replay + live runtime + audit trace</span>
@@ -181,30 +200,45 @@
         </div>
         <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">Default web verification entry: viewer</span>. That is the formal name of the homepage's default and only UI web validation path; lower-level compatibility and programmatic entry points live in the docs hub.</p>
 
+        <details class="proof-log-details">
+          <summary>Expand the corresponding event log samples (illustrative evidence)</summary>
+          <div class="proof-log-body">
+            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[sample tick=128] minimal::harvest accepted -> +power
+[sample tick=133] minimal::scheduler stable -> next decision window
+[sample tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
+            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[sample tick=084] twin_region::agent-1 request trade(energy)
+[sample tick=091] twin_region::agent-2 accepted -> shared production boost
+[sample tick=097] twin_region::supply pact revised -> maintenance priority shifts</code></pre>
+            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[sample tick=142] triad_region::agent-3 reroute logistics via neutral node
+[sample tick=149] triad_region::multi-party pact signed
+[sample tick=155] triad_region::policy vote closes -> regime shift</code></pre>
+          </div>
+        </details>
+
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 128</span>
-            <p>minimal: a harvest action is accepted, showing the input-to-world action path is linked.</p>
+            <span>Tick 128 · sample</span>
+            <p>Illustrative minimal sample: a harvest action is accepted, showing how an input-to-world action path could be linked.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 136</span>
-            <p>minimal: a market spike is recorded, showing that the chain already reaches visible consequences.</p>
+            <span>Tick 136 · sample</span>
+            <p>Illustrative minimal sample: a market spike is recorded, showing how a chain could reach a visible consequence.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 91</span>
-            <p>twin_region: a trade event completes, showing multi-agent coordination can be traced into production effects.</p>
+            <span>Tick 91 · sample</span>
+            <p>Illustrative dual-region sample: a trade event completes, showing how coordination could be traced into production effects.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 97</span>
-            <p>twin_region: a supply pact is revised, showing strategy inputs can alter cooperation structure.</p>
+            <span>Tick 97 · sample</span>
+            <p>Illustrative dual-region sample: a supply pact is revised, showing how strategy inputs could alter cooperation structure.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 149</span>
-            <p>triad_region: a multi-party pact is recorded in an auditable trail, showing governance signaling is already auditable.</p>
+            <span>Tick 149 · sample</span>
+            <p>Illustrative three-party sample: a multi-party pact is recorded in an auditable trail, showing how governance signaling could be audited.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 155</span>
-            <p>triad_region: a governance vote closes, showing institutional consequences are observable too.</p>
+            <span>Tick 155 · sample</span>
+            <p>Illustrative three-party sample: a governance vote closes, showing how institutional consequences could be observed.</p>
           </article>
         </div>
       </section>
@@ -215,7 +249,7 @@
             <p class="eyebrow">World laws · readable boundaries</p>
             <h2>The world does not let you cheat: time, resources, and consequences have sources.</h2>
           </div>
-          <p class="section-intro">These product boundaries come from the World Rules & Core Gameplay PRD. They explain what players can influence, and why the Viewer must make evidence and unknown states explicit.</p>
+          <p class="section-intro">These product boundaries come from the World Rules &amp; Core Gameplay PRD. They explain what players can influence, and why the Viewer must make evidence and unknown states explicit.</p>
         </div>
         <div class="law-grid">
           <article class="law-card">
@@ -239,7 +273,7 @@
             <p>Changes that happened should be traceable through events, replays, and receipts; unknown or degraded states stay explicit instead of being presented as success.</p>
           </article>
         </div>
-        <p class="law-source">Source: <a href="https://github.com/eng-cc/oasis7/blob/main/doc/product/world-rules-core-gameplay/prd.md" target="_blank" rel="noreferrer">World Rules & Core Gameplay PRD</a> (<code>doc/product/world-rules-core-gameplay/prd.md</code>). This page shows controlled-scenario evidence, not live telemetry and not live world telemetry.</p>
+        <p class="law-source">Source: <a href="https://github.com/eng-cc/oasis7/blob/main/doc/product/world-rules-core-gameplay/prd.md" target="_blank" rel="noreferrer">World Rules &amp; Core Gameplay PRD</a> (<code>doc/product/world-rules-core-gameplay/prd.md</code>). This page shows controlled-scenario evidence, not live telemetry and not live world telemetry.</p>
       </section>
 
       <section id="world" class="section landing-chapter landing-world" data-reveal>
@@ -272,18 +306,9 @@
         </div>
       </section>
 
-      <section id="download" class="section" data-reveal>
+      <section id="download" class="section landing-chapter landing-download" data-reveal>
         <h2>Want to try it yourself? What is public today is still a preview build</h2>
         <p class="section-intro">The public downloads are still for preview validation, not for a normal player launch. Each platform gets one main package so you do not have to make a packaging decision first.</p>
-        <div class="boundary-banner" data-homepage-claim="download-boundary">
-          <p class="boundary-title">Check whether this path is for you</p>
-          <p class="boundary-note" data-homepage-claim="access-signing-boundary">The public entry is for technical-preview validation only, not a public web player entry.</p>
-          <ul class="boundary-list">
-            <li><strong>Good fit:</strong> builders who want to validate preview builds and report blockers or install friction.</li>
-            <li><strong>Not for:</strong> people expecting a public web player entry or a public player launch experience.</li>
-            <li><strong>Current boundary:</strong> this is not a public web player entry or a public player launch, and formal announcement is still pending.</li>
-          </ul>
-        </div>
         <p class="release-meta">
           Current version: <strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="Published">publish time pending</span>
@@ -338,8 +363,8 @@
             </div>
             <p class="download-primary-footnote" data-download-primary-footnote>If the auto-detected platform is wrong, switch it above. The page no longer treats several package types as equal first choices.</p>
           </div>
-          <aside class="download-support-card">
-            <h3>Check Before Download</h3>
+          <details class="download-support-card">
+            <summary>Compatibility and trust boundary before install</summary>
             <dl class="download-support-list">
               <div>
                 <dt>System / architecture</dt>
@@ -358,7 +383,7 @@
                 <dd data-download-primary-support>This page is for preview validation, not a player-ready launch. If your device blocks unknown publishers, check the release notes before downloading.</dd>
               </div>
             </dl>
-          </aside>
+          </details>
           <div class="download-platform-sources" hidden>
             <article
               data-download-platform-source="windows"
@@ -404,8 +429,17 @@
             </article>
           </div>
         </div>
-        <div class="download-advanced">
-          <p class="download-advanced-title">Additional Context</p>
+        <div class="boundary-banner" data-homepage-claim="download-boundary">
+          <p class="boundary-title">Check whether this path is for you</p>
+          <p class="boundary-note" data-homepage-claim="access-signing-boundary">The public entry is for technical-preview validation only, not a public web player entry.</p>
+          <ul class="boundary-list">
+            <li><strong>Good fit:</strong> builders who want to validate preview builds and report blockers or install friction.</li>
+            <li><strong>Not for:</strong> people expecting a public web player entry or a public player launch experience.</li>
+            <li><strong>Current boundary:</strong> this is not a public web player entry or a public player launch, and formal announcement is still pending.</li>
+          </ul>
+        </div>
+        <details class="download-advanced">
+          <summary class="download-advanced-title">Additional verification and upgrade context</summary>
           <ul class="download-advanced-list">
             <li>
               Checksum manifest:
@@ -418,7 +452,7 @@
             <li>Before upgrading, back up `config.toml`, `.oasis7_launcher_ux_state.json`, and `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/` from the directory you actually launch from. Those paths are still resolved relative to the active working directory.</li>
             <li>On Windows especially, do not treat “uninstall then reinstall” as state-preserving. The current uninstaller removes the install directory.</li>
           </ul>
-        </div>
+        </details>
       </section>
 
       <section id="contribute" class="section" data-reveal>
@@ -450,7 +484,7 @@
               </li>
               <li>
                 <a
-                  href="https://github.com/eng-cc/oasis7/blob/main/doc/game/gameplay/gameplay-top-level-design.prd.md"
+                  href="https://github.com/eng-cc/oasis7/blob/main/doc/engineering/design.md"
                   target="_blank"
                   rel="noreferrer"
                   >Engine and modular architecture doc</a
