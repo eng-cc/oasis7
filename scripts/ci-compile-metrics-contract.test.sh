@@ -48,6 +48,15 @@ if grep -Eq 'COMPILE_METRICS_MAX_[A-Z0-9_]+' .github/workflows/compile-metrics.y
   echo "compile metrics workflow must not define unused threshold environment defaults" >&2
   exit 1
 fi
+workflow_cargo_check_threshold=$(awk '
+/^[[:space:]]*max_cargo_check_regression_pct:[[:space:]]*$/ { in_block=1; next }
+in_block && /^      [a-zA-Z0-9_]+:/ { exit }
+in_block && /^[[:space:]]*default:/ { print $2; exit }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_cargo_check_threshold" != '"25"' ]]; then
+  echo "compile metrics workflow must default to a cold cargo check regression threshold of 25%" >&2
+  exit 1
+fi
 if ! grep -Eq '^[[:space:]]*- oasis7_default_features[[:space:]]*$' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must expose the oasis7 default-feature target" >&2
   exit 1
