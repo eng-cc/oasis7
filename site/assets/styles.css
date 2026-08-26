@@ -3191,8 +3191,7 @@ main:has(.landing-chapter) {
   padding-block: 0.85rem;
 }
 
-.landing-proof .proof-strip,
-.landing-proof > .doc-entry-note:not(:last-of-type) {
+.landing-proof .proof-strip {
   display: none;
 }
 

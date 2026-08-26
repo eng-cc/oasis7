@@ -79,6 +79,22 @@ check_forbidden_patterns() {
   done
 }
 
+check_provenance_claim_css_visibility() {
+  python3 - "${STYLES}" <<'PY'
+import re
+import sys
+
+css = open(sys.argv[1], encoding="utf-8").read()
+for selector, declarations in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+    if "doc-entry-note" not in selector:
+        continue
+    if re.search(r"\bdisplay\s*:\s*none\b", declarations, flags=re.IGNORECASE):
+        raise SystemExit(
+            f"error: homepage provenance claim can be hidden by CSS selector: {selector.strip()}"
+        )
+PY
+}
+
 ZH_PATTERNS=(
   "class=\"skip-link\""
   "data-homepage-claim=\"preview-status\""
@@ -180,14 +196,14 @@ check_visible_section_claim "${EN_ENTRY}" "world-laws"
 check_required_patterns "${ZH_ENTRY}" \
   "data-homepage-claim=\"world-laws\"" \
   "世界规则" \
-  "世界不会回档" \
+  "普通浏览与刷新不会抹掉已发生的变化；治理恢复属于单独的审计流程。" \
   "每一份资源都有来源和代价" \
   "不知道的状态就标为未知" \
   "doc/product/world-rules-core-gameplay/prd.md"
 check_required_patterns "${EN_ENTRY}" \
   "data-homepage-claim=\"world-laws\"" \
   "World laws" \
-  "The world does not roll back" \
+  "Ordinary browsing and refreshes do not erase changes that already happened; governed recovery follows a separate audited process." \
   "Every resource has a source and a cost" \
   "Unknown states stay visibly unknown" \
   "doc/product/world-rules-core-gameplay/prd.md"
@@ -211,6 +227,7 @@ check_forbidden_patterns "${EN_ENTRY}" \
   "On-page coverage: illustrative replay + causal reading + source-binding boundary"
 check_required_patterns "${APP_JS}" "${APP_JS_PATTERNS[@]}"
 check_required_patterns "${STYLES}" "${STYLE_PATTERNS[@]}"
+check_provenance_claim_css_visibility
 
 # Keep the two public homepage entries equivalent at the structural level. The
 # fixed-string checks above protect player-facing wording; this parser protects
