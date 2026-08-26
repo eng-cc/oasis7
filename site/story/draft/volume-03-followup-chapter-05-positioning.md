@@ -6,6 +6,7 @@
 - 对应时间线：`TL-151` 到 `TL-158`。
 - 章节卡：`site/story/chapter-cards/volume-03-followup-chapter-05-cards.md`。
 - 承接正文：`site/story/draft/volume-03-followup-chapter-004.md`。
+- 状态：line edit 后定位基线；不是正文。
 
 ## 本章任务句
 

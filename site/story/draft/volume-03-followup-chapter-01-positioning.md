@@ -7,7 +7,7 @@
 - 时间线：`TL-119` 到 `TL-126`。
 - 章节卡：`site/story/chapter-cards/volume-03-followup-chapter-01-cards.md`。
 - 调研：`site/story/research/volume-03-followup-route-research.md`。
-- 状态：写前定位；不是正文。
+- 状态：line edit 后定位基线；不是正文。
 
 ## 本章任务句
 

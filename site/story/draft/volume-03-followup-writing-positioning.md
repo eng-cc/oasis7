@@ -6,6 +6,7 @@
 - 承接：第三卷第五章 `CH-118` 之后。
 - 对应草案：`site/story/outline/volume-03-followup-route-scaffold.md` 与 `site/story/chapter-cards/volume-03-followup-route-cards.md`。
 - 建议场次：`CH-119` 到 `CH-158`。
+- 本轮状态：后续五章正文已完成逐章 line edit；路线边界与章节卡同步。
 
 ## 路线任务句
 
