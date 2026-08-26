@@ -107,6 +107,24 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - limit order 只有在权威 current quote 同时落入买卖双方 limits 时成交；买单按最高限价优先、卖单按最低限价优先，同价按更早 order identity。未匹配订单保持 open 且可取消，不代表 escrow 或保证成交。
 - 本合同保留价格约束与确定性规则，但不声称 `power_sale_quote` / `energy_liquidity_preview` 已实现；玩家可读机会成本仍是对应 GitHub task evidence 记录的未收口债务。
 
+### 工业方案成本与价值归因合同
+
+跨工厂、原料、配方与物流的玩家决策还需要一条可对账的经济闭环：玩家先比较一个方案的预期总成本、可交付价值与主要风险，提交后再按实际生产、运输和终端结算结果核对偏差，最后决定继续、减量、改道、换配方或转向其他目标。本节只冻结归因语义与玩家决策边界，不新增价格、产率、税费、运输费率、维护公式、runtime schema 或数值平衡。
+
+- 方案比较必须绑定同一 candidate、root、revision/segment、measurement window 与 authority snapshot，并分开表达 `planned`、`admissible`、`committed`、`actual` 四层。`planned` 是候选预计投入/产出，`admissible` 是当前 profile 允许的合法单位与路径，`committed` 是权威接受后真正形成的投入/容量/义务，`actual` 只能来自已结算的 production、transport、byproduct 与 delivery/terminal receipt；preview、推荐、accepted ack、估算 ETA 与 speculative hold 不能进入实际成本或价值。
+- 成本归因至少覆盖：实际消耗或占用的原材料批次；owner-held electricity 的预计、hold、消耗与未满足部分；物流 tariff/损耗、边吞吐与 buffer/terminal 容量占用；以及 profile 明确支持时的 factory setup、maintenance 或 downtime 成本。未实现或缺失的维护、价格、容量、终端价值或损耗 authority 必须显示 `unknown/degraded`，不能按零成本、零损耗、无限容量或免费机会成本继续比较。
+- 价值归因必须把主产物、副产物、在途/缓冲状态和终端用途分开。副产物只有取得其声明的 ledger、local service、trade 或 quarantine disposition 后，才可按 profile 支持的 value class 计入；无法处置的 branch 只能计为待决、风险或成本，不得用主产物价值抵销。`production receipt` 只证明实际产物进入合法账本、buffer 或显式在途承诺，不能单独计入 delivery value、需求减少、市场/服务结算或终端奖励；这些结果必须等待匹配的 delivery/terminal settlement receipt。
+- 提交前 surface 至少让玩家比较当前真实支持的 `run_full`、`run_reduced_or_partial`、`wait_or_restore_input`、`reroute_or_change_source`、`hold_for_terminal` 与 `pivot_to_other_recipe`。每个候选应说明预计总成本的组成、可执行/未满足量、预计交付量或 value class、仍占用的容量/电力/库存、失败风险、下一复查点和推荐理由；不承诺固定利润、精确 ETA 或未来价格。没有足够 authority 计算方案总成本或终端价值时，候选只能标为 `unknown/degraded`，不能伪装为安全或高收益。
+- 接受后必须沿同一 root/revision 形成一次 immutable plan baseline，并按生产、物流 handoff/arrival、buffer/terminal admission 与 delivery/settlement 的实际 receipts 累积对账。对账至少区分 `planned/admissible/committed/actual` 数量、成本、损耗、待决义务与价值结果；profile 支持的 compensating receipt 必须链接原 receipt，不能改写历史成本或价值。因果换线、配方/工厂/边/终端变化建立 parent-linked 新 revision/candidate，旧方案的成本、已发生损耗和未决价值不迁移成新方案收益。
+- 失败恢复必须保留已经消费、仍占用、已损失与可追回的价值，并沿 profile 支持的 `wait`、`release`、`reduce`、`reroute`、`hold`、`rework`、`return`、`salvage`、`requote` 或 `pivot` 路径各生效一次。终端容量、owner、资格、需求或价格 authority 失效时，不得自动退款、免费补偿、静默改道或把产出收益当作已交付；玩家应能看到继续当前方案与改走新方案的机会成本。
+- 同一 root/revision 下的重复 submit、arrival、reconnect、retry、restore 与 replay 只能重读同一成本/价值 disposition，不得复制输入 sink、power debit、运输损耗、产物、副产物、delivery value、奖励或重新计算历史价格。不同 accepted intents 即使 payload 相同，也必须分别归因，不能合并成本或价值。
+
+该闭环保持 **world-first**：成本与价值来自同一权威世界历史及 receipt，而非客户端估算；保持 **emergence-first**：源头近、终端近、低损耗、少占容量或高价值副产物之间存在可理解的机会成本；保持 **persistent / auditable**：计划、承诺、实际成本、损耗、终端价值与补偿跨重连、恢复和 replay 延续；保持 **extensible**：未来的 market、service、maintenance 或不同材料 profile 可声明自己的 value/cost policy，但不能绕过共同的分层和结算边界。
+
+`test_tier_required` 至少覆盖一个两来源/两路径 tradeoff fixture：同一配方分别选择“原料近但输出路径拥挤”和“终端近但输入损耗较高”，能从 preview 读出 planned/admissible 成本、可执行量、容量/电力占用、预计交付量或 `unknown/degraded` value class；提交后只形成一次 committed baseline，生产、物流到达与终端结算分别追加 actual cost/value，且 production receipt 不减少需求、不发交付奖励。还须覆盖原料/电力/物流容量漂移、运输损耗、mandatory byproduct destination 失效、终端 owner/资格/容量失效与 supported wait/reduce/reroute/hold/requote/pivot 恢复；已消费和仍占用价值可追溯，不能自动退款、免费转化或静默改道。重复 submit/arrival、重连、retry、restore 与 replay 不得复制任何 sink、损耗、产出、delivery value 或奖励。
+
+`test_tier_full` 在此基础上覆盖三阶段以上的多输入/多输出链、跨窗口 plan revision 与 causal cutover、maintenance-enabled 与 maintenance-unknown 两种 profile、多个并发 root 的成本/容量争用、长期 WIP/buffer 占用、跨账本损耗、byproduct quarantine/rework/salvage/return/compensation，以及持久化恢复后 planned/committed/actual 对账和 Viewer/pure API/Agent 对成本组成、价值状态、primary blocker、机会成本与下一动作的一致性。本文不冻结 cost/value 公式、价格/税费、数值、队列、runtime schema 或 UI 布局。
+
 ## 5. Risks & Roadmap
 
 - 状态、回放、WASM 请求和 builtin identity 的兼容风险必须由 runtime 回归覆盖。
