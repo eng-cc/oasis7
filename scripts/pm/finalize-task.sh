@@ -76,6 +76,11 @@ else
   "$SCRIPT_DIR/refresh-task-cache.sh" --task-uid "$task_uid" --json >/dev/null
 
   patch_receipt_arg=""
+  # Resolve the current remote default branch before choosing the integration
+  # lane. A stale origin/<main> tracking ref must not turn an ordinary
+  # fast-forward merge into an unnecessary patch-equivalence recovery path.
+  git -C "$repo_root" fetch origin "$main_ref" >/dev/null \
+    || fail "failed to refresh origin default branch before integration decision"
   if [[ -n "$supplied_patch" ]]; then
     [[ "$(cd "$(dirname "$supplied_patch")" && pwd -P)/$(basename "$supplied_patch")" == "$patch_equivalence" ]] \
       || fail "supplied patch-equivalence receipt path mismatch"
@@ -85,7 +90,6 @@ else
   elif ! git -C "$repo_root" merge-base --is-ancestor "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_oid"])' "$merge_receipt")" "origin/$main_ref"; then
     # Squash/rebase integration: find the exact first-parent integration commit
     # whose tree equals the repository-generated branch projection.
-    git -C "$repo_root" fetch origin "$main_ref" >/dev/null
     branch_tip="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_oid"])' "$merge_receipt")"
     found=0
     while read -r integration_commit; do

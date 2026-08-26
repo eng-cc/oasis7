@@ -75,16 +75,65 @@ except ValueError: raise SystemExit("review-closeout: review plan escapes reposi
 p=json.loads(plan_path.read_text())
 if p.get("schema")!="oasis7-review-plan/v1" or p.get("task_uid")!=sys.argv[3]:
  raise SystemExit("review-closeout: review plan identity mismatch")
-for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","relevant_evidence_digest"):
+for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","epoch","relevant_evidence_digest"):
  if not p.get(key): raise SystemExit(f"review-closeout: review plan is missing {key}")
-print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["relevant_evidence_digest"])
+print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["epoch"]); print(p["relevant_evidence_digest"])
 PY
 )"
 BATCH_PATH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
 BATCH_PATH="$(resolve_repo_file "review batch" "$BATCH_PATH")" || exit 1
+FROZEN_HEAD="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
+PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)" || die "cannot resolve current HEAD"
+[[ "$CURRENT_HEAD" == "$FROZEN_HEAD" ]] || die "review-closeout: frozen HEAD mismatch: expected $FROZEN_HEAD, actual $CURRENT_HEAD"
 
-python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
-  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+# Validate the immutable plan/batch/collection identity before reconcile or
+# collect can rewrite the role ledger or publish a collection receipt.
+COLLECTION_STATE="$(python3 - "$ROOT_DIR" "$BATCH_PATH" "$ROLE_RETURNS" "$TASK_UID" "$FROZEN_HEAD" "$PLAN_EPOCH" <<'PY'
+import hashlib, json, pathlib, sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+batch_path = pathlib.Path(sys.argv[2]).resolve()
+ledger_path = pathlib.Path(sys.argv[3]).resolve()
+task_uid, frozen_head, plan_epoch = sys.argv[4:7]
+for label, path in (("review batch", batch_path), ("role-return ledger", ledger_path)):
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise SystemExit(f"review-closeout: {label} escapes repository root")
+try:
+    batch = json.loads(batch_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"review-closeout: review batch is not readable: {exc}")
+if batch.get("schema") != "oasis7-review-batch/v1":
+    raise SystemExit("review-closeout: review batch schema is invalid")
+for key, expected in (("task_uid", task_uid), ("frozen_head", frozen_head), ("epoch", plan_epoch)):
+    if batch.get(key) != expected:
+        raise SystemExit(f"review-closeout: review batch {key} mismatch")
+collection_path = batch_path.with_name(f"{batch_path.stem}.collection.json")
+if collection_path.exists():
+    try:
+        collection = json.loads(collection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"review-closeout: existing collection is not readable: {exc}")
+    if collection.get("schema") != "oasis7-review-collection/v1" or collection.get("status") != "passed":
+        raise SystemExit("review-closeout: existing collection receipt is invalid")
+    for key, expected in (("task_uid", task_uid), ("frozen_head", frozen_head), ("epoch", plan_epoch)):
+        if collection.get(key) != expected:
+            raise SystemExit(f"review-closeout: existing collection {key} mismatch")
+    ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+    if collection.get("ledger_digest") != ledger_digest:
+        raise SystemExit("review-closeout: existing collection ledger digest mismatch")
+    print("existing")
+else:
+    print("absent")
+PY
+)" || exit 1
+
+if [[ "$COLLECTION_STATE" == "absent" ]]; then
+  python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
+    --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+fi
 python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
   --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 
@@ -101,7 +150,7 @@ if sys.argv[2]: risks.append(sys.argv[2])
 print(roles); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
 PY
 )"
-[[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+[[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
 ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\n' "$SUMMARIES" | sed -n '1p')"
   --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"
   --finding-disposition-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '4p')" --verification "$VERIFICATION"

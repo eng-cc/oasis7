@@ -115,10 +115,14 @@ if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
   echo "review-closeout accepted a missing role return" >&2
   exit 1
 fi
-grep -Eiq 'identity mismatch|missing expected|role' "$TMPDIR/missing-role.err"
+grep -Eiq 'identity mismatch|missing expected|ledger digest|role' "$TMPDIR/missing-role.err"
 
 # A changed working HEAD must invalidate the immutable review plan.
 cp "$TMPDIR/complete-ledger.jsonl" "$LEDGER"
+COLLECTION="${BATCH%.json}.collection.json"
+test -f "$COLLECTION"
+cp "$LEDGER" "$TMPDIR/stale-ledger-before.jsonl"
+cp "$COLLECTION" "$TMPDIR/stale-collection-before.json"
 git -C "$REPO" commit --allow-empty -qm stale-head
 if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
   --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
@@ -127,6 +131,7 @@ if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
   exit 1
 fi
 grep -Eiq 'source head|frozen HEAD|head mismatch' "$TMPDIR/stale-head.err"
+cmp "$TMPDIR/stale-ledger-before.jsonl" "$LEDGER"
+cmp "$TMPDIR/stale-collection-before.json" "$COLLECTION"
 
 echo "review-closeout-facade.test: OK"
-

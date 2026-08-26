@@ -17,11 +17,22 @@ git -C "$REPO" config user.name Test
 printf 'fixture\n' >"$REPO/README"
 git -C "$REPO" add README
 git -C "$REPO" commit -qm fixture
-HEAD_OID="$(git -C "$REPO" rev-parse HEAD)"
+INITIAL_MAIN_OID="$(git -C "$REPO" rev-parse HEAD)"
 ORIGIN="$TMP/origin.git"
 git init --bare -q "$ORIGIN"
 git -C "$REPO" remote add origin "$ORIGIN"
 git -C "$REPO" push -q origin main
+
+# The remote-tracking ref is deliberately stale while the real origin/main
+# already contains the ordinary fast-forward integration.  The orchestrator
+# must refresh before selecting the ordinary lane; otherwise it misclassifies
+# this as squash/rebase and invokes the patch-equivalence helper.
+printf 'ordinary change\n' >>"$REPO/README"
+git -C "$REPO" add README
+git -C "$REPO" commit -qm ordinary-integration
+HEAD_OID="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" push -q origin main
+git -C "$REPO" update-ref refs/remotes/origin/main "$INITIAL_MAIN_OID"
 
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
 {"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
