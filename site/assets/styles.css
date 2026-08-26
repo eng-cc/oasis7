@@ -1475,6 +1475,10 @@ code {
   display: none;
 }
 
+.proof-causal-card[data-proof-visible="false"] {
+  display: none;
+}
+
 .proof-log-details {
   margin-top: 0.86rem;
   border: 1px solid rgba(131, 188, 220, 0.22);
@@ -3044,6 +3048,7 @@ code {
 main:has(.landing-chapter) {
   max-width: 1280px;
   padding-inline: clamp(1rem, 3vw, 2.5rem);
+  min-width: 0;
 }
 
 .landing-chapter {
@@ -3052,6 +3057,15 @@ main:has(.landing-chapter) {
   box-shadow: none;
   background: transparent;
   overflow: visible;
+  min-width: 0;
+}
+
+.landing-chapter > *,
+.landing-chapter .hero-grid > *,
+.landing-chapter .proof-grid > *,
+.landing-chapter .world-layout > *,
+.landing-chapter .download-surface > * {
+  min-width: 0;
 }
 
 .landing-chapter::before {
@@ -3062,6 +3076,10 @@ main:has(.landing-chapter) {
   margin-top: 0;
   min-height: min(680px, calc(100vh - 1.5rem));
   padding-inline: clamp(0.5rem, 3vw, 2.5rem);
+}
+
+.landing-hero::after {
+  right: 0;
 }
 
 .landing-hero .hero-grid {
@@ -3381,5 +3399,253 @@ main:has(.landing-chapter) {
 
   .landing-download .download-platform-chip {
     min-height: 44px;
+  }
+}
+
+/* Provenance layer: cartography and readable world-law boundaries. */
+.hero-support-copy {
+  max-width: 34rem;
+  margin: 0.58rem 0 0;
+  color: #8fa9b8;
+  font-size: 0.88rem;
+}
+
+.hero-telemetry-label {
+  position: absolute;
+  left: 1rem;
+  bottom: 0.84rem;
+  z-index: 2;
+  margin: 0;
+  border: 1px solid rgba(67, 239, 187, 0.32);
+  border-radius: 999px;
+  background: rgba(3, 10, 17, 0.78);
+  color: #bfffe5;
+  padding: 0.26rem 0.58rem;
+  font: 600 0.66rem/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+.provenance-story {
+  position: relative;
+  display: grid;
+  gap: 0.8rem;
+  margin: 1.35rem 0 1.4rem;
+  border-left: 2px solid var(--accent);
+  padding: 0.15rem 0 0.15rem clamp(1rem, 2.4vw, 2rem);
+  background:
+    linear-gradient(90deg, rgba(67, 239, 187, 0.08), transparent 42%),
+    repeating-linear-gradient(90deg, transparent 0 44px, rgba(131, 188, 220, 0.06) 44px 45px);
+}
+
+.provenance-story-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.provenance-story-heading .eyebrow {
+  margin: 0;
+}
+
+.provenance-label {
+  margin: 0;
+  color: #a7d7c4;
+  font: 600 0.72rem/1.35 "JetBrains Mono", monospace;
+  letter-spacing: 0.04em;
+}
+
+.provenance-story-copy {
+  margin: 0;
+  max-width: 68ch;
+  color: #d4e6ed;
+  font-size: 1rem;
+}
+
+.provenance-story-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.provenance-story-facts span {
+  border: 1px solid rgba(131, 188, 220, 0.24);
+  border-radius: 999px;
+  background: rgba(8, 20, 31, 0.78);
+  color: #b7ceda;
+  padding: 0.28rem 0.56rem;
+  font-size: 0.76rem;
+}
+
+.landing-laws {
+  position: relative;
+  margin-top: clamp(4rem, 10vw, 9rem);
+  padding: 0 clamp(0.25rem, 2vw, 1.5rem);
+}
+
+.landing-laws::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -2rem;
+  right: 2%;
+  width: 42%;
+  height: 75%;
+  opacity: 0.45;
+  background:
+    linear-gradient(90deg, transparent 49.6%, rgba(67, 239, 187, 0.2) 49.6% 50.4%, transparent 50.4%),
+    linear-gradient(0deg, transparent 49.6%, rgba(67, 239, 187, 0.2) 49.6% 50.4%, transparent 50.4%),
+    radial-gradient(circle at 50% 50%, rgba(67, 239, 187, 0.17) 0 2px, transparent 3px);
+  background-size: 88px 88px, 88px 88px, 88px 88px;
+  mask-image: radial-gradient(ellipse, #000 0 42%, transparent 76%);
+  pointer-events: none;
+}
+
+.laws-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(260px, 0.92fr);
+  gap: clamp(1.2rem, 4vw, 4rem);
+  align-items: end;
+  margin-bottom: 1.6rem;
+}
+
+.laws-heading .section-intro {
+  margin: 0;
+}
+
+.law-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.law-card {
+  min-height: 13.5rem;
+  border-top: 1px solid rgba(67, 239, 187, 0.54);
+  border-bottom: 1px solid var(--line-soft);
+  padding: 0.9rem 0.75rem 1rem 0;
+  background: linear-gradient(180deg, rgba(8, 25, 33, 0.48), transparent 76%);
+}
+
+.law-index {
+  display: block;
+  margin-bottom: 1.25rem;
+  color: var(--accent-warm);
+  font: 600 0.68rem/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.law-card h3 {
+  max-width: 18ch;
+  margin-bottom: 0.5rem;
+}
+
+.law-card p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.law-source {
+  max-width: 76ch;
+  margin: 1.1rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.law-source a {
+  color: #b9ffdd;
+}
+
+.cartography-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 1rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  color: #8db4bb;
+  font: 600 0.68rem/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cartography-strip span {
+  padding: 0.58rem 0.86rem;
+  border-right: 1px solid var(--line-soft);
+}
+
+.cartography-strip span:first-child {
+  color: var(--accent);
+}
+
+.cartography-strip span:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 900px) {
+  .laws-heading,
+  .law-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .law-card {
+    min-height: 12rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-support-copy {
+    font-size: 0.82rem;
+  }
+
+  .hero-telemetry-label {
+    left: 0.7rem;
+    bottom: 0.7rem;
+    font-size: 0.58rem;
+  }
+
+  .provenance-story-copy {
+    font-size: 0.9rem;
+  }
+
+  .provenance-story-facts {
+    display: grid;
+  }
+
+  .provenance-story-facts span {
+    border-radius: var(--radius-sm);
+  }
+
+  .laws-heading,
+  .law-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .law-card {
+    min-height: 0;
+    padding-right: 0;
+  }
+
+  .law-index {
+    margin-bottom: 0.8rem;
+  }
+
+  .cartography-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .cartography-strip span {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .cartography-strip span:last-child {
+    border-bottom: 0;
   }
 }
