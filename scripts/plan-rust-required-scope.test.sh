@@ -274,6 +274,39 @@ assert_reason_contains "$codex_config_output" \
   "codex_agent_config:.codex/agents/repository_health_engineer.toml"
 assert_reason_absent "$codex_config_output" "unclassified_or_unresolvable:"
 
+canonical_role_cards=(
+  agent_engineer
+  blockchain_ops_engineer
+  game_visual_interaction_designer
+  gameplay_designer
+  liveops_community
+  producer_system_designer
+  qa_engineer
+  repository_health_engineer
+  runtime_engineer
+  viewer_engineer
+  wasm_platform_engineer
+)
+for role in "${canonical_role_cards[@]}"; do
+  role_card_path=".agents/roles/${role}.md"
+  codex_role_card_output="$(plan_for_path "$role_card_path")"
+  assert_key_equals "$codex_role_card_output" scope targeted
+  assert_key_equals "$codex_role_card_output" selected_capabilities codex_agent_config_validation
+  assert_key_equals "$codex_role_card_output" run_codex_agent_config_validation true
+  assert_key_equals "$codex_role_card_output" run_operational_contracts false
+  assert_key_equals "$codex_role_card_output" run_rust_baseline false
+  assert_key_equals "$codex_role_card_output" needs_rust_toolchain false
+  assert_reason_contains "$codex_role_card_output" "codex_role_card:${role_card_path}"
+  assert_reason_absent "$codex_role_card_output" "unclassified_or_unresolvable:"
+done
+
+role_template_output="$(plan_for_path .agents/roles/templates/subagent-slice-card.md)"
+assert_key_equals "$role_template_output" scope minimal
+assert_key_equals "$role_template_output" selected_capabilities required_gate_baseline
+assert_key_equals "$role_template_output" run_codex_agent_config_validation false
+assert_reason_contains "$role_template_output" \
+  "governance_doc:.agents/roles/templates/subagent-slice-card.md"
+
 invalid_config="$(mktemp)"
 trap 'rm -f "$invalid_config"' EXIT
 printf '{not json}\n' >"$invalid_config"
