@@ -100,6 +100,36 @@ with open(plan, "w", encoding="utf-8") as handle:
     handle.write("\n")
 PY
 
+# A malformed plan must fail before reconcile can rewrite the ledger or publish
+# a collection receipt.
+cp "$PLAN" "$TMPDIR/valid-plan.json"
+cp "$LEDGER" "$TMPDIR/pre-malformed-ledger.jsonl"
+python3 - "$PLAN" <<'PY'
+import json, sys
+path = sys.argv[1]
+payload = json.load(open(path, encoding="utf-8"))
+payload["roles"].append(payload["roles"][0])
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+    handle.write("\n")
+PY
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/malformed-plan.out" 2>"$TMPDIR/malformed-plan.err"); then
+  echo "review-closeout accepted duplicate review-plan roles" >&2
+  exit 1
+fi
+grep -F 'roles must be unique' "$TMPDIR/malformed-plan.err" >/dev/null
+cmp -s "$LEDGER" "$TMPDIR/pre-malformed-ledger.jsonl" || {
+  echo "malformed review plan mutated the preflight ledger" >&2
+  exit 1
+}
+[[ ! -e "${BATCH%.json}.collection.json" ]] || {
+  echo "malformed review plan published a collection receipt" >&2
+  exit 1
+}
+cp "$TMPDIR/valid-plan.json" "$PLAN"
+
 VALID_OUT="$TMPDIR/valid.out"
 VALID_ERR="$TMPDIR/valid.err"
 if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \

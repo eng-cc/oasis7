@@ -89,14 +89,15 @@ CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)" || die "cannot resolve curre
 
 # Validate the immutable plan/batch/collection identity before reconcile or
 # collect can rewrite the role ledger or publish a collection receipt.
-COLLECTION_STATE="$(python3 - "$ROOT_DIR" "$BATCH_PATH" "$ROLE_RETURNS" "$TASK_UID" "$FROZEN_HEAD" "$PLAN_EPOCH" <<'PY'
+COLLECTION_STATE="$(python3 - "$ROOT_DIR" "$BATCH_PATH" "$ROLE_RETURNS" "$TASK_UID" "$FROZEN_HEAD" "$PLAN_EPOCH" "$REVIEW_PLAN" <<'PY'
 import hashlib, json, pathlib, sys
 
 root = pathlib.Path(sys.argv[1]).resolve()
 batch_path = pathlib.Path(sys.argv[2]).resolve()
 ledger_path = pathlib.Path(sys.argv[3]).resolve()
 task_uid, frozen_head, plan_epoch = sys.argv[4:7]
-for label, path in (("review batch", batch_path), ("role-return ledger", ledger_path)):
+plan_path = pathlib.Path(sys.argv[7]).resolve()
+for label, path in (("review batch", batch_path), ("role-return ledger", ledger_path), ("review plan", plan_path)):
     try:
         path.relative_to(root)
     except ValueError:
@@ -110,6 +111,31 @@ if batch.get("schema") != "oasis7-review-batch/v1":
 for key, expected in (("task_uid", task_uid), ("frozen_head", frozen_head), ("epoch", plan_epoch)):
     if batch.get(key) != expected:
         raise SystemExit(f"review-closeout: review batch {key} mismatch")
+try:
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"review-closeout: review plan is not readable: {exc}")
+roles = plan.get("roles")
+plan_slices = plan.get("expected_slices")
+batch_slices = batch.get("expected_slices")
+if (not isinstance(roles, list) or not roles or
+        not all(isinstance(role, str) and role for role in roles) or len(set(roles)) != len(roles)):
+    raise SystemExit("review-closeout: review plan roles must be unique non-empty strings")
+if not isinstance(plan_slices, list) or not isinstance(batch_slices, list):
+    raise SystemExit("review-closeout: review plan/batch expected_slices are invalid")
+def slice_identities(items):
+    identities = []
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("role"), str) or not isinstance(item.get("slice_id"), str):
+            raise SystemExit("review-closeout: review plan/batch slice identity is invalid")
+        identities.append((item["role"], item["slice_id"]))
+    return identities
+plan_identities = slice_identities(plan_slices)
+batch_identities = slice_identities(batch_slices)
+if [role for role, _ in plan_identities] != roles or len(set(plan_identities)) != len(plan_identities):
+    raise SystemExit("review-closeout: review plan roles/expected_slices mismatch")
+if len(plan_identities) != len(batch_identities) or set(plan_identities) != set(batch_identities):
+    raise SystemExit("review-closeout: review plan/batch slice set mismatch")
 collection_path = batch_path.with_name(f"{batch_path.stem}.collection.json")
 if collection_path.exists():
     try:
