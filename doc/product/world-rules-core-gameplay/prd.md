@@ -130,6 +130,20 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 中断后的玩家反馈至少回答：原任务及当前阶段、已经投入与仍被占用的价值、已形成或仍待形成的产出/副产物、保留与损失、对稳定产线候选进度的影响，以及当前真实可用的继续、等待、修复、改道、中止或重新规划动作。`game` 拥有这些选择的玩法取舍与平衡，`world-runtime` 拥有事件、状态、资源守恒、去重与 replay，Agent 拥有意图打断/换向的可解释 handoff，Viewer 与 pure API 拥有同一权威结果的表达，QA 拥有组合证据；产品层不规定取消 action、退款公式、队列算法、状态 schema 或 UI 布局。
 
+#### 原材料 source/deposit 的发现、争用、枯竭与补充
+
+原材料流水线不能从一个未解释的“可采资源”数字直接开始。任何可进入采集/补充决策的 source/deposit 都必须保留稳定身份，并把**观察到来源**、**当前可提交的采集机会**与**receipt 支持的实际采出**分开。地图提示、材质倾向、Agent 推荐或旧观察只能帮助发现候选，不能单独证明当前可采量、访问资格、优先级或未来补充；专业 profile 必须声明该来源适用的发现/可见范围、数量与质量事实的新鲜度、访问或作用域边界，以及 depletion/replenishment 是否存在。未知、过期或互相冲突的事实显示 `unknown/stale` 或等价产品语义，不能按零竞争、无限库存或可直接采集处理。
+
+提交前的只读 `source_assessment` 必须让玩家比较专业合同当前真实支持的 `extract_now`、`reduce_batch`、`move_to_alternate_source`、`wait_for_replenishment`、`prepare_access_or_route`、`use_another_legal_material_or_recipe` 与 `defer`。每个候选至少说明 source 身份与作用域、预计可满足量及其权威/估计边界、材料 profile/质量提示、访问/竞争条件、采集与到首个目标账本的时间/资源/物流成本、枯竭或补充状态、主要风险、对当前配方/首个工业目标的影响、`next_action` 与 `next_recheck`。预览、扫描、推荐和刷新都无世界效果，不创建 claim、hold、采集顺位、材料批次或补充资格；没有安全来源时必须明确停止或转向，不能无限推荐等待、静默自动换源或把同名材料当作等价输入。
+
+采集提交必须从新鲜权威状态重新校验 source、访问权限、可分配量、材料适用性和必要路线/容量。多个玩家或 Agent 争用同一有限来源时，专业合同必须基于同一权威 allocation snapshot 与公开、确定、可回放的顺序/配给规则形成有界结果；网络到达顺序、后台处理顺序、反复扫描、拆小批、重连或 retry 不得取得隐藏优先级、超额占用或第二份材料。成功结果只能对实际获配量产生一次 source effect/receipt 与带 parent provenance 的 material batch；不足、耗尽、权限或状态漂移只能按 profile 得到 `full/partial/deferred/denied/expired` 中适用的可读结果、原子拒绝或重新报价，不能透支、负库存、自动补料或把失败变成隐式债务。
+
+depletion 与 replenishment 必须延续同一 source 历史，而不是把客户端刷新或定时提示当作新库存。耗尽结果必须说明已采出、仍被有效承诺、未满足数量和真实的迁移/替代/等待路径；只有权威 replenishment effect 生效后，fresh assessment 才能看到新增可分配量。补充事件、到期/撤销释放和其触发的重评各最多产生一次效果；等待不会自动续期旧 quote、保留优先级或承诺 ETA。若 profile 不支持补充，耗尽来源不得持续显示 `wait_for_replenishment`；若补充时刻或数量不可证明，必须显示范围/未知与复查条件，不能伪造精确倒计时或保证。
+
+这项边界保持 **world-first**：来源可用性、争用和采出只由同一权威世界历史中的 assessment/commit/receipt 决定；保持 **emergence-first**：玩家可在更近但拥挤、较远但稳定、等待补充、减量或换材料/配方之间取舍；保持 **persistent / auditable**：source 身份、观察新鲜度、allocation、depletion、replenishment、实际采出与 material batch lineage 跨重连、恢复和 replay 延续；保持 **extensible**：矿藏、可补充 frag、回收源或未来其他 source profile 可声明各自规则，但不能绕过共同的只读预览、提交重验、有限分配与单次结算边界。
+
+`test_tier_required` 至少覆盖：未知/已发现但过期/当前可采/耗尽/补充中或不支持补充的来源；同一 snapshot 下两个或以上意图争用同一有限 source 时总获配量不超过权威可分配量，等价重排、拆批与 retry 不改变已声明优先依据或复制占用；报价后数量、质量、权限或路线漂移时重新报价、形成新的明确 allocation snapshot，或在无 source/material sink 下原子拒绝；成功采集只产生一次 source receipt 与一次匹配 material batch；耗尽后提供真实换源/等待/换材料或配方路径，权威补充后才新增一次可分配量。重连、乱序、snapshot restore 与 replay 不复制采出、释放、补充、物流 credit、稳定进度或奖励；Viewer、pure API 与 Agent 对 source 状态、估计/权威边界、已承诺/未满足量、主要风险、下一动作和复查点保持同义。本文不冻结资源分布、发现概率、产率、补充周期、allocation/公平算法、所有权制度、runtime schema、地图/UI 或当前实现完成声明。
+
 #### 从采集/补充到首个可消费账本输入的 handoff
 
 首个可消费账本输入必须沿一条可追溯的来源链形成：`extraction/replenishment → refinement → source-to-ledger handoff → first canonical consumable ledger input`。这里的“形成”不是把采集结果、精炼结果或一条推荐直接当作下游库存；只有来源/精炼效果已按专业合同结算、handoff 按适用的账本与物流规则完成、实际数量和损耗可对账，并取得当前阶段的适用性结论后，批次才可作为下游 canonical input。产品层只冻结这条玩家可理解的因果边界；这些权威边界由 [`M4 industrial resource flow contract`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、`world-runtime` 与相关 Recipe/Product/Factory 专业合同联合界定：M4 负责材料账本/类型标签、handoff 与领域适用性语义，world-runtime 负责 receipt/event/schema、转移/结算顺序与当前实现状态，Recipe/Product/Factory 合同负责各自 profile 的输入/输出适用性及能力声明；本节不新增字段或实现完成声明。
