@@ -162,28 +162,32 @@ measure_command_seconds() {
   local log_path="$4"
   shift 4
 
-  local start_ns
-  local end_ns
-  start_ns=$(python3 - <<'PY'
-import time
-print(time.monotonic_ns())
-PY
-)
-  (
-    cd "$checkout_path"
-    export CARGO_TARGET_DIR="$target_dir"
-    export CARGO_HOME="$cargo_home"
-    "$@"
-  ) >"$log_path" 2>&1
-  end_ns=$(python3 - <<'PY'
-import time
-print(time.monotonic_ns())
-PY
-)
-  python3 - "$start_ns" "$end_ns" <<'PY'
+  # Keep both timing endpoints in one process. This preserves monotonic elapsed
+  # time without comparing clock values produced by separate Python processes.
+  python3 - "$checkout_path" "$target_dir" "$cargo_home" "$log_path" "$@" <<'PY'
+import os
+from pathlib import Path
+import subprocess
 import sys
-start_ns = int(sys.argv[1])
-end_ns = int(sys.argv[2])
+import time
+
+checkout_path, target_dir, cargo_home, log_path, *command = sys.argv[1:]
+env = os.environ.copy()
+env["CARGO_TARGET_DIR"] = target_dir
+env["CARGO_HOME"] = cargo_home
+start_ns = time.monotonic_ns()
+with Path(log_path).open("wb") as log:
+    completed = subprocess.run(
+        command,
+        cwd=checkout_path,
+        env=env,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+end_ns = time.monotonic_ns()
+if completed.returncode != 0:
+    raise SystemExit(completed.returncode)
 print(f"{(end_ns - start_ns) / 1_000_000_000:.3f}")
 PY
 }

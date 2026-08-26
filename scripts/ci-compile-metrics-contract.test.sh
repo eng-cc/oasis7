@@ -48,6 +48,35 @@ if grep -Eq 'COMPILE_METRICS_MAX_[A-Z0-9_]+' .github/workflows/compile-metrics.y
   echo "compile metrics workflow must not define unused threshold environment defaults" >&2
   exit 1
 fi
+if ! grep -Eq '^[[:space:]]*- oasis7_default_features[[:space:]]*$' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must expose the oasis7 default-feature target" >&2
+  exit 1
+fi
+workflow_oasis7_default_target=$(awk '
+/^[[:space:]]*oasis7_default_features\)[[:space:]]*$/ { in_case=1; next }
+in_case && /^[[:space:]]*;;/ { exit }
+in_case { print }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_oasis7_default_target" != *'package="oasis7"'* ]]; then
+  echo "oasis7 default-feature target must measure package oasis7" >&2
+  exit 1
+fi
+if [[ "$workflow_oasis7_default_target" != *'extra_args+=(--check-only)'* ]]; then
+  echo "oasis7 default-feature target must use check-only measurement" >&2
+  exit 1
+fi
+if [[ "$workflow_oasis7_default_target" == *'--no-default-features'* ]]; then
+  echo "oasis7 default-feature target must retain Cargo default features" >&2
+  exit 1
+fi
+if ! grep -q 'time\.monotonic_ns()' scripts/ci-compile-metrics.sh; then
+  echo "compile metrics timing must use a monotonic clock" >&2
+  exit 1
+fi
+if grep -q 'time\.time_ns()' scripts/ci-compile-metrics.sh; then
+  echo "compile metrics elapsed timing must not use adjustable wall-clock time" >&2
+  exit 1
+fi
 if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1
@@ -241,6 +270,7 @@ assert metrics["check_only"] is True
 assert metrics["no_default_features"] is True
 assert metrics["wasmtime_present"] is True
 assert metrics["wasm_executor_present"] is True
+assert metrics["cargo_check_seconds"] >= 0
 assert metrics["cargo_build_release_seconds"] is None
 assert metrics["release_binary_bytes"] is None
 assert comparison["metric_rows"] == []
