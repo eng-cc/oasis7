@@ -16,6 +16,7 @@ on:
         options:
           - launcher
           - oasis7_node_no_default_features
+          - oasis7_node_default_features
           - oasis7_default_features
       max_package_count_regression_pct:
         description: "Allowed package closure regression percentage"
@@ -140,6 +141,10 @@ jobs:
             oasis7_node_no_default_features)
               package="oasis7_node"
               extra_args+=(--check-only --no-default-features)
+              ;;
+            oasis7_node_default_features)
+              package="oasis7_node"
+              extra_args+=(--check-only)
               ;;
             oasis7_default_features)
               package="oasis7"
