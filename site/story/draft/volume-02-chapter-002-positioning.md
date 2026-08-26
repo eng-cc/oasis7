@@ -7,7 +7,7 @@
 - 时间线：`TL-047` 到 `TL-054`。
 - 章节卡：`site/story/chapter-cards/volume-02-chapter-02-cards.md`。
 - 调研：`site/story/research/volume-02-chapter-02-research.md`。
-- 状态：写前定位；不是正文。
+- 状态：已完成正文的 line-edit 参考；不是正文。
 
 ## 本章任务句
 
@@ -144,9 +144,15 @@ Agent 不能：
 - 行业反差黑话过密。
 - 复用第一卷 `留灯`、`位置保留`、`下一次回应时间`、`三行提示`、`调字号` 作为情感收束。
 
-## 进入正文前检查
+## 本轮 line edit 记录
+
+- 正文结果：压缩待确认夹、工具柜和误差样本的重复状态说明；保留单次、低风险、可撤回的局部授权与空白握手记录。
+- 连续性：回砂只完成当前动作边界，旧工具、旧承诺和私人习惯仍未接收。
+- 状态：正文与本定位已完成本轮 line edit；没有把局部动作写成关系恢复。
+
+## 本章连续性检查
 
 - 已有章节卡：`site/story/chapter-cards/volume-02-chapter-02-cards.md`。
 - 已有章节调研：`site/story/research/volume-02-chapter-02-research.md`。
 - 本章任务句已能同时回答低风险工具复查和关系边界推进。
-- 本章只到写前定位；下一步才能进入 `CH-047` drafting。
+- 本章 `CH-047` 到 `CH-054` 正文与定位已完成 line edit；后续连续性以第三章至第五章及本轮 ledger 为准。

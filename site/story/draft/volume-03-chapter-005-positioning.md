@@ -7,7 +7,7 @@
 - 时间线：`TL-111` 到 `TL-118`。
 - 章节卡：`site/story/chapter-cards/volume-03-chapter-05-cards.md`。
 - 调研：`site/story/research/volume-03-greenhouse-life-cycle-research.md`。
-- 状态：写前定位；不是正文。
+- 状态：line edit 后定位基线；不是正文。
 
 ## 本章任务句
 
