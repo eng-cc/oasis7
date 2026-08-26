@@ -16,6 +16,7 @@ on:
         options:
           - launcher
           - oasis7_node_no_default_features
+          - oasis7_default_features
       max_package_count_regression_pct:
         description: "Allowed package closure regression percentage"
         required: false
@@ -139,6 +140,10 @@ jobs:
             oasis7_node_no_default_features)
               package="oasis7_node"
               extra_args+=(--check-only --no-default-features)
+              ;;
+            oasis7_default_features)
+              package="oasis7"
+              extra_args+=(--check-only)
               ;;
             *)
               echo "error: unsupported metric target: ${{ inputs.metric_target }}" >&2
