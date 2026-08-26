@@ -342,6 +342,8 @@ jobs:
         with:
           shared-key: ci-full-regression-v1
           cache-on-failure: true
+      - name: Install trunk
+        run: cargo install trunk --locked
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
 
@@ -408,6 +410,8 @@ jobs:
         with:
           shared-key: ci-full-escalation-v1
           cache-on-failure: true
+      - name: Install trunk
+        run: cargo install trunk --locked
       - id: full
         name: Run human-authorized full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
