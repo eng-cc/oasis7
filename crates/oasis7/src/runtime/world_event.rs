@@ -1,10 +1,16 @@
 //! World event types that wrap all event kinds.
 
 use crate::simulator::ResourceKind;
-use oasis7_wasm_abi::{ModuleCallFailure, ModuleEmitEvent, ModuleStateUpdate};
+use oasis7_wasm_abi::{CapabilityGrantV2, ModuleCallFailure, ModuleEmitEvent, ModuleStateUpdate};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use super::audit::AuditEventKind;
+use super::capability_authorization::{
+    CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
+    CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
+    CapabilityInvocationContext,
+};
 use super::effect::{EffectIntent, EffectReceipt};
 use super::events::{CausedBy, DomainEvent};
 use super::governance::GovernanceEvent;
@@ -30,6 +36,7 @@ impl WorldEvent {
             WorldEventBody::Domain(_) => AuditEventKind::Domain,
             WorldEventBody::EffectQueued(_) => AuditEventKind::EffectQueued,
             WorldEventBody::ReceiptAppended(_) => AuditEventKind::ReceiptAppended,
+            WorldEventBody::CapabilityAuthorization(_) => AuditEventKind::CapabilityAuthorization,
             WorldEventBody::PolicyDecisionRecorded(_) => AuditEventKind::PolicyDecision,
             WorldEventBody::RuleDecisionRecorded(_) => AuditEventKind::RuleDecision,
             WorldEventBody::ActionOverridden(_) => AuditEventKind::ActionOverridden,
@@ -61,6 +68,45 @@ pub struct ModuleRuntimeChargeEvent {
     pub emit_count: u32,
 }
 
+/// Journal evidence for every mutation in the trusted capability lane.
+///
+/// These events carry the post-transition values instead of relying on a
+/// snapshot to capture in-memory authorization maps.  Recovery can therefore
+/// replay a journal tail after an older snapshot without re-running a module
+/// or accepting a second nonce.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum CapabilityAuthorizationEvent {
+    AuthorityInstalled {
+        record: CapabilityAuthorityRecord,
+    },
+    InvocationContextInstalled {
+        key: String,
+        context: CapabilityInvocationContext,
+    },
+    BudgetAccountInstalled {
+        key: String,
+        account: CapabilityBudgetAccount,
+    },
+    GrantRegistered {
+        grant: CapabilityGrantV2,
+    },
+    CommandCommitted {
+        budget_key: String,
+        budget_account: CapabilityBudgetAccount,
+        grant: CapabilityGrantV2,
+        nonce_key: String,
+        nonce_record: CapabilityAuthorizationNonceRecord,
+        receipt: CapabilityAuthorizationAuditReceipt,
+        effect_receipt_links: BTreeMap<String, CapabilityEffectReceiptLink>,
+    },
+    EffectReceiptCommitted {
+        intent_id: String,
+        authorization_receipt_id: String,
+        effect_receipt_id: String,
+    },
+}
+
 /// The body/payload of a world event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "payload")]
@@ -68,6 +114,7 @@ pub enum WorldEventBody {
     Domain(DomainEvent),
     EffectQueued(EffectIntent),
     ReceiptAppended(EffectReceipt),
+    CapabilityAuthorization(CapabilityAuthorizationEvent),
     PolicyDecisionRecorded(PolicyDecisionRecord),
     RuleDecisionRecorded(RuleDecisionRecord),
     ActionOverridden(ActionOverrideRecord),

@@ -7,36 +7,26 @@
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use oasis7_wasm_abi::{
-    AgentCommandResponse, CapabilityAudience, CapabilityCatalogSnapshot, CapabilityGrantV2,
-    ModuleCallCaller, ModuleCallInput, ModuleCallOrigin, ModuleKind, ModuleSandbox, canonical_hash,
-    capability_scope_hash, validate_module_command_declarations, validate_module_command_envelope,
+    AgentCommandResponse, CapabilityCatalogSnapshot, CapabilityGrantV2, ModuleCallInput,
+    ModuleCallOrigin, ModuleKind, ModuleSandbox, canonical_hash, capability_scope_hash,
+    validate_module_command_declarations, validate_module_command_envelope,
 };
-use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::super::capability_authorization::{
     CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
     CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
     CapabilityInvocationContext,
 };
-use super::super::{EffectIntent, EffectOrigin, PolicyDecisionRecord, WorldError, WorldEventBody};
+use super::super::{
+    CapabilityAuthorizationEvent, EffectIntent, EffectOrigin, PolicyDecisionRecord, WorldError,
+    WorldEventBody,
+};
 use super::World;
 use super::capability_authorization_state::{
     budget_reservation_units, capability_actual_units, capability_budget_key,
     validate_budget_account,
 };
-
-#[derive(Serialize)]
-struct AuthorizationNonceKey<'a> {
-    subject: &'a oasis7_wasm_abi::CapabilitySubject,
-    issuer_id: &'a str,
-    issuer_key_epoch: u64,
-    grant_id: &'a str,
-    audience: &'a CapabilityAudience,
-    branch_id: &'a str,
-    finality_epoch: u64,
-    nonce: &'a str,
-}
 
 impl World {
     /// Legacy compatibility shim.  Authority cannot be installed from a
@@ -73,15 +63,32 @@ impl World {
         ))
     }
 
-    /// Install an immutable finalized governance authority record.  The
-    /// record is the durable source of both issuer trust and revocation
-    /// freshness for the v2 executor.
+    /// Reject the legacy unproven authority import path.
+    ///
+    /// Authority records are trust roots, so accepting a structurally valid
+    /// record from a public API would let a caller choose its own issuer key.
+    /// Use [`Self::install_capability_authority_record_with_finality`] with a
+    /// certificate verified against the live governance signer set instead.
+    #[deprecated(note = "install a CapabilityAuthorityRecord with finality proof")]
     pub fn install_capability_authority_record(
         &mut self,
+        _record: CapabilityAuthorityRecord,
+    ) -> Result<(), WorldError> {
+        Err(deny(
+            "authority installation requires a verified governance finality certificate",
+        ))
+    }
+
+    /// Install an immutable authority record after verifying its governance
+    /// finality certificate against the live proposal and validator epoch.
+    pub fn install_capability_authority_record_with_finality(
+        &mut self,
         record: CapabilityAuthorityRecord,
+        certificate: super::super::governance::GovernanceFinalityCertificate,
     ) -> Result<(), WorldError> {
         self.verify_capability_authorization_root()?;
         validate_authority_record(&record)?;
+        self.verify_capability_authority_finality(&record, &certificate)?;
         if self.chain_resource_manifest.world_id != "unbound"
             && self.chain_resource_manifest.world_id != record.world_id
         {
@@ -95,41 +102,41 @@ impl World {
         {
             return Err(deny("authority record is immutable"));
         }
-        self.capability_revocation_state.epoch = self
-            .capability_revocation_state
-            .epoch
-            .max(record.revocation_epoch);
-        self.capability_revocation_state
-            .revoked_grant_ids
-            .extend(record.revoked_grant_ids.iter().cloned());
-        self.capability_revocation_state
-            .superseded_by
-            .extend(record.superseded_by.clone());
-        self.capability_revocation_state.finalized_receipt_id =
-            Some(record.finalized_receipt_id.clone());
-        self.capability_revocation_state
-            .authority_records
-            .insert(record.issuer_id.clone(), record);
-        self.refresh_capability_authorization_root()
+        self.append_event(
+            WorldEventBody::CapabilityAuthorization(
+                CapabilityAuthorizationEvent::AuthorityInstalled { record },
+            ),
+            None,
+        )?;
+        Ok(())
     }
 
     /// Bind the invocation identity supplied by the trusted host.  This is
-    /// persisted and immutable per grant, so provider DTOs cannot choose a
-    /// subject, presenter, or audience at execution time.
+    /// persisted and immutable per grant/response nonce, so provider DTOs
+    /// cannot choose a subject, presenter, or audience at execution time.
     pub fn install_capability_invocation_context(
         &mut self,
         context: CapabilityInvocationContext,
     ) -> Result<(), WorldError> {
         self.verify_capability_authorization_root()?;
         validate_invocation_context(&context)?;
-        if let Some(existing) = self.capability_invocation_contexts.get(&context.grant_id)
+        let key =
+            super::capability_authorization_events::capability_invocation_context_key(&context)?;
+        if let Some(existing) = self.capability_invocation_contexts.get(&key)
             && existing != &context
         {
             return Err(deny("invocation context is immutable"));
         }
-        self.capability_invocation_contexts
-            .insert(context.grant_id.clone(), context);
-        self.refresh_capability_authorization_root()
+        if self.capability_invocation_contexts.get(&key) == Some(&context) {
+            return Ok(());
+        }
+        self.append_event(
+            WorldEventBody::CapabilityAuthorization(
+                CapabilityAuthorizationEvent::InvocationContextInstalled { key, context },
+            ),
+            None,
+        )?;
+        Ok(())
     }
 
     /// Install the durable logical budget for a subject/grant pair.  The
@@ -147,8 +154,16 @@ impl World {
         {
             return Err(deny("capability budget account is immutable"));
         }
-        self.capability_budget_accounts.insert(key, account);
-        self.refresh_capability_authorization_root()
+        if self.capability_budget_accounts.get(&key) == Some(&account) {
+            return Ok(());
+        }
+        self.append_event(
+            WorldEventBody::CapabilityAuthorization(
+                CapabilityAuthorizationEvent::BudgetAccountInstalled { key, account },
+            ),
+            None,
+        )?;
+        Ok(())
     }
 
     /// Insert an issuer-authenticated immutable grant into the durable view.
@@ -176,6 +191,9 @@ impl World {
         if grant.expires_at_tick.is_none() {
             return Err(deny("grant must carry an explicit expiry"));
         }
+        if grant.issued_at_tick > self.state.time {
+            return Err(deny("grant is not issued at the current logical tick"));
+        }
         self.verify_issuer(&grant)?;
         self.verify_live_revocation(&grant)?;
         let encoded = serde_json::to_value(&grant)?;
@@ -184,8 +202,13 @@ impl World {
         {
             return Err(deny("immutable grant body changed"));
         }
-        self.capability_grants_v2.insert(grant.grant_id, encoded);
-        self.refresh_capability_authorization_root()
+        self.append_event(
+            WorldEventBody::CapabilityAuthorization(
+                CapabilityAuthorizationEvent::GrantRegistered { grant },
+            ),
+            None,
+        )?;
+        Ok(())
     }
 
     /// Validate one manifest capability against the live admission state.
@@ -252,6 +275,7 @@ impl World {
             || grant
                 .expires_at_tick
                 .is_some_and(|expiry| self.state.time > expiry)
+            || grant.issued_at_tick > self.state.time
         {
             return Err(deny("v2 capability lifetime is not currently valid"));
         }
@@ -302,20 +326,16 @@ impl World {
             return Err(deny("response does not match catalog snapshot"));
         }
         self.verify_invocation_context(&grant, &catalog, &response)?;
+        if grant.issued_at_tick > self.state.time {
+            return Err(deny("grant is not issued at the current logical tick"));
+        }
         let request_hash = response
             .canonical_request_hash()
             .map_err(|error| deny(format!("request hash: {error}")))?;
-        let nonce_key_hash = canonical_hash(&AuthorizationNonceKey {
-            subject: &grant.subject,
-            issuer_id: &grant.issuer.issuer_id,
-            issuer_key_epoch: grant.issuer.issuer_key_epoch,
-            grant_id: &grant.grant_id,
-            audience: &grant.audience,
-            branch_id: &grant.audience.branch_id,
-            finality_epoch: grant.audience.finality_epoch,
-            nonce: &response.response_nonce,
-        })
-        .map_err(|error| deny(format!("nonce key hash: {error}")))?;
+        let nonce_key_hash = super::capability_authorization_events::authorization_nonce_key(
+            &grant,
+            &response.response_nonce,
+        )?;
 
         if let Some(record) = self.capability_nonce_records.get(&nonce_key_hash) {
             if record.request_hash != request_hash {
@@ -347,7 +367,7 @@ impl World {
         {
             return Err(deny("grant expired"));
         }
-        if !grant.audience_matches(&catalog.audience)
+        if !super::capability_authorization_events::audience_matches(&grant, &catalog.audience)
             || grant.audience != response.audience
             || catalog.audience != response.audience
             || catalog.subject != response.subject
@@ -405,7 +425,15 @@ impl World {
                 "catalog payload bound does not match active declaration",
             ));
         }
-        if !grant.scope_matches_command(entry, response.envelope.payload.len()) {
+        super::capability_authorization_events::validate_subject_for_manifest(
+            &grant.subject,
+            &manifest,
+        )?;
+        if !super::capability_authorization_events::scope_matches_command(
+            &grant,
+            entry,
+            response.envelope.payload.len(),
+        ) {
             return Err(deny("grant scope does not exactly authorize command"));
         }
         if !entry.eligible_grant_ids.is_empty()
@@ -447,7 +475,8 @@ impl World {
         let mut staged = self.clone();
         staged.reserve_capability_budget(&budget_key, reservation_units)?;
         staged.refresh_capability_authorization_root()?;
-        let output = staged.execute_trusted_module_sandbox(&manifest, &response, sandbox)?;
+        let output =
+            staged.execute_trusted_module_sandbox(&manifest, &response, &grant.subject, sandbox)?;
         let effect_intent_ids: Vec<String> = staged
             .journal
             .events
@@ -522,35 +551,45 @@ impl World {
             canonical_request_hash: request_hash.clone(),
             canonical_result_hash: result_hash.clone(),
         };
-        staged
-            .capability_grants_v2
-            .insert(grant.grant_id.clone(), encoded_grant);
-        staged.capability_nonce_records.insert(
-            nonce_key_hash,
-            CapabilityAuthorizationNonceRecord {
-                request_hash,
-                outcome_hash: result_hash,
-                committed_receipt_id: Some(receipt_id.clone()),
-                state: "committed".to_string(),
-            },
-        );
-        staged
-            .capability_authorization_receipts
-            .insert(receipt_id.clone(), receipt.clone());
+        let nonce_record = CapabilityAuthorizationNonceRecord {
+            request_hash,
+            outcome_hash: result_hash,
+            committed_receipt_id: Some(receipt_id.clone()),
+            state: "committed".to_string(),
+        };
+        let budget_account = staged
+            .capability_budget_accounts
+            .get(&budget_key)
+            .cloned()
+            .ok_or_else(|| deny("capability budget account disappeared before commit"))?;
+        let mut effect_receipt_links = BTreeMap::new();
         for intent_id in effect_intent_ids {
-            staged.capability_effect_receipt_links.insert(
+            effect_receipt_links.insert(
                 intent_id,
                 CapabilityEffectReceiptLink {
                     authorization_receipt_id: receipt_id.clone(),
                 },
             );
         }
-        staged.refresh_capability_authorization_root()?;
+        staged.append_event(
+            WorldEventBody::CapabilityAuthorization(
+                CapabilityAuthorizationEvent::CommandCommitted {
+                    budget_key,
+                    budget_account,
+                    grant,
+                    nonce_key: nonce_key_hash,
+                    nonce_record,
+                    receipt: receipt.clone(),
+                    effect_receipt_links,
+                },
+            ),
+            None,
+        )?;
         *self = staged;
         Ok(receipt)
     }
 
-    fn verify_issuer(&self, grant: &CapabilityGrantV2) -> Result<(), WorldError> {
+    pub(super) fn verify_issuer(&self, grant: &CapabilityGrantV2) -> Result<(), WorldError> {
         let issuer = &grant.issuer;
         let authority = self
             .capability_revocation_state
@@ -604,9 +643,18 @@ impl World {
         catalog: &CapabilityCatalogSnapshot,
         response: &AgentCommandResponse,
     ) -> Result<(), WorldError> {
+        let key =
+            super::capability_authorization_events::capability_invocation_context_key_for_values(
+                grant.grant_id.as_str(),
+                response.response_nonce.as_str(),
+            )?;
         let context = self
             .capability_invocation_contexts
-            .get(&grant.grant_id)
+            .get(&key)
+            // Snapshots written before the nonce-key migration used the grant
+            // id alone.  Keep those records readable, but only when their
+            // complete bound nonce still matches this response.
+            .or_else(|| self.capability_invocation_contexts.get(&grant.grant_id))
             .ok_or_else(|| deny("trusted host invocation context is not bound"))?;
         if context.grant_id != grant.grant_id
             || context.subject != grant.subject
@@ -685,7 +733,10 @@ impl World {
         self.verify_parent_chain(grant)
     }
 
-    fn verify_live_revocation(&self, grant: &CapabilityGrantV2) -> Result<(), WorldError> {
+    pub(super) fn verify_live_revocation(
+        &self,
+        grant: &CapabilityGrantV2,
+    ) -> Result<(), WorldError> {
         let state = &self.capability_revocation_state;
         if state.epoch < grant.revocation_epoch {
             return Err(deny("revocation registry is stale"));
@@ -737,6 +788,7 @@ impl World {
             || parent
                 .expires_at_tick
                 .is_some_and(|expiry| self.state.time > expiry)
+            || parent.issued_at_tick > self.state.time
         {
             return Err(deny("parent grant lifetime is not currently valid"));
         }
@@ -803,6 +855,7 @@ impl World {
         &mut self,
         manifest: &oasis7_wasm_abi::ModuleManifest,
         response: &AgentCommandResponse,
+        subject: &oasis7_wasm_abi::CapabilitySubject,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<oasis7_wasm_abi::ModuleOutput, WorldError> {
         let trace_id = response
@@ -830,9 +883,7 @@ impl World {
                     kind: "trusted_module_command".to_string(),
                     id: response.response_nonce.clone(),
                 },
-                caller: ModuleCallCaller::Agent {
-                    agent_id: subject_agent_id(&response.subject),
-                },
+                caller: super::capability_authorization_events::module_call_caller(subject),
                 limits: manifest.limits.clone(),
                 stage: Some("trusted_module_command".to_string()),
                 world_config_hash: Some(self.current_manifest_hash()?),
@@ -1008,13 +1059,17 @@ impl World {
             || grant
                 .expires_at_tick
                 .is_some_and(|expiry| self.state.time > expiry)
+            || grant.issued_at_tick > self.state.time
             || grant.scope.module_id != manifest.module_id
             || grant.scope.module_version != manifest.version
             || grant.scope.object_kind != "effect"
             || grant.scope.object_name != effect.kind
             || !matches!(grant.scope.operation.as_str(), "invoke" | "execute")
-            || grant.scope.entity_selector.is_none()
-            || grant.scope.resource_selector.is_none()
+            // Effect params are opaque JSON at this boundary.  Refuse
+            // selector-bearing grants until the ABI supplies a canonical
+            // target binding that can be compared here.
+            || grant.scope.entity_selector.is_some()
+            || grant.scope.resource_selector.is_some()
         {
             return Err(deny("trusted effect grant scope does not match output"));
         }
@@ -1032,7 +1087,9 @@ impl World {
     }
 }
 
-fn validate_authority_record(record: &CapabilityAuthorityRecord) -> Result<(), WorldError> {
+pub(super) fn validate_authority_record(
+    record: &CapabilityAuthorityRecord,
+) -> Result<(), WorldError> {
     for (field, value) in [
         ("issuer_id", record.issuer_id.as_str()),
         ("issuer_kind", record.issuer_kind.as_str()),
@@ -1077,7 +1134,9 @@ fn validate_authority_record(record: &CapabilityAuthorityRecord) -> Result<(), W
     Ok(())
 }
 
-fn validate_invocation_context(context: &CapabilityInvocationContext) -> Result<(), WorldError> {
+pub(super) fn validate_invocation_context(
+    context: &CapabilityInvocationContext,
+) -> Result<(), WorldError> {
     for (field, value) in [
         ("grant_id", context.grant_id.as_str()),
         ("catalog_snapshot_id", context.catalog_snapshot_id.as_str()),
@@ -1107,46 +1166,5 @@ fn validate_invocation_context(context: &CapabilityInvocationContext) -> Result<
 pub(super) fn deny(reason: impl Into<String>) -> WorldError {
     WorldError::CapabilityAuthorizationDenied {
         reason: reason.into(),
-    }
-}
-
-fn subject_agent_id(subject: &oasis7_wasm_abi::CapabilitySubject) -> String {
-    match subject {
-        oasis7_wasm_abi::CapabilitySubject::Agent { agent_id, .. } => agent_id.clone(),
-        oasis7_wasm_abi::CapabilitySubject::Module { instance_id, .. } => instance_id.clone(),
-        oasis7_wasm_abi::CapabilitySubject::System { system_id, .. } => system_id.clone(),
-    }
-}
-
-trait GrantAuthorizationExt {
-    fn audience_matches(&self, audience: &CapabilityAudience) -> bool;
-    fn scope_matches_command(
-        &self,
-        entry: &oasis7_wasm_abi::CapabilityCatalogEntry,
-        payload_len: usize,
-    ) -> bool;
-}
-
-impl GrantAuthorizationExt for CapabilityGrantV2 {
-    fn audience_matches(&self, audience: &CapabilityAudience) -> bool {
-        self.audience == *audience
-    }
-
-    fn scope_matches_command(
-        &self,
-        entry: &oasis7_wasm_abi::CapabilityCatalogEntry,
-        payload_len: usize,
-    ) -> bool {
-        self.scope.module_id == entry.module_id
-            && self.scope.module_version == entry.module_version
-            && self.scope.namespace == entry.namespace
-            && self.scope.object_kind == "command"
-            && self.scope.object_name == entry.command
-            && self.scope.operation == "execute"
-            && self.scope.entity_selector.is_some()
-            && self.scope.resource_selector.is_some()
-            && self.scope.max_payload_bytes.is_some_and(|max| {
-                u64::try_from(payload_len).is_ok_and(|payload_len| payload_len <= max)
-            })
     }
 }

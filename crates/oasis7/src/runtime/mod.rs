@@ -286,4 +286,6 @@ pub use world::{
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
-pub use world_event::{ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody};
+pub use world_event::{
+    CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
+};

@@ -2,8 +2,8 @@ use super::super::util::sha256_hex;
 use serde_json::Value as JsonValue;
 
 use super::super::{
-    CausedBy, EffectIntent, EffectOrigin, EffectReceipt, PolicyDecisionRecord, WorldError,
-    WorldEventBody, WorldEventId,
+    CapabilityAuthorizationEvent, CausedBy, EffectIntent, EffectOrigin, EffectReceipt,
+    PolicyDecisionRecord, WorldError, WorldEventBody, WorldEventId,
 };
 use super::World;
 
@@ -112,30 +112,32 @@ impl World {
         }
 
         self.finalize_receipt_signature(&mut receipt)?;
+        if let Some(link) = self.capability_effect_receipt_links.get(&receipt.intent_id) {
+            let authorization_receipt_id = link.authorization_receipt_id.clone();
+            // Keep the authorization closure before the queue acknowledgement.
+            // If a crash leaves only the first event durable, the pending
+            // intent remains retryable and the idempotent closure can be
+            // followed by the receipt acknowledgement on recovery.
+            self.append_event(
+                WorldEventBody::CapabilityAuthorization(
+                    CapabilityAuthorizationEvent::EffectReceiptCommitted {
+                        intent_id: receipt.intent_id.clone(),
+                        authorization_receipt_id,
+                        effect_receipt_id: receipt.intent_id.clone(),
+                    },
+                ),
+                Some(CausedBy::Effect {
+                    intent_id: receipt.intent_id.clone(),
+                }),
+            )?;
+        }
+
         let event_id = self.append_event(
             WorldEventBody::ReceiptAppended(receipt.clone()),
             Some(CausedBy::Effect {
                 intent_id: receipt.intent_id.clone(),
             }),
         )?;
-
-        if let Some(link) = self
-            .capability_effect_receipt_links
-            .remove(&receipt.intent_id)
-        {
-            let audit = self
-                .capability_authorization_receipts
-                .get_mut(&link.authorization_receipt_id)
-                .ok_or_else(|| WorldError::CapabilityAuthorizationDenied {
-                    reason: "effect receipt authorization link has no audit receipt".to_string(),
-                })?;
-            if audit.committed_effect_receipt_id.is_none() {
-                // `intent_id` is the stable identifier of the actual
-                // EffectReceipt in the existing effect protocol.
-                audit.committed_effect_receipt_id = Some(receipt.intent_id);
-            }
-            self.refresh_capability_authorization_root()?;
-        }
         Ok(event_id)
     }
 

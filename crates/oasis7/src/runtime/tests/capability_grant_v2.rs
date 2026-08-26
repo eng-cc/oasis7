@@ -16,18 +16,20 @@ use oasis7_wasm_executor::WasmExecutor;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-const MODULE_ID: &str = "module.weather";
-const MODULE_VERSION: &str = "1.0.0";
-const WORLD_ID: &str = "world.test";
-const BRANCH_ID: &str = "branch-1";
-const SUBJECT_ID: &str = "agent-7";
-const PRESENTER_ID: &str = "provider-1";
-const ISSUER_ID: &str = "governance-1";
-const SCHEMA_HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+pub(super) const MODULE_ID: &str = "module.weather";
+pub(super) const MODULE_VERSION: &str = "1.0.0";
+pub(super) const WORLD_ID: &str = "world.test";
+pub(super) const BRANCH_ID: &str = "branch-1";
+pub(super) const SUBJECT_ID: &str = "agent-7";
+pub(super) const PRESENTER_ID: &str = "provider-1";
+pub(super) const ISSUER_ID: &str = "governance-1";
+pub(super) const FINALITY_SIGNER_2: &str = "governance-finality-2";
+pub(super) const SCHEMA_HASH: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 #[derive(Default)]
-struct RecordingSandbox {
-    calls: usize,
+pub(super) struct RecordingSandbox {
+    pub(super) calls: usize,
 }
 
 impl ModuleSandbox for RecordingSandbox {
@@ -43,9 +45,27 @@ impl ModuleSandbox for RecordingSandbox {
     }
 }
 
-struct ConfiguredSandbox {
-    calls: usize,
-    output: ModuleOutput,
+pub(super) struct ConfiguredSandbox {
+    pub(super) calls: usize,
+    pub(super) output: ModuleOutput,
+}
+
+#[derive(Default)]
+pub(super) struct ProvenanceSandbox {
+    pub(super) requests: Vec<ModuleCallRequest>,
+}
+
+impl ModuleSandbox for ProvenanceSandbox {
+    fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
+        self.requests.push(request.clone());
+        Ok(ModuleOutput {
+            new_state: Some(vec![0x42]),
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        })
+    }
 }
 
 impl ModuleSandbox for ConfiguredSandbox {
@@ -55,7 +75,7 @@ impl ModuleSandbox for ConfiguredSandbox {
     }
 }
 
-fn grant_json(overrides: Value) -> Value {
+pub(super) fn grant_json(overrides: Value) -> Value {
     let mut grant = json!({
         "grant_id": "grant-weather-1",
         "grant_version": 2,
@@ -89,12 +109,12 @@ fn grant_json(overrides: Value) -> Value {
             "object_kind": "command",
             "object_name": "observe",
             "operation": "execute",
-            "entity_selector": ["station-1"],
-            "resource_selector": ["weather.read"],
+            "entity_selector": null,
+            "resource_selector": null,
             "max_payload_bytes": 128,
             "policy_class": "read-only"
         },
-        "issued_at_tick": 1,
+        "issued_at_tick": 0,
         "expires_at_tick": 100,
         "grant_nonce": "grant-nonce-1",
         "parent_grant_id": null,
@@ -108,7 +128,7 @@ fn grant_json(overrides: Value) -> Value {
     grant
 }
 
-fn capability_issuer_signing_key() -> SigningKey {
+pub(super) fn capability_issuer_signing_key() -> SigningKey {
     let seed = util::sha256_hex(b"oasis7-test-capability-issuer-v2");
     let seed_bytes = hex::decode(seed).expect("decode capability issuer signing seed");
     let private_key_bytes: [u8; 32] = seed_bytes
@@ -118,7 +138,17 @@ fn capability_issuer_signing_key() -> SigningKey {
     SigningKey::from_bytes(&private_key_bytes)
 }
 
-fn signed_grant(value: Value) -> CapabilityGrantV2 {
+fn capability_finality_signing_key_2() -> SigningKey {
+    let seed = util::sha256_hex(b"oasis7-test-capability-finality-signer-2-v1");
+    let seed_bytes = hex::decode(seed).expect("decode capability finality signing seed");
+    let private_key_bytes: [u8; 32] = seed_bytes
+        .as_slice()
+        .try_into()
+        .expect("capability finality signing seed is 32 bytes");
+    SigningKey::from_bytes(&private_key_bytes)
+}
+
+pub(super) fn signed_grant(value: Value) -> CapabilityGrantV2 {
     let mut grant: CapabilityGrantV2 = typed(value);
     let body_hash = grant
         .canonical_body_hash()
@@ -146,7 +176,7 @@ fn signed_grant(value: Value) -> CapabilityGrantV2 {
     grant
 }
 
-fn signed_effect_grant() -> CapabilityGrantV2 {
+pub(super) fn signed_effect_grant() -> CapabilityGrantV2 {
     signed_grant(grant_json(json!({
         "grant_nonce": "effect-grant-nonce-1",
         "scope": {
@@ -157,7 +187,20 @@ fn signed_effect_grant() -> CapabilityGrantV2 {
     })))
 }
 
-fn catalog_json(overrides: Value) -> Value {
+pub(super) fn signed_effect_grant_with_selectors() -> CapabilityGrantV2 {
+    signed_grant(grant_json(json!({
+        "grant_nonce": "effect-grant-selector-nonce-1",
+        "scope": {
+            "object_kind": "effect",
+            "object_name": "weather.publish",
+            "operation": "invoke",
+            "entity_selector": ["station-1"],
+            "resource_selector": ["weather.read"]
+        }
+    })))
+}
+
+pub(super) fn catalog_json(overrides: Value) -> Value {
     let mut catalog = json!({
         "snapshot_id": "catalog-weather-1",
         "world_id": WORLD_ID,
@@ -203,7 +246,7 @@ fn catalog_json(overrides: Value) -> Value {
     catalog
 }
 
-fn response_json(overrides: Value) -> Value {
+pub(super) fn response_json(overrides: Value) -> Value {
     let mut response = json!({
         "response_nonce": "response-1",
         "subject": {
@@ -269,7 +312,7 @@ fn typed<T: serde::de::DeserializeOwned>(value: Value) -> T {
     serde_json::from_value(value).expect("decode authorization fixture")
 }
 
-fn prepared_catalog(
+pub(super) fn prepared_catalog(
     world: &World,
     grant: &CapabilityGrantV2,
     value: Value,
@@ -306,7 +349,10 @@ fn prepared_catalog(
     catalog
 }
 
-fn prepared_response(value: Value, catalog: &CapabilityCatalogSnapshot) -> AgentCommandResponse {
+pub(super) fn prepared_response(
+    value: Value,
+    catalog: &CapabilityCatalogSnapshot,
+) -> AgentCommandResponse {
     let mut response: AgentCommandResponse = typed(value);
     if response.catalog_snapshot_id == "catalog-weather-1" {
         response.catalog_snapshot_id = catalog.snapshot_id.clone();
@@ -348,50 +394,165 @@ fn activate_module_for_test(world: &mut World, manifest: ModuleManifest) {
         .expect("apply module activation");
 }
 
-fn fixture_world() -> World {
+fn install_test_capability_authority(world: &mut World, revoked_grant_ids: BTreeSet<String>) {
+    let issuer_key = capability_issuer_signing_key();
+    let finality_key = capability_finality_signing_key_2();
+    world
+        .bind_node_identity(
+            ISSUER_ID,
+            &hex::encode(issuer_key.verifying_key().to_bytes()),
+        )
+        .expect("bind capability issuer finality identity");
+    world
+        .bind_node_identity(
+            FINALITY_SIGNER_2,
+            &hex::encode(finality_key.verifying_key().to_bytes()),
+        )
+        .expect("bind capability finality signer identity");
+    world
+        .set_governance_finality_epoch_snapshot(GovernanceFinalityEpochSnapshot {
+            epoch_id: 4,
+            threshold: 2,
+            min_unique_signers: 2,
+            threshold_bps: 10_000,
+            signer_node_ids: vec![ISSUER_ID.to_string(), FINALITY_SIGNER_2.to_string()],
+            validator_stakes: BTreeMap::from([
+                (ISSUER_ID.to_string(), 100),
+                (FINALITY_SIGNER_2.to_string(), 100),
+            ]),
+            ..GovernanceFinalityEpochSnapshot::default()
+        })
+        .expect("configure capability finality signer set");
+
+    let proposal = world
+        .propose_manifest_update(
+            Manifest {
+                version: world.manifest().version.saturating_add(1),
+                content: json!({"capability_authority_fixture": true}),
+            },
+            "tester",
+        )
+        .expect("propose capability authority fixture");
+    world
+        .shadow_proposal(proposal)
+        .expect("shadow capability authority fixture");
+    world
+        .approve_proposal(proposal, "tester", ProposalDecision::Approve)
+        .expect("approve capability authority fixture");
+    let manifest_hash = match &world
+        .proposals()
+        .get(&proposal)
+        .expect("capability authority proposal")
+        .status
+    {
+        ProposalStatus::Approved { manifest_hash, .. } => manifest_hash.clone(),
+        status => panic!("expected approved capability authority fixture, got {status:?}"),
+    };
+    let snapshot = world
+        .governance_finality_epoch_snapshots()
+        .get(&4)
+        .cloned()
+        .expect("capability finality epoch snapshot");
+    let consensus_height = world.journal().events.len() as u64 + 1;
+    let min_unique_signers = snapshot.effective_min_unique_signers();
+    let mut signatures = BTreeMap::new();
+    for (node_id, signing_key) in [
+        (ISSUER_ID, issuer_key.clone()),
+        (FINALITY_SIGNER_2, finality_key),
+    ] {
+        let payload = GovernanceFinalityCertificate::signing_payload_v1(
+            proposal,
+            manifest_hash.as_str(),
+            consensus_height,
+            snapshot.epoch_id,
+            snapshot.validator_set_hash.as_str(),
+            snapshot.stake_root.as_str(),
+            snapshot.threshold_bps,
+            min_unique_signers,
+            node_id,
+        );
+        let signature = signing_key.sign(payload.as_slice());
+        signatures.insert(
+            node_id.to_string(),
+            format!(
+                "{}{}",
+                GovernanceFinalityCertificate::SIGNATURE_PREFIX_ED25519_V1,
+                hex::encode(signature.to_bytes())
+            ),
+        );
+    }
+    let certificate = GovernanceFinalityCertificate {
+        proposal_id: proposal,
+        manifest_hash,
+        consensus_height,
+        epoch_id: snapshot.epoch_id,
+        validator_set_hash: snapshot.validator_set_hash,
+        stake_root: snapshot.stake_root,
+        threshold_bps: snapshot.threshold_bps,
+        min_unique_signers,
+        threshold: min_unique_signers,
+        signatures,
+    };
+    world
+        .install_capability_authority_record_with_finality(
+            CapabilityAuthorityRecord {
+                issuer_id: ISSUER_ID.to_string(),
+                issuer_kind: "governance".to_string(),
+                key_id: "governance-key-1".to_string(),
+                public_key_hex: hex::encode(issuer_key.verifying_key().to_bytes()),
+                issuer_key_epoch: 3,
+                governance_epoch: 9,
+                finalized_receipt_id: "finality-9".to_string(),
+                authority_rotation_receipt_id: None,
+                world_id: WORLD_ID.to_string(),
+                branch_id: BRANCH_ID.to_string(),
+                finality_epoch: 4,
+                finality_block_hash: "block-hash-4".to_string(),
+                finality_status: "finalized".to_string(),
+                revocation_epoch: 2,
+                revoked_grant_ids,
+                superseded_by: BTreeMap::new(),
+            },
+            certificate,
+        )
+        .expect("register governed capability issuer");
+}
+
+pub(super) fn fixture_world() -> World {
     fixture_world_with_revocations(BTreeSet::new())
 }
 
-fn fixture_world_with_revocations(revoked_grant_ids: BTreeSet<String>) -> World {
+pub(super) fn fixture_world_with_revocations(revoked_grant_ids: BTreeSet<String>) -> World {
     fixture_world_with_revocations_and_budget(revoked_grant_ids, 128)
 }
 
-fn fixture_world_with_revocations_and_budget(
+pub(super) fn fixture_world_with_revocations_and_budget(
     revoked_grant_ids: BTreeSet<String>,
     budget_units: i64,
+) -> World {
+    fixture_world_with_revocations_and_budget_and_effect_grant(
+        revoked_grant_ids,
+        budget_units,
+        signed_effect_grant(),
+    )
+}
+
+pub(super) fn fixture_world_with_revocations_and_budget_and_effect_grant(
+    revoked_grant_ids: BTreeSet<String>,
+    budget_units: i64,
+    effect_grant: CapabilityGrantV2,
 ) -> World {
     // Use the existing governance-backed module activation path.  The v2
     // authorization registry/issuer must be supplied by the implementation;
     // this fixture must not grow a test-only production helper.
     let mut world = World::new();
     world.set_policy(PolicySet::allow_all());
-    let effect_grant = signed_effect_grant();
     let wasm_bytes = b"capability-grant-v2-module";
     let wasm_hash = util::sha256_hex(wasm_bytes);
     world
         .register_module_artifact(wasm_hash.clone(), wasm_bytes)
         .expect("register active test module artifact");
-    let signing_key = capability_issuer_signing_key();
-    world
-        .install_capability_authority_record(CapabilityAuthorityRecord {
-            issuer_id: ISSUER_ID.to_string(),
-            issuer_kind: "governance".to_string(),
-            key_id: "governance-key-1".to_string(),
-            public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
-            issuer_key_epoch: 3,
-            governance_epoch: 9,
-            finalized_receipt_id: "finality-9".to_string(),
-            authority_rotation_receipt_id: None,
-            world_id: WORLD_ID.to_string(),
-            branch_id: BRANCH_ID.to_string(),
-            finality_epoch: 4,
-            finality_block_hash: "block-hash-4".to_string(),
-            finality_status: "finalized".to_string(),
-            revocation_epoch: 2,
-            revoked_grant_ids,
-            superseded_by: BTreeMap::new(),
-        })
-        .expect("register governed capability issuer");
+    install_test_capability_authority(&mut world, revoked_grant_ids);
     world
         .register_capability_grant_v2(effect_grant.clone())
         .expect("register durable signed effect grant");
@@ -442,7 +603,7 @@ fn fixture_world_with_revocations_and_budget(
     world
 }
 
-fn install_invocation_context(
+pub(super) fn install_invocation_context(
     world: &mut World,
     grant: &CapabilityGrantV2,
     catalog: &CapabilityCatalogSnapshot,
@@ -462,6 +623,50 @@ fn install_invocation_context(
         .expect("install trusted invocation context");
 }
 
+/// Build a catalog/response pair whose world head remains valid whether the
+/// host journals invocation-context installation.  This keeps the tests
+/// focused on authorization behavior while exercising the same persisted
+/// setup path used by production callers.
+pub(super) fn prepared_invocation(
+    world: &World,
+    grant: &CapabilityGrantV2,
+    catalog_value: Value,
+    response_value: Value,
+) -> (CapabilityCatalogSnapshot, AgentCommandResponse) {
+    let catalog = prepared_catalog(world, grant, catalog_value);
+    let response = prepared_response(response_value.clone(), &catalog);
+    let mut probe = world.clone();
+    install_invocation_context(&mut probe, grant, &catalog, &response);
+    let expected_head = probe
+        .journal()
+        .events
+        .last()
+        .map(|event| event.id)
+        .unwrap_or(0);
+
+    let mut catalog = catalog;
+    if catalog.world_head != expected_head {
+        catalog.world_head = expected_head;
+        catalog.snapshot_id = catalog
+            .canonical_hash()
+            .expect("compute context-bound catalog snapshot hash");
+    }
+    let response = prepared_response(response_value, &catalog);
+    (catalog, response)
+}
+
+pub(super) fn install_budget_for_grant(world: &mut World, grant: &CapabilityGrantV2, units: i64) {
+    world
+        .install_capability_budget_account(CapabilityBudgetAccount {
+            subject: grant.subject.clone(),
+            grant_id: grant.grant_id.clone(),
+            remaining_units: units,
+            reserved_units: 0,
+            spent_units: 0,
+        })
+        .expect("install grant budget fixture");
+}
+
 fn install_bound_invocation_context(world: &mut World) {
     let bound_grant = signed_grant(grant_json(json!({})));
     let bound_catalog = prepared_catalog(world, &bound_grant, catalog_json(json!({})));
@@ -474,7 +679,7 @@ fn install_bound_invocation_context(world: &mut World) {
     }
 }
 
-fn execute_prepared_fixture(
+pub(super) fn execute_prepared_fixture(
     world: &mut World,
     grant: CapabilityGrantV2,
     catalog: CapabilityCatalogSnapshot,
@@ -485,7 +690,7 @@ fn execute_prepared_fixture(
     execute_without_invocation_context(world, grant, catalog, response, sandbox)
 }
 
-fn execute_without_invocation_context(
+pub(super) fn execute_without_invocation_context(
     world: &mut World,
     grant: CapabilityGrantV2,
     catalog: CapabilityCatalogSnapshot,
@@ -532,15 +737,18 @@ fn execute_fixture(
 #[test]
 fn trusted_executor_accepts_exact_grant_and_never_routes_to_core_action() {
     let mut world = fixture_world();
-    let mut sandbox = RecordingSandbox::default();
-    let receipt = execute_fixture(
-        &mut world,
-        grant_json(json!({})),
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
         catalog_json(json!({})),
         response_json(json!({})),
-        &mut sandbox,
-    )
-    .expect("exact v2 authorization should execute");
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let mut sandbox = RecordingSandbox::default();
+    let receipt =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect("exact v2 authorization should execute");
 
     assert_eq!(sandbox.calls, 1);
     assert_eq!(receipt.decision, "accepted");
@@ -712,8 +920,13 @@ fn trusted_executor_rejects_expiry_revocation_inactive_module_and_stale_catalog(
 fn trusted_executor_atomically_commits_state_effect_emit_budget_nonce_and_receipt() {
     let mut world = fixture_world();
     let grant = signed_grant(grant_json(json!({})));
-    let catalog = prepared_catalog(&world, &grant, catalog_json(json!({})));
-    let response = prepared_response(response_json(json!({})), &catalog);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
     let mut sandbox = ConfiguredSandbox {
         calls: 0,
         output: ModuleOutput {
@@ -733,8 +946,9 @@ fn trusted_executor_atomically_commits_state_effect_emit_budget_nonce_and_receip
         },
     };
 
-    let receipt = execute_prepared_fixture(&mut world, grant, catalog, response, &mut sandbox)
-        .expect("valid typed output should commit atomically");
+    let receipt =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect("valid typed output should commit atomically");
 
     assert_eq!(sandbox.calls, 1);
     assert_eq!(receipt.decision, "accepted");
@@ -800,8 +1014,12 @@ fn trusted_executor_atomically_commits_state_effect_emit_budget_nonce_and_receip
 fn trusted_executor_rolls_back_all_state_effects_budget_nonce_and_receipt_on_effect_failure() {
     let mut world = fixture_world();
     let grant = signed_grant(grant_json(json!({})));
-    let catalog = prepared_catalog(&world, &grant, catalog_json(json!({})));
-    let response = prepared_response(response_json(json!({})), &catalog);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
     install_invocation_context(&mut world, &grant, &catalog, &response);
     let snapshot_before = world.snapshot();
     let journal_before = world.journal().clone();
@@ -845,10 +1063,15 @@ fn trusted_executor_rolls_back_all_state_effects_budget_nonce_and_receipt_on_eff
 fn trusted_executor_debits_durable_budget_once_and_retries_idempotently_after_snapshot_restore() {
     let mut world = fixture_world();
     let grant = signed_grant(grant_json(json!({})));
-    let catalog = prepared_catalog(&world, &grant, catalog_json(json!({})));
-    let response = prepared_response(response_json(json!({})), &catalog);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
     let mut first_sandbox = RecordingSandbox::default();
-    let first = execute_prepared_fixture(
+    let first = execute_without_invocation_context(
         &mut world,
         grant.clone(),
         catalog.clone(),
@@ -869,9 +1092,14 @@ fn trusted_executor_debits_durable_budget_once_and_retries_idempotently_after_sn
     let mut restored = World::from_snapshot(restored_snapshot, restored_journal)
         .expect("restore committed authorization state");
     let mut retry_sandbox = RecordingSandbox::default();
-    let retry =
-        execute_prepared_fixture(&mut restored, grant, catalog, response, &mut retry_sandbox)
-            .expect("exact request survives snapshot restore as idempotent");
+    let retry = execute_without_invocation_context(
+        &mut restored,
+        grant,
+        catalog,
+        response,
+        &mut retry_sandbox,
+    )
+    .expect("exact request survives snapshot restore as idempotent");
 
     assert_eq!(retry.decision, "idempotent");
     assert_eq!(retry.receipt_id, first.receipt_id);
@@ -952,40 +1180,4 @@ fn trusted_executor_rejects_missing_forged_and_stale_invocation_context_before_s
         ));
         assert_eq!(sandbox.calls, 0, "{case} must fail before sandbox");
     }
-}
-
-#[test]
-fn authorization_nonce_same_hash_is_idempotent_but_different_hash_conflicts_without_effect() {
-    let mut world = fixture_world();
-    let grant = signed_grant(grant_json(json!({})));
-    let catalog = prepared_catalog(&world, &grant, catalog_json(json!({})));
-    let response = prepared_response(response_json(json!({})), &catalog);
-    let mut sandbox = RecordingSandbox::default();
-    let first = execute_prepared_fixture(
-        &mut world,
-        grant.clone(),
-        catalog.clone(),
-        response.clone(),
-        &mut sandbox,
-    )
-    .expect("first exact request");
-    let second = execute_prepared_fixture(
-        &mut world,
-        grant.clone(),
-        catalog.clone(),
-        response.clone(),
-        &mut sandbox,
-    )
-    .expect("same request is idempotent");
-    assert_eq!(first.receipt_id, second.receipt_id);
-    assert_eq!(second.decision, "idempotent");
-    assert_eq!(sandbox.calls, 1);
-
-    let mut conflict_response = response;
-    conflict_response.envelope.payload = vec![123, 34, 120, 34, 125];
-    let error =
-        execute_prepared_fixture(&mut world, grant, catalog, conflict_response, &mut sandbox)
-            .expect_err("same nonce with a different request hash must conflict");
-    assert!(matches!(error, WorldError::CapabilityNonceConflict { .. }));
-    assert_eq!(sandbox.calls, 1);
 }

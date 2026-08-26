@@ -12,6 +12,7 @@ mod bootstrap_economy;
 mod bootstrap_gameplay;
 mod bootstrap_power;
 mod capability_authorization;
+mod capability_authorization_events;
 mod capability_authorization_state;
 mod economy;
 mod effects;

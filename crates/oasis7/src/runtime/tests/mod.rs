@@ -74,6 +74,7 @@ mod body;
 mod builtin_wasm_identity;
 mod builtin_wasm_materializer;
 mod capability_grant_v2;
+mod capability_grant_v2_regressions;
 mod data_access_control;
 mod economy;
 mod economy_bootstrap;

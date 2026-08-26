@@ -7,6 +7,7 @@ pub(in crate::viewer::runtime_live) fn runtime_event_kind_label(
         RuntimeWorldEventBody::Domain(_) => "domain",
         RuntimeWorldEventBody::EffectQueued(_) => "effect_queued",
         RuntimeWorldEventBody::ReceiptAppended(_) => "receipt_appended",
+        RuntimeWorldEventBody::CapabilityAuthorization(_) => "capability_authorization",
         RuntimeWorldEventBody::PolicyDecisionRecorded(_) => "policy_decision_recorded",
         RuntimeWorldEventBody::RuleDecisionRecorded(_) => "rule_decision_recorded",
         RuntimeWorldEventBody::ActionOverridden(_) => "action_overridden",

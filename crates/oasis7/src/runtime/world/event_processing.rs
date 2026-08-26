@@ -642,6 +642,9 @@ impl World {
                     });
                 }
             }
+            WorldEventBody::CapabilityAuthorization(event) => {
+                self.apply_capability_authorization_event(event, time)?;
+            }
             WorldEventBody::PolicyDecisionRecorded(_) => {}
             WorldEventBody::RuleDecisionRecorded(_) => {}
             WorldEventBody::ActionOverridden(_) => {}
