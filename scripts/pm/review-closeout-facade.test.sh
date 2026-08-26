@@ -25,6 +25,12 @@ for helper in 'review-batch-epoch.py' 'reconcile' 'collect' 'record-pre-pr-revie
     exit 1
   }
 done
+for ordering_contract in 'planned_roles=plan.get("roles")' 'rows=[by_role[role] for role in planned_roles]'; do
+  grep -F -- "$ordering_contract" <<<"$SOURCE" >/dev/null || {
+    echo "review-closeout must restore immutable review-plan role order after batch reconciliation" >&2
+    exit 1
+  }
+done
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT

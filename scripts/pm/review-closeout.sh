@@ -137,10 +137,18 @@ fi
 python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
   --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 
-SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" <<'PY'
+SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" "$REVIEW_PLAN" <<'PY'
 import json, pathlib, sys
 rows=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines() if x.strip()]
 if not rows: raise SystemExit("review-closeout: role-return ledger is empty")
+plan=json.loads(pathlib.Path(sys.argv[3]).read_text())
+planned_roles=plan.get("roles")
+if not isinstance(planned_roles, list) or not all(isinstance(role, str) for role in planned_roles):
+ raise SystemExit("review-closeout: review plan roles are invalid")
+by_role={r.get("role"): r for r in rows}
+if len(by_role) != len(rows) or set(by_role) != set(planned_roles):
+ raise SystemExit("review-closeout: role-return ledger roles mismatch review plan")
+rows=[by_role[role] for role in planned_roles]
 roles=",".join(str(r["role"]) for r in rows)
 evidence="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
 verdicts="; ".join(f'{r["role"]} scope={r["scope_verdict"]} risk={r["risk_verdict"]}' for r in rows)
