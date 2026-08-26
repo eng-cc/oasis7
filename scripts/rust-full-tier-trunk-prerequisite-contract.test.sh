@@ -8,29 +8,33 @@ python3 - "$WORKFLOW" <<'PY'
 from pathlib import Path
 import re
 import sys
+import tempfile
 
 workflow_path = Path(sys.argv[1])
-lines = workflow_path.read_text(encoding="utf-8").splitlines()
 job_header = re.compile(r"^  (?P<name>[A-Za-z0-9_-]+):\s*$")
-run_key = re.compile(r"^(?P<indent>\s*)run:\s*(?P<body>.*)$")
+run_key = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:\s*(?P<body>.*)$")
 target = "CI_VERBOSE=1 ./scripts/ci-tests.sh full"
-trunk_install = "cargo install trunk --locked"
+trunk_install = 'cargo install trunk --locked --version "${TRUNK_VERSION}"'
+trunk_verify = 'trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"'
+expected_jobs = {"full-regression", "full-escalation"}
 
-try:
-    jobs_index = next(index for index, line in enumerate(lines) if line == "jobs:")
-except StopIteration:
-    raise SystemExit("rust.yml contract: missing jobs: mapping")
 
-jobs = {}
-current_name = None
-for index in range(jobs_index + 1, len(lines)):
-    match = job_header.match(lines[index])
-    if match:
-        current_name = match.group("name")
-        jobs[current_name] = []
-        continue
-    if current_name is not None:
-        jobs[current_name].append((index, lines[index]))
+def repository_trunk_version():
+    release_workflow_path = workflow_path.with_name("release-packages.yml")
+    release_lines = release_workflow_path.read_text(encoding="utf-8").splitlines()
+    versions = [
+        match.group("version")
+        for line in release_lines
+        if (match := re.match(r"^  TRUNK_VERSION: (?P<version>[0-9]+\.[0-9]+\.[0-9]+)$", line))
+    ]
+    if len(versions) != 1:
+        raise SystemExit(
+            "rust.yml contract: release workflow must define exactly one pinned TRUNK_VERSION"
+        )
+    return versions[0]
+
+
+expected_trunk_version = repository_trunk_version()
 
 def run_commands(job_lines):
     """Return (line number, shell text) for each YAML run key and body."""
@@ -58,38 +62,175 @@ def run_commands(job_lines):
         position += 1
     return commands
 
-full_jobs = []
-failures = []
-for job_name, job_lines in jobs.items():
-    commands = run_commands(job_lines)
-    invocation_lines = [
-        (line_number, command)
-        for line_number, command in commands
-        if target in command and "--command" not in command
-    ]
-    if not invocation_lines:
-        continue
+def validate_workflow(path, required_jobs):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    try:
+        jobs_start = next(index for index, line in enumerate(lines) if line == "jobs:")
+    except StopIteration:
+        raise SystemExit(f"rust.yml contract: {path} is missing jobs: mapping")
 
-    full_jobs.append(job_name)
-    invocation_line = invocation_lines[0][0]
-    install_lines = [
-        line_number
-        for line_number, command in commands
-        if trunk_install in command and line_number < invocation_line
-    ]
-    if not install_lines:
-        failures.append(
-            f"{job_name}: full-tier invocation at rust.yml:{invocation_line + 1} "
-            f"lacks preceding `{trunk_install}`"
-        )
+    # Keep the parser intentionally small, but support both YAML step forms:
+    # `run: ...` under a named step and the valid inline `- run: ...` form.
+    local_jobs = {}
+    current_name = None
+    for index in range(jobs_start + 1, len(lines)):
+        match = job_header.match(lines[index])
+        if match:
+            current_name = match.group("name")
+            local_jobs[current_name] = []
+            continue
+        if current_name is not None:
+            local_jobs[current_name].append((index, lines[index]))
 
-expected_jobs = {"full-regression", "full-escalation"}
-missing_expected_jobs = sorted(expected_jobs - set(full_jobs))
-if missing_expected_jobs:
+    top_level_versions = [
+        match.group("version")
+        for line in lines
+        if (match := re.match(r"^  TRUNK_VERSION: (?P<version>[0-9]+\.[0-9]+\.[0-9]+)$", line))
+    ]
+    top_level_version = top_level_versions[0] if len(top_level_versions) == 1 else None
+    failures = []
+    full_jobs = []
+    for job_name, job_lines in local_jobs.items():
+        commands = [
+            (line_number, command.strip())
+            for line_number, command in run_commands(job_lines)
+            if command.strip() and not command.strip().startswith("#")
+        ]
+        invocation_lines = [
+            (line_number, command)
+            for line_number, command in commands
+            if target in command and "--command" not in command
+        ]
+        if not invocation_lines:
+            continue
+
+        full_jobs.append(job_name)
+        invocation_line = invocation_lines[0][0]
+        if top_level_version != expected_trunk_version:
+            failures.append(
+                f"{job_name}: top-level TRUNK_VERSION is "
+                f"{top_level_version or '<missing>'}; expected {expected_trunk_version}"
+            )
+        preceding_commands = [
+            (line_number, command)
+            for line_number, command in commands
+            if line_number < invocation_line
+        ]
+        if not any(trunk_install in command for _, command in preceding_commands):
+            failures.append(
+                f"{job_name}: full-tier invocation at rust.yml:{invocation_line + 1} "
+                f"lacks preceding pinned `{trunk_install}`"
+            )
+        if not any(trunk_verify in command for _, command in preceding_commands):
+            failures.append(
+                f"{job_name}: full-tier invocation at rust.yml:{invocation_line + 1} "
+                f"lacks preceding `{trunk_verify}` verification"
+            )
+
+    missing_expected_jobs = sorted(required_jobs - set(full_jobs))
     failures.extend(
         f"{job}: expected full-tier job invocation was not found"
         for job in missing_expected_jobs
     )
+    return full_jobs, failures
+
+
+def fixture_workflow(step_lines):
+    return "\n".join(
+        [
+            "name: trunk prerequisite fixture",
+            "on:",
+            "  workflow_dispatch:",
+            "env:",
+            f"  TRUNK_VERSION: {expected_trunk_version}",
+            "jobs:",
+            "  full-caller:",
+            "    runs-on: ubuntu-24.04",
+            "    steps:",
+            *step_lines,
+            "",
+        ]
+    )
+
+
+def check_fixture(name, contents, expected_pass):
+    with tempfile.TemporaryDirectory(prefix="rust-full-tier-trunk-") as temp_dir:
+        path = Path(temp_dir) / "rust.yml"
+        path.write_text(contents, encoding="utf-8")
+        _, fixture_failures = validate_workflow(path, {"full-caller"})
+    if expected_pass and fixture_failures:
+        return [f"{name}: expected pass, got {fixture_failures}"]
+    if expected_pass:
+        fixture_results.append(f"{name}: correctly accepted")
+        return []
+    if not expected_pass and not fixture_failures:
+        return [f"{name}: expected contract failure, but fixture passed"]
+    fixture_results.append(f"{name}: correctly rejected")
+    return []
+
+
+production_full_jobs, failures = validate_workflow(workflow_path, expected_jobs)
+fixture_results = []
+fixture_failures = []
+fixture_failures.extend(
+    check_fixture(
+        "inline full caller without trunk",
+        fixture_workflow([f"      - run: {target}"]),
+        expected_pass=False,
+    )
+)
+fixture_failures.extend(
+    check_fixture(
+        "unpinned trunk install",
+        fixture_workflow(
+            [
+                "      - name: Install trunk",
+                "        run: cargo install trunk --locked",
+                f"      - name: Verify trunk",
+                f"        run: {trunk_verify}",
+                f"      - name: Run full test tier",
+                f"        run: {target}",
+            ]
+        ),
+        expected_pass=False,
+    )
+)
+fixture_failures.extend(
+    check_fixture(
+        "wrong-version trunk install",
+        fixture_workflow(
+            [
+                "      - name: Install trunk",
+                '        run: cargo install trunk --locked --version "999.99.99"',
+                f"      - name: Verify trunk",
+                f"        run: {trunk_verify}",
+                f"      - name: Run full test tier",
+                f"        run: {target}",
+            ]
+        ),
+        expected_pass=False,
+    )
+)
+fixture_failures.extend(
+    check_fixture(
+        "repository pinned trunk install",
+        fixture_workflow(
+            [
+                "      - name: Install trunk",
+                f"        run: {trunk_install}",
+                "      - name: Verify trunk",
+                f"        run: {trunk_verify}",
+                f"      - name: Run full test tier",
+                f"        run: {target}",
+            ]
+        ),
+        expected_pass=True,
+    )
+)
+failures.extend(fixture_failures)
+
+for fixture_result in fixture_results:
+    print(f"fixture: {fixture_result}")
 
 if failures:
     print("rust-full-tier-trunk-prerequisite contract: FAIL", file=sys.stderr)
@@ -99,6 +240,6 @@ if failures:
 
 print(
     "rust-full-tier-trunk-prerequisite contract: passed "
-    f"({len(full_jobs)} full-tier jobs install trunk before invocation)"
+    f"({len(production_full_jobs)} full-tier jobs use the pinned trunk prerequisite)"
 )
 PY
