@@ -289,22 +289,179 @@ the visual treatment. GitHub task evidence owns mutable execution status.
 - **Narrow Command continuity (P2).** While Command content scrolls, the selected readable Agent
   identity, current truthful status, Objective, and close/back route remain visible.
 
-#### Agent Console V2: contract-gated backlog
+#### Agent Console V2: canonical runtime Intent contract
 
-ETA, energy, cargo, module health, relationships/trust, plan or memory content and confidence,
-decision rationale, provider/cost/debug context, multi-Agent graphs, and new cancel/approve/retry/
-reprioritize controls are not Viewer presentation fields merely because related raw objects exist.
-Before Viewer implementation, `producer_system_designer`, `runtime_engineer`, and
-`agent_engineer` must define their player meaning, authoritative source, schema stability,
-freshness, missing/stale behavior, privacy/permission boundary, action idempotency, and receipt
-semantics. Prompt profiles, execution debug contexts, raw memory, metrics, events, cursor movement,
-or wall-clock time must not be repackaged as player-facing Agent truth.
+本节冻结 Agent Console V2 的最小产品语义，作为 `runtime_engineer`、`agent_engineer` 与
+`viewer_engineer` 的实现边界；它不是当前发行放行结论。当前已存在的 Activity projection
+继续表示“Agent 正在做什么”，V2 新增的 Intent projection 只表示“权威运行时接受、阻断、
+结束或替换了什么”。Action Receipt 只表示“世界实际发生了什么”。三者不得互相推断：
+Activity 不能代签 Intent，Intent 不能代签世界结果，环境 Feed、chat echo 或 render update
+不能代签 Receipt。
 
-Any future Agent Context field binds to a stable `agent_id`, an authoritative snapshot or receipt
-position (`logical_time`/`event_seq` and, when applicable, `world_id`/`reorg_epoch`), a source class
-(`runtime_projection`, `receipt`, or explicitly local pending state), and a visible freshness state.
-Replay, gap/reorg, reconnect, or snapshot reload marks retained context stale or clears it until an
-authoritative replacement arrives.
+ETA、energy、cargo、module health、relationships/trust、plan 或 memory 内容与 confidence、
+decision rationale、provider/cost/debug context、multi-Agent graph，以及新的
+cancel/approve/retry/reprioritize controls，不能因为存在相关 raw object 就成为 Viewer 字段。
+Prompt profile、execution debug context、raw memory、metrics、cursor、wall-clock 或
+`last_active` 不能被包装成玩家 Agent truth。
+
+##### V2 projection fields and authority
+
+以下是稳定的玩家语义字段；具体 Rust/DTO 名称、存储布局和事件结构仍由 runtime 专业权威
+实现，但必须保留字段含义和兼容方向：
+
+| Field | Player meaning / authority |
+| --- | --- |
+| `schema_version` | Versioned `agent_intent.v2` projection; legacy snapshots may omit it and must remain readable. |
+| `agent_id` / `intent_id` | Stable Agent identity and immutable request identity. `intent_id` is the idempotency key; it is not a prompt hash displayed as player copy. |
+| `kind` / `summary` | A bounded, sanitized, catalogued action class and player-readable summary. Summary is not raw prompt, hidden instruction, model output, or rationale. |
+| `target_id` | Optional target from authoritative world state; absence is honest and does not imply the default target. |
+| `status` | `proposed`, `submitted`, `accepted`, `blocked`, `completed`, `rejected`, `expired`, `cancelled`, or `superseded`, with the lifecycle rules below. |
+| `source` | `player`, `agent`, or `provider_advisory`; provider remains advisory and never becomes the execution authority. |
+| `position` | Authoritative `world_id`, `reorg_epoch` when applicable, `logical_time`, and `event_seq`; this is the ordering anchor, not wall-clock time. |
+| `source_class` | `runtime_projection`, `receipt`, or explicitly `local_pending`; local pending content must never be rendered as runtime accepted. |
+| `freshness` | `current`, `stale`, `reconnecting`, `unknown`, `conflict`, or `unavailable`, supplied by the authoritative snapshot/transport state. |
+| `updated_at` | Runtime logical update position; it must not be synthesized from browser time, response arrival order, or render time. |
+| `receipt_ref` | Optional explicit causal receipt/event reference. It remains `null` when runtime has not published a causal identity. |
+| `reason_code` / `reason_summary` | Sanitized authority reason for block, rejection, replacement, expiry, cancellation, or alternative; no private policy or debug payload. |
+| `replaced_by` | Optional new `intent_id` only for an explicit authoritative replacement; ordinary retry/reconnect does not populate it. |
+| `control_state` | `controllable`, `read_only`, `control_lost`, or `unavailable`; this is a player-facing permission result, never a public-key or auth-material dump. |
+
+`position`, `source_class`, and `freshness` are mandatory for any retained Agent Context. A
+snapshot with an intent but without a trustworthy position is not `current`; it is stale/unknown or
+cleared. A missing projection is not equivalent to `Idle`, `accepted`, or “no work”.
+
+##### Intent lifecycle, Activity separation, and receipts
+
+The product lifecycle is:
+
+`local_pending -> submitted -> accepted -> blocked/completed` and, where applicable,
+`accepted -> rejected/expired/cancelled/superseded`.
+
+- `local_pending` is a local draft or request not yet admitted by runtime. It may be shown as
+  **Draft / Not submitted**, but never as a current runtime Intent.
+- `submitted` means the request reached an authenticated transport boundary; it does not mean the
+  world accepted it or that the Agent applied it.
+- `accepted` means runtime admitted the intent into its authoritative cadence/queue. It does not
+  mean a world effect exists. An `accepted` intent may have an independent Activity of
+  `executing`, `waiting`, or `blocked`.
+- `blocked` means runtime retains the intent but cannot progress under the current authority or
+  world constraint. It must expose a safe reason and a supported next step; it is not an inferred
+  state from ambient events or a missing reply.
+- `completed` is legal only when an explicit committed world receipt/event binds the Intent. A chat
+  ack, queued echo, local optimistic update, Activity transition, or UI notification cannot produce
+  `completed`.
+- `rejected`, `expired`, `cancelled`, and `superseded` are terminal dispositions with no new world
+  effect. A replacement must be explicit and leaves the old Intent auditable via `replaced_by`.
+
+The Console presents the three timelines side by side but independently: Activity answers
+“what is the Agent doing now?”, Intent answers “what did authority admit?”, and Receipt answers
+“what changed in the world?”. No UI state may promote an Activity `executing` or `blocked` into a
+completed Intent or Receipt.
+
+The same `intent_id` submitted more than once must return the same authoritative acceptance or
+terminal receipt and must not create a second world effect. Reconnect, provider switching,
+browser retry, or copying a prior request cannot silently replay, merge, reprioritize, or transfer
+an existing Intent. Any supported replacement/cancellation is a separate authenticated request
+with its own identity and receipt.
+
+##### Normative runtime-safety addendum
+
+The complete Intent transition contract is:
+
+| Current | Allowed next state | Normative meaning |
+| --- | --- | --- |
+| `proposed` | `submitted`, `rejected`, `expired` | Advisory/local candidate only; it has no authority or world effect. |
+| `submitted` | `accepted`, `rejected`, `expired`, `cancelled` | Authenticated request received, but not yet admitted or effective. |
+| `accepted` | `blocked`, `completed`, `rejected`, `expired`, `cancelled`, `superseded` | Runtime admitted the request; world effect still requires its own receipt. |
+| `blocked` | `accepted`, `rejected`, `expired`, `cancelled`, `superseded` | A fresh authority re-check may resume it as `accepted`; no ambient event may do so. |
+| `completed`, `rejected`, `expired`, `cancelled`, `superseded` | same state only | Terminal dispositions are immutable. Replay, reconnect, retry, or a later provider result may only return the recorded disposition; they cannot reopen or rewrite it. |
+
+Every authoritative Intent persists its `intent_id`, a canonical request digest, and an idempotency
+ledger entry in the runtime state/journal. The digest covers the normalized request and its target,
+Agent, actor, world, authority scope, and applicable expiry/nonce—not merely a display string. The
+ledger must survive snapshot/replay/reconnect for the authority's duplicate-protection window:
+
+- the same `intent_id` with the same canonical digest returns exactly the original disposition and,
+  when present, the same receipt reference, without a second reservation, event, or world effect;
+- the same `intent_id` with a different digest returns deterministic `intent_conflict`, leaves the
+  original disposition unchanged, and performs no side effect;
+- replacement, cancellation, or a new retry uses a new `intent_id` and a new digest, with an
+  explicit `replaced_by`/causal link where applicable. Client timestamps and response arrival order
+  never decide identity or disposition.
+
+Before enqueueing, reserving, debiting, mutating Agent/World state, or emitting an acceptance or
+receipt, runtime must verify a signed Intent envelope with a versioned domain-separated purpose
+(the exact cryptographic algorithm remains runtime authority). The envelope must bind the world,
+Agent, `intent_id`, canonical digest, authorized actor/scope, nonce and applicable authority
+position/expiry so that a signature cannot be replayed as another action, Agent, world, or protocol
+message. Permission, ownership/binding, scope, nonce/replay, and world preconditions are checked
+before any side effect; a failed check produces a deterministic rejection/blocked result and no
+reservation, state mutation, acceptance, or receipt.
+
+`receipt_ref` is valid only as the complete authority tuple
+`{ intent_id, world_id, reorg_epoch, logical_time, event_seq, receipt_id }`. A partial, inferred,
+text-derived, or mismatched tuple is `null`/invalid and cannot justify `completed`, player impact,
+or a Viewer success message. Receipt identity and Intent identity remain immutable across replay;
+reorg/recovery either supplies a replacement authoritative tuple or marks the retained projection
+stale/unknown.
+
+`provider_advisory` may create a `proposed` suggestion only. It cannot create an `accepted` Intent,
+receipt, reservation, or world effect. An owner/player may convert a suggestion into a new,
+independently authenticated request; that conversion rechecks permission and receives a new
+`intent_id` and canonical digest.
+
+Player-visible `summary`, `reason_code`, `reason_summary`, and next-step copy must come from a
+versioned allowlist of templates plus bounded authority parameters. Raw prompt text, model output,
+provider rationale, hidden policy, arbitrary runtime strings, credentials, or unrecognized reason
+codes are never player copy; an unknown code uses a safe generic template or is redacted.
+
+##### Freshness, control, privacy, and failure semantics
+
+- `current` is allowed only when the snapshot/event chain is authoritative and current for the
+  displayed `position`. A retained snapshot after reconnect, gap, reorg, replay, or reload is
+  `stale` until a replacement arrives; it must not silently drive a high-consequence action.
+- During refresh, an older value may remain as **Last known**, but never as **Current**. Conflicting
+  observations are **Needs confirmation**; the client must not pick a truth by arrival order.
+- `unknown`/`unavailable` clears or redacts unsupported details and provides wait/refresh/reselect/
+  stop guidance. Missing Intent does not alter independently published Activity or Receipt values.
+- Authorization is checked before value freshness. When control/ownership is lost, the surface
+  enters `control_lost`, keeps any local draft explicitly unsubmitted, hides latest authority
+  values and diffs, and offers no submit/replay/transfer path. When control remains valid but the
+  authoritative value changed, the draft is `stale`; show the new authorized value and require
+  refresh/re-edit, never auto-merge or overwrite.
+- A viewer without control may receive only the visibility-approved identity, coarse Activity,
+  and redacted status. Intent summary, target detail, private reason, prompt, memory, provider,
+  organization policy, public key, and other sensitive fields remain hidden. Redaction is not
+  `Idle`, `completed`, or proof that no Intent exists.
+- Reason and next-step copy must be safe, bounded, localized where supported, and sourced from
+  authority. Raw enum values, trace text, credentials, model/provider diagnostics, and hidden
+  instructions stay in Diagnostics or are omitted.
+
+##### V2 acceptance and explicit non-goals
+
+V2 is accepted only when all of the following are proven by runtime/replay, Viewer contract, and
+headed QA evidence:
+
+1. Legacy snapshots without Intent remain readable; identical state + journal replay yields the
+   same projection and position, and missing Intent remains distinct from Idle.
+2. Accepted, blocked, completed, rejected, expired, cancelled, and superseded are visibly distinct;
+   accepted/queued never present a world success, and only a bound receipt can present completion.
+3. Duplicate `intent_id`, reconnect, retry, provider switch, and out-of-order response cases yield
+   at most one authoritative Intent/Receipt/world effect.
+4. Gap/reorg/reconnect/reload, stale, conflict, unavailable, control-lost, unauthorized, and
+   redacted cases retain honest source/freshness/permission semantics and a valid next step.
+5. Activity, Intent, Action Receipt, World Feed, and local pending draft remain separate in the
+   rendered Console; no plan/rationale/ETA/relationship/success is inferred from another surface.
+6. Headed desktop and narrow mobile checks cover current, blocked, missing, stale, permission-loss,
+   duplicate, replacement, and terminal receipt scenarios with screenshot, state, and browser
+   console evidence; release remains blocked when the authoritative runtime or WebGL2 headed lane
+   cannot be verified.
+
+Explicit non-goals are new world powers, new gameplay balance, new protocol-wide player controls,
+automatic cancellation/retry/reprioritization, ETA/energy/cargo/health/relationship/plan/memory
+disclosure, provider/model/cost/debug disclosure, private-policy disclosure, client-side
+freshness inference, or a claim that local mock/fallback/software-safe screenshots constitute
+release readiness.
 
 ### 可发现性增强
 - 为关键入口增加显式提示文案（例如：快捷键提示、模式提示）。
@@ -352,6 +509,7 @@ required after the corresponding implementation slice.
 | REC-02 | Player/Cinematic receipt | headed `1440x1000`, `1024x768`, `768x1024`, `390x844` | exactly one visible causal receipt; no overlay collision; raw confidence enum is not player copy | viewer + visual + QA |
 | ENT-01 | Targets/Canvas/Command identity | keyboard + screen reader + long en/zh names | readable name is primary; stable ID remains metadata; selection is announced semantically | viewer + visual + QA |
 | CTX-01 | Agent Context Lite | current/stale/missing/replay/gap/reorg | only explicit published fields render; source/freshness is honest; no inferred plan, ETA, relationship, or success | agent + runtime + viewer + QA |
+| INT-01 | Agent Intent V2 | current/accepted, blocked, completed, missing, stale, conflict, control-lost, redacted, duplicate/replacement | Activity, Intent, and Receipt remain separate; accepted/queued never imply world success; duplicate identity yields one authority result; permission and freshness are explicit | agent + runtime + viewer + QA |
 | REN-01 | Renderer unavailable recovery | headed desktop/mobile, sync and post-probe failure | recovery action is reachable and honest; retry failure preserves usable Player fallback and diagnostics | viewer + QA |
 
 ## 目标验收指标（实现后）
