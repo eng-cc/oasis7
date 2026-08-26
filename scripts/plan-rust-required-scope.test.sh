@@ -235,6 +235,43 @@ if ! grep -qi "config" "$invalid_config.err"; then
   exit 1
 fi
 
+assert_invalid_selector_type() {
+  local selector="$1"
+  local typed_invalid_config
+  typed_invalid_config="$(mktemp)"
+  python3 - "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$selector" "$typed_invalid_config" <<'PY'
+import json
+import sys
+
+source, selector, destination = sys.argv[1:]
+with open(source, encoding="utf-8") as handle:
+    config = json.load(handle)
+config["rules"][0][selector] = "false"
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(config, handle)
+    handle.write("\n")
+PY
+  if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+    --event-name pull_request \
+    --config "$typed_invalid_config" \
+    --changed-path README.md \
+    >"$typed_invalid_config.out" 2>"$typed_invalid_config.err"; then
+    echo "expected non-boolean $selector selector to fail closed, got:" >&2
+    cat "$typed_invalid_config.out" >&2
+    cat "$typed_invalid_config.err" >&2
+    exit 1
+  fi
+  if ! grep -qi "config" "$typed_invalid_config.err"; then
+    echo "expected $selector selector type validation failure, got:" >&2
+    cat "$typed_invalid_config.err" >&2
+    exit 1
+  fi
+  rm -f "$typed_invalid_config" "$typed_invalid_config.out" "$typed_invalid_config.err"
+}
+
+assert_invalid_selector_type full
+assert_invalid_selector_type minimal
+
 wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
 assert_key_equals "$wasm_build_output" scope targeted
 assert_key_equals "$wasm_build_output" run_oasis7_workspace_support_crate_tests true
