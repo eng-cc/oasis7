@@ -12,6 +12,7 @@ mod bootstrap_economy;
 mod bootstrap_gameplay;
 mod bootstrap_power;
 mod capability_authorization;
+mod capability_authorization_admin;
 mod capability_authorization_events;
 mod capability_authorization_state;
 mod economy;
@@ -78,6 +79,7 @@ use super::capability_authorization::{
 };
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
+use super::error::WorldError;
 use super::events::{ActionEnvelope, MaterialTransitPriority};
 use super::governance::{
     GovernanceExecutionPolicy, GovernanceFinalityEpochSnapshot, GovernanceFinalitySignerRegistry,
@@ -741,9 +743,29 @@ impl World {
         }
     }
 
-    pub(super) fn push_pending_effect_bounded(&mut self, intent: EffectIntent) {
+    pub(super) fn push_pending_effect_bounded(
+        &mut self,
+        intent: EffectIntent,
+    ) -> Result<(), WorldError> {
+        let max_len = self.runtime_memory_limits.max_pending_effects.max(1);
+        if self.pending_effects.len() >= max_len
+            && !self.pending_effects.iter().any(|pending| {
+                !self
+                    .capability_effect_receipt_links
+                    .contains_key(&pending.intent_id)
+            })
+        {
+            // An authorization-linked intent already represents a durable
+            // budget debit.  Refusing the new queue event keeps the staged
+            // command atomic; silently evicting the existing linked intent
+            // would strand that debit and its recovery receipt.
+            return Err(WorldError::CapabilityAuthorizationDenied {
+                reason: "effect queue is full of authorization-linked intents".to_string(),
+            });
+        }
         self.pending_effects.push_back(intent);
         self.enforce_pending_effect_limit();
+        Ok(())
     }
 
     pub(super) fn record_logistics_sla_completion(
@@ -825,7 +847,17 @@ impl World {
     pub(super) fn enforce_pending_effect_limit(&mut self) {
         let max_len = self.runtime_memory_limits.max_pending_effects.max(1);
         while self.pending_effects.len() > max_len {
-            let _ = self.pending_effects.pop_front();
+            let Some(eviction_index) = self.pending_effects.iter().position(|intent| {
+                !self
+                    .capability_effect_receipt_links
+                    .contains_key(&intent.intent_id)
+            }) else {
+                // Keep linked effects durable even if an operator lowers the
+                // limit below their count.  They remain dispatchable and can
+                // be closed by a real provider receipt after restart.
+                break;
+            };
+            let _ = self.pending_effects.remove(eviction_index);
             self.runtime_backpressure_stats.pending_effects_evicted = self
                 .runtime_backpressure_stats
                 .pending_effects_evicted
@@ -848,13 +880,24 @@ impl World {
     pub(super) fn enforce_inflight_effect_limit(&mut self) {
         let max_len = self.runtime_memory_limits.max_inflight_effects.max(1);
         while self.inflight_effects.len() > max_len {
-            if let Some(first_key) = self.inflight_effects.keys().next().cloned() {
+            if let Some(first_key) = self
+                .inflight_effects
+                .keys()
+                .find(|intent_id| {
+                    !self
+                        .capability_effect_receipt_links
+                        .contains_key(*intent_id)
+                })
+                .cloned()
+            {
                 self.inflight_effects.remove(first_key.as_str());
                 self.runtime_backpressure_stats.inflight_effects_evicted = self
                     .runtime_backpressure_stats
                     .inflight_effects_evicted
                     .saturating_add(1);
             } else {
+                // Never drop an in-flight intent whose authorization budget
+                // is already debited and whose receipt link is still open.
                 break;
             }
         }

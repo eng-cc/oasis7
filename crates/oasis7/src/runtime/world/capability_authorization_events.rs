@@ -4,12 +4,15 @@
 //! also be journal evidence.  This module applies those evidence records
 //! during both normal append and stale-snapshot recovery.
 
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use oasis7_wasm_abi::{
     CapabilityAudience, CapabilityCatalogEntry, CapabilityGrantV2, ModuleCallCaller, canonical_hash,
 };
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 use super::super::capability_authorization::{
+    CapabilityAgentIdentity, CapabilityAuthorityFinalityBinding, CapabilityAuthorityFinalityProof,
     CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
     CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
     CapabilityInvocationContext,
@@ -28,6 +31,14 @@ impl World {
         record: &CapabilityAuthorityRecord,
         certificate: &GovernanceFinalityCertificate,
     ) -> Result<(), WorldError> {
+        if !self
+            .governance_finality_epoch_snapshots
+            .contains_key(&certificate.epoch_id)
+        {
+            return Err(deny(
+                "authority finality requires a historical governance epoch snapshot",
+            ));
+        }
         let proposal = self
             .proposals
             .get(&certificate.proposal_id)
@@ -66,14 +77,110 @@ impl World {
         Ok(())
     }
 
+    pub(super) fn verify_capability_authority_finality_proof(
+        &self,
+        record: &CapabilityAuthorityRecord,
+        proof: &CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        if proof.proof_version != CapabilityAuthorityFinalityProof::PROOF_VERSION_V1 {
+            return Err(deny(
+                "capability authority finality proof version is unsupported",
+            ));
+        }
+        let expected_binding = CapabilityAuthorityFinalityBinding::from_record(record)
+            .map_err(|error| deny(format!("capability authority binding: {error}")))?;
+        if proof.binding != expected_binding {
+            return Err(deny(
+                "capability authority finality proof does not match authority record",
+            ));
+        }
+        self.verify_capability_authority_finality(record, &proof.certificate)?;
+        let certificate_signers: BTreeSet<&String> = proof.certificate.signatures.keys().collect();
+        let proof_signers: BTreeSet<&String> = proof.signatures.keys().collect();
+        if proof_signers != certificate_signers {
+            return Err(deny(
+                "capability authority finality proof signer set does not match certificate",
+            ));
+        }
+        for (node_id, signature_with_prefix) in &proof.signatures {
+            let signature_hex = signature_with_prefix
+                .strip_prefix(CapabilityAuthorityFinalityProof::SIGNATURE_PREFIX_ED25519_V1)
+                .ok_or_else(|| {
+                    deny(format!(
+                        "capability authority proof signature prefix mismatch for {node_id}"
+                    ))
+                })?;
+            let signer_public_key =
+                self.node_identity_public_key(node_id.as_str())
+                    .ok_or_else(|| {
+                        deny(format!(
+                            "capability authority proof signer is not trusted: {node_id}"
+                        ))
+                    })?;
+            let public_key_bytes: [u8; 32] = hex::decode(signer_public_key)
+                .map_err(|_| {
+                    deny(format!(
+                        "capability authority proof signer key is invalid: {node_id}"
+                    ))
+                })?
+                .try_into()
+                .map_err(|_| {
+                    deny(format!(
+                        "capability authority proof signer key length is invalid: {node_id}"
+                    ))
+                })?;
+            let signature_bytes: [u8; 64] = hex::decode(signature_hex)
+                .map_err(|_| {
+                    deny(format!(
+                        "capability authority proof signature is invalid: {node_id}"
+                    ))
+                })?
+                .try_into()
+                .map_err(|_| {
+                    deny(format!(
+                        "capability authority proof signature length is invalid: {node_id}"
+                    ))
+                })?;
+            let verifying_key = VerifyingKey::from_bytes(&public_key_bytes).map_err(|_| {
+                deny(format!(
+                    "capability authority proof signer key is invalid: {node_id}"
+                ))
+            })?;
+            let payload = proof
+                .signing_payload_v1(node_id.as_str())
+                .map_err(|error| deny(format!("capability authority proof payload: {error}")))?;
+            verifying_key
+                .verify(payload.as_slice(), &Signature::from_bytes(&signature_bytes))
+                .map_err(|_| {
+                    deny(format!(
+                        "capability authority proof signature failed: {node_id}"
+                    ))
+                })?;
+        }
+        Ok(())
+    }
+
     pub(super) fn apply_capability_authorization_event(
         &mut self,
         event: &CapabilityAuthorizationEvent,
         time: WorldTime,
     ) -> Result<(), WorldError> {
         match event {
-            CapabilityAuthorizationEvent::AuthorityInstalled { record } => {
-                apply_authority_record(self, record)?;
+            CapabilityAuthorizationEvent::AuthorityInstalled { .. } => {
+                return Err(deny(
+                    "record-only capability authority event has no replayable finality certificate",
+                ));
+            }
+            CapabilityAuthorizationEvent::AuthorityInstalledWithFinality { .. } => {
+                return Err(deny(
+                    "certificate-only capability authority event has no binding proof",
+                ));
+            }
+            CapabilityAuthorizationEvent::AuthorityInstalledWithProof { record, proof } => {
+                apply_authority_record(self, record, proof)?;
+            }
+            CapabilityAuthorizationEvent::AgentIdentityInstalled { agent_id, identity } => {
+                apply_agent_identity(self, agent_id, identity)?;
             }
             CapabilityAuthorizationEvent::InvocationContextInstalled { key, context } => {
                 apply_invocation_context(self, key, context)?;
@@ -125,8 +232,10 @@ impl World {
 fn apply_authority_record(
     world: &mut World,
     record: &CapabilityAuthorityRecord,
+    proof: &CapabilityAuthorityFinalityProof,
 ) -> Result<(), WorldError> {
     validate_authority_record(record)?;
+    world.verify_capability_authority_finality_proof(record, proof)?;
     if world.chain_resource_manifest.world_id != "unbound"
         && world.chain_resource_manifest.world_id != record.world_id
     {
@@ -139,6 +248,14 @@ fn apply_authority_record(
         && existing != record
     {
         return Err(deny("authority record is immutable"));
+    }
+    if let Some(existing) = world
+        .capability_revocation_state
+        .authority_finality_proofs
+        .get(&record.issuer_id)
+        && existing != proof
+    {
+        return Err(deny("authority finality proof is immutable"));
     }
     world.capability_revocation_state.epoch = world
         .capability_revocation_state
@@ -158,6 +275,43 @@ fn apply_authority_record(
         .capability_revocation_state
         .authority_records
         .insert(record.issuer_id.clone(), record.clone());
+    world
+        .capability_revocation_state
+        .authority_finality_proofs
+        .insert(record.issuer_id.clone(), proof.clone());
+    Ok(())
+}
+
+fn apply_agent_identity(
+    world: &mut World,
+    agent_id: &str,
+    identity: &CapabilityAgentIdentity,
+) -> Result<(), WorldError> {
+    super::capability_authorization::validate_agent_identity(agent_id, identity)?;
+    let Some(agent) = world.state.agents.get(agent_id) else {
+        return Err(deny("capability agent identity requires a live agent"));
+    };
+    if agent.state.agent_id != agent_id {
+        return Err(deny("live agent state id does not match its registry key"));
+    }
+    if let Some(existing) = world
+        .capability_revocation_state
+        .agent_identities
+        .get(agent_id)
+    {
+        if identity.generation < existing.generation {
+            return Err(deny("capability agent identity generation regressed"));
+        }
+        if identity.generation == existing.generation && existing != identity {
+            return Err(deny(
+                "capability agent identity changed without a new generation",
+            ));
+        }
+    }
+    world
+        .capability_revocation_state
+        .agent_identities
+        .insert(agent_id.to_string(), identity.clone());
     Ok(())
 }
 
@@ -275,6 +429,39 @@ fn apply_command_commit(
             "capability command receipt journal binding is invalid",
         ));
     }
+    let authority = world
+        .capability_revocation_state
+        .authority_records
+        .get(&grant.issuer.issuer_id)
+        .ok_or_else(|| deny("capability command receipt issuer authority is missing"))?;
+    if receipt.branch_id != authority.branch_id
+        || receipt.finality_epoch != authority.finality_epoch
+        || receipt.finality_status != "verified"
+        || receipt.finality_block_hash.as_deref() != Some(authority.finality_block_hash.as_str())
+    {
+        return Err(deny(
+            "capability command receipt finality binding is invalid",
+        ));
+    }
+    // Sandbox output events are journaled between the preflight head and the
+    // authorization commit, so the current tail is not necessarily the
+    // receipt's `world_head_before`.  Validate ordering and bind the after
+    // head to the event id allocated for this commit in both live and replay
+    // paths.
+    let current_head = world
+        .journal
+        .events
+        .last()
+        .map(|event| event.id)
+        .unwrap_or(0);
+    if receipt.world_head_before > current_head
+        || receipt.world_head_after != Some(world.next_event_id)
+        || receipt.world_head_before >= world.next_event_id
+    {
+        return Err(deny(
+            "capability command receipt journal head binding is invalid",
+        ));
+    }
     let encoded = serde_json::to_value(grant)?;
     if let Some(existing) = world.capability_grants_v2.get(&grant.grant_id)
         && existing != &encoded
@@ -318,6 +505,16 @@ fn apply_command_commit(
     for (intent_id, link) in effect_receipt_links {
         if intent_id.trim().is_empty() || link.authorization_receipt_id != receipt.receipt_id {
             return Err(deny("capability effect receipt journal binding is invalid"));
+        }
+        let effect_is_durable = world
+            .pending_effects
+            .iter()
+            .any(|intent| intent.intent_id == *intent_id)
+            || world.inflight_effects.contains_key(intent_id);
+        if !effect_is_durable {
+            return Err(deny(
+                "capability authorization-linked effect is missing from durable queues",
+            ));
         }
         if let Some(existing) = world.capability_effect_receipt_links.get(intent_id)
             && existing != link
@@ -408,19 +605,60 @@ pub(super) fn module_call_caller(subject: &oasis7_wasm_abi::CapabilitySubject) -
 }
 
 pub(super) fn validate_subject_for_manifest(
+    world: &World,
     subject: &oasis7_wasm_abi::CapabilitySubject,
     manifest: &oasis7_wasm_abi::ModuleManifest,
 ) -> Result<(), WorldError> {
-    if let oasis7_wasm_abi::CapabilitySubject::Module {
-        module_id,
-        module_version,
-        ..
-    } = subject
-        && (module_id != &manifest.module_id || module_version != &manifest.version)
-    {
-        return Err(deny(
-            "module subject identity does not match the active module",
-        ));
+    match subject {
+        oasis7_wasm_abi::CapabilitySubject::Agent {
+            agent_id,
+            owner_binding,
+            generation,
+        } => {
+            let Some(agent) = world.state.agents.get(agent_id) else {
+                return Err(deny("agent subject does not identify a live agent"));
+            };
+            if agent.state.agent_id != *agent_id {
+                return Err(deny("live agent state id does not match its registry key"));
+            }
+            let Some(identity) = world
+                .capability_revocation_state
+                .agent_identities
+                .get(agent_id)
+            else {
+                return Err(deny("live agent capability identity is not bound"));
+            };
+            if identity.owner_binding != *owner_binding || identity.generation != *generation {
+                return Err(deny(
+                    "agent subject owner or generation does not match live identity",
+                ));
+            }
+        }
+        oasis7_wasm_abi::CapabilitySubject::Module {
+            module_id,
+            module_version,
+            instance_id,
+        } => {
+            if module_id != &manifest.module_id || module_version != &manifest.version {
+                return Err(deny(
+                    "module subject identity does not match the active module",
+                ));
+            }
+            let Some(instance) = world.state.module_instances.get(instance_id) else {
+                return Err(deny("module subject does not identify a live instance"));
+            };
+            if !instance.active
+                || instance.instance_id != *instance_id
+                || instance.module_id != *module_id
+                || instance.module_version != *module_version
+                || instance.wasm_hash != manifest.wasm_hash
+            {
+                return Err(deny(
+                    "module subject instance does not match the active module identity",
+                ));
+            }
+        }
+        oasis7_wasm_abi::CapabilitySubject::System { .. } => {}
     }
     Ok(())
 }
@@ -495,7 +733,7 @@ pub(super) fn audience_matches(grant: &CapabilityGrantV2, audience: &CapabilityA
 pub(super) fn scope_matches_command(
     grant: &CapabilityGrantV2,
     entry: &CapabilityCatalogEntry,
-    payload_len: usize,
+    payload: &[u8],
 ) -> bool {
     grant.scope.module_id == entry.module_id
         && grant.scope.module_version == entry.module_version
@@ -503,12 +741,42 @@ pub(super) fn scope_matches_command(
         && grant.scope.object_kind == "command"
         && grant.scope.object_name == entry.command
         && grant.scope.operation == "execute"
-        // The command/effect payload is opaque to this runtime.  A
-        // selector-bearing grant is therefore not executable until a
-        // schema-aware target binding is part of the ABI.
-        && grant.scope.entity_selector.is_none()
-        && grant.scope.resource_selector.is_none()
         && grant.scope.max_payload_bytes.is_some_and(|max| {
-            u64::try_from(payload_len).is_ok_and(|payload_len| payload_len <= max)
+            u64::try_from(payload.len()).is_ok_and(|payload_len| payload_len <= max)
         })
+        && serde_json::from_slice::<serde_json::Value>(payload)
+            .ok()
+            .is_some_and(|value| scope_selectors_match_json(&grant.scope, &value))
+}
+
+/// Selector-bearing grants are only valid when the command/effect payload has
+/// an explicit, typed target for every constrained dimension.  A malformed or
+/// target-less payload is denied instead of being interpreted as an implicit
+/// wildcard.  Selector lists are allowlists; an omitted (`None`) selector
+/// authorizes only an un-targeted value for that dimension.
+pub(super) fn scope_selectors_match_json(
+    scope: &oasis7_wasm_abi::CapabilityScope,
+    payload: &serde_json::Value,
+) -> bool {
+    selector_matches_json(scope.entity_selector.as_deref(), payload, "entity_id")
+        && selector_matches_json(scope.resource_selector.as_deref(), payload, "resource_id")
+}
+
+fn selector_matches_json(
+    selectors: Option<&[String]>,
+    payload: &serde_json::Value,
+    field: &str,
+) -> bool {
+    match selectors {
+        // An omitted selector is not an implicit wildcard.  It can authorize
+        // an un-targeted payload, but must reject a payload that attempts to
+        // supply a target without a corresponding grant allowlist.
+        None => payload.get(field).is_none(),
+        Some(selectors) => {
+            let Some(value) = payload.get(field).and_then(serde_json::Value::as_str) else {
+                return false;
+            };
+            selectors.iter().any(|selector| selector == value)
+        }
+    }
 }

@@ -13,7 +13,10 @@ use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
 use super::events::ActionEnvelope;
-use super::governance::{GovernanceExecutionPolicy, GovernanceIdentityPenaltyRecord, Proposal};
+use super::governance::{
+    GovernanceExecutionPolicy, GovernanceFinalityEpochSnapshot, GovernanceIdentityPenaltyRecord,
+    Proposal,
+};
 use super::manifest::Manifest;
 use super::modules::{ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
@@ -142,6 +145,8 @@ pub struct Snapshot {
     pub tick_consensus_rejection_audit_events: Vec<TickConsensusRejectionAuditEvent>,
     #[serde(default)]
     pub governance_execution_policy: GovernanceExecutionPolicy,
+    #[serde(default)]
+    pub governance_finality_epoch_snapshots: BTreeMap<u64, GovernanceFinalityEpochSnapshot>,
     #[serde(default)]
     pub governance_emergency_brake_until_tick: Option<WorldTime>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]

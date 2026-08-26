@@ -75,6 +75,7 @@ pub use audit::{AuditCausedBy, AuditEventKind, AuditFilter};
 
 // Trusted module authorization (v2)
 pub use capability_authorization::{
+    CapabilityAgentIdentity, CapabilityAuthorityFinalityBinding, CapabilityAuthorityFinalityProof,
     CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
     CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
     CapabilityInvocationContext, CapabilityRevocationState,

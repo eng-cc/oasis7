@@ -92,6 +92,102 @@ fn capability_authority_install_rejects_unverified_finality_metadata() {
 }
 
 #[test]
+fn capability_authority_install_rejects_verified_finality_metadata_mismatch() {
+    let cases = [
+        ("receipt", "forged-receipt", BRANCH_ID, "block-hash-4"),
+        ("branch", "finality-9", "forged-branch", "block-hash-4"),
+        ("block", "finality-9", BRANCH_ID, "forged-block"),
+        ("issuer key epoch", "finality-9", BRANCH_ID, "block-hash-4"),
+        ("governance epoch", "finality-9", BRANCH_ID, "block-hash-4"),
+        ("rotated key", "finality-9", BRANCH_ID, "block-hash-4"),
+    ];
+    for (index, (label, receipt_id, branch_id, block_hash)) in cases.into_iter().enumerate() {
+        let mut world = World::new();
+        let error = install_test_capability_authority_with_metadata(
+            &mut world,
+            BTreeSet::new(),
+            receipt_id,
+            branch_id,
+            block_hash,
+            if index == 3 { 4 } else { 3 },
+            if index == 4 { 10 } else { 9 },
+            label == "rotated key",
+        )
+        .expect_err(label);
+        assert!(
+            matches!(error, WorldError::CapabilityAuthorizationDenied { .. }),
+            "{label} mismatch must be denied, got {error:?}"
+        );
+    }
+}
+
+#[test]
+fn authority_replay_rejects_record_without_finality_proof() {
+    let snapshot = World::new().snapshot();
+    let record = CapabilityAuthorityRecord {
+        issuer_id: ISSUER_ID.to_string(),
+        issuer_kind: "governance".to_string(),
+        key_id: "governance-key-1".to_string(),
+        public_key_hex: "11".repeat(32),
+        issuer_key_epoch: 3,
+        governance_epoch: 9,
+        finalized_receipt_id: "finality-9".to_string(),
+        authority_rotation_receipt_id: None,
+        world_id: WORLD_ID.to_string(),
+        branch_id: BRANCH_ID.to_string(),
+        finality_epoch: 4,
+        finality_block_hash: "block-hash-4".to_string(),
+        finality_status: "finalized".to_string(),
+        revocation_epoch: 2,
+        revoked_grant_ids: BTreeSet::new(),
+        superseded_by: BTreeMap::new(),
+    };
+    let certificate = GovernanceFinalityCertificate {
+        proposal_id: 0,
+        manifest_hash: String::new(),
+        consensus_height: 0,
+        epoch_id: 0,
+        validator_set_hash: String::new(),
+        stake_root: String::new(),
+        threshold_bps: 0,
+        min_unique_signers: 0,
+        threshold: 0,
+        signatures: BTreeMap::new(),
+    };
+    let events = [
+        (
+            "record-only",
+            CapabilityAuthorizationEvent::AuthorityInstalled {
+                record: record.clone(),
+            },
+        ),
+        (
+            "certificate-only",
+            CapabilityAuthorizationEvent::AuthorityInstalledWithFinality {
+                record,
+                certificate,
+            },
+        ),
+    ];
+    for (label, authorization_event) in events {
+        let mut replay_snapshot = snapshot.clone();
+        let mut journal = Journal::new();
+        journal.append(WorldEvent {
+            id: 1,
+            time: 0,
+            caused_by: None,
+            body: WorldEventBody::CapabilityAuthorization(authorization_event),
+        });
+        replay_snapshot.last_event_id = 0;
+        let error = World::from_snapshot(replay_snapshot, journal).expect_err(label);
+        assert!(matches!(
+            error,
+            WorldError::CapabilityAuthorizationDenied { .. }
+        ));
+    }
+}
+
+#[test]
 fn capability_invocation_context_allows_two_distinct_nonces_for_one_grant() {
     let mut world = fixture_world();
     let grant = signed_grant(grant_json(json!({"issued_at_tick": 0})));
@@ -191,6 +287,8 @@ fn trusted_executor_replays_stale_snapshot_authz_tail_exactly_once() {
 #[test]
 fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once() {
     let mut world = fixture_world();
+    let signer = ReceiptSigner::hmac_sha256(b"capability-receipt-test-key");
+    world.set_receipt_signer(signer.clone());
     let grant = signed_grant(grant_json(json!({})));
     let (catalog, response) = prepared_invocation(
         &world,
@@ -240,10 +338,10 @@ fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once
         .events
         .pop()
         .expect("receipt acknowledgement event should be journaled last");
-    assert!(matches!(
-        acknowledgement.body,
-        WorldEventBody::ReceiptAppended(_)
-    ));
+    let signed_receipt = match acknowledgement.body {
+        WorldEventBody::ReceiptAppended(receipt) => receipt,
+        body => panic!("expected receipt acknowledgement, got {body:?}"),
+    };
     assert_eq!(
         closure_only_journal.events.len(),
         journal_before_receipt.events.len() + 1,
@@ -258,6 +356,7 @@ fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once
 
     let mut recovered = World::from_snapshot(stale_snapshot, closure_only_journal)
         .expect("recovery should replay the durable authorization closure");
+    recovered.set_receipt_signer(signer);
     let recovered_audit = recovered
         .capability_authorization_receipts()
         .get(&authorization.receipt_id)
@@ -273,7 +372,7 @@ fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once
     );
 
     recovered
-        .ingest_receipt(receipt)
+        .ingest_receipt(signed_receipt)
         .expect("receipt acknowledgement should remain retryable after closure replay");
     assert_eq!(
         recovered
@@ -335,6 +434,238 @@ fn trusted_executor_rejects_future_issued_grant_before_sandbox() {
         WorldError::CapabilityAuthorizationDenied { .. }
     ));
     assert_eq!(sandbox.calls, 0);
+}
+
+#[test]
+fn trusted_executor_rejects_catalog_entry_without_grant_eligibility() {
+    for eligible_grant_ids in [json!([]), json!(["grant-not-issued-to-this-command"])] {
+        let mut world = fixture_world();
+        let grant = signed_grant(grant_json(json!({})));
+        let (catalog, response) = prepared_invocation(
+            &world,
+            &grant,
+            catalog_json(json!({
+                "entries": [{
+                    "module_id": MODULE_ID,
+                    "module_version": MODULE_VERSION,
+                    "namespace": "weather",
+                    "command": "observe",
+                    "schema_version": 1,
+                    "schema_hash": SCHEMA_HASH,
+                    "max_payload_bytes": 128,
+                    "eligible_grant_ids": eligible_grant_ids
+                }]
+            })),
+            response_json(json!({})),
+        );
+        install_invocation_context(&mut world, &grant, &catalog, &response);
+        let mut sandbox = RecordingSandbox::default();
+
+        let error =
+            execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+                .expect_err("catalog eligibility must be checked against the live entry");
+        assert!(matches!(
+            error,
+            WorldError::CapabilityAuthorizationDenied { .. }
+        ));
+        assert_eq!(sandbox.calls, 0);
+    }
+}
+
+#[test]
+fn trusted_executor_rejects_omitted_selector_for_targeted_command() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({})));
+    let payload = serde_json::to_vec(&json!({
+        "entity_id": "station-1",
+        "resource_id": "weather.read"
+    }))
+    .expect("encode targeted command payload");
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({
+            "envelope": {"payload": payload}
+        })),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let mut sandbox = RecordingSandbox::default();
+
+    let error =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect_err("an omitted selector must not act as a target wildcard");
+    assert!(matches!(
+        error,
+        WorldError::CapabilityAuthorizationDenied { .. }
+    ));
+    assert_eq!(sandbox.calls, 0);
+}
+
+#[test]
+fn snapshot_restore_rejects_missing_authorization_root_with_v2_state() {
+    let world = fixture_world();
+    let mut snapshot = world.snapshot();
+    snapshot.capability_authorization_root.clear();
+
+    let error = World::from_snapshot(snapshot, world.journal().clone())
+        .expect_err("populated v2 state must not permit root recomputation");
+    assert!(matches!(
+        error,
+        WorldError::CapabilityAuthorizationDenied { .. }
+    ));
+}
+
+#[test]
+fn trusted_executor_rejects_agent_subject_without_live_owner_generation() {
+    let cases = [
+        ("agent-missing", "owner-7", 1_u64),
+        (SUBJECT_ID, "stale-owner", 1_u64),
+        (SUBJECT_ID, "owner-7", 99_u64),
+    ];
+    for (agent_id, owner_binding, generation) in cases {
+        let mut world = fixture_world();
+        let subject = json!({
+            "kind": "agent",
+            "agent_id": agent_id,
+            "owner_binding": owner_binding,
+            "generation": generation
+        });
+        let grant = signed_grant(grant_json(json!({"subject": subject.clone()})));
+        install_budget_for_grant(&mut world, &grant, 128);
+        let (catalog, response) = prepared_invocation(
+            &world,
+            &grant,
+            catalog_json(json!({"subject": subject.clone()})),
+            response_json(json!({"subject": subject})),
+        );
+        install_invocation_context(&mut world, &grant, &catalog, &response);
+        let mut sandbox = RecordingSandbox::default();
+
+        let error =
+            execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+                .expect_err("agent authorization requires a live owner/generation binding");
+        assert!(matches!(
+            error,
+            WorldError::CapabilityAuthorizationDenied { .. }
+        ));
+        assert_eq!(sandbox.calls, 0);
+    }
+}
+
+#[test]
+fn trusted_executor_rejects_unknown_module_instance_subject() {
+    let mut world = fixture_world();
+    let subject = json!({
+        "kind": "module",
+        "module_id": MODULE_ID,
+        "module_version": MODULE_VERSION,
+        "instance_id": "forged-module-instance"
+    });
+    let grant = signed_grant(grant_json(json!({"subject": subject.clone()})));
+    install_budget_for_grant(&mut world, &grant, 128);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({"subject": subject.clone()})),
+        response_json(json!({"subject": subject})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let mut sandbox = RecordingSandbox::default();
+
+    let error =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect_err("module subject must identify a live active instance");
+    assert!(matches!(
+        error,
+        WorldError::CapabilityAuthorizationDenied { .. }
+    ));
+    assert_eq!(sandbox.calls, 0);
+}
+
+#[test]
+fn trusted_executor_receipt_world_head_includes_command_commit() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let mut sandbox = RecordingSandbox::default();
+    let receipt =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect("trusted command should commit");
+
+    let last_event = world.journal().events.last().expect("command commit event");
+    assert!(matches!(
+        last_event.body,
+        WorldEventBody::CapabilityAuthorization(
+            CapabilityAuthorizationEvent::CommandCommitted { .. }
+        )
+    ));
+    assert_eq!(receipt.world_head_after, Some(last_event.id));
+}
+
+#[test]
+fn trusted_executor_rejects_linked_effect_queue_overflow_atomically() {
+    let effect_grant = signed_effect_grant_with_selectors();
+    let mut world = fixture_world_with_revocations_and_budget_and_effect_grant(
+        BTreeSet::new(),
+        128,
+        effect_grant.clone(),
+    )
+    .with_runtime_memory_limits(WorldRuntimeMemoryLimits {
+        max_pending_effects: 1,
+        ..WorldRuntimeMemoryLimits::default()
+    });
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let before = world.snapshot();
+    let mut sandbox = ConfiguredSandbox {
+        calls: 0,
+        output: ModuleOutput {
+            new_state: Some(vec![0x51]),
+            effects: vec![
+                ModuleEffectIntent {
+                    kind: "weather.publish".to_string(),
+                    params: json!({"entity_id": "station-1", "resource_id": "weather.read"}),
+                    cap_ref: effect_grant.grant_id.clone(),
+                    cap_slot: None,
+                },
+                ModuleEffectIntent {
+                    kind: "weather.publish".to_string(),
+                    params: json!({"entity_id": "station-1", "resource_id": "weather.read"}),
+                    cap_ref: effect_grant.grant_id,
+                    cap_slot: None,
+                },
+            ],
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        },
+    };
+
+    let error =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect_err("bounded linked-effect overflow must fail deterministically");
+    assert!(matches!(
+        error,
+        WorldError::CapabilityAuthorizationDenied { .. }
+    ));
+    assert_eq!(
+        world.snapshot(),
+        before,
+        "debit and queued effects must roll back together"
+    );
 }
 
 #[test]
@@ -443,7 +774,7 @@ fn trusted_executor_preserves_module_and_system_subject_provenance() {
                 "kind": "module",
                 "module_id": MODULE_ID,
                 "module_version": MODULE_VERSION,
-                "instance_id": "weather-instance-1"
+                "instance_id": "module.weather#1"
             }),
             ModuleCallCaller::Module {
                 module_id: MODULE_ID.to_string(),

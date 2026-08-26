@@ -14,7 +14,7 @@ use oasis7_wasm_abi::{
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::super::capability_authorization::{
-    CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
+    CapabilityAgentIdentity, CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
     CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
     CapabilityInvocationContext,
 };
@@ -77,38 +77,6 @@ impl World {
         Err(deny(
             "authority installation requires a verified governance finality certificate",
         ))
-    }
-
-    /// Install an immutable authority record after verifying its governance
-    /// finality certificate against the live proposal and validator epoch.
-    pub fn install_capability_authority_record_with_finality(
-        &mut self,
-        record: CapabilityAuthorityRecord,
-        certificate: super::super::governance::GovernanceFinalityCertificate,
-    ) -> Result<(), WorldError> {
-        self.verify_capability_authorization_root()?;
-        validate_authority_record(&record)?;
-        self.verify_capability_authority_finality(&record, &certificate)?;
-        if self.chain_resource_manifest.world_id != "unbound"
-            && self.chain_resource_manifest.world_id != record.world_id
-        {
-            return Err(deny("authority record world does not match live world"));
-        }
-        if let Some(existing) = self
-            .capability_revocation_state
-            .authority_records
-            .get(&record.issuer_id)
-            && existing != &record
-        {
-            return Err(deny("authority record is immutable"));
-        }
-        self.append_event(
-            WorldEventBody::CapabilityAuthorization(
-                CapabilityAuthorizationEvent::AuthorityInstalled { record },
-            ),
-            None,
-        )?;
-        Ok(())
     }
 
     /// Bind the invocation identity supplied by the trusted host.  This is
@@ -426,18 +394,32 @@ impl World {
             ));
         }
         super::capability_authorization_events::validate_subject_for_manifest(
+            self,
             &grant.subject,
             &manifest,
         )?;
         if !super::capability_authorization_events::scope_matches_command(
             &grant,
             entry,
-            response.envelope.payload.len(),
+            response.envelope.payload.as_slice(),
         ) {
             return Err(deny("grant scope does not exactly authorize command"));
         }
-        if !entry.eligible_grant_ids.is_empty()
-            && !entry
+        let catalog_entry = catalog
+            .entries
+            .iter()
+            .find(|candidate| {
+                candidate.module_id == entry.module_id
+                    && candidate.module_version == entry.module_version
+                    && candidate.namespace == entry.namespace
+                    && candidate.command == entry.command
+                    && candidate.schema_version == entry.schema_version
+                    && candidate.schema_hash == entry.schema_hash
+                    && candidate.max_payload_bytes == entry.max_payload_bytes
+            })
+            .ok_or_else(|| deny("selected catalog entry is not present in the live catalog"))?;
+        if catalog_entry.eligible_grant_ids.is_empty()
+            || !catalog_entry
                 .eligible_grant_ids
                 .iter()
                 .any(|id| id == &grant.grant_id)
@@ -533,14 +515,11 @@ impl World {
             budget_before,
             budget_after: Some(budget_after),
             world_head_before,
-            world_head_after: Some(
-                staged
-                    .journal
-                    .events
-                    .last()
-                    .map(|event| event.id)
-                    .unwrap_or(0),
-            ),
+            // `CommandCommitted` is the next journal event.  Capture its
+            // allocated id before append_event applies and journals it so the
+            // audit receipt's after-head includes the authorization commit,
+            // not merely the sandbox/output events that precede it.
+            world_head_after: Some(staged.next_event_id),
             branch_id: grant.audience.branch_id.clone(),
             finality_epoch: grant.audience.finality_epoch,
             finality_block_hash,
@@ -1065,13 +1044,14 @@ impl World {
             || grant.scope.object_kind != "effect"
             || grant.scope.object_name != effect.kind
             || !matches!(grant.scope.operation.as_str(), "invoke" | "execute")
-            // Effect params are opaque JSON at this boundary.  Refuse
-            // selector-bearing grants until the ABI supplies a canonical
-            // target binding that can be compared here.
-            || grant.scope.entity_selector.is_some()
-            || grant.scope.resource_selector.is_some()
         {
             return Err(deny("trusted effect grant scope does not match output"));
+        }
+        if !super::capability_authorization_events::scope_selectors_match_json(
+            &grant.scope,
+            &effect.params,
+        ) {
+            return Err(deny("trusted effect output is outside the grant selectors"));
         }
         let params_bytes = serde_json::to_vec(&effect.params)?;
         if !grant
@@ -1130,6 +1110,21 @@ pub(super) fn validate_authority_record(
         })
     {
         return Err(deny("authority record contains an empty revocation id"));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_agent_identity(
+    agent_id: &str,
+    identity: &CapabilityAgentIdentity,
+) -> Result<(), WorldError> {
+    if agent_id.trim().is_empty() || identity.owner_binding.trim().is_empty() {
+        return Err(deny("capability agent identity fields are required"));
+    }
+    if identity.generation == 0 {
+        return Err(deny(
+            "capability agent identity generation must be positive",
+        ));
     }
     Ok(())
 }

@@ -154,7 +154,7 @@ pub enum ProposalDecision {
 }
 
 /// Finality certificate bound to consensus height and signer threshold.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GovernanceFinalityCertificate {
     pub proposal_id: ProposalId,
     pub manifest_hash: String,

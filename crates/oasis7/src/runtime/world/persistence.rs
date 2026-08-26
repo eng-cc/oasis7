@@ -9,6 +9,7 @@ use oasis7_distfs::{assemble_journal, assemble_snapshot};
 use oasis7_proto::distributed::SnapshotManifest;
 use serde::{Deserialize, Serialize};
 
+use super::super::capability_authorization::CapabilityRevocationState;
 use super::super::util::{hash_json, read_json_from_path, write_json_to_path};
 use super::super::{
     Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, SegmentConfig, Snapshot,
@@ -811,6 +812,7 @@ impl World {
                 .tick_consensus_rejection_audit_events
                 .clone(),
             governance_execution_policy: self.governance_execution_policy.clone(),
+            governance_finality_epoch_snapshots: self.governance_finality_epoch_snapshots.clone(),
             governance_emergency_brake_until_tick: self.governance_emergency_brake_until_tick,
             governance_identity_penalties: self.governance_identity_penalties.clone(),
             next_governance_identity_penalty_id: self.next_governance_identity_penalty_id,
@@ -1076,6 +1078,18 @@ impl World {
         world.capability_budget_accounts = snapshot.capability_budget_accounts;
         world.capability_effect_receipt_links = snapshot.capability_effect_receipt_links;
         if world.capability_authorization_root.is_empty() {
+            let has_v2_authorization_state = !world.capability_grants_v2.is_empty()
+                || world.capability_revocation_state != CapabilityRevocationState::default()
+                || !world.capability_nonce_records.is_empty()
+                || !world.capability_authorization_receipts.is_empty()
+                || !world.capability_invocation_contexts.is_empty()
+                || !world.capability_budget_accounts.is_empty()
+                || !world.capability_effect_receipt_links.is_empty();
+            if has_v2_authorization_state {
+                return Err(super::capability_authorization::deny(
+                    "capability authorization root is required when v2 state is populated",
+                ));
+            }
             world.refresh_capability_authorization_root()?;
         } else {
             world.verify_capability_authorization_root()?;
@@ -1095,12 +1109,30 @@ impl World {
         world.tick_consensus_rejection_audit_events =
             snapshot.tick_consensus_rejection_audit_events;
         world.governance_execution_policy = snapshot.governance_execution_policy;
+        world.governance_finality_epoch_snapshots = snapshot.governance_finality_epoch_snapshots;
         Self::validate_governance_execution_policy(&world.governance_execution_policy)?;
         world.governance_emergency_brake_until_tick =
             snapshot.governance_emergency_brake_until_tick;
         world.governance_identity_penalties = snapshot.governance_identity_penalties;
         world.next_governance_identity_penalty_id =
             snapshot.next_governance_identity_penalty_id.max(1);
+        for (issuer_id, record) in &world.capability_revocation_state.authority_records {
+            let proof = world
+                .capability_revocation_state
+                .authority_finality_proofs
+                .get(issuer_id)
+                .ok_or_else(|| {
+                    super::capability_authorization::deny(
+                        "authority record is missing its replayable finality proof",
+                    )
+                })?;
+            if proof.binding.issuer_id != *issuer_id {
+                return Err(super::capability_authorization::deny(
+                    "authority finality proof issuer binding is invalid",
+                ));
+            }
+            world.verify_capability_authority_finality_proof(record, proof)?;
+        }
         world.enforce_pending_action_limit();
         world.enforce_pending_effect_limit();
         world.enforce_inflight_effect_limit();

@@ -111,13 +111,12 @@ impl World {
             });
         }
 
-        self.finalize_receipt_signature(&mut receipt)?;
         if let Some(link) = self.capability_effect_receipt_links.get(&receipt.intent_id) {
             let authorization_receipt_id = link.authorization_receipt_id.clone();
-            // Keep the authorization closure before the queue acknowledgement.
-            // If a crash leaves only the first event durable, the pending
-            // intent remains retryable and the idempotent closure can be
-            // followed by the receipt acknowledgement on recovery.
+            // Close the authorization link first.  The subsequent receipt
+            // signature is therefore anchored to a journal that already
+            // contains the durable authorization closure; a signed receipt
+            // cannot be replayed as if it predated that closure.
             self.append_event(
                 WorldEventBody::CapabilityAuthorization(
                     CapabilityAuthorizationEvent::EffectReceiptCommitted {
@@ -132,6 +131,7 @@ impl World {
             )?;
         }
 
+        self.finalize_receipt_signature(&mut receipt)?;
         let event_id = self.append_event(
             WorldEventBody::ReceiptAppended(receipt.clone()),
             Some(CausedBy::Effect {

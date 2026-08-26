@@ -7,13 +7,13 @@ use std::collections::BTreeMap;
 
 use super::audit::AuditEventKind;
 use super::capability_authorization::{
-    CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
-    CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
-    CapabilityInvocationContext,
+    CapabilityAgentIdentity, CapabilityAuthorityFinalityProof, CapabilityAuthorityRecord,
+    CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
+    CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
 };
 use super::effect::{EffectIntent, EffectReceipt};
 use super::events::{CausedBy, DomainEvent};
-use super::governance::GovernanceEvent;
+use super::governance::{GovernanceEvent, GovernanceFinalityCertificate};
 use super::manifest::ManifestUpdate;
 use super::modules::ModuleEvent;
 use super::policy::PolicyDecisionRecord;
@@ -77,8 +77,27 @@ pub struct ModuleRuntimeChargeEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum CapabilityAuthorizationEvent {
+    /// Legacy record-only authority admission. Recovery intentionally rejects
+    /// this shape because it has no replayable finality evidence.
     AuthorityInstalled {
         record: CapabilityAuthorityRecord,
+    },
+    /// Compatibility event for the pre-binding certificate-only admission
+    /// shape. Recovery rejects it because the certificate does not bind every
+    /// authority-record field.
+    AuthorityInstalledWithFinality {
+        record: CapabilityAuthorityRecord,
+        certificate: GovernanceFinalityCertificate,
+    },
+    /// Proof-bearing trust-root admission. The proof is retained in the
+    /// journal and snapshot so recovery can revalidate the binding.
+    AuthorityInstalledWithProof {
+        record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    },
+    AgentIdentityInstalled {
+        agent_id: String,
+        identity: CapabilityAgentIdentity,
     },
     InvocationContextInstalled {
         key: String,

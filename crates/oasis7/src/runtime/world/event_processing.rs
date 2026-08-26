@@ -623,7 +623,7 @@ impl World {
                 }
             }
             WorldEventBody::EffectQueued(intent) => {
-                self.push_pending_effect_bounded(intent.clone());
+                self.push_pending_effect_bounded(intent.clone())?;
             }
             WorldEventBody::ReceiptAppended(receipt) => {
                 let mut removed = false;
