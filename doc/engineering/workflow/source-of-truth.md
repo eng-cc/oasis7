@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.13.2**
-Last Updated: **2026-08-06**
+Version: **v1.14.0**
+Last Updated: **2026-08-25**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -637,12 +637,9 @@ helpers.
 ### Terminal runbook
 
 After merge, use `<canonical-task-worktree>` for task evidence and
-`<canonical-default-worktree>` for sync, cleanup receipts, and finalization.
-Helpers fail closed unless inputs bind the same repository, task, PR, head,
-worktree, branch, and default branch as applicable.
-Receipt identity is bound to the Git common-dir. Relocation or identity mismatch
-is `capability_blocked` until trusted mapping migration authorizes a new epoch;
-do not copy or edit receipt identity files.
+`<canonical-default-worktree>` for sync, receipts, and finalization. Helpers
+fail closed on repository/task/PR/head/worktree/branch/default-branch drift.
+Receipt/common-dir relocation requires a trusted new epoch; never edit receipts.
 
 ```bash
 cd <canonical-default-worktree>
@@ -650,6 +647,10 @@ RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --default-worktree <canonical-default-worktree> \
   --task-uid <TASK-UID> --create)"
 ```
+
+Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`.
+It derives identity and squash proof while preserving the six fail-closed
+authorities below as the recovery/debug contract:
 
 1. Merge receipt — require live readback; retry this command with the same PR.
 ```bash
@@ -671,11 +672,9 @@ cd <canonical-default-worktree>
 ./scripts/pm/refresh-task-cache.sh --task-uid <TASK-UID> --json
 ```
 
-4. Main sync — require receipt readback; retry with the same bound inputs.
-   The helper fetches first. It permits a dirty default worktree only when its
-   checked-out default-branch HEAD already equals the freshly fetched
-   `origin/<default-branch>`, so no branch update is attempted; a clean
-   worktree remains mandatory before any fast-forward.
+4. Main sync — require receipt readback; retry with the same bound inputs. A
+dirty default worktree is allowed only when it already equals fetched origin;
+any fast-forward still requires a clean worktree.
 ```bash
 ./scripts/pm/post-merge-main-sync.sh --repo-root <canonical-default-worktree> \
   --main-ref <default-branch> --task-uid <TASK-UID> \
@@ -710,14 +709,10 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 5 | cleanup receipt | intent journal proves cleanup | repeat step 5 |
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
 
-All six steps require successful readback; never reorder them or substitute caller-authored receipts.
-The finalizer closes its lock descriptor on every exit path but keeps the
-task-scoped singleton lock file persistent and ignored. Reusing one stable
-flock inode prevents waiting and newly arriving finalizers from overlapping.
-Cleanup
-diagnostics distinguish an absent path, a path that is not a Git worktree, a
-worktree not registered by the canonical repository, and a Git common-dir
-mismatch so operators can repair the correct boundary without guessing.
+All six steps require readback; never reorder or substitute caller-authored
+receipts. The finalizer keeps one persistent ignored lock inode, and cleanup
+diagnostics distinguish absent, non-worktree, unregistered, and common-dir
+mismatch states.
 
 ### 5.5 PR and review chain
 Select every involved reviewer through the
@@ -750,6 +745,8 @@ activation/context mode, actual runtime or unverifiable reason, artifact digest,
 both verdicts, disposition, and residual risk. The repository validates role
 coverage, head binding, and artifact integrity; the GitHub task issue remains
 the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
+After role artifacts complete, `./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <plan> --role-returns <ledger>` reconciles/collects them and delegates the packet to `record-pre-pr-review.sh`; lower helpers remain recovery entrypoints.
+
 Before publishing a plan-backed packet, `record-pre-pr-review.sh --review-plan`
 derives or exactly validates the task/head/comparison ref+OID/roles from the
 immutable plan and verifies that the recorded comparison OID remains an available

@@ -28,8 +28,7 @@ Output: 路由和 TODO、dispatch contracts、integrated change/evidence、当�
 Operational report:
 
 ```bash
-./scripts/pm/workflow-report.sh --phase start|close --role tpm --task-uid <TASK-UID>
-./scripts/pm/workflow-report.sh --phase review --role tpm
+./scripts/pm/workflow-report.sh --phase start|close|review --role tpm --task-uid <TASK-UID>
 ```
 
 不得声称 blocked production supervisor 已成为可用 runtime；Current/Target 边界只引用顶部 canonical capability anchor。

@@ -70,6 +70,12 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertTrue('"Comparison OID",' in source,
                         "prepare helper does not validate packet comparison OID")
 
+    def test_prepare_task_pr_quotes_the_terminal_finalizer_command(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        self.assertIn('CLEANUP_CMD_1="$(render_cmd', source)
+        self.assertIn('"$CANONICAL_REPO_ROOT/scripts/pm/finalize-task.sh"', source)
+        self.assertIn('--repo-root "$CANONICAL_REPO_ROOT"', source)
+
 
 if __name__ == "__main__":
     unittest.main()
