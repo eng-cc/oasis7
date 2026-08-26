@@ -477,6 +477,11 @@ body {
   overflow-wrap: anywhere;
 }
 
+.agent-intent__detail {
+  display: grid;
+  gap: 4px;
+}
+
 .director-surface {
   position: fixed;
   inset: 24px 24px 24px auto;

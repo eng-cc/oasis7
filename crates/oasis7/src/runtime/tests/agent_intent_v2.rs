@@ -179,6 +179,8 @@ fn replaced_intent_event_is_replayable_without_promoting_activity_or_receipt() {
         "Start recipe",
         Some("intent-replacement-2"),
     );
+    let mut superseded = superseded;
+    superseded["event_seq"] = serde_json::json!(12);
     let mut state = WorldState::default();
     state
         .agents
@@ -211,7 +213,8 @@ fn replaced_intent_event_is_replayable_without_promoting_activity_or_receipt() {
 
 #[test]
 fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
-    let accepted = canonical_intent("intent-lifecycle-2", "accepted", "Start recipe", None);
+    let mut accepted = canonical_intent("intent-lifecycle-2", "accepted", "Start recipe", None);
+    accepted["effect_intent_id"] = serde_json::json!("effect-intent-lifecycle-2");
     let mut blocked = accepted.clone();
     blocked["status"] = serde_json::json!("blocked");
     blocked["reason_code"] = serde_json::json!("insufficient_power");
@@ -297,4 +300,203 @@ fn terminal_intent_is_immutable_and_transition_replay_is_idempotent() {
             .is_err()
     );
     assert_eq!(serde_json::to_vec(&state).unwrap(), terminal);
+}
+
+#[test]
+fn transition_rejects_mutating_immutable_payload_or_rewinding_event_sequence() {
+    let accepted = canonical_intent("intent-immutable-1", "accepted", "Start recipe", None);
+    let mut mutated = accepted.clone();
+    mutated["status"] = serde_json::json!("blocked");
+    mutated["summary"] = serde_json::json!("Rewrite the original instruction");
+    mutated["reason_code"] = serde_json::json!("insufficient_power");
+    mutated["event_seq"] = serde_json::json!(10);
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
+        .unwrap();
+    let before = serde_json::to_vec(&state).unwrap();
+
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", mutated), 8)
+            .is_err()
+    );
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before);
+}
+
+#[test]
+fn historical_duplicate_after_terminal_replacement_is_an_idempotent_noop() {
+    let old = canonical_intent("intent-history-old", "accepted", "Start recipe", None);
+    let mut superseded = old.clone();
+    superseded["status"] = serde_json::json!("superseded");
+    superseded["replaced_by"] = serde_json::json!("intent-history-new");
+    superseded["event_seq"] = serde_json::json!(12);
+    let new = canonical_intent("intent-history-new", "accepted", "Stop recipe", None);
+    let mut terminal = new.clone();
+    terminal["status"] = serde_json::json!("rejected");
+    terminal["reason_code"] = serde_json::json!("policy_denied");
+    terminal["event_seq"] = serde_json::json!(13);
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", old.clone()), 7)
+        .unwrap();
+    state
+        .apply_domain_event(&intent_event("AgentIntentReplaced", superseded), 8)
+        .unwrap();
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", new), 9)
+        .unwrap();
+    state
+        .apply_domain_event(&intent_event("AgentIntentTransitioned", terminal), 10)
+        .unwrap();
+
+    let before_retry = serde_json::to_vec(&state).unwrap();
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", old), 11)
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before_retry);
+}
+
+#[test]
+fn completion_requires_a_nonzero_committed_world_event_reference() {
+    let mut accepted = canonical_intent("intent-receipt-1", "accepted", "Start recipe", None);
+    accepted["effect_intent_id"] = serde_json::json!("effect-intent-receipt-1");
+    let mut completed = accepted.clone();
+    completed["status"] = serde_json::json!("completed");
+    completed["event_seq"] = serde_json::json!(12);
+    completed["receipt_ref"] = serde_json::json!("world-event:0");
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
+        .unwrap();
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", completed), 8)
+            .is_err()
+    );
+}
+
+#[test]
+fn intent_summary_is_bounded_before_it_reaches_persistent_state() {
+    let accepted = canonical_intent(
+        "intent-summary-bound-1",
+        "accepted",
+        &"x".repeat(1024),
+        None,
+    );
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
+            .is_err()
+    );
+}
+
+#[test]
+fn replay_rejects_an_intent_payload_that_does_not_match_its_world_event_envelope() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let snapshot = world.snapshot();
+    let event_id = world
+        .record_agent_chat_intent("player-envelope", AGENT_ID, 1, "Start recipe")
+        .expect("record canonical intent");
+    let mut tampered_journal = world.journal().clone();
+    let WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent }) =
+        &mut tampered_journal.events[0].body
+    else {
+        panic!("expected canonical intent event");
+    };
+    intent.event_seq = event_id.saturating_add(1);
+
+    let result = World::from_snapshot(snapshot, tampered_journal);
+    assert!(result.is_err(), "tampered payload must fail replay");
+}
+
+#[test]
+fn world_api_exact_historical_retry_returns_original_without_reactivating_it() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let original = world
+        .record_agent_chat_intent("player-history", AGENT_ID, 1, "Start recipe")
+        .unwrap();
+    world
+        .record_agent_chat_intent("player-history", AGENT_ID, 2, "Stop recipe")
+        .unwrap();
+    let before_retry = world.state().agents[AGENT_ID].intent.clone().unwrap();
+
+    let replay = world
+        .record_agent_chat_intent("player-history", AGENT_ID, 1, "Start recipe")
+        .unwrap();
+
+    assert_eq!(replay, original);
+    assert_eq!(
+        world.state().agents[AGENT_ID].intent.as_ref(),
+        Some(&before_retry)
+    );
+}
+
+#[test]
+fn replay_rejects_receipt_committed_for_a_different_effect_intent() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let snapshot = world.snapshot();
+    world
+        .record_agent_chat_intent("player-receipt", AGENT_ID, 1, "Start recipe")
+        .unwrap();
+    let mut journal = world.journal().clone();
+    let WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent }) =
+        &mut journal.events[0].body
+    else {
+        panic!("expected accepted intent");
+    };
+    intent.effect_intent_id = Some("effect-for-this-intent".to_string());
+    let mut completed = intent.clone();
+    completed.status = "completed".to_string();
+    completed.event_seq = 3;
+    completed.updated_at = completed.updated_at.saturating_add(1);
+    completed.receipt_ref = Some("world-event:2".to_string());
+    journal.events.push(WorldEvent {
+        id: 2,
+        time: 7,
+        caused_by: None,
+        body: WorldEventBody::ReceiptAppended(EffectReceipt {
+            intent_id: "different-effect-intent".to_string(),
+            status: "ok".to_string(),
+            payload: serde_json::json!({}),
+            cost_cents: None,
+            signature: None,
+        }),
+    });
+    journal.events.push(WorldEvent {
+        id: 3,
+        time: 8,
+        caused_by: None,
+        body: WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned { intent: completed }),
+    });
+
+    assert!(World::from_snapshot(snapshot, journal).is_err());
 }

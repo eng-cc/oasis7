@@ -24,6 +24,9 @@ pub struct AgentIntentV2 {
     pub kind: String,
     pub summary: String,
     pub target_id: Option<String>,
+    /// Effect intent whose committed receipt may complete this intent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_intent_id: Option<String>,
     pub status: String,
     pub source: String,
     pub logical_time: WorldTime,
@@ -33,6 +36,13 @@ pub struct AgentIntentV2 {
     pub reason_code: Option<String>,
     pub reason_summary: Option<String>,
     pub replaced_by: Option<String>,
+    /// Stable identity of the authenticated principal that submitted the intent.
+    /// Legacy snapshots omit this field and remain readable.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub actor_id: String,
+    /// Digest of the authenticated request envelope for durable retry detection.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub request_digest: String,
 }
 
 /// The authoritative coarse-grained activity state exposed for an agent.

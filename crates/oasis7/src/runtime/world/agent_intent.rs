@@ -24,6 +24,19 @@ fn derive_agent_chat_intent_id(player_id: &str, agent_id: &str, intent_seq: u64)
     format!("agent-intent-v2:{}", sha256_hex(payload.as_bytes()))
 }
 
+fn derive_agent_chat_request_digest(
+    player_id: &str,
+    agent_id: &str,
+    intent_seq: u64,
+    message: &str,
+) -> String {
+    let payload = format!(
+        "agent-chat-request-v2\0player={}\0agent={}\0intent_seq={}\0message={}",
+        player_id, agent_id, intent_seq, message
+    );
+    sha256_hex(payload.as_bytes())
+}
+
 impl World {
     /// Append a player-authenticated agent-chat intent to the canonical runtime journal.
     ///
@@ -52,6 +65,15 @@ impl World {
         if message.is_empty() {
             return Err(invalid_agent_intent("summary cannot be empty"));
         }
+        if message.chars().count() > 512 {
+            return Err(invalid_agent_intent("summary exceeds 512 characters"));
+        }
+        if message
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+        {
+            return Err(invalid_agent_intent("summary contains a control character"));
+        }
         if !self.state.agents.contains_key(agent_id) {
             return Err(WorldError::AgentNotFound {
                 agent_id: agent_id.to_string(),
@@ -59,6 +81,23 @@ impl World {
         }
 
         let intent_id = derive_agent_chat_intent_id(player_id, agent_id, intent_seq);
+        let request_digest =
+            derive_agent_chat_request_digest(player_id, agent_id, intent_seq, message);
+        if let Some(recorded) = self.state.agent_intent_ledger.get(&intent_id) {
+            if recorded.actor_id == player_id
+                && recorded.request_digest == request_digest
+                && recorded.agent_id == agent_id
+                && recorded.kind == AGENT_CHAT_INTENT_KIND
+                && recorded.summary == message
+                && recorded.source == AGENT_CHAT_INTENT_SOURCE
+            {
+                return Ok(recorded.event_seq);
+            }
+            return Err(invalid_agent_intent(format!(
+                "intent_id {} conflicts with its durable request digest",
+                intent_id
+            )));
+        }
         let now = self.state.time;
         let current = self
             .state
@@ -79,6 +118,9 @@ impl World {
                     && existing.reason_code.is_none()
                     && existing.reason_summary.is_none()
                     && existing.replaced_by.is_none()
+                    && (existing.actor_id.is_empty() || existing.actor_id == player_id)
+                    && (existing.request_digest.is_empty()
+                        || existing.request_digest == request_digest)
                 {
                     // The canonical event is already present.  Returning its recorded journal
                     // position keeps a retry idempotent even when the sidecar ack was lost.
@@ -107,6 +149,7 @@ impl World {
                     kind: previous.kind,
                     summary: previous.summary,
                     target_id: previous.target_id,
+                    effect_intent_id: previous.effect_intent_id,
                     status: AGENT_INTENT_STATUS_SUPERSEDED.to_string(),
                     source: previous.source,
                     logical_time: previous.logical_time,
@@ -116,6 +159,8 @@ impl World {
                     reason_code: previous.reason_code,
                     reason_summary: previous.reason_summary,
                     replaced_by: Some(intent_id.clone()),
+                    actor_id: previous.actor_id,
+                    request_digest: previous.request_digest,
                 };
                 let actual_event_seq = self.append_event(
                     WorldEventBody::Domain(DomainEvent::AgentIntentReplaced {
@@ -140,6 +185,7 @@ impl World {
             kind: AGENT_CHAT_INTENT_KIND.to_string(),
             summary: message.to_string(),
             target_id: None,
+            effect_intent_id: None,
             status: AGENT_INTENT_STATUS_ACCEPTED.to_string(),
             source: AGENT_CHAT_INTENT_SOURCE.to_string(),
             logical_time: now,
@@ -149,6 +195,8 @@ impl World {
             reason_code: None,
             reason_summary: None,
             replaced_by: None,
+            actor_id: player_id.to_string(),
+            request_digest,
         };
         let actual_event_seq = self.append_event(
             WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent: accepted }),

@@ -5,6 +5,7 @@ use crate::runtime::{AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentV2};
 const STATUS_ACCEPTED: &str = "accepted";
 const STATUS_BLOCKED: &str = "blocked";
 const STATUS_SUPERSEDED: &str = "superseded";
+const MAX_AGENT_INTENT_SUMMARY_CHARS: usize = 512;
 const TERMINAL_STATUSES: &[&str] = &[
     "completed",
     "rejected",
@@ -38,6 +39,19 @@ fn validate_common_intent(intent: &AgentIntentV2) -> Result<(), WorldError> {
     if intent.summary.trim().is_empty() {
         return Err(invalid_intent("summary cannot be empty"));
     }
+    if intent.summary.chars().count() > MAX_AGENT_INTENT_SUMMARY_CHARS {
+        return Err(invalid_intent(format!(
+            "summary exceeds {} characters",
+            MAX_AGENT_INTENT_SUMMARY_CHARS
+        )));
+    }
+    if intent
+        .summary
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err(invalid_intent("summary contains a control character"));
+    }
     if intent.source.trim().is_empty() {
         return Err(invalid_intent("source cannot be empty"));
     }
@@ -47,11 +61,59 @@ fn validate_common_intent(intent: &AgentIntentV2) -> Result<(), WorldError> {
     Ok(())
 }
 
+fn validate_receipt_reference(intent: &AgentIntentV2) -> Result<(), WorldError> {
+    if intent.status != "completed" {
+        return Ok(());
+    }
+    let Some(receipt_ref) = intent.receipt_ref.as_deref() else {
+        return Err(invalid_intent(
+            "completed transition requires a committed receipt_ref",
+        ));
+    };
+    if intent
+        .effect_intent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(invalid_intent(
+            "completed transition requires a bound effect_intent_id",
+        ));
+    }
+    let Some(event_id) = receipt_ref
+        .strip_prefix("world-event:")
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|event_id| *event_id > 0)
+    else {
+        return Err(invalid_intent(
+            "completed transition requires a non-zero world-event receipt_ref",
+        ));
+    };
+    let _ = event_id;
+    Ok(())
+}
+
+fn immutable_payload_matches(current: &AgentIntentV2, incoming: &AgentIntentV2) -> bool {
+    current.schema_version == incoming.schema_version
+        && current.agent_id == incoming.agent_id
+        && current.intent_id == incoming.intent_id
+        && current.kind == incoming.kind
+        && current.summary == incoming.summary
+        && current.target_id == incoming.target_id
+        && current.effect_intent_id == incoming.effect_intent_id
+        && current.source == incoming.source
+        && current.logical_time == incoming.logical_time
+        && current.actor_id == incoming.actor_id
+        && current.request_digest == incoming.request_digest
+}
+
 impl WorldState {
     pub(super) fn apply_domain_event_intent(
         &mut self,
         event: &DomainEvent,
         _now: WorldTime,
+        envelope_event_seq: Option<u64>,
     ) -> Result<(), WorldError> {
         let intent = match event {
             DomainEvent::AgentIntentAccepted { intent }
@@ -60,6 +122,15 @@ impl WorldState {
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
         };
         validate_common_intent(intent)?;
+        if let Some(envelope_event_seq) = envelope_event_seq {
+            if intent.event_seq != envelope_event_seq {
+                return Err(invalid_intent(format!(
+                    "event_seq {} does not match world event envelope {}",
+                    intent.event_seq, envelope_event_seq
+                )));
+            }
+        }
+        validate_receipt_reference(intent)?;
 
         if !self.agents.contains_key(&intent.agent_id) {
             return Err(WorldError::AgentNotFound {
@@ -79,6 +150,16 @@ impl WorldState {
                     return Err(invalid_intent(format!(
                         "accepted event must carry status {STATUS_ACCEPTED}, got {}",
                         intent.status
+                    )));
+                }
+
+                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if recorded == intent {
+                        return Ok(());
+                    }
+                    return Err(invalid_intent(format!(
+                        "intent_id {} conflicts with its durable ledger payload",
+                        intent.intent_id
                     )));
                 }
 
@@ -104,6 +185,8 @@ impl WorldState {
                         )));
                     }
                 }
+                self.agent_intent_ledger
+                    .insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentReplaced { .. } => {
                 if intent.status != STATUS_SUPERSEDED {
@@ -123,6 +206,20 @@ impl WorldState {
                     ));
                 }
 
+                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if recorded == intent {
+                        return Ok(());
+                    }
+                    if recorded.status != STATUS_ACCEPTED
+                        || !immutable_payload_matches(recorded, intent)
+                    {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable ledger payload",
+                            intent.intent_id
+                        )));
+                    }
+                }
+
                 match existing {
                     Some(current) if current == *intent => {
                         // Exact replay of the replacement is a no-op.
@@ -133,6 +230,16 @@ impl WorldState {
                                 "terminal intent {} cannot be replaced again",
                                 current.intent_id
                             )));
+                        }
+                        if !immutable_payload_matches(&current, intent) {
+                            return Err(invalid_intent(
+                                "replacement cannot mutate immutable intent payload",
+                            ));
+                        }
+                        if intent.event_seq <= current.event_seq {
+                            return Err(invalid_intent(
+                                "replacement event_seq must advance the current intent",
+                            ));
                         }
                         cell.intent = Some(intent.clone());
                     }
@@ -151,6 +258,16 @@ impl WorldState {
                 }
             }
             DomainEvent::AgentIntentTransitioned { .. } => {
+                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if recorded == intent {
+                        return Ok(());
+                    }
+                    if !immutable_payload_matches(recorded, intent) {
+                        return Err(invalid_intent(
+                            "transition cannot mutate immutable intent payload",
+                        ));
+                    }
+                }
                 let Some(current) = existing else {
                     return Err(invalid_intent(format!(
                         "transition target {} is not present",
@@ -165,6 +282,16 @@ impl WorldState {
                         "transition targets {}, but current intent is {}",
                         intent.intent_id, current.intent_id
                     )));
+                }
+                if !immutable_payload_matches(&current, intent) {
+                    return Err(invalid_intent(
+                        "transition cannot mutate immutable intent payload",
+                    ));
+                }
+                if intent.event_seq <= current.event_seq {
+                    return Err(invalid_intent(
+                        "transition event_seq must advance the current intent",
+                    ));
                 }
                 if TERMINAL_STATUSES.contains(&current.status.as_str()) {
                     return Err(invalid_intent(format!(
@@ -191,18 +318,6 @@ impl WorldState {
                         "unsupported transition {} -> {}",
                         current.status, intent.status
                     )));
-                }
-                if intent.status == "completed"
-                    && intent
-                        .receipt_ref
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .is_none()
-                {
-                    return Err(invalid_intent(
-                        "completed transition requires a committed receipt_ref",
-                    ));
                 }
                 if intent.status == STATUS_BLOCKED
                     && intent

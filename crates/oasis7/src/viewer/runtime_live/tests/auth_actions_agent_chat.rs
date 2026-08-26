@@ -841,6 +841,75 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
 }
 
 #[test]
+fn runtime_intent_projection_distinguishes_missing_intent_from_lost_control() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+
+    server
+        .llm_sidecar
+        .player_agent_bindings
+        .insert("player-missing".to_string(), agent_id.clone());
+    server
+        .llm_sidecar
+        .agent_player_bindings
+        .insert(agent_id.clone(), "player-missing".to_string());
+    let missing = serde_json::to_value(
+        server
+            .compat_snapshot(Some("player-missing"))
+            .player_gameplay
+            .expect("player gameplay snapshot"),
+    )
+    .expect("serialize missing projection");
+    assert!(
+        missing.pointer("/primary_intent").is_none(),
+        "missing canonical intent must remain missing"
+    );
+
+    server.llm_sidecar.player_agent_bindings.insert(
+        "player-lost".to_string(),
+        "agent-no-longer-present".to_string(),
+    );
+    server.llm_sidecar.agent_player_bindings.insert(
+        "agent-no-longer-present".to_string(),
+        "player-lost".to_string(),
+    );
+    let lost = serde_json::to_value(
+        server
+            .compat_snapshot(Some("player-lost"))
+            .player_gameplay
+            .expect("player gameplay snapshot"),
+    )
+    .expect("serialize lost-control projection");
+    assert_eq!(
+        lost.pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("unavailable")
+    );
+    assert_eq!(
+        lost.pointer("/primary_intent/freshness")
+            .and_then(serde_json::Value::as_str),
+        Some("stale")
+    );
+    assert_eq!(
+        lost.pointer("/primary_intent/control_state")
+            .and_then(serde_json::Value::as_str),
+        Some("control_lost")
+    );
+}
+
+#[test]
 fn runtime_agent_chat_requires_starter_oc_balance() {
     let _guard = lock_test_llm_env();
     // SAFETY: This test holds the runtime LLM env lock while mutating process env.

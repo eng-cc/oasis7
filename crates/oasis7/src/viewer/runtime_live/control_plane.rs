@@ -516,6 +516,21 @@ impl ViewerRuntimeLiveServer {
             player_id.as_str(),
             public_key.as_deref(),
         )?;
+        // Commit the canonical intent before touching the provider or emitting
+        // a local echo. A provider timeout must never leave an observable chat
+        // side effect whose runtime authority was not persisted.
+        self.world
+            .record_agent_chat_intent(
+                verified.player_id.as_str(),
+                agent_id.as_str(),
+                intent.intent_seq,
+                message.as_str(),
+            )
+            .map_err(|error| AgentChatError {
+                code: "intent_persistence_failed".to_string(),
+                message: format!("failed to persist canonical agent intent: {error:?}"),
+                agent_id: Some(agent_id.clone()),
+            })?;
         let chat_echo_enabled = self.config.agent_chat_echo_enabled;
         match self.llm_sidecar.push_chat_message(
             &self.world,
@@ -534,18 +549,6 @@ impl ViewerRuntimeLiveServer {
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
-        self.world
-            .record_agent_chat_intent(
-                verified.player_id.as_str(),
-                agent_id.as_str(),
-                intent.intent_seq,
-                message.as_str(),
-            )
-            .map_err(|error| AgentChatError {
-                code: "intent_persistence_failed".to_string(),
-                message: format!("failed to persist canonical agent intent: {error:?}"),
-                agent_id: Some(agent_id.clone()),
-            })?;
         let primary_intent = apply_accepted_primary_intent(
             self.llm_sidecar.primary_intents.get(agent_id.as_str()),
             message.as_str(),

@@ -59,6 +59,7 @@ impl Default for WorldState {
         Self {
             time: 0,
             agents: BTreeMap::new(),
+            agent_intent_ledger: BTreeMap::new(),
             resources: BTreeMap::new(),
             materials: BTreeMap::new(),
             material_ledgers: default_material_ledgers(),

@@ -37,6 +37,14 @@ function acceptedIntent(overrides = {}) {
   };
 }
 
+function completedIntent(overrides = {}) {
+  return acceptedIntent({
+    status: "completed",
+    receipt_ref: "receipt-intent-v2:test",
+    ...overrides,
+  });
+}
+
 let dispose = null;
 
 afterEach(() => {
@@ -80,5 +88,59 @@ describe("Agent Console V2 authoritative intent", () => {
     await waitFor(() => expect(within(surface).getByText("Intent hidden — control lost")).toBeInTheDocument());
     expect(surface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
     expect(surface).not.toHaveTextContent(/control_lost|runtime_projection/i);
+  }, 60000);
+
+  it("redacts the intent summary for read-only observers", async () => {
+    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ control_state: "read_only" })));
+    await waitFor(() => expect(within(surface).getByText("Intent hidden — read-only")).toBeInTheDocument());
+    expect(surface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
+  }, 60000);
+
+  it.each([
+    ["legacy schema", { schema_version: 1 }],
+    ["local pending source", { source_class: "local_pending" }],
+    ["unknown control state", { control_state: "operator_override" }],
+  ])("fails closed for %s intent metadata", async (_label, overrides) => {
+    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent(overrides)));
+    const intentSurface = surface.querySelector(".agent-intent");
+    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
+    expect(intentSurface).not.toHaveTextContent(/Accepted|Stabilize power/i);
+  }, 60000);
+
+  it("bounds and normalizes the player-safe intent summary", async () => {
+    const summary = `${"A".repeat(180)}\nprovider rationale must stay hidden`;
+    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ message: summary })));
+    await waitFor(() => expect(within(surface).getByText("Current Intent")).toBeInTheDocument());
+    const rendered = surface.querySelector(".agent-intent__summary")?.textContent || "";
+    expect(rendered.length).toBeLessThanOrEqual(161);
+    expect(rendered).toContain("…");
+    expect(rendered).not.toContain("provider rationale");
+  }, 60000);
+
+  it("renders a bounded blocked reason and supported next step", async () => {
+    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({
+      status: "blocked",
+      reason_code: "missing_material",
+      reason_summary: "Iron input is unavailable.",
+      next_step: "Replenish iron input before resuming.",
+      resume_required: true,
+    })));
+    await waitFor(() => expect(within(surface).getByText("Blocked")).toBeInTheDocument());
+    expect(surface).toHaveTextContent("Iron input is unavailable.");
+    expect(surface).toHaveTextContent("Replenish iron input before resuming.");
+    expect(surface).not.toHaveTextContent(/missing_material|resume_required/i);
+  }, 60000);
+
+  it("does not claim completion without an authoritative receipt", async () => {
+    const surface = await commandSurfaceFor(intentSnapshot(completedIntent({ receipt_ref: null })));
+    await waitFor(() => expect(within(surface).getByText("Intent unavailable")).toBeInTheDocument());
+    expect(surface).not.toHaveTextContent("Completed");
+  }, 60000);
+
+  it("shows completion only when a receipt identity is present", async () => {
+    const surface = await commandSurfaceFor(intentSnapshot(completedIntent()));
+    await waitFor(() => expect(within(surface).getByText("Completed")).toBeInTheDocument());
+    expect(surface).toHaveTextContent("Stabilize power before expanding the iron line.");
+    expect(surface).not.toHaveTextContent(/receipt-intent-v2|runtime_projection/i);
   }, 60000);
 });

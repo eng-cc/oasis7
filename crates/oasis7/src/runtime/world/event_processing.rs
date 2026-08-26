@@ -116,7 +116,7 @@ impl World {
                     self.record_tick_consensus_for_tick(tick)?;
                 }
             }
-            self.apply_event_body(&event.body, event.time)?;
+            self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
             self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
             replaying_tick = Some(event.time);
@@ -533,8 +533,13 @@ impl World {
         body: WorldEventBody,
         caused_by: Option<CausedBy>,
     ) -> Result<WorldEventId, WorldError> {
-        self.apply_event_body(&body, self.state.time)?;
+        // Domain intent payloads carry the journal position as part of their
+        // authority identity. Validate against the id before mutating state;
+        // this keeps the payload and its envelope inseparable on replay.
+        let expected_event_id = self.next_event_id.max(1);
+        self.apply_event_body_at(&body, self.state.time, Some(expected_event_id))?;
         let event_id = self.allocate_next_event_id();
+        debug_assert_eq!(event_id, expected_event_id);
         self.journal.append(WorldEvent {
             id: event_id,
             time: self.state.time,
@@ -546,14 +551,17 @@ impl World {
         Ok(event_id)
     }
 
-    fn apply_event_body(
+    fn apply_event_body_at(
         &mut self,
         body: &WorldEventBody,
         time: WorldTime,
+        envelope_event_seq: Option<WorldEventId>,
     ) -> Result<(), WorldError> {
         match body {
             WorldEventBody::Domain(event) => {
-                self.state.apply_domain_event(event, time)?;
+                self.validate_agent_intent_receipt_reference(event, envelope_event_seq)?;
+                self.state
+                    .apply_domain_event_at(event, time, envelope_event_seq)?;
                 self.state.route_domain_event(event);
                 if let super::super::DomainEvent::ModuleInstalled {
                     instance_id,
@@ -645,6 +653,64 @@ impl World {
             WorldEventBody::RollbackApplied(_) => {}
         }
         self.state.time = time;
+        Ok(())
+    }
+
+    fn validate_agent_intent_receipt_reference(
+        &self,
+        event: &DomainEvent,
+        envelope_event_seq: Option<WorldEventId>,
+    ) -> Result<(), WorldError> {
+        let DomainEvent::AgentIntentTransitioned { intent } = event else {
+            return Ok(());
+        };
+        if intent.status != "completed" {
+            return Ok(());
+        }
+        let receipt_event_id = intent
+            .receipt_ref
+            .as_deref()
+            .and_then(|value| value.strip_prefix("world-event:"))
+            .and_then(|value| value.parse::<WorldEventId>().ok())
+            .filter(|event_id| *event_id > 0)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: "completed AgentIntentV2 requires a world-event receipt reference"
+                    .to_string(),
+            })?;
+        let Some(envelope_event_seq) = envelope_event_seq else {
+            // Direct WorldState reducers validate the reference shape. The
+            // journal-backed World path below additionally proves commitment.
+            return Ok(());
+        };
+        if receipt_event_id >= envelope_event_seq {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} must precede transition event {}",
+                    receipt_event_id, envelope_event_seq
+                ),
+            });
+        }
+        let expected_effect_intent_id = intent.effect_intent_id.as_deref().ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: "completed AgentIntentV2 requires a bound effect_intent_id".to_string(),
+            }
+        })?;
+        let committed = self.journal.events.iter().any(|event| {
+            event.id == receipt_event_id
+                && matches!(
+                    &event.body,
+                    WorldEventBody::ReceiptAppended(receipt)
+                        if receipt.intent_id == expected_effect_intent_id
+                )
+        });
+        if !committed {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} is not committed for effect intent {}",
+                    receipt_event_id, expected_effect_intent_id
+                ),
+            });
+        }
         Ok(())
     }
 }

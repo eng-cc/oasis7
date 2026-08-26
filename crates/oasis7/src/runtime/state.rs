@@ -9,7 +9,7 @@ use oasis7_wasm_abi::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::agent_cell::AgentCell;
+use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
 use super::events::{DomainEvent, IndustryStage, MaterialMarketQuote, MaterialTransitPriority};
@@ -39,7 +39,7 @@ use super::reward_asset::{
     REWARD_MINT_SIGNATURE_V2_PREFIX, RewardAssetConfig, RewardSignatureGovernancePolicy,
     SystemOrderPoolBudget, reward_mint_signature_v1, verify_reward_mint_signature_v2,
 };
-use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldTime};
+use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldEventId, WorldTime};
 use super::util::{deserialize_btreemap_u64_keys, hash_json};
 
 mod apply_domain_event_core;
@@ -566,6 +566,9 @@ pub struct ModuleReleaseManifestMappingState {
 pub struct WorldState {
     pub time: WorldTime,
     pub agents: BTreeMap<String, AgentCell>,
+    /// Durable intent history used for idempotency after the current intent is replaced.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub agent_intent_ledger: BTreeMap<String, AgentIntentV2>,
     #[serde(default)]
     pub resources: BTreeMap<ResourceKind, i64>,
     #[serde(default)]
@@ -1024,12 +1027,21 @@ impl WorldState {
         event: &DomainEvent,
         now: WorldTime,
     ) -> Result<(), WorldError> {
+        self.apply_domain_event_at(event, now, None)
+    }
+
+    pub(crate) fn apply_domain_event_at(
+        &mut self,
+        event: &DomainEvent,
+        now: WorldTime,
+        envelope_event_seq: Option<WorldEventId>,
+    ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
             DomainEvent::AgentIntentAccepted { .. }
             | DomainEvent::AgentIntentReplaced { .. }
             | DomainEvent::AgentIntentTransitioned { .. } => {
-                self.apply_domain_event_intent(event, now)?
+                self.apply_domain_event_intent(event, now, envelope_event_seq)?
             }
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }

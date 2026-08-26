@@ -134,11 +134,25 @@ impl ViewerRuntimeLiveServer {
             && snapshot_bound_agent_id.is_none()
             && !first_agent_claim_target_bound;
         let primary_intent = snapshot_bound_agent_id.and_then(|agent_id| {
-            runtime_state
-                .agents
-                .get(agent_id)
-                .and_then(|cell| cell.intent.as_ref())
-                .map(|intent| {
+            let Some(runtime_agent) = runtime_state.agents.get(agent_id) else {
+                return Some(crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                    status: "unavailable".to_string(),
+                    message: None,
+                    resume_required: true,
+                    schema_version: Some(2),
+                    intent_id: None,
+                    source_class: Some("runtime_projection".to_string()),
+                    freshness: Some("stale".to_string()),
+                    control_state: Some("control_lost".to_string()),
+                    event_seq: None,
+                    reason_code: None,
+                    reason_summary: None,
+                    receipt_ref: None,
+                    next_step: None,
+                });
+            };
+            if let Some(intent) = runtime_agent.intent.as_ref() {
+                Some({
                     let reprioritized = self.world.journal().events.iter().any(|event| {
                         matches!(
                             &event.body,
@@ -168,8 +182,38 @@ impl ViewerRuntimeLiveServer {
                         freshness: Some("current".to_string()),
                         control_state: Some("controllable".to_string()),
                         event_seq: Some(intent.event_seq.to_string()),
+                        reason_code: intent.reason_code.clone(),
+                        reason_summary: intent.reason_summary.clone(),
+                        receipt_ref: intent.receipt_ref.clone(),
+                        next_step: (intent.status == "blocked")
+                            .then(|| "Recheck runtime state before resuming.".to_string()),
                     }
                 })
+            } else {
+                // Prompt-control predates AgentIntentV2. Keep that handoff
+                // visible for compatibility, but mark it explicitly as a
+                // sidecar/unknown projection rather than runtime authority.
+                self.llm_sidecar
+                    .primary_intents
+                    .get(agent_id)
+                    .map(
+                        |legacy| crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                            status: legacy.status.clone(),
+                            message: legacy.message.clone(),
+                            resume_required: legacy.resume_required,
+                            schema_version: None,
+                            intent_id: None,
+                            source_class: Some("prompt_control_compatibility".to_string()),
+                            freshness: Some("unknown".to_string()),
+                            control_state: Some("unknown".to_string()),
+                            event_seq: None,
+                            reason_code: None,
+                            reason_summary: None,
+                            receipt_ref: None,
+                            next_step: None,
+                        },
+                    )
+            }
         });
         let model = runtime_state_to_simulator_model(
             runtime_state,
