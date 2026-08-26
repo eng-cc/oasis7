@@ -17,6 +17,10 @@ silently change the compile surface being measured.
 The timed compile commands run offline after the host-target pre-fetch, so a
 registry or network miss cannot contaminate the wall-clock measurements.
 
+Every Cargo invocation fixes CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0,
+and CARGO_PROFILE_TEST_DEBUG=0, and unsets RUSTC_WRAPPER, regardless of caller
+environment.
+
 Each checkout performs one dependency-tree query; closure counting and
 dependency-presence checks are derived from that shared result.
 
@@ -140,6 +144,17 @@ if [[ -z "$host_target" ]]; then
   exit 1
 fi
 
+# Keep every Cargo query and timed compile on the same measurement contract,
+# regardless of caller-provided development settings.  The workflow sets these
+# values too, but the harness is also a documented standalone entrypoint.
+compile_metrics_cargo_env=(
+  env
+  -u RUSTC_WRAPPER
+  CARGO_INCREMENTAL=0
+  CARGO_PROFILE_DEV_DEBUG=0
+  CARGO_PROFILE_TEST_DEBUG=0
+)
+
 measure_command_seconds() {
   local checkout_path="$1"
   local target_dir="$2"
@@ -224,19 +239,19 @@ measure_checkout() {
   mkdir -p "$check_target" "$release_target"
 
   local check_seconds
-  local cargo_check_args=(env -u RUSTC_WRAPPER cargo check --offline --locked -p "$package_name")
+  local cargo_check_args=("${compile_metrics_cargo_env[@]}" cargo check --offline --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     cargo_check_args+=(--no-default-features)
   fi
   (
     cd "$checkout_path"
     export CARGO_HOME="$cargo_home"
-    cargo fetch --locked --target "$host_target" \
+    "${compile_metrics_cargo_env[@]}" cargo fetch --locked --target "$host_target" \
       >/dev/null 2>"$out_dir/logs/${label}-cargo-fetch.log"
   )
 
   local dependency_tree_path="$tmp_root/${label}-dependency-tree.txt"
-  local tree_args=(cargo tree --offline --locked -p "$package_name")
+  local tree_args=("${compile_metrics_cargo_env[@]}" cargo tree --offline --locked -p "$package_name")
   if [[ "$no_default_features" == true ]]; then
     tree_args+=(--no-default-features)
   fi
@@ -288,7 +303,7 @@ measure_checkout() {
         "$release_target" \
         "$cargo_home" \
         "$out_dir/logs/${label}-cargo-build-release.log" \
-        env -u RUSTC_WRAPPER cargo build --offline --locked -p "$package_name" --release --bin "$binary_name"
+        "${compile_metrics_cargo_env[@]}" cargo build --offline --locked -p "$package_name" --release --bin "$binary_name"
     )
 
     local binary_path

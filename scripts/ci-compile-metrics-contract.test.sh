@@ -135,6 +135,10 @@ cat >"$fake_bin/cargo" <<'FAKE_CARGO'
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_CARGO_LOG:?}"
 printf '%s\n' "${CARGO_HOME:-<unset>}" >>"${FAKE_CARGO_HOME_LOG:?}"
+printf '%s\n' "${CARGO_INCREMENTAL:-<unset>}" >>"${FAKE_CARGO_INCREMENTAL_LOG:?}"
+printf '%s\n' "${CARGO_PROFILE_DEV_DEBUG:-<unset>}" >>"${FAKE_CARGO_PROFILE_DEV_DEBUG_LOG:?}"
+printf '%s\n' "${CARGO_PROFILE_TEST_DEBUG:-<unset>}" >>"${FAKE_CARGO_PROFILE_TEST_DEBUG_LOG:?}"
+printf '%s\n' "${RUSTC_WRAPPER:-<unset>}" >>"${FAKE_RUSTC_WRAPPER_LOG:?}"
 if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
   printf '%s\n' "$CARGO_TARGET_DIR" >>"${FAKE_CARGO_TARGET_LOG:?}"
 fi
@@ -170,8 +174,8 @@ case "${1:-}" in
   check)
     ;;
   build)
-    echo "unexpected release build" >&2
-    exit 1
+    mkdir -p "${CARGO_TARGET_DIR:?}/release"
+    : >"${CARGO_TARGET_DIR}/release/fake_library"
     ;;
   *)
     echo "unexpected cargo command: $*" >&2
@@ -202,10 +206,18 @@ out_dir="$tmp_dir/metrics"
 expected_commit_oid=$(git rev-parse HEAD)
 FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
+FAKE_CARGO_INCREMENTAL_LOG="$tmp_dir/cargo-incremental.log" \
+FAKE_CARGO_PROFILE_DEV_DEBUG_LOG="$tmp_dir/cargo-profile-dev-debug.log" \
+FAKE_CARGO_PROFILE_TEST_DEBUG_LOG="$tmp_dir/cargo-profile-test-debug.log" \
+FAKE_RUSTC_WRAPPER_LOG="$tmp_dir/cargo-rustc-wrapper.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/cargo-target.log" \
 FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
 FAKE_CARGO_TREE_FIXTURE=all \
+CARGO_INCREMENTAL=1 \
+CARGO_PROFILE_DEV_DEBUG=2 \
+CARGO_PROFILE_TEST_DEBUG=2 \
+RUSTC_WRAPPER=hostile-wrapper \
 PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
@@ -242,6 +254,80 @@ if grep -Eq 'build' "$tmp_dir/cargo.log"; then
   echo "check-only compile metrics unexpectedly invoked cargo build" >&2
   exit 1
 fi
+
+python3 - \
+  "$tmp_dir/cargo-incremental.log" \
+  "$tmp_dir/cargo-profile-dev-debug.log" \
+  "$tmp_dir/cargo-profile-test-debug.log" \
+  "$tmp_dir/cargo-rustc-wrapper.log" <<'PY'
+from pathlib import Path
+import sys
+
+for path_arg, variable in zip(
+    sys.argv[1:],
+    (
+        "CARGO_INCREMENTAL",
+        "CARGO_PROFILE_DEV_DEBUG",
+        "CARGO_PROFILE_TEST_DEBUG",
+        "RUSTC_WRAPPER",
+    ),
+):
+    values = [line for line in Path(path_arg).read_text(encoding="utf-8").splitlines() if line]
+    expected = "<unset>" if variable == "RUSTC_WRAPPER" else "0"
+    if not values or set(values) != {expected}:
+        raise SystemExit(f"{variable} was not normalized for every Cargo call: {values}")
+print("compile environment (current-only): all Cargo calls normalized")
+PY
+
+release_out_dir="$tmp_dir/release-metrics"
+FAKE_CARGO_LOG="$tmp_dir/release-cargo.log" \
+FAKE_CARGO_HOME_LOG="$tmp_dir/release-cargo-home.log" \
+FAKE_CARGO_INCREMENTAL_LOG="$tmp_dir/release-cargo-incremental.log" \
+FAKE_CARGO_PROFILE_DEV_DEBUG_LOG="$tmp_dir/release-cargo-profile-dev-debug.log" \
+FAKE_CARGO_PROFILE_TEST_DEBUG_LOG="$tmp_dir/release-cargo-profile-test-debug.log" \
+FAKE_RUSTC_WRAPPER_LOG="$tmp_dir/release-cargo-rustc-wrapper.log" \
+FAKE_CARGO_TARGET_LOG="$tmp_dir/release-cargo-target.log" \
+FAKE_HOST_TARGET="$host_target" \
+FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_CARGO_TREE_FIXTURE=all \
+CARGO_INCREMENTAL=1 \
+CARGO_PROFILE_DEV_DEBUG=2 \
+CARGO_PROFILE_TEST_DEBUG=2 \
+RUSTC_WRAPPER=hostile-wrapper \
+PATH="$fake_bin:$PATH" \
+  ./scripts/ci-compile-metrics.sh \
+    --package fake_library \
+    --out-dir "$release_out_dir" \
+    --binary fake_library
+
+if ! grep -Eq '^build ' "$tmp_dir/release-cargo.log"; then
+  echo "release compile metrics did not invoke cargo build" >&2
+  exit 1
+fi
+
+python3 - \
+  "$tmp_dir/release-cargo-incremental.log" \
+  "$tmp_dir/release-cargo-profile-dev-debug.log" \
+  "$tmp_dir/release-cargo-profile-test-debug.log" \
+  "$tmp_dir/release-cargo-rustc-wrapper.log" <<'PY'
+from pathlib import Path
+import sys
+
+for path_arg, variable in zip(
+    sys.argv[1:],
+    (
+        "CARGO_INCREMENTAL",
+        "CARGO_PROFILE_DEV_DEBUG",
+        "CARGO_PROFILE_TEST_DEBUG",
+        "RUSTC_WRAPPER",
+    ),
+):
+    values = [line for line in Path(path_arg).read_text(encoding="utf-8").splitlines() if line]
+    expected = "<unset>" if variable == "RUSTC_WRAPPER" else "0"
+    if not values or set(values) != {expected}:
+        raise SystemExit(f"{variable} was not normalized for every release Cargo call: {values}")
+print("compile environment (release): all Cargo calls normalized")
+PY
 
 python3 - "$tmp_dir/cargo.log" <<'PY'
 from pathlib import Path
@@ -282,16 +368,48 @@ baseline_out_dir="$tmp_dir/metrics-with-baseline"
 baseline_cargo_home="$tmp_dir/shared-cargo-home"
 FAKE_CARGO_LOG="$tmp_dir/baseline-cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/baseline-cargo-home.log" \
+FAKE_CARGO_INCREMENTAL_LOG="$tmp_dir/baseline-cargo-incremental.log" \
+FAKE_CARGO_PROFILE_DEV_DEBUG_LOG="$tmp_dir/baseline-cargo-profile-dev-debug.log" \
+FAKE_CARGO_PROFILE_TEST_DEBUG_LOG="$tmp_dir/baseline-cargo-profile-test-debug.log" \
+FAKE_RUSTC_WRAPPER_LOG="$tmp_dir/baseline-cargo-rustc-wrapper.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
 FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
 FAKE_CARGO_TREE_FIXTURE=none \
+CARGO_INCREMENTAL=1 \
+CARGO_PROFILE_DEV_DEBUG=2 \
+CARGO_PROFILE_TEST_DEBUG=2 \
+RUSTC_WRAPPER=hostile-wrapper \
 CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
     --out-dir "$baseline_out_dir" \
     --check-only \
     --baseline-ref HEAD
+
+python3 - \
+  "$tmp_dir/baseline-cargo-incremental.log" \
+  "$tmp_dir/baseline-cargo-profile-dev-debug.log" \
+  "$tmp_dir/baseline-cargo-profile-test-debug.log" \
+  "$tmp_dir/baseline-cargo-rustc-wrapper.log" <<'PY'
+from pathlib import Path
+import sys
+
+for path_arg, variable in zip(
+    sys.argv[1:],
+    (
+        "CARGO_INCREMENTAL",
+        "CARGO_PROFILE_DEV_DEBUG",
+        "CARGO_PROFILE_TEST_DEBUG",
+        "RUSTC_WRAPPER",
+    ),
+):
+    values = [line for line in Path(path_arg).read_text(encoding="utf-8").splitlines() if line]
+    expected = "<unset>" if variable == "RUSTC_WRAPPER" else "0"
+    if not values or set(values) != {expected}:
+        raise SystemExit(f"{variable} was not normalized for every current/baseline Cargo call: {values}")
+print("compile environment (current+baseline): all Cargo calls normalized")
+PY
 
 python3 - "$baseline_out_dir/baseline.metrics.json" "$baseline_out_dir/comparison.json" <<'PY'
 import json
