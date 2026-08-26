@@ -37,9 +37,10 @@ fn caller_variants_roundtrip_through_json_and_cbor() {
             serde_json::from_slice(&json).expect("deserialize caller from JSON");
         assert_eq!(json_roundtrip, caller);
 
-        let cbor = serde_cbor::to_vec(&caller).expect("serialize caller as CBOR");
+        let mut cbor = Vec::new();
+        ciborium::ser::into_writer(&caller, &mut cbor).expect("serialize caller as CBOR");
         let cbor_roundtrip: ModuleCallCaller =
-            serde_cbor::from_slice(&cbor).expect("deserialize caller from CBOR");
+            ciborium::de::from_reader(cbor.as_slice()).expect("deserialize caller from CBOR");
         assert_eq!(cbor_roundtrip, caller);
     }
 }
@@ -62,9 +63,10 @@ fn provenance_roundtrips_separately_from_command_envelope() {
             id: "decision-7".to_string(),
         },
     };
-    let encoded = serde_cbor::to_vec(&provenance).expect("serialize provenance");
+    let mut encoded = Vec::new();
+    ciborium::ser::into_writer(&provenance, &mut encoded).expect("serialize provenance");
     let decoded: ModuleInvocationProvenance =
-        serde_cbor::from_slice(&encoded).expect("deserialize provenance");
+        ciborium::de::from_reader(encoded.as_slice()).expect("deserialize provenance");
     assert_eq!(decoded, provenance);
 
     let envelope = ModuleCommandEnvelope {

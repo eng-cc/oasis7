@@ -13,8 +13,8 @@ pub use spec::{
 };
 
 use oasis7_wasm_abi::{
-    ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest, ModuleContext,
-    ModuleOutput, ModuleSandbox, ModuleTickLifecycleDirective,
+    ModuleCallCaller, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest,
+    ModuleContext, ModuleOutput, ModuleSandbox, ModuleTickLifecycleDirective,
 };
 use oasis7_wasm_executor::{
     WasmExecutor, WasmExecutorConfig, WasmExecutorMetricsSnapshot,
@@ -627,6 +627,9 @@ fn build_case_request(
             origin: ModuleCallOrigin {
                 kind: case.request.origin_kind.clone(),
                 id: case.request.origin_id.clone(),
+            },
+            caller: ModuleCallCaller::System {
+                system_id: "observe_runner".to_string(),
             },
             limits: limits.clone(),
             stage: case.request.stage.clone(),

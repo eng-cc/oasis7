@@ -3,7 +3,7 @@
 //! These tests pin the versioned command surface without weakening the legacy
 //! manifest decoding assertions.  The deterministic-encoding fixture exercises
 //! the ABI's production canonical-CBOR helper rather than relying on
-//! `serde_cbor::to_vec`.
+//! a non-canonical declaration-order encoding.
 
 use std::collections::BTreeMap;
 
@@ -147,10 +147,12 @@ fn command_envelope_roundtrips_canonically_and_rejects_before_execution() {
         ModuleCommandEnvelope::decode_canonical(&encoded).unwrap(),
         envelope
     );
-    let declaration_order = serde_cbor::to_vec(&envelope).expect("encode declaration order");
+    let mut declaration_order = Vec::new();
+    ciborium::ser::into_writer(&envelope, &mut declaration_order)
+        .expect("encode declaration order");
     assert_ne!(
         declaration_order, encoded,
-        "serde_cbor struct order must not be accepted as canonical"
+        "struct declaration order must not be accepted as canonical"
     );
     assert!(matches!(
         ModuleCommandEnvelope::decode_canonical(&declaration_order),
@@ -211,14 +213,37 @@ fn canonical_cbor_orders_map_keys_by_encoded_key_length() {
         0x62, 0x61, 0x61, 0x01, // "aa": 1
     ];
 
-    let serde_cbor_encoded = serde_cbor::to_vec(&payload).expect("encode map payload");
+    let mut declaration_order = Vec::new();
+    ciborium::ser::into_writer(&payload, &mut declaration_order).expect("encode map payload");
     assert_ne!(
-        serde_cbor_encoded, expected_rfc8949_bytes,
-        "serde_cbor::to_vec must not be treated as the ABI canonical encoder"
+        declaration_order, expected_rfc8949_bytes,
+        "declaration-order CBOR must not be treated as the ABI canonical encoder"
     );
     let encoded = encode_canonical_cbor(&payload).expect("encode canonical map payload");
     assert_eq!(
         encoded, expected_rfc8949_bytes,
         "canonical helper must use RFC 8949 deterministic map ordering; actual={encoded:02x?}"
+    );
+}
+
+#[test]
+fn canonical_cbor_normalizes_nested_maps() {
+    let mut inner = BTreeMap::new();
+    inner.insert("aa".to_string(), 1_u8);
+    inner.insert("b".to_string(), 2_u8);
+    let payload = BTreeMap::from([("outer".to_string(), inner)]);
+
+    let expected_rfc8949_bytes = [
+        0xa1, // map(1)
+        0x65, 0x6f, 0x75, 0x74, 0x65, 0x72, // "outer"
+        0xa2, // map(2)
+        0x61, 0x62, 0x02, // "b": 2
+        0x62, 0x61, 0x61, 0x01, // "aa": 1
+    ];
+
+    let encoded = encode_canonical_cbor(&payload).expect("canonical nested map payload");
+    assert_eq!(
+        encoded, expected_rfc8949_bytes,
+        "canonical helper must normalize nested maps; actual={encoded:02x?}"
     );
 }
