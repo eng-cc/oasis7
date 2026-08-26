@@ -26,6 +26,9 @@ impl WorldState {
             }
             DomainEvent::ActionAccepted { .. } => {}
             DomainEvent::ActionRejected { .. } => {}
+            DomainEvent::AgentIntentAccepted { .. } | DomainEvent::AgentIntentReplaced { .. } => {
+                unreachable!("Agent Intent events are handled by apply_domain_event_intent")
+            }
             DomainEvent::Observation { .. } => {}
             DomainEvent::BodyAttributesUpdated { agent_id, view, .. } => {
                 let cell =

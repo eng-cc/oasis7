@@ -9,6 +9,8 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::AgentMoved { .. } => "domain.agent_moved",
             DomainEvent::ActionAccepted { .. } => "domain.action_accepted",
             DomainEvent::ActionRejected { .. } => "domain.action_rejected",
+            DomainEvent::AgentIntentAccepted { .. } => "domain.agent_intent_accepted",
+            DomainEvent::AgentIntentReplaced { .. } => "domain.agent_intent_replaced",
             DomainEvent::Observation { .. } => "domain.observation",
             DomainEvent::BodyAttributesUpdated { .. } => "domain.body_attributes_updated",
             DomainEvent::BodyAttributesRejected { .. } => "domain.body_attributes_rejected",

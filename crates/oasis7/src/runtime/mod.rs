@@ -55,7 +55,9 @@ pub use types::{
 };
 
 // Agent cell
-pub use agent_cell::{AgentActivityStatus, AgentActivityV1, AgentCell};
+pub use agent_cell::{
+    AGENT_INTENT_V2_SCHEMA_VERSION, AgentActivityStatus, AgentActivityV1, AgentCell, AgentIntentV2,
+};
 
 // Chain resource schema
 pub use crate::chain_resource_schema::{

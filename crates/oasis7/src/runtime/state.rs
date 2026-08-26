@@ -47,6 +47,7 @@ mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
 mod apply_domain_event_industry_helpers;
+mod apply_domain_event_intent;
 mod apply_domain_event_main_token;
 #[path = "state_defaults.rs"]
 mod state_defaults;
@@ -1025,6 +1026,9 @@ impl WorldState {
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
+            DomainEvent::AgentIntentAccepted { .. } | DomainEvent::AgentIntentReplaced { .. } => {
+                self.apply_domain_event_intent(event, now)?
+            }
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
             | DomainEvent::ActionAccepted { .. }

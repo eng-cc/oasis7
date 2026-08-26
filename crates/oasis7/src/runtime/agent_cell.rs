@@ -7,6 +7,34 @@ use std::collections::VecDeque;
 use super::events::DomainEvent;
 use super::types::{ActionId, WorldTime};
 
+/// Schema version for the runtime-owned Agent Intent representation.
+pub const AGENT_INTENT_V2_SCHEMA_VERSION: u32 = 2;
+
+/// The canonical runtime intent currently associated with an agent.
+///
+/// This deliberately contains only runtime authority fields.  Viewer
+/// projection concerns such as world identity, reorg epoch, source class,
+/// freshness, and control state are added by the projection layer and must
+/// not be persisted in the agent cell.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentIntentV2 {
+    pub schema_version: u32,
+    pub agent_id: String,
+    pub intent_id: String,
+    pub kind: String,
+    pub summary: String,
+    pub target_id: Option<String>,
+    pub status: String,
+    pub source: String,
+    pub logical_time: WorldTime,
+    pub event_seq: u64,
+    pub updated_at: WorldTime,
+    pub receipt_ref: Option<String>,
+    pub reason_code: Option<String>,
+    pub reason_summary: Option<String>,
+    pub replaced_by: Option<String>,
+}
+
 /// The authoritative coarse-grained activity state exposed for an agent.
 ///
 /// A missing activity (`AgentCell::activity == None`) is distinct from an
@@ -96,6 +124,8 @@ pub struct AgentCell {
     pub last_active: WorldTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity: Option<AgentActivityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<AgentIntentV2>,
 }
 
 impl AgentCell {
@@ -105,6 +135,7 @@ impl AgentCell {
             mailbox: VecDeque::new(),
             last_active: now,
             activity: None,
+            intent: None,
         }
     }
 }
