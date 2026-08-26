@@ -69,6 +69,27 @@ if [[ "$workflow_oasis7_default_target" == *'--no-default-features'* ]]; then
   echo "oasis7 default-feature target must retain Cargo default features" >&2
   exit 1
 fi
+if ! grep -Eq '^[[:space:]]*- oasis7_node_default_features[[:space:]]*$' .github/workflows/compile-metrics.yml; then
+  echo "compile metrics workflow must expose the oasis7_node default-feature target" >&2
+  exit 1
+fi
+workflow_oasis7_node_default_target=$(awk '
+/^[[:space:]]*oasis7_node_default_features\)[[:space:]]*$/ { in_case=1; next }
+in_case && /^[[:space:]]*;;/ { exit }
+in_case { print }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_oasis7_node_default_target" != *'package="oasis7_node"'* ]]; then
+  echo "oasis7_node default-feature target must measure package oasis7_node" >&2
+  exit 1
+fi
+if [[ "$workflow_oasis7_node_default_target" != *'extra_args+=(--check-only)'* ]]; then
+  echo "oasis7_node default-feature target must use check-only measurement" >&2
+  exit 1
+fi
+if [[ "$workflow_oasis7_node_default_target" == *'--no-default-features'* ]]; then
+  echo "oasis7_node default-feature target must retain Cargo default features" >&2
+  exit 1
+fi
 if ! grep -q 'time\.monotonic_ns()' scripts/ci-compile-metrics.sh; then
   echo "compile metrics timing must use a monotonic clock" >&2
   exit 1
