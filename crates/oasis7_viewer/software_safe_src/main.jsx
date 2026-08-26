@@ -21,6 +21,7 @@ import {
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 import { AgentActivitySurface } from "./agent_activity_surface.jsx";
+import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -3254,6 +3255,7 @@ function InteractionPanel() {
     return selected?.name || selected?.label || agentId();
   };
   const selectedAgentActivity = () => core.state.snapshot?.model?.agents?.[agentId()]?.activity;
+  const selectedAgentIntent = () => core.state.snapshot?.player_gameplay?.primary_intent;
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3361,6 +3363,7 @@ function InteractionPanel() {
         </Badge>
       </div>
       <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
+      <AgentIntentSurface intent={selectedAgentIntent()} locale={locale()} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -4251,6 +4254,25 @@ function installViewerVisualFixture() {
       setFixtureChatHistory();
       core.setPromptOverridesVisible(false);
     },
+    agent_intent_v2() {
+      core.injectSnapshot(viewerFixtureBaseSnapshot({
+        player_gameplay: {
+          primary_intent: {
+            schema_version: 2,
+            intent_id: "agent-intent-v2:headed-acceptance",
+            status: "accepted",
+            message: "Stabilize power before expanding the iron line.",
+            resume_required: false,
+            source_class: "runtime_projection",
+            freshness: "current",
+            control_state: "controllable",
+            event_seq: "42",
+          },
+        },
+      }), { returnState: false });
+      core.applySelection({ kind: "agent", id: "agent-0" });
+      setFixturePlayerAuth();
+    },
     gameplay_diagnostics_expanded() {
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
       core.applySelection({ kind: "agent", id: "agent-0" });
@@ -4296,14 +4318,14 @@ export function mountViewerApp(root = document.getElementById("app")) {
   }
 
   core.initializeSoftwareSafeCore();
+  let dispose = mount(() => <AppShell />, root);
+  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
   const viewerVisualFixtureName = installViewerVisualFixture();
   if (viewerVisualFixtureName) {
     root.setAttribute("data-viewer-visual-fixture", viewerVisualFixtureName);
   } else {
     root.removeAttribute("data-viewer-visual-fixture");
   }
-  let dispose = mount(() => <AppShell />, root);
-  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
 
   return () => {
     core.setRenderHook(null);
@@ -4313,8 +4335,12 @@ export function mountViewerApp(root = document.getElementById("app")) {
 }
 
 function shouldBypassAutoMountForTestApi() {
-  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
+  const params = new URLSearchParams(window.location.search || "");
+  const value = String(params.get("test_api") || "").trim().toLowerCase();
+  const autoMount = String(params.get("auto_mount") || "").trim().toLowerCase();
+  const testApi = value === "1" || value === "true" || value === "yes" || value === "on";
+  const headedFixture = autoMount === "1" || autoMount === "true" || autoMount === "yes" || autoMount === "on";
+  return testApi && !headedFixture;
 }
 
 const autoMountRoot = document.getElementById("app");
