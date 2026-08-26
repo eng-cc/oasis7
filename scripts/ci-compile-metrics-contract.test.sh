@@ -69,6 +69,14 @@ if [[ "$workflow_oasis7_default_target" == *'--no-default-features'* ]]; then
   echo "oasis7 default-feature target must retain Cargo default features" >&2
   exit 1
 fi
+if ! grep -q 'time\.monotonic_ns()' scripts/ci-compile-metrics.sh; then
+  echo "compile metrics timing must use a monotonic clock" >&2
+  exit 1
+fi
+if grep -q 'time\.time_ns()' scripts/ci-compile-metrics.sh; then
+  echo "compile metrics elapsed timing must not use adjustable wall-clock time" >&2
+  exit 1
+fi
 if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1

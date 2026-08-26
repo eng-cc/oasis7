@@ -162,36 +162,32 @@ measure_command_seconds() {
   local log_path="$4"
   shift 4
 
-  local start_ns
-  local end_ns
-  # The timing endpoints are separate Python processes. On macOS, especially
-  # when the host Python architecture differs from the Rust toolchain, the
-  # mach_absolute_time-backed monotonic clock can be process-relative; a
-  # cross-process delta may therefore be negative. CLOCK_REALTIME is shared
-  # across those processes and still provides microsecond-scale precision for
-  # these multi-second compile measurements.
-  start_ns=$(python3 - <<'PY'
-import time
-print(time.time_ns())
-PY
-)
-  (
-    cd "$checkout_path"
-    export CARGO_TARGET_DIR="$target_dir"
-    export CARGO_HOME="$cargo_home"
-    "$@"
-  ) >"$log_path" 2>&1
-  end_ns=$(python3 - <<'PY'
-import time
-print(time.time_ns())
-PY
-)
-  python3 - "$start_ns" "$end_ns" <<'PY'
+  # Keep both timing endpoints in one process. This preserves monotonic elapsed
+  # time without comparing clock values produced by separate Python processes.
+  python3 - "$checkout_path" "$target_dir" "$cargo_home" "$log_path" "$@" <<'PY'
+import os
+from pathlib import Path
+import subprocess
 import sys
-start_ns = int(sys.argv[1])
-end_ns = int(sys.argv[2])
-if end_ns < start_ns:
-    raise SystemExit("compile metrics clock moved backwards")
+import time
+
+checkout_path, target_dir, cargo_home, log_path, *command = sys.argv[1:]
+env = os.environ.copy()
+env["CARGO_TARGET_DIR"] = target_dir
+env["CARGO_HOME"] = cargo_home
+start_ns = time.monotonic_ns()
+with Path(log_path).open("wb") as log:
+    completed = subprocess.run(
+        command,
+        cwd=checkout_path,
+        env=env,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+end_ns = time.monotonic_ns()
+if completed.returncode != 0:
+    raise SystemExit(completed.returncode)
 print(f"{(end_ns - start_ns) / 1_000_000_000:.3f}")
 PY
 }
