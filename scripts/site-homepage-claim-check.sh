@@ -183,10 +183,15 @@ APP_JS_PATTERNS=(
 
 STYLE_PATTERNS=(
   ".skip-link"
+  ".nav a:focus-visible"
+  ".menu-button:focus-visible"
+  ".hero-overview-link:focus-visible"
   "html[data-js=\"true\"] .nav"
   "html[data-js=\"true\"] .menu-button"
   ".developer-details"
   ".boundary-banner"
+  ".proof-switch-btn,"
+  ".story-step,"
 )
 
 check_required_patterns "${ZH_ENTRY}" "${ZH_PATTERNS[@]}"

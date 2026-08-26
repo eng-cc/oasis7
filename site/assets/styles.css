@@ -121,6 +121,14 @@ a:hover {
   top: 0.82rem;
 }
 
+.skip-link:focus-visible,
+.nav a:focus-visible,
+.menu-button:focus-visible,
+.hero-overview-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -3037,6 +3045,11 @@ code {
   .card,
   .lattice-feature,
   .arch-node,
+  .nav a,
+  .lang-icon-button,
+  .download-platform-chip,
+  .proof-switch-btn,
+  .story-step,
   .timeline-item.active::before,
   .status-tag.active {
     transition: none;
