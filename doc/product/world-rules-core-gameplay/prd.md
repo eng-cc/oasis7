@@ -343,6 +343,24 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该档案的 `test_tier_required` 至少以同一 deterministic fixture 覆盖：两类输入齐套后只启动一个合法 cycle 并产生一次 bundle；其中一类 input 为 `unknown/not_applicable` 时无 sink/WIP；物流满时保持可读 blocked，容量释放后仅重评未决 edge；power 在报价后不足时原子拒绝或按声明 mode 延期；mandatory 副产物 destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自声明边界完成目标。Viewer 与 pure API 必须从同一档案读出 factory/recipe、两类输入、path/loss/capacity、cycle、bundle/branch、terminal、primary blocker、机会成本、`next_action` 和 `next_recheck`；重复提交、重连、arrival reorder、Agent retry、snapshot restore 与 replay 不复制材料消费、hold、产出、交付、稳定进度或奖励。`test_tier_full` 再扩展到三阶段、三个以上输入/输出分支、cutover、长期持久化恢复和跨窗口 lineage。
 
+#### 原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）
+
+现有合同已经禁止按材料名称推断适用、静默降级、隐藏混料和免费转换，却没有正面定义缺料、来源耗尽或批次不适用时何种“替代”可以进入玩家决策。产品必须区分三种不能互相冒充的选择：`替代来源` 是同一材料 profile 改用不同 source/ledger/path；`原料替代` 是不同材料 profile 经当前 pinned recipe 明确许可后满足同一 required input edge；`换配方` 则改变 recipe version、输入/输出因果或终端用途，属于新的配方候选。推荐、同名材料、相似品质、市场可买、Agent 判断或旧版本曾经接受都不能自动建立原料替代关系。
+
+原料替代默认禁止。只有当前 recipe/factory 专业 profile 对具体 input edge 声明有限 substitute set，且同时给出适用的规格/品质与 custody 边界、确定性的数量比例和 rounding、residual disposition、owner/ledger/path 前置，以及对 power、时长、主产物、副产物、质量、terminal 或价值分类的影响时，才可形成合法候选。缺少 ratio、provenance、适用性、owner、route、输出影响或 authority 的候选必须显示 `unknown/degraded` 或 `no_legal_substitute`，并在首个不可逆 sink 前 fail closed；不得按零损耗、等量替换、等价产出或安全可用补默认值。
+
+输入阻塞发生在下一不可逆 sink 前时，player-facing surface 应提供只读 `industrial_substitution_preview`（产品语义，不冻结 runtime 名称），比较当前 profile 真实支持的 `keep_and_wait`、`use_alternate_source`、`prepare_substitute_material`、`switch_to_legal_recipe`、`reduce_or_defer` 与 `pivot`。每个候选至少说明原/目标材料或配方身份、authority/compatibility、admissible quantity、比例/rounding/residual、额外投入与转换损耗、power/物流/buffer/terminal 占用、已 hold/已消费价值、预计 output/value class、主要风险、稳定窗口影响、`next_action` 与 `next_recheck`。首局只在当前 primary blocker 确实由输入造成时展示至多 2–3 个有权威依据的主要候选；未知兼容性不能成为虚假安全选项，也不能阻断仍合法的原配方等待/补料路径。预览不扣料、不转换、不预留、不取得队列顺位，也不推进 tick、WIP、`W` 或奖励。
+
+玩家或具备对应范围授权的 Agent 明确确认后，提交必须从新鲜权威状态重新校验 recipe/profile、批次、比例、质量/custody、owner、ledger、route/capacity、power、output/terminal 和权限，并把实际 settled substitute batch/receipt 绑定到 canonical input/join identity。旧候选中未消费的 hold 只能按原 identity 释放或保留一次；短缺、到期、延迟、retry、重连或 Agent 重规划都不能自动触发替代。合法替代只产生一次 parent-linked substitution decision/conversion receipt；实际 production receipt 才能推进工业进度，delivery/terminal settlement 仍独立决定交付、需求减少和奖励。
+
+若 pinned recipe profile 已声明该替代材料与原输入具有相同的产出因果、质量、power、时间、副产物和 terminal 语义，则 recipe version 可以保持不变，但必须建立可审计的 child decision segment，记录所选 batch、比例、rounding、residual、损耗、父 receipt 与 authority snapshot。任何上述因果语义变化都必须形成 parent-linked 新 recipe candidate/version，并从 `W=0` 开始；旧 receipt、reservation、排队资格、稳定进度或奖励不得迁移。换配方始终遵循新候选与既有 cutover 合同，不能包装成“原料替代”来保留旧进度。
+
+部分替代只在 profile 已支持 partial execution 时可用，并继续服从 canonical executable unit；residual 必须按 profile 确定地保留/结转、return、产生一次有界损耗或原子拒绝，不能由客户端取整、隐藏丢弃或进入第二个 join。首个不可逆 input sink 之后，不得追溯改写为替代；只有专业合同明确支持的 rework、conversion、return、hold 或 salvage 才能各产生一次 linked disposition。切换失败必须保留已消费、仍占用、可追回与已损失价值，并给出等待、补原料、改来源、重新报价、换配方或终止中真实可用的恢复动作，不得自动退款、瞬移、降级或免费重算产出。
+
+这项合同保持 **world-first**：替代资格和效果来自 settled batch、profile 与权威 receipt，而非客户端或 Agent 猜测；保持 **emergence-first**：玩家在稀缺原料、转换损耗、物流/能源占用、产出质量与交付时机之间形成真实取舍；保持 **persistent / auditable**：所选批次、比例、损耗、owner、parent linkage 和 decision 跨恢复/replay 延续；保持 **extensible**：未来材料 profile 可以增加有限替代关系，但不能改写既有 recipe 或 settlement 历史。产品层拥有三类选择、确认与进度边界；`game` 拥有比例/损耗带来的节奏、价值和平衡；Recipe/Factory/M4/runtime 拥有 profile、批次、join、ledger、conversion 与 receipt 真值；Viewer/pure API/Agent 负责同义表达，QA 负责确定性与反套利验证。
+
+`test_tier_required` 至少以同一 blocked-input fixture 覆盖：默认禁止的异料替代无 sink；同料换来源、profile 许可的异料替代与换配方作为不同候选展示完整机会成本；preview 保持只读；fresh commit 只结算一次；ratio/rounding/residual 守恒；同名但不适用、错误 owner/quality/route、过期 profile 与 stale preview 原子拒绝；无因果变化的替代保持 pinned recipe 并只建立一个 child decision，有因果变化或换配方建立新 candidate 且 `W=0`。重复提交、切换、重连、Agent retry、restore 与 replay 不复制 sink、conversion、receipt、产出、稳定进度或奖励。`test_tier_full` 扩展到多阶段 join、并发 root 争用同一替代批次、品质/保管漂移、in-transit/buffer 状态、跨窗口 cutover 与持久化恢复；Viewer、pure API 与 Agent 对候选、blocker、成本/损耗、lineage、`next_action` 和 `next_recheck` 保持一致，并证明不能通过廉价替代、反复切换或拆分提交制造高价值产出、刷新顺位或重复成长。
+
 #### 配方生命周期、版本兼容与受控退役
 
 配方不是可被客户端或 Agent 就地修改的库存标签，而是具有来源、作用域和版本身份的受治理工业能力。配方生命周期使用六个且仅六个产品状态：`pending_validation`（待验证）、`validated_pending_admission`（已验证待准入）、`active`（已生效）、`restricted`（受限生效）、`retiring`（退役中）和 `retired`（已退役）。只有 `active` 或在声明作用域内的 `restricted` 版本，且当前授权、工厂能力、原材料规格/品质、物流路径、电力与终端前置均满足时，才能成为新的生产候选；提案、模拟结果、同名配方推荐或“已下载”状态都不产生预留、输入 sink、产出、稳定窗口或交付资格。
