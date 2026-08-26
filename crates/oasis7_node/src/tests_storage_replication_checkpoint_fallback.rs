@@ -635,6 +635,168 @@ fn fresh_observer_fetch_head_lower_checkpoint_without_lineage_fails_closed() {
 }
 
 #[test]
+fn fresh_observer_fetch_head_lower_checkpoint_without_lineage_fails_closed_with_network_cursor()
+{
+    let _nonce_lock = lock_checkpoint_probe_nonce();
+    let _probe_nonce = CheckpointProbeNonceGuard::install();
+    let world_id = "world-fetch-head-only-lower-checkpoint-network-cursor";
+    let dir_a = temp_dir("fetch-head-only-lower-network-cursor-a");
+    let dir_b = temp_dir("fetch-head-only-lower-network-cursor-b");
+    let (_, public_key_a) = deterministic_keypair_hex(200);
+    let (_, public_key_b) = deterministic_keypair_hex(201);
+    let advertised_height = 784;
+    let checkpoint_height = 768;
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 200)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 200)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 201)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a.clone()])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("source replication runtime");
+    replication_a
+        .build_local_commit_message(
+            "node-a",
+            world_id,
+            7_784,
+            &committed_decision(1),
+            Some("peer-execution-block-1"),
+            Some("peer-execution-state-1"),
+        )
+        .expect("build height-one commit")
+        .expect("height-one commit");
+    replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            7_784,
+            &committed_decision(checkpoint_height),
+            Some("execution-block-768"),
+            Some("execution-state-768"),
+            Some(checkpoint_bundle(
+                checkpoint_height,
+                "execution-block-768",
+                "execution-state-768",
+            )),
+        )
+        .expect("build retained checkpoint without lineage")
+        .expect("retained checkpoint without lineage");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FetchHeadOnlyCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        advertised_head: super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: advertised_height,
+                block_hash: format!("block-{advertised_height}"),
+                state_root: format!("execution-state-{advertised_height}"),
+                timestamp_ms: 7_784,
+            }),
+        },
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register checkpoint provider");
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network));
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, true, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("fresh observer replication runtime");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+    // Keep local execution clean while modelling a previously observed network cursor above one.
+    engine_b.network_committed_height = 64;
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(engine_b.last_execution_height, 0);
+    assert!(engine_b.peer_heads.is_empty());
+    let mut execution_hook = BootstrapBeforeIncrementalHook {
+        installed: Vec::new(),
+        incremental_commits: Vec::new(),
+        rollback_heights: Vec::new(),
+    };
+
+    let result = engine_b.sync_missing_replication_commits(
+        &endpoint_b,
+        "node-b",
+        world_id,
+        Some(&mut replication_b),
+        Some(&mut execution_hook),
+    );
+    assert!(
+        result.is_err(),
+        "a lower FetchHead candidate without C-to-H lineage must remain fail-closed above cursor one: result={result:?} installed={:?} committed={} persisted={} executed={}",
+        execution_hook.installed,
+        engine_b.committed_height,
+        engine_b.replication_persisted_height,
+        engine_b.last_execution_height
+    );
+    let error = result.expect_err(
+        "a lower FetchHead candidate without C-to-H lineage must remain fail-closed above cursor one",
+    );
+    assert!(
+        error.to_string().contains("execution hash validation failed"),
+        "height-one mismatch must remain the terminal failure: {error}"
+    );
+    assert!(
+        execution_hook.installed.is_empty(),
+        "no lower checkpoint may install without lineage: {:?}",
+        execution_hook.installed
+    );
+    assert_eq!(engine_b.committed_height, 0);
+    assert_eq!(engine_b.replication_persisted_height, 0);
+    assert_eq!(engine_b.last_execution_height, 0);
+    assert_eq!(engine_b.network_committed_height, 64);
+    assert!(
+        replication_b
+            .load_commit_message_by_height(world_id, checkpoint_height)
+            .expect("inspect observer checkpoint persistence")
+            .is_none(),
+        "a rejected lower checkpoint must not be persisted"
+    );
+    assert!(
+        !dir_b
+            .join("checkpoint-verification")
+            .join(format!("{checkpoint_height}.json"))
+            .exists(),
+        "a rejected lower checkpoint must not emit a verification receipt"
+    );
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn fresh_observer_fetch_head_refreshes_after_height_one_execution_mismatch() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = CheckpointProbeNonceGuard::install();

@@ -567,8 +567,8 @@ impl PosNodeEngine {
         }
         if fresh_execution_bootstrap && !expected_head_matches_candidate {
             let discovered_head_lineage = self.checkpoint_bootstrap_enabled
-                && execution_hook.is_some()
-                && self.network_committed_height <= 1
+                && self.require_execution_on_commit
+                && self.peer_heads.is_empty()
                 && expected_checkpoint_head
                     .is_some_and(|expected_head| checkpoint_height < expected_head.height);
             if payload.lineage_envelope.is_none()
