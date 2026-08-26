@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 use super::events::DomainEvent;
-use super::types::WorldTime;
+use super::types::{ActionId, WorldTime};
 
 /// The authoritative coarse-grained activity state exposed for an agent.
 ///
@@ -26,6 +26,16 @@ pub enum AgentActivityStatus {
 pub struct AgentActivityV1 {
     pub status: AgentActivityStatus,
     pub updated_at: WorldTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<ActionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_summary: Option<String>,
 }
 
 impl AgentActivityV1 {
@@ -33,6 +43,47 @@ impl AgentActivityV1 {
         Self {
             status: AgentActivityStatus::Idle,
             updated_at,
+            operation_kind: None,
+            operation_id: None,
+            target_id: None,
+            reason_code: None,
+            reason_summary: None,
+        }
+    }
+
+    pub fn executing(
+        operation_kind: impl Into<String>,
+        operation_id: ActionId,
+        target_id: impl Into<String>,
+        updated_at: WorldTime,
+    ) -> Self {
+        Self {
+            status: AgentActivityStatus::Executing,
+            updated_at,
+            operation_kind: Some(operation_kind.into()),
+            operation_id: Some(operation_id),
+            target_id: Some(target_id.into()),
+            reason_code: None,
+            reason_summary: None,
+        }
+    }
+
+    pub fn blocked(
+        operation_kind: impl Into<String>,
+        operation_id: ActionId,
+        target_id: impl Into<String>,
+        reason_code: impl Into<String>,
+        reason_summary: impl Into<String>,
+        updated_at: WorldTime,
+    ) -> Self {
+        Self {
+            status: AgentActivityStatus::Blocked,
+            updated_at,
+            operation_kind: Some(operation_kind.into()),
+            operation_id: Some(operation_id),
+            target_id: Some(target_id.into()),
+            reason_code: Some(reason_code.into()),
+            reason_summary: Some(reason_summary.into()),
         }
     }
 }
