@@ -4,6 +4,11 @@ use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use super::capability_authorization::{
+    CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
+    CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
+    CapabilityRevocationState,
+};
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -95,6 +100,24 @@ pub struct Snapshot {
     #[serde(default)]
     pub module_tick_routing_metrics: ModuleTickRoutingDeterministicSnapshot,
     pub capabilities: BTreeMap<String, CapabilityGrant>,
+    /// Versioned trusted-module authorization state.  All fields default to
+    /// empty for snapshots written before CapabilityGrantV2 existed.
+    #[serde(default)]
+    pub capability_grants_v2: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub capability_revocation_state: CapabilityRevocationState,
+    #[serde(default)]
+    pub capability_nonce_records: BTreeMap<String, CapabilityAuthorizationNonceRecord>,
+    #[serde(default)]
+    pub capability_authorization_receipts: BTreeMap<String, CapabilityAuthorizationAuditReceipt>,
+    #[serde(default)]
+    pub capability_invocation_contexts: BTreeMap<String, CapabilityInvocationContext>,
+    #[serde(default)]
+    pub capability_authorization_root: String,
+    #[serde(default)]
+    pub capability_budget_accounts: BTreeMap<String, CapabilityBudgetAccount>,
+    #[serde(default)]
+    pub capability_effect_receipt_links: BTreeMap<String, CapabilityEffectReceiptLink>,
     pub policies: PolicySet,
     #[serde(deserialize_with = "deserialize_btreemap_u64_keys")]
     pub proposals: BTreeMap<ProposalId, Proposal>,

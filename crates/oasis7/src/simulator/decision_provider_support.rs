@@ -102,6 +102,8 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
             agent_profile: None,
             fixture_id: Some("golden.move.visible_location.v1".to_string()),
             replay_id: None,
+            capability_catalog: None,
+            capability_invocation_context: None,
             timeout_budget_ms: DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS,
         },
         expected_decision: ProviderDecision::Act {

@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::net::TcpListener;
-use std::path::PathBuf;
 use std::process::Command;
 
 use sha2::{Digest, Sha256};
@@ -66,6 +65,8 @@ use self::auth_support::{
 };
 #[path = "oasis7_provider_local_bridge/agent_decision.rs"]
 mod agent_decision;
+#[path = "oasis7_provider_local_bridge/options.rs"]
+mod options;
 use self::agent_decision::{
     apply_profile_guardrails, build_decision_prompt, build_gateway_agent_params, build_session_key,
     deterministic_mock_decision, parse_model_decision, provider_decision_label, summarize_text,
@@ -79,6 +80,7 @@ use self::letai_direct::{
     should_auto_topup_letai_error,
 };
 use self::letai_direct::{error_diagnostics_json, invoke_rust_direct_letai};
+use self::options::default_gateway_health_url;
 use self::support::{
     agent_output_from_json, local_session_id_from_session_key, should_fallback_to_local_agent,
 };
@@ -198,6 +200,8 @@ impl ProviderState {
             "feedback".to_string(),
             "agent_chat".to_string(),
             "loopback_only".to_string(),
+            "typed_module_command_v2".to_string(),
+            "subject_bound_capability_catalog".to_string(),
         ];
         match self.options.mode {
             ProviderMode::Real => {
@@ -485,6 +489,9 @@ impl ProviderState {
                     let (decision, module_command) = match decision {
                         ProviderDecision::ModuleCommand { module_command } => {
                             (ProviderDecision::Wait, Some(module_command))
+                        }
+                        ProviderDecision::ModuleCommandResponse { response } => {
+                            (ProviderDecision::ModuleCommandResponse { response }, None)
                         }
                         decision => (decision, None),
                     };
@@ -1181,26 +1188,4 @@ fn parse_provider_backend(raw: &str) -> Result<ProviderBackend, String> {
             "unsupported provider backend `{other}`; expected rust-direct-letai or legacy-cli"
         )),
     }
-}
-
-fn default_gateway_health_url() -> String {
-    let config_path = env::var("HOME").ok().map(PathBuf::from).map(|home| {
-        let dir = [".open", "claw"].concat();
-        let file = ["open", "claw", ".json"].concat();
-        home.join(dir).join(file)
-    });
-    if let Some(config_path) = config_path {
-        if let Ok(raw) = fs::read_to_string(config_path) {
-            if let Ok(value) = serde_json::from_str::<Value>(raw.as_str()) {
-                if let Some(port) = value
-                    .get("gateway")
-                    .and_then(|gateway| gateway.get("port"))
-                    .and_then(Value::as_u64)
-                {
-                    return format!("http://127.0.0.1:{port}/health");
-                }
-            }
-        }
-    }
-    "http://127.0.0.1:18789/health".to_string()
 }

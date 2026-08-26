@@ -303,17 +303,7 @@ impl World {
         manifest: &ModuleManifest,
     ) -> Result<(), WorldError> {
         for cap in &manifest.required_caps {
-            let grant =
-                self.capabilities
-                    .get(cap)
-                    .ok_or_else(|| WorldError::ModuleChangeInvalid {
-                        reason: format!("module cap missing {cap}"),
-                    })?;
-            if grant.is_expired(self.state.time) {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("module cap expired {cap}"),
-                });
-            }
+            self.validate_module_required_capability(cap)?;
         }
         Ok(())
     }
@@ -978,7 +968,7 @@ impl World {
         Ok(())
     }
 
-    fn call_module_raw(
+    pub(super) fn call_module_raw(
         &mut self,
         module_id: &str,
         trace_id: &str,

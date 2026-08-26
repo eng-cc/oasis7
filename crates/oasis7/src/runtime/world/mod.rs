@@ -11,6 +11,7 @@ mod body;
 mod bootstrap_economy;
 mod bootstrap_gameplay;
 mod bootstrap_power;
+mod capability_authorization;
 mod economy;
 mod effects;
 mod event_processing;
@@ -61,12 +62,18 @@ pub use module_tick_runtime::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use oasis7_wasm_router::PreparedSubscription;
 
 use super::CrisisStatus;
+use super::capability_authorization::{
+    CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
+    CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
+    CapabilityRevocationState,
+};
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::events::{ActionEnvelope, MaterialTransitPriority};
@@ -298,6 +305,27 @@ pub struct World {
     #[serde(default)]
     module_tick_routing_metrics: ModuleTickRoutingMetrics,
     capabilities: BTreeMap<String, CapabilityGrant>,
+    /// Immutable v2 grant bodies keyed by stable grant id.  The ABI owns the
+    /// typed wire DTO; JSON here keeps snapshots forward-compatible with ABI
+    /// additions while retaining the exact values used for authorization.
+    #[serde(default)]
+    capability_grants_v2: BTreeMap<String, JsonValue>,
+    #[serde(default)]
+    capability_revocation_state: CapabilityRevocationState,
+    #[serde(default)]
+    capability_nonce_records: BTreeMap<String, CapabilityAuthorizationNonceRecord>,
+    #[serde(default)]
+    capability_authorization_receipts: BTreeMap<String, CapabilityAuthorizationAuditReceipt>,
+    #[serde(default)]
+    capability_invocation_contexts: BTreeMap<String, CapabilityInvocationContext>,
+    #[serde(default)]
+    capability_authorization_root: String,
+    #[serde(default)]
+    capability_budget_accounts: BTreeMap<String, CapabilityBudgetAccount>,
+    /// Pending provider receipt association for module effects.  This remains
+    /// durable across restart and is resolved only by an actual receipt.
+    #[serde(default)]
+    capability_effect_receipt_links: BTreeMap<String, CapabilityEffectReceiptLink>,
     policies: PolicySet,
     proposals: BTreeMap<ProposalId, Proposal>,
     scheduler_cursor: Option<String>,
@@ -399,7 +427,7 @@ impl World {
                     .or_insert(public_key_hex);
             }
         }
-        Self {
+        let mut world = Self {
             manifest: Manifest::default(),
             module_registry: ModuleRegistry::default(),
             module_artifacts: BTreeSet::new(),
@@ -426,6 +454,14 @@ impl World {
             module_tick_schedule: BTreeMap::new(),
             module_tick_routing_metrics: ModuleTickRoutingMetrics::default(),
             capabilities: BTreeMap::new(),
+            capability_grants_v2: BTreeMap::new(),
+            capability_revocation_state: CapabilityRevocationState::default(),
+            capability_nonce_records: BTreeMap::new(),
+            capability_authorization_receipts: BTreeMap::new(),
+            capability_invocation_contexts: BTreeMap::new(),
+            capability_authorization_root: String::new(),
+            capability_budget_accounts: BTreeMap::new(),
+            capability_effect_receipt_links: BTreeMap::new(),
             policies: PolicySet::default(),
             proposals: BTreeMap::new(),
             scheduler_cursor: None,
@@ -447,7 +483,11 @@ impl World {
             rollback_authority_registry: super::RollbackAuthorityRegistry::default(),
             consumed_rollback_nonces: BTreeSet::new(),
             rollback_nonce_outcomes: BTreeMap::new(),
-        }
+        };
+        world
+            .refresh_capability_authorization_root()
+            .expect("empty capability authorization root is serializable");
+        world
     }
 
     pub fn with_release_security_policy(mut self, policy: ReleaseSecurityPolicy) -> Self {
@@ -493,6 +533,44 @@ impl World {
 
     pub fn capabilities(&self) -> &BTreeMap<String, CapabilityGrant> {
         &self.capabilities
+    }
+
+    pub fn capability_grants_v2(&self) -> &BTreeMap<String, JsonValue> {
+        &self.capability_grants_v2
+    }
+
+    pub fn capability_revocation_state(&self) -> &CapabilityRevocationState {
+        &self.capability_revocation_state
+    }
+
+    pub fn capability_nonce_records(
+        &self,
+    ) -> &BTreeMap<String, CapabilityAuthorizationNonceRecord> {
+        &self.capability_nonce_records
+    }
+
+    pub fn capability_authorization_receipts(
+        &self,
+    ) -> &BTreeMap<String, CapabilityAuthorizationAuditReceipt> {
+        &self.capability_authorization_receipts
+    }
+
+    pub fn capability_invocation_contexts(&self) -> &BTreeMap<String, CapabilityInvocationContext> {
+        &self.capability_invocation_contexts
+    }
+
+    pub fn capability_authorization_root(&self) -> &str {
+        &self.capability_authorization_root
+    }
+
+    pub fn capability_budget_accounts(&self) -> &BTreeMap<String, CapabilityBudgetAccount> {
+        &self.capability_budget_accounts
+    }
+
+    pub fn capability_effect_receipt_links(
+        &self,
+    ) -> &BTreeMap<String, CapabilityEffectReceiptLink> {
+        &self.capability_effect_receipt_links
     }
 
     pub fn proposals(&self) -> &BTreeMap<ProposalId, Proposal> {

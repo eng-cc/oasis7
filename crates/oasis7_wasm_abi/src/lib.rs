@@ -3,18 +3,16 @@ use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::sync::Arc;
-
+mod capability_v2;
 mod economy;
-
+pub use capability_v2::*;
 pub use economy::*;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleKind {
     Reducer,
     Pure,
 }
-
 impl ModuleKind {
     pub fn entrypoint(&self) -> &'static str {
         match self {
@@ -23,7 +21,6 @@ impl ModuleKind {
         }
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModuleLimits {
     #[serde(default)]
@@ -39,13 +36,11 @@ pub struct ModuleLimits {
     #[serde(default)]
     pub max_emits: u32,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleArtifact {
     pub wasm_hash: String,
     pub bytes: Arc<[u8]>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModuleArtifactIdentity {
     pub source_hash: String,
@@ -54,11 +49,9 @@ pub struct ModuleArtifactIdentity {
     pub signature_scheme: String,
     pub artifact_signature: String,
 }
-
 impl ModuleArtifactIdentity {
     pub const SIGNATURE_SCHEME_ED25519: &'static str = "ed25519";
     pub const SIGNATURE_PREFIX_ED25519_V1: &'static str = "modsig:ed25519:v1:";
-
     pub fn is_complete(&self) -> bool {
         !self.source_hash.trim().is_empty()
             && !self.build_manifest_hash.trim().is_empty()
@@ -66,7 +59,6 @@ impl ModuleArtifactIdentity {
             && !self.signature_scheme.trim().is_empty()
             && !self.artifact_signature.trim().is_empty()
     }
-
     pub fn signing_payload_v1(
         wasm_hash: &str,
         source_hash: &str,
@@ -78,19 +70,16 @@ impl ModuleArtifactIdentity {
         )
         .into_bytes()
     }
-
     pub fn expected_signature_prefix(&self) -> Option<&'static str> {
         match self.signature_scheme.as_str() {
             Self::SIGNATURE_SCHEME_ED25519 => Some(Self::SIGNATURE_PREFIX_ED25519_V1),
             _ => None,
         }
     }
-
     pub fn has_unsigned_prefix(&self) -> bool {
         self.artifact_signature.starts_with("unsigned:")
     }
 }
-
 #[derive(Debug, Clone)]
 pub struct BoundedLruCache<V> {
     capacity: usize,
@@ -99,7 +88,6 @@ pub struct BoundedLruCache<V> {
     keys_by_recent: BTreeMap<u128, String>,
     next_recent: u128,
 }
-
 impl<V: PartialEq> PartialEq for BoundedLruCache<V> {
     fn eq(&self, other: &Self) -> bool {
         self.capacity == other.capacity
@@ -107,9 +95,7 @@ impl<V: PartialEq> PartialEq for BoundedLruCache<V> {
             && self.lru_keys().eq(other.lru_keys())
     }
 }
-
 impl<V: Eq> Eq for BoundedLruCache<V> {}
-
 impl<V> BoundedLruCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -120,34 +106,27 @@ impl<V> BoundedLruCache<V> {
             next_recent: 0,
         }
     }
-
     pub fn capacity(&self) -> usize {
         self.capacity
     }
-
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
-
     pub fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity;
         self.prune();
     }
-
     pub fn insert(&mut self, key: String, value: V) {
         self.cache.insert(key.clone(), value);
         self.touch(&key);
         self.prune();
     }
-
     pub fn lru_keys(&self) -> impl Iterator<Item = &str> {
         self.keys_by_recent.values().map(String::as_str)
     }
-
     fn touch(&mut self, key: &str) {
         if !self.cache.contains_key(key) {
             return;
@@ -159,7 +138,6 @@ impl<V> BoundedLruCache<V> {
         }
         self.keys_by_recent.insert(recent, key.to_string());
     }
-
     fn prune(&mut self) {
         if self.capacity == 0 {
             self.cache.clear();
@@ -177,7 +155,6 @@ impl<V> BoundedLruCache<V> {
             }
         }
     }
-
     pub fn get_cloned(&mut self, key: &str) -> Option<V>
     where
         V: Clone,
@@ -187,14 +164,12 @@ impl<V> BoundedLruCache<V> {
         Some(value)
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoundedFifoCache<V> {
     capacity: usize,
     cache: BTreeMap<String, V>,
     insertion_order: VecDeque<String>,
 }
-
 impl<V> BoundedFifoCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -203,27 +178,22 @@ impl<V> BoundedFifoCache<V> {
             insertion_order: VecDeque::new(),
         }
     }
-
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
-
     pub fn insert(&mut self, key: String, value: V) {
         if self.capacity == 0 {
             self.cache.clear();
             self.insertion_order.clear();
             return;
         }
-
         if let Some(entry) = self.cache.get_mut(&key) {
             *entry = value;
             return;
         }
-
         while self.cache.len() >= self.capacity {
             if let Some(evicted) = self.insertion_order.pop_front() {
                 self.cache.remove(&evicted);

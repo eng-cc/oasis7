@@ -555,6 +555,9 @@ fn parse_execute_until_decision(
                 ),
             }),
         ),
+        AgentDecision::ModuleCommand { .. } => {
+            return Err("execute_until cannot contain a trusted module command".to_string());
+        }
     };
 
     let until_conditions = parse_execute_until_conditions(&payload.until)?;

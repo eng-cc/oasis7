@@ -782,6 +782,14 @@ impl World {
             module_tick_schedule: self.module_tick_schedule.clone(),
             module_tick_routing_metrics: self.module_tick_routing_metrics.deterministic_snapshot(),
             capabilities: self.capabilities.clone(),
+            capability_grants_v2: self.capability_grants_v2.clone(),
+            capability_revocation_state: self.capability_revocation_state.clone(),
+            capability_nonce_records: self.capability_nonce_records.clone(),
+            capability_authorization_receipts: self.capability_authorization_receipts.clone(),
+            capability_invocation_contexts: self.capability_invocation_contexts.clone(),
+            capability_authorization_root: self.capability_authorization_root.clone(),
+            capability_budget_accounts: self.capability_budget_accounts.clone(),
+            capability_effect_receipt_links: self.capability_effect_receipt_links.clone(),
             policies: self.policies.clone(),
             proposals: self.proposals.clone(),
             scheduler_cursor: self.scheduler_cursor.clone(),
@@ -1059,6 +1067,19 @@ impl World {
             snapshot.module_tick_routing_metrics,
         );
         world.capabilities = snapshot.capabilities;
+        world.capability_grants_v2 = snapshot.capability_grants_v2;
+        world.capability_revocation_state = snapshot.capability_revocation_state;
+        world.capability_nonce_records = snapshot.capability_nonce_records;
+        world.capability_authorization_receipts = snapshot.capability_authorization_receipts;
+        world.capability_invocation_contexts = snapshot.capability_invocation_contexts;
+        world.capability_authorization_root = snapshot.capability_authorization_root;
+        world.capability_budget_accounts = snapshot.capability_budget_accounts;
+        world.capability_effect_receipt_links = snapshot.capability_effect_receipt_links;
+        if world.capability_authorization_root.is_empty() {
+            world.refresh_capability_authorization_root()?;
+        } else {
+            world.verify_capability_authorization_root()?;
+        }
         world.policies = snapshot.policies;
         world.proposals = snapshot.proposals;
         world.scheduler_cursor = snapshot.scheduler_cursor;

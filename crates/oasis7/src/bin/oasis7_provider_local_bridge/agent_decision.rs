@@ -2,6 +2,7 @@ use oasis7::simulator::{
     Action, ActionCatalogEntry, AgentQuery, DecisionRequest, MicroDepotQuoteRequest,
     ProviderDecision, ProviderModuleCommand,
 };
+use oasis7_wasm_abi::AgentCommandResponse;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -70,6 +71,7 @@ pub(super) fn provider_decision_label(decision: &ProviderDecision) -> &'static s
         }
         ProviderDecision::Query { .. } => "query",
         ProviderDecision::ModuleCommand { .. } => "module_command",
+        ProviderDecision::ModuleCommandResponse { .. } => "module_command",
     }
 }
 
@@ -163,6 +165,11 @@ pub(super) fn build_decision_prompt(
         "recent_feedback": recent_feedback,
         "action_catalog": action_catalog,
         "module_command_catalog": module_command_catalog,
+        // These are host-produced, subject-bound values.  A provider may
+        // select an entry and echo the invocation fields, but cannot change
+        // them or mint a grant.
+        "capability_catalog": request.capability_catalog,
+        "capability_invocation_context": request.capability_invocation_context,
     });
     format!(
         concat!(
@@ -182,6 +189,7 @@ pub(super) fn build_decision_prompt(
             "{{\"decision\":\"act\",\"action_ref\":\"simple_interact\",\"args\":{{\"target_kind\":\"agent|location|object\",\"target_id\":\"<id>\",\"interaction\":\"<verb>\"}}}}\n",
             "{{\"decision\":\"query\",\"action_ref\":\"quote_micro_depot_install\",\"args\":<serialized InstallMicroDepot action>}}\n",
             "{{\"decision\":\"module_command\",\"module_command\":{{\"module_id\":\"<module id>\",\"module_version\":\"<version>\",\"namespace\":\"<namespace>\",\"name\":\"<name>\",\"schema_version\":<u32>,\"schema_hash\":\"<sha256>\",\"payload\":<byte array>}}}}\n",
+            "For a trusted module command, return decision=module_command with agent_command_response containing the exact response_nonce, subject, presenter, audience, catalog_snapshot_id, selected_entry and envelope from capability_invocation_context/catalog. Never include eligible_grant_ids in selected_entry.\n",
             "Profile guidance:\n{}\n",
             "Do not invent ids. Keep messages short. Context JSON follows:\n{}"
         ),
@@ -290,6 +298,8 @@ struct ModelDecisionEnvelope {
     args: Option<Value>,
     #[serde(default)]
     module_command: Option<ProviderModuleCommand>,
+    #[serde(default)]
+    agent_command_response: Option<AgentCommandResponse>,
 }
 
 pub(super) fn parse_model_decision(
@@ -375,10 +385,21 @@ pub(super) fn parse_model_decision(
                 query: build_query_from_args(agent_id, query_ref, &args)?,
             }
         }
-        "module_command" => ProviderDecision::ModuleCommand {
-            module_command: envelope
-                .module_command
-                .ok_or_else(|| "module_command requires module_command object".to_string())?,
+        "module_command" => {
+            if let Some(response) = envelope.agent_command_response {
+                ProviderDecision::ModuleCommandResponse { response }
+            } else {
+                ProviderDecision::ModuleCommand {
+                    module_command: envelope.module_command.ok_or_else(|| {
+                        "module_command requires module_command object".to_string()
+                    })?,
+                }
+            }
+        }
+        "module_command_response" => ProviderDecision::ModuleCommandResponse {
+            response: envelope.agent_command_response.ok_or_else(|| {
+                "module_command_response requires agent_command_response object".to_string()
+            })?,
         },
         other => return Err(format!("unsupported decision `{other}`")),
     };
@@ -515,6 +536,9 @@ pub(super) fn apply_profile_guardrails(
         }
         ProviderDecision::ModuleCommand { module_command } => {
             (ProviderDecision::ModuleCommand { module_command }, None)
+        }
+        ProviderDecision::ModuleCommandResponse { response } => {
+            (ProviderDecision::ModuleCommandResponse { response }, None)
         }
     }
 }

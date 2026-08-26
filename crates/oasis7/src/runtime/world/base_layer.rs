@@ -213,17 +213,10 @@ impl World {
         self.validate_module_limits(&module.module_id, &module.limits)?;
 
         for cap in &module.required_caps {
-            let grant =
-                self.capabilities
-                    .get(cap)
-                    .ok_or_else(|| WorldError::ModuleChangeInvalid {
-                        reason: format!("module cap missing {cap}"),
-                    })?;
-            if grant.is_expired(self.state.time) {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("module cap expired {cap}"),
-                });
-            }
+            self.validate_module_required_capability(cap)
+                .map_err(|error| WorldError::ModuleChangeInvalid {
+                    reason: format!("module cap admission failed {cap}: {error:?}"),
+                })?;
         }
 
         Ok(())

@@ -856,6 +856,7 @@ fn action_ref_from_decision(decision: &AgentDecision) -> Option<String> {
         AgentDecision::WaitTicks(_) => Some("wait_ticks".to_string()),
         AgentDecision::Act(action) => Some(action_ref_from_action(action).to_string()),
         AgentDecision::Query(_) => Some("evaluate_micro_depot_quote".to_string()),
+        AgentDecision::ModuleCommand { .. } => Some("module_command".to_string()),
     }
 }
 
@@ -875,6 +876,7 @@ fn decision_label(decision: &AgentDecision) -> String {
         AgentDecision::WaitTicks(ticks) => format!("wait_ticks:{ticks}"),
         AgentDecision::Act(action) => format!("act:{}", action_ref_from_action(action)),
         AgentDecision::Query(_) => "query:evaluate_micro_depot_quote".to_string(),
+        AgentDecision::ModuleCommand { .. } => "module_command".to_string(),
     }
 }
 

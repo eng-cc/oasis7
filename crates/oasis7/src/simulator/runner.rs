@@ -503,6 +503,14 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     decision_trace,
                 })
             }
+            AgentDecision::ModuleCommand { response } => Some(AgentTickResult {
+                agent_id,
+                decision: AgentDecision::ModuleCommand { response },
+                action_result: None,
+                query_result: None,
+                skipped_reason: None,
+                decision_trace,
+            }),
             AgentDecision::Act(action) => {
                 if let Some(agent) = self.agents.get_mut(&agent_id) {
                     agent.action_count += 1;
@@ -630,6 +638,14 @@ impl<B: AgentBehavior> AgentRunner<B> {
                     decision_trace,
                 })
             }
+            AgentDecision::ModuleCommand { response } => Some(AgentTickResult {
+                agent_id,
+                decision: AgentDecision::ModuleCommand { response },
+                action_result: None,
+                query_result: None,
+                skipped_reason: None,
+                decision_trace,
+            }),
             AgentDecision::Act(action) => {
                 if let Some(agent) = self.agents.get_mut(&agent_id) {
                     agent.action_count += 1;

@@ -17,6 +17,8 @@ use std::thread;
 mod tests_agent_chat;
 #[path = "tests_newapi_bridge_state.rs"]
 mod tests_newapi_bridge_state;
+#[path = "tests_options.rs"]
+mod tests_options;
 #[path = "tests_query_parsing.rs"]
 mod tests_query_parsing;
 
@@ -991,46 +993,6 @@ fn maybe_auto_topup_letai_user_reports_missing_amount_as_skipped() {
 }
 
 #[test]
-fn parse_options_rejects_short_auth_token() {
-    let err = parse_options(["--auth-token", "too-short"].into_iter()).expect_err("short token");
-    assert!(err.contains("at least 24 characters"));
-}
-
-#[test]
-fn parse_options_rejects_auth_route_map_with_short_tokens() {
-    let auth_map_path = std::env::temp_dir().join(format!(
-        "oasis7-provider-bridge-auth-map-{}.json",
-        std::process::id()
-    ));
-    fs::write(
-        auth_map_path.as_path(),
-        serde_json::to_vec(&serde_json::json!({
-            "too-short": "alice"
-        }))
-        .expect("encode auth map"),
-    )
-    .expect("write auth map");
-    let err = parse_options(
-        [
-            "--auth-route-map",
-            auth_map_path.to_str().expect("utf8 path"),
-        ]
-        .into_iter(),
-    )
-    .expect_err("short auth route token should fail");
-    assert!(err.contains("did not contain any usable entries"));
-    let _ = fs::remove_file(auth_map_path);
-}
-
-#[test]
-fn route_label_env_clears_label_when_absent() {
-    assert_eq!(
-        route_label_env(None),
-        vec![("OASIS7_REMOTE_LLM_ROUTE_LABEL", String::new())]
-    );
-}
-
-#[test]
 fn resolve_newapi_bridge_route_label_requires_active_binding() {
     let _guard = newapi_bridge_state_env_guard();
     let state_path = std::env::temp_dir().join(format!(
@@ -1216,6 +1178,8 @@ fn sample_request() -> DecisionRequest {
         agent_profile: Some(DEFAULT_PROVIDER_AGENT_PROFILE.to_string()),
         fixture_id: None,
         replay_id: None,
+        capability_catalog: None,
+        capability_invocation_context: None,
         timeout_budget_ms: 7000,
     }
 }

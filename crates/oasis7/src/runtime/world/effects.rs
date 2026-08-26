@@ -86,7 +86,17 @@ impl World {
         Ok(intent)
     }
 
-    pub fn ingest_receipt(
+    pub fn ingest_receipt(&mut self, receipt: EffectReceipt) -> Result<WorldEventId, WorldError> {
+        // Receipt ingestion also closes the durable authorization link for a
+        // trusted command effect.  Stage both the effect acknowledgement and
+        // the audit update so a malformed receipt cannot leave half a commit.
+        let mut staged = self.clone();
+        let event_id = staged.ingest_receipt_staged(receipt)?;
+        *self = staged;
+        Ok(event_id)
+    }
+
+    fn ingest_receipt_staged(
         &mut self,
         mut receipt: EffectReceipt,
     ) -> Result<WorldEventId, WorldError> {
@@ -102,12 +112,31 @@ impl World {
         }
 
         self.finalize_receipt_signature(&mut receipt)?;
-        self.append_event(
+        let event_id = self.append_event(
             WorldEventBody::ReceiptAppended(receipt.clone()),
             Some(CausedBy::Effect {
-                intent_id: receipt.intent_id,
+                intent_id: receipt.intent_id.clone(),
             }),
-        )
+        )?;
+
+        if let Some(link) = self
+            .capability_effect_receipt_links
+            .remove(&receipt.intent_id)
+        {
+            let audit = self
+                .capability_authorization_receipts
+                .get_mut(&link.authorization_receipt_id)
+                .ok_or_else(|| WorldError::CapabilityAuthorizationDenied {
+                    reason: "effect receipt authorization link has no audit receipt".to_string(),
+                })?;
+            if audit.committed_effect_receipt_id.is_none() {
+                // `intent_id` is the stable identifier of the actual
+                // EffectReceipt in the existing effect protocol.
+                audit.committed_effect_receipt_id = Some(receipt.intent_id);
+            }
+            self.refresh_capability_authorization_root()?;
+        }
+        Ok(event_id)
     }
 
     fn finalize_receipt_signature(&self, receipt: &mut EffectReceipt) -> Result<(), WorldError> {
