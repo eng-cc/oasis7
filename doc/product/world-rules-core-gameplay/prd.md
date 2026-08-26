@@ -132,7 +132,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 #### 原材料 source/deposit 的发现、争用、枯竭与补充
 
-原材料流水线不能从一个未解释的“可采资源”数字直接开始。任何可进入采集/补充决策的 source/deposit 都必须保留稳定身份，并把**观察到来源**、**当前可提交的采集机会**与**receipt 支持的实际采出**分开。地图提示、材质倾向、Agent 推荐或旧观察只能帮助发现候选，不能单独证明当前可采量、访问资格、优先级或未来补充；专业 profile 必须声明该来源适用的发现/可见范围、数量与质量事实的新鲜度、访问或作用域边界，以及 depletion/replenishment 是否存在。未知、过期或互相冲突的事实显示 `unknown/stale` 或等价产品语义，不能按零竞争、无限库存或可直接采集处理。现有 chunk/fragment 生成、预算、首次采集与 `FragmentsReplenished` 的场景 authority 继续由 [`PRD-WORLD_SIMULATOR-020`](../../world-simulator/scenario/chunked-fragment-generation.prd.md) 拥有；本节只冻结跨 source profile 共用的产品决策与反滥用边界，不另建资源生成或补充真值。
+原材料流水线不能从一个未解释的“可采资源”数字直接开始。任何可进入采集/补充决策的 source/deposit 都必须保留稳定身份，并把**观察到来源**、**当前可提交的采集机会**与**receipt 支持的实际采出**分开。地图提示、材质倾向、Agent 推荐或旧观察只能帮助发现候选，不能单独证明当前可采量、访问资格、优先级或未来补充；专业 profile 必须声明该来源适用的发现/可见范围、数量与质量事实的新鲜度、访问或作用域边界，以及 depletion/replenishment 是否存在。未知、过期或互相冲突的事实显示 `unknown/stale` 或等价产品语义，不能按零竞争、无限库存或可直接采集处理。现有 chunk/fragment 生成、预算、首次采集与 `FragmentsReplenished` 的场景 authority 继续由 [`chunked fragment generation`](../../world-simulator/scenario/chunked-fragment-generation.prd.md) 专题拥有；本节只冻结跨 source profile 共用的产品决策与反滥用边界，不另建资源生成或补充真值。
 
 提交前的只读 `source_assessment` 是现有 `resource_replenishment_quote` / `fragment_refill_preview` 与首次采集 preview 的跨 profile 产品覆盖，不新增第二套 action authority。它必须让玩家比较专业合同当前真实支持的 `mine_now`、`reduce_batch`、`move_to_other_frag`、`wait_for_replenish`、`restore_power_first`，以及其他 profile 已声明的准备访问/路线、改用合法材料或配方与延期动作；跨 profile 读面可以使用同义玩家文案，但必须映射回对应专业 action，不能发明不可提交的 `extract_now` 或 `wait_for_replenishment`。每个候选至少说明 source 身份与作用域、预计可满足量及其权威/估计边界、材料 profile/质量提示、访问/竞争条件、采集与到首个目标账本的时间/资源/物流成本、枯竭或补充状态、主要风险、对当前配方/首个工业目标的影响、`next_action` 与 `next_recheck`。预览、扫描、推荐和刷新都无世界效果，不创建 claim、hold、采集顺位、材料批次或补充资格；没有安全来源时必须明确停止或转向，不能无限推荐等待、静默自动换源或把同名材料当作等价输入。
 
