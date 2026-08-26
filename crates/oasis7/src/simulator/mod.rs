@@ -177,13 +177,13 @@ pub use types::{
     StockError, WorldEventId, WorldTime,
 };
 pub use world_model::{
-    Agent, AgentExecutionDebugContext, AgentKinematics, AgentPromptProfile, Asset, AssetKind,
-    AsteroidFragmentConfig, BoundaryReservation, ChunkState, EconomyConfig, Factory,
-    FragmentResourceError, InstalledModuleState, Location, MaterialDistributionStrategy,
-    MaterialRadiationFactors, MaterialWeights, ModuleArtifactBidState, ModuleArtifactListingState,
-    ModuleArtifactState, PhysicsConfig, PhysicsParameterSpec, PowerOrderBookState, PowerOrderState,
-    RegionalInfrastructure, SpaceConfig, ThermalStatus, WorldConfig, WorldModel,
-    physics_parameter_specs,
+    Agent, AgentActivityProjectionV1, AgentExecutionDebugContext, AgentKinematics,
+    AgentPromptProfile, Asset, AssetKind, AsteroidFragmentConfig, BoundaryReservation, ChunkState,
+    EconomyConfig, Factory, FragmentResourceError, InstalledModuleState, Location,
+    MaterialDistributionStrategy, MaterialRadiationFactors, MaterialWeights,
+    ModuleArtifactBidState, ModuleArtifactListingState, ModuleArtifactState, PhysicsConfig,
+    PhysicsParameterSpec, PowerOrderBookState, PowerOrderState, RegionalInfrastructure,
+    SpaceConfig, ThermalStatus, WorldConfig, WorldModel, physics_parameter_specs,
 };
 
 // Re-export power system types

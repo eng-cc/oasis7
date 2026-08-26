@@ -138,5 +138,5 @@ export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en
   };
   main.__markStarterOcOnboardingCompleteForTest("agent-0");
   const dispose = main.mountViewerApp(appRoot);
-  return { container: appRoot, dispose };
+  return { container: appRoot, core, dispose };
 }

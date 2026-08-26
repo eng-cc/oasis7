@@ -7,15 +7,16 @@ use super::support::{
 };
 use crate::geometry::space_distance_cm;
 use crate::runtime::{
-    DomainEvent as RuntimeDomainEvent, MaterialStack as RuntimeMaterialStack,
+    AgentActivityStatus, DomainEvent as RuntimeDomainEvent, MaterialStack as RuntimeMaterialStack,
     RejectReason as RuntimeRejectReason, WorldEvent as RuntimeWorldEvent,
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    Agent, AgentExecutionDebugContext, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, Factory, Location,
-    RejectReason as SimulatorRejectReason, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind,
-    WorldModel, provider_phase1_required_actions, provider_phase1_required_capabilities,
+    Agent, AgentActivityProjectionV1, AgentExecutionDebugContext,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, Factory,
+    Location, RejectReason as SimulatorRejectReason, ResourceOwner, WorldConfig, WorldEvent,
+    WorldEventKind, WorldModel, provider_phase1_required_actions,
+    provider_phase1_required_capabilities,
 };
 use std::collections::BTreeMap;
 
@@ -64,6 +65,10 @@ pub(super) fn runtime_state_to_simulator_model(
         let mut agent = Agent::new(agent_id.clone(), location_id, cell.state.pos);
         agent.body = cell.state.body.clone();
         agent.resources = cell.state.resources.clone();
+        agent.activity = cell
+            .activity
+            .as_ref()
+            .map(runtime_agent_activity_to_simulator_projection);
         if let Some(power) = runtime_power_statuses.get(agent_id) {
             agent.power = power.clone();
         }
@@ -97,6 +102,28 @@ pub(super) fn runtime_state_to_simulator_model(
     model.agent_execution_debug_contexts = collect_agent_execution_debug_contexts(state, sidecar);
     model.player_auth_last_nonce = sidecar.player_auth_last_nonce.clone();
     model
+}
+
+fn runtime_agent_activity_to_simulator_projection(
+    activity: &crate::runtime::AgentActivityV1,
+) -> AgentActivityProjectionV1 {
+    AgentActivityProjectionV1 {
+        status: match activity.status {
+            AgentActivityStatus::Idle => "idle",
+            AgentActivityStatus::Executing => "executing",
+            AgentActivityStatus::Blocked => "blocked",
+            AgentActivityStatus::Waiting => "waiting",
+            AgentActivityStatus::Unavailable => "unavailable",
+        }
+        .to_string(),
+        operation: activity.operation_kind.clone(),
+        target: activity.target_id.clone(),
+        reason: activity
+            .reason_summary
+            .clone()
+            .or_else(|| activity.reason_code.clone()),
+        updated_at: activity.updated_at,
+    }
 }
 
 fn seed_location_for_runtime_agent(
@@ -653,13 +680,89 @@ fn action_accepted_player_feedback(notes: &[String]) -> &'static str {
 mod tests {
     use super::*;
     use crate::geometry::GeoPos;
+    use crate::models::AgentState;
     use crate::runtime::{
-        Action, FactoryModuleSpec, FactoryProductionState, FactoryState, MaterialLedgerId,
-        MaterialStack, SnapshotMeta,
+        Action, AgentActivityV1, AgentCell, FactoryModuleSpec, FactoryProductionState,
+        FactoryState, MaterialLedgerId, MaterialStack, SnapshotMeta,
     };
     use crate::simulator::{ResourceKind, WorldKernel, WorldScenario};
     use crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
     use crate::viewer::runtime_live::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
+
+    fn serialized_mapped_agent_activity(activity: Option<AgentActivityV1>) -> serde_json::Value {
+        let mut state = crate::runtime::WorldState::default();
+        let mut cell = AgentCell::new(AgentState::new("agent-activity", GeoPos::new(0, 0, 0)), 0);
+        cell.activity = activity;
+        state.agents.insert("agent-activity".to_string(), cell);
+
+        let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Script);
+        let model = runtime_state_to_simulator_model(&state, &sidecar, None);
+        serde_json::to_value(model.agents.get("agent-activity").expect("mapped agent"))
+            .expect("serialize mapped agent")
+    }
+
+    #[test]
+    fn runtime_state_to_simulator_model_projects_authoritative_agent_activity() {
+        for (activity, expected_status, expected_reason, expected_updated_at) in [
+            (
+                AgentActivityV1::executing("recipe", 17, "factory-activity", 7),
+                "executing",
+                None,
+                7,
+            ),
+            (
+                AgentActivityV1::blocked(
+                    "recipe",
+                    18,
+                    "factory-activity",
+                    "power_low",
+                    "insufficient electricity",
+                    8,
+                ),
+                "blocked",
+                Some("insufficient electricity"),
+                8,
+            ),
+        ] {
+            let agent = serialized_mapped_agent_activity(Some(activity));
+            let projected = agent
+                .get("activity")
+                .expect("mapped Agent must publish activity")
+                .as_object()
+                .expect("mapped activity object");
+
+            assert_eq!(
+                projected.get("status"),
+                Some(&serde_json::json!(expected_status))
+            );
+            assert_eq!(
+                projected.get("operation"),
+                Some(&serde_json::json!("recipe"))
+            );
+            assert_eq!(
+                projected.get("target"),
+                Some(&serde_json::json!("factory-activity"))
+            );
+            assert_eq!(
+                projected.get("reason").and_then(serde_json::Value::as_str),
+                expected_reason
+            );
+            assert_eq!(
+                projected.get("updated_at"),
+                Some(&serde_json::json!(expected_updated_at))
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_state_to_simulator_model_does_not_synthesize_missing_activity() {
+        let agent = serialized_mapped_agent_activity(None);
+        assert!(
+            agent.get("activity").is_none()
+                || agent.get("activity") == Some(&serde_json::Value::Null)
+        );
+    }
+
     #[test]
     fn runtime_state_to_simulator_model_preserves_formal_release_seed_fragment_location() {
         let (world, _) = super::super::support::bootstrap_formal_release_runtime_world()

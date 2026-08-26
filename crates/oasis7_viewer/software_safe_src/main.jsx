@@ -20,6 +20,7 @@ import {
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
+import { AgentActivitySurface } from "./agent_activity_surface.jsx";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -2296,6 +2297,7 @@ function TargetsPanel() {
                     <div class="list-item__meta">
                       {`${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`}
                     </div>
+                    <AgentActivitySurface activity={agent.activity} locale={locale()} />
                     <div class="list-item__meta">{status().detail}</div>
                   </button>
                 );
@@ -3251,6 +3253,7 @@ function InteractionPanel() {
     const selected = core.state.snapshot?.model?.agents?.[agentId()];
     return selected?.name || selected?.label || agentId();
   };
+  const selectedAgentActivity = () => core.state.snapshot?.model?.agents?.[agentId()]?.activity;
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3357,6 +3360,7 @@ function InteractionPanel() {
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
+      <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
