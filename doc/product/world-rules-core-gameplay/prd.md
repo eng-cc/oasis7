@@ -217,6 +217,12 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 终端处置必须在排产前说明目的账本/recipient、可读的容量与已占用量、产品适用性/交付资格、生产后保留库存、交付是否仍待决，以及持有、预留容量、减量、改道、转本地用途、重报价或延期中真实可用的动作。终端容量不足、owner/recipient 失效、需求过期或路线不可用时，最终阶段只能按专业 profile 在产出 sink/稳定进度前阻塞或原子拒绝，或把已经合法生产的产物保持为有界、可追溯的未准入/待交付状态；不得无限堆积、免费销毁、自动转卖/降价/改道、静默没收，或把 production receipt 冒充 delivery receipt。稳定候选必须声明 terminal admission 是否属于 `W` 的有效周期条件：若属于，未准入周期不计进度；若只验证 production，则只能报告 production-stable，不能宣称已经交付或结算。
 
+#### 生产结算—终端交付状态闭环与奖励门控
+
+`production-settled` 是 production receipt 证明的事实，不是可以替代库存/交付状态的互斥 bucket。产物完成生产后，必须继续落入当前 root/owning revision 下的 `buffer-held`，或在明确终端准入/运输承诺下进入 `terminal-pending`；只有独立、作用域匹配且仍有效的 delivery/settlement receipt，才能把对应数量转为 `delivered/settled`，减少需求、发放交付奖励或完成终端里程碑。Production receipt、buffer admission、terminal preview/acceptance 或“生产完成”表现标签都不能提前触发这些效果，也不能把同一数量同时计入 buffer、pending 与 settled。
+
+玩家必须能从这条闭环比较当前 profile 真实支持的 `deliver_to_terminal`、`hold_in_output_ledger`、`route_to_next_stage`、等待/预留容量、改道、减量或延期，并看到 primary blocker、仍被占用的数量/容量与机会成本、预计结果/复查边界、失败损失、可撤回性和成功后打开的下一工业用途；未声明的动作不得伪装成可选恢复。终端容量、owner/recipient、资格、需求或路线在生产后失效时，已合法生产的数量与 provenance 必须保持，只能进入有界 pending/hold、原子拒绝新的交付尝试，或执行 profile 支持的一次性 return/quarantine/改道处置；不得销毁、免费 credit、自动退款/降价/改道或发放交付效果。若 terminal admission 属于 `W` 条件，`terminal-pending` 不计稳定进度；production-only profile 可以报告 production-stable，但不能标记 delivered/finalized。重复 submit、arrival、乱序到达、重连、Agent retry、snapshot restore 与 replay 对同一 root+receipt 至多产生一次 production、delivery、需求减少、奖励、里程碑与 hold release，并且 Viewer 与 pure API 必须返回同义的 bucket、根因和下一步。
+
 跨 stage/ledger handoff 的 preview、accepted/hold/allocation、in-transit/pending、released/rejected 都只是决策或待决证据，不能被 Agent、Viewer 或客户端提升为 settlement。每个 source -> edge -> destination operation 必须以同一身份和有序 journal 收敛为“有效 source effect + 至多一次 destination settlement”、明确 pending/hold，或原子拒绝/无效果之一；故障、乱序/重复到达、重连、retry 与 replay 不得造成来源已扣而目的丢失、目的免费 credit、pending 与 settled 并存，或重复下游 sink/奖励。若专业合同支持纠错/补偿，必须新增可追溯的 compensating receipt，不得修改历史 settlement 或用陈旧 receipt 解锁下游。
 
 每个 recipe + factory capability 必须声明 canonical executable production unit，以及是否支持按合法 quantum/cycle 部分执行；材料批次、玩家请求量或共享容量的 partial allocation 都不能自动等同于可执行的 partial recipe。提交前与结果必须区分 requested、当前 admissible、committed/allocated、executable、实际 executed 和 unmet remainder。Full-only recipe 在输入、能源、阶段/边容量或终端准入不足一个合法执行单位时，只能在首个 sink 前延期或原子拒绝；不得静默降额/取整、部分扣料、生成半批产物/副产物、留下隐藏欠费或提前计入稳定进度。
