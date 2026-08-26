@@ -39,6 +39,9 @@ pub enum DomainEvent {
     AgentIntentReplaced {
         intent: AgentIntentV2,
     },
+    AgentIntentTransitioned {
+        intent: AgentIntentV2,
+    },
     Observation {
         observation: Observation,
     },
@@ -880,7 +883,8 @@ impl DomainEvent {
             DomainEvent::AgentMoved { agent_id, .. } => Some(agent_id.as_str()),
             DomainEvent::ActionAccepted { actor_id, .. } => Some(actor_id.as_str()),
             DomainEvent::AgentIntentAccepted { intent }
-            | DomainEvent::AgentIntentReplaced { intent } => Some(intent.agent_id.as_str()),
+            | DomainEvent::AgentIntentReplaced { intent }
+            | DomainEvent::AgentIntentTransitioned { intent } => Some(intent.agent_id.as_str()),
             DomainEvent::Observation { observation } => Some(observation.agent_id.as_str()),
             DomainEvent::BodyAttributesUpdated { agent_id, .. } => Some(agent_id.as_str()),
             DomainEvent::BodyAttributesRejected { agent_id, .. } => Some(agent_id.as_str()),

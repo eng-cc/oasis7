@@ -208,3 +208,93 @@ fn replaced_intent_event_is_replayable_without_promoting_activity_or_receipt() {
         "intent must not become a world receipt"
     );
 }
+
+#[test]
+fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
+    let accepted = canonical_intent("intent-lifecycle-2", "accepted", "Start recipe", None);
+    let mut blocked = accepted.clone();
+    blocked["status"] = serde_json::json!("blocked");
+    blocked["reason_code"] = serde_json::json!("insufficient_power");
+    blocked["reason_summary"] = serde_json::json!("Restore power to continue");
+    blocked["event_seq"] = serde_json::json!(12);
+    let mut resumed = accepted.clone();
+    resumed["event_seq"] = serde_json::json!(13);
+    resumed["updated_at"] = serde_json::json!(8);
+    let mut completed_without_receipt = resumed.clone();
+    completed_without_receipt["status"] = serde_json::json!("completed");
+    completed_without_receipt["event_seq"] = serde_json::json!(14);
+    let mut completed = completed_without_receipt.clone();
+    completed["receipt_ref"] = serde_json::json!("world-event:14");
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
+        .unwrap();
+    state
+        .apply_domain_event(&intent_event("AgentIntentTransitioned", blocked), 7)
+        .unwrap();
+    assert_eq!(
+        state.agents[AGENT_ID].intent.as_ref().unwrap().status,
+        "blocked"
+    );
+    state
+        .apply_domain_event(&intent_event("AgentIntentTransitioned", resumed), 8)
+        .unwrap();
+    assert_eq!(
+        state.agents[AGENT_ID].intent.as_ref().unwrap().status,
+        "accepted"
+    );
+    assert!(
+        state
+            .apply_domain_event(
+                &intent_event("AgentIntentTransitioned", completed_without_receipt),
+                9
+            )
+            .is_err()
+    );
+    state
+        .apply_domain_event(
+            &intent_event("AgentIntentTransitioned", completed.clone()),
+            9,
+        )
+        .unwrap();
+    assert_eq!(
+        state.agents[AGENT_ID].intent.as_ref().unwrap().receipt_ref,
+        Some("world-event:14".to_string())
+    );
+}
+
+#[test]
+fn terminal_intent_is_immutable_and_transition_replay_is_idempotent() {
+    let accepted = canonical_intent("intent-terminal-1", "accepted", "Start recipe", None);
+    let mut rejected = accepted.clone();
+    rejected["status"] = serde_json::json!("rejected");
+    rejected["reason_code"] = serde_json::json!("policy_denied");
+    rejected["reason_summary"] = serde_json::json!("This instruction is not permitted");
+    rejected["event_seq"] = serde_json::json!(12);
+    let mut cancelled = rejected.clone();
+    cancelled["status"] = serde_json::json!("cancelled");
+    cancelled["event_seq"] = serde_json::json!(13);
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
+        .unwrap();
+    let event = intent_event("AgentIntentTransitioned", rejected);
+    state.apply_domain_event(&event, 8).unwrap();
+    let terminal = serde_json::to_vec(&state).unwrap();
+    state.apply_domain_event(&event, 9).unwrap();
+    assert_eq!(serde_json::to_vec(&state).unwrap(), terminal);
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", cancelled), 10)
+            .is_err()
+    );
+    assert_eq!(serde_json::to_vec(&state).unwrap(), terminal);
+}

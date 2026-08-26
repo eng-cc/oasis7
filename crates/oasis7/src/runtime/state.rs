@@ -1026,7 +1026,9 @@ impl WorldState {
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
-            DomainEvent::AgentIntentAccepted { .. } | DomainEvent::AgentIntentReplaced { .. } => {
+            DomainEvent::AgentIntentAccepted { .. }
+            | DomainEvent::AgentIntentReplaced { .. }
+            | DomainEvent::AgentIntentTransitioned { .. } => {
                 self.apply_domain_event_intent(event, now)?
             }
             DomainEvent::AgentRegistered { .. }

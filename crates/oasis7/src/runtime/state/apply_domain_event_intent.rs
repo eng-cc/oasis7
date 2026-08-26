@@ -3,6 +3,7 @@ use super::*;
 use crate::runtime::{AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentV2};
 
 const STATUS_ACCEPTED: &str = "accepted";
+const STATUS_BLOCKED: &str = "blocked";
 const STATUS_SUPERSEDED: &str = "superseded";
 const TERMINAL_STATUSES: &[&str] = &[
     "completed",
@@ -54,7 +55,8 @@ impl WorldState {
     ) -> Result<(), WorldError> {
         let intent = match event {
             DomainEvent::AgentIntentAccepted { intent }
-            | DomainEvent::AgentIntentReplaced { intent } => intent,
+            | DomainEvent::AgentIntentReplaced { intent }
+            | DomainEvent::AgentIntentTransitioned { intent } => intent,
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
         };
         validate_common_intent(intent)?;
@@ -147,6 +149,72 @@ impl WorldState {
                         )));
                     }
                 }
+            }
+            DomainEvent::AgentIntentTransitioned { .. } => {
+                let Some(current) = existing else {
+                    return Err(invalid_intent(format!(
+                        "transition target {} is not present",
+                        intent.intent_id
+                    )));
+                };
+                if current == *intent {
+                    return Ok(());
+                }
+                if current.intent_id != intent.intent_id {
+                    return Err(invalid_intent(format!(
+                        "transition targets {}, but current intent is {}",
+                        intent.intent_id, current.intent_id
+                    )));
+                }
+                if TERMINAL_STATUSES.contains(&current.status.as_str()) {
+                    return Err(invalid_intent(format!(
+                        "terminal intent {} cannot transition again",
+                        current.intent_id
+                    )));
+                }
+
+                let allowed = matches!(
+                    (current.status.as_str(), intent.status.as_str()),
+                    (STATUS_ACCEPTED, STATUS_BLOCKED)
+                        | (STATUS_BLOCKED, STATUS_ACCEPTED)
+                        | (STATUS_ACCEPTED, "completed")
+                        | (STATUS_BLOCKED, "completed")
+                        | (STATUS_ACCEPTED, "rejected")
+                        | (STATUS_BLOCKED, "rejected")
+                        | (STATUS_ACCEPTED, "expired")
+                        | (STATUS_BLOCKED, "expired")
+                        | (STATUS_ACCEPTED, "cancelled")
+                        | (STATUS_BLOCKED, "cancelled")
+                );
+                if !allowed {
+                    return Err(invalid_intent(format!(
+                        "unsupported transition {} -> {}",
+                        current.status, intent.status
+                    )));
+                }
+                if intent.status == "completed"
+                    && intent
+                        .receipt_ref
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .is_none()
+                {
+                    return Err(invalid_intent(
+                        "completed transition requires a committed receipt_ref",
+                    ));
+                }
+                if intent.status == STATUS_BLOCKED
+                    && intent
+                        .reason_code
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .is_none()
+                {
+                    return Err(invalid_intent("blocked transition requires a reason_code"));
+                }
+                cell.intent = Some(intent.clone());
             }
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
         }

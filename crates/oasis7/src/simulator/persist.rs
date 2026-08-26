@@ -188,6 +188,18 @@ pub struct PlayerGameplayPrimaryIntent {
     pub message: Option<String>,
     #[serde(default)]
     pub resume_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_seq: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::{DomainEvent as RuntimeDomainEvent, WorldEventBody as RuntimeWorldEventBody};
 use crate::simulator::{ChunkRuntimeConfig, WorldKernel};
 
 impl ViewerRuntimeLiveServer {
@@ -132,6 +133,44 @@ impl ViewerRuntimeLiveServer {
         let first_agent_claim_target_available = snapshot_player_id.is_some()
             && snapshot_bound_agent_id.is_none()
             && !first_agent_claim_target_bound;
+        let primary_intent = snapshot_bound_agent_id.and_then(|agent_id| {
+            runtime_state
+                .agents
+                .get(agent_id)
+                .and_then(|cell| cell.intent.as_ref())
+                .map(|intent| {
+                    let reprioritized = self.world.journal().events.iter().any(|event| {
+                        matches!(
+                            &event.body,
+                            RuntimeWorldEventBody::Domain(
+                                RuntimeDomainEvent::AgentIntentReplaced { intent: replaced }
+                            ) if replaced.agent_id == agent_id
+                                && replaced.replaced_by.as_deref()
+                                    == Some(intent.intent_id.as_str())
+                        )
+                    });
+                    let status = if intent.status == "accepted" {
+                        if reprioritized {
+                            "reprioritized"
+                        } else {
+                            "accepted_new"
+                        }
+                    } else {
+                        intent.status.as_str()
+                    };
+                    crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                        status: status.to_string(),
+                        message: Some(intent.summary.clone()),
+                        resume_required: false,
+                        schema_version: Some(intent.schema_version),
+                        intent_id: Some(intent.intent_id.clone()),
+                        source_class: Some("runtime_projection".to_string()),
+                        freshness: Some("current".to_string()),
+                        control_state: Some("controllable".to_string()),
+                        event_seq: Some(intent.event_seq.to_string()),
+                    }
+                })
+        });
         let model = runtime_state_to_simulator_model(
             runtime_state,
             &self.llm_sidecar,
@@ -144,18 +183,7 @@ impl ViewerRuntimeLiveServer {
             snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
-            snapshot_bound_agent_id.and_then(|agent_id| {
-                self.llm_sidecar
-                    .primary_intents
-                    .get(agent_id)
-                    .map(
-                        |intent| crate::simulator::persist::PlayerGameplayPrimaryIntent {
-                            status: intent.status.clone(),
-                            message: intent.message.clone(),
-                            resume_required: intent.resume_required,
-                        },
-                    )
-            }),
+            primary_intent,
             self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),

@@ -2,6 +2,7 @@
 
 mod actions;
 mod agent_claims;
+mod agent_intent;
 mod audit;
 mod base_layer;
 mod body;

@@ -681,6 +681,19 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
         .expect("accepted player instruction");
     assert!(!ack.idempotent_replay);
 
+    let canonical_intent = server.world.state().agents[agent_id.as_str()]
+        .intent
+        .clone()
+        .expect("accepted chat must journal canonical Agent Intent V2");
+    assert_eq!(canonical_intent.status, "accepted");
+    assert_eq!(
+        canonical_intent.summary,
+        "Prioritize the iron line before expanding."
+    );
+    assert_eq!(canonical_intent.agent_id, agent_id);
+    assert_eq!(canonical_intent.logical_time, ack.accepted_at_tick);
+    assert_ne!(canonical_intent.event_seq, 0);
+
     let gameplay = server
         .compat_snapshot(Some("player-a"))
         .player_gameplay
@@ -706,6 +719,32 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
             .and_then(serde_json::Value::as_bool),
         Some(false),
         "a newly accepted primary intent must clear any resume-required state"
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/schema_version"),
+        Some(&serde_json::json!(2))
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/intent_id")
+            .and_then(serde_json::Value::as_str),
+        Some(canonical_intent.intent_id.as_str())
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/source_class"),
+        Some(&serde_json::json!("runtime_projection"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/freshness"),
+        Some(&serde_json::json!("current"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/control_state"),
+        Some(&serde_json::json!("controllable"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/event_seq"),
+        Some(&serde_json::json!(canonical_intent.event_seq.to_string()))
     );
 }
 
@@ -788,6 +827,16 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
             .pointer("/primary_intent/resume_required")
             .and_then(serde_json::Value::as_bool),
         Some(false)
+    );
+
+    let canonical_intent = server.world.state().agents[agent_id.as_str()]
+        .intent
+        .as_ref()
+        .expect("reprioritized chat must replace canonical intent");
+    assert_eq!(canonical_intent.status, "accepted");
+    assert_eq!(
+        canonical_intent.summary,
+        "Stabilize power before expanding the iron line."
     );
 }
 
