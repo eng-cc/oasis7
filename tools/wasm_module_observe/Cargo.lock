@@ -776,6 +776,7 @@ name = "oasis7_wasm_abi"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_cbor",
  "serde_json",
 ]
 
