@@ -39,16 +39,32 @@ check_required_patterns() {
 check_visible_section_claim() {
   local file_path="$1"
   local claim="$2"
-  local section_opening
-  section_opening="$(rg -o -U '<section[^>]*>' "${file_path}" | rg -F "data-homepage-claim=\"${claim}\"" || true)"
-  if [[ -z "${section_opening}" ]]; then
-    echo "error: missing visible homepage section claim in ${file_path}: ${claim}" >&2
-    return 1
-  fi
-  if printf '%s\n' "${section_opening}" | rg -Fq 'hidden'; then
-    echo "error: homepage section claim is hidden in ${file_path}: ${claim}" >&2
-    return 1
-  fi
+  python3 - "${file_path}" "${claim}" <<'PY'
+import sys
+from html.parser import HTMLParser
+
+class SectionClaimParser(HTMLParser):
+    def __init__(self, claim):
+        super().__init__(convert_charrefs=True)
+        self.claim = claim
+        self.matches = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "section":
+            return
+        values = {name.lower(): value or "" for name, value in attrs}
+        if values.get("data-homepage-claim") == self.claim:
+            classes = values.get("class", "").split()
+            self.matches.append("hidden" in values or "hidden" in classes or values.get("aria-hidden") == "true")
+
+parser = SectionClaimParser(sys.argv[2])
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+parser.close()
+if not parser.matches:
+    raise SystemExit(f"error: missing visible homepage section claim in {sys.argv[1]}: {sys.argv[2]}")
+if any(parser.matches):
+    raise SystemExit(f"error: homepage section claim is hidden in {sys.argv[1]}: {sys.argv[2]}")
+PY
 }
 
 check_forbidden_patterns() {
@@ -79,6 +95,7 @@ ZH_PATTERNS=(
   "来源：受控验证场景回放"
   "说明性后果链：Agent 选择 → 世界状态变化"
   "待绑定来源：截图、事件日志与审计轨迹"
+  "本页覆盖：说明性回放 + 因果读法 + 来源绑定边界"
   "data-homepage-claim=\"telemetry-boundary\""
   "当前页面展示的是受控场景证据，不是实时遥测。"
   "data-homepage-claim=\"access-signing-boundary\""
@@ -113,6 +130,7 @@ EN_PATTERNS=(
   "Source: controlled validation scenario replay"
   "Illustrative chain: Agent choice → world-state change"
   "Source binding pending: screenshot, event log, and audit trace"
+  "On-page coverage: illustrative replay + causal reading + source-binding boundary"
   "data-homepage-claim=\"telemetry-boundary\""
   "This page shows illustrative controlled-scenario evidence, not live telemetry."
   "data-homepage-claim=\"access-signing-boundary\""
@@ -163,8 +181,8 @@ check_required_patterns "${EN_ENTRY}" \
   "Resource changes must come from an authorized causal source/sink" \
   "Consequences remain auditable" \
   "doc/product/world-rules-core-gameplay/prd.md"
-check_forbidden_patterns "${ZH_ENTRY}" "实时遥测流" "实时世界状态"
-check_forbidden_patterns "${EN_ENTRY}" "live telemetry feed" "live world state"
+check_forbidden_patterns "${ZH_ENTRY}" "实时遥测流" "实时世界状态" "覆盖：离线回放 + 在线运行 + 审计校验"
+check_forbidden_patterns "${EN_ENTRY}" "live telemetry feed" "live world state" "Coverage: replay + live runtime + audit trace"
 check_required_patterns "${APP_JS}" "${APP_JS_PATTERNS[@]}"
 check_required_patterns "${STYLES}" "${STYLE_PATTERNS[@]}"
 
