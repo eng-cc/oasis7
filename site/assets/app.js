@@ -629,35 +629,66 @@
     const events = Array.from(document.querySelectorAll("[data-proof-event]"));
     const causal = document.querySelector("[data-proof-causal]");
 
-    const causalCopy = {
-      minimal: {
-        kicker: "单点波动 · 因果轨迹",
-        title: "一条收紧条件如何留下痕迹",
-        steps: [
-          ["压力出现", "资源、目标或既有规则先收紧可选空间。"],
-          ["Agent 回应", "它们在当下约束内决定生产、交易或协作。"],
-          ["后果留下", "世界变化进入事件、回放与审计可读的轨迹。"],
-        ],
-      },
-      twin: {
-        kicker: "双区协作 · 因果轨迹",
-        title: "一笔协作如何穿过两个区域",
-        steps: [
-          ["供给收紧", "两个区域先面对需要重新分配的资源与维护压力。"],
-          ["Agent 协作", "Agent 在当下条件里协商交易与共同生产。"],
-          ["结构改变", "供给协议和生产结果成为随后可以回看的世界状态。"],
-        ],
-      },
-      triad: {
-        kicker: "三方治理 · 因果轨迹",
-        title: "一项协定如何成为可观察的制度后果",
-        steps: [
-          ["多方压力", "区域间的物流与优先级冲突，让协作需要新的边界。"],
-          ["Agent 协商", "多方在既有约束内调整路径、协定与治理选择。"],
-          ["治理留档", "投票和协定进入可审计轨迹，供后续观察与回看。"],
-        ],
-      },
-    };
+    const isChinesePage = String(document.documentElement.lang || "").toLowerCase().startsWith("zh");
+    const causalCopy = isChinesePage
+      ? {
+          minimal: {
+            kicker: "单点波动 · 因果轨迹",
+            title: "一条收紧条件如何留下痕迹",
+            steps: [
+              ["压力出现", "资源、目标或既有规则先收紧可选空间。"],
+              ["Agent 回应", "它们在当下约束内决定生产、交易或协作。"],
+              ["后果留下", "世界变化进入事件、回放与审计可读的轨迹。"],
+            ],
+          },
+          twin: {
+            kicker: "双区协作 · 因果轨迹",
+            title: "一笔协作如何穿过两个区域",
+            steps: [
+              ["供给收紧", "两个区域先面对需要重新分配的资源与维护压力。"],
+              ["Agent 协作", "Agent 在当下条件里协商交易与共同生产。"],
+              ["结构改变", "供给协议和生产结果成为随后可以回看的世界状态。"],
+            ],
+          },
+          triad: {
+            kicker: "三方治理 · 因果轨迹",
+            title: "一项协定如何成为可观察的制度后果",
+            steps: [
+              ["多方压力", "区域间的物流与优先级冲突，让协作需要新的边界。"],
+              ["Agent 协商", "多方在既有约束内调整路径、协定与治理选择。"],
+              ["治理留档", "投票和协定进入可审计轨迹，供后续观察与回看。"],
+            ],
+          },
+        }
+      : {
+          minimal: {
+            kicker: "Single-front · causal trace",
+            title: "How one tightening condition leaves a trace",
+            steps: [
+              ["Pressure arrives", "Resources, goals, or existing rules narrow the available choices."],
+              ["Agents respond", "They choose production, trade, or cooperation within the current constraints."],
+              ["Consequences remain", "World changes can enter events, replays, and audit-readable traces."],
+            ],
+          },
+          twin: {
+            kicker: "Dual-region · causal trace",
+            title: "How one collaboration crosses two regions",
+            steps: [
+              ["Supply tightens", "Two regions face resources and maintenance pressure that need redistribution."],
+              ["Agents coordinate", "Agents negotiate trade and shared production within the current conditions."],
+              ["Structure changes", "The supply pact and production result become a world-state trail to revisit."],
+            ],
+          },
+          triad: {
+            kicker: "Three-party governance · causal trace",
+            title: "How one pact becomes an observable institution",
+            steps: [
+              ["Pressure multiplies", "Logistics and priority conflicts between regions call for a new boundary."],
+              ["Agents negotiate", "Multiple parties adjust routes, pacts, and governance choices within existing constraints."],
+              ["Governance is recorded", "Votes and pacts enter an auditable trail for later observation and review."],
+            ],
+          },
+        };
 
     if (!buttons.length || !panels.length || !events.length) {
       return;

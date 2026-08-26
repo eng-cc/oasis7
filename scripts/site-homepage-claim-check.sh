@@ -83,21 +83,27 @@ ZH_PATTERNS=(
   "class=\"skip-link\""
   "data-homepage-claim=\"preview-status\""
   "状态：limited playable technical preview"
+  "不是正式玩家发布或公开网页加入"
   "data-homepage-claim=\"indirect-agency\""
   "你可以影响文明，但不能替 Agent 决定每一步。"
+  "资源告急。"
+  "文明会怎么选？"
+  "你给方向。Agent 作选择。"
+  "看一次文明危机"
+  "文明制图 · 世界氛围图"
   "data-homepage-claim=\"consequence-story\""
   "data-evidence-mode=\"controlled-replay\""
   "data-homepage-claim=\"world-laws\""
+  "这个世界只有几条不可违反的法律。"
+  "时间只向前走"
+  "没有什么凭空出现"
+  "你不能替它们选择"
+  "后果可以回看"
   "不是实时世界遥测"
-  "data-homepage-claim=\"indirect-agency\""
-  "你设定方向与约束，但不直接安排每个 Agent 的行动。"
   "data-homepage-claim=\"provenance-story\""
-  "来源：受控验证场景回放"
-  "说明性后果链：Agent 选择 → 世界状态变化"
-  "待绑定来源：截图、事件日志与审计轨迹"
-  "本页覆盖：说明性回放 + 因果读法 + 来源绑定边界"
   "data-homepage-claim=\"telemetry-boundary\""
-  "当前页面展示的是受控场景证据，不是实时遥测。"
+  "基于当前受控测试场景整理的示例性片段"
+  "不是实时世界遥测"
   "data-homepage-claim=\"access-signing-boundary\""
   "当前公开入口仅用于技术预览验证，不是公开网页玩家入口。"
   "Windows 尚未补齐代码签名，macOS 尚未完成 notarization"
@@ -118,21 +124,27 @@ EN_PATTERNS=(
   "class=\"skip-link\""
   "data-homepage-claim=\"preview-status\""
   "Status: limited playable technical preview"
+  "not a public player launch or public web join"
   "data-homepage-claim=\"indirect-agency\""
   "You can influence a civilization, but you cannot decide every step for its Agents."
+  "Resources are running out."
+  "What will the civilization choose?"
+  "You set the direction. Agents make the choices."
+  "Watch a civilization crisis"
+  "CIVILIZATION CARTOGRAPHY · WORLD ATMOSPHERE"
   "data-homepage-claim=\"consequence-story\""
   "data-evidence-mode=\"controlled-replay\""
   "data-homepage-claim=\"world-laws\""
+  "This world has only a few laws that cannot be broken."
+  "Time only moves forward"
+  "Nothing appears from nowhere"
+  "You cannot choose for them"
+  "Consequences can be revisited"
   "not live world telemetry"
-  "data-homepage-claim=\"indirect-agency\""
-  "You set direction and constraints, but you do not directly arrange every Agent action."
   "data-homepage-claim=\"provenance-story\""
-  "Source: controlled validation scenario replay"
-  "Illustrative chain: Agent choice → world-state change"
-  "Source binding pending: screenshot, event log, and audit trace"
-  "On-page coverage: illustrative replay + causal reading + source-binding boundary"
   "data-homepage-claim=\"telemetry-boundary\""
-  "This page shows illustrative controlled-scenario evidence, not live telemetry."
+  "An illustrative excerpt based on current controlled test scenarios"
+  "not live world telemetry"
   "data-homepage-claim=\"access-signing-boundary\""
   "The public entry is for technical-preview validation only, not a public web player entry."
   "Windows is not code-signed yet, macOS is not notarized yet"
@@ -168,21 +180,35 @@ check_visible_section_claim "${EN_ENTRY}" "world-laws"
 check_required_patterns "${ZH_ENTRY}" \
   "data-homepage-claim=\"world-laws\"" \
   "世界规则" \
-  "来自《世界规则与核心玩法 PRD》" \
-  "间接能动性" \
-  "资源变化必须来自被授权的因果链" \
-  "后果可审计" \
+  "世界不会回档" \
+  "每一份资源都有来源和代价" \
+  "不知道的状态就标为未知" \
   "doc/product/world-rules-core-gameplay/prd.md"
 check_required_patterns "${EN_ENTRY}" \
   "data-homepage-claim=\"world-laws\"" \
   "World laws" \
-  "World Rules &amp; Core Gameplay PRD" \
-  "indirect agency" \
-  "Resource changes must come from an authorized causal source/sink" \
-  "Consequences remain auditable" \
+  "The world does not roll back" \
+  "Every resource has a source and a cost" \
+  "Unknown states stay visibly unknown" \
   "doc/product/world-rules-core-gameplay/prd.md"
-check_forbidden_patterns "${ZH_ENTRY}" "实时遥测流" "实时世界状态" "覆盖：离线回放 + 在线运行 + 审计校验"
-check_forbidden_patterns "${EN_ENTRY}" "live telemetry feed" "live world state" "Coverage: replay + live runtime + audit trace"
+check_forbidden_patterns "${ZH_ENTRY}" \
+  "实时遥测流" \
+  "实时世界状态" \
+  "覆盖：离线回放 + 在线运行 + 审计校验" \
+  "看一条受控后果链" \
+  "静态制图 · 受控场景来源" \
+  "资源变化必须来自被授权的因果链" \
+  "思考也有代价" \
+  "本页覆盖：说明性回放 + 因果读法 + 来源绑定边界"
+check_forbidden_patterns "${EN_ENTRY}" \
+  "live telemetry feed" \
+  "live world state" \
+  "Coverage: replay + live runtime + audit trace" \
+  "Watch one controlled consequence chain" \
+  "Static cartography · controlled-scenario source" \
+  "Resource changes must come from an authorized causal source/sink" \
+  "thinking has a cost" \
+  "On-page coverage: illustrative replay + causal reading + source-binding boundary"
 check_required_patterns "${APP_JS}" "${APP_JS_PATTERNS[@]}"
 check_required_patterns "${STYLES}" "${STYLE_PATTERNS[@]}"
 
@@ -359,7 +385,7 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
             if landing:
                 landing_sections[node.attrs["id"]] = landing
 
-    required_landing_ids = {"hero", "what", "proof", "world-laws", "world", "download"}
+    required_landing_ids = {"hero", "proof", "world-laws", "world", "download"}
     missing_landing = sorted(required_landing_ids - landing_sections.keys())
     if missing_landing:
         errors.append(f"{path}: missing landing section classes for: {', '.join(missing_landing)}")
