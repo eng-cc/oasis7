@@ -233,24 +233,34 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 #### 配方生命周期、版本兼容与受控退役
 
-配方不是可被客户端或 Agent 就地修改的库存标签，而是具有来源、作用域和版本身份的受治理工业能力。配方从**提案/待验证**、**已验证待准入**、**已生效**到**限制/退役**必须有可读的权威状态；只有已生效且当前授权、工厂能力、原材料规格/品质、物流路径、电力与终端前置均满足的版本，才能成为新的生产候选。提案、模拟结果、同名配方推荐或“已下载”状态都不产生预留、输入 sink、产出、稳定窗口或交付资格。
+配方不是可被客户端或 Agent 就地修改的库存标签，而是具有来源、作用域和版本身份的受治理工业能力。配方必须可区分 **`pending_validation`**（待验证）、**`validated_pending_admission`**（已验证待准入）、**`active`**（已生效）、**`restricted`**（受限）与 **`retired`**（退役）五个产品状态；只有 `active` 且当前授权、工厂能力、原材料规格/品质、物流路径、电力与终端前置均满足的版本，才能成为新的生产候选。提案、模拟结果、同名配方推荐或“已下载”状态都不产生预留、输入 sink、产出、稳定窗口或交付资格。
 
 每个已接受的工业任务必须固定一个不可变的配方版本/能力身份，并把它与 factory capability、输入批次、物流边/路径、输出 bundle 和 terminal purpose 关联。改变输入/输出/副产物、规格或品质适用范围、阶段关系、能源/物流前置、工厂能力或终端资格等产出因果内容，必须创建新的配方版本和 parent-linked 候选；新候选从稳定窗口 `W=0` 开始，不能继承旧候选的 receipt、reservation、里程碑、排队优先级或实际进度。仅改变不影响产出因果的说明/展示元数据时，才可保留原生产身份；无法证明为非因果变更时，按新版本处理并 fail closed，不能靠名称相同或当前缓存猜测兼容。
 
-配方兼容不是“材料名称相同”或“有一座工厂”即可。提交前的只读预览至少让玩家看见配方版本的来源/授权作用域、输入与产出/副产物用途、匹配的 factory capability、每条必需物流边或路径、规格/品质适用结论、power/容量/terminal 前置、当前状态和下一次复查点。`ready`、`pending_validation`、`not_licensed`、`incompatible`、`retiring`、`expired` 与 `unknown` 等产品语义必须能被玩家区分；未验证、授权失效、能力不匹配或证据未知的版本不得被展示为可选择的“降级替代”。
+配方兼容不是“材料名称相同”或“有一座工厂”即可。提交前的只读预览至少让玩家看见配方版本的来源/授权作用域、输入与产出/副产物用途、匹配的 factory capability、每条必需物流边或路径、规格/品质适用结论、power/容量/terminal 前置、当前状态和下一次复查点。`pending_validation`、`validated_pending_admission`、`active`、`restricted`、`retired` 与 `not_licensed`、`incompatible`、`expired`、`unknown` 等阻塞/原因语义必须能被玩家区分；`retiring` 只能表示过渡或原因，不能替代 `restricted`/`retired`。未验证、授权失效、能力不匹配或证据未知的版本不得被展示为可选择的“降级替代”。
 
 配方状态或前置在报价后漂移时，系统只能按当前权威版本重新评估并产生一次 receipt，或在首个不可逆 sink 前原子拒绝/保持无效果待决。至少以下情形必须 fail closed：版本身份或授权范围缺失；输入规格、owner、账本、路线、容量、power 或 terminal 资格不匹配；旧版本已经退役且没有当前有效的显式兼容/排空 profile；候选引用了错误 root、批次、stage 或 module/provenance。失败必须保留原任务/已结算历史的 lineage，说明最早 blocker、已占用/已消费与下一步；不得自动换配方、免费转换材料、静默降低规格、伪造退款或以“已接受”代替生效。
 
-退役只禁止新任务继续取得该版本的生产资格，不能追溯删除已结算历史。退役时，新的排程必须拒绝并推荐当前有效版本或等待重新授权；已经 accepted 但未产生不可逆 sink 的任务按 profile 释放/保持/重新报价，已经产生 WIP、在途或 buffer 的任务只能完成旧版本、隔离、返工、salvage、return、改道或终止中真实受支持的一条处置路径。若存在兼容 successor，仍须在同一权威快照完成 fresh revalidation，并由玩家或具备范围授权的 Agent 明确确认；转换必须创建链接旧 receipt、实际数量/损耗与新候选身份的单次 handoff/conversion receipt，稳定窗口重新计数。旧版本的重连、重试、回放或陈旧批准不能重新激活、复制产出或刷新容量顺位。
+`restricted` 与 `retired` 不是同一状态：`restricted` 仍是受限的已生效能力，可以在声明范围内保全既有价值；它禁止新的准入、永久新容量和超出既有承诺的新效果，但允许 profile 支持的既有任务继续、持有、维护或受控退出。`retired` 则不再是可执行生产能力；它只保留历史读取/回放，以及对已接受但未结算的任务执行一次 profile 支持的受控完成、hold、隔离、返工、salvage、return、改道、终止或 successor handoff。两者都不能追溯删除已结算历史；退役时新的排程必须拒绝并推荐当前有效版本或等待重新授权。若存在兼容 successor，仍须在同一权威快照完成 fresh revalidation，并由玩家或具备范围授权的 Agent 明确确认；转换必须创建链接旧 receipt、实际数量/损耗与新候选身份的单次 handoff/conversion receipt，且新候选从 `W=0` 重新计数。旧版本的重连、重试、回放或陈旧批准不能重新激活、复制产出或刷新容量顺位。
+
+为使每个状态都有可执行的下一步，以下是产品动作语义（不是 runtime 字段、API 或 UI schema）；除 `active` 外，若当前 profile 没有列出的安全处置，必须明确返回 `no_safe_fallback` 和下一次可决策/复查点：
+
+| 状态 | 玩家可做的动作 | 进度/奖励语义 | 失败、下一步与无安全替代 |
+| --- | --- | --- | --- |
+| `pending_validation` | 查看缺失/不确定证据，补齐并重新提交、撤回或放弃提案 | 只有 validation evidence；不产生 accepted 任务、输入 sink、WIP、`W`、产出或奖励 | 失败/未知保持待验证；下一步是补证据后重验或放弃；不能修复时明确 `no_safe_fallback`，不伪造降级替代 |
+| `validated_pending_admission` | 查看验证结论，等待/请求准入、比较当前有效版本或撤回 | 验证决定仍是 evidence-only；不产生生产资格、预留、输入 sink、`W`、产出或奖励 | 准入撤回、过期或前置漂移时必须重新验证/重新申请或改用当前有效版本；无合法准入路径时 `no_safe_fallback` |
+| `active` | 在当前 pin 和前置下执行 `ScheduleRecipe`，推进首个制成品，并在实际结果后选择新的工业用途 | 只有实际 production/delivery receipt 才推进执行、稳定 `W`、首个制成品或后续用途；预览/接受不发奖，实际里程碑应打开可读的下一方向 | 缺料、缺电、物流、容量、治理或 terminal blocker 只能等待、修复、重新报价、降载/改道或重规划；都不支持时 `no_safe_fallback` |
+| `restricted` | 继续 profile 允许的既有承诺，或持有、维护、减量、受控退出 | 既有 WIP/在途仅可在原范围内产生一次实际结果；不得取得新准入、永久容量、新稳定窗口或新的长期能力奖励 | 受限范围无法继续时转为 hold 或一次性处置；不能安全保全时 `no_safe_fallback`，不能自动扩容、换配方或退款 |
+| `retired` | 读取历史/回放；对既有未结算任务执行一次 profile 支持的受控完成、hold、返工、salvage、return、改道、终止或经确认的 successor handoff | 不再产生新的生产资格、稳定进度或里程碑奖励；仅记录既有历史或一次处置/转换 receipt，不能复活旧版本 | 新排程直接拒绝；下一步只能选择已声明的处置或 successor fresh revalidation；没有任何安全处置时 `no_safe_fallback` |
 
 该边界同时服务五项产品原则：**world-first** 让可用配方由真实授权、材料和设施能力决定；**emergence-first** 允许玩家在约束内选择来源、版本、路线与退役处置，而不是领取免费转换；**persistent** 让版本 pin、lineage、pending 与退役处置跨重连/恢复/replay 延续；**auditable** 让提案、准入、版本变更、兼容结论和单次 receipt 可追溯；**extensible** 允许未来增加配方/工厂 profile 而不改写既有批次和历史。配方治理不直接发放原材料、产能、库存或市场权利，也不规定配方比率、授权角色、版税、兼容算法、runtime schema 或 UI 实现。
 
 配方生命周期验收至少包括：
 
-- 一条提案→验证→准入→生效→退役样例；生效前无世界效果，玩家可读每个状态、阻塞与下一步。
+- 一条提案→验证→准入→生效→受限→退役样例；生效前无世界效果，玩家可读每个状态、阻塞、可执行动作与下一步。
 - 同名但改变产出因果的两个版本；旧任务固定旧版本，新候选 `W=0`，两者不共享 receipt、reservation、进度或奖励。
 - 授权、输入规格、factory fit、物流/电力/容量或 terminal 证据缺失/漂移的负例；首个 sink 前原子拒绝或无效果待决，且显示 primary blocker 与复查边界。
-- 退役同时存在新排程、未开始任务、WIP/在途/缓冲批次的样例；新排程不可选，存量任务只能按 profile 取得一次明确处置，兼容 successor 需显式确认和 parent-linked conversion。
+- 受限与退役同时存在新排程、未开始任务、WIP/在途/缓冲批次的样例；受限只保全有界既有价值且不开新容量，退役新排程不可选，存量任务只能按 profile 取得一次明确处置，兼容 successor 需显式确认、parent-linked conversion 并从 `W=0` 开始；没有安全处置时显示 `no_safe_fallback`。
 - 重复 submit、arrival、重连、Agent retry、snapshot restore 与 replay；同一版本最多产生一次 sink/产出/receipt，旧版本不能复活，Viewer 与 pure API 对状态、兼容结论、机会成本和下一步保持同义。
 
 ### 世界宪法级产品不变量
@@ -333,7 +343,7 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 | SC-22 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 维护/计划停机前的可比较取舍、维护真值缺失的诚实表达、提交重验、bounded pending 无隐式 hold、原任务/未结算状态保留、单次结果与稳定/交付影响 | test_tier_required |
 | SC-23 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-001 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | BuildFactory quote 的只读/确定性、逐项成本与余额、四类 power mode/未冻结 authority、choices/blockers、quote correlation、fresh submit revalidation、single sink/receipt、profile output boundary、retry/reconnect/replay 与 Viewer/pure API parity | test_tier_required |
-| SC-24 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 配方生命周期状态、版本 pin、兼容性/授权/前置漂移 fail-closed、退役对新旧任务的有界处置、parent-linked conversion、持久化/replay/Agent retry 单次效果与 Viewer/pure API parity | test_tier_full |
+| SC-24 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 配方生命周期五态（含 `restricted` 与 `retired` 区分）的可读动作、进度/奖励与失败/下一步/`no_safe_fallback`；版本 pin、兼容性/授权/前置漂移 fail-closed、受限/退役对新旧任务的有界处置、WIP/在途/缓冲批次、successor 确认后的 parent-linked conversion/`W=0`、持久化/replay/Agent retry 单次效果与 Viewer/pure API parity | test_tier_full |
 
 ## 6. Non-Goals
 
