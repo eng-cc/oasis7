@@ -273,6 +273,7 @@ run_required_gate_checks() {
   run ./scripts/check-standalone-tool-lockfiles.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/rust-required-gate-compile-command-contract.test.sh
+  run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run_required_component "operational contracts" "${OASIS7_CI_RUN_OPERATIONAL_CONTRACTS:-}" "disabled_by_scope_planner" run_operational_contract_tests
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate

@@ -52,6 +52,7 @@ env:
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
   RUST_TOOLCHAIN: 1.96.0
+  TRUNK_VERSION: 0.21.14
   OASIS7_WASM_TOOLCHAIN: nightly-2025-12-11
   OASIS7_WASM_TARGET: wasm32-unknown-unknown
   OASIS7_WASM_BUILD_STD: "1"
@@ -342,6 +343,13 @@ jobs:
         with:
           shared-key: ci-full-regression-v1
           cache-on-failure: true
+      - name: Install pinned trunk
+        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
+      - name: Verify pinned trunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
 
@@ -408,6 +416,13 @@ jobs:
         with:
           shared-key: ci-full-escalation-v1
           cache-on-failure: true
+      - name: Install pinned trunk
+        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
+      - name: Verify pinned trunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
       - id: full
         name: Run human-authorized full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
