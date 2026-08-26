@@ -164,9 +164,15 @@ measure_command_seconds() {
 
   local start_ns
   local end_ns
+  # The timing endpoints are separate Python processes. On macOS, especially
+  # when the host Python architecture differs from the Rust toolchain, the
+  # mach_absolute_time-backed monotonic clock can be process-relative; a
+  # cross-process delta may therefore be negative. CLOCK_REALTIME is shared
+  # across those processes and still provides microsecond-scale precision for
+  # these multi-second compile measurements.
   start_ns=$(python3 - <<'PY'
 import time
-print(time.monotonic_ns())
+print(time.time_ns())
 PY
 )
   (
@@ -177,13 +183,15 @@ PY
   ) >"$log_path" 2>&1
   end_ns=$(python3 - <<'PY'
 import time
-print(time.monotonic_ns())
+print(time.time_ns())
 PY
 )
   python3 - "$start_ns" "$end_ns" <<'PY'
 import sys
 start_ns = int(sys.argv[1])
 end_ns = int(sys.argv[2])
+if end_ns < start_ns:
+    raise SystemExit("compile metrics clock moved backwards")
 print(f"{(end_ns - start_ns) / 1_000_000_000:.3f}")
 PY
 }
