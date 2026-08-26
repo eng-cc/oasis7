@@ -15,6 +15,7 @@ def config(path):
     if not isinstance(r,dict) or not isinstance(r.get("match"),list) or not r["match"] or any(not isinstance(x,str) or not x for x in r["match"]): die("invalid config rule patterns")
     if not isinstance(r.get("reason"),str) or not r["reason"] or r["reason"] in reasons: die("invalid config rule reason")
     reasons.add(r["reason"])
+    if not isinstance(r.get("full",False),bool) or not isinstance(r.get("minimal",False),bool): die("invalid config rule selectors")
     if not isinstance(r.get("capabilities",[]),list) or any(not isinstance(x,str) for x in r.get("capabilities",[])) or (not r.get("full") and not r.get("minimal") and not r.get("capabilities")) or not set(r.get("capabilities",[])).issubset(CAPABILITIES): die("invalid config rule capabilities")
   return c,"sha256:"+hashlib.sha256(raw).hexdigest()
 def git_paths(a):
