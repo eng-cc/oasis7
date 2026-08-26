@@ -4,7 +4,7 @@ use std::fmt;
 use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::runtime::CapabilityInvocationContext;
+use crate::capability_invocation_context::CapabilityInvocationContext;
 
 use super::{
     DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
@@ -25,9 +25,10 @@ pub struct ProviderModuleCommand {
     pub payload: Vec<u8>,
 }
 
-/// The immutable capability context attached to one provider decision turn.
-/// Runtime code creates this value; provider code can only echo it in an
-/// [`AgentCommandResponse`].
+/// The immutable transport context attached to one provider decision turn.
+/// The host creates this value and the provider can only echo it in an
+/// [`AgentCommandResponse`].  It carries no authority; the native runtime
+/// remains responsible for grant, revocation, and budget validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderCapabilityContext {
     pub catalog: CapabilityCatalogSnapshot,

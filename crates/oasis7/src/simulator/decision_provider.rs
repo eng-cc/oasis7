@@ -7,7 +7,7 @@ use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot, ModuleCom
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::runtime::CapabilityInvocationContext;
+use crate::capability_invocation_context::CapabilityInvocationContext;
 
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,

@@ -43,6 +43,7 @@ mod world_model;
 mod tests;
 
 // Re-export all public types
+pub use crate::capability_invocation_context::CapabilityInvocationContext;
 pub use agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
     LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,

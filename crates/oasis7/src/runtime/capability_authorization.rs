@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet};
 
-use oasis7_wasm_abi::{CapabilityAudience, CapabilityPresenter, CapabilitySubject};
+pub use crate::capability_invocation_context::CapabilityInvocationContext;
+use oasis7_wasm_abi::CapabilitySubject;
 
 /// A finalized governance record installed by the host before a grant can be
 /// used.  The executor never treats a process-local key/epoch pair as an
@@ -35,20 +36,6 @@ pub struct CapabilityAuthorityRecord {
     pub revoked_grant_ids: BTreeSet<String>,
     #[serde(default)]
     pub superseded_by: BTreeMap<String, String>,
-}
-
-/// Host-bound invocation identity.  Candidate DTOs are accepted only when
-/// all identity and audience fields equal this durable binding.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CapabilityInvocationContext {
-    pub grant_id: String,
-    pub subject: CapabilitySubject,
-    pub presenter: CapabilityPresenter,
-    pub audience: CapabilityAudience,
-    pub catalog_snapshot_id: String,
-    pub module_id: String,
-    pub module_version: String,
-    pub response_nonce: String,
 }
 
 /// Durable logical execution budget for one subject/grant pair.  Runtime

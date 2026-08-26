@@ -27,7 +27,7 @@ pub struct RuntimeTrustedModuleExecutor<'a> {
     world: &'a mut crate::runtime::World,
     grant: CapabilityGrantV2,
     catalog: CapabilityCatalogSnapshot,
-    invocation: crate::runtime::CapabilityInvocationContext,
+    invocation: crate::capability_invocation_context::CapabilityInvocationContext,
     sandbox: &'a mut dyn oasis7_wasm_abi::ModuleSandbox,
 }
 
@@ -37,7 +37,7 @@ impl<'a> RuntimeTrustedModuleExecutor<'a> {
         world: &'a mut crate::runtime::World,
         grant: CapabilityGrantV2,
         catalog: CapabilityCatalogSnapshot,
-        invocation: crate::runtime::CapabilityInvocationContext,
+        invocation: crate::capability_invocation_context::CapabilityInvocationContext,
         sandbox: &'a mut dyn oasis7_wasm_abi::ModuleSandbox,
     ) -> Self {
         Self {
