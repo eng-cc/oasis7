@@ -48,6 +48,26 @@ class ReceiptTest(unittest.TestCase):
     self.assertEqual(["pixel_world_bridge","viewer_js_required"],receipt["planner"]["selected_capabilities"])
     self.assertIs(receipt["planner"]["run_pixel_world_bridge_lib_tests"],True)
     self.assertIs(receipt["planner"]["run_pixel_world_bridge_wasm_check"],True)
+
+  def test_all_planner_gate_selectors_are_preserved_in_receipt_authority(self):
+    raw=plan()
+    for field in ("run_scenario_regression", "run_operational_contracts",
+                  "run_codex_agent_config_validation", "run_required_gate_baseline"):
+      raw[field]="true"
+    planner=M.canonical_planner(raw)
+    for field in ("run_scenario_regression", "run_operational_contracts",
+                  "run_codex_agent_config_validation", "run_required_gate_baseline"):
+      self.assertIs(planner[field], True,
+                    f"canonical planner dropped {field} from CI receipt authority")
+
+    changed=dict(raw)
+    changed["run_operational_contracts"]="false"
+    changed_planner=M.canonical_planner(changed)
+    digest=lambda value: M.hashlib.sha256(
+      json.dumps(value,sort_keys=True,separators=(",", ":")).encode()
+    ).hexdigest()
+    self.assertNotEqual(digest(planner), digest(changed_planner),
+                        "non-Rust gate selector changes must alter planner authority")
   def test_invalid_or_missing_capability_selection_fails_closed(self):
     for selected in (None,"viewer_js_required;pixel_world_bridge","viewer-js"):
       raw=plan()
