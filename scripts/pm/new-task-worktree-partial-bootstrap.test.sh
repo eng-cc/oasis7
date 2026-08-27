@@ -20,6 +20,7 @@ cp "$ROOT_DIR/scripts/new-task-worktree.sh" "$REPO/scripts/new-task-worktree.sh"
 cp "$ROOT_DIR/scripts/worktree-harness-lib.sh" "$REPO/scripts/worktree-harness-lib.sh"
 cp "$ROOT_DIR/scripts/pm/find-python-with-module.sh" "$REPO/scripts/pm/find-python-with-module.sh"
 cp "$ROOT_DIR/scripts/pm/pm_store.py" "$REPO/scripts/pm/pm_store.py"
+cp "$ROOT_DIR/scripts/pm/terminal-tombstone-guard.py" "$REPO/scripts/pm/terminal-tombstone-guard.py"
 chmod +x "$REPO/scripts/new-task-worktree.sh"
 
 cat >"$REPO/scripts/cargo-dev.sh" <<'EOF'

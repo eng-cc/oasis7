@@ -65,7 +65,15 @@ PY
 grep -q '^issue close 11 -R fixture/repo --reason completed$' "$GH_LOG"
 grep -q '^api graphql ' "$GH_LOG"
 ! grep -q '^project item-list ' "$GH_LOG"
-python3 - "$ROOT_DIR" "$UID_VALUE" <<'PY'
+# External Project drift after finalization must be repaired on an idempotent
+# finalizer retry, even though the earlier ledger operation was committed.
+: >"$REMOTE_STATE"
+python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null
+[[ "$(sort -u "$REMOTE_STATE" | wc -l | tr -d ' ')" == 3 ]]
+for field in F_STATUS F_PM F_PHASE; do
+  [[ "$(grep -c "^$field$" "$EDIT_LOG")" == 2 ]] || { echo "terminal retry did not repair Project drift: $field" >&2; exit 1; }
+done
+PYTHONPATH="$ROOT_DIR/scripts/pm${PYTHONPATH:+:$PYTHONPATH}" python3 - "$ROOT_DIR" "$UID_VALUE" <<'PY'
 import importlib.util,pathlib,sys
 path=pathlib.Path(sys.argv[1])/"scripts/pm/post-merge-finalize.py"
 spec=importlib.util.spec_from_file_location("finalizer_identity_test",path)

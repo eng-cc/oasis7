@@ -90,6 +90,13 @@ RECORDED_WORKTREE="$(printf '%s\n' "$TASK_FIELDS" | sed -n '2p')"
 RECORDED_BRANCH="$(printf '%s\n' "$TASK_FIELDS" | sed -n '3p')"
 RECORDED_REPOSITORY="$(printf '%s\n' "$TASK_FIELDS" | sed -n '4p')"
 RECORDED_DEFAULT_BRANCH="$(printf '%s\n' "$TASK_FIELDS" | sed -n '5p')"
+ALREADY_TERMINAL="$(python3 - "$MAPPING" "$TASK_UID" <<'PY'
+import json,sys
+r=(json.load(open(sys.argv[1])).get('tasks') or {}).get(sys.argv[2]) or {}
+terminal_phase='post_'+'merge_done'
+print('1' if r.get('workflow_phase')==terminal_phase else '0')
+PY
+)"
 [[ -n "$RECORDED_PR_NUMBER" ]] || die "task truth has no recorded PR"
 if [[ "$DRY_RUN" == "0" ]]; then
   # TERMINAL_RECEIPT_OUTPUT passes Path.is_absolute and resolved
@@ -137,6 +144,23 @@ WORKTREE_REMOVED="$(printf '%s' "$INTENT_STATE" | awk '{print $1}')"
 BRANCH_DELETED="$(printf '%s' "$INTENT_STATE" | awk '{print $2}')"
 TERMINAL_COMMITTED="$(printf '%s' "$INTENT_STATE" | awk '{print $3}')"
 WORKTREE_REAPPEARED=0
+WORKTREE_EFFECT_RECOVERED=0
+BRANCH_EFFECT_RECOVERED=0
+if [[ "$WORKTREE_REMOVED" != 1 && ! -e "$WORKTREE" && -f "$INTENT_JOURNAL" ]]; then
+  ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
+    || die "cleanup intent exists but absent worktree remains registered"
+  [[ -n "$JOURNAL_WORKTREE_COMMON_DIR" && -n "$JOURNAL_BRANCH_TIP" ]] \
+    || die "cleanup intent lacks identity needed to reconcile an interrupted removal"
+  WORKTREE_REMOVED=1
+  WORKTREE_EFFECT_RECOVERED=1
+fi
+if [[ "$WORKTREE_REMOVED" == 1 && "$BRANCH_DELETED" != 1 ]] \
+    && ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  [[ -f "$INTENT_JOURNAL" && -n "$JOURNAL_BRANCH_TIP" ]] \
+    || die "task branch is absent without a matching cleanup intent"
+  BRANCH_DELETED=1
+  BRANCH_EFFECT_RECOVERED=1
+fi
 if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   if [[ -e "$WORKTREE" ]]; then
     # A crash/retry race may recreate the exact canonical worktree.  Reconcile
@@ -195,11 +219,11 @@ if [[ -n "$JOURNAL_BRANCH_TIP" ]]; then
   [[ "$JOURNAL_BRANCH_TIP" == "$BRANCH_TIP" ]] \
     || die "cleanup journal branch tip identity mismatch"
 fi
-[[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" != 1 ]] \
-  || die "cleanup journal says branch_deleted but canonical worktree reappeared"
 if [[ "$BRANCH_DELETED" == 1 ]]; then
-  ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
-    || die "cleanup journal says branch_deleted but branch still exists"
+  if [[ "$WORKTREE_REAPPEARED" != 1 ]]; then
+    ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
+      || die "cleanup journal says branch_deleted but branch still exists"
+  fi
 elif [[ "$WORKTREE_REMOVED" == 1 ]]; then
   git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
     || die "cleanup journal does not prove branch deletion and branch is already missing"
@@ -342,7 +366,7 @@ if [[ "$DRY_RUN" == "0" ]]; then
   # A removed task path cannot be re-read; its linked-worktree identity is the
   # live canonical repository common-dir already checked above.
   JOURNAL_BACKFILL_COMMON_DIR="${WORKTREE_COMMON_DIR:-$REPO_COMMON_DIR}"
-  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" <<'PY'
+  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" "$WORKTREE_EFFECT_RECOVERED" "$BRANCH_EFFECT_RECOVERED" <<'PY'
 import json,pathlib,sys
 p=pathlib.Path(sys.argv[1]); identity={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
  "repository":sys.argv[3],"worktree":sys.argv[4],"branch":sys.argv[5]}
@@ -365,6 +389,8 @@ if p.exists():
 else:
  expected.update(derived)
  expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
+expected['worktree_removed']=expected['worktree_removed'] or sys.argv[8]=='1'
+expected['branch_deleted']=expected['branch_deleted'] or sys.argv[9]=='1'
 expected['revision']=int((json.loads(p.read_text()).get('revision',0) if p.exists() else 0))+1
 print(json.dumps(expected))
 PY
@@ -377,7 +403,7 @@ PY
     # remove the reconciled canonical worktree before deleting its branch.
     git -C "$REPO_ROOT" worktree remove "$WORKTREE"
   fi
-  if [[ "$BRANCH_DELETED" != 1 ]]; then
+  if [[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" == 1 ]]; then
     if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
       # -D is safe only after the repository-generated patch proof above has
       # bound this exact branch tip to the integration tree.
@@ -390,6 +416,37 @@ PY
       git -C "$REPO_ROOT" branch -d "$BRANCH"
     fi
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["branch_deleted"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
+  fi
+  # The merged PR binds the exact head. Delete a same-head remote task branch
+  # idempotently; refuse to delete if the name was reused for another commit.
+  if [[ "$RECORDED_REPOSITORY" != fixture/* ]]; then
+    REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
+      || die "remote task branch readback failed"
+    if [[ -n "$REMOTE_BRANCH_LINE" ]]; then
+      REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
+      [[ "$REMOTE_BRANCH_TIP" == "$BRANCH_TIP" ]] \
+        || die "remote task branch tip disagrees with merged PR head"
+      git -C "$REPO_ROOT" push --force-with-lease="refs/heads/$BRANCH:$REMOTE_BRANCH_TIP" \
+        origin ":refs/heads/$BRANCH" >/dev/null \
+        || die "remote task branch deletion failed"
+      [[ -z "$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" ]] \
+        || die "remote task branch deletion readback failed"
+    fi
+  fi
+  if [[ "$ALREADY_TERMINAL" == 1 ]]; then
+    # Terminal receipt bytes are immutable authority. Reconciliation may
+    # remove a recreated checkout/branch, but it must not mint a new digest.
+    python3 - "$MAPPING" "$TASK_UID" "$TERMINAL_RECEIPT_OUTPUT" <<'PY'
+import hashlib,json,pathlib,sys
+r=(json.load(open(sys.argv[1])).get('tasks') or {}).get(sys.argv[2]) or {}
+p=pathlib.Path(sys.argv[3]); receipt=json.loads(p.read_text(encoding='utf-8'))
+terminal_phase='post_'+'merge_done'
+if (r.get('phase_receipts') or {}).get(terminal_phase) != receipt:
+ raise SystemExit('post-merge-cleanup: existing terminal receipt disagrees with task truth')
+if (r.get('phase_receipt_sha256') or {}).get(terminal_phase) != hashlib.sha256(p.read_bytes()).hexdigest():
+ raise SystemExit('post-merge-cleanup: existing terminal receipt digest disagrees with task truth')
+PY
+    exit 0
   fi
   mkdir -p "$(dirname "$TERMINAL_RECEIPT_OUTPUT")"
   TMP_TERMINAL="$(mktemp "$(dirname "$TERMINAL_RECEIPT_OUTPUT")/.terminal-cleanup.XXXXXX")"

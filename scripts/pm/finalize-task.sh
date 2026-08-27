@@ -65,9 +65,29 @@ terminal_receipt="$receipt_root/terminal-cleanup-receipt.json"
 patch_equivalence="$receipt_root/patch-equivalence-receipt.json"
 
 # already_finalized retries remain live-readback operations, never a second identity.
-if [[ -f "$terminal_receipt" && -f "$receipt_root/finalizer-ledger.json" ]]; then
+if [[ -f "$terminal_receipt" ]]; then
+  ledger_existed=0
+  [[ -f "$receipt_root/finalizer-ledger.json" ]] && ledger_existed=1
+  # A terminal Codex task may have its exact checkout recreated after the first
+  # cleanup. Re-run the receipt-bound cleanup before finalizer readback so
+  # --resume reconciles that drift instead of accepting a stale receipt alone.
+  cleanup_needed=0
+  [[ -e "$task_worktree" ]] && cleanup_needed=1
+  git -C "$repo_root" show-ref --verify --quiet "refs/heads/$task_branch" && cleanup_needed=1
+  remote_branch="$(git -C "$repo_root" ls-remote --heads origin "refs/heads/$task_branch")" \
+    || fail "cannot read remote task branch during terminal reconciliation"
+  [[ -n "$remote_branch" ]] && cleanup_needed=1
+  if [[ "$cleanup_needed" == 1 ]]; then
+    cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
+      --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
+      --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt")
+    if [[ -f "$patch_equivalence" ]]; then
+      cleanup_args+=(--patch-equivalence-receipt "$patch_equivalence")
+    fi
+    "$SCRIPT_DIR/post-merge-cleanup.sh" "${cleanup_args[@]}"
+  fi
   python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --terminal-receipt "$terminal_receipt" >/dev/null
-  status="already_finalized"
+  status="$([[ "$ledger_existed" == 1 ]] && printf already_finalized || printf finalized)"
 else
   [[ -d "$task_worktree" ]] || fail "canonical task worktree is missing before task_done; identity mismatch cannot be repaired here"
   (cd "$task_worktree" && python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$pr_number" --json >"$merge_receipt")

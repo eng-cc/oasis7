@@ -16,6 +16,10 @@ run_case() {
   git -C "$repo" worktree add -qb "$branch" "$worktree"; printf 'merged\n' >>"$worktree/file"
   git -C "$worktree" commit -qam merged; local head; head="$(git -C "$worktree" rev-parse HEAD)"
   git -C "$repo" merge --ff-only "$branch" >/dev/null
+  local origin="$TMPDIR/$name/origin.git"
+  git init --bare -q "$origin"
+  git -C "$repo" remote add origin "$origin"
+  git -C "$repo" push -q origin main "$branch"
   mkdir -p "$repo/.pm/github-project-sync"
   cat >"$repo/.pm/github-project-sync/tasks.json" <<EOF
 {"tasks":{"$uid":{"task_uid":"$uid","status":"done","workflow_phase":"main_sync","repository":"eng-cc/oasis7","issue_number":11,"pr_number":1,"pr_url":"https://example.invalid/pull/1","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main"}}}
@@ -68,6 +72,7 @@ import json,sys
 j=json.load(open(sys.argv[1])); assert all(j[k] for k in ('worktree_removed','branch_deleted','terminal_receipt_committed')),j
 PY
   [[ ! -e "$worktree" ]]; ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+  [[ -z "$(git -C "$repo" ls-remote --heads origin "refs/heads/$branch")" ]]
 }
 
 run_case after_worktree TPM_CLEANUP_FAULT_AFTER_WORKTREE_REMOVE 86
