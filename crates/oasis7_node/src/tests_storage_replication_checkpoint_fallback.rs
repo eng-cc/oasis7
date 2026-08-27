@@ -112,7 +112,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
 }
 
 #[test]
-fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkpoint() {
+fn fresh_observer_bootstraps_authenticated_checkpoint_before_height_one_execution() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let _probe_nonce = CheckpointProbeNonceGuard::install();
     let world_id = "world-fresh-observer-execution-mismatch-checkpoint-fallback";
@@ -236,8 +236,7 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
             .expect("fresh observer replication runtime");
     let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
     // Model the probe's stale low network cursor plus an authenticated high
-    // peer head.  The current implementation enters height-one replay from
-    // this state and returns the mismatch before trying the retained boundary.
+    // peer head. Bootstrap must win before height-one replay from this state.
     engine_b.network_committed_height = 1;
     engine_b.peer_heads.insert(
         "node-a".to_string(),
@@ -259,10 +258,10 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
         rollback_heights: Vec::new(),
     };
 
-    // Keep the valid height-one commit available and make its clean-local
-    // execution result disagree with the signed peer binding.  Height zero
-    // rollback is deliberately unavailable; the expected recovery is the
-    // authenticated retained checkpoint closure above.
+    // Keep the valid height-one commit available but make its clean-local
+    // execution result disagree with the signed peer binding. The regression
+    // contract is that authenticated checkpoint bootstrap happens first, so
+    // mismatch recovery and height-zero rollback are never used.
     let result = engine_b.sync_missing_replication_commits(
         &endpoint_b,
         "node-b",
@@ -277,8 +276,8 @@ fn fresh_observer_execution_mismatch_falls_back_to_authenticated_retained_checkp
         execution_hook.incremental_commits,
         execution_hook.rollback_heights
     );
-    assert_eq!(execution_hook.incremental_commits, vec![1]);
-    assert_eq!(execution_hook.rollback_heights, vec![0]);
+    assert!(execution_hook.incremental_commits.is_empty());
+    assert!(execution_hook.rollback_heights.is_empty());
     assert_eq!(execution_hook.installed, vec![checkpoint_height]);
     assert_eq!(engine_b.committed_height, checkpoint_height);
     assert_eq!(engine_b.replication_persisted_height, checkpoint_height);
