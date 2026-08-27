@@ -123,15 +123,20 @@ tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-compile-metrics-XXXXXX")
 cleanup_paths=("$tmp_root")
 linked_worktrees=()
 cleanup() {
+  local original_status=$?
   local path
   # A linked checkout has repository metadata outside its directory, so it
   # must be deregistered through Git before ordinary path cleanup.
   for path in ${linked_worktrees[@]+"${linked_worktrees[@]}"}; do
-    git -C "$repo_root" worktree remove --force "$path" >/dev/null 2>&1 || true
+    if ! git -C "$repo_root" worktree remove --force "$path"; then
+      echo "error: failed to remove registered compile-metrics worktree; preserving path: $path" >&2
+      return 1
+    fi
   done
   for path in "${cleanup_paths[@]}"; do
     rm -rf "$path"
   done
+  return "$original_status"
 }
 trap cleanup EXIT
 

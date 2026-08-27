@@ -69,15 +69,13 @@ if [[ -f "$terminal_receipt" && -f "$receipt_root/finalizer-ledger.json" ]]; the
   # A terminal Codex task may have its exact checkout recreated after the first
   # cleanup. Re-run the receipt-bound cleanup before finalizer readback so
   # --resume reconciles that drift instead of accepting a stale receipt alone.
-  if [[ -d "$task_worktree" ]]; then
-    cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
-      --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
-      --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt")
-    if [[ -f "$patch_equivalence" ]]; then
-      cleanup_args+=(--patch-equivalence-receipt "$patch_equivalence")
-    fi
-    "$SCRIPT_DIR/post-merge-cleanup.sh" "${cleanup_args[@]}"
+  cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
+    --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
+    --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt")
+  if [[ -f "$patch_equivalence" ]]; then
+    cleanup_args+=(--patch-equivalence-receipt "$patch_equivalence")
   fi
+  "$SCRIPT_DIR/post-merge-cleanup.sh" "${cleanup_args[@]}"
   python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --terminal-receipt "$terminal_receipt" >/dev/null
   status="already_finalized"
 else

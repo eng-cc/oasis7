@@ -269,6 +269,10 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "add" ]]; then
   mkdir -p "${4:?}"
   exit 0
 fi
+if [[ "${1:-}" == "-C" && "${3:-}" == "worktree" && "${4:-}" == "remove" && "${5:-}" == "--force" ]]; then
+  rm -rf "${6:?}"
+  exit 0
+fi
 echo "unexpected git command: $*" >&2
 exit 1
 FAKE_GIT

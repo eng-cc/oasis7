@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -19,16 +20,32 @@ def run_json(command: list[str]) -> dict:
         return {"query_error": "invalid JSON response"}
 
 
-def registered_worktrees(root: pathlib.Path) -> set[str]:
+def registered_worktrees(root: pathlib.Path) -> dict[str, str]:
     result = subprocess.run(
         ["git", "-C", str(root), "worktree", "list", "--porcelain"],
         text=True, capture_output=True, check=True,
     )
-    return {
-        line.removeprefix("worktree ")
-        for line in result.stdout.splitlines()
-        if line.startswith("worktree ")
-    }
+    entries: dict[str, str] = {}
+    current = ""
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            current = str(pathlib.Path(line.removeprefix("worktree ")).resolve())
+            entries[current] = ""
+        elif current and line.startswith("branch refs/heads/"):
+            entries[current] = line.removeprefix("branch refs/heads/")
+    return entries
+
+
+def load(path: pathlib.Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def digest(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
 
 
 def audit(root: pathlib.Path, task_uid: str) -> dict:
@@ -48,7 +65,12 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
     tombstone = receipt_root / "terminal-tombstone.json"
     worktree = str(pathlib.Path(str(record.get("canonical_worktree") or "")).resolve())
     branch = str(record.get("task_branch") or "")
-    worktree_present = worktree in registered_worktrees(root)
+    registrations = registered_worktrees(root)
+    worktree_present = worktree in registrations
+    branch_registered_elsewhere = any(
+        checked_branch == branch and checked_path != worktree
+        for checked_path, checked_branch in registrations.items()
+    )
     local_branch_present = subprocess.run(
         ["git", "-C", str(root), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]
     ).returncode == 0
@@ -60,19 +82,52 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
                       "-R", str(record.get("repository")), "--json", "state,projectItems"])
     pr = run_json(["gh", "pr", "view", str(record.get("pr_number")),
                    "-R", str(record.get("repository")), "--json", "state,mergedAt,headRefName"])
-    tombstone_data = json.loads(tombstone.read_text(encoding="utf-8")) if tombstone.is_file() else {}
+    terminal_data, ledger_data, tombstone_data = load(terminal), load(ledger), load(tombstone)
+    expected_identity = {
+        "task_uid": task_uid, "repository": record.get("repository"),
+        "issue_number": record.get("issue_number"), "pr_number": record.get("pr_number"),
+    }
+    terminal_identity = (
+        terminal_data.get("receipt_type") == "oasis7_terminal_cleanup"
+        and terminal_data.get("issuer") == "post-merge-cleanup"
+        and all(str(terminal_data.get(key)) == str(value) for key, value in expected_identity.items())
+        and terminal_data.get("merge_receipt_sha256") == record.get("merge_receipt_sha256")
+        and terminal_data.get("main_sync_receipt_sha256") == (record.get("phase_receipt_sha256") or {}).get("main_sync")
+        and terminal_data == (record.get("phase_receipts") or {}).get("post_merge_done")
+        and digest(terminal) == (record.get("phase_receipt_sha256") or {}).get("post_merge_done")
+    )
+    operations = ledger_data.get("operations") or {}
+    project_bound = bool(record.get("project_item_id"))
+    ledger_effects = ["issue_close"] + (["project_update", "evidence_comment"] if project_bound else [])
+    ledger_valid = (
+        ledger_data.get("schema") == "oasis7_finalizer_ledger_v1"
+        and ledger_data.get("task_uid") == task_uid
+        and all((operations.get(effect) or {}).get("committed") is True for effect in ledger_effects)
+    )
+    project_done = any(
+        str(((item or {}).get("status") or {}).get("name") or "").upper() == "DONE"
+        for item in (issue.get("projectItems") or [])
+    )
     checks = {
         "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",
-        "terminal_receipt_present": terminal.is_file(),
-        "finalizer_ledger_present": ledger.is_file(),
+        "terminal_receipt_chain_valid": terminal_identity,
+        "finalizer_ledger_committed": ledger_valid,
         "terminal_tombstone_valid": (
             tombstone_data.get("schema") == "oasis7_terminal_tombstone_v1"
             and tombstone_data.get("task_uid") == task_uid
+            and all(str(tombstone_data.get(key)) == str(value) for key, value in expected_identity.items())
+            and tombstone_data.get("canonical_worktree") == record.get("canonical_worktree")
+            and tombstone_data.get("task_branch") == branch
+            and tombstone_data.get("workflow_phase") == "post_merge_done"
+            and tombstone_data.get("terminal_receipt_sha256") == digest(terminal)
             and tombstone_data.get("checkout_recreation_forbidden") is True
         ),
         "issue_closed": str(issue.get("state") or "").upper() == "CLOSED",
-        "pr_merged": str(pr.get("state") or "").upper() == "MERGED",
-        "worktree_absent": not worktree_present,
+        "project_terminal": project_done,
+        "pr_merged": str(pr.get("state") or "").upper() == "MERGED" and bool(pr.get("mergedAt"))
+                     and pr.get("headRefName") == branch,
+        "worktree_absent": not worktree_present and not pathlib.Path(worktree).exists(),
+        "task_branch_not_registered_elsewhere": not branch_registered_elsewhere,
         "local_branch_absent": not local_branch_present,
         "remote_branch_absent": remote_branch.returncode == 0 and not remote_branch.stdout.strip(),
     }

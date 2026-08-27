@@ -137,6 +137,23 @@ WORKTREE_REMOVED="$(printf '%s' "$INTENT_STATE" | awk '{print $1}')"
 BRANCH_DELETED="$(printf '%s' "$INTENT_STATE" | awk '{print $2}')"
 TERMINAL_COMMITTED="$(printf '%s' "$INTENT_STATE" | awk '{print $3}')"
 WORKTREE_REAPPEARED=0
+WORKTREE_EFFECT_RECOVERED=0
+BRANCH_EFFECT_RECOVERED=0
+if [[ "$WORKTREE_REMOVED" != 1 && ! -e "$WORKTREE" && -f "$INTENT_JOURNAL" ]]; then
+  ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
+    || die "cleanup intent exists but absent worktree remains registered"
+  [[ -n "$JOURNAL_WORKTREE_COMMON_DIR" && -n "$JOURNAL_BRANCH_TIP" ]] \
+    || die "cleanup intent lacks identity needed to reconcile an interrupted removal"
+  WORKTREE_REMOVED=1
+  WORKTREE_EFFECT_RECOVERED=1
+fi
+if [[ "$WORKTREE_REMOVED" == 1 && "$BRANCH_DELETED" != 1 ]] \
+    && ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  [[ -f "$INTENT_JOURNAL" && -n "$JOURNAL_BRANCH_TIP" ]] \
+    || die "task branch is absent without a matching cleanup intent"
+  BRANCH_DELETED=1
+  BRANCH_EFFECT_RECOVERED=1
+fi
 if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   if [[ -e "$WORKTREE" ]]; then
     # A crash/retry race may recreate the exact canonical worktree.  Reconcile
@@ -342,7 +359,7 @@ if [[ "$DRY_RUN" == "0" ]]; then
   # A removed task path cannot be re-read; its linked-worktree identity is the
   # live canonical repository common-dir already checked above.
   JOURNAL_BACKFILL_COMMON_DIR="${WORKTREE_COMMON_DIR:-$REPO_COMMON_DIR}"
-  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" <<'PY'
+  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" "$WORKTREE_EFFECT_RECOVERED" "$BRANCH_EFFECT_RECOVERED" <<'PY'
 import json,pathlib,sys
 p=pathlib.Path(sys.argv[1]); identity={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
  "repository":sys.argv[3],"worktree":sys.argv[4],"branch":sys.argv[5]}
@@ -365,6 +382,8 @@ if p.exists():
 else:
  expected.update(derived)
  expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
+expected['worktree_removed']=expected['worktree_removed'] or sys.argv[8]=='1'
+expected['branch_deleted']=expected['branch_deleted'] or sys.argv[9]=='1'
 expected['revision']=int((json.loads(p.read_text()).get('revision',0) if p.exists() else 0))+1
 print(json.dumps(expected))
 PY
@@ -400,7 +419,8 @@ PY
       REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
       [[ "$REMOTE_BRANCH_TIP" == "$BRANCH_TIP" ]] \
         || die "remote task branch tip disagrees with merged PR head"
-      git -C "$REPO_ROOT" push origin --delete "$BRANCH" >/dev/null \
+      git -C "$REPO_ROOT" push --force-with-lease="refs/heads/$BRANCH:$REMOTE_BRANCH_TIP" \
+        origin ":refs/heads/$BRANCH" >/dev/null \
         || die "remote task branch deletion failed"
       [[ -z "$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" ]] \
         || die "remote task branch deletion readback failed"

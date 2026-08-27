@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
+import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 AUDIT = ROOT / "scripts/pm/terminal-task-audit.py"
 FINALIZER = ROOT / "scripts/pm/post-merge-finalize.py"
+GUARD = ROOT / "scripts/pm/terminal-tombstone-guard.py"
 CANONICAL = ROOT / "doc/engineering/workflow/source-of-truth.md"
 
 
@@ -29,6 +32,45 @@ class TerminalReconciliationContractTest(unittest.TestCase):
             "oasis7_terminal_tombstone_v1",
             "checkout_recreation_forbidden",
         ):
+            self.assertIn(marker, source)
+
+    def test_checkout_creator_consumes_terminal_tombstone(self) -> None:
+        creator = (ROOT / "scripts/new-task-worktree.sh").read_text(encoding="utf-8")
+        self.assertIn("terminal-tombstone-guard.py", creator)
+        with tempfile.TemporaryDirectory() as scratch:
+            repo = Path(scratch) / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            common = Path(subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "--git-common-dir"], text=True
+            ).strip())
+            if not common.is_absolute():
+                common = repo / common
+            receipt_root = common / "oasis7-workflow-receipts" / ("task_" + "0" * 32)
+            receipt_root.mkdir(parents=True)
+            retired = str(Path(scratch) / "retired")
+            (receipt_root / "terminal-tombstone.json").write_text(json.dumps({
+                "schema": "oasis7_terminal_tombstone_v1",
+                "task_uid": "task_" + "0" * 32,
+                "canonical_worktree": retired,
+                "task_branch": "task/retired",
+                "checkout_recreation_forbidden": True,
+            }), encoding="utf-8")
+            blocked = subprocess.run([
+                str(GUARD), "--repo-root", str(repo), "--worktree", retired,
+                "--branch", "task/other",
+            ], text=True, capture_output=True)
+            self.assertNotEqual(blocked.returncode, 0)
+            allowed = subprocess.run([
+                str(GUARD), "--repo-root", str(repo), "--worktree", str(Path(scratch) / "new"),
+                "--branch", "task/new",
+            ], text=True, capture_output=True)
+            self.assertEqual(allowed.returncode, 0, allowed.stderr)
+
+    def test_audit_validates_receipt_chain_and_physical_absence(self) -> None:
+        source = AUDIT.read_text(encoding="utf-8")
+        for marker in ("merge_receipt_sha256", "main_sync_receipt_sha256",
+                       "phase_receipt_sha256", "pathlib.Path(worktree).exists()",
+                       "finalizer_ledger_committed", "project_terminal"):
             self.assertIn(marker, source)
 
     def test_canonical_truth_defines_cross_sink_terminal_invariant(self) -> None:

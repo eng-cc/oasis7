@@ -401,6 +401,9 @@ if existing_branch_path="$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null)"; th
   exit 1
 fi
 
+python3 "$CANONICAL_REPO_ROOT/scripts/pm/terminal-tombstone-guard.py" \
+  --repo-root "$CANONICAL_REPO_ROOT" --worktree "$TARGET_PATH" --branch "$BRANCH_NAME"
+
 mkdir -p "$(dirname "$TARGET_PATH")"
 
 MODE="create_new_branch"
