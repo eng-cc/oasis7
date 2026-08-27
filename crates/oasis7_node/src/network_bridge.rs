@@ -547,6 +547,7 @@ impl ReplicationNetworkEndpoint {
         self.request_fetch_commit_for_gap_sync_with_policy(
             request,
             GapSyncFetchCommitRetryPolicy::FullGapSync,
+            false,
         )
     }
 
@@ -557,6 +558,18 @@ impl ReplicationNetworkEndpoint {
         self.request_fetch_commit_for_gap_sync_with_policy(
             request,
             GapSyncFetchCommitRetryPolicy::SingleProbe,
+            false,
+        )
+    }
+
+    pub(crate) fn request_fetch_commit_for_high_checkpoint_probe(
+        &self,
+        request: &FetchCommitRequest,
+    ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        self.request_fetch_commit_for_gap_sync_with_policy(
+            request,
+            GapSyncFetchCommitRetryPolicy::SingleProbe,
+            true,
         )
     }
 
@@ -593,6 +606,7 @@ impl ReplicationNetworkEndpoint {
         &self,
         request: &FetchCommitRequest,
         retry_policy: GapSyncFetchCommitRetryPolicy,
+        require_lineage_sidecar: bool,
     ) -> Result<GapSyncFetchCommitResponse, NodeError> {
         // A failure snapshot describes exactly one request sweep.  Discard an
         // unconsumed prior snapshot before any early validation return can
@@ -607,11 +621,13 @@ impl ReplicationNetworkEndpoint {
             )?;
         }
         if let Some(response) = self.cached_fetch_commit_success_response(request) {
-            return Ok(GapSyncFetchCommitResponse {
-                response,
-                repair_summary: "cache=hit".to_string(),
-                route_snapshot: NodeReplicationGapSyncRouteSnapshot::default(),
-            });
+            if !require_lineage_sidecar || response.lineage_envelope.is_some() {
+                return Ok(GapSyncFetchCommitResponse {
+                    response,
+                    repair_summary: "cache=hit".to_string(),
+                    route_snapshot: NodeReplicationGapSyncRouteSnapshot::default(),
+                });
+            }
         }
         let mut last_err = None;
         let mut route_events = Vec::new();
@@ -654,7 +670,10 @@ impl ReplicationNetworkEndpoint {
                 }
             }
         };
-        if !response.found {
+        if !response.found
+            || (require_lineage_sidecar
+                && (response.message.is_none() || response.lineage_envelope.is_none()))
+        {
             // A fresh observer can have enough stale discovery candidates to
             // exhaust this bounded sweep before reaching the validators that
             // supplied its signed head.  Prefer live connected peers, then
@@ -707,7 +726,11 @@ impl ReplicationNetworkEndpoint {
                         route_observer
                             .observe_found(GapSyncFetchCommitRouteKind::Provider, candidate.found);
                         route_events.push(format!("peer:{}:found={}", peer_id, candidate.found));
-                        if candidate.found {
+                        let candidate_satisfies_request = candidate.found
+                            && (!require_lineage_sidecar
+                                || (candidate.message.is_some()
+                                    && candidate.lineage_envelope.is_some()));
+                        if candidate_satisfies_request {
                             response = candidate;
                             last_err = None;
                             break;
@@ -735,7 +758,10 @@ impl ReplicationNetworkEndpoint {
         }
         if retry_policy == GapSyncFetchCommitRetryPolicy::FullGapSync {
             for _ in 1..FETCH_COMMIT_GENERIC_ROUTE_ATTEMPTS {
-                if response.found {
+                if response.found
+                    && (!require_lineage_sidecar
+                        || (response.message.is_some() && response.lineage_envelope.is_some()))
+                {
                     break;
                 }
                 let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {

@@ -1,5 +1,9 @@
 use std::fs;
 
+use oasis7_proto::distributed_checkpoint_lineage::{
+    CheckpointLineageCheckpointV1, CheckpointLineageEnvelopeV1, CheckpointLineageHeadV1,
+};
+
 use super::*;
 
 #[derive(Clone)]
@@ -137,6 +141,112 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
     ) -> Result<(), WorldError> {
         Ok(())
     }
+}
+
+fn route_test_lineage_envelope() -> CheckpointLineageEnvelopeV1 {
+    CheckpointLineageEnvelopeV1 {
+        schema_version: 1,
+        claim_boundary: "oasis7.checkpoint_lineage.v1".to_string(),
+        world_id: "world-gap-sync-fetch-commit-lineage-route".to_string(),
+        checkpoint: CheckpointLineageCheckpointV1 {
+            height: 64,
+            block_hash: "block-64".to_string(),
+            state_root: "state-64".to_string(),
+            execution_block_hash: "execution-block-64".to_string(),
+            execution_state_root: "execution-state-64".to_string(),
+            descriptor_digest: "descriptor-digest-64".to_string(),
+            manifest_size: 1,
+        },
+        head: CheckpointLineageHeadV1 {
+            height: 80,
+            block_hash: "block-80".to_string(),
+            state_root: "state-80".to_string(),
+            execution_block_hash: "execution-block-80".to_string(),
+            execution_state_root: "execution-state-80".to_string(),
+        },
+        validator_set_hash: "validator-set".to_string(),
+        total_stake: 1,
+        required_stake: 1,
+        round_id: "round-64".to_string(),
+        votes: Vec::new(),
+    }
+}
+
+#[test]
+fn high_checkpoint_fetch_does_not_stop_at_found_provider_without_lineage_sidecar() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-lineage-route-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-lineage-route-local");
+    let world_id = "world-gap-sync-fetch-commit-lineage-route";
+    let generic_attempts = Arc::new(Mutex::new(0usize));
+    let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let peer_responses = Arc::new(Mutex::new(HashMap::new()));
+    let network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync> =
+        Arc::new(network_gap_sync_tests::PeerDirectedFetchCommitTestNetwork {
+            // The generic route models the first connected validator: it has
+            // the commit but not the authenticated checkpoint sidecar.
+            generic_response: super::replication::FetchCommitResponse {
+                found: true,
+                message: None,
+                lineage_envelope: None,
+            },
+            generic_unsupported: false,
+            peer_responses: Arc::clone(&peer_responses),
+            connected_peer_ids: vec!["validator-204".to_string(), "validator-205".to_string()],
+            generic_attempts: Arc::clone(&generic_attempts),
+            provider_attempts: Arc::clone(&provider_attempts),
+        });
+    let (_, _, endpoint, message) = network_gap_sync_tests::build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        210,
+        211,
+        Arc::clone(&network),
+    );
+    peer_responses
+        .lock()
+        .expect("lock provider responses")
+        .extend([
+            (
+                "validator-204".to_string(),
+                super::replication::FetchCommitResponse {
+                    found: true,
+                    message: None,
+                    lineage_envelope: None,
+                },
+            ),
+            (
+                "validator-205".to_string(),
+                super::replication::FetchCommitResponse {
+                    found: true,
+                    message: Some(message),
+                    lineage_envelope: Some(route_test_lineage_envelope()),
+                },
+            ),
+        ]);
+    let request = signed_fetch_commit_request_for_test(world_id, 64, 211);
+
+    let response = endpoint
+        .request_fetch_commit_for_high_checkpoint_probe(&request)
+        .expect("high checkpoint route should continue after a sidecar-less provider");
+    assert!(
+        response.response.lineage_envelope.is_some(),
+        "high checkpoint route must select a provider carrying authenticated lineage"
+    );
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[
+            vec!["validator-204".to_string()],
+            vec!["validator-205".to_string()],
+        ],
+        "route must try the second validator after a sidecar-less found response"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
 }
 
 #[test]
