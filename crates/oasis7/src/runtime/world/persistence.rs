@@ -746,7 +746,7 @@ impl World {
             state: self.state.clone(),
             journal_len: self.journal.len(),
             last_event_id: self.next_event_id.saturating_sub(1),
-            journal_commitment: hash_json(&self.journal.events).unwrap_or_default(),
+            journal_commitment: self.journal.commitment().unwrap_or_default(),
             event_id_era: self.next_event_id_era,
             next_action_id: self.next_action_id,
             action_id_era: self.next_action_id_era,

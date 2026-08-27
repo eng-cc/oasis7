@@ -225,6 +225,15 @@ impl Journal {
         self.events.is_empty()
     }
 
+    /// Return the canonical commitment for this journal's event sequence.
+    ///
+    /// Snapshots use the commitment of their represented journal prefix, so
+    /// callers that intentionally replace that prefix can recompute the
+    /// commitment without duplicating the hashing convention.
+    pub fn commitment(&self) -> Result<String, WorldError> {
+        super::util::hash_json(&self.events)
+    }
+
     pub fn to_json(&self) -> Result<String, WorldError> {
         Ok(serde_json::to_string_pretty(self)?)
     }
