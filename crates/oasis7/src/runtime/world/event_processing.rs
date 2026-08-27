@@ -682,6 +682,20 @@ impl World {
                 reason: "completed AgentIntentV2 requires a world-event receipt reference"
                     .to_string(),
             })?;
+        if intent
+            .world_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+            || intent.reorg_epoch.is_none()
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason:
+                    "completed AgentIntentV2 requires world_id and reorg_epoch authority context"
+                        .to_string(),
+            });
+        }
         let Some(envelope_event_seq) = envelope_event_seq else {
             // The state reducer will fail closed without the witness. Keep
             // this validator side-effect free for any non-journal caller.
@@ -700,19 +714,28 @@ impl World {
                 reason: "completed AgentIntentV2 requires a bound effect_intent_id".to_string(),
             }
         })?;
-        let committed = self.journal.events.iter().any(|event| {
+        let committed = self.journal.events.iter().find(|event| {
             event.id == receipt_event_id
                 && matches!(
                     &event.body,
                     WorldEventBody::ReceiptAppended(receipt)
                         if receipt.intent_id == expected_effect_intent_id
+                            && !receipt.status.trim().is_empty()
                 )
         });
-        if !committed {
+        let Some(committed) = committed else {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
                     "completed AgentIntentV2 receipt {} is not committed for effect intent {}",
                     receipt_event_id, expected_effect_intent_id
+                ),
+            });
+        };
+        if committed.time < intent.logical_time {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} precedes intent logical time {}",
+                    receipt_event_id, intent.logical_time
                 ),
             });
         }

@@ -211,10 +211,10 @@ impl ViewerRuntimeLiveServer {
             Ok(()) => {
                 self.llm_sidecar.request_decision();
             }
-            Err(error)
-                if chat_echo_enabled
-                    && (error.code == "llm_init_failed"
-                        || error.code == "agent_provider_chat_unsupported") => {}
+            // A local echo may stand in for an unavailable builtin runner, but
+            // a provider capability refusal is authoritative: do not emit an
+            // accepted-looking echo while leaving the durable intent accepted.
+            Err(error) if chat_echo_enabled && error.code == "llm_init_failed" => {}
             Err(error) => {
                 let disposition = if matches!(
                     error.code.as_str(),

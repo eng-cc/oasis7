@@ -66,12 +66,46 @@ fn invalid_agent_intent(reason: impl Into<String>) -> WorldError {
     }
 }
 
+fn append_canonical_bytes(payload: &mut Vec<u8>, value: &[u8]) {
+    let length = u64::try_from(value.len()).expect("canonical field length must fit in u64");
+    payload.extend_from_slice(&length.to_be_bytes());
+    payload.extend_from_slice(value);
+}
+
+fn append_canonical_str(payload: &mut Vec<u8>, value: &str) {
+    append_canonical_bytes(payload, value.as_bytes());
+}
+
+fn append_canonical_u64(payload: &mut Vec<u8>, value: u64) {
+    payload.extend_from_slice(&value.to_be_bytes());
+}
+
+fn append_canonical_optional_str(payload: &mut Vec<u8>, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            payload.push(1);
+            append_canonical_str(payload, value);
+        }
+        None => payload.push(0),
+    }
+}
+
+fn append_canonical_optional_u64(payload: &mut Vec<u8>, value: Option<u64>) {
+    match value {
+        Some(value) => {
+            payload.push(1);
+            append_canonical_u64(payload, value);
+        }
+        None => payload.push(0),
+    }
+}
+
 fn derive_agent_chat_intent_id(player_id: &str, agent_id: &str, intent_seq: u64) -> String {
-    let payload = format!(
-        "agent-chat-intent-v2\0player={}\0agent={}\0intent_seq={}",
-        player_id, agent_id, intent_seq
-    );
-    format!("agent-intent-v2:{}", sha256_hex(payload.as_bytes()))
+    let mut payload = b"agent-chat-intent-v2\0".to_vec();
+    append_canonical_str(&mut payload, player_id);
+    append_canonical_str(&mut payload, agent_id);
+    append_canonical_u64(&mut payload, intent_seq);
+    format!("agent-intent-v2:{}", sha256_hex(&payload))
 }
 
 fn derive_agent_chat_request_digest(
@@ -81,23 +115,17 @@ fn derive_agent_chat_request_digest(
     message: &str,
     authority: &AgentIntentAuthorityContext,
 ) -> String {
-    let payload = format!(
-        "agent-chat-request-v2\0player={}\0agent={}\0intent_seq={}\0intent_tick={}\0world_id={}\0reorg_epoch={}\0authority_scope={}\0replaces_intent_id={}\0message={}",
-        player_id,
-        agent_id,
-        intent_seq,
-        authority
-            .intent_tick
-            .map_or_else(|| "<none>".to_string(), |value| value.to_string()),
-        authority.world_id.as_deref().unwrap_or("<none>"),
-        authority
-            .reorg_epoch
-            .map_or_else(|| "<none>".to_string(), |value| value.to_string()),
-        authority.authority_scope.as_deref().unwrap_or("<none>"),
-        authority.replaces_intent_id.as_deref().unwrap_or("<none>"),
-        message
-    );
-    sha256_hex(payload.as_bytes())
+    let mut payload = b"agent-chat-request-v2\0".to_vec();
+    append_canonical_str(&mut payload, player_id);
+    append_canonical_str(&mut payload, agent_id);
+    append_canonical_u64(&mut payload, intent_seq);
+    append_canonical_optional_u64(&mut payload, authority.intent_tick);
+    append_canonical_optional_str(&mut payload, authority.world_id.as_deref());
+    append_canonical_optional_u64(&mut payload, authority.reorg_epoch);
+    append_canonical_optional_str(&mut payload, authority.authority_scope.as_deref());
+    append_canonical_optional_str(&mut payload, authority.replaces_intent_id.as_deref());
+    append_canonical_str(&mut payload, message);
+    sha256_hex(&payload)
 }
 
 fn normalize_authority_context(
@@ -108,6 +136,17 @@ fn normalize_authority_context(
             "intent_tick must be greater than zero when supplied",
         ));
     }
+    let has_authority_tuple_field = authority.world_id.is_some()
+        || authority.reorg_epoch.is_some()
+        || authority.authority_scope.is_some();
+    let has_complete_authority_tuple = authority.world_id.is_some()
+        && authority.reorg_epoch.is_some()
+        && authority.authority_scope.is_some();
+    if has_authority_tuple_field && !has_complete_authority_tuple {
+        return Err(invalid_agent_intent(
+            "authority context must include world_id, reorg_epoch, and authority_scope together",
+        ));
+    }
     authority.world_id = authority
         .world_id
         .map(|value| value.trim().to_string())
@@ -116,6 +155,13 @@ fn normalize_authority_context(
         .authority_scope
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    if authority.world_id.is_some() != has_authority_tuple_field
+        || authority.authority_scope.is_some() != has_authority_tuple_field
+    {
+        return Err(invalid_agent_intent(
+            "authority context fields cannot be empty",
+        ));
+    }
     authority.replaces_intent_id = authority
         .replaces_intent_id
         .map(|value| value.trim().to_string())
@@ -242,6 +288,13 @@ impl World {
         let event_seq = self.next_event_id.max(1);
         let mut transitioned = current;
         transitioned.status = disposition.status().to_string();
+        transitioned.summary = canonical_agent_intent_summary(
+            AGENT_CHAT_INTENT_KIND,
+            AGENT_CHAT_INTENT_SOURCE,
+            disposition.status(),
+        )
+        .map(|summary| summary.text)
+        .map_err(|error| invalid_agent_intent(error.to_string()))?;
         transitioned.event_seq = event_seq;
         transitioned.updated_at = self.state.time;
         transitioned.reason_code = Some(disposition.reason_code().to_string());
@@ -271,7 +324,7 @@ impl World {
     /// Authentication, authorization, nonce consumption, and provider enqueueing remain
     /// outside this kernel method.  The caller supplies the already verified player identity
     /// and intent sequence; the runtime owns logical time and journal event sequencing.
-    pub fn record_agent_chat_intent(
+    pub(crate) fn record_agent_chat_intent(
         &mut self,
         player_id: &str,
         agent_id: &str,
@@ -324,13 +377,12 @@ impl World {
         {
             return Err(invalid_agent_intent("summary contains a control character"));
         }
-        let player_summary = canonical_agent_intent_summary(
-            AGENT_CHAT_INTENT_KIND,
-            AGENT_CHAT_INTENT_SOURCE,
-            AGENT_INTENT_STATUS_ACCEPTED,
-        )
-        .map_err(|error| invalid_agent_intent(error.to_string()))?
-        .text;
+        let lifecycle_summary = |status| {
+            canonical_agent_intent_summary(AGENT_CHAT_INTENT_KIND, AGENT_CHAT_INTENT_SOURCE, status)
+                .map(|summary| summary.text)
+                .map_err(|error| invalid_agent_intent(error.to_string()))
+        };
+        let player_summary = lifecycle_summary(AGENT_INTENT_STATUS_ACCEPTED)?;
         if !self.state.agents.contains_key(agent_id) {
             return Err(WorldError::AgentNotFound {
                 agent_id: agent_id.to_string(),
@@ -345,7 +397,6 @@ impl World {
                 && recorded.request_digest == request_digest
                 && recorded.agent_id == agent_id
                 && recorded.kind == AGENT_CHAT_INTENT_KIND
-                && recorded.summary == player_summary
                 && recorded.source == AGENT_CHAT_INTENT_SOURCE
                 && recorded.intent_tick == authority.intent_tick
                 && recorded.world_id == authority.world_id
@@ -416,13 +467,19 @@ impl World {
                         previous.intent_id
                     )));
                 }
+                if matches!(previous.status.as_str(), "proposed" | "submitted") {
+                    return Err(invalid_agent_intent(format!(
+                        "intent {} cannot be superseded before acceptance",
+                        previous.intent_id
+                    )));
+                }
                 let replacement_event_seq = self.next_event_id.max(1);
                 let replacement = AgentIntentV2 {
                     schema_version: AGENT_INTENT_V2_SCHEMA_VERSION,
                     agent_id: previous.agent_id,
                     intent_id: previous.intent_id,
                     kind: previous.kind,
-                    summary: previous.summary,
+                    summary: lifecycle_summary(AGENT_INTENT_STATUS_SUPERSEDED)?,
                     target_id: previous.target_id,
                     effect_intent_id: previous.effect_intent_id,
                     intent_tick: previous.intent_tick,
@@ -470,7 +527,7 @@ impl World {
             agent_id: agent_id.to_string(),
             intent_id: intent_id.clone(),
             kind: AGENT_CHAT_INTENT_KIND.to_string(),
-            summary: player_summary,
+            summary: lifecycle_summary("proposed")?,
             target_id: None,
             effect_intent_id: None,
             intent_tick: authority.intent_tick,
@@ -504,6 +561,7 @@ impl World {
         let submitted_event_seq = self.next_event_id.max(1);
         let mut submitted = proposed;
         submitted.status = "submitted".to_string();
+        submitted.summary = lifecycle_summary("submitted")?;
         submitted.event_seq = submitted_event_seq;
         submitted.updated_at = now;
         let actual_event_seq = self.append_event(
@@ -521,6 +579,7 @@ impl World {
         let accepted_event_seq = self.next_event_id.max(1);
         let mut accepted = submitted;
         accepted.status = AGENT_INTENT_STATUS_ACCEPTED.to_string();
+        accepted.summary = player_summary;
         accepted.event_seq = accepted_event_seq;
         accepted.updated_at = now;
         let actual_event_seq = self.append_event(

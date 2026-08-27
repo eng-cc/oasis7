@@ -6,10 +6,11 @@ import {
   AGENT_INTENT_STATUSES,
   buildAgentIntentFixtureSnapshot,
 } from "./agent_intent_visual_fixture.js";
+import { AGENT_INTENT_SUMMARIES } from "./agent_intent_surface.jsx";
 import { renderViewerApp } from "./test_support/viewer_app_fixture.jsx";
 
 const AGENT_ID = "agent-0";
-const INTENT_SUMMARY = "Stabilize power before expanding the iron line.";
+const INTENT_SUMMARY = AGENT_INTENT_SUMMARIES.accepted;
 
 function acceptedIntent(overrides = {}) {
   return {
@@ -80,6 +81,7 @@ describe("Agent Console V2 authoritative intent", () => {
         : null;
       const { intentSurface } = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
         status,
+        message: AGENT_INTENT_SUMMARIES[status],
         receipt_ref: receiptRef,
         replaced_by: status === "superseded" ? "agent-intent-v2:replacement" : null,
       })));
@@ -96,7 +98,7 @@ describe("Agent Console V2 authoritative intent", () => {
         superseded: "Replaced",
       }[status];
       expect(within(intentSurface).getByText(statusLabel)).toBeInTheDocument();
-      expect(intentSurface).toHaveTextContent(INTENT_SUMMARY);
+      expect(intentSurface).toHaveTextContent(AGENT_INTENT_SUMMARIES[status]);
       expect(intentSurface.textContent).not.toMatch(/agent-intent-v2|live-runtime-test|world-event:/);
       dispose?.();
       dispose = null;
@@ -139,13 +141,21 @@ describe("Agent Console V2 authoritative intent", () => {
       event_seq: "11",
       receipt_id: "world-event:12",
     };
-    const valid = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ status: "completed", receipt_ref: validReceipt })));
+    const valid = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
+      status: "completed",
+      message: AGENT_INTENT_SUMMARIES.completed,
+      receipt_ref: validReceipt,
+    })));
     expect(valid.intentSurface).toHaveAttribute("data-agent-intent-receipt-state", "confirmed");
     expect(valid.intentSurface).toHaveTextContent("World receipt confirmed");
     dispose?.();
     dispose = null;
 
-    const missing = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ status: "completed", receipt_ref: null })));
+    const missing = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
+      status: "completed",
+      message: AGENT_INTENT_SUMMARIES.completed,
+      receipt_ref: null,
+    })));
     expect(missing.intentSurface).toHaveAttribute("data-agent-intent-state", "unavailable");
     expect(missing.intentSurface).toHaveAttribute("data-agent-intent-receipt-state", "missing");
     expect(missing.intentSurface).not.toHaveTextContent("Completed");
@@ -160,10 +170,11 @@ describe("Agent Console V2 authoritative intent", () => {
 
     const replacement = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
       status: "superseded",
+      message: AGENT_INTENT_SUMMARIES.superseded,
       replaced_by: "agent-intent-v2:replacement",
       reason_code: "superseded_by_replacement",
     })));
-    expect(replacement.intentSurface).toHaveTextContent("Replaced by a newer intent");
+    expect(replacement.intentSurface).toHaveTextContent("This intent was replaced by a newer intent.");
     expect(replacement.intentSurface.textContent).not.toMatch(/agent-intent-v2|replacement/);
   });
 

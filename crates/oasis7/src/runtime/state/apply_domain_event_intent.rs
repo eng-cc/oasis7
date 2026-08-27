@@ -91,11 +91,21 @@ fn validate_runtime_acceptance_source(intent: &AgentIntentV2) -> Result<(), Worl
 }
 
 fn validate_player_safe_copy(intent: &AgentIntentV2) -> Result<(), WorldError> {
-    let expected = canonical_agent_intent_summary(&intent.kind, &intent.source, STATUS_ACCEPTED)
-        .map_err(|error| invalid_intent(error.to_string()))?;
-    if intent.summary != expected.text {
+    let expected = if intent.source == SOURCE_PROVIDER_ADVISORY {
+        if intent.status != STATUS_PROPOSED {
+            return Err(invalid_intent(
+                "provider_advisory may remain proposed but cannot enter another lifecycle state",
+            ));
+        }
+        "Agent guidance is proposed and not yet accepted.".to_string()
+    } else {
+        canonical_agent_intent_summary(&intent.kind, &intent.source, intent.status.as_str())
+            .map_err(|error| invalid_intent(error.to_string()))?
+            .text
+    };
+    if intent.summary != expected {
         return Err(invalid_intent(
-            "accepted intent summary must use the canonical player-safe template",
+            "intent summary must use the canonical player-safe template for its lifecycle state",
         ));
     }
     if let Some(reason_code) = intent.reason_code.as_deref() {
@@ -147,6 +157,18 @@ fn validate_receipt_reference(
         ));
     };
     if intent
+        .world_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+        || intent.reorg_epoch.is_none()
+    {
+        return Err(invalid_intent(
+            "completed transition requires world_id and reorg_epoch authority context",
+        ));
+    }
+    if intent
         .effect_intent_id
         .as_deref()
         .map(str::trim)
@@ -185,7 +207,6 @@ fn immutable_payload_matches(current: &AgentIntentV2, incoming: &AgentIntentV2) 
         && current.agent_id == incoming.agent_id
         && current.intent_id == incoming.intent_id
         && current.kind == incoming.kind
-        && current.summary == incoming.summary
         && current.target_id == incoming.target_id
         && current.effect_intent_id == incoming.effect_intent_id
         && current.intent_tick == incoming.intent_tick
@@ -542,16 +563,22 @@ impl WorldState {
 
                 let allowed = matches!(
                     (current.status.as_str(), intent.status.as_str()),
-                    (STATUS_ACCEPTED, STATUS_BLOCKED)
-                        | (STATUS_BLOCKED, STATUS_ACCEPTED)
+                    (STATUS_PROPOSED, "rejected")
+                        | (STATUS_PROPOSED, "expired")
+                        | (STATUS_SUBMITTED, "rejected")
+                        | (STATUS_SUBMITTED, "expired")
+                        | (STATUS_SUBMITTED, "cancelled")
+                        | (STATUS_ACCEPTED, STATUS_BLOCKED)
                         | (STATUS_ACCEPTED, "completed")
-                        | (STATUS_BLOCKED, "completed")
                         | (STATUS_ACCEPTED, "rejected")
-                        | (STATUS_BLOCKED, "rejected")
                         | (STATUS_ACCEPTED, "expired")
-                        | (STATUS_BLOCKED, "expired")
                         | (STATUS_ACCEPTED, "cancelled")
+                        | (STATUS_ACCEPTED, "superseded")
+                        | (STATUS_BLOCKED, STATUS_ACCEPTED)
+                        | (STATUS_BLOCKED, "rejected")
+                        | (STATUS_BLOCKED, "expired")
                         | (STATUS_BLOCKED, "cancelled")
+                        | (STATUS_BLOCKED, "superseded")
                 );
                 if !allowed {
                     return Err(invalid_intent(format!(

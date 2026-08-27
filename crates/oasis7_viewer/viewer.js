@@ -11854,7 +11854,7 @@ function readFeed(props) {
   return typeof props.feed === "function" ? props.feed() : props.feed || {};
 }
 function statusCopy(locale, tr2, status) {
-  const copy = {
+  const copy2 = {
     loading: ["正在加载世界动态…", "Loading world activity…"],
     ready: ["环境上下文已更新", "Ambient context updated"],
     empty: ["暂无世界动态", "No world activity yet"],
@@ -11862,7 +11862,7 @@ function statusCopy(locale, tr2, status) {
     gap: ["世界动态已过期", "World activity is stale"],
     unavailable: ["世界动态不可用", "World activity unavailable"]
   }[status] || ["世界动态不可用", "World activity unavailable"];
-  return tr2(locale, copy[0], copy[1]);
+  return tr2(locale, copy2[0], copy2[1]);
 }
 function statusBadgeClass(status) {
   if (status === "ready") return "badge badge--accent";
@@ -15400,6 +15400,368 @@ function installBranchCommitmentVisualFixture(fixtures, { core: core2, setFixtur
     setFixturePlayerAuth2();
   };
 }
+var _tmpl$$5 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$2$5 = /* @__PURE__ */ template(`<div class=agent-intent__status-row>`), _tmpl$3$4 = /* @__PURE__ */ template(`<div class=agent-intent__summary>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div class="agent-intent__detail agent-intent__receipt"><span class=metric__label>`), _tmpl$5$3 = /* @__PURE__ */ template(`<div class=agent-intent__detail><span class=metric__label></span><span class=agent-intent__summary>`), _tmpl$6$2 = /* @__PURE__ */ template(`<div class="agent-intent__detail agent-intent__lifecycle">`), _tmpl$7$2 = /* @__PURE__ */ template(`<div class="agent-intent__detail agent-intent__next-step"><span class=metric__label></span><span class=agent-intent__summary>`), _tmpl$8$2 = /* @__PURE__ */ template(`<section class=agent-intent aria-live=polite><div class="agent-intent__heading metric__label"></div><div class=agent-intent__state>`);
+const PLAYER_SAFE_COPY_SCHEMA_VERSION = 1;
+const INTENT_STATUS_LABELS = {
+  proposed: ["已提出", "Proposed"],
+  submitted: ["已提交", "Submitted"],
+  accepted: ["已接受", "Accepted"],
+  blocked: ["受阻", "Blocked"],
+  completed: ["已完成", "Completed"],
+  rejected: ["已拒绝", "Rejected"],
+  expired: ["已过期", "Expired"],
+  cancelled: ["已取消", "Cancelled"],
+  superseded: ["已替换", "Replaced"]
+};
+const AGENT_INTENT_SUMMARIES = Object.freeze({
+  proposed: "Agent guidance is proposed and not yet accepted.",
+  submitted: "Agent guidance was submitted and awaits runtime acceptance.",
+  accepted: "Agent guidance accepted; the Agent will evaluate its next world action.",
+  blocked: "Agent guidance is blocked pending a runtime recheck.",
+  completed: "Agent guidance completed with a confirmed world receipt.",
+  rejected: "Agent guidance was rejected by runtime authority.",
+  expired: "Agent guidance expired before execution.",
+  cancelled: "Agent guidance was cancelled before completion.",
+  superseded: "Agent guidance was replaced by newer guidance."
+});
+const REASON_ALLOWLIST = Object.freeze({
+  missing_material: "World prerequisites changed before execution.",
+  material_shortage: "World prerequisites changed before execution.",
+  permission_changed: "The requested operation is no longer authorized.",
+  ownership_changed: "The controlling session changed before completion.",
+  world_precondition_changed: "The world position changed before execution.",
+  precondition_changed: "The world position changed before execution.",
+  agent_unavailable: "The Agent is not available for this intent.",
+  duplicate_request: "The duplicate request was already recorded.",
+  superseded_by_replacement: "A newer intent has taken over."
+});
+const NEXT_STEP_ALLOWLIST = Object.freeze({
+  unavailable: "Stop and refresh the world snapshot before retrying.",
+  missing_receipt: "Wait for a committed world receipt, then refresh.",
+  stale: "Refresh the world state before acting.",
+  conflict: "Review the latest world state and reselect an intent.",
+  reconnecting: "Wait for the runtime connection to recover.",
+  control_lost: "Reselect the Agent after control is restored.",
+  read_only: "Reselect the Agent in a controllable session.",
+  unauthorized: "Request access before viewing this intent.",
+  blocked: "Recheck runtime state before resuming."
+});
+const ALLOWED_CONTROL_STATES = /* @__PURE__ */ new Set(["controllable", "read_only", "control_lost", "unauthorized", "unavailable"]);
+const ALLOWED_FRESHNESS = /* @__PURE__ */ new Set(["current", "stale", "reconnecting", "conflict"]);
+const TERMINAL_INTENT_STATUSES = /* @__PURE__ */ new Set(["completed", "rejected", "expired", "cancelled", "superseded"]);
+const COPY_KEY_FIELDS = ["copy_schema_version", "summary_schema_version", "player_copy_schema_version"];
+function textValue$1(value2) {
+  return typeof value2 === "string" ? value2.trim() : "";
+}
+function counterIdentity(value2) {
+  if (typeof value2 === "number") return Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
+  const raw2 = textValue$1(value2);
+  if (!/^\d+$/.test(raw2)) return null;
+  try {
+    return BigInt(raw2).toString();
+  } catch (_error) {
+    return null;
+  }
+}
+function hasAuthoritativePosition(intent) {
+  return textValue$1(intent.agent_id).length > 0 && textValue$1(intent.world_id).length > 0 && counterIdentity(intent.reorg_epoch) !== null && counterIdentity(intent.logical_time) !== null && counterIdentity(intent.event_seq) !== null && counterIdentity(intent.updated_at) !== null;
+}
+function hasReceiptReference(receiptRef, intent) {
+  if (!receiptRef || typeof receiptRef !== "object") return false;
+  const receiptIdentity = textValue$1(receiptRef.receipt_id);
+  const receiptEventId = receiptIdentity.startsWith("world-event:") ? counterIdentity(receiptIdentity.slice("world-event:".length)) : null;
+  if (textValue$1(receiptRef.intent_id) !== textValue$1(intent?.intent_id) || textValue$1(receiptRef.world_id) !== textValue$1(intent?.world_id) || receiptEventId === null || receiptEventId === "0") return false;
+  return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch) && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time) && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
+}
+function copy(locale, key) {
+  const zh = String(locale || "").toLowerCase().startsWith("zh");
+  const values = {
+    heading: ["当前意图", "Current Intent"],
+    unavailable: ["意图不可用", "Intent unavailable"],
+    hiddenControlLost: ["意图已隐藏 — 控制权丢失", "Intent hidden — control lost"],
+    hiddenReadOnly: ["意图已隐藏 — 只读观察", "Intent hidden — read-only"],
+    hiddenUnauthorized: ["意图已隐藏 — 未获授权", "Intent hidden — unauthorized"],
+    stale: ["陈旧意图", "Stale intent"],
+    current: ["当前", "Current"],
+    reconnecting: ["重新连接中", "Reconnecting"],
+    offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
+    needsConfirmation: ["需要确认", "Needs confirmation"],
+    reason: ["原因", "Reason"],
+    reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
+    nextStep: ["下一步", "Next step"],
+    receipt: ["世界回执已确认", "World receipt confirmed"],
+    receiptMissing: ["等待世界回执", "World receipt missing"],
+    replayed: ["重复请求已合并；没有创建新的意图。", "Duplicate request coalesced; no new intent was created."],
+    replaced: ["这条意图已由较新的意图接管。", "This intent was replaced by a newer intent."]
+  }[key];
+  return values ? values[zh ? 0 : 1] : key;
+}
+function statusLabel(locale, status) {
+  const values = INTENT_STATUS_LABELS[status];
+  return values ? values[String(locale || "").toLowerCase().startsWith("zh") ? 0 : 1] : "";
+}
+function unavailable(locale, nextStep = NEXT_STEP_ALLOWLIST.unavailable, extra = {}) {
+  return {
+    kind: "unavailable",
+    label: copy(locale, "unavailable"),
+    nextStep,
+    receiptState: "not_applicable",
+    ...extra
+  };
+}
+function copyVersion(intent) {
+  const explicit = COPY_KEY_FIELDS.map((field) => intent[field]).find((value2) => value2 !== void 0 && value2 !== null);
+  return explicit === void 0 ? PLAYER_SAFE_COPY_SCHEMA_VERSION : explicit;
+}
+function allowlistedIntentCopy(intent, status) {
+  if (copyVersion(intent) !== PLAYER_SAFE_COPY_SCHEMA_VERSION) return {
+    valid: false,
+    value: ""
+  };
+  const expected = AGENT_INTENT_SUMMARIES[status];
+  const key = textValue$1(intent.summary_key || intent.summaryKey);
+  if (key && key !== status) return {
+    valid: false,
+    value: ""
+  };
+  const supplied = textValue$1(intent.summary ?? intent.message);
+  if (!supplied || supplied !== expected) return {
+    valid: false,
+    value: ""
+  };
+  return {
+    valid: true,
+    value: expected
+  };
+}
+function allowlistedReason(intent, status) {
+  const key = textValue$1(intent.reason_code || intent.reason_key || intent.reasonKey).toLowerCase();
+  const supplied = textValue$1(intent.reason_summary);
+  if (!key) return supplied ? {
+    valid: false,
+    label: "",
+    summary: ""
+  } : {
+    valid: true,
+    label: "",
+    summary: ""
+  };
+  if (!Object.prototype.hasOwnProperty.call(REASON_ALLOWLIST, key)) return {
+    valid: false,
+    label: "",
+    summary: ""
+  };
+  const declaredKey = textValue$1(intent.reason_key || intent.reasonKey).toLowerCase();
+  if (declaredKey && declaredKey !== key) return {
+    valid: false,
+    label: "",
+    summary: ""
+  };
+  if (supplied && supplied !== REASON_ALLOWLIST[key]) return {
+    valid: false,
+    label: "",
+    summary: ""
+  };
+  if (!TERMINAL_INTENT_STATUSES.has(status) && status !== "blocked") return {
+    valid: true,
+    label: "",
+    summary: ""
+  };
+  return {
+    valid: true,
+    label: key,
+    summary: REASON_ALLOWLIST[key]
+  };
+}
+function allowlistedNextStep(intent, status, stateKind) {
+  const declared = textValue$1(intent.next_step_key || intent.nextStepKey).toLowerCase();
+  if (declared && !Object.prototype.hasOwnProperty.call(NEXT_STEP_ALLOWLIST, declared)) return {
+    valid: false,
+    value: ""
+  };
+  const fallbackKey = stateKind === "current" && status === "blocked" ? "blocked" : stateKind;
+  const expected = NEXT_STEP_ALLOWLIST[declared || fallbackKey] || "";
+  const supplied = textValue$1(intent.next_step || intent.next_step_hint);
+  if (supplied && supplied !== expected) return {
+    valid: false,
+    value: ""
+  };
+  return {
+    valid: true,
+    value: expected
+  };
+}
+function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
+  if (!intent || typeof intent !== "object") return unavailable(locale);
+  if (intent.schema_version !== 2 || textValue$1(intent.source_class) !== "runtime_projection") return unavailable(locale);
+  const connection = textValue$1(connectionStatus).toLowerCase();
+  if (connection === "connecting" || connection === "reconnecting") return {
+    kind: "reconnecting",
+    label: copy(locale, "reconnecting"),
+    nextStep: NEXT_STEP_ALLOWLIST.reconnecting,
+    receiptState: "not_applicable"
+  };
+  if (connection && connection !== "connected") return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, {
+    label: copy(locale, "offline")
+  });
+  const controlState = textValue$1(intent.control_state).toLowerCase();
+  if (!ALLOWED_CONTROL_STATES.has(controlState)) return unavailable(locale);
+  if (controlState === "control_lost") return {
+    kind: controlState,
+    label: copy(locale, "hiddenControlLost"),
+    nextStep: NEXT_STEP_ALLOWLIST.control_lost,
+    receiptState: "hidden"
+  };
+  if (controlState === "read_only") return {
+    kind: controlState,
+    label: copy(locale, "hiddenReadOnly"),
+    nextStep: NEXT_STEP_ALLOWLIST.read_only,
+    receiptState: "hidden"
+  };
+  if (controlState === "unauthorized") return {
+    kind: controlState,
+    label: copy(locale, "hiddenUnauthorized"),
+    nextStep: NEXT_STEP_ALLOWLIST.unauthorized,
+    receiptState: "hidden"
+  };
+  if (controlState === "unavailable" || !textValue$1(intent.intent_id) || !hasAuthoritativePosition(intent)) return unavailable(locale);
+  const status = textValue$1(intent.status).toLowerCase();
+  if (!statusLabel(locale, status)) return unavailable(locale);
+  const freshness = textValue$1(intent.freshness).toLowerCase();
+  if (!ALLOWED_FRESHNESS.has(freshness)) return unavailable(locale);
+  const receiptState = status === "completed" ? hasReceiptReference(intent.receipt_ref, intent) ? "confirmed" : "missing" : "not_applicable";
+  const receiptLabel = receiptState === "confirmed" ? copy(locale, "receipt") : receiptState === "missing" ? copy(locale, "receiptMissing") : "";
+  if (receiptState === "missing") return unavailable(locale, NEXT_STEP_ALLOWLIST.missing_receipt, {
+    receiptState,
+    receiptLabel
+  });
+  const safeCopy = allowlistedIntentCopy(intent, status);
+  if (!safeCopy.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, {
+    receiptState
+  });
+  const reason = allowlistedReason(intent, status);
+  if (!reason.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, {
+    receiptState
+  });
+  const stateKind = freshness === "stale" ? "stale" : freshness === "reconnecting" ? "reconnecting" : freshness === "conflict" ? "conflict" : "current";
+  const nextStep = allowlistedNextStep(intent, status, stateKind);
+  if (!nextStep.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, {
+    receiptState
+  });
+  const lifecycleNote = intent.duplicate === true || intent.replayed === true || intent.replay === true ? copy(locale, "replayed") : textValue$1(intent.replaced_by) ? copy(locale, "replaced") : "";
+  const base = {
+    kind: stateKind,
+    label: stateKind === "stale" ? copy(locale, "stale") : stateKind === "conflict" ? copy(locale, "needsConfirmation") : stateKind === "reconnecting" ? copy(locale, "reconnecting") : copy(locale, "current"),
+    statusLabel: stateKind === "stale" ? "" : statusLabel(locale, status),
+    message: safeCopy.value,
+    receiptState,
+    receiptLabel,
+    reasonLabel: reason.label,
+    reasonSummary: reason.summary,
+    lifecycleNote,
+    nextStep: nextStep.value
+  };
+  return base;
+}
+function AgentIntentSurface(props) {
+  const locale = () => props.locale || "en";
+  const model = () => describeAgentIntent(props.intent, locale(), props.connectionStatus);
+  const hidden = () => ["control_lost", "read_only", "unauthorized", "unavailable"].includes(model().kind);
+  return (() => {
+    var _el$ = _tmpl$8$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    insert(_el$2, () => copy(locale(), "heading"));
+    insert(_el$3, () => model().label);
+    insert(_el$, createComponent(Show, {
+      get when() {
+        return !hidden();
+      },
+      get children() {
+        return [(() => {
+          var _el$4 = _tmpl$2$5();
+          insert(_el$4, createComponent(Show, {
+            get when() {
+              return model().statusLabel;
+            },
+            get children() {
+              var _el$5 = _tmpl$$5();
+              insert(_el$5, () => model().statusLabel);
+              return _el$5;
+            }
+          }));
+          return _el$4;
+        })(), createComponent(Show, {
+          get when() {
+            return model().message;
+          },
+          get children() {
+            var _el$6 = _tmpl$3$4();
+            insert(_el$6, () => model().message);
+            return _el$6;
+          }
+        }), createComponent(Show, {
+          get when() {
+            return model().receiptLabel;
+          },
+          get children() {
+            var _el$7 = _tmpl$4$3(), _el$8 = _el$7.firstChild;
+            insert(_el$8, () => model().receiptLabel);
+            return _el$7;
+          }
+        }), createComponent(Show, {
+          get when() {
+            return model().reasonLabel || model().reasonSummary;
+          },
+          get children() {
+            var _el$9 = _tmpl$5$3(), _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling;
+            insert(_el$0, () => copy(locale(), "reason"));
+            insert(_el$1, () => model().reasonSummary);
+            return _el$9;
+          }
+        }), createComponent(Show, {
+          get when() {
+            return model().lifecycleNote;
+          },
+          get children() {
+            var _el$10 = _tmpl$6$2();
+            insert(_el$10, () => model().lifecycleNote);
+            return _el$10;
+          }
+        })];
+      }
+    }), null);
+    insert(_el$, createComponent(Show, {
+      get when() {
+        return memo(() => !!hidden())() && model().receiptLabel;
+      },
+      get children() {
+        var _el$11 = _tmpl$4$3(), _el$12 = _el$11.firstChild;
+        insert(_el$12, () => model().receiptLabel);
+        return _el$11;
+      }
+    }), null);
+    insert(_el$, createComponent(Show, {
+      get when() {
+        return model().nextStep;
+      },
+      get children() {
+        var _el$13 = _tmpl$7$2(), _el$14 = _el$13.firstChild, _el$15 = _el$14.nextSibling;
+        insert(_el$14, () => copy(locale(), "nextStep"));
+        insert(_el$15, () => model().nextStep);
+        return _el$13;
+      }
+    }), null);
+    createRenderEffect((_p$) => {
+      var _v$ = model().kind, _v$2 = model().receiptState || "not_applicable";
+      _v$ !== _p$.e && setAttribute(_el$, "data-agent-intent-state", _p$.e = _v$);
+      _v$2 !== _p$.t && setAttribute(_el$, "data-agent-intent-receipt-state", _p$.t = _v$2);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0
+    });
+    return _el$;
+  })();
+}
 const AGENT_INTENT_STATUSES = [
   "proposed",
   "submitted",
@@ -15461,7 +15823,7 @@ function buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot2, state2) {
     schema_version: 2,
     intent_id: intentId,
     status,
-    message: status === "blocked" ? "Agent guidance is blocked pending a runtime recheck." : status === "completed" ? "Agent guidance completed with a confirmed world receipt." : "Agent guidance is available for the next world action.",
+    message: AGENT_INTENT_SUMMARIES[status],
     resume_required: status === "blocked",
     source_class: "runtime_projection",
     freshness,
@@ -15473,8 +15835,8 @@ function buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot2, state2) {
     updated_at: 7,
     event_seq: "42",
     reason_code: status === "blocked" ? "missing_material" : status === "rejected" ? "permission_changed" : status === "expired" ? "precondition_changed" : status === "cancelled" ? "ownership_changed" : status === "superseded" ? "superseded_by_replacement" : variant === "duplicate" ? "duplicate_request" : null,
-    reason_summary: status === "blocked" ? "World prerequisites changed before execution." : status === "rejected" ? "The requested operation is no longer authorized." : status === "expired" ? "The world position changed before the intent was resumed." : null,
-    next_step: status === "blocked" ? "Review the world state, then resume when ready." : null,
+    reason_summary: status === "blocked" ? "World prerequisites changed before execution." : status === "rejected" ? "The requested operation is no longer authorized." : status === "expired" ? "The world position changed before execution." : null,
+    next_step: status === "blocked" ? "Recheck runtime state before resuming." : null,
     receipt_ref: status === "completed" && receiptState === "valid" ? {
       intent_id: intentId,
       world_id: worldId,
@@ -15522,7 +15884,7 @@ function installAgentIntentV2VisualFixture(fixtures, { core: core2, setFixturePl
     core2.requestRender();
   };
 }
-var _tmpl$$5 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$5 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$4 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$3 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
+var _tmpl$$4 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$4 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$3 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$2 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
 function ReprioritizeActionForm(props) {
   const [open, setOpen] = createSignal(false);
   const [draft, setDraft] = createSignal("");
@@ -15581,14 +15943,14 @@ function ReprioritizeActionForm(props) {
     setSubmitted(true);
   };
   return (() => {
-    var _el$ = _tmpl$2$5();
+    var _el$ = _tmpl$2$4();
     insert(_el$, createComponent(Show, {
       get when() {
         return !open();
       },
       get fallback() {
         return (() => {
-          var _el$3 = _tmpl$5$3(), _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$9 = _el$6.nextSibling, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling;
+          var _el$3 = _tmpl$5$2(), _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$9 = _el$6.nextSibling, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling;
           _el$3.$$keydown = (event) => {
             if (event.key === "Escape" && !inFlight()) {
               event.preventDefault();
@@ -15609,7 +15971,7 @@ function ReprioritizeActionForm(props) {
               return localError();
             },
             get children() {
-              var _el$7 = _tmpl$3$4();
+              var _el$7 = _tmpl$3$3();
               var _ref$2 = errorNode;
               typeof _ref$2 === "function" ? use(_ref$2, _el$7) : errorNode = _el$7;
               insert(_el$7, localError);
@@ -15621,7 +15983,7 @@ function ReprioritizeActionForm(props) {
               return memo(() => !!!localError())() && inFlight();
             },
             get children() {
-              var _el$8 = _tmpl$4$3();
+              var _el$8 = _tmpl$4$2();
               insert(_el$8, () => props.tr(props.locale, "正在认证并提交新目标…", "Authenticating and submitting the new goal…"));
               return _el$8;
             }
@@ -15643,7 +16005,7 @@ function ReprioritizeActionForm(props) {
         })();
       },
       get children() {
-        var _el$2 = _tmpl$$5();
+        var _el$2 = _tmpl$$4();
         _el$2.$$click = () => {
           setOpen(true);
           queueMicrotask(() => textarea?.focus());
@@ -15802,7 +16164,7 @@ function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
   }
   return { agentBindingForId: agentBindingForId2, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction: buildAgentClaimAction2, buildAgentClaimTargets: buildAgentClaimTargets2, describeAgentSessionStatus: describeAgentSessionStatus2, hasAgentClaimSessionBoundary: hasAgentClaimSessionBoundary2, hasExecutableAgentClaim: hasExecutableAgentClaim2, normalizedId: normalizedId2, publishedClaimChoiceCandidates: publishedClaimChoiceCandidates2, slot1ClaimChoiceNeedsDefer, slot1ClaimChoiceQuote: slot1ClaimChoiceQuote2 };
 }
-var _tmpl$$4 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$2$4 = /* @__PURE__ */ template(`<div class=feedback-detail><strong></strong>: `), _tmpl$3$3 = /* @__PURE__ */ template(`<div class=event-card data-testid=claim-choice-rationale><div class=event-card__title><span>`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--warn"></span></div><div class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$6$2 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$7$2 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$8$2 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent">`);
+var _tmpl$$3 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class=feedback-detail><strong></strong>: `), _tmpl$3$2 = /* @__PURE__ */ template(`<div class=event-card data-testid=claim-choice-rationale><div class=event-card__title><span>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--warn"></span></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$6$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent">`);
 function AgentClaimChoiceCard(props) {
   const publishedCandidates = () => props.publishedCandidates?.() || [];
   const choiceQuote = () => props.choiceQuote?.() || null;
@@ -15834,7 +16196,7 @@ function AgentClaimChoiceCard(props) {
       return publishedCandidates().length > 0;
     },
     get children() {
-      var _el$ = _tmpl$$4();
+      var _el$ = _tmpl$$3();
       insert(_el$, createComponent(For, {
         get each() {
           return publishedCandidates();
@@ -15848,7 +16210,7 @@ function AgentClaimChoiceCard(props) {
               return candidate.name;
             },
             get children() {
-              var _el$30 = _tmpl$8$2();
+              var _el$30 = _tmpl$8$1();
               insert(_el$30, () => candidate.name);
               return _el$30;
             }
@@ -15903,14 +16265,14 @@ function AgentClaimChoiceCard(props) {
       return hasPublishedRationale();
     },
     get children() {
-      var _el$2 = _tmpl$3$3(), _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild;
+      var _el$2 = _tmpl$3$2(), _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild;
       insert(_el$4, () => tr2("候选路线理由", "Candidate route rationale"));
       insert(_el$2, createComponent(Show, {
         get when() {
           return startingLocation();
         },
         get children() {
-          var _el$5 = _tmpl$2$4(), _el$6 = _el$5.firstChild;
+          var _el$5 = _tmpl$2$3(), _el$6 = _el$5.firstChild;
           _el$6.nextSibling;
           insert(_el$6, () => tr2("起始位置", "Starting location"));
           insert(_el$5, startingLocation, null);
@@ -15922,7 +16284,7 @@ function AgentClaimChoiceCard(props) {
           return specialtySummary();
         },
         get children() {
-          var _el$8 = _tmpl$2$4(), _el$9 = _el$8.firstChild;
+          var _el$8 = _tmpl$2$3(), _el$9 = _el$8.firstChild;
           _el$9.nextSibling;
           insert(_el$9, () => tr2("专长 / 能力", "Specialty / capabilities"));
           insert(_el$8, specialtySummary, null);
@@ -15934,7 +16296,7 @@ function AgentClaimChoiceCard(props) {
           return firstIndustrialGoalHelp();
         },
         get children() {
-          var _el$1 = _tmpl$2$4(), _el$10 = _el$1.firstChild;
+          var _el$1 = _tmpl$2$3(), _el$10 = _el$1.firstChild;
           _el$10.nextSibling;
           insert(_el$10, () => tr2("首个工业目标帮助", "First industrial goal help"));
           insert(_el$1, firstIndustrialGoalHelp, null);
@@ -15946,7 +16308,7 @@ function AgentClaimChoiceCard(props) {
           return riskSummary();
         },
         get children() {
-          var _el$12 = _tmpl$2$4(), _el$13 = _el$12.firstChild;
+          var _el$12 = _tmpl$2$3(), _el$13 = _el$12.firstChild;
           _el$13.nextSibling;
           insert(_el$13, () => tr2("候选风险", "Candidate risk"));
           insert(_el$12, riskSummary, null);
@@ -15958,7 +16320,7 @@ function AgentClaimChoiceCard(props) {
           return recommendationReason();
         },
         get children() {
-          var _el$15 = _tmpl$2$4(), _el$16 = _el$15.firstChild;
+          var _el$15 = _tmpl$2$3(), _el$16 = _el$15.firstChild;
           _el$16.nextSibling;
           insert(_el$16, () => tr2("推荐理由", "Recommendation reason"));
           insert(_el$15, recommendationReason, null);
@@ -15972,7 +16334,7 @@ function AgentClaimChoiceCard(props) {
       return isRationaleMissingDefer();
     },
     get children() {
-      var _el$18 = _tmpl$4$2(), _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$19.nextSibling;
+      var _el$18 = _tmpl$4$1(), _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$19.nextSibling;
       insert(_el$20, () => tr2("暂不确认", "Wait before confirming"));
       insert(_el$21, () => tr2("暂缓", "Defer"));
       insert(_el$22, () => tr2(`当前可支付 ${upfrontAmount()} upfront，但确认后只能维持 ${upkeepRunway()} 个完整 upkeep epoch。尚未发布 canonical 路线理由，因此不推荐任何候选。请在理由发布且有额外可用于 upkeep 的 eligible balance 后再评估；仅补足资金不等于被推荐。`, `The ${upfrontAmount()} upfront cost is payable now, but confirmation leaves ${upkeepRunway()} full upkeep epochs. No canonical route rationale is published, so no candidate is recommended. Reassess after a rationale is published and you have additional eligible upkeep balance; funding alone does not make a candidate recommended.`));
@@ -15983,13 +16345,13 @@ function AgentClaimChoiceCard(props) {
       return memo(() => !!(fallbackLabel() || choiceClassLabel()))() && !isRationaleMissingDefer();
     },
     get children() {
-      var _el$23 = _tmpl$7$2();
+      var _el$23 = _tmpl$7$1();
       insert(_el$23, createComponent(Show, {
         get when() {
           return fallbackLabel();
         },
         get children() {
-          var _el$24 = _tmpl$5$2();
+          var _el$24 = _tmpl$5$1();
           insert(_el$24, fallbackLabel);
           return _el$24;
         }
@@ -15999,7 +16361,7 @@ function AgentClaimChoiceCard(props) {
           return choiceClassLabel();
         },
         get children() {
-          var _el$25 = _tmpl$6$2();
+          var _el$25 = _tmpl$6$1();
           insert(_el$25, choiceClassLabel);
           return _el$25;
         }
@@ -16008,20 +16370,20 @@ function AgentClaimChoiceCard(props) {
     }
   })];
 }
-var _tmpl$$3 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class="feedback-detail first-delivery-preview"><div class=metric__label>`), _tmpl$3$2 = /* @__PURE__ */ template(`<div>`);
+var _tmpl$$2 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class="feedback-detail first-delivery-preview"><div class=metric__label>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div>`);
 function FirstDeliveryPreview(props) {
   const preview = () => props.preview || {};
   const locale = () => props.locale;
   const tr2 = props.tr;
   return (() => {
-    var _el$ = _tmpl$2$3(), _el$2 = _el$.firstChild;
+    var _el$ = _tmpl$2$2(), _el$2 = _el$.firstChild;
     insert(_el$2, () => tr2(locale(), "首单交付预览", "First delivery preview"));
     insert(_el$, createComponent(Show, {
       get when() {
         return preview().localNeed;
       },
       get children() {
-        var _el$3 = _tmpl$$3(), _el$4 = _el$3.firstChild;
+        var _el$3 = _tmpl$$2(), _el$4 = _el$3.firstChild;
         insert(_el$4, () => tr2(locale(), "本地需求", "Local need"));
         insert(_el$3, () => preview().localNeed, null);
         return _el$3;
@@ -16032,7 +16394,7 @@ function FirstDeliveryPreview(props) {
         return preview().expectedOutput;
       },
       get children() {
-        var _el$5 = _tmpl$$3(), _el$6 = _el$5.firstChild;
+        var _el$5 = _tmpl$$2(), _el$6 = _el$5.firstChild;
         insert(_el$6, () => tr2(locale(), "预计产出", "Expected output"));
         insert(_el$5, () => preview().expectedOutput, null);
         return _el$5;
@@ -16043,14 +16405,14 @@ function FirstDeliveryPreview(props) {
         return preview().requiredInputs.length > 0;
       },
       get children() {
-        var _el$7 = _tmpl$$3(), _el$8 = _el$7.firstChild;
+        var _el$7 = _tmpl$$2(), _el$8 = _el$7.firstChild;
         insert(_el$8, () => tr2(locale(), "所需输入", "Required inputs"));
         insert(_el$7, createComponent(For, {
           get each() {
             return preview().requiredInputs;
           },
           children: (input) => (() => {
-            var _el$13 = _tmpl$3$2();
+            var _el$13 = _tmpl$3$1();
             insert(_el$13, input);
             return _el$13;
           })()
@@ -16063,7 +16425,7 @@ function FirstDeliveryPreview(props) {
         return preview().valueTiming;
       },
       get children() {
-        var _el$9 = _tmpl$$3(), _el$0 = _el$9.firstChild;
+        var _el$9 = _tmpl$$2(), _el$0 = _el$9.firstChild;
         insert(_el$0, () => tr2(locale(), "价值时机", "Value timing"));
         insert(_el$9, () => preview().valueTiming, null);
         return _el$9;
@@ -16074,7 +16436,7 @@ function FirstDeliveryPreview(props) {
         return preview().leverageClassUnlocked;
       },
       get children() {
-        var _el$1 = _tmpl$$3(), _el$10 = _el$1.firstChild;
+        var _el$1 = _tmpl$$2(), _el$10 = _el$1.firstChild;
         insert(_el$10, () => tr2(locale(), "解锁杠杆", "Leverage unlocked"));
         insert(_el$1, () => preview().leverageClassUnlocked, null);
         return _el$1;
@@ -16085,7 +16447,7 @@ function FirstDeliveryPreview(props) {
         return preview().returnVisitHook;
       },
       get children() {
-        var _el$11 = _tmpl$$3(), _el$12 = _el$11.firstChild;
+        var _el$11 = _tmpl$$2(), _el$12 = _el$11.firstChild;
         insert(_el$12, () => tr2(locale(), "回访钩子", "Return visit hook"));
         insert(_el$11, () => preview().returnVisitHook, null);
         return _el$11;
@@ -16153,16 +16515,16 @@ function recoveryOptionVisualFixture() {
     }
   ];
 }
-var _tmpl$$2 = /* @__PURE__ */ template(`<div class=agent-activity__field><span class=metric__label></span><span>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=agent-activity><div class="agent-activity__heading metric__label"></div><div class=agent-activity__state>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class=agent-activity__field><span class=metric__label></span><span>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=agent-activity><div class="agent-activity__heading metric__label"></div><div class=agent-activity__state>`);
 const KNOWN_ACTIVITY_STATUSES = /* @__PURE__ */ new Set(["idle", "executing", "blocked", "waiting", "unavailable"]);
-function textValue$1(value2) {
+function textValue(value2) {
   if (value2 === null || value2 === void 0) {
     return "";
   }
   return String(value2).trim();
 }
 function titleCaseIdentifier(value2) {
-  const text2 = textValue$1(value2).replace(/[_:-]+/g, " ").replace(/\s+/g, " ").trim();
+  const text2 = textValue(value2).replace(/[_:-]+/g, " ").replace(/\s+/g, " ").trim();
   if (!text2 || /^\d+$/.test(text2) || /^(?:0x|sha256|uuid)\b/i.test(text2)) {
     return "";
   }
@@ -16173,7 +16535,7 @@ function humanizedActivityValue(value2, fallback = "") {
 }
 function activityCopy(locale, key) {
   const zh = String(locale || "").toLowerCase().startsWith("zh");
-  const copy = {
+  const copy2 = {
     currentActivity: ["当前活动", "Current Activity"],
     unavailable: ["活动不可用", "Activity unavailable"],
     idle: ["空闲", "Idle"],
@@ -16185,7 +16547,7 @@ function activityCopy(locale, key) {
     operation: ["操作", "Operation"],
     targetUnavailable: ["目标信息暂不可用", "Target unavailable"]
   }[key];
-  return copy ? copy[zh ? 0 : 1] : key;
+  return copy2 ? copy2[zh ? 0 : 1] : key;
 }
 function describeAgentActivity(activity, locale = "en") {
   if (!activity || typeof activity !== "object") {
@@ -16197,7 +16559,7 @@ function describeAgentActivity(activity, locale = "en") {
       reason: ""
     };
   }
-  const status = textValue$1(activity.status).toLowerCase();
+  const status = textValue(activity.status).toLowerCase();
   if (!KNOWN_ACTIVITY_STATUSES.has(status)) {
     return {
       kind: "unavailable",
@@ -16232,7 +16594,7 @@ function AgentActivitySurface(props) {
   const locale = () => props.locale || "en";
   const model = () => describeAgentActivity(props.activity, locale());
   return (() => {
-    var _el$ = _tmpl$2$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$2$1(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => activityCopy(locale(), "currentActivity"));
     insert(_el$3, () => model().label);
     insert(_el$, createComponent(Show, {
@@ -16240,7 +16602,7 @@ function AgentActivitySurface(props) {
         return memo(() => model().kind === "blocked")() && model().operation;
       },
       get children() {
-        var _el$4 = _tmpl$$2(), _el$5 = _el$4.firstChild, _el$6 = _el$5.nextSibling;
+        var _el$4 = _tmpl$$1(), _el$5 = _el$4.firstChild, _el$6 = _el$5.nextSibling;
         insert(_el$5, () => activityCopy(locale(), "operation"));
         insert(_el$6, () => model().operation);
         return _el$4;
@@ -16251,7 +16613,7 @@ function AgentActivitySurface(props) {
         return memo(() => !!(model().kind !== "unavailable" && model().kind !== "idle" && model().kind !== "unavailable"))() && model().targetLabel;
       },
       get children() {
-        var _el$7 = _tmpl$$2(), _el$8 = _el$7.firstChild, _el$9 = _el$8.nextSibling;
+        var _el$7 = _tmpl$$1(), _el$8 = _el$7.firstChild, _el$9 = _el$8.nextSibling;
         insert(_el$8, () => activityCopy(locale(), "target"));
         insert(_el$9, () => model().targetLabel);
         return _el$7;
@@ -16262,7 +16624,7 @@ function AgentActivitySurface(props) {
         return memo(() => !!(model().kind !== "unavailable" && model().kind !== "idle" && !model().targetLabel))() && model().operation;
       },
       get children() {
-        var _el$0 = _tmpl$$2(), _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling;
+        var _el$0 = _tmpl$$1(), _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling;
         insert(_el$1, () => activityCopy(locale(), "target"));
         insert(_el$10, () => activityCopy(locale(), "targetUnavailable"));
         return _el$0;
@@ -16273,407 +16635,13 @@ function AgentActivitySurface(props) {
         return memo(() => model().kind === "blocked")() && model().reason;
       },
       get children() {
-        var _el$11 = _tmpl$$2(), _el$12 = _el$11.firstChild, _el$13 = _el$12.nextSibling;
+        var _el$11 = _tmpl$$1(), _el$12 = _el$11.firstChild, _el$13 = _el$12.nextSibling;
         insert(_el$12, () => activityCopy(locale(), "reason"));
         insert(_el$13, () => model().reason);
         return _el$11;
       }
     }), null);
     createRenderEffect(() => setAttribute(_el$, "data-agent-activity-state", model().kind));
-    return _el$;
-  })();
-}
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class=agent-intent__state>`), _tmpl$2$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=agent-intent__status-row><span class=agent-intent__state>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=agent-intent__summary>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class="agent-intent__detail agent-intent__receipt"><span class=metric__label>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=agent-intent__detail><span class=metric__label></span><span class=agent-intent__summary>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="agent-intent__detail agent-intent__lifecycle">`), _tmpl$8$1 = /* @__PURE__ */ template(`<section class=agent-intent aria-live=polite><div class="agent-intent__heading metric__label">`);
-const INTENT_STATUS_LABELS = {
-  proposed: ["已提出", "Proposed"],
-  submitted: ["已提交", "Submitted"],
-  accepted: ["已接受", "Accepted"],
-  blocked: ["受阻", "Blocked"],
-  completed: ["已完成", "Completed"],
-  rejected: ["已拒绝", "Rejected"],
-  expired: ["已过期", "Expired"],
-  cancelled: ["已取消", "Cancelled"],
-  superseded: ["已替换", "Replaced"]
-};
-const INTENT_REASON_LABELS = {
-  missing_material: ["材料不足", "Missing material"],
-  material_shortage: ["材料短缺", "Material shortage"],
-  permission_changed: ["权限已变化", "Permission changed"],
-  ownership_changed: ["所有权已变化", "Ownership changed"],
-  world_precondition_changed: ["世界前置条件已变化", "World precondition changed"],
-  precondition_changed: ["前置条件已变化", "Precondition changed"],
-  agent_unavailable: ["行动体不可用", "Agent unavailable"],
-  duplicate_request: ["重复请求已合并", "Duplicate request coalesced"],
-  superseded_by_replacement: ["已由替代意图接管", "Replaced by a newer intent"]
-};
-const ALLOWED_CONTROL_STATES = /* @__PURE__ */ new Set(["controllable", "read_only", "control_lost", "unauthorized", "unavailable"]);
-const ALLOWED_FRESHNESS = /* @__PURE__ */ new Set(["current", "stale", "reconnecting", "conflict"]);
-const TERMINAL_INTENT_STATUSES = /* @__PURE__ */ new Set(["completed", "rejected", "expired", "cancelled", "superseded"]);
-const MAX_PLAYER_SAFE_COPY_CHARS = 160;
-const SENSITIVE_INTERNAL_COPY = /system[_ ]?prompt|provider(?:[_ ]?rationale)?|chain[_ ]?of[_ ]?thought|memory\s*:|trace\s*:|debug\s*:|auth(?:[_ ]?(?:token|secret|proof)|\s*:)|cost[_ ]?cents/i;
-function textValue(value2) {
-  return typeof value2 === "string" ? value2.trim() : "";
-}
-function boundedSafeText(value2) {
-  const normalized = textValue(value2).split(/\r?\n/).filter((line) => !SENSITIVE_INTERNAL_COPY.test(line)).join(" ").replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "";
-  }
-  const chars = Array.from(normalized);
-  return chars.length <= MAX_PLAYER_SAFE_COPY_CHARS ? normalized : `${chars.slice(0, MAX_PLAYER_SAFE_COPY_CHARS - 1).join("")}…`;
-}
-function counterIdentity(value2) {
-  if (typeof value2 === "number") {
-    return Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
-  }
-  const raw2 = textValue(value2);
-  if (!/^\d+$/.test(raw2)) {
-    return null;
-  }
-  try {
-    return BigInt(raw2).toString();
-  } catch (_error) {
-    return null;
-  }
-}
-function hasAuthoritativePosition(intent) {
-  return textValue(intent.agent_id).length > 0 && textValue(intent.world_id).length > 0 && counterIdentity(intent.reorg_epoch) !== null && counterIdentity(intent.logical_time) !== null && counterIdentity(intent.event_seq) !== null && counterIdentity(intent.updated_at) !== null;
-}
-function hasReceiptReference(receiptRef, intent) {
-  if (!receiptRef || typeof receiptRef !== "object") {
-    return false;
-  }
-  const receiptIdentity = textValue(receiptRef.receipt_id);
-  const receiptEventId = receiptIdentity.startsWith("world-event:") ? counterIdentity(receiptIdentity.slice("world-event:".length)) : null;
-  if (textValue(receiptRef.intent_id) !== textValue(intent?.intent_id) || textValue(receiptRef.world_id) !== textValue(intent?.world_id) || receiptEventId === null || receiptEventId === "0") {
-    return false;
-  }
-  return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch) && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time) && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
-}
-function intentCopy(locale, key) {
-  const zh = String(locale || "").toLowerCase().startsWith("zh");
-  const copy = {
-    heading: ["当前意图", "Current Intent"],
-    unavailable: ["意图不可用", "Intent unavailable"],
-    hiddenControlLost: ["意图已隐藏 — 控制权丢失", "Intent hidden — control lost"],
-    hiddenReadOnly: ["意图已隐藏 — 只读观察", "Intent hidden — read-only"],
-    hiddenUnauthorized: ["意图已隐藏 — 未获授权", "Intent hidden — unauthorized"],
-    stale: ["陈旧意图", "Stale intent"],
-    current: ["当前", "Current"],
-    reconnecting: ["重新连接中", "Reconnecting"],
-    offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
-    needsConfirmation: ["需要确认", "Needs confirmation"],
-    reason: ["原因", "Reason"],
-    reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
-    nextStep: ["下一步", "Next step"],
-    receipt: ["世界回执已确认", "World receipt confirmed"],
-    receiptMissing: ["等待世界回执", "World receipt missing"],
-    replayed: ["重复请求已合并；没有创建新的意图。", "Duplicate request coalesced; no new intent was created."],
-    replaced: ["这条意图已由较新的意图接管。", "This intent was replaced by a newer intent."],
-    recheckBeforeResume: ["重新检查运行时状态后再恢复。", "Recheck runtime state before resuming."]
-  }[key];
-  return copy ? copy[zh ? 0 : 1] : key;
-}
-function statusLabel(locale, status) {
-  const label = INTENT_STATUS_LABELS[status];
-  if (!label) {
-    return "";
-  }
-  return String(locale || "").toLowerCase().startsWith("zh") ? label[0] : label[1];
-}
-function describeIntentReason(intent, locale, status) {
-  if (!TERMINAL_INTENT_STATUSES.has(status) && status !== "blocked") {
-    return {
-      reasonLabel: "",
-      reasonSummary: ""
-    };
-  }
-  const reasonCode = textValue(intent.reason_code).toLowerCase();
-  if (!reasonCode) {
-    return {
-      reasonLabel: "",
-      reasonSummary: ""
-    };
-  }
-  const label = INTENT_REASON_LABELS[reasonCode];
-  if (!label) {
-    return {
-      reasonLabel: intentCopy(locale, "reasonUnavailable"),
-      reasonSummary: ""
-    };
-  }
-  const zh = String(locale || "").toLowerCase().startsWith("zh");
-  return {
-    reasonLabel: label[zh ? 0 : 1],
-    reasonSummary: boundedSafeText(intent.reason_summary)
-  };
-}
-function connectionPresentationState(connectionStatus) {
-  const status = textValue(connectionStatus).toLowerCase();
-  if (!status || status === "connected") {
-    return "connected";
-  }
-  if (status === "connecting" || status === "reconnecting") {
-    return "reconnecting";
-  }
-  return "offline";
-}
-function receiptPresentation(intent, locale) {
-  if (intent.status !== "completed") {
-    return {
-      state: "not_applicable",
-      label: ""
-    };
-  }
-  return hasReceiptReference(intent.receipt_ref, intent) ? {
-    state: "confirmed",
-    label: intentCopy(locale, "receipt")
-  } : {
-    state: "missing",
-    label: intentCopy(locale, "receiptMissing")
-  };
-}
-function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
-  if (!intent || typeof intent !== "object") {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "not_applicable"
-    };
-  }
-  if (intent.schema_version !== 2 || textValue(intent.source_class) !== "runtime_projection") {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "not_applicable"
-    };
-  }
-  const connection = connectionPresentationState(connectionStatus);
-  if (connection === "reconnecting") {
-    return {
-      kind: "reconnecting",
-      label: intentCopy(locale, "reconnecting"),
-      statusLabel: "",
-      message: "",
-      receiptState: "not_applicable"
-    };
-  }
-  if (connection === "offline") {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "offline"),
-      receiptState: "not_applicable"
-    };
-  }
-  const controlState = textValue(intent.control_state).toLowerCase();
-  if (!ALLOWED_CONTROL_STATES.has(controlState)) {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "not_applicable"
-    };
-  }
-  if (controlState === "control_lost") {
-    return {
-      kind: "control_lost",
-      label: intentCopy(locale, "hiddenControlLost"),
-      receiptState: "hidden"
-    };
-  }
-  if (controlState === "read_only") {
-    return {
-      kind: "read_only",
-      label: intentCopy(locale, "hiddenReadOnly"),
-      receiptState: "hidden"
-    };
-  }
-  if (controlState === "unauthorized") {
-    return {
-      kind: "unauthorized",
-      label: intentCopy(locale, "hiddenUnauthorized"),
-      receiptState: "hidden"
-    };
-  }
-  if (controlState === "unavailable" || !textValue(intent.intent_id) || !hasAuthoritativePosition(intent)) {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "not_applicable"
-    };
-  }
-  const status = textValue(intent.status).toLowerCase();
-  const label = statusLabel(locale, status);
-  const freshness = textValue(intent.freshness).toLowerCase();
-  if (!label || !ALLOWED_FRESHNESS.has(freshness)) {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "not_applicable"
-    };
-  }
-  const receipt = receiptPresentation(intent, locale);
-  if (status === "completed" && receipt.state === "missing") {
-    return {
-      kind: "unavailable",
-      label: intentCopy(locale, "unavailable"),
-      receiptState: "missing",
-      receiptLabel: receipt.label
-    };
-  }
-  const message = boundedSafeText(intent.summary || intent.message);
-  const reason = describeIntentReason(intent, locale, status);
-  const nextStep = status === "blocked" ? boundedSafeText(intent.next_step || intent.next_step_hint) || (intent.resume_required ? intentCopy(locale, "recheckBeforeResume") : "") : "";
-  const lifecycleNote = intent.duplicate === true || intent.replayed === true || intent.replay === true ? intentCopy(locale, "replayed") : textValue(intent.replaced_by) ? intentCopy(locale, "replaced") : "";
-  if (freshness === "stale") {
-    return {
-      kind: "stale",
-      label: intentCopy(locale, "stale"),
-      statusLabel: "",
-      message,
-      receiptState: receipt.state,
-      receiptLabel: receipt.label,
-      lifecycleNote,
-      ...reason,
-      nextStep
-    };
-  }
-  if (freshness === "reconnecting") {
-    return {
-      kind: "reconnecting",
-      label: intentCopy(locale, "reconnecting"),
-      statusLabel: label,
-      message,
-      receiptState: receipt.state,
-      receiptLabel: receipt.label,
-      lifecycleNote,
-      ...reason,
-      nextStep
-    };
-  }
-  if (freshness === "conflict") {
-    return {
-      kind: "conflict",
-      label: intentCopy(locale, "needsConfirmation"),
-      statusLabel: label,
-      message,
-      receiptState: receipt.state,
-      receiptLabel: receipt.label,
-      lifecycleNote,
-      ...reason,
-      nextStep
-    };
-  }
-  return {
-    kind: "current",
-    label: intentCopy(locale, "current"),
-    statusLabel: label,
-    message,
-    receiptState: receipt.state,
-    receiptLabel: receipt.label,
-    lifecycleNote,
-    ...reason,
-    nextStep
-  };
-}
-function AgentIntentSurface(props) {
-  const locale = () => props.locale || "en";
-  const model = () => describeAgentIntent(props.intent, locale(), props.connectionStatus);
-  const hidden = () => ["control_lost", "read_only", "unauthorized", "unavailable"].includes(model().kind);
-  return (() => {
-    var _el$ = _tmpl$8$1(), _el$2 = _el$.firstChild;
-    insert(_el$2, () => intentCopy(locale(), "heading"));
-    insert(_el$, createComponent(Show, {
-      get when() {
-        return hidden();
-      },
-      get children() {
-        var _el$3 = _tmpl$$1();
-        insert(_el$3, () => model().label);
-        return _el$3;
-      }
-    }), null);
-    insert(_el$, createComponent(Show, {
-      get when() {
-        return !hidden();
-      },
-      get children() {
-        return [(() => {
-          var _el$4 = _tmpl$3$1(), _el$5 = _el$4.firstChild;
-          insert(_el$5, () => model().label);
-          insert(_el$4, createComponent(Show, {
-            get when() {
-              return model().statusLabel;
-            },
-            get children() {
-              var _el$6 = _tmpl$2$1();
-              insert(_el$6, () => model().statusLabel);
-              return _el$6;
-            }
-          }), null);
-          return _el$4;
-        })(), createComponent(Show, {
-          get when() {
-            return model().message;
-          },
-          get children() {
-            var _el$7 = _tmpl$4$1();
-            insert(_el$7, () => model().message);
-            return _el$7;
-          }
-        }), createComponent(Show, {
-          get when() {
-            return model().receiptLabel;
-          },
-          get children() {
-            var _el$8 = _tmpl$5$1(), _el$9 = _el$8.firstChild;
-            insert(_el$9, () => model().receiptLabel);
-            return _el$8;
-          }
-        }), createComponent(Show, {
-          get when() {
-            return model().reasonLabel || model().reasonSummary;
-          },
-          get children() {
-            var _el$0 = _tmpl$6$1(), _el$1 = _el$0.firstChild, _el$10 = _el$1.nextSibling;
-            insert(_el$1, () => intentCopy(locale(), "reason"));
-            insert(_el$10, () => model().reasonLabel, null);
-            insert(_el$10, (() => {
-              var _c$ = memo(() => !!model().reasonSummary);
-              return () => _c$() ? `: ${model().reasonSummary}` : "";
-            })(), null);
-            return _el$0;
-          }
-        }), createComponent(Show, {
-          get when() {
-            return model().lifecycleNote;
-          },
-          get children() {
-            var _el$11 = _tmpl$7$1();
-            insert(_el$11, () => model().lifecycleNote);
-            return _el$11;
-          }
-        }), createComponent(Show, {
-          get when() {
-            return model().nextStep;
-          },
-          get children() {
-            var _el$12 = _tmpl$6$1(), _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling;
-            insert(_el$13, () => intentCopy(locale(), "nextStep"));
-            insert(_el$14, () => model().nextStep);
-            return _el$12;
-          }
-        })];
-      }
-    }), null);
-    createRenderEffect((_p$) => {
-      var _v$ = model().kind, _v$2 = model().receiptState || "not_applicable";
-      _v$ !== _p$.e && setAttribute(_el$, "data-agent-intent-state", _p$.e = _v$);
-      _v$2 !== _p$.t && setAttribute(_el$, "data-agent-intent-receipt-state", _p$.t = _v$2);
-      return _p$;
-    }, {
-      e: void 0,
-      t: void 0
-    });
     return _el$;
   })();
 }

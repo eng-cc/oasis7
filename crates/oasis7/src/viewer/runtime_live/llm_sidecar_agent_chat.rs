@@ -55,7 +55,15 @@ impl RuntimeLlmSidecar {
                 .trim()
                 .eq_ignore_ascii_case(PROVIDER_AGENT_CHAT_CAPABILITY)
         }) {
-            return Ok(None);
+            return Err(RuntimeProviderAgentChatRequestError {
+                retryable: false,
+                error: AgentChatError {
+                    code: "agent_provider_chat_unsupported".to_string(),
+                    message: "configured provider does not advertise the agent_chat capability"
+                        .to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                },
+            });
         }
         let agent = world.state().agents.get(agent_id);
         let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));

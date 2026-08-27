@@ -72,11 +72,7 @@ export function buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot, state
       schema_version: 2,
       intent_id: intentId,
       status,
-      message: status === "blocked"
-        ? "Agent guidance is blocked pending a runtime recheck."
-        : status === "completed"
-          ? "Agent guidance completed with a confirmed world receipt."
-          : "Agent guidance is available for the next world action.",
+      message: AGENT_INTENT_SUMMARIES[status],
       resume_required: status === "blocked",
       source_class: "runtime_projection",
       freshness,
@@ -105,9 +101,9 @@ export function buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot, state
         : status === "rejected"
           ? "The requested operation is no longer authorized."
           : status === "expired"
-            ? "The world position changed before the intent was resumed."
+            ? "The world position changed before execution."
             : null,
-      next_step: status === "blocked" ? "Review the world state, then resume when ready." : null,
+      next_step: status === "blocked" ? "Recheck runtime state before resuming." : null,
       receipt_ref: status === "completed" && receiptState === "valid"
         ? {
           intent_id: intentId,
@@ -161,3 +157,4 @@ export function installAgentIntentV2VisualFixture(
     core.requestRender();
   };
 }
+import { AGENT_INTENT_SUMMARIES } from "./agent_intent_surface.jsx";

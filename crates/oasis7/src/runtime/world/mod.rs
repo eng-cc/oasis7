@@ -3,6 +3,7 @@
 mod actions;
 mod agent_claims;
 mod agent_intent;
+mod agent_intent_terminal;
 pub use agent_intent::{AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome};
 mod audit;
 mod base_layer;

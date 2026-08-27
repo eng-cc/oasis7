@@ -442,7 +442,7 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
 }
 
 #[test]
-fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() {
+fn runtime_agent_chat_provider_mode_persists_rejection_without_agent_chat_capability() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
@@ -558,9 +558,30 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    let ack = server
+        .handle_agent_chat(request)
+        .expect("chat initially accepted");
     assert_eq!(ack.agent_id, agent_id);
-    server.enqueue_pending_provider_agent_chat_replies();
+    let errors = server.enqueue_pending_provider_agent_chat_replies();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "agent_provider_chat_unsupported");
+    assert_eq!(
+        server.world.state().agents[&agent_id]
+            .intent
+            .as_ref()
+            .unwrap()
+            .status,
+        "rejected"
+    );
+    assert_eq!(
+        server.world.state().agents[&agent_id]
+            .intent
+            .as_ref()
+            .unwrap()
+            .reason_code
+            .as_deref(),
+        Some("provider_rejected")
+    );
     let recorded = recorded.lock().expect("recorded lock");
     assert_eq!(recorded.len(), 2);
     assert_eq!(recorded[0].method, "POST");

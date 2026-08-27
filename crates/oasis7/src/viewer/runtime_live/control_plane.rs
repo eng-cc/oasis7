@@ -709,24 +709,40 @@ impl ViewerRuntimeLiveServer {
             } else {
                 AgentIntentProviderFailureDisposition::Rejected
             };
-            if let (Some(intent_id), Some(request_digest)) = (
+            let disposition_error = if let (Some(intent_id), Some(request_digest)) = (
                 failure.pending.intent_id.as_deref(),
                 failure.pending.request_digest.as_deref(),
             ) {
-                if let Err(error) = self.world.transition_agent_chat_provider_failure_exact(
-                    failure.pending.agent_id.as_str(),
-                    intent_id,
-                    request_digest,
-                    disposition,
-                ) {
-                    tracing::error!(
-                        agent_id = failure.pending.agent_id,
-                        error = ?error,
-                        "failed to persist exact provider chat disposition"
-                    );
-                }
+                self.world
+                    .transition_agent_chat_provider_failure_exact(
+                        failure.pending.agent_id.as_str(),
+                        intent_id,
+                        request_digest,
+                        disposition,
+                    )
+                    .err()
+            } else {
+                Some(crate::runtime::WorldError::ResourceBalanceInvalid {
+                    reason: "provider chat failure has no durable intent identity".to_string(),
+                })
+            };
+            if let Some(error) = disposition_error {
+                let failure_agent_id = failure.pending.agent_id.clone();
+                tracing::error!(
+                    agent_id = failure_agent_id.as_str(),
+                    error = ?error,
+                    "failed to persist exact provider chat disposition"
+                );
+                errors.push(AgentChatError {
+                    code: "intent_disposition_failed".to_string(),
+                    message: format!(
+                        "provider chat failed but its durable intent disposition could not be persisted: {error:?}"
+                    ),
+                    agent_id: Some(failure_agent_id),
+                });
+            } else {
+                errors.push(failure.error);
             }
-            errors.push(failure.error);
         }
         errors
     }
