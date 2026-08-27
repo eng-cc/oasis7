@@ -410,6 +410,197 @@ fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once
 }
 
 #[test]
+fn trusted_executor_replays_multi_effect_receipt_closure_exactly_once() {
+    let effect_grant = signed_effect_grant_with_selectors();
+    let mut world = fixture_world_with_revocations_and_budget_and_effect_grant(
+        BTreeSet::new(),
+        128,
+        effect_grant.clone(),
+    );
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let mut sandbox = ConfiguredSandbox {
+        calls: 0,
+        output: ModuleOutput {
+            new_state: Some(vec![0x9a]),
+            effects: vec![
+                ModuleEffectIntent {
+                    kind: "weather.publish".to_string(),
+                    params: json!({"entity_id": "station-1", "resource_id": "weather.read"}),
+                    cap_ref: effect_grant.grant_id.clone(),
+                    cap_slot: None,
+                },
+                ModuleEffectIntent {
+                    kind: "weather.publish".to_string(),
+                    params: json!({"entity_id": "station-1", "resource_id": "weather.read"}),
+                    cap_ref: effect_grant.grant_id,
+                    cap_slot: None,
+                },
+            ],
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        },
+    };
+
+    let authorization =
+        execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+            .expect("multi-effect command should commit");
+    let first = world.take_next_effect().expect("first effect is queued");
+    let second = world.take_next_effect().expect("second effect is queued");
+    assert_ne!(first.intent_id, second.intent_id);
+    assert_eq!(
+        world
+            .capability_effect_receipt_links()
+            .values()
+            .filter(|link| link.authorization_receipt_id == authorization.receipt_id)
+            .count(),
+        2,
+        "both effects remain linked until their own receipts arrive"
+    );
+
+    let stale_snapshot = world.snapshot();
+    let journal_before_receipt = world.journal().clone();
+    let first_receipt = EffectReceipt {
+        intent_id: first.intent_id.clone(),
+        status: "ok".to_string(),
+        payload: json!({"published": true, "effect": 1}),
+        cost_cents: Some(1),
+        signature: None,
+    };
+    let second_receipt = EffectReceipt {
+        intent_id: second.intent_id.clone(),
+        status: "ok".to_string(),
+        payload: json!({"published": true, "effect": 2}),
+        cost_cents: Some(1),
+        signature: None,
+    };
+
+    world
+        .ingest_receipt(first_receipt.clone())
+        .expect("first linked effect receipt should close independently");
+    let mut closure_only_journal = world.journal().clone();
+    let signed_first_receipt = match closure_only_journal
+        .events
+        .pop()
+        .expect("first receipt acknowledgement event")
+        .body
+    {
+        WorldEventBody::ReceiptAppended(receipt) => receipt,
+        body => panic!("expected first receipt acknowledgement, got {body:?}"),
+    };
+    assert_eq!(
+        closure_only_journal.events.len(),
+        journal_before_receipt.events.len() + 1,
+        "the crash window preserves one closure but not its external acknowledgement"
+    );
+
+    let mut recovered = World::from_snapshot(stale_snapshot, closure_only_journal)
+        .expect("replay should preserve the first effect closure and second pending link");
+    let recovered_audit = recovered
+        .capability_authorization_receipts()
+        .values()
+        .next()
+        .expect("authorization audit receipt survives replay");
+    assert_eq!(
+        recovered_audit.committed_effect_receipt_ids,
+        BTreeSet::from([first.intent_id.clone()]),
+        "replayed closure records exactly the first effect"
+    );
+    assert!(
+        !recovered
+            .capability_effect_receipt_links()
+            .contains_key(&first.intent_id)
+    );
+    assert!(
+        recovered
+            .capability_effect_receipt_links()
+            .contains_key(&second.intent_id)
+    );
+
+    recovered
+        .ingest_receipt(signed_first_receipt)
+        .expect("receipt acknowledgement should remain retryable after closure replay");
+    recovered
+        .ingest_receipt(second_receipt)
+        .expect("second linked effect receipt should close independently");
+    assert!(
+        recovered
+            .capability_effect_receipt_links()
+            .values()
+            .all(|link| link.authorization_receipt_id != authorization.receipt_id),
+        "all links for one authorization receipt must close"
+    );
+    let recovered_audit = recovered
+        .capability_authorization_receipts()
+        .get(&authorization.receipt_id)
+        .expect("authorization audit receipt remains durable");
+    assert_eq!(
+        recovered_audit.committed_effect_receipt_ids,
+        BTreeSet::from([first.intent_id.clone(), second.intent_id.clone()]),
+        "replay records every effect closure without overwriting prior receipts"
+    );
+    assert_eq!(
+        recovered
+            .journal()
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.body,
+                WorldEventBody::CapabilityAuthorization(
+                    CapabilityAuthorizationEvent::EffectReceiptCommitted { intent_id, .. }
+                ) if intent_id == &first.intent_id || intent_id == &second.intent_id
+            ))
+            .count(),
+        2,
+        "each effect gets exactly one durable authorization closure"
+    );
+}
+
+#[test]
+fn stale_capability_context_replay_ignores_unrelated_module_state_tail() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+
+    let stale_snapshot = world.snapshot();
+    let mut journal = world.journal().clone();
+    journal.append(WorldEvent {
+        id: stale_snapshot.last_event_id + 1,
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::ModuleStateUpdated(oasis7_wasm_abi::ModuleStateUpdate {
+            module_id: "module.unrelated".to_string(),
+            trace_id: "unrelated-tail".to_string(),
+            state: vec![0x77],
+        }),
+    });
+
+    assert_eq!(stale_snapshot.journal_len + 1, journal.len());
+    assert!(stale_snapshot.capability_authorization_receipts.is_empty());
+    assert!(!stale_snapshot.capability_invocation_contexts.is_empty());
+    let recovered = World::from_snapshot(stale_snapshot, journal)
+        .expect("unrelated module state tail must not look like a missing capability commit");
+    assert_eq!(
+        recovered.state().module_states.get("module.unrelated"),
+        Some(&vec![0x77])
+    );
+    assert_eq!(recovered.capability_invocation_contexts().len(), 1);
+}
+
+#[test]
 fn trusted_executor_rejects_future_issued_grant_before_sandbox() {
     let mut world = fixture_world();
     let future_tick = world.state().time.saturating_add(1);

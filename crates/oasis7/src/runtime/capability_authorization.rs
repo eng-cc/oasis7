@@ -251,6 +251,12 @@ pub struct CapabilityAuthorizationAuditReceipt {
     pub state_hash_after: Option<String>,
     #[serde(default)]
     pub committed_effect_receipt_id: Option<String>,
+    /// Intent ids whose external receipts have been durably committed for
+    /// this authorization.  `committed_effect_receipt_id` remains the first
+    /// receipt for snapshots and consumers written before multi-effect
+    /// closure was supported; this set is the complete replayable record.
+    #[serde(default)]
+    pub committed_effect_receipt_ids: BTreeSet<String>,
     pub canonical_request_hash: String,
     pub canonical_result_hash: String,
 }

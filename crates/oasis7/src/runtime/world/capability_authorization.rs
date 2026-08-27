@@ -571,6 +571,7 @@ impl World {
             state_hash_before,
             state_hash_after: Some(state_hash_after),
             committed_effect_receipt_id: None,
+            committed_effect_receipt_ids: BTreeSet::new(),
             canonical_request_hash: request_hash.clone(),
             canonical_result_hash: result_hash.clone(),
         };
@@ -836,10 +837,11 @@ impl World {
         subject: &oasis7_wasm_abi::CapabilitySubject,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<oasis7_wasm_abi::ModuleOutput, WorldError> {
-        let trace_id = response
-            .trace_id
-            .clone()
-            .unwrap_or_else(|| format!("trusted-command-{}", response.response_nonce));
+        // The provider-supplied trace id is observability data, not an
+        // authority binding.  Use the host-bound response nonce for the
+        // durable trusted-command trace so replay can distinguish this
+        // command's state update from an unrelated module tail event.
+        let trace_id = format!("trusted-command-{}", response.response_nonce);
         let input = response
             .envelope
             .encode_canonical()

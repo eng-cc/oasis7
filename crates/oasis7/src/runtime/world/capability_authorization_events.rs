@@ -762,12 +762,16 @@ fn apply_effect_receipt_commit(
         ));
     }
     let Some(link) = world.capability_effect_receipt_links.get(intent_id) else {
-        if world
+        let already_committed = world
             .capability_authorization_receipts
             .get(authorization_receipt_id)
-            .and_then(|receipt| receipt.committed_effect_receipt_id.as_deref())
-            == Some(effect_receipt_id)
-        {
+            .is_some_and(|receipt| {
+                receipt
+                    .committed_effect_receipt_ids
+                    .contains(effect_receipt_id)
+                    || receipt.committed_effect_receipt_id.as_deref() == Some(effect_receipt_id)
+            });
+        if already_committed {
             return Ok(());
         }
         return Err(deny("effect receipt authorization link is missing"));
@@ -779,12 +783,16 @@ fn apply_effect_receipt_commit(
         .capability_authorization_receipts
         .get_mut(authorization_receipt_id)
         .ok_or_else(|| deny("effect receipt authorization link has no audit receipt"))?;
-    if let Some(existing) = &audit.committed_effect_receipt_id
-        && existing != effect_receipt_id
-    {
-        return Err(deny("authorization receipt effect binding changed"));
+    // One authorization command may emit multiple independently receipted
+    // effects.  Keep the historical first-id projection for compatibility,
+    // while the set records every closure and makes replay/idempotency
+    // deterministic for each linked intent.
+    if audit.committed_effect_receipt_id.is_none() {
+        audit.committed_effect_receipt_id = Some(effect_receipt_id.to_string());
     }
-    audit.committed_effect_receipt_id = Some(effect_receipt_id.to_string());
+    audit
+        .committed_effect_receipt_ids
+        .insert(effect_receipt_id.to_string());
     world.capability_effect_receipt_links.remove(intent_id);
     Ok(())
 }

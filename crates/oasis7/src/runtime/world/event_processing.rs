@@ -131,8 +131,21 @@ impl World {
             }
             if require_capability_commit {
                 match &event.body {
-                    WorldEventBody::ModuleStateUpdated(_) => {
-                        capability_state_update_seen = true;
+                    WorldEventBody::ModuleStateUpdated(update) => {
+                        // ModuleStateUpdated is also emitted by ordinary
+                        // module ticks and commands.  Only a state update
+                        // carrying the trace/module identity of one of the
+                        // pending trusted invocation contexts indicates a
+                        // capability command that may have crashed before
+                        // its CommandCommitted journal event.  Treating an
+                        // unrelated module update as that marker rejects
+                        // valid stale-snapshot recovery with JournalMismatch.
+                        capability_state_update_seen = capability_state_update_seen
+                            || self.capability_invocation_contexts.values().any(|context| {
+                                context.module_id == update.module_id
+                                    && update.trace_id
+                                        == format!("trusted-command-{}", context.response_nonce)
+                            });
                     }
                     WorldEventBody::CapabilityAuthorization(
                         super::super::CapabilityAuthorizationEvent::CommandCommitted { .. },
