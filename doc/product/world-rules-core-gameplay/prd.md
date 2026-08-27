@@ -169,6 +169,16 @@ depletion 与 replenishment 必须延续同一 source 历史，而不是把客�
 
 本 handoff 的 Non-Goals 是：不规定采集、补种、精炼或运输的产率/价格/损耗公式，不新增或重命名 runtime/ABI/ledger 字段，不决定队列、公平性、UI 布局或 Agent 自动化策略，不把产品读面当作当前实现完成证明，也不替代 `game` 的玩法平衡、M4 的材料/账本合同或 `world-runtime` 的事件、状态、持久化与 replay 权威。
 
+#### 调运（`TransferMaterial`）的报价、在途与到达边界
+
+当来源账本中的材料需要跨站点、跨区域或跨账本支撑当前配方/稳定产线时，产品层把 `TransferMaterial` 收束为一条可追溯的 source → edge → destination handoff；玩家承诺、可比较动作与反馈边界由产品层和 [`gameplay top-level design`](../../game/gameplay/gameplay-top-level-design.prd.md) 拥有，M4 拥有材料账本、handoff、适用性与物流等工业领域语义，`world-runtime` 拥有 event/receipt/job/replay、identity/schema 以及当前执行事实。提交前的 `logistics_transfer_quote` / `transfer_impact_preview` 必须是只读、确定且带条件的当前快照，至少让玩家看见 `submission_feasible`、可调运上限、来源前后可用量、目的地预计到达量、预计损耗/预计收到量、到达 tick/`ready_at`、在途量与容量、有效优先级及理由；当前配方缺口和推荐动作只能作为上下文派生读面，不新增第二套 runtime quote authority。
+
+玩家必须能在确认前比较专业合同真实支持的 `submit_transfer`、`wait_for_transit_capacity`、`reduce_amount_or_source_materials`、改走本地/替代来源与延期/重新规划。报价不预留材料、不占用吞吐、不推进 tick 或账本；提交时按当前权威库存、距离/路线、容量、权限、优先级与目标账本重新校验。任一前置漂移、报价过期或无可执行容量都只能原子拒绝且不扣材料、不生成部分在途货物，并说明旧报价失效与下一次可决策点；不得静默降额、后台重试或自动改道。
+
+`in-transit` 仅表示一次已接受、保留 source/edge/destination、预计到达量/损耗与占用的调运承诺；它不等于目的账本已 credit、材料已到达、已适用或已解除配方缺口。只有权威 arrival receipt 将实际收到量写入声明的目的账本/有界 buffer 后才是 `arrived`；`arrived` 仍须独立通过批次、规格、owner、账本、root/阶段与配方条件验证，才能成为 canonical consumable input。失败时仅可使用专业合同已声明的等待容量后重报价、减量/换来源、修复权限、显式 return/hold/quarantine、改道或重新规划；已发生的运输损耗、在制或到达效果不得被恢复抹除，也不得默认全额退款。
+
+同一 accepted intent 的 source effect、在途创建、arrival credit、损耗与配方缺口推进各至多结算一次，并保留 parent receipt、batch/root lineage。重连、重复提交、乱序、snapshot restore、Agent retry 与 replay 只能重读同一 transfer/arrival disposition；若当前专业实现无法证明 lineage/idempotency，surface 必须先展示既有结果或要求新的显式决策，不能自动重提。`test_tier_required` 至少覆盖：跨站正向到达且缺口只解除一次；吞吐已满时零扣减、`wait_for_transit_capacity` 与重新报价；来源不足时减量/换源且无部分扣料；距离/权限失败无世界效果；报价后库存/容量漂移原子拒绝并保留原状态；重连、重复提交与 replay 不复制调运、损耗、到达或稳定窗口进度。本文不冻结物流算法、价格/损耗/吞吐数值、runtime 字段/schema、队列、UI 布局或当前实现完成声明。
+
 #### 原材料批次时效、质量漂移与仓储保管
 
 材料到达目的账本不等于其质量永远有效。每个材料/产品 profile 必须声明自身属于 `stable` 或 `time/environment-sensitive`：`stable` 批次在等待、运输和有界 buffer 保管期间不因时间自动失效，但仍受新的权威规格、owner、账本或污染/损坏事实约束；`time/environment-sensitive` 批次则必须声明适用的有效性边界、保管/运输条件与重新验证点。材料批次、profile、质量/规格适用性与 custody 语义的专业 authority 是 [`M4 industrial resource flow contract`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；`world-runtime` 继续拥有事件、schema、权威状态、时间与当前实现状态，产品层只冻结玩家承诺，不成为第二套 schema authority。未声明或 legacy profile 在完成显式 admission/backfill 前一律视为 `unknown`，并在首个 input sink、WIP、稳定进度或奖励前 fail closed；不能由本段文字、材料名称、客户端缓存或 Agent 推断为 `stable`、可用或已完成 backfill。该分类只定义产品结果语义，不规定所有材料都要衰减。
