@@ -123,6 +123,33 @@ PY
 printf '%s\n' cleanup finalize >"$TMP/retry-expected"
 cmp "$TMP/retry-expected" "$SEQUENCE"
 
+# A published terminal receipt with no ledger is the precise crash window
+# between cleanup and finalizer entry. Resume must invoke only the receipt-
+# bound finalizer; the now-absent checkout is not required.
+rm -f "$REPO/.git/receipts/finalizer-ledger.json"
+rm -rf "$TASK"
+: >"$SEQUENCE"
+TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+  "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/no-ledger-retry.json"
+printf '%s\n' finalize >"$TMP/no-ledger-expected"
+cmp "$TMP/no-ledger-expected" "$SEQUENCE"
+python3 - "$TMP/no-ledger-retry.json" <<'PY'
+import json,sys
+r=json.load(open(sys.argv[1])); assert r["status"]=="finalized",r
+PY
+
+# Once the ledger exists and no local residue is present, another resume must
+# preserve the terminal receipt byte-for-byte and perform finalizer readback.
+before_digest="$(shasum -a 256 "$REPO/.git/receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
+: >"$SEQUENCE"
+TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+  "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/residue-free-retry.json"
+printf '%s\n' finalize >"$TMP/residue-free-expected"
+cmp "$TMP/residue-free-expected" "$SEQUENCE"
+after_digest="$(shasum -a 256 "$REPO/.git/receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
+[[ "$before_digest" == "$after_digest" ]]
+mkdir -p "$TASK"
+
 # Build a real squash/rebase-shaped history.  The task head is not an
 # ancestor of origin/main, so the orchestrator must derive and bind a
 # repository-generated patch-equivalence receipt before sync/cleanup.

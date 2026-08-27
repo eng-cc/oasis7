@@ -65,6 +65,13 @@ class TerminalReconciliationContractTest(unittest.TestCase):
                 "--branch", "task/new",
             ], text=True, capture_output=True)
             self.assertEqual(allowed.returncode, 0, allowed.stderr)
+            (receipt_root / "terminal-tombstone.json").write_text("{broken", encoding="utf-8")
+            corrupt = subprocess.run([
+                str(GUARD), "--repo-root", str(repo), "--worktree", str(Path(scratch) / "new"),
+                "--branch", "task/new",
+            ], text=True, capture_output=True)
+            self.assertNotEqual(corrupt.returncode, 0)
+            self.assertIn("invalid terminal tombstone", corrupt.stderr)
 
     def test_audit_validates_receipt_chain_and_physical_absence(self) -> None:
         source = AUDIT.read_text(encoding="utf-8")

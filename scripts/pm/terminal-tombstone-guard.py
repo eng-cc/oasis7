@@ -24,8 +24,8 @@ def main() -> int:
     for tombstone in (common / "oasis7-workflow-receipts").glob("*/terminal-tombstone.json"):
         try:
             data = json.loads(tombstone.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"terminal-tombstone-guard: invalid terminal tombstone {tombstone}: {exc}")
         if data.get("schema") != "oasis7_terminal_tombstone_v1" or data.get("checkout_recreation_forbidden") is not True:
             continue
         same_path = bool(data.get("canonical_worktree")) and norm(data["canonical_worktree"]) == requested

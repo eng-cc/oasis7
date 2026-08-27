@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
 import subprocess
@@ -91,6 +92,8 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
         terminal_data.get("receipt_type") == "oasis7_terminal_cleanup"
         and terminal_data.get("issuer") == "post-merge-cleanup"
         and all(str(terminal_data.get(key)) == str(value) for key, value in expected_identity.items())
+        and str(pathlib.Path(str(terminal_data.get("worktree") or "")).resolve()) == worktree
+        and terminal_data.get("branch") == branch
         and terminal_data.get("merge_receipt_sha256") == record.get("merge_receipt_sha256")
         and terminal_data.get("main_sync_receipt_sha256") == (record.get("phase_receipt_sha256") or {}).get("main_sync")
         and terminal_data == (record.get("phase_receipts") or {}).get("post_merge_done")
@@ -102,12 +105,30 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
     ledger_valid = (
         ledger_data.get("schema") == "oasis7_finalizer_ledger_v1"
         and ledger_data.get("task_uid") == task_uid
-        and all((operations.get(effect) or {}).get("committed") is True for effect in ledger_effects)
+        and all(
+            (operations.get(effect) or {}).get("operation_id")
+                == hashlib.sha256(f"{task_uid}:post_merge_done:{effect}".encode()).hexdigest()
+            and (operations.get(effect) or {}).get("effect") == effect
+            and (operations.get(effect) or {}).get("intent") is True
+            and (operations.get(effect) or {}).get("readback") is True
+            and (operations.get(effect) or {}).get("committed") is True
+            for effect in ledger_effects
+        )
     )
-    project_done = any(
-        str(((item or {}).get("status") or {}).get("name") or "").upper() == "DONE"
-        for item in (issue.get("projectItems") or [])
-    )
+    project_done = not project_bound
+    project_live: dict = {}
+    if project_bound:
+        helper = root / "scripts/pm/github-project-workflow.py"
+        spec = importlib.util.spec_from_file_location("terminal_audit_project", helper)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            project_live = module.fetch_project_items_by_ids([str(record["project_item_id"])]).get(
+                str(record["project_item_id"])
+            ) or {}
+            project_done = all(project_live.get(name) == value for name, value in {
+                "Status": "Done", "PM Status": "done", "Workflow Phase": "post_merge_done",
+            }.items())
     checks = {
         "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",
         "terminal_receipt_chain_valid": terminal_identity,
@@ -141,7 +162,7 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
         "task": {key: record.get(key) for key in
                  ("repository", "issue_number", "pr_number", "status", "workflow_phase",
                   "canonical_worktree", "task_branch")},
-        "live": {"issue": issue, "pr": pr},
+        "live": {"issue": issue, "pr": pr, "project_item": project_live},
         "receipt_root": str(receipt_root),
     }
 
