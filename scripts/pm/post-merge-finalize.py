@@ -69,6 +69,39 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
         fail("bound Project item content does not match task issue identity")
     return {name:str(item.get(name) or "") for name in ("Status","PM Status","Workflow Phase")}
 
+def _ensure_terminal_project(mapping: dict, record: dict, ledger_path: pathlib.Path,
+                             task_uid: str) -> None:
+    """Read back and repair the exact bound Project item, even after terminal drift."""
+    if not record.get("project_item_id"):
+        return
+    sync_path=SCRIPT_DIR/"github-project-sync.py"
+    spec=importlib.util.spec_from_file_location("oasis7_finalizer_sync",sync_path)
+    if spec is None or spec.loader is None: fail("terminal Project sync unavailable")
+    sync=importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
+    project=mapping.get("project") or {}; owner=str(project.get("owner") or record["repository"].split("/",1)[0])
+    project_id,fields=sync.project_context(owner,int(project.get("number") or 1))
+    task={"task_uid":task_uid,"status":record.get("status"),"workflow_phase":"post_merge_done",
+          "owner_role":record.get("owner_role"),"module":record.get("module"),
+          "priority":record.get("priority"),"worktree_hint":record.get("worktree_hint"),
+          "pr_url":record.get("pr_url"),"pr_number":record.get("pr_number")}
+    expected={k:v for k,v in sync.project_field_values(task).items()
+              if k in {"Status","PM Status","Workflow Phase"}}
+    _ledger_transition(ledger_path,task_uid,"project_update","intent")
+    live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                           task_uid,int(record["issue_number"]),str(record["repository"]))
+    missing={name for name,value in expected.items() if live.get(name)!=value}
+    if missing:
+        _ledger_transition(ledger_path,task_uid,"project_update","action",{"fields":sorted(missing)})
+        updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
+                                           only_fields=missing)
+        if skipped or updated!=len(missing): fail("terminal Project fields were not fully persisted")
+        live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                               task_uid,int(record["issue_number"]),str(record["repository"]))
+    if any(live.get(name)!=value for name,value in expected.items()):
+        fail("terminal Project field readback mismatch")
+    _ledger_transition(ledger_path,task_uid,"project_update","readback",live)
+    _ledger_transition(ledger_path,task_uid,"project_update","committed")
+
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
 
@@ -138,6 +171,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     # durable ledger and never hold the mapping lock across a network call.
     lock_handle.close(); lock_fd=-1
     if already_finalized:
+        _ensure_terminal_project(mapping,record,ledger_path,task_uid)
         _ledger_transition(ledger_path,task_uid,"issue_close","intent")
         issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
         _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
@@ -155,39 +189,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     phase="post_merge_done"; record["workflow_phase"]=phase
     record.setdefault("phase_receipts",{})[phase]=receipt
     record.setdefault("phase_receipt_sha256",{})[phase]=digest
-    if record.get("project_item_id"):
-        project_entry=_ledger_entry(ledger_path,"project_update")
-        project_done=bool(project_entry.get("committed"))
-        sync_path=SCRIPT_DIR/"github-project-sync.py"
-        spec=importlib.util.spec_from_file_location("oasis7_finalizer_sync",sync_path)
-        if spec is None or spec.loader is None: fail("terminal Project sync unavailable")
-        sync=importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
-        project=mapping.get("project") or {}; owner=str(project.get("owner") or record["repository"].split("/",1)[0])
-        project_id,fields=sync.project_context(owner,int(project.get("number") or 1))
-        task={"task_uid":task_uid,"status":record.get("status"),"workflow_phase":phase,
-              "owner_role":record.get("owner_role"),"module":record.get("module"),
-              "priority":record.get("priority"),"worktree_hint":record.get("worktree_hint"),
-              "pr_url":record.get("pr_url"),"pr_number":record.get("pr_number")}
-        expected_project={k:v for k,v in sync.project_field_values(task).items()
-                          if k in {"Status","PM Status","Workflow Phase"}}
-        if not project_done:
-            _ledger_transition(ledger_path,task_uid,"project_update","intent")
-            live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
-                                   task_uid,int(record["issue_number"]),str(record["repository"]))
-            missing={name for name,value in expected_project.items() if live.get(name)!=value}
-            if missing:
-                # Action is durable before the first edit. A crash is resolved
-                # by live readback; only fields still missing are edited.
-                _ledger_transition(ledger_path,task_uid,"project_update","action",{"fields":sorted(missing)})
-                updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
-                                                   only_fields=missing)
-                if skipped or updated!=len(missing): fail("terminal Project fields were not fully persisted")
-                live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
-                                       task_uid,int(record["issue_number"]),str(record["repository"]))
-            if any(live.get(name)!=value for name,value in expected_project.items()):
-                fail("terminal Project field readback mismatch")
-            _ledger_transition(ledger_path,task_uid,"project_update","readback",live)
-            _ledger_transition(ledger_path,task_uid,"project_update","committed")
+    _ensure_terminal_project(mapping,record,ledger_path,task_uid)
     comment_operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
     body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
           "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")

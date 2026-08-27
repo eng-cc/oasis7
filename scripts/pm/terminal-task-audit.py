@@ -127,7 +127,7 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
                 str(record["project_item_id"])
             ) or {}
             project_done = all(project_live.get(name) == value for name, value in {
-                "Status": "Done", "PM Status": "done", "Workflow Phase": "post_merge_done",
+                "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
             }.items())
     checks = {
         "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",

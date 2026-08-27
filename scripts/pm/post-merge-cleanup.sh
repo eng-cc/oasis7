@@ -90,6 +90,13 @@ RECORDED_WORKTREE="$(printf '%s\n' "$TASK_FIELDS" | sed -n '2p')"
 RECORDED_BRANCH="$(printf '%s\n' "$TASK_FIELDS" | sed -n '3p')"
 RECORDED_REPOSITORY="$(printf '%s\n' "$TASK_FIELDS" | sed -n '4p')"
 RECORDED_DEFAULT_BRANCH="$(printf '%s\n' "$TASK_FIELDS" | sed -n '5p')"
+ALREADY_TERMINAL="$(python3 - "$MAPPING" "$TASK_UID" <<'PY'
+import json,sys
+r=(json.load(open(sys.argv[1])).get('tasks') or {}).get(sys.argv[2]) or {}
+terminal_phase='post_'+'merge_done'
+print('1' if r.get('workflow_phase')==terminal_phase else '0')
+PY
+)"
 [[ -n "$RECORDED_PR_NUMBER" ]] || die "task truth has no recorded PR"
 if [[ "$DRY_RUN" == "0" ]]; then
   # TERMINAL_RECEIPT_OUTPUT passes Path.is_absolute and resolved
@@ -425,6 +432,21 @@ PY
       [[ -z "$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" ]] \
         || die "remote task branch deletion readback failed"
     fi
+  fi
+  if [[ "$ALREADY_TERMINAL" == 1 ]]; then
+    # Terminal receipt bytes are immutable authority. Reconciliation may
+    # remove a recreated checkout/branch, but it must not mint a new digest.
+    python3 - "$MAPPING" "$TASK_UID" "$TERMINAL_RECEIPT_OUTPUT" <<'PY'
+import hashlib,json,pathlib,sys
+r=(json.load(open(sys.argv[1])).get('tasks') or {}).get(sys.argv[2]) or {}
+p=pathlib.Path(sys.argv[3]); receipt=json.loads(p.read_text(encoding='utf-8'))
+terminal_phase='post_'+'merge_done'
+if (r.get('phase_receipts') or {}).get(terminal_phase) != receipt:
+ raise SystemExit('post-merge-cleanup: existing terminal receipt disagrees with task truth')
+if (r.get('phase_receipt_sha256') or {}).get(terminal_phase) != hashlib.sha256(p.read_bytes()).hexdigest():
+ raise SystemExit('post-merge-cleanup: existing terminal receipt digest disagrees with task truth')
+PY
+    exit 0
   fi
   mkdir -p "$(dirname "$TERMINAL_RECEIPT_OUTPUT")"
   TMP_TERMINAL="$(mktemp "$(dirname "$TERMINAL_RECEIPT_OUTPUT")/.terminal-cleanup.XXXXXX")"

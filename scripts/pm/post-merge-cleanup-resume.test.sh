@@ -192,6 +192,27 @@ assert journal["branch_tip"] == branch_tip, journal
 assert journal["worktree_common_dir"] == common, (journal, common)
 PY
   fi
+  if [[ "$reappear" == 1 ]]; then
+    # Model a fully finalized task whose exact checkout is recreated later.
+    # Reconciliation must remove the residue without changing terminal receipt
+    # bytes already bound into task truth.
+    python3 - "$repo/.pm/github-project-sync/tasks.json" "$uid" "$receipts/terminal-cleanup-receipt.json" <<'PY'
+import hashlib,json,pathlib,sys
+mapping=pathlib.Path(sys.argv[1]); data=json.loads(mapping.read_text()); r=data['tasks'][sys.argv[2]]
+p=pathlib.Path(sys.argv[3]); receipt=json.loads(p.read_text())
+r['workflow_phase']='post_merge_done'; r.setdefault('phase_receipts',{})['post_merge_done']=receipt
+r.setdefault('phase_receipt_sha256',{})['post_merge_done']=hashlib.sha256(p.read_bytes()).hexdigest()
+mapping.write_text(json.dumps(data)+'\n')
+PY
+    before="$(shasum -a 256 "$receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
+    git -C "$repo" branch "$branch" "$branch_tip"
+    git -C "$repo" worktree add -q "$worktree" "$branch"
+    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" bash "${cleanup_args[@]}" >"$root/terminal-reconcile.out"
+    after="$(shasum -a 256 "$receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
+    [[ "$before" == "$after" ]]
+    [[ ! -e "$worktree" ]]
+    ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+  fi
 }
 
 # Squash/rebase cleanup must resume with a force-delete only after the exact

@@ -79,7 +79,7 @@ if [[ -f "$terminal_receipt" ]]; then
       || fail "cannot read remote task branch during terminal reconciliation"
     [[ -n "$remote_branch" ]] && cleanup_needed=1
   fi
-  if [[ -f "$receipt_root/finalizer-ledger.json" && "$cleanup_needed" == 1 ]]; then
+  if [[ "$cleanup_needed" == 1 ]]; then
     cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
       --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
       --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt")
