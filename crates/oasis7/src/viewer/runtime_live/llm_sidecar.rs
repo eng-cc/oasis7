@@ -3,9 +3,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
 use crate::runtime::{
-    Action as RuntimeAction, CausedBy as RuntimeCausedBy, DomainEvent as RuntimeDomainEvent,
-    ModuleSourcePackage, World as RuntimeWorld, WorldEvent as RuntimeWorldEvent,
-    WorldEventBody as RuntimeWorldEventBody,
+    Action as RuntimeAction, AgentIntentV2, CausedBy as RuntimeCausedBy,
+    DomainEvent as RuntimeDomainEvent, ModuleSourcePackage, World as RuntimeWorld,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
@@ -65,6 +65,8 @@ const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_M
 const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
+#[path = "llm_sidecar_agent_chat.rs"]
+mod agent_chat_support;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
 #[path = "llm_sidecar_runtime_support.rs"]
@@ -137,6 +139,24 @@ pub(super) struct RuntimePendingProviderAgentChat {
     pub(super) agent_id: String,
     player_id: String,
     message: String,
+    /// Durable runtime identity for the request that caused this provider call.
+    /// Legacy callers may leave these absent; the V2 integration must use the
+    /// identity-aware enqueue method.
+    pub(super) intent_id: Option<String>,
+    pub(super) request_digest: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeProviderAgentChatFailure {
+    pub(super) pending: RuntimePendingProviderAgentChat,
+    pub(super) error: AgentChatError,
+    pub(super) retryable: bool,
+}
+
+#[derive(Debug)]
+struct RuntimeProviderAgentChatRequestError {
+    error: AgentChatError,
+    retryable: bool,
 }
 
 impl RuntimeLlmDecision {
@@ -680,6 +700,40 @@ impl RuntimeLlmSidecar {
         player_id: &str,
         message: &str,
     ) -> Result<(), AgentChatError> {
+        self.push_chat_message_with_intent(world, config, agent_id, player_id, message, None)
+    }
+
+    /// Queue a provider-backed chat request with the exact durable Intent
+    /// identity that authorized it.  The caller must use this after the
+    /// accepted Intent has been committed; the sidecar never invents or
+    /// replaces the identity.
+    pub(super) fn push_chat_message_for_intent(
+        &mut self,
+        world: &RuntimeWorld,
+        config: &WorldConfig,
+        intent: &AgentIntentV2,
+        player_id: &str,
+        message: &str,
+    ) -> Result<(), AgentChatError> {
+        self.push_chat_message_with_intent(
+            world,
+            config,
+            intent.agent_id.as_str(),
+            player_id,
+            message,
+            Some((intent.intent_id.as_str(), intent.request_digest.as_str())),
+        )
+    }
+
+    fn push_chat_message_with_intent(
+        &mut self,
+        world: &RuntimeWorld,
+        config: &WorldConfig,
+        agent_id: &str,
+        player_id: &str,
+        message: &str,
+        intent_identity: Option<(&str, &str)>,
+    ) -> Result<(), AgentChatError> {
         if !self.is_llm_mode() {
             return Err(AgentChatError {
                 code: "llm_mode_required".to_string(),
@@ -749,6 +803,9 @@ impl RuntimeLlmSidecar {
                     agent_id: agent_id.to_string(),
                     player_id: player_id.to_string(),
                     message: message.to_string(),
+                    intent_id: intent_identity.map(|(intent_id, _)| intent_id.to_string()),
+                    request_digest: intent_identity
+                        .map(|(_, request_digest)| request_digest.to_string()),
                 });
             Ok(())
         } else {
@@ -786,9 +843,27 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &RuntimeWorld,
     ) -> (Vec<(String, String)>, Vec<AgentChatError>) {
+        let (replies, failures) = self.drain_provider_agent_chat_replies_with_identity(world);
+        let replies = replies
+            .into_iter()
+            .map(|(pending, reply)| (pending.agent_id, reply))
+            .collect();
+        let errors = failures.into_iter().map(|failure| failure.error).collect();
+        (replies, errors)
+    }
+
+    /// Drain provider replies while retaining the exact Intent identity for
+    /// durable success/failure disposition handling.
+    pub(super) fn drain_provider_agent_chat_replies_with_identity(
+        &mut self,
+        world: &RuntimeWorld,
+    ) -> (
+        Vec<(RuntimePendingProviderAgentChat, String)>,
+        Vec<RuntimeProviderAgentChatFailure>,
+    ) {
         let pending: Vec<_> = self.pending_provider_agent_chats.drain(..).collect();
         let mut replies = Vec::new();
-        let mut errors = Vec::new();
+        let mut failures = Vec::new();
         for request in pending {
             match self.request_provider_agent_chat(
                 world,
@@ -796,120 +871,25 @@ impl RuntimeLlmSidecar {
                 request.player_id.as_str(),
                 request.message.as_str(),
             ) {
-                Ok(Some(reply)) => replies.push((request.agent_id, reply)),
+                Ok(Some(reply)) => replies.push((request, reply)),
                 Ok(None) => {}
-                Err(error) => {
+                Err(request_error) => {
+                    let RuntimeProviderAgentChatRequestError { error, retryable } = request_error;
                     tracing::warn!(
                         agent_id = error.agent_id.as_deref().unwrap_or(""),
                         error_code = error.code.as_str(),
                         error_message = error.message.as_str(),
                         "provider-backed agent chat reply failed after ack"
                     );
-                    errors.push(error);
+                    failures.push(RuntimeProviderAgentChatFailure {
+                        pending: request,
+                        retryable,
+                        error,
+                    });
                 }
             }
         }
-        (replies, errors)
-    }
-
-    fn request_provider_agent_chat(
-        &self,
-        world: &RuntimeWorld,
-        agent_id: &str,
-        player_id: &str,
-        message: &str,
-    ) -> Result<Option<String>, AgentChatError> {
-        let settings = provider_settings_from_env()
-            .map_err(|message| AgentChatError {
-                code: "provider_config_invalid".to_string(),
-                message,
-                agent_id: Some(agent_id.to_string()),
-            })?
-            .ok_or_else(|| AgentChatError {
-                code: "provider_config_missing".to_string(),
-                message: "provider-backed agent chat requires provider settings".to_string(),
-                agent_id: Some(agent_id.to_string()),
-            })?;
-        let client = ProviderLoopbackHttpClient::new_with_transport(
-            settings.base_url.as_str(),
-            settings.auth_token.as_deref(),
-            settings.decision_timeout_ms,
-            settings.provider_transport.as_str(),
-        )
-        .map_err(|error| AgentChatError {
-            code: "provider_unreachable".to_string(),
-            message: error.to_string(),
-            agent_id: Some(agent_id.to_string()),
-        })?;
-        let info = client.provider_info().map_err(|error| AgentChatError {
-            code: "provider_unreachable".to_string(),
-            message: error.to_string(),
-            agent_id: Some(agent_id.to_string()),
-        })?;
-        if !info.capabilities.iter().any(|capability| {
-            capability
-                .trim()
-                .eq_ignore_ascii_case(PROVIDER_AGENT_CHAT_CAPABILITY)
-        }) {
-            return Ok(None);
-        }
-        let agent = world.state().agents.get(agent_id);
-        let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));
-        let resources = agent.and_then(|agent| serde_json::to_value(&agent.state.resources).ok());
-        let provider_request = ProviderAgentChatRequest {
-            agent_id: agent_id.to_string(),
-            player_id: player_id.to_string(),
-            message: message.to_string(),
-            world_time: world.state().time,
-            location_id,
-            resources,
-            recent_feedback: Vec::new(),
-        };
-        let chat_request_key = provider_agent_chat_log_key(&provider_request);
-        let started = Instant::now();
-        tracing::info!(
-            chat_request_key = chat_request_key.as_str(),
-            agent_id,
-            player_id,
-            world_time = provider_request.world_time,
-            "provider-backed agent chat request started"
-        );
-        let response = match client.request_agent_chat(&provider_request) {
-            Ok(response) => {
-                tracing::info!(
-                    chat_request_key = chat_request_key.as_str(),
-                    agent_id,
-                    player_id,
-                    elapsed_ms = started.elapsed().as_millis() as u64,
-                    "provider-backed agent chat request succeeded"
-                );
-                response
-            }
-            Err(error) => {
-                tracing::warn!(
-                    chat_request_key = chat_request_key.as_str(),
-                    agent_id,
-                    player_id,
-                    elapsed_ms = started.elapsed().as_millis() as u64,
-                    error = error.to_string().as_str(),
-                    "provider-backed agent chat request failed"
-                );
-                return Err(AgentChatError {
-                    code: "provider_unreachable".to_string(),
-                    message: error.to_string(),
-                    agent_id: Some(agent_id.to_string()),
-                });
-            }
-        };
-        let reply = response.message.trim();
-        if reply.is_empty() {
-            return Err(AgentChatError {
-                code: "provider_empty_chat_response".to_string(),
-                message: "provider returned an empty agent chat response".to_string(),
-                agent_id: Some(agent_id.to_string()),
-            });
-        }
-        Ok(Some(reply.to_string()))
+        (replies, failures)
     }
 
     pub(super) fn next_llm_decision(

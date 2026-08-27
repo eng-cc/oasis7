@@ -1,7 +1,8 @@
 use super::*;
 
 use super::super::auth::{
-    PromptControlAuthIntent, VerifiedPlayerAuth, verify_agent_chat_auth_proof,
+    AGENT_CHAT_AUTHORITY_SCOPE, PromptControlAuthIntent, VerifiedPlayerAuth,
+    verify_agent_chat_auth_proof_with_authority,
     verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
@@ -10,18 +11,27 @@ use super::super::protocol::{
     AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
 };
-use crate::runtime::World as RuntimeWorld;
+use crate::runtime::{
+    AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
+    World as RuntimeWorld,
+};
 use crate::simulator::{
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, PromptUpdateOperation, WorldEventKind,
 };
 use sha2::{Digest, Sha256};
 
+#[path = "control_plane/agent_chat.rs"]
+mod agent_chat;
 mod agent_chat_intent;
+#[path = "control_plane/auth_helpers.rs"]
+mod auth_helpers;
 mod llm_sidecar;
 #[path = "control_plane/prompt_profile.rs"]
 mod prompt_profile;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
+pub(super) use auth_helpers::map_auth_verify_error_code;
+use auth_helpers::{hosted_strong_auth_grant_public_key_from_env, hosted_strong_auth_now_unix_ms};
 pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
@@ -58,23 +68,16 @@ pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
         .unwrap_or(false)
 }
 
-fn hosted_strong_auth_grant_public_key_from_env() -> Result<String, String> {
-    std::env::var(HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV)
-        .ok()
-        .map(|raw| raw.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "hosted strong auth backend grant signer is not configured on this runtime".to_string()
-        })
-}
-
-fn hosted_strong_auth_now_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX)
+fn provider_reply_matches_current_intent(
+    current: Option<&AgentIntentV2>,
+    pending_intent_id: Option<&str>,
+    pending_request_digest: Option<&str>,
+) -> bool {
+    current.is_some_and(|current| {
+        pending_intent_id == Some(current.intent_id.as_str())
+            && pending_request_digest == Some(current.request_digest.as_str())
+            && matches!(current.status.as_str(), "accepted" | "blocked")
+    })
 }
 
 impl ViewerRuntimeLiveServer {
@@ -414,168 +417,6 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
-    pub(super) fn handle_agent_chat(
-        &mut self,
-        request: AgentChatRequest,
-    ) -> Result<AgentChatAck, AgentChatError> {
-        let agent_id = request.agent_id.clone();
-        if !self.llm_sidecar.is_llm_mode() {
-            return Err(AgentChatError {
-                code: "llm_mode_required".to_string(),
-                message: "agent chat requires runtime live server running with --llm".to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
-        if !self.supports_agent_chat() {
-            return Err(AgentChatError {
-                code: "agent_provider_chat_unsupported".to_string(),
-                message:
-                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
-
-        let player_id = request
-            .player_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
-        let Some(player_id) = player_id else {
-            return Err(AgentChatError {
-                code: "player_id_required".to_string(),
-                message: "agent_chat requires non-empty player_id".to_string(),
-                agent_id: Some(agent_id),
-            });
-        };
-        let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        let message = request.message.trim().to_string();
-        if message.is_empty() {
-            return Err(AgentChatError {
-                code: "empty_message".to_string(),
-                message: "chat message cannot be empty".to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
-        let verified = self.verify_agent_chat_auth(&request)?;
-        self.session_policy
-            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
-            .map_err(|message| AgentChatError {
-                code: map_session_policy_error_code(message.as_str()).to_string(),
-                message,
-                agent_id: Some(agent_id.clone()),
-            })?;
-        let intent = resolve_agent_chat_intent(&request, verified.nonce).map_err(|message| {
-            AgentChatError {
-                code: "intent_seq_invalid".to_string(),
-                message,
-                agent_id: Some(agent_id.clone()),
-            }
-        })?;
-        if let Some(replay_ack) = self
-            .llm_sidecar
-            .find_chat_intent_replay(
-                verified.player_id.as_str(),
-                agent_id.as_str(),
-                intent.intent_seq,
-                intent.intent_tick,
-                message.as_str(),
-                public_key.as_deref(),
-            )
-            .map_err(|message| AgentChatError {
-                code: "intent_seq_conflict".to_string(),
-                message,
-                agent_id: Some(agent_id.clone()),
-            })?
-        {
-            return Ok(replay_ack);
-        }
-        if self.world.main_token_liquid_balance(agent_id.as_str()) == 0
-            && !self
-                .world
-                .state()
-                .starter_oc_claims
-                .contains_key(agent_id.as_str())
-        {
-            return Err(AgentChatError {
-                code: "starter_oc_required".to_string(),
-                message: "claim starter OC before using LLM/agent chat".to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
-        self.llm_sidecar
-            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
-            .map_err(|message| AgentChatError {
-                code: "auth_nonce_replay".to_string(),
-                message,
-                agent_id: Some(agent_id.clone()),
-            })?;
-        self.bind_agent_player_access_for_chat(
-            agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let chat_echo_enabled = self.config.agent_chat_echo_enabled;
-        match self.llm_sidecar.push_chat_message(
-            &self.world,
-            &self.snapshot_config,
-            agent_id.as_str(),
-            player_id.as_str(),
-            message.as_str(),
-        ) {
-            Ok(()) => {
-                self.llm_sidecar.request_decision();
-            }
-            Err(error)
-                if chat_echo_enabled
-                    && (error.code == "llm_init_failed"
-                        || error.code == "agent_provider_chat_unsupported") => {}
-            Err(error) => return Err(error),
-        }
-        self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
-        let primary_intent = apply_accepted_primary_intent(
-            self.llm_sidecar.primary_intents.get(agent_id.as_str()),
-            message.as_str(),
-        );
-        self.llm_sidecar
-            .primary_intents
-            .insert(agent_id.clone(), primary_intent);
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-            action: "agent_chat".to_string(),
-            stage: "accepted".to_string(),
-            effect: format!("queued direct agent instruction for {}", agent_id),
-            intent_summary: Some(format!("send direct instruction to {}", agent_id)),
-            target_agent_id: Some(agent_id.clone()),
-            reason: None,
-            hint: Some(
-                "continue the world and watch for the agent's reply or the next visible world consequence"
-                    .to_string(),
-            ),
-            delta_logical_time: 0,
-            delta_event_seq: 0,
-        });
-        let ack = AgentChatAck {
-            agent_id: agent_id.clone(),
-            accepted_at_tick: self.world.state().time,
-            message_len: message.chars().count(),
-            player_id: Some(player_id),
-            intent_tick: intent.intent_tick,
-            intent_seq: Some(intent.intent_seq),
-            idempotent_replay: false,
-        };
-        self.llm_sidecar.record_chat_intent_ack(
-            verified.player_id.as_str(),
-            agent_id.as_str(),
-            intent.intent_seq,
-            intent.intent_tick,
-            message.as_str(),
-            public_key.as_deref(),
-            &ack,
-        );
-        Ok(ack)
-    }
-
     fn verify_and_consume_prompt_control_apply_auth(
         &mut self,
         intent: PromptControlAuthIntent,
@@ -752,12 +593,18 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(request.agent_id.clone()),
             });
         };
-        let verified =
-            verify_agent_chat_auth_proof(request, auth).map_err(|message| AgentChatError {
-                code: map_auth_verify_error_code(message.as_str()).to_string(),
-                message,
-                agent_id: Some(request.agent_id.clone()),
-            })?;
+        let verified = verify_agent_chat_auth_proof_with_authority(
+            request,
+            auth,
+            self.config.world_id.as_str(),
+            self.reorg_epoch,
+            AGENT_CHAT_AUTHORITY_SCOPE,
+        )
+        .map_err(|message| AgentChatError {
+            code: map_auth_verify_error_code(message.as_str()).to_string(),
+            message,
+            agent_id: Some(request.agent_id.clone()),
+        })?;
         Ok(verified)
     }
 
@@ -861,12 +708,133 @@ impl ViewerRuntimeLiveServer {
         });
     }
 
+    /// Complete a chat Intent only when the runtime has already published a
+    /// receipt for the exact bound effect. Provider replies and local echoes
+    /// are observations, not effects; this hook keeps their terminal path
+    /// receipt-bound without inventing an effect or receipt for chat itself.
+    pub(super) fn complete_agent_chat_if_receipt_bound(
+        &mut self,
+        agent_id: &str,
+        intent_id: &str,
+        request_digest: &str,
+    ) {
+        let effect_intent_id = self
+            .world
+            .state()
+            .agents
+            .get(agent_id)
+            .and_then(|cell| cell.intent.as_ref())
+            .filter(|intent| {
+                intent.intent_id == intent_id
+                    && intent.request_digest == request_digest
+                    && intent.status == "accepted"
+            })
+            .and_then(|intent| intent.effect_intent_id.clone());
+        let Some(effect_intent_id) = effect_intent_id else {
+            return;
+        };
+        let Some(receipt_event_id) = self.world.journal().events.iter().find_map(|event| {
+            matches!(
+                &event.body,
+                crate::runtime::WorldEventBody::ReceiptAppended(receipt)
+                    if receipt.intent_id == effect_intent_id
+            )
+            .then_some(event.id)
+        }) else {
+            return;
+        };
+        if let Err(error) = self.world.complete_agent_intent_with_receipt_exact(
+            agent_id,
+            intent_id,
+            request_digest,
+            receipt_event_id,
+        ) {
+            tracing::warn!(
+                agent_id,
+                intent_id,
+                receipt_event_id,
+                error = ?error,
+                "receipt-bound Agent Chat completion was not applied"
+            );
+        }
+    }
+
     pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) -> Vec<AgentChatError> {
-        let (replies, errors) = self
+        let (replies, failures) = self
             .llm_sidecar
-            .drain_provider_agent_chat_replies(&self.world);
-        for (agent_id, message) in replies {
-            self.enqueue_agent_chat_reply_event(agent_id.as_str(), message.as_str());
+            .drain_provider_agent_chat_replies_with_identity(&self.world);
+        for (pending, message) in replies {
+            let current = self
+                .world
+                .state()
+                .agents
+                .get(pending.agent_id.as_str())
+                .and_then(|cell| cell.intent.as_ref());
+            if provider_reply_matches_current_intent(
+                current,
+                pending.intent_id.as_deref(),
+                pending.request_digest.as_deref(),
+            ) {
+                self.enqueue_agent_chat_reply_event(pending.agent_id.as_str(), message.as_str());
+                if let (Some(intent_id), Some(request_digest)) = (
+                    pending.intent_id.as_deref(),
+                    pending.request_digest.as_deref(),
+                ) {
+                    self.complete_agent_chat_if_receipt_bound(
+                        pending.agent_id.as_str(),
+                        intent_id,
+                        request_digest,
+                    );
+                }
+            } else {
+                tracing::debug!(
+                    agent_id = pending.agent_id.as_str(),
+                    intent_id = pending.intent_id.as_deref().unwrap_or(""),
+                    "discarding stale provider agent-chat reply"
+                );
+            }
+        }
+        let mut errors = Vec::with_capacity(failures.len());
+        for failure in failures {
+            let disposition = if failure.retryable {
+                AgentIntentProviderFailureDisposition::Blocked
+            } else {
+                AgentIntentProviderFailureDisposition::Rejected
+            };
+            let disposition_error = if let (Some(intent_id), Some(request_digest)) = (
+                failure.pending.intent_id.as_deref(),
+                failure.pending.request_digest.as_deref(),
+            ) {
+                self.world
+                    .transition_agent_chat_provider_failure_exact(
+                        failure.pending.agent_id.as_str(),
+                        intent_id,
+                        request_digest,
+                        disposition,
+                    )
+                    .err()
+            } else {
+                Some(crate::runtime::WorldError::ResourceBalanceInvalid {
+                    reason: "provider chat failure has no durable intent identity".to_string(),
+                })
+            };
+            if let Some(error) = disposition_error {
+                let failure_agent_id = failure.pending.agent_id.clone();
+                tracing::error!(
+                    agent_id = failure_agent_id.as_str(),
+                    error = ?error,
+                    "failed to persist exact provider chat disposition"
+                );
+                errors.push(AgentChatError {
+                    code: "intent_disposition_failed".to_string(),
+                    message: format!(
+                        "provider chat failed but its durable intent disposition could not be persisted: {error:?}"
+                    ),
+                    agent_id: Some(failure_agent_id),
+                });
+            } else {
+                errors.push(failure.error);
+            }
         }
         errors
     }
@@ -1143,18 +1111,81 @@ pub(super) fn ensure_expected_prompt_version_runtime(
     Ok(())
 }
 
-pub(super) fn map_auth_verify_error_code(message: &str) -> &'static str {
-    if message.contains("nonce") {
-        return "auth_nonce_invalid";
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn current_intent(status: &str) -> AgentIntentV2 {
+        AgentIntentV2 {
+            schema_version: crate::runtime::AGENT_INTENT_V2_SCHEMA_VERSION,
+            agent_id: "agent-1".to_string(),
+            intent_id: "intent-1".to_string(),
+            kind: "agent_chat".to_string(),
+            summary: "safe lifecycle summary".to_string(),
+            target_id: None,
+            effect_intent_id: None,
+            intent_tick: None,
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            status: status.to_string(),
+            source: "player".to_string(),
+            logical_time: 1,
+            event_seq: 1,
+            updated_at: 1,
+            receipt_ref: None,
+            reason_code: None,
+            reason_summary: None,
+            replaced_by: None,
+            actor_id: "player-1".to_string(),
+            request_digest: "digest-1".to_string(),
+        }
     }
-    if message.contains("signature") || message.contains("awviewauth:v1") {
-        return "auth_signature_invalid";
+
+    #[test]
+    fn async_provider_reply_requires_exact_current_identity_and_live_status() {
+        let accepted = current_intent("accepted");
+        assert!(provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("intent-1"),
+            Some("digest-1")
+        ));
+
+        let blocked = current_intent("blocked");
+        assert!(provider_reply_matches_current_intent(
+            Some(&blocked),
+            Some("intent-1"),
+            Some("digest-1")
+        ));
+
+        for status in [
+            "rejected",
+            "expired",
+            "cancelled",
+            "completed",
+            "superseded",
+        ] {
+            let terminal = current_intent(status);
+            assert!(!provider_reply_matches_current_intent(
+                Some(&terminal),
+                Some("intent-1"),
+                Some("digest-1")
+            ));
+        }
+        assert!(!provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("other-intent"),
+            Some("digest-1")
+        ));
+        assert!(!provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("intent-1"),
+            Some("other-digest")
+        ));
+        assert!(!provider_reply_matches_current_intent(
+            None,
+            Some("intent-1"),
+            Some("digest-1")
+        ));
     }
-    if message.contains("player_id") || message.contains("public_key") {
-        return "auth_claim_mismatch";
-    }
-    if message.contains("required") || message.contains("empty") {
-        return "auth_claim_invalid";
-    }
-    "auth_invalid"
 }

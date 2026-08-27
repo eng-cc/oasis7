@@ -310,6 +310,24 @@ pub enum ProviderLoopbackHttpError {
     },
 }
 
+impl ProviderLoopbackHttpError {
+    /// Whether retrying the same provider request can plausibly succeed without
+    /// changing the authenticated request identity.  Authentication, URL,
+    /// and response-shape failures are durable rejections; transport and
+    /// server throttling failures remain retryable.
+    pub fn retryable(&self) -> bool {
+        match self {
+            Self::RequestFailed { .. } => true,
+            Self::UnexpectedStatus { status_code, .. } => {
+                *status_code == 429 || *status_code >= 500
+            }
+            Self::InvalidBaseUrl(_) | Self::Unauthorized { .. } | Self::DecodeFailed { .. } => {
+                false
+            }
+        }
+    }
+}
+
 impl fmt::Display for ProviderLoopbackHttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

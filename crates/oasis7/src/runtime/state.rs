@@ -9,7 +9,7 @@ use oasis7_wasm_abi::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::agent_cell::AgentCell;
+use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
 use super::events::{DomainEvent, IndustryStage, MaterialMarketQuote, MaterialTransitPriority};
@@ -39,7 +39,7 @@ use super::reward_asset::{
     REWARD_MINT_SIGNATURE_V2_PREFIX, RewardAssetConfig, RewardSignatureGovernancePolicy,
     SystemOrderPoolBudget, reward_mint_signature_v1, verify_reward_mint_signature_v2,
 };
-use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldTime};
+use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldEventId, WorldTime};
 use super::util::{deserialize_btreemap_u64_keys, hash_json};
 
 mod apply_domain_event_core;
@@ -47,6 +47,7 @@ mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
 mod apply_domain_event_industry_helpers;
+mod apply_domain_event_intent;
 mod apply_domain_event_main_token;
 #[path = "state_defaults.rs"]
 mod state_defaults;
@@ -565,6 +566,9 @@ pub struct ModuleReleaseManifestMappingState {
 pub struct WorldState {
     pub time: WorldTime,
     pub agents: BTreeMap<String, AgentCell>,
+    /// Latest durable intent disposition used for idempotency after replacement.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub agent_intent_ledger: BTreeMap<String, AgentIntentV2>,
     #[serde(default)]
     pub resources: BTreeMap<ResourceKind, i64>,
     #[serde(default)]
@@ -1023,8 +1027,28 @@ impl WorldState {
         event: &DomainEvent,
         now: WorldTime,
     ) -> Result<(), WorldError> {
+        self.apply_domain_event_at(event, now, None, None)
+    }
+
+    pub(crate) fn apply_domain_event_at(
+        &mut self,
+        event: &DomainEvent,
+        now: WorldTime,
+        envelope_event_seq: Option<WorldEventId>,
+        committed_receipt_event_id: Option<WorldEventId>,
+    ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
+            DomainEvent::AgentIntentProposed { .. }
+            | DomainEvent::AgentIntentSubmitted { .. }
+            | DomainEvent::AgentIntentAccepted { .. }
+            | DomainEvent::AgentIntentReplaced { .. }
+            | DomainEvent::AgentIntentTransitioned { .. } => self.apply_domain_event_intent(
+                event,
+                now,
+                envelope_event_seq,
+                committed_receipt_event_id,
+            )?,
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
             | DomainEvent::ActionAccepted { .. }
@@ -1171,8 +1195,4 @@ impl WorldState {
             }
         }
     }
-}
-
-fn unlock_meta_track_tiers(track: &str, track_points: i64, progress: &mut MetaProgressState) {
-    support::unlock_meta_track_tiers(track, track_points, progress)
 }

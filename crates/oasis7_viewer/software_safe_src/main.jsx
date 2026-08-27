@@ -9,6 +9,7 @@ import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx"; import { FallbackTradeoffPanel } from "./fallback_tradeoff_panel.jsx"; import { WaitResolutionQuoteCard } from "./wait_resolution_quote_card.jsx";
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual_fixture.js";
+import { installAgentIntentV2VisualFixture } from "./agent_intent_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
@@ -20,6 +21,8 @@ import {
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
+import { AgentActivitySurface } from "./agent_activity_surface.jsx";
+import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -2296,6 +2299,7 @@ function TargetsPanel() {
                     <div class="list-item__meta">
                       {`${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`}
                     </div>
+                    <AgentActivitySurface activity={agent.activity} locale={locale()} />
                     <div class="list-item__meta">{status().detail}</div>
                   </button>
                 );
@@ -3251,6 +3255,17 @@ function InteractionPanel() {
     const selected = core.state.snapshot?.model?.agents?.[agentId()];
     return selected?.name || selected?.label || agentId();
   };
+  const selectedAgentActivity = () => core.state.snapshot?.model?.agents?.[agentId()]?.activity;
+  const selectedAgentIntent = () => core.state.snapshot?.player_gameplay?.primary_intent;
+  const selectedAgentIntentConnectionStatus = () => {
+    const status = core.state.connectionStatus;
+    // A software-safe canvas fallback can report a renderer diagnostic through
+    // the shared error channel while the runtime transport remains usable.
+    if (status === "error" && String(core.state.lastError || "").startsWith("pixel_world_host:")) {
+      return "connected";
+    }
+    return status;
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3357,6 +3372,12 @@ function InteractionPanel() {
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
+      <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
+      <AgentIntentSurface
+        intent={selectedAgentIntent()}
+        locale={locale()}
+        connectionStatus={selectedAgentIntentConnectionStatus()}
+      />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -4266,6 +4287,7 @@ function installViewerVisualFixture() {
       core.state.selectedObject = null;
     },
   };
+  installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installPowerSaleQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
@@ -4292,14 +4314,14 @@ export function mountViewerApp(root = document.getElementById("app")) {
   }
 
   core.initializeSoftwareSafeCore();
+  let dispose = mount(() => <AppShell />, root);
+  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
   const viewerVisualFixtureName = installViewerVisualFixture();
   if (viewerVisualFixtureName) {
     root.setAttribute("data-viewer-visual-fixture", viewerVisualFixtureName);
   } else {
     root.removeAttribute("data-viewer-visual-fixture");
   }
-  let dispose = mount(() => <AppShell />, root);
-  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
 
   return () => {
     core.setRenderHook(null);
@@ -4309,8 +4331,12 @@ export function mountViewerApp(root = document.getElementById("app")) {
 }
 
 function shouldBypassAutoMountForTestApi() {
-  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
+  const params = new URLSearchParams(window.location.search || "");
+  const value = String(params.get("test_api") || "").trim().toLowerCase();
+  const autoMount = String(params.get("auto_mount") || "").trim().toLowerCase();
+  const testApi = value === "1" || value === "true" || value === "yes" || value === "on";
+  const headedFixture = autoMount === "1" || autoMount === "true" || autoMount === "yes" || autoMount === "on";
+  return testApi && !headedFixture;
 }
 
 const autoMountRoot = document.getElementById("app");

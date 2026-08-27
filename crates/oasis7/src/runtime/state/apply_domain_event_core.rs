@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::runtime::AgentActivityV1;
+
 #[path = "apply_domain_event_core_late.rs"]
 mod late;
 
@@ -12,8 +14,9 @@ impl WorldState {
         match event {
             DomainEvent::AgentRegistered { agent_id, pos } => {
                 let state = AgentState::new(agent_id, *pos);
-                self.agents
-                    .insert(agent_id.clone(), AgentCell::new(state, now));
+                let mut cell = AgentCell::new(state, now);
+                cell.activity = Some(AgentActivityV1::idle(now));
+                self.agents.insert(agent_id.clone(), cell);
             }
             DomainEvent::AgentMoved { agent_id, to, .. } => {
                 if let Some(cell) = self.agents.get_mut(agent_id) {
@@ -23,6 +26,13 @@ impl WorldState {
             }
             DomainEvent::ActionAccepted { .. } => {}
             DomainEvent::ActionRejected { .. } => {}
+            DomainEvent::AgentIntentProposed { .. }
+            | DomainEvent::AgentIntentSubmitted { .. }
+            | DomainEvent::AgentIntentAccepted { .. }
+            | DomainEvent::AgentIntentReplaced { .. }
+            | DomainEvent::AgentIntentTransitioned { .. } => {
+                unreachable!("Agent Intent events are handled by apply_domain_event_intent")
+            }
             DomainEvent::Observation { .. } => {}
             DomainEvent::BodyAttributesUpdated { agent_id, view, .. } => {
                 let cell =

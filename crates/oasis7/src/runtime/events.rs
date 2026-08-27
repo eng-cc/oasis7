@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
+use super::agent_cell::AgentIntentV2;
 use super::gameplay_state::{EconomicContractFulfillmentKind, WarParticipantOutcome};
 use super::governance::GovernanceFinalityCertificate;
 use super::main_token::{

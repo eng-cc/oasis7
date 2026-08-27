@@ -110,16 +110,26 @@ impl World {
         let start_index = start_index.min(self.journal.events.len());
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
         let mut replaying_tick: Option<WorldTime> = None;
+        let mut previous_event_time = self.state.time;
         for event in events {
+            if event.time < previous_event_time {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "journal event time {} cannot precede prior event time {}",
+                        event.time, previous_event_time
+                    ),
+                });
+            }
             if let Some(tick) = replaying_tick {
                 if event.time != tick {
                     self.record_tick_consensus_for_tick(tick)?;
                 }
             }
-            self.apply_event_body(&event.body, event.time)?;
+            self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
             self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
             replaying_tick = Some(event.time);
+            previous_event_time = event.time;
         }
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;
@@ -533,8 +543,13 @@ impl World {
         body: WorldEventBody,
         caused_by: Option<CausedBy>,
     ) -> Result<WorldEventId, WorldError> {
-        self.apply_event_body(&body, self.state.time)?;
+        // Domain intent payloads carry the journal position as part of their
+        // authority identity. Validate against the id before mutating state;
+        // this keeps the payload and its envelope inseparable on replay.
+        let expected_event_id = self.next_event_id.max(1);
+        self.apply_event_body_at(&body, self.state.time, Some(expected_event_id))?;
         let event_id = self.allocate_next_event_id();
+        debug_assert_eq!(event_id, expected_event_id);
         self.journal.append(WorldEvent {
             id: event_id,
             time: self.state.time,
@@ -546,14 +561,22 @@ impl World {
         Ok(event_id)
     }
 
-    fn apply_event_body(
+    fn apply_event_body_at(
         &mut self,
         body: &WorldEventBody,
         time: WorldTime,
+        envelope_event_seq: Option<WorldEventId>,
     ) -> Result<(), WorldError> {
         match body {
             WorldEventBody::Domain(event) => {
-                self.state.apply_domain_event(event, time)?;
+                let committed_receipt_event_id =
+                    self.validate_agent_intent_receipt_reference(event, envelope_event_seq)?;
+                self.state.apply_domain_event_at(
+                    event,
+                    time,
+                    envelope_event_seq,
+                    committed_receipt_event_id,
+                )?;
                 self.state.route_domain_event(event);
                 if let super::super::DomainEvent::ModuleInstalled {
                     instance_id,
@@ -646,5 +669,86 @@ impl World {
         }
         self.state.time = time;
         Ok(())
+    }
+
+    fn validate_agent_intent_receipt_reference(
+        &self,
+        event: &DomainEvent,
+        envelope_event_seq: Option<WorldEventId>,
+    ) -> Result<Option<WorldEventId>, WorldError> {
+        let DomainEvent::AgentIntentTransitioned { intent } = event else {
+            return Ok(None);
+        };
+        if intent.status != "completed" {
+            return Ok(None);
+        }
+        let receipt_event_id = intent
+            .receipt_ref
+            .as_deref()
+            .and_then(|value| value.strip_prefix("world-event:"))
+            .and_then(|value| value.parse::<WorldEventId>().ok())
+            .filter(|event_id| *event_id > 0)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: "completed AgentIntentV2 requires a world-event receipt reference"
+                    .to_string(),
+            })?;
+        if intent
+            .world_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+            || intent.reorg_epoch.is_none()
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason:
+                    "completed AgentIntentV2 requires world_id and reorg_epoch authority context"
+                        .to_string(),
+            });
+        }
+        let Some(envelope_event_seq) = envelope_event_seq else {
+            // The state reducer will fail closed without the witness. Keep
+            // this validator side-effect free for any non-journal caller.
+            return Ok(None);
+        };
+        if receipt_event_id >= envelope_event_seq {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} must precede transition event {}",
+                    receipt_event_id, envelope_event_seq
+                ),
+            });
+        }
+        let expected_effect_intent_id = intent.effect_intent_id.as_deref().ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: "completed AgentIntentV2 requires a bound effect_intent_id".to_string(),
+            }
+        })?;
+        let committed = self.journal.events.iter().find(|event| {
+            event.id == receipt_event_id
+                && matches!(
+                    &event.body,
+                    WorldEventBody::ReceiptAppended(receipt)
+                        if receipt.intent_id == expected_effect_intent_id
+                            && !receipt.status.trim().is_empty()
+                )
+        });
+        let Some(committed) = committed else {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} is not committed for effect intent {}",
+                    receipt_event_id, expected_effect_intent_id
+                ),
+            });
+        };
+        if committed.time < intent.logical_time {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "completed AgentIntentV2 receipt {} precedes intent logical time {}",
+                    receipt_event_id, intent.logical_time
+                ),
+            });
+        }
+        Ok(Some(receipt_event_id))
     }
 }

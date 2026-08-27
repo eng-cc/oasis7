@@ -3,6 +3,7 @@ use super::apply_domain_event_industry_helpers::{
     validate_recipe_output_capacity,
 };
 use super::*;
+use crate::runtime::AgentActivityV1;
 
 impl WorldState {
     pub(super) fn apply_domain_event_industry(
@@ -775,6 +776,12 @@ impl WorldState {
                     factory.production.status = FactoryProductionStatus::Running;
                 }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
+                    cell.activity = Some(AgentActivityV1::executing(
+                        "recipe",
+                        *job_id,
+                        factory_id.clone(),
+                        now,
+                    ));
                     cell.last_active = now;
                 }
             }
@@ -893,7 +900,15 @@ impl WorldState {
                     }
                 }
                 self.refresh_industry_progress_stage(now);
+                let no_active_recipe_jobs = self
+                    .factories
+                    .get(factory_id)
+                    .map(|factory| factory.production.active_jobs == 0)
+                    .unwrap_or(false);
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
+                    if no_active_recipe_jobs {
+                        cell.activity = Some(AgentActivityV1::idle(now));
+                    }
                     cell.last_active = now;
                 }
             }
@@ -962,6 +977,14 @@ impl WorldState {
                     self.refresh_industry_progress_stage(now);
                 }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
+                    cell.activity = Some(AgentActivityV1::blocked(
+                        "recipe",
+                        *action_id,
+                        factory_id.clone(),
+                        blocker_kind.clone(),
+                        blocker_detail.clone(),
+                        now,
+                    ));
                     cell.last_active = now;
                 }
             }

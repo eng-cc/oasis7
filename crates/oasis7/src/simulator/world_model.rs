@@ -40,6 +40,24 @@ const DEFAULT_AGENT_SPEED_CM_PER_TICK: i64 = world_model_config::DEFAULT_AGENT_S
 // World Entities
 // ============================================================================
 
+/// Player-facing projection of an authoritative runtime agent activity.
+///
+/// This is deliberately a separate simulator shape: the runtime keeps its
+/// persisted field names and typed action id, while the simulator model
+/// exposes the compact labels consumed by the Viewer.  `None` means the
+/// runtime has no activity record; it must not be synthesized as idle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentActivityProjectionV1 {
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub updated_at: WorldTime,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentKinematics {
@@ -129,6 +147,9 @@ pub struct Agent {
     pub body: RobotBodySpec,
     pub location_id: LocationId,
     pub resources: ResourceStock,
+    /// Optional authoritative activity projection from the runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<AgentActivityProjectionV1>,
     /// Power status for M4 power system.
     pub power: AgentPowerStatus,
     /// Movement state for upcoming time-based move execution.
@@ -147,6 +168,7 @@ impl Agent {
             body: RobotBodySpec::default(),
             location_id: location_id.into(),
             resources: ResourceStock::default(),
+            activity: None,
             power: AgentPowerStatus::default(),
             kinematics: AgentKinematics::default(),
             thermal: ThermalStatus::default(),
@@ -166,6 +188,7 @@ impl Agent {
             body: RobotBodySpec::default(),
             location_id: location_id.into(),
             resources: ResourceStock::default(),
+            activity: None,
             power: AgentPowerStatus::from_config(power_config),
             kinematics: AgentKinematics::default(),
             thermal: ThermalStatus::default(),

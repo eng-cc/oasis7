@@ -450,6 +450,64 @@ body {
   font-size: 13px;
 }
 
+.agent-activity,
+.agent-intent {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(152, 177, 150, 0.18);
+  border-radius: 10px;
+  background: rgba(22, 25, 20, 0.62);
+}
+
+.agent-activity__status,
+.agent-activity__state,
+.agent-intent__state {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.agent-activity__field,
+.agent-intent__detail {
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.agent-intent {
+  border-color: rgba(208, 168, 91, 0.24);
+}
+
+.agent-intent__status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-intent__summary {
+  color: var(--muted-strong);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.agent-intent__receipt {
+  color: var(--good);
+}
+
+.agent-intent[data-agent-intent-state="conflict"],
+.agent-intent[data-agent-intent-state="stale"],
+.agent-intent[data-agent-intent-state="reconnecting"] {
+  border-color: rgba(208, 168, 91, 0.46);
+}
+
+.agent-intent[data-agent-intent-state="control_lost"],
+.agent-intent[data-agent-intent-state="read_only"],
+.agent-intent[data-agent-intent-state="unauthorized"],
+.agent-intent[data-agent-intent-state="unavailable"] {
+  border-color: rgba(190, 112, 95, 0.4);
+}
+
 .director-surface {
   position: fixed;
   inset: 24px 24px 24px auto;

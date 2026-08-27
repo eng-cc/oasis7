@@ -309,6 +309,10 @@ fn agent_chat_auth_verify_rejects_player_mismatch() {
         auth: None,
         intent_tick: Some(9),
         intent_seq: Some(15),
+        world_id: None,
+        reorg_epoch: None,
+        authority_scope: None,
+        replaces_intent_id: None,
     };
     let mut proof =
         sign_agent_chat_auth_proof(&request, 15, public_key.as_str(), private_key.as_str())
@@ -329,6 +333,10 @@ fn agent_chat_auth_verify_rejects_invalid_signature_prefix() {
         auth: None,
         intent_tick: None,
         intent_seq: Some(16),
+        world_id: None,
+        reorg_epoch: None,
+        authority_scope: None,
+        replaces_intent_id: None,
     };
     let mut proof =
         sign_agent_chat_auth_proof(&request, 16, public_key.as_str(), private_key.as_str())
@@ -349,10 +357,117 @@ fn agent_chat_auth_verify_rejects_zero_intent_seq() {
         auth: None,
         intent_tick: Some(1),
         intent_seq: Some(0),
+        world_id: None,
+        reorg_epoch: None,
+        authority_scope: None,
+        replaces_intent_id: None,
     };
     let err = sign_agent_chat_auth_proof(&request, 17, public_key.as_str(), private_key.as_str())
         .expect_err("zero intent_seq should fail");
     assert!(err.contains("intent_seq"));
+}
+
+fn signed_v2_agent_chat_request(
+    public_key: &str,
+    private_key: &str,
+) -> (AgentChatRequest, PlayerAuthProof) {
+    let request = AgentChatRequest {
+        agent_id: "agent-v2".to_string(),
+        message: "prioritize the eastern relay".to_string(),
+        player_id: Some("player-v2".to_string()),
+        public_key: Some(public_key.to_string()),
+        auth: None,
+        intent_tick: Some(42),
+        intent_seq: Some(7),
+        world_id: Some("world-alpha".to_string()),
+        reorg_epoch: Some(3),
+        authority_scope: Some(AGENT_CHAT_AUTHORITY_SCOPE.to_string()),
+        replaces_intent_id: Some("agent-intent-v2:previous".to_string()),
+    };
+    let proof = sign_agent_chat_auth_proof(&request, 19, public_key, private_key)
+        .expect("sign V2 Agent Chat proof");
+    (request, proof)
+}
+
+#[test]
+fn agent_chat_auth_v2_binds_authority_and_explicit_replacement() {
+    let (public_key, private_key) = test_signer();
+    let (request, proof) = signed_v2_agent_chat_request(&public_key, &private_key);
+    verify_agent_chat_auth_proof(&request, &proof).expect("V2 proof remains valid");
+
+    let mut world_tampered = request.clone();
+    world_tampered.world_id = Some("world-beta".to_string());
+    let err = verify_agent_chat_auth_proof(&world_tampered, &proof)
+        .expect_err("world identity is signed");
+    assert!(err.contains("verify auth signature failed"), "{err}");
+
+    let mut reorg_tampered = request.clone();
+    reorg_tampered.reorg_epoch = Some(4);
+    let err =
+        verify_agent_chat_auth_proof(&reorg_tampered, &proof).expect_err("reorg epoch is signed");
+    assert!(err.contains("verify auth signature failed"), "{err}");
+
+    let mut scope_tampered = request.clone();
+    scope_tampered.authority_scope = Some("other_viewer_scope".to_string());
+    let err = verify_agent_chat_auth_proof(&scope_tampered, &proof)
+        .expect_err("authority scope is signed");
+    assert!(err.contains("verify auth signature failed"), "{err}");
+
+    let mut replacement_tampered = request;
+    replacement_tampered.replaces_intent_id = Some("agent-intent-v2:another".to_string());
+    let err = verify_agent_chat_auth_proof(&replacement_tampered, &proof)
+        .expect_err("replacement target is signed");
+    assert!(err.contains("verify auth signature failed"), "{err}");
+}
+
+#[test]
+fn agent_chat_auth_v2_requires_complete_authority_and_expected_context() {
+    let (public_key, private_key) = test_signer();
+    let (request, proof) = signed_v2_agent_chat_request(&public_key, &private_key);
+    verify_agent_chat_auth_proof_with_authority(
+        &request,
+        &proof,
+        "world-alpha",
+        3,
+        AGENT_CHAT_AUTHORITY_SCOPE,
+    )
+    .expect("matching authority context remains valid");
+
+    let err = verify_agent_chat_auth_proof_with_authority(
+        &request,
+        &proof,
+        "world-beta",
+        3,
+        AGENT_CHAT_AUTHORITY_SCOPE,
+    )
+    .expect_err("cross-world replay must fail");
+    assert!(err.contains("world_id mismatch"), "{err}");
+
+    let err = verify_agent_chat_auth_proof_with_authority(
+        &request,
+        &proof,
+        "world-alpha",
+        4,
+        AGENT_CHAT_AUTHORITY_SCOPE,
+    )
+    .expect_err("cross-reorg replay must fail");
+    assert!(err.contains("reorg_epoch mismatch"), "{err}");
+
+    let err = verify_agent_chat_auth_proof_with_authority(
+        &request,
+        &proof,
+        "world-alpha",
+        3,
+        "other_viewer_scope",
+    )
+    .expect_err("cross-scope replay must fail");
+    assert!(err.contains("authority_scope mismatch"), "{err}");
+
+    let mut partial = request;
+    partial.authority_scope = None;
+    let err = sign_agent_chat_auth_proof(&partial, 20, &public_key, &private_key)
+        .expect_err("partial authority envelope must not be signed");
+    assert!(err.contains("authority envelope"), "{err}");
 }
 
 #[test]

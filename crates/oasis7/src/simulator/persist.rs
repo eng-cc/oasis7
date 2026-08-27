@@ -188,6 +188,52 @@ pub struct PlayerGameplayPrimaryIntent {
     pub message: Option<String>,
     #[serde(default)]
     pub resume_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_id: Option<String>,
+    /// Agent identity that owns this runtime-authoritative intent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    /// Canonical runtime intent kind (for example `player_instruction`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Canonical origin of the intent (for example `player_chat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Optional runtime target carried by the intent contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    /// World identity at the position where the intent was accepted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_id: Option<String>,
+    /// Reorg epoch bound to the accepted intent position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reorg_epoch: Option<u64>,
+    /// Runtime logical time of the intent transition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logical_time: Option<u64>,
+    /// Runtime update time of the intent transition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_seq: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_summary: Option<String>,
+    /// A committed receipt tuple. Legacy string values deserialize as JSON but
+    /// are deliberately rejected by the player-facing projection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_ref: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

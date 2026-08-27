@@ -247,6 +247,20 @@ pub struct AgentChatRequest {
     pub intent_tick: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent_seq: Option<u64>,
+    /// Canonical world identity for the signed Agent Intent authority envelope.
+    ///
+    /// These fields are optional on the wire so legacy Viewer clients remain
+    /// deserializable.  The authoritative V2 endpoint must require the complete
+    /// tuple before accepting an intent; a partial tuple is invalid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reorg_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_scope: Option<String>,
+    /// Explicit causal replacement target.  Ordinary retries leave this empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaces_intent_id: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameplayActionRequest {
@@ -733,6 +747,10 @@ mod tests {
                 }),
                 intent_tick: Some(42),
                 intent_seq: Some(9),
+                world_id: Some("world-1".to_string()),
+                reorg_epoch: Some(2),
+                authority_scope: Some("player_agent_chat".to_string()),
+                replaces_intent_id: Some("agent-intent-v2:prior".to_string()),
             },
         };
         let json = serde_json::to_string(&request).expect("serialize request");
@@ -922,6 +940,11 @@ mod tests {
                 intent_tick: Some(42),
                 intent_seq: Some(17),
                 idempotent_replay: true,
+                intent_id: None,
+                accepted_event_seq: None,
+                status: None,
+                receipt_ref: None,
+                replaced_by: None,
             },
         };
         let json = serde_json::to_string(&response).expect("serialize response");

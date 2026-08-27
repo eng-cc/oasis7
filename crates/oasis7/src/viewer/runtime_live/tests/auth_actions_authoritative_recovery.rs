@@ -35,6 +35,11 @@ fn persist_session_side_effect_projection(
         intent_tick: Some(server.world.state().time),
         intent_seq: Some(77),
         idempotent_replay: false,
+        intent_id: None,
+        accepted_event_seq: None,
+        status: None,
+        receipt_ref: None,
+        replaced_by: None,
     };
     server.llm_sidecar.record_chat_intent_ack(
         "cached-player",
@@ -316,6 +321,11 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
         intent_tick: Some(server.world.state().time),
         intent_seq: Some(44),
         idempotent_replay: false,
+        intent_id: None,
+        accepted_event_seq: None,
+        status: None,
+        receipt_ref: None,
+        replaced_by: None,
     };
     server.llm_sidecar.record_chat_intent_ack(
         "player-mutation-atomic",
@@ -837,6 +847,10 @@ fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
             message: "hello".to_string(),
             intent_tick: Some(10),
             intent_seq: Some(6),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         6,
         public_key.as_str(),
@@ -867,6 +881,10 @@ fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
             message: "changed".to_string(),
             intent_tick: Some(10),
             intent_seq: Some(6),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         6,
         public_key.as_str(),
@@ -903,6 +921,10 @@ fn runtime_agent_chat_rejects_intent_seq_nonce_mismatch() {
             message: "hello".to_string(),
             intent_tick: Some(3),
             intent_seq: Some(8),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         9,
         public_key.as_str(),
@@ -955,6 +977,10 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             message: "hello".to_string(),
             intent_tick: Some(1),
             intent_seq: Some(2),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         2,
         public_key_v1.as_str(),
@@ -1011,6 +1037,10 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             message: "stale".to_string(),
             intent_tick: Some(2),
             intent_seq: Some(2),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         2,
         public_key_v1.as_str(),
@@ -1021,6 +1051,13 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
         .expect_err("old key should be rejected after rotation");
     assert_eq!(stale_err.code, "session_revoked");
 
+    let replaces_intent_id = server
+        .world
+        .state()
+        .agents
+        .get(agent_id.as_str())
+        .and_then(|cell| cell.intent.as_ref())
+        .map(|intent| intent.intent_id.clone());
     let rotated_request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
             agent_id: agent_id.clone(),
@@ -1030,6 +1067,10 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             message: "rotated".to_string(),
             intent_tick: Some(3),
             intent_seq: Some(1),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id,
         },
         1,
         public_key_v2.as_str(),
@@ -1108,6 +1149,10 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             message: "revoked".to_string(),
             intent_tick: Some(4),
             intent_seq: Some(2),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         2,
         public_key_v2.as_str(),

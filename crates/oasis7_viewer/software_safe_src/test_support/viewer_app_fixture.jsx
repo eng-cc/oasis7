@@ -124,6 +124,7 @@ export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en
   core.initializeSoftwareSafeCore();
   core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
+  core.state.connectionStatus = "connected";
   core.state.auth = {
     ...core.state.auth,
     available: true,
@@ -138,5 +139,6 @@ export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en
   };
   main.__markStarterOcOnboardingCompleteForTest("agent-0");
   const dispose = main.mountViewerApp(appRoot);
-  return { container: appRoot, dispose };
+  core.requestRender();
+  return { container: appRoot, core, dispose };
 }

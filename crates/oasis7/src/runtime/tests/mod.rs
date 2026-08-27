@@ -61,10 +61,12 @@ pub(super) fn test_wasm_executor_config() -> oasis7_wasm_executor::WasmExecutorC
     config
 }
 
+mod agent_activity;
 mod agent_claims;
 mod agent_claims_auto_funding;
 #[cfg(feature = "test_tier_full")]
 mod agent_default_modules;
+mod agent_intent_v2;
 mod apply_domain_event_guards;
 mod audit;
 mod basic;

@@ -303,6 +303,15 @@ fn signed_agent_chat_request(
     if request.intent_seq.is_none() {
         request.intent_seq = Some(nonce);
     }
+    if request.world_id.is_none() {
+        request.world_id = Some("live-runtime-minimal".to_string());
+    }
+    if request.reorg_epoch.is_none() {
+        request.reorg_epoch = Some(0);
+    }
+    if request.authority_scope.is_none() {
+        request.authority_scope = Some("player_agent_chat".to_string());
+    }
     let proof =
         crate::viewer::sign_agent_chat_auth_proof(&request, nonce, public_key_hex, private_key_hex)
             .expect("sign agent chat auth");
@@ -589,17 +598,8 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
         oasis7::env_mut::remove_var(RUNTIME_AGENT_CHAT_ECHO_ENV);
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
         oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
         oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
         oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
     }
 
@@ -694,6 +694,10 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
             message: "hello runtime echo over socket".to_string(),
             intent_tick: Some(snapshot.time),
             intent_seq: Some(35),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         35,
         public_key.as_str(),

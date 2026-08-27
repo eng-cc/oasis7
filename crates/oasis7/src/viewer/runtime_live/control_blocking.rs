@@ -1,5 +1,68 @@
 use super::*;
+use crate::runtime::{AgentIntentV2, WorldEventBody as RuntimeWorldEventBody};
 use crate::simulator::{ChunkRuntimeConfig, WorldKernel};
+
+fn canonical_player_intent_status(status: &str) -> Option<&'static str> {
+    match status.trim() {
+        "proposed" => Some("proposed"),
+        "submitted" => Some("submitted"),
+        "accepted" | "accepted_new" | "reprioritized" | "unchanged" => Some("accepted"),
+        "blocked" | "resume_required" => Some("blocked"),
+        "completed" => Some("completed"),
+        "rejected" => Some("rejected"),
+        "expired" => Some("expired"),
+        "cancelled" => Some("cancelled"),
+        "superseded" => Some("superseded"),
+        _ => None,
+    }
+}
+
+/// Project a runtime receipt only when the runtime has committed the exact
+/// receipt event referenced by a completed AgentIntentV2. The player-facing
+/// contract never exposes the runtime's opaque string as proof.
+fn committed_receipt_tuple(
+    intent: &AgentIntentV2,
+    journal: &crate::runtime::Journal,
+) -> Option<serde_json::Value> {
+    if intent.status != "completed" {
+        return None;
+    }
+    let effect_intent_id = intent
+        .effect_intent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let raw_receipt_ref = intent.receipt_ref.as_deref()?.trim();
+    let receipt_event_id = raw_receipt_ref
+        .strip_prefix("world-event:")
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|event_id| *event_id > 0)?;
+    let world_id = intent
+        .world_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let reorg_epoch = intent.reorg_epoch?;
+    let receipt_event = journal
+        .events
+        .iter()
+        .find(|event| event.id == receipt_event_id && event.id < intent.event_seq)?;
+    let RuntimeWorldEventBody::ReceiptAppended(receipt) = &receipt_event.body else {
+        return None;
+    };
+    if receipt.intent_id != effect_intent_id || receipt.status.trim().is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({
+        "intent_id": intent.intent_id,
+        "world_id": world_id,
+        "reorg_epoch": reorg_epoch,
+        "logical_time": intent.logical_time,
+        "event_seq": intent.event_seq.to_string(),
+        "receipt_id": raw_receipt_ref,
+    }))
+}
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn tolerate_background_play_gameplay_block(
@@ -132,6 +195,114 @@ impl ViewerRuntimeLiveServer {
         let first_agent_claim_target_available = snapshot_player_id.is_some()
             && snapshot_bound_agent_id.is_none()
             && !first_agent_claim_target_bound;
+        let primary_intent = snapshot_bound_agent_id.and_then(|agent_id| {
+            let Some(runtime_agent) = runtime_state.agents.get(agent_id) else {
+                return Some(crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                    status: "unavailable".to_string(),
+                    message: None,
+                    resume_required: true,
+                    schema_version: Some(2),
+                    intent_id: None,
+                    agent_id: Some(agent_id.to_string()),
+                    kind: None,
+                    source: None,
+                    target_id: None,
+                    world_id: None,
+                    reorg_epoch: None,
+                    logical_time: None,
+                    updated_at: None,
+                    source_class: Some("runtime_projection".to_string()),
+                    freshness: Some("stale".to_string()),
+                    control_state: Some("control_lost".to_string()),
+                    event_seq: None,
+                    reason_code: None,
+                    reason_summary: None,
+                    receipt_ref: None,
+                    next_step: None,
+                });
+            };
+            if let Some(intent) = runtime_agent.intent.as_ref() {
+                Some({
+                    let status =
+                        canonical_player_intent_status(&intent.status).unwrap_or("unavailable");
+                    let has_authority_position = intent.world_id.as_deref()
+                        == Some(self.config.world_id.as_str())
+                        && intent.reorg_epoch == Some(self.reorg_epoch);
+                    crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                        status: status.to_string(),
+                        message: Some(intent.summary.clone()),
+                        resume_required: intent.status == "blocked",
+                        schema_version: Some(intent.schema_version),
+                        intent_id: Some(intent.intent_id.clone()),
+                        agent_id: Some(intent.agent_id.clone()),
+                        kind: Some(intent.kind.clone()),
+                        source: Some(intent.source.clone()),
+                        target_id: intent.target_id.clone(),
+                        world_id: intent.world_id.clone(),
+                        reorg_epoch: intent.reorg_epoch,
+                        logical_time: Some(intent.logical_time),
+                        updated_at: Some(intent.updated_at),
+                        source_class: Some("runtime_projection".to_string()),
+                        freshness: Some(
+                            if has_authority_position {
+                                "current"
+                            } else {
+                                "unknown"
+                            }
+                            .to_string(),
+                        ),
+                        control_state: Some(
+                            if has_authority_position {
+                                "controllable"
+                            } else {
+                                "unavailable"
+                            }
+                            .to_string(),
+                        ),
+                        event_seq: Some(intent.event_seq.to_string()),
+                        reason_code: intent.reason_code.clone(),
+                        reason_summary: intent.reason_summary.clone(),
+                        receipt_ref: committed_receipt_tuple(intent, self.world.journal()),
+                        next_step: (intent.status == "blocked")
+                            .then(|| "Recheck runtime state before resuming.".to_string()),
+                    }
+                })
+            } else {
+                // Prompt-control predates AgentIntentV2. Keep that handoff
+                // visible for compatibility, but mark it explicitly as a
+                // sidecar/unknown projection rather than runtime authority.
+                self.llm_sidecar
+                    .primary_intents
+                    .get(agent_id)
+                    .map(
+                        |legacy| crate::simulator::persist::PlayerGameplayPrimaryIntent {
+                            status: canonical_player_intent_status(&legacy.status)
+                                .unwrap_or("unavailable")
+                                .to_string(),
+                            message: legacy.message.clone(),
+                            resume_required: legacy.resume_required,
+                            schema_version: None,
+                            intent_id: None,
+                            agent_id: Some(agent_id.to_string()),
+                            kind: None,
+                            source: None,
+                            target_id: None,
+                            world_id: None,
+                            reorg_epoch: None,
+                            logical_time: None,
+                            updated_at: None,
+                            source_class: Some("prompt_control_compatibility".to_string()),
+                            freshness: Some("unknown".to_string()),
+                            control_state: Some("unknown".to_string()),
+                            event_seq: None,
+                            reason_code: None,
+                            reason_summary: None,
+                            receipt_ref: None,
+                            next_step: None,
+                        },
+                    )
+            }
+        });
         let model = runtime_state_to_simulator_model(
             runtime_state,
             &self.llm_sidecar,
@@ -144,18 +315,7 @@ impl ViewerRuntimeLiveServer {
             snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
-            snapshot_bound_agent_id.and_then(|agent_id| {
-                self.llm_sidecar
-                    .primary_intents
-                    .get(agent_id)
-                    .map(
-                        |intent| crate::simulator::persist::PlayerGameplayPrimaryIntent {
-                            status: intent.status.clone(),
-                            message: intent.message.clone(),
-                            resume_required: intent.resume_required,
-                        },
-                    )
-            }),
+            primary_intent,
             self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),
@@ -400,5 +560,90 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::{EffectReceipt, WorldEvent};
+
+    fn completed_intent(receipt_ref: Option<&str>) -> AgentIntentV2 {
+        AgentIntentV2 {
+            schema_version: 2,
+            agent_id: "agent-0".to_string(),
+            intent_id: "agent-intent-v2:test".to_string(),
+            kind: "agent_chat".to_string(),
+            summary: "Stabilize power".to_string(),
+            target_id: None,
+            effect_intent_id: Some("effect-intent-v2:test".to_string()),
+            intent_tick: Some(7),
+            world_id: Some("live-runtime-test".to_string()),
+            reorg_epoch: Some(2),
+            authority_scope: Some("player_agent_chat".to_string()),
+            status: "completed".to_string(),
+            source: "player".to_string(),
+            logical_time: 8,
+            event_seq: 4,
+            updated_at: 8,
+            receipt_ref: receipt_ref.map(ToOwned::to_owned),
+            reason_code: None,
+            reason_summary: None,
+            replaced_by: None,
+            actor_id: "player-0".to_string(),
+            request_digest: "digest".to_string(),
+        }
+    }
+
+    #[test]
+    fn completed_projection_requires_matching_committed_receipt_event() {
+        let intent = completed_intent(Some("world-event:3"));
+        let journal = crate::runtime::Journal {
+            events: vec![WorldEvent {
+                id: 3,
+                time: 8,
+                caused_by: None,
+                body: RuntimeWorldEventBody::ReceiptAppended(EffectReceipt {
+                    intent_id: "effect-intent-v2:test".to_string(),
+                    status: "ok".to_string(),
+                    payload: serde_json::json!({"ok": true}),
+                    cost_cents: None,
+                    signature: None,
+                }),
+            }],
+        };
+        assert_eq!(
+            committed_receipt_tuple(&intent, &journal),
+            Some(serde_json::json!({
+                "intent_id": "agent-intent-v2:test",
+                "world_id": "live-runtime-test",
+                "reorg_epoch": 2,
+                "logical_time": 8,
+                "event_seq": "4",
+                "receipt_id": "world-event:3",
+            }))
+        );
+
+        let mut mismatched = journal.clone();
+        mismatched.events[0].id = 9;
+        assert!(committed_receipt_tuple(&intent, &mismatched).is_none());
+        assert!(committed_receipt_tuple(&completed_intent(None), &journal).is_none());
+    }
+
+    #[test]
+    fn player_status_projection_has_no_legacy_acceptance_aliases() {
+        assert_eq!(canonical_player_intent_status("accepted"), Some("accepted"));
+        assert_eq!(
+            canonical_player_intent_status("accepted_new"),
+            Some("accepted")
+        );
+        assert_eq!(
+            canonical_player_intent_status("reprioritized"),
+            Some("accepted")
+        );
+        assert_eq!(
+            canonical_player_intent_status("resume_required"),
+            Some("blocked")
+        );
     }
 }

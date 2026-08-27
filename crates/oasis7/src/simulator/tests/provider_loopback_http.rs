@@ -298,6 +298,48 @@ fn provider_loopback_http_client_surfaces_http_401_on_decision() {
     assert!(err.to_string().contains("unauthorized"));
 }
 
+#[test]
+fn provider_http_failure_retryability_is_deterministic() {
+    assert!(
+        ProviderLoopbackHttpError::RequestFailed {
+            path: "/v1/world-simulator/agent-chat".to_string(),
+            detail: "connection reset".to_string(),
+        }
+        .retryable()
+    );
+    assert!(
+        ProviderLoopbackHttpError::UnexpectedStatus {
+            path: "/v1/world-simulator/agent-chat".to_string(),
+            status_code: 429,
+            body: "rate limited".to_string(),
+        }
+        .retryable()
+    );
+    assert!(
+        ProviderLoopbackHttpError::UnexpectedStatus {
+            path: "/v1/world-simulator/agent-chat".to_string(),
+            status_code: 503,
+            body: "unavailable".to_string(),
+        }
+        .retryable()
+    );
+    assert!(
+        !ProviderLoopbackHttpError::Unauthorized {
+            path: "/v1/world-simulator/agent-chat".to_string(),
+            detail: "bad token".to_string(),
+        }
+        .retryable()
+    );
+    assert!(
+        !ProviderLoopbackHttpError::UnexpectedStatus {
+            path: "/v1/world-simulator/agent-chat".to_string(),
+            status_code: 400,
+            body: "bad request".to_string(),
+        }
+        .retryable()
+    );
+}
+
 fn spawn_mock_http_server<F>(expected_connections: usize, handler: F) -> String
 where
     F: Fn(RecordedHttpRequest) -> MockHttpResponse + Send + Sync + 'static,

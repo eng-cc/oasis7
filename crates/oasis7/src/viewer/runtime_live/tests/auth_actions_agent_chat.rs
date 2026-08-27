@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "auth_actions_agent_chat_echo.rs"]
+mod echo_tests;
+
 #[test]
 fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
@@ -64,6 +67,10 @@ fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
             message: "hello".to_string(),
             intent_tick: Some(35),
             intent_seq: Some(35),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         35,
         public_key.as_str(),
@@ -81,7 +88,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    let base_url = spawn_runtime_live_mock_http_server(6, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -197,6 +204,10 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
             message: "hello provider feedback".to_string(),
             intent_tick: Some(12),
             intent_seq: Some(34),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         34,
         public_key.as_str(),
@@ -206,17 +217,19 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     assert_eq!(ack.agent_id, agent_id);
     server.enqueue_pending_provider_agent_chat_replies();
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 5);
+    assert_eq!(recorded.len(), 6);
     assert_eq!(recorded[0].path, "/v1/provider/info");
     assert_eq!(recorded[1].path, "/v1/provider/health");
-    assert_eq!(recorded[2].method, "POST");
-    assert_eq!(recorded[2].path, "/v1/world-simulator/feedback");
-    assert_eq!(recorded[3].method, "GET");
-    assert_eq!(recorded[3].path, "/v1/provider/info");
-    assert_eq!(recorded[4].method, "POST");
-    assert_eq!(recorded[4].path, "/v1/world-simulator/agent-chat");
+    assert_eq!(recorded[2].method, "GET");
+    assert_eq!(recorded[2].path, "/v1/provider/info");
+    assert_eq!(recorded[3].method, "POST");
+    assert_eq!(recorded[3].path, "/v1/world-simulator/feedback");
+    assert_eq!(recorded[4].method, "GET");
+    assert_eq!(recorded[4].path, "/v1/provider/info");
+    assert_eq!(recorded[5].method, "POST");
+    assert_eq!(recorded[5].path, "/v1/world-simulator/agent-chat");
     let feedback: crate::simulator::FeedbackEnvelope =
-        serde_json::from_slice(recorded[2].body.as_slice()).expect("decode feedback");
+        serde_json::from_slice(recorded[3].body.as_slice()).expect("decode feedback");
     assert_eq!(
         feedback.world_delta_summary.as_deref(),
         Some("player_message: hello provider feedback")
@@ -239,7 +252,7 @@ fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    let base_url = spawn_runtime_live_mock_http_server(4, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -333,6 +346,10 @@ fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
             message: "hello provider async failure".to_string(),
             intent_tick: Some(55),
             intent_seq: Some(55),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         55,
         public_key.as_str(),
@@ -403,6 +420,10 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
             message: "hello unbound".to_string(),
             intent_tick: Some(39),
             intent_seq: Some(39),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         39,
         public_key.as_str(),
@@ -423,11 +444,11 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
 }
 
 #[test]
-fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() {
+fn runtime_agent_chat_provider_mode_persists_rejection_without_agent_chat_capability() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(2, {
+    let base_url = spawn_runtime_live_mock_http_server(1, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -517,6 +538,10 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
             message: "hello phase1 provider".to_string(),
             intent_tick: Some(13),
             intent_seq: Some(36),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         36,
         public_key.as_str(),
@@ -535,15 +560,15 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
-    assert_eq!(ack.agent_id, agent_id);
-    server.enqueue_pending_provider_agent_chat_replies();
+    let error = server
+        .handle_agent_chat(request)
+        .expect_err("unsupported provider capability must reject before acceptance");
+    assert_eq!(error.code, "agent_provider_chat_unsupported");
+    assert_eq!(server.world.state().agents[&agent_id].intent, None);
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 2);
-    assert_eq!(recorded[0].method, "POST");
-    assert_eq!(recorded[0].path, "/v1/world-simulator/feedback");
-    assert_eq!(recorded[1].method, "GET");
-    assert_eq!(recorded[1].path, "/v1/provider/info");
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].method, "GET");
+    assert_eq!(recorded[0].path, "/v1/provider/info");
     assert!(
         !recorded
             .iter()
@@ -583,6 +608,10 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
             message: "hello".to_string(),
             intent_tick: Some(7),
             intent_seq: Some(5),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         5,
         public_key.as_str(),
@@ -607,9 +636,12 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
     assert_eq!(first.intent_tick, Some(7));
     assert_eq!(first.intent_seq, Some(5));
     assert!(!first.idempotent_replay);
+    assert!(first.intent_id.is_some());
+    assert!(first.accepted_event_seq.is_some_and(|seq| seq > 0));
+    assert_eq!(first.status.as_deref(), Some("accepted"));
 
     let replay = server
-        .handle_agent_chat(request)
+        .handle_agent_chat(request.clone())
         .expect("replay request accepted");
     assert_eq!(replay.agent_id, first.agent_id);
     assert_eq!(replay.accepted_at_tick, first.accepted_at_tick);
@@ -617,6 +649,9 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
     assert_eq!(replay.player_id, first.player_id);
     assert_eq!(replay.intent_tick, first.intent_tick);
     assert_eq!(replay.intent_seq, first.intent_seq);
+    assert_eq!(replay.intent_id, first.intent_id);
+    assert_eq!(replay.accepted_event_seq, first.accepted_event_seq);
+    assert_eq!(replay.status, first.status);
     assert!(replay.idempotent_replay);
     assert_eq!(
         server
@@ -626,6 +661,12 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
             .copied(),
         Some(5)
     );
+
+    server.reorg_epoch = server.reorg_epoch.saturating_add(1);
+    let stale = server
+        .handle_agent_chat(request)
+        .expect_err("cached ack must not cross a reorg epoch");
+    assert_eq!(stale.code, "auth_invalid");
 }
 
 #[test]
@@ -673,6 +714,10 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
                 message: "Prioritize the iron line before expanding.".to_string(),
                 intent_tick: Some(92),
                 intent_seq: Some(92),
+                world_id: None,
+                reorg_epoch: None,
+                authority_scope: None,
+                replaces_intent_id: None,
             },
             92,
             public_key.as_str(),
@@ -680,6 +725,19 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
         ))
         .expect("accepted player instruction");
     assert!(!ack.idempotent_replay);
+
+    let canonical_intent = server.world.state().agents[agent_id.as_str()]
+        .intent
+        .clone()
+        .expect("accepted chat must journal canonical Agent Intent V2");
+    assert_eq!(canonical_intent.status, "accepted");
+    assert_eq!(
+        canonical_intent.summary,
+        "Agent guidance accepted; the Agent will evaluate its next world action."
+    );
+    assert_eq!(canonical_intent.agent_id, agent_id);
+    assert_eq!(canonical_intent.logical_time, ack.accepted_at_tick);
+    assert_ne!(canonical_intent.event_seq, 0);
 
     let gameplay = server
         .compat_snapshot(Some("player-a"))
@@ -690,15 +748,15 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
         contract
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("accepted_new"),
+        Some("accepted"),
         "an accepted instruction must publish a durable primary-intent handoff, not only transient feedback"
     );
     assert_eq!(
         contract
             .pointer("/primary_intent/message")
             .and_then(serde_json::Value::as_str),
-        Some("Prioritize the iron line before expanding."),
-        "the durable handoff must retain the accepted player instruction verbatim"
+        Some("Agent guidance accepted; the Agent will evaluate its next world action."),
+        "the durable handoff must expose only the canonical player-safe summary"
     );
     assert_eq!(
         contract
@@ -706,6 +764,56 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
             .and_then(serde_json::Value::as_bool),
         Some(false),
         "a newly accepted primary intent must clear any resume-required state"
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/schema_version"),
+        Some(&serde_json::json!(2))
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/intent_id")
+            .and_then(serde_json::Value::as_str),
+        Some(canonical_intent.intent_id.as_str())
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/agent_id")
+            .and_then(serde_json::Value::as_str),
+        Some(agent_id.as_str())
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/world_id")
+            .and_then(serde_json::Value::as_str),
+        Some("live-runtime-minimal")
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/reorg_epoch"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/logical_time"),
+        Some(&serde_json::json!(canonical_intent.logical_time))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/updated_at"),
+        Some(&serde_json::json!(canonical_intent.updated_at))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/source_class"),
+        Some(&serde_json::json!("runtime_projection"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/freshness"),
+        Some(&serde_json::json!("current"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/control_state"),
+        Some(&serde_json::json!("controllable"))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/event_seq"),
+        Some(&serde_json::json!(canonical_intent.event_seq.to_string()))
     );
 }
 
@@ -744,27 +852,56 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
+    let mut first_request = None;
     for (nonce, message) in [
         (92, "Prioritize the iron line before expanding."),
         (93, "Stabilize power before expanding the iron line."),
     ] {
+        let replaces_intent_id = server
+            .world
+            .state()
+            .agents
+            .get(agent_id.as_str())
+            .and_then(|cell| cell.intent.as_ref())
+            .map(|intent| intent.intent_id.clone());
+        let request = signed_agent_chat_request(
+            crate::viewer::AgentChatRequest {
+                agent_id: agent_id.clone(),
+                player_id: Some("player-a".to_string()),
+                public_key: None,
+                auth: None,
+                message: message.to_string(),
+                intent_tick: Some(nonce),
+                intent_seq: Some(nonce),
+                world_id: None,
+                reorg_epoch: None,
+                authority_scope: None,
+                replaces_intent_id,
+            },
+            nonce,
+            public_key.as_str(),
+            private_key.as_str(),
+        );
+        if nonce == 92 {
+            first_request = Some(request.clone());
+        }
         server
-            .handle_agent_chat(signed_agent_chat_request(
-                crate::viewer::AgentChatRequest {
-                    agent_id: agent_id.clone(),
-                    player_id: Some("player-a".to_string()),
-                    public_key: None,
-                    auth: None,
-                    message: message.to_string(),
-                    intent_tick: Some(nonce),
-                    intent_seq: Some(nonce),
-                },
-                nonce,
-                public_key.as_str(),
-                private_key.as_str(),
-            ))
+            .handle_agent_chat(request)
             .expect("accepted player instruction");
     }
+
+    let replacement_replay = server
+        .handle_agent_chat(first_request.expect("retain first chat request"))
+        .expect("replay of superseded intent should return its durable disposition");
+    assert_eq!(replacement_replay.status.as_deref(), Some("superseded"));
+    assert!(replacement_replay.idempotent_replay);
+    assert_eq!(
+        replacement_replay.replaced_by.as_deref(),
+        server.world.state().agents[agent_id.as_str()]
+            .intent
+            .as_ref()
+            .map(|intent| intent.intent_id.as_str())
+    );
 
     let gameplay = server
         .compat_snapshot(Some("player-a"))
@@ -775,19 +912,98 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
         contract
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("reprioritized")
+        Some("accepted")
     );
     assert_eq!(
         contract
             .pointer("/primary_intent/message")
             .and_then(serde_json::Value::as_str),
-        Some("Stabilize power before expanding the iron line.")
+        Some("Agent guidance accepted; the Agent will evaluate its next world action.")
     );
     assert_eq!(
         contract
             .pointer("/primary_intent/resume_required")
             .and_then(serde_json::Value::as_bool),
         Some(false)
+    );
+
+    let canonical_intent = server.world.state().agents[agent_id.as_str()]
+        .intent
+        .as_ref()
+        .expect("reprioritized chat must replace canonical intent");
+    assert_eq!(canonical_intent.status, "accepted");
+    assert_eq!(
+        canonical_intent.summary,
+        "Agent guidance accepted; the Agent will evaluate its next world action."
+    );
+}
+
+#[test]
+fn runtime_intent_projection_distinguishes_missing_intent_from_lost_control() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+
+    server
+        .llm_sidecar
+        .player_agent_bindings
+        .insert("player-missing".to_string(), agent_id.clone());
+    server
+        .llm_sidecar
+        .agent_player_bindings
+        .insert(agent_id.clone(), "player-missing".to_string());
+    let missing = serde_json::to_value(
+        server
+            .compat_snapshot(Some("player-missing"))
+            .player_gameplay
+            .expect("player gameplay snapshot"),
+    )
+    .expect("serialize missing projection");
+    assert!(
+        missing.pointer("/primary_intent").is_none(),
+        "missing canonical intent must remain missing"
+    );
+
+    server.llm_sidecar.player_agent_bindings.insert(
+        "player-lost".to_string(),
+        "agent-no-longer-present".to_string(),
+    );
+    server.llm_sidecar.agent_player_bindings.insert(
+        "agent-no-longer-present".to_string(),
+        "player-lost".to_string(),
+    );
+    let lost = serde_json::to_value(
+        server
+            .compat_snapshot(Some("player-lost"))
+            .player_gameplay
+            .expect("player gameplay snapshot"),
+    )
+    .expect("serialize lost-control projection");
+    assert_eq!(
+        lost.pointer("/primary_intent/status")
+            .and_then(serde_json::Value::as_str),
+        Some("unavailable")
+    );
+    assert_eq!(
+        lost.pointer("/primary_intent/freshness")
+            .and_then(serde_json::Value::as_str),
+        Some("stale")
+    );
+    assert_eq!(
+        lost.pointer("/primary_intent/control_state")
+            .and_then(serde_json::Value::as_str),
+        Some("control_lost")
     );
 }
 
@@ -821,6 +1037,10 @@ fn runtime_agent_chat_requires_starter_oc_balance() {
             message: "hello without OC".to_string(),
             intent_tick: Some(14),
             intent_seq: Some(37),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         37,
         public_key.as_str(),
@@ -920,6 +1140,10 @@ fn runtime_agent_chat_allows_zero_balance_after_starter_oc_claim() {
             message: "hello after spent OC".to_string(),
             intent_tick: Some(40),
             intent_seq: Some(40),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         40,
         public_key.as_str(),
@@ -929,213 +1153,4 @@ fn runtime_agent_chat_allows_zero_balance_after_starter_oc_claim() {
         .handle_agent_chat(chat_request)
         .expect("claimed starter OC should keep chat gate open");
     assert_eq!(ack.agent_id, agent_id);
-}
-
-#[test]
-fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
-    let _guard = lock_test_llm_env();
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
-    }
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
-    )
-    .expect("runtime server");
-    let agent_id = server
-        .world
-        .state()
-        .agents
-        .keys()
-        .next()
-        .cloned()
-        .expect("seed agent");
-    seed_agent_chat_oc(&mut server, agent_id.as_str());
-    let (public_key, private_key) = test_signer(31);
-    let request = signed_agent_chat_request(
-        crate::viewer::AgentChatRequest {
-            agent_id: agent_id.clone(),
-            player_id: Some("player-a".to_string()),
-            public_key: None,
-            auth: None,
-            message: "hello runtime echo".to_string(),
-            intent_tick: Some(9),
-            intent_seq: Some(31),
-        },
-        31,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    let register_ack = register_runtime_session(
-        &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        30,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
-    assert_eq!(ack.agent_id, agent_id);
-    let feedback = server
-        .latest_player_gameplay_feedback
-        .as_ref()
-        .expect("agent-chat feedback recorded");
-    assert_eq!(feedback.action, "agent_chat");
-    assert_eq!(feedback.stage, "accepted");
-    assert_eq!(feedback.target_agent_id.as_deref(), Some(agent_id.as_str()));
-    assert!(
-        feedback
-            .intent_summary
-            .as_deref()
-            .is_some_and(|summary| summary.contains(agent_id.as_str()))
-    );
-
-    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
-    assert!(events.iter().any(|event| matches!(
-        &event.kind,
-        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
-            if event_agent_id == &agent_id && message == "[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：hello runtime echo"
-    )));
-}
-
-#[test]
-fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
-    clear_runtime_provider_env();
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_BASE_URL);
-    }
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_API_KEY);
-    }
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
-    )
-    .expect("runtime server");
-    let agent_id = server
-        .world
-        .state()
-        .agents
-        .keys()
-        .next()
-        .cloned()
-        .expect("seed agent");
-    seed_agent_chat_oc(&mut server, agent_id.as_str());
-    let (public_key, private_key) = test_signer(33);
-    let request = signed_agent_chat_request(
-        crate::viewer::AgentChatRequest {
-            agent_id: agent_id.clone(),
-            player_id: Some("player-a".to_string()),
-            public_key: None,
-            auth: None,
-            message: "hello runtime echo without llm config".to_string(),
-            intent_tick: Some(11),
-            intent_seq: Some(33),
-        },
-        33,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    let register_ack = register_runtime_session(
-        &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        32,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
-    assert_eq!(ack.agent_id, agent_id);
-
-    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
-    assert!(events.iter().any(|event| matches!(
-        &event.kind,
-        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
-            if event_agent_id == &agent_id && message == "[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：hello runtime echo without llm config"
-    )));
-}
-
-#[test]
-fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
-    let _guard = lock_test_llm_env();
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(
-            removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
-            "1",
-        );
-    }
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
-    )
-    .expect("runtime server");
-    let agent_id = server
-        .world
-        .state()
-        .agents
-        .keys()
-        .next()
-        .cloned()
-        .expect("seed agent");
-    seed_agent_chat_oc(&mut server, agent_id.as_str());
-    let (public_key, private_key) = test_signer(32);
-    let request = signed_agent_chat_request(
-        crate::viewer::AgentChatRequest {
-            agent_id: agent_id.clone(),
-            player_id: Some("player-a".to_string()),
-            public_key: None,
-            auth: None,
-            message: "hello removed old brand runtime echo".to_string(),
-            intent_tick: Some(10),
-            intent_seq: Some(32),
-        },
-        32,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    let register_ack = register_runtime_session(
-        &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        31,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-
-    let ack = server.handle_agent_chat(request).expect("chat accepted");
-    assert_eq!(ack.agent_id, agent_id);
-
-    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
-    assert!(!events.iter().any(|event| matches!(
-        &event.kind,
-        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
-            if event_agent_id == &agent_id && message == "[local-mock-receipt] 已收到消息；当前本地 mock provider 不生成真实 Agent 回复：hello removed old brand runtime echo"
-    )));
 }
