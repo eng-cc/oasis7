@@ -35,6 +35,11 @@ fn persist_session_side_effect_projection(
         intent_tick: Some(server.world.state().time),
         intent_seq: Some(77),
         idempotent_replay: false,
+        intent_id: None,
+        accepted_event_seq: None,
+        status: None,
+        receipt_ref: None,
+        replaced_by: None,
     };
     server.llm_sidecar.record_chat_intent_ack(
         "cached-player",
@@ -316,6 +321,11 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
         intent_tick: Some(server.world.state().time),
         intent_seq: Some(44),
         idempotent_replay: false,
+        intent_id: None,
+        accepted_event_seq: None,
+        status: None,
+        receipt_ref: None,
+        replaced_by: None,
     };
     server.llm_sidecar.record_chat_intent_ack(
         "player-mutation-atomic",

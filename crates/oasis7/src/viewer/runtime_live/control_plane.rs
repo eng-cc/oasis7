@@ -708,6 +708,57 @@ impl ViewerRuntimeLiveServer {
         });
     }
 
+    /// Complete a chat Intent only when the runtime has already published a
+    /// receipt for the exact bound effect. Provider replies and local echoes
+    /// are observations, not effects; this hook keeps their terminal path
+    /// receipt-bound without inventing an effect or receipt for chat itself.
+    pub(super) fn complete_agent_chat_if_receipt_bound(
+        &mut self,
+        agent_id: &str,
+        intent_id: &str,
+        request_digest: &str,
+    ) {
+        let effect_intent_id = self
+            .world
+            .state()
+            .agents
+            .get(agent_id)
+            .and_then(|cell| cell.intent.as_ref())
+            .filter(|intent| {
+                intent.intent_id == intent_id
+                    && intent.request_digest == request_digest
+                    && intent.status == "accepted"
+            })
+            .and_then(|intent| intent.effect_intent_id.clone());
+        let Some(effect_intent_id) = effect_intent_id else {
+            return;
+        };
+        let Some(receipt_event_id) = self.world.journal().events.iter().find_map(|event| {
+            matches!(
+                &event.body,
+                crate::runtime::WorldEventBody::ReceiptAppended(receipt)
+                    if receipt.intent_id == effect_intent_id
+            )
+            .then_some(event.id)
+        }) else {
+            return;
+        };
+        if let Err(error) = self.world.complete_agent_intent_with_receipt_exact(
+            agent_id,
+            intent_id,
+            request_digest,
+            receipt_event_id,
+        ) {
+            tracing::warn!(
+                agent_id,
+                intent_id,
+                receipt_event_id,
+                error = ?error,
+                "receipt-bound Agent Chat completion was not applied"
+            );
+        }
+    }
+
     pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) -> Vec<AgentChatError> {
         let (replies, failures) = self
             .llm_sidecar
@@ -725,6 +776,16 @@ impl ViewerRuntimeLiveServer {
                 pending.request_digest.as_deref(),
             ) {
                 self.enqueue_agent_chat_reply_event(pending.agent_id.as_str(), message.as_str());
+                if let (Some(intent_id), Some(request_digest)) = (
+                    pending.intent_id.as_deref(),
+                    pending.request_digest.as_deref(),
+                ) {
+                    self.complete_agent_chat_if_receipt_bound(
+                        pending.agent_id.as_str(),
+                        intent_id,
+                        request_digest,
+                    );
+                }
             } else {
                 tracing::debug!(
                     agent_id = pending.agent_id.as_str(),

@@ -27,6 +27,10 @@ export const AGENT_INTENT_SUMMARIES = Object.freeze({
 });
 
 const REASON_ALLOWLIST = Object.freeze({
+  insufficient_power: "Restore power to continue",
+  policy_denied: "This instruction is not permitted",
+  provider_unavailable: "Agent service is temporarily unavailable",
+  provider_rejected: "Agent service rejected this instruction",
   missing_material: "World prerequisites changed before execution.",
   material_shortage: "World prerequisites changed before execution.",
   permission_changed: "The requested operation is no longer authorized.",
@@ -48,6 +52,7 @@ const NEXT_STEP_ALLOWLIST = Object.freeze({
   read_only: "Reselect the Agent in a controllable session.",
   unauthorized: "Request access before viewing this intent.",
   blocked: "Recheck runtime state before resuming.",
+  rejected: "Review the latest world state before retrying.",
 });
 
 const ALLOWED_CONTROL_STATES = new Set(["controllable", "read_only", "control_lost", "unauthorized", "unavailable"]);
@@ -169,7 +174,7 @@ function allowlistedReason(intent, status) {
 function allowlistedNextStep(intent, status, stateKind) {
   const declared = textValue(intent.next_step_key || intent.nextStepKey).toLowerCase();
   if (declared && !Object.prototype.hasOwnProperty.call(NEXT_STEP_ALLOWLIST, declared)) return { valid: false, value: "" };
-  const fallbackKey = stateKind === "current" && status === "blocked" ? "blocked" : stateKind;
+  const fallbackKey = stateKind === "current" && (status === "blocked" || status === "rejected") ? status : stateKind;
   const expected = NEXT_STEP_ALLOWLIST[declared || fallbackKey] || "";
   const supplied = textValue(intent.next_step || intent.next_step_hint);
   if (supplied && supplied !== expected) return { valid: false, value: "" };

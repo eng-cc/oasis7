@@ -1,5 +1,33 @@
 use super::*;
 
+fn durable_agent_chat_ack(
+    agent_id: &str,
+    player_id: &str,
+    message_len: usize,
+    intent_tick: Option<u64>,
+    intent_id: String,
+    logical_time: u64,
+    event_seq: u64,
+    status: String,
+    receipt_ref: Option<String>,
+    replaced_by: Option<String>,
+) -> AgentChatAck {
+    AgentChatAck {
+        agent_id: agent_id.to_string(),
+        accepted_at_tick: logical_time,
+        message_len,
+        player_id: Some(player_id.to_string()),
+        intent_tick,
+        intent_seq: None,
+        idempotent_replay: true,
+        intent_id: Some(intent_id),
+        accepted_event_seq: Some(event_seq),
+        status: Some(status),
+        receipt_ref,
+        replaced_by,
+    }
+}
+
 impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn handle_agent_chat(
         &mut self,
@@ -13,16 +41,6 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(agent_id),
             });
         }
-        if !self.supports_agent_chat() {
-            return Err(AgentChatError {
-                code: "agent_provider_chat_unsupported".to_string(),
-                message:
-                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id),
-            });
-        }
-
         let player_id = request
             .player_id
             .as_deref()
@@ -97,24 +115,20 @@ impl ViewerRuntimeLiveServer {
                 agent_id: Some(agent_id.clone()),
             })?;
         if let Some(disposition) = durable_replay {
-            if disposition.status != "accepted" {
-                return Err(AgentChatError {
-                    code: format!("intent_{}", disposition.status),
-                    message: disposition.reason_summary.unwrap_or_else(|| {
-                        format!("this instruction is already {}", disposition.status)
-                    }),
-                    agent_id: Some(agent_id),
-                });
-            }
-            return Ok(cached_replay.unwrap_or(AgentChatAck {
-                agent_id: agent_id.clone(),
-                accepted_at_tick: self.world.state().time,
-                message_len: message.chars().count(),
-                player_id: Some(player_id),
-                intent_tick: intent.intent_tick,
-                intent_seq: Some(intent.intent_seq),
-                idempotent_replay: true,
-            }));
+            let mut ack = durable_agent_chat_ack(
+                agent_id.as_str(),
+                player_id.as_str(),
+                message.chars().count(),
+                intent.intent_tick,
+                disposition.intent_id,
+                disposition.logical_time,
+                disposition.event_seq,
+                disposition.status,
+                disposition.receipt_ref,
+                disposition.replaced_by,
+            );
+            ack.intent_seq = Some(intent.intent_seq);
+            return Ok(ack);
         }
         if cached_replay.is_some() {
             return Err(AgentChatError {
@@ -122,6 +136,15 @@ impl ViewerRuntimeLiveServer {
                 message: "cached ack has no durable runtime intent".to_string(),
                 agent_id: Some(agent_id),
             });
+        }
+        // Provider capability is an admission precondition. Do this before
+        // nonce consumption, binding, durable acceptance, behavior feedback,
+        // or provider queueing so an unsupported provider has no side effect.
+        if let Err(provider_error) = self
+            .llm_sidecar
+            .ensure_provider_agent_chat_capability(agent_id.as_str())
+        {
+            return Err(provider_error);
         }
         if self.world.main_token_liquid_balance(agent_id.as_str()) == 0
             && !self
@@ -158,7 +181,7 @@ impl ViewerRuntimeLiveServer {
                 agent_id.as_str(),
                 intent.intent_seq,
                 message.as_str(),
-                authority,
+                authority.clone(),
             )
             .map_err(|error| AgentChatError {
                 code: "intent_persistence_failed".to_string(),
@@ -168,15 +191,39 @@ impl ViewerRuntimeLiveServer {
         if record_outcome.is_replay() {
             // A durable replay remains authoritative after sidecar cache loss;
             // suppress duplicate provider and echo effects for the same tuple.
-            let ack = AgentChatAck {
-                agent_id: agent_id.clone(),
-                accepted_at_tick: self.world.state().time,
-                message_len: message.chars().count(),
-                player_id: Some(player_id),
-                intent_tick: intent.intent_tick,
-                intent_seq: Some(intent.intent_seq),
-                idempotent_replay: true,
-            };
+            let disposition = self
+                .world
+                .agent_chat_intent_replay_disposition(
+                    verified.player_id.as_str(),
+                    agent_id.as_str(),
+                    intent.intent_seq,
+                    message.as_str(),
+                    authority,
+                )
+                .map_err(|error| AgentChatError {
+                    code: "intent_seq_conflict".to_string(),
+                    message: format!("durable replay lookup failed: {error:?}"),
+                    agent_id: Some(agent_id.clone()),
+                })?
+                .ok_or_else(|| AgentChatError {
+                    code: "intent_persistence_failed".to_string(),
+                    message: "replayed intent is missing from the durable runtime ledger"
+                        .to_string(),
+                    agent_id: Some(agent_id.clone()),
+                })?;
+            let mut ack = durable_agent_chat_ack(
+                agent_id.as_str(),
+                player_id.as_str(),
+                message.chars().count(),
+                intent.intent_tick,
+                disposition.intent_id,
+                disposition.logical_time,
+                disposition.event_seq,
+                disposition.status,
+                disposition.receipt_ref,
+                disposition.replaced_by,
+            );
+            ack.intent_seq = Some(intent.intent_seq);
             self.llm_sidecar.record_chat_intent_ack(
                 verified.player_id.as_str(),
                 agent_id.as_str(),
@@ -246,6 +293,11 @@ impl ViewerRuntimeLiveServer {
             }
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
+        self.complete_agent_chat_if_receipt_bound(
+            agent_id.as_str(),
+            accepted_intent.intent_id.as_str(),
+            accepted_intent.request_digest.as_str(),
+        );
         let primary_intent = apply_accepted_primary_intent(
             self.llm_sidecar.primary_intents.get(agent_id.as_str()),
             message.as_str(),
@@ -269,12 +321,17 @@ impl ViewerRuntimeLiveServer {
         });
         let ack = AgentChatAck {
             agent_id: agent_id.clone(),
-            accepted_at_tick: self.world.state().time,
+            accepted_at_tick: accepted_intent.logical_time,
             message_len: message.chars().count(),
             player_id: Some(player_id),
             intent_tick: intent.intent_tick,
             intent_seq: Some(intent.intent_seq),
             idempotent_replay: false,
+            intent_id: Some(accepted_intent.intent_id.clone()),
+            accepted_event_seq: Some(accepted_intent.event_seq),
+            status: Some(accepted_intent.status.clone()),
+            receipt_ref: accepted_intent.receipt_ref.clone(),
+            replaced_by: accepted_intent.replaced_by.clone(),
         };
         self.llm_sidecar.record_chat_intent_ack(
             verified.player_id.as_str(),

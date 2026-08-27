@@ -31,13 +31,64 @@ fn validate_provider_agent_chat_response(
 }
 
 impl RuntimeLlmSidecar {
-    pub(super) fn request_provider_agent_chat(
+    /// Check the provider's Agent Chat capability before the control plane
+    /// admits an authenticated Intent. This is deliberately separate from
+    /// the eventual request: a queued provider call must never be the first
+    /// place where an unsupported capability is discovered.
+    pub(in crate::viewer::runtime_live) fn ensure_provider_agent_chat_capability(
         &self,
-        world: &RuntimeWorld,
         agent_id: &str,
-        player_id: &str,
-        message: &str,
-    ) -> Result<Option<String>, RuntimeProviderAgentChatRequestError> {
+    ) -> Result<(), AgentChatError> {
+        // Builtin/echo Agent Chat does not have a remote capability contract;
+        // only provider-backed admission may perform this network preflight.
+        if !env_requests_provider_backend() {
+            return Ok(());
+        }
+        self.ensure_provider_agent_chat_capability_with_retry(agent_id)
+            .map_err(|failure| failure.error)
+    }
+
+    fn ensure_provider_agent_chat_capability_with_retry(
+        &self,
+        agent_id: &str,
+    ) -> Result<(), RuntimeProviderAgentChatRequestError> {
+        let (client, _) = self.provider_agent_chat_client(agent_id)?;
+        let info =
+            client
+                .provider_info()
+                .map_err(|error| RuntimeProviderAgentChatRequestError {
+                    retryable: error.retryable(),
+                    error: AgentChatError {
+                        code: "provider_unreachable".to_string(),
+                        message: error.to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    },
+                })?;
+        if !info.capabilities.iter().any(|capability| {
+            capability
+                .trim()
+                .eq_ignore_ascii_case(PROVIDER_AGENT_CHAT_CAPABILITY)
+        }) {
+            return Err(RuntimeProviderAgentChatRequestError {
+                retryable: false,
+                error: AgentChatError {
+                    code: "agent_provider_chat_unsupported".to_string(),
+                    message: "configured provider does not advertise the agent_chat capability"
+                        .to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                },
+            });
+        }
+        Ok(())
+    }
+
+    fn provider_agent_chat_client(
+        &self,
+        agent_id: &str,
+    ) -> Result<
+        (ProviderLoopbackHttpClient, ProviderDecisionSettings),
+        RuntimeProviderAgentChatRequestError,
+    > {
         let settings = provider_settings_from_env()
             .map_err(|message| RuntimeProviderAgentChatRequestError {
                 error: AgentChatError {
@@ -69,6 +120,17 @@ impl RuntimeLlmSidecar {
                 agent_id: Some(agent_id.to_string()),
             },
         })?;
+        Ok((client, settings))
+    }
+
+    pub(super) fn request_provider_agent_chat(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        player_id: &str,
+        message: &str,
+    ) -> Result<Option<String>, RuntimeProviderAgentChatRequestError> {
+        let (client, _) = self.provider_agent_chat_client(agent_id)?;
         let info =
             client
                 .provider_info()

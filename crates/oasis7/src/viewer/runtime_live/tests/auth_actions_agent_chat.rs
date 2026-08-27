@@ -88,7 +88,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    let base_url = spawn_runtime_live_mock_http_server(6, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -217,17 +217,19 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     assert_eq!(ack.agent_id, agent_id);
     server.enqueue_pending_provider_agent_chat_replies();
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 5);
+    assert_eq!(recorded.len(), 6);
     assert_eq!(recorded[0].path, "/v1/provider/info");
     assert_eq!(recorded[1].path, "/v1/provider/health");
-    assert_eq!(recorded[2].method, "POST");
-    assert_eq!(recorded[2].path, "/v1/world-simulator/feedback");
-    assert_eq!(recorded[3].method, "GET");
-    assert_eq!(recorded[3].path, "/v1/provider/info");
-    assert_eq!(recorded[4].method, "POST");
-    assert_eq!(recorded[4].path, "/v1/world-simulator/agent-chat");
+    assert_eq!(recorded[2].method, "GET");
+    assert_eq!(recorded[2].path, "/v1/provider/info");
+    assert_eq!(recorded[3].method, "POST");
+    assert_eq!(recorded[3].path, "/v1/world-simulator/feedback");
+    assert_eq!(recorded[4].method, "GET");
+    assert_eq!(recorded[4].path, "/v1/provider/info");
+    assert_eq!(recorded[5].method, "POST");
+    assert_eq!(recorded[5].path, "/v1/world-simulator/agent-chat");
     let feedback: crate::simulator::FeedbackEnvelope =
-        serde_json::from_slice(recorded[2].body.as_slice()).expect("decode feedback");
+        serde_json::from_slice(recorded[3].body.as_slice()).expect("decode feedback");
     assert_eq!(
         feedback.world_delta_summary.as_deref(),
         Some("player_message: hello provider feedback")
@@ -250,7 +252,7 @@ fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    let base_url = spawn_runtime_live_mock_http_server(4, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -446,7 +448,7 @@ fn runtime_agent_chat_provider_mode_persists_rejection_without_agent_chat_capabi
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(2, {
+    let base_url = spawn_runtime_live_mock_http_server(1, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -558,36 +560,15 @@ fn runtime_agent_chat_provider_mode_persists_rejection_without_agent_chat_capabi
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
-    let ack = server
+    let error = server
         .handle_agent_chat(request)
-        .expect("chat initially accepted");
-    assert_eq!(ack.agent_id, agent_id);
-    let errors = server.enqueue_pending_provider_agent_chat_replies();
-    assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].code, "agent_provider_chat_unsupported");
-    assert_eq!(
-        server.world.state().agents[&agent_id]
-            .intent
-            .as_ref()
-            .unwrap()
-            .status,
-        "rejected"
-    );
-    assert_eq!(
-        server.world.state().agents[&agent_id]
-            .intent
-            .as_ref()
-            .unwrap()
-            .reason_code
-            .as_deref(),
-        Some("provider_rejected")
-    );
+        .expect_err("unsupported provider capability must reject before acceptance");
+    assert_eq!(error.code, "agent_provider_chat_unsupported");
+    assert_eq!(server.world.state().agents[&agent_id].intent, None);
     let recorded = recorded.lock().expect("recorded lock");
-    assert_eq!(recorded.len(), 2);
-    assert_eq!(recorded[0].method, "POST");
-    assert_eq!(recorded[0].path, "/v1/world-simulator/feedback");
-    assert_eq!(recorded[1].method, "GET");
-    assert_eq!(recorded[1].path, "/v1/provider/info");
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].method, "GET");
+    assert_eq!(recorded[0].path, "/v1/provider/info");
     assert!(
         !recorded
             .iter()
@@ -655,6 +636,9 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
     assert_eq!(first.intent_tick, Some(7));
     assert_eq!(first.intent_seq, Some(5));
     assert!(!first.idempotent_replay);
+    assert!(first.intent_id.is_some());
+    assert!(first.accepted_event_seq.is_some_and(|seq| seq > 0));
+    assert_eq!(first.status.as_deref(), Some("accepted"));
 
     let replay = server
         .handle_agent_chat(request.clone())
@@ -665,6 +649,9 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
     assert_eq!(replay.player_id, first.player_id);
     assert_eq!(replay.intent_tick, first.intent_tick);
     assert_eq!(replay.intent_seq, first.intent_seq);
+    assert_eq!(replay.intent_id, first.intent_id);
+    assert_eq!(replay.accepted_event_seq, first.accepted_event_seq);
+    assert_eq!(replay.status, first.status);
     assert!(replay.idempotent_replay);
     assert_eq!(
         server
@@ -865,6 +852,7 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
         AuthoritativeRecoveryStatus::SessionRegistered
     );
 
+    let mut first_request = None;
     for (nonce, message) in [
         (92, "Prioritize the iron line before expanding."),
         (93, "Stabilize power before expanding the iron line."),
@@ -876,27 +864,44 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
             .get(agent_id.as_str())
             .and_then(|cell| cell.intent.as_ref())
             .map(|intent| intent.intent_id.clone());
+        let request = signed_agent_chat_request(
+            crate::viewer::AgentChatRequest {
+                agent_id: agent_id.clone(),
+                player_id: Some("player-a".to_string()),
+                public_key: None,
+                auth: None,
+                message: message.to_string(),
+                intent_tick: Some(nonce),
+                intent_seq: Some(nonce),
+                world_id: None,
+                reorg_epoch: None,
+                authority_scope: None,
+                replaces_intent_id,
+            },
+            nonce,
+            public_key.as_str(),
+            private_key.as_str(),
+        );
+        if nonce == 92 {
+            first_request = Some(request.clone());
+        }
         server
-            .handle_agent_chat(signed_agent_chat_request(
-                crate::viewer::AgentChatRequest {
-                    agent_id: agent_id.clone(),
-                    player_id: Some("player-a".to_string()),
-                    public_key: None,
-                    auth: None,
-                    message: message.to_string(),
-                    intent_tick: Some(nonce),
-                    intent_seq: Some(nonce),
-                    world_id: None,
-                    reorg_epoch: None,
-                    authority_scope: None,
-                    replaces_intent_id,
-                },
-                nonce,
-                public_key.as_str(),
-                private_key.as_str(),
-            ))
+            .handle_agent_chat(request)
             .expect("accepted player instruction");
     }
+
+    let replacement_replay = server
+        .handle_agent_chat(first_request.expect("retain first chat request"))
+        .expect("replay of superseded intent should return its durable disposition");
+    assert_eq!(replacement_replay.status.as_deref(), Some("superseded"));
+    assert!(replacement_replay.idempotent_replay);
+    assert_eq!(
+        replacement_replay.replaced_by.as_deref(),
+        server.world.state().agents[agent_id.as_str()]
+            .intent
+            .as_ref()
+            .map(|intent| intent.intent_id.as_str())
+    );
 
     let gameplay = server
         .compat_snapshot(Some("player-a"))

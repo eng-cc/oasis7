@@ -626,7 +626,6 @@ impl WorldState {
                         | (STATUS_ACCEPTED, "expired")
                         | (STATUS_ACCEPTED, "cancelled")
                         | (STATUS_ACCEPTED, "superseded")
-                        | (STATUS_BLOCKED, STATUS_ACCEPTED)
                         | (STATUS_BLOCKED, "rejected")
                         | (STATUS_BLOCKED, "expired")
                         | (STATUS_BLOCKED, "cancelled")

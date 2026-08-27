@@ -94,6 +94,11 @@ fn terminal_agent_chat_waits_past_ack_for_reply_or_error() {
             intent_tick: Some(7),
             intent_seq: Some(9),
             idempotent_replay: false,
+            intent_id: None,
+            accepted_event_seq: None,
+            status: None,
+            receipt_ref: None,
+            replaced_by: None,
         },
     };
     assert!(!terminal_agent_chat(&ack));

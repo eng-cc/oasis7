@@ -110,7 +110,16 @@ impl World {
         let start_index = start_index.min(self.journal.events.len());
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
         let mut replaying_tick: Option<WorldTime> = None;
+        let mut previous_event_time = self.state.time;
         for event in events {
+            if event.time < previous_event_time {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "journal event time {} cannot precede prior event time {}",
+                        event.time, previous_event_time
+                    ),
+                });
+            }
             if let Some(tick) = replaying_tick {
                 if event.time != tick {
                     self.record_tick_consensus_for_tick(tick)?;
@@ -120,6 +129,7 @@ impl World {
             self.state.time = event.time;
             self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
             replaying_tick = Some(event.time);
+            previous_event_time = event.time;
         }
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;

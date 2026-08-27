@@ -15425,6 +15425,10 @@ const AGENT_INTENT_SUMMARIES = Object.freeze({
   superseded: "Agent guidance was replaced by newer guidance."
 });
 const REASON_ALLOWLIST = Object.freeze({
+  insufficient_power: "Restore power to continue",
+  policy_denied: "This instruction is not permitted",
+  provider_unavailable: "Agent service is temporarily unavailable",
+  provider_rejected: "Agent service rejected this instruction",
   missing_material: "World prerequisites changed before execution.",
   material_shortage: "World prerequisites changed before execution.",
   permission_changed: "The requested operation is no longer authorized.",
@@ -15444,7 +15448,8 @@ const NEXT_STEP_ALLOWLIST = Object.freeze({
   control_lost: "Reselect the Agent after control is restored.",
   read_only: "Reselect the Agent in a controllable session.",
   unauthorized: "Request access before viewing this intent.",
-  blocked: "Recheck runtime state before resuming."
+  blocked: "Recheck runtime state before resuming.",
+  rejected: "Review the latest world state before retrying."
 });
 const ALLOWED_CONTROL_STATES = /* @__PURE__ */ new Set(["controllable", "read_only", "control_lost", "unauthorized", "unavailable"]);
 const ALLOWED_FRESHNESS = /* @__PURE__ */ new Set(["current", "stale", "reconnecting", "conflict"]);
@@ -15579,7 +15584,7 @@ function allowlistedNextStep(intent, status, stateKind) {
     valid: false,
     value: ""
   };
-  const fallbackKey = stateKind === "current" && status === "blocked" ? "blocked" : stateKind;
+  const fallbackKey = stateKind === "current" && (status === "blocked" || status === "rejected") ? status : stateKind;
   const expected = NEXT_STEP_ALLOWLIST[declared || fallbackKey] || "";
   const supplied = textValue$1(intent.next_step || intent.next_step_hint);
   if (supplied && supplied !== expected) return {

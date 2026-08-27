@@ -285,6 +285,11 @@ impl LiveWorld {
                 .intent_seq
                 .or_else(|| request.auth.as_ref().map(|auth| auth.nonce)),
             idempotent_replay: false,
+            intent_id: None,
+            accepted_event_seq: None,
+            status: None,
+            receipt_ref: None,
+            replaced_by: None,
         })
     }
 

@@ -82,6 +82,32 @@ describe("AgentIntentSurface fail-closed player copy boundary", () => {
   });
 
   it.each([
+    ["blocked", "insufficient_power", "Restore power to continue", "Recheck runtime state before resuming."],
+    ["rejected", "policy_denied", "This instruction is not permitted", "Review the latest world state before retrying."],
+    ["blocked", "provider_unavailable", "Agent service is temporarily unavailable", "Recheck runtime state before resuming."],
+    ["rejected", "provider_rejected", "Agent service rejected this instruction", "Review the latest world state before retrying."],
+  ])("renders canonical %s reason and next step for %s", (status, reasonCode, reasonSummary, nextStep) => {
+    const value = intent({
+      status,
+      message: status === "blocked"
+        ? "Agent guidance is blocked pending a runtime recheck."
+        : "Agent guidance was rejected by runtime authority.",
+      reason_code: reasonCode,
+      reason_summary: reasonSummary,
+    });
+    const model = describeAgentIntent(value);
+    expect(model.kind).toBe("current");
+    expect(model.statusLabel).toBe(status === "blocked" ? "Blocked" : "Rejected");
+    expect(model.reasonSummary).toBe(reasonSummary);
+    expect(model.nextStep).toBe(nextStep);
+    const surface = renderIntent(value);
+    expect(surface).toHaveTextContent(model.statusLabel);
+    expect(surface).toHaveTextContent(reasonSummary);
+    expect(surface).toHaveTextContent(nextStep);
+    expect(surface).not.toHaveTextContent("Intent unavailable");
+  });
+
+  it.each([
     ["missing intent", null, "Stop and refresh the world snapshot before retrying."],
     ["legacy schema", intent({ schema_version: 1 }), "Stop and refresh the world snapshot before retrying."],
     ["missing receipt", intent({ status: "completed", message: "Agent guidance completed with a confirmed world receipt.", receipt_ref: null }), "Wait for a committed world receipt, then refresh."],

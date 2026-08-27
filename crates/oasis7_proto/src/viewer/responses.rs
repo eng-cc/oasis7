@@ -63,6 +63,21 @@ pub struct AgentChatAck<Time> {
     pub intent_seq: Option<u64>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub idempotent_replay: bool,
+    /// Durable runtime identity. Older clients may ignore these additive
+    /// fields; retries use them instead of reconstructing acceptance from
+    /// response arrival time. `accepted_event_seq` is the canonical position.
+    /// The fields remain optional so older clients can continue decoding the
+    /// acknowledgement while newer clients preserve durable retry identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_event_seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {

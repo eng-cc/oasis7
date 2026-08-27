@@ -940,6 +940,11 @@ mod tests {
                 intent_tick: Some(42),
                 intent_seq: Some(17),
                 idempotent_replay: true,
+                intent_id: None,
+                accepted_event_seq: None,
+                status: None,
+                receipt_ref: None,
+                replaced_by: None,
             },
         };
         let json = serde_json::to_string(&response).expect("serialize response");

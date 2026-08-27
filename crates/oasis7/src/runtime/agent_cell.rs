@@ -81,12 +81,18 @@ pub struct AgentIntentReplayDisposition {
     pub intent_id: String,
     pub status: String,
     pub event_seq: u64,
+    /// Original runtime position of the intent, retained across terminal
+    /// transitions so retries never need to synthesize a wall-clock value.
+    #[serde(default)]
+    pub logical_time: WorldTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
 }
 
 impl From<&AgentIntentV2> for AgentIntentReplayDisposition {
@@ -95,9 +101,11 @@ impl From<&AgentIntentV2> for AgentIntentReplayDisposition {
             intent_id: intent.intent_id.clone(),
             status: intent.status.clone(),
             event_seq: intent.event_seq,
+            logical_time: intent.logical_time,
             receipt_ref: intent.receipt_ref.clone(),
             reason_code: intent.reason_code.clone(),
             reason_summary: intent.reason_summary.clone(),
+            replaced_by: intent.replaced_by.clone(),
         }
     }
 }

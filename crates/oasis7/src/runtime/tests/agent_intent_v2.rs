@@ -267,7 +267,7 @@ fn replaced_intent_event_is_replayable_without_promoting_activity_or_receipt() {
 }
 
 #[test]
-fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
+fn blocked_intent_cannot_resume_without_a_dedicated_authority_proof() {
     let mut accepted = canonical_intent("intent-lifecycle-2", "accepted", "Start recipe", None);
     accepted["effect_intent_id"] = serde_json::json!("effect-intent-lifecycle-2");
     let mut blocked = accepted.clone();
@@ -298,12 +298,20 @@ fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
         state.agents[AGENT_ID].intent.as_ref().unwrap().status,
         "blocked"
     );
-    state
-        .apply_domain_event(&intent_event("AgentIntentTransitioned", resumed), 8)
-        .unwrap();
+    let blocked_state = serde_json::to_vec(&state).expect("encode blocked state");
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", resumed), 8)
+            .is_err(),
+        "blocked -> accepted requires a dedicated authority-proof API"
+    );
     assert_eq!(
         state.agents[AGENT_ID].intent.as_ref().unwrap().status,
-        "accepted"
+        "blocked"
+    );
+    assert_eq!(
+        serde_json::to_vec(&state).expect("encode unchanged blocked state"),
+        blocked_state
     );
     assert!(
         state

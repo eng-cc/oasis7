@@ -153,6 +153,62 @@ fn player_chat_intent_journals_proposed_submitted_accepted_and_replays() {
 }
 
 #[test]
+fn provider_chat_response_does_not_synthesize_world_effect_or_completion() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let authority = AgentIntentAuthorityContext {
+        intent_tick: Some(7),
+        world_id: Some("runtime-world".to_string()),
+        reorg_epoch: Some(2),
+        authority_scope: Some("player_agent_chat".to_string()),
+        replaces_intent_id: None,
+    };
+
+    world
+        .record_agent_chat_intent_with_authority(
+            "player-provider-reply",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            authority,
+        )
+        .expect("persist accepted chat intent");
+    let accepted = world.state().agents[AGENT_ID]
+        .intent
+        .clone()
+        .expect("accepted chat intent");
+    let journal_len = world.journal().events.len();
+
+    // A provider response is an observation until a separately authorized
+    // world effect publishes a real receipt. It must not acquire a synthetic
+    // effect identity or complete the player intent on its own.
+    assert_eq!(accepted.status, "accepted");
+    assert!(accepted.effect_intent_id.is_none());
+    assert!(
+        world
+            .complete_agent_intent_with_receipt_exact(
+                AGENT_ID,
+                accepted.intent_id.as_str(),
+                accepted.request_digest.as_str(),
+                0,
+            )
+            .is_err()
+    );
+    assert_eq!(world.journal().events.len(), journal_len);
+    assert_eq!(
+        world.state().agents[AGENT_ID]
+            .intent
+            .as_ref()
+            .expect("chat intent remains current")
+            .status,
+        "accepted"
+    );
+}
+
+#[test]
 fn durable_digest_binds_intent_tick_world_reorg_and_authority_scope() {
     let mut state = WorldState::default();
     state
@@ -536,5 +592,44 @@ fn intent_updated_at_cannot_rewind_during_transition() {
             .apply_domain_event(&intent_event("AgentIntentTransitioned", rejected), 6)
             .is_err(),
         "a later lifecycle event cannot rewind updated_at"
+    );
+}
+
+#[test]
+fn replay_rejects_journal_events_with_decreasing_world_time() {
+    let state = WorldState::default();
+    let world = World::new_with_state(state);
+    let snapshot = world.snapshot();
+    let effect = |intent_id: &str| {
+        WorldEventBody::EffectQueued(EffectIntent {
+            intent_id: intent_id.to_string(),
+            kind: "test_effect".to_string(),
+            params: serde_json::json!({}),
+            cap_ref: "test".to_string(),
+            origin: EffectOrigin::System,
+        })
+    };
+    let journal = Journal {
+        events: vec![
+            WorldEvent {
+                id: 1,
+                time: 8,
+                caused_by: None,
+                body: effect("effect-time-8"),
+            },
+            WorldEvent {
+                id: 2,
+                time: 7,
+                caused_by: None,
+                body: effect("effect-time-7"),
+            },
+        ],
+    };
+
+    let error = World::from_snapshot(snapshot, journal)
+        .expect_err("replay must reject a journal time rewind");
+    assert!(
+        matches!(error, WorldError::ResourceBalanceInvalid { ref reason } if reason.contains("journal event time 7 cannot precede prior event time 8")),
+        "unexpected replay error: {error:?}"
     );
 }
