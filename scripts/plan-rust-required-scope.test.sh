@@ -134,6 +134,46 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
+# Pure PM implementation and test helpers are workflow-governance checks, not
+# Rust workspace changes.  Keep representative Python and test/sh paths in a
+# single union so one unclassified path cannot silently widen the whole plan.
+pm_workflow_output="$(plan_for_paths \
+  scripts/pm/terminal-task-audit.py \
+  scripts/pm/terminal-task-audit-project-semantics.test.py \
+  scripts/pm/github-project-workflow.py \
+  scripts/pm/github-project-workflow.test.sh)"
+assert_key_equals "$pm_workflow_output" scope targeted
+assert_key_equals "$pm_workflow_output" selected_capabilities workflow_governance
+assert_key_equals "$pm_workflow_output" run_rust_baseline false
+assert_key_equals "$pm_workflow_output" needs_rust_toolchain false
+assert_reason_contains "$pm_workflow_output" \
+  "workflow_governance:scripts/pm/terminal-task-audit.py"
+assert_reason_contains "$pm_workflow_output" \
+  "workflow_governance:scripts/pm/terminal-task-audit-project-semantics.test.py"
+assert_reason_contains "$pm_workflow_output" \
+  "workflow_governance:scripts/pm/github-project-workflow.py"
+assert_reason_contains "$pm_workflow_output" \
+  "workflow_governance:scripts/pm/github-project-workflow.test.sh"
+assert_reason_absent "$pm_workflow_output" "unclassified_or_unresolvable:"
+
+# An explicit gameplay/high-risk verification rule must union with the broad
+# PM workflow rule.  The specific rule retains its Rust capabilities while the
+# generic rule adds governance coverage.
+pm_gameplay_union_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"
+assert_key_equals "$pm_gameplay_union_output" scope targeted
+assert_key_equals "$pm_gameplay_union_output" selected_capabilities \
+  'oasis7_required;viewer_js_required;workflow_governance'
+assert_key_equals "$pm_gameplay_union_output" run_oasis7_required_tests true
+assert_key_equals "$pm_gameplay_union_output" run_viewer_contract_tests true
+assert_key_equals "$pm_gameplay_union_output" run_operational_contracts true
+assert_key_equals "$pm_gameplay_union_output" run_rust_baseline true
+assert_key_equals "$pm_gameplay_union_output" needs_rust_toolchain true
+assert_reason_contains "$pm_gameplay_union_output" \
+  "workflow_governance:scripts/pm/verify-gameplay-high-risk-hardening.sh"
+assert_reason_contains "$pm_gameplay_union_output" \
+  "viewer_gameplay_verification:scripts/pm/verify-gameplay-high-risk-hardening.sh"
+assert_reason_absent "$pm_gameplay_union_output" "unclassified_or_unresolvable:"
+
 # Workflow/PM changes should select the workflow and operational contract
 # checks without inheriting unrelated Rust crates.  This fixture is RED until
 # the planner has an explicit non-Rust workflow-governance capability.
