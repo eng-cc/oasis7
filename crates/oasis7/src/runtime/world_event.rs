@@ -99,6 +99,10 @@ pub enum CapabilityAuthorizationEvent {
         agent_id: String,
         identity: CapabilityAgentIdentity,
     },
+    SystemIdentityInstalled {
+        system_id: String,
+        epoch: u64,
+    },
     InvocationContextInstalled {
         key: String,
         context: CapabilityInvocationContext,
@@ -112,6 +116,17 @@ pub enum CapabilityAuthorizationEvent {
     },
     CommandCommitted {
         budget_key: String,
+        /// The predecessor budget values are retained beside the post-state
+        /// so replay can verify the exact deterministic spend transition even
+        /// when the live staged world already contains the post-state.
+        #[serde(default)]
+        budget_before_remaining_units: i64,
+        #[serde(default)]
+        budget_before_spent_units: i64,
+        #[serde(default)]
+        state_hash_before: String,
+        #[serde(default)]
+        receipt_hash: String,
         budget_account: CapabilityBudgetAccount,
         grant: CapabilityGrantV2,
         nonce_key: String,

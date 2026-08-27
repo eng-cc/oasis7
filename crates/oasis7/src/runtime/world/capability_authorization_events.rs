@@ -6,7 +6,8 @@
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use oasis7_wasm_abi::{
-    CapabilityAudience, CapabilityCatalogEntry, CapabilityGrantV2, ModuleCallCaller, canonical_hash,
+    CapabilityAudience, CapabilityCatalogEntry, CapabilityGrantV2, ModuleCallCaller,
+    canonical_hash, capability_scope_hash,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -182,6 +183,9 @@ impl World {
             CapabilityAuthorizationEvent::AgentIdentityInstalled { agent_id, identity } => {
                 apply_agent_identity(self, agent_id, identity)?;
             }
+            CapabilityAuthorizationEvent::SystemIdentityInstalled { system_id, epoch } => {
+                apply_system_identity(self, system_id, *epoch)?;
+            }
             CapabilityAuthorizationEvent::InvocationContextInstalled { key, context } => {
                 apply_invocation_context(self, key, context)?;
             }
@@ -193,6 +197,10 @@ impl World {
             }
             CapabilityAuthorizationEvent::CommandCommitted {
                 budget_key,
+                budget_before_remaining_units,
+                budget_before_spent_units,
+                state_hash_before,
+                receipt_hash,
                 budget_account,
                 grant,
                 nonce_key,
@@ -203,6 +211,10 @@ impl World {
                 apply_command_commit(
                     self,
                     budget_key,
+                    *budget_before_remaining_units,
+                    *budget_before_spent_units,
+                    state_hash_before,
+                    receipt_hash,
                     budget_account,
                     grant,
                     nonce_key,
@@ -247,13 +259,18 @@ fn apply_authority_record(
         .get(&record.issuer_id)
         && existing != record
     {
-        return Err(deny("authority record is immutable"));
+        validate_authority_record_transition(existing, record)?;
     }
     if let Some(existing) = world
         .capability_revocation_state
         .authority_finality_proofs
         .get(&record.issuer_id)
         && existing != proof
+        && world
+            .capability_revocation_state
+            .authority_records
+            .get(&record.issuer_id)
+            == Some(record)
     {
         return Err(deny("authority finality proof is immutable"));
     }
@@ -279,6 +296,88 @@ fn apply_authority_record(
         .capability_revocation_state
         .authority_finality_proofs
         .insert(record.issuer_id.clone(), proof.clone());
+    Ok(())
+}
+
+/// Authority updates are themselves governed transitions.  A proof over a
+/// replacement record is not enough on its own: replay must also establish
+/// that the replacement did not erase a prior revocation/supersession or
+/// silently change an issuer's governance context.
+fn validate_authority_record_transition(
+    previous: &CapabilityAuthorityRecord,
+    next: &CapabilityAuthorityRecord,
+) -> Result<(), WorldError> {
+    if previous.issuer_id != next.issuer_id
+        || previous.issuer_kind != next.issuer_kind
+        || previous.world_id != next.world_id
+        || previous.branch_id != next.branch_id
+        || previous.finality_epoch != next.finality_epoch
+        || previous.finality_block_hash != next.finality_block_hash
+        || previous.finality_status != next.finality_status
+    {
+        return Err(deny(
+            "authority transition changes its finalized governance context",
+        ));
+    }
+    let key_rotation = previous.issuer_key_epoch != next.issuer_key_epoch
+        || previous.key_id != next.key_id
+        || previous.public_key_hex != next.public_key_hex;
+    if key_rotation {
+        if next.issuer_key_epoch <= previous.issuer_key_epoch
+            || next.authority_rotation_receipt_id.is_none()
+            || next.authority_rotation_receipt_id == previous.authority_rotation_receipt_id
+            || next.governance_epoch < previous.governance_epoch
+        {
+            return Err(deny(
+                "authority key rotation requires a strictly newer key epoch and receipt",
+            ));
+        }
+    } else if previous.authority_rotation_receipt_id != next.authority_rotation_receipt_id
+        || previous.governance_epoch != next.governance_epoch
+        || previous.finalized_receipt_id != next.finalized_receipt_id
+    {
+        return Err(deny(
+            "authority rotation or governance receipt changed without a key rotation",
+        ));
+    }
+    if next.revocation_epoch < previous.revocation_epoch
+        || !next
+            .revoked_grant_ids
+            .is_superset(&previous.revoked_grant_ids)
+    {
+        return Err(deny("authority transition regressed revocation state"));
+    }
+    let revocation_changed = next.revoked_grant_ids != previous.revoked_grant_ids
+        || next.superseded_by != previous.superseded_by;
+    if revocation_changed && !key_rotation && next.revocation_epoch <= previous.revocation_epoch {
+        return Err(deny(
+            "revocation or supersession transition requires a newer registry epoch",
+        ));
+    }
+    for (grant_id, replacement_id) in &previous.superseded_by {
+        if next.superseded_by.get(grant_id) != Some(replacement_id) {
+            return Err(deny("authority transition erased supersession state"));
+        }
+    }
+    for (grant_id, replacement_id) in &next.superseded_by {
+        if grant_id == replacement_id
+            || !is_sha256_hex(grant_id)
+            || !is_sha256_hex(replacement_id)
+            || next.revoked_grant_ids.contains(replacement_id)
+        {
+            return Err(deny(
+                "authority transition contains an invalid supersession target",
+            ));
+        }
+        let mut cursor = replacement_id.as_str();
+        let mut visited = BTreeSet::new();
+        while let Some(next_target) = next.superseded_by.get(cursor) {
+            if !visited.insert(cursor.to_string()) || next_target == grant_id {
+                return Err(deny("authority supersession graph contains a cycle"));
+            }
+            cursor = next_target.as_str();
+        }
+    }
     Ok(())
 }
 
@@ -312,6 +411,29 @@ fn apply_agent_identity(
         .capability_revocation_state
         .agent_identities
         .insert(agent_id.to_string(), identity.clone());
+    Ok(())
+}
+
+fn apply_system_identity(world: &mut World, system_id: &str, epoch: u64) -> Result<(), WorldError> {
+    if system_id.trim().is_empty() || epoch > world.state.time {
+        return Err(deny("capability system identity is not live"));
+    }
+    if let Some(existing) = world
+        .capability_revocation_state
+        .system_identities
+        .get(system_id)
+    {
+        if *existing != epoch {
+            return Err(deny(
+                "capability system identity changed without a new epoch",
+            ));
+        }
+        return Ok(());
+    }
+    world
+        .capability_revocation_state
+        .system_identities
+        .insert(system_id.to_string(), epoch);
     Ok(())
 }
 
@@ -366,6 +488,7 @@ fn apply_registered_grant(
     validate_grant_body(grant, time)?;
     world.verify_issuer(grant)?;
     world.verify_live_revocation(grant)?;
+    world.verify_parent_chain(grant)?;
     let encoded = serde_json::to_value(grant)?;
     if let Some(existing) = world.capability_grants_v2.get(&grant.grant_id)
         && existing != &encoded
@@ -382,6 +505,10 @@ fn apply_registered_grant(
 fn apply_command_commit(
     world: &mut World,
     budget_key: &str,
+    budget_before_remaining_units: i64,
+    budget_before_spent_units: i64,
+    state_hash_before: &str,
+    receipt_hash: &str,
     budget_account: &CapabilityBudgetAccount,
     grant: &CapabilityGrantV2,
     nonce_key: &str,
@@ -393,12 +520,41 @@ fn apply_command_commit(
     validate_grant_body(grant, time)?;
     world.verify_issuer(grant)?;
     world.verify_live_revocation(grant)?;
+    world.verify_parent_chain(grant)?;
     validate_budget_account(budget_account)?;
+    if state_hash_before != receipt.state_hash_before
+        || !is_sha256_hex(receipt_hash)
+        || authorization_receipt_hash(receipt)? != receipt_hash
+    {
+        return Err(deny(
+            "capability authorization receipt integrity check failed",
+        ));
+    }
     if capability_budget_key(&budget_account.subject, &budget_account.grant_id)? != budget_key
         || budget_account.subject != grant.subject
         || budget_account.grant_id != grant.grant_id
+        || budget_before_remaining_units < 0
+        || budget_before_spent_units < 0
+        || budget_account.reserved_units != 0
     {
         return Err(deny("capability command budget binding is invalid"));
+    }
+    if receipt.budget_before != budget_before_remaining_units
+        || receipt.budget_after != Some(budget_account.remaining_units)
+        || budget_account.spent_units < budget_before_spent_units
+        || budget_account.remaining_units
+            != budget_before_remaining_units
+                .saturating_sub(budget_account.spent_units - budget_before_spent_units)
+    {
+        return Err(deny("capability command budget transition is invalid"));
+    }
+    if let Some(existing) = world.capability_budget_accounts.get(budget_key)
+        && existing != budget_account
+        && (existing.remaining_units != budget_before_remaining_units
+            || existing.reserved_units != 0
+            || existing.spent_units != budget_before_spent_units)
+    {
+        return Err(deny("capability command budget predecessor is invalid"));
     }
     if nonce_record.state != "committed"
         || nonce_record.request_hash.trim().is_empty()
@@ -416,6 +572,27 @@ fn apply_command_commit(
     if authorization_nonce_key(grant, response_nonce)? != nonce_key {
         return Err(deny("capability command nonce key is not canonical"));
     }
+    let context_key =
+        capability_invocation_context_key_for_values(grant.grant_id.as_str(), response_nonce)?;
+    let context = world
+        .capability_invocation_contexts
+        .get(&context_key)
+        .or_else(|| world.capability_invocation_contexts.get(&grant.grant_id))
+        .ok_or_else(|| deny("capability command invocation context is missing"))?;
+    let context_presenter = serde_json::to_value(&context.presenter)?;
+    if context.grant_id != grant.grant_id
+        || context.subject != grant.subject
+        || context.audience != grant.audience
+        || context.module_id != grant.scope.module_id
+        || context.module_version != grant.scope.module_version
+        || context.response_nonce != response_nonce
+        || context_presenter != receipt.presenter.clone().unwrap_or_default()
+        || context.catalog_snapshot_id != receipt.catalog_snapshot_id.clone().unwrap_or_default()
+    {
+        return Err(deny(
+            "capability command receipt invocation context binding is invalid",
+        ));
+    }
     if receipt.grant_id.as_deref() != Some(grant.grant_id.as_str())
         || receipt.authorization_nonce_key_hash.as_deref() != Some(nonce_key)
         || receipt.decision != "accepted"
@@ -424,6 +601,25 @@ fn apply_command_commit(
         || receipt.canonical_result_hash.trim().is_empty()
         || receipt.subject != serde_json::to_value(&grant.subject)?
         || receipt.audience != serde_json::to_value(&grant.audience)?
+        || receipt.presenter.is_none()
+        || receipt.scope_hash
+            != capability_scope_hash(&grant.scope)
+                .map_err(|error| deny(format!("scope hash: {error}")))?
+        || receipt.module_id.as_deref() != Some(grant.scope.module_id.as_str())
+        || receipt.module_version.as_deref() != Some(grant.scope.module_version.as_str())
+        || receipt
+            .catalog_snapshot_id
+            .as_deref()
+            .is_none_or(str::is_empty)
+        || receipt.state_hash_before.trim().is_empty()
+        || receipt
+            .state_hash_after
+            .as_deref()
+            .is_none_or(str::is_empty)
+        || !is_sha256_hex(receipt.state_hash_before.as_str())
+        || !is_sha256_hex(receipt.state_hash_after.as_deref().unwrap_or_default())
+        || !is_sha256_hex(receipt.canonical_request_hash.as_str())
+        || !is_sha256_hex(receipt.canonical_result_hash.as_str())
     {
         return Err(deny(
             "capability command receipt journal binding is invalid",
@@ -441,6 +637,29 @@ fn apply_command_commit(
     {
         return Err(deny(
             "capability command receipt finality binding is invalid",
+        ));
+    }
+    let active_manifest = world
+        .active_module_manifest(grant.scope.module_id.as_str())
+        .map_err(|error| {
+            deny(format!(
+                "capability command receipt module is missing: {error:?}"
+            ))
+        })?;
+    let manifest_hash = canonical_hash(&active_manifest)
+        .map_err(|error| deny(format!("capability command receipt manifest hash: {error}")))?;
+    if receipt.manifest_hash.as_deref() != Some(manifest_hash.as_str())
+        || receipt.state_hash_after.as_deref()
+            != Some(
+                canonical_hash(&world.state)
+                    .map_err(|error| {
+                        deny(format!("capability command receipt state hash: {error}"))
+                    })?
+                    .as_str(),
+            )
+    {
+        return Err(deny(
+            "capability command receipt state or manifest hash is invalid",
         ));
     }
     // Sandbox output events are journaled between the preflight head and the
@@ -574,6 +793,11 @@ fn validate_grant_body(grant: &CapabilityGrantV2, time: WorldTime) -> Result<(),
     grant
         .validate()
         .map_err(|error| deny(format!("grant validation: {error}")))?;
+    if grant.status != "verified" {
+        return Err(deny(
+            "only finalized and verified grants may enter durable authorization state",
+        ));
+    }
     if !grant
         .body_hash_matches()
         .map_err(|error| deny(format!("grant body hash: {error}")))?
@@ -588,6 +812,16 @@ fn validate_grant_body(grant: &CapabilityGrantV2, time: WorldTime) -> Result<(),
         return Err(deny("grant is not issued at the current logical tick"));
     }
     Ok(())
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+pub(super) fn authorization_receipt_hash(
+    receipt: &CapabilityAuthorizationAuditReceipt,
+) -> Result<String, WorldError> {
+    canonical_hash(receipt).map_err(|error| deny(format!("authorization receipt hash: {error}")))
 }
 
 pub(super) fn module_call_caller(subject: &oasis7_wasm_abi::CapabilitySubject) -> ModuleCallCaller {
@@ -658,7 +892,16 @@ pub(super) fn validate_subject_for_manifest(
                 ));
             }
         }
-        oasis7_wasm_abi::CapabilitySubject::System { .. } => {}
+        oasis7_wasm_abi::CapabilitySubject::System { system_id, epoch } => {
+            if world
+                .capability_revocation_state
+                .system_identities
+                .get(system_id)
+                != Some(epoch)
+            {
+                return Err(deny("system subject does not identify a live binding"));
+            }
+        }
     }
     Ok(())
 }
@@ -758,8 +1001,43 @@ pub(super) fn scope_selectors_match_json(
     scope: &oasis7_wasm_abi::CapabilityScope,
     payload: &serde_json::Value,
 ) -> bool {
+    if !canonical_target_payload(payload) {
+        return false;
+    }
     selector_matches_json(scope.entity_selector.as_deref(), payload, "entity_id")
         && selector_matches_json(scope.resource_selector.as_deref(), payload, "resource_id")
+}
+
+/// Commands and effects use a deliberately small target schema.  Arbitrary
+/// `*_id`/recipient/target fields are not accepted as an implicit target: a
+/// producer must use `entity_id` and/or `resource_id`, and the grant must
+/// carry the corresponding selector.  Walk nested JSON too, otherwise a
+/// provider could hide an opaque target under a metadata object.
+fn canonical_target_payload(payload: &serde_json::Value) -> bool {
+    match payload {
+        serde_json::Value::Object(fields) => fields.iter().all(|(field, value)| {
+            let normalized = field.to_ascii_lowercase();
+            let allowed = matches!(normalized.as_str(), "entity_id" | "resource_id");
+            let target_bearing = allowed
+                || normalized == "target"
+                || normalized == "target_id"
+                || normalized == "target_ids"
+                || normalized == "object_id"
+                || normalized == "object_ids"
+                || normalized == "recipient"
+                || normalized == "recipient_id"
+                || normalized == "recipient_ids"
+                || normalized == "owner_id"
+                || normalized == "owner_ids"
+                || normalized == "destination_id"
+                || normalized == "destination_ids"
+                || normalized.ends_with("_id")
+                || normalized.ends_with("_ids");
+            (!target_bearing || allowed && value.is_string()) && canonical_target_payload(value)
+        }),
+        serde_json::Value::Array(values) => values.iter().all(canonical_target_payload),
+        _ => true,
+    }
 }
 
 fn selector_matches_json(

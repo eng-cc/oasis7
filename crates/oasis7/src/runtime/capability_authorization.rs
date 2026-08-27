@@ -183,6 +183,11 @@ pub struct CapabilityRevocationState {
     /// Live agent id -> owner/generation binding used by capability subjects.
     #[serde(default)]
     pub agent_identities: BTreeMap<String, CapabilityAgentIdentity>,
+    /// Runtime-bound system id -> current authorization epoch.  System
+    /// subjects are not inferred from an enum value; the trusted host must
+    /// journal a binding before the subject can execute.
+    #[serde(default)]
+    pub system_identities: BTreeMap<String, u64>,
 }
 
 /// A durable record for the complete authorization nonce tuple.

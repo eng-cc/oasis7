@@ -350,6 +350,17 @@ pub enum GovernanceEvent {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         signer_node_ids: Vec<String>,
     },
+    /// Historical signer/finality inputs are journaled at the epoch in which
+    /// they were used.  Replay must not depend on a mutable current snapshot.
+    FinalityEpochSnapshotSet {
+        snapshot: GovernanceFinalityEpochSnapshot,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        previous: Option<GovernanceFinalityEpochSnapshot>,
+    },
+    FinalityEpochSnapshotRemoved {
+        epoch_id: u64,
+        snapshot: GovernanceFinalityEpochSnapshot,
+    },
     EmergencyBrakeActivated {
         initiator: String,
         reason: String,

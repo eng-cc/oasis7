@@ -98,6 +98,23 @@ impl World {
         if self.capability_invocation_contexts.get(&key) == Some(&context) {
             return Ok(());
         }
+        if let oasis7_wasm_abi::CapabilitySubject::System { system_id, epoch } = &context.subject
+            && self
+                .capability_revocation_state
+                .system_identities
+                .get(system_id)
+                != Some(epoch)
+        {
+            self.append_event(
+                WorldEventBody::CapabilityAuthorization(
+                    CapabilityAuthorizationEvent::SystemIdentityInstalled {
+                        system_id: system_id.clone(),
+                        epoch: *epoch,
+                    },
+                ),
+                None,
+            )?;
+        }
         self.append_event(
             WorldEventBody::CapabilityAuthorization(
                 CapabilityAuthorizationEvent::InvocationContextInstalled { key, context },
@@ -159,11 +176,32 @@ impl World {
         if grant.expires_at_tick.is_none() {
             return Err(deny("grant must carry an explicit expiry"));
         }
+        if grant.status != "verified" {
+            return Err(deny(
+                "only finalized and verified grants may enter durable authorization state",
+            ));
+        }
         if grant.issued_at_tick > self.state.time {
             return Err(deny("grant is not issued at the current logical tick"));
         }
         self.verify_issuer(&grant)?;
         self.verify_live_revocation(&grant)?;
+        self.verify_parent_chain(&grant)?;
+        if let oasis7_wasm_abi::CapabilitySubject::System { system_id, .. } = &grant.subject {
+            let manifest = self
+                .active_module_manifest(grant.scope.module_id.as_str())
+                .map_err(|error| deny(format!("system subject module is not live: {error:?}")))?;
+            let expected_system_id = grant
+                .scope
+                .module_id
+                .strip_prefix("module.")
+                .map(|suffix| format!("system-{suffix}"));
+            if expected_system_id.as_deref() != Some(system_id.as_str())
+                || manifest.version != grant.scope.module_version
+            {
+                return Err(deny("system subject is not bound to a live module system"));
+            }
+        }
         let encoded = serde_json::to_value(&grant)?;
         if let Some(existing) = self.capability_grants_v2.get(&grant.grant_id)
             && existing != &encoded
@@ -347,6 +385,7 @@ impl World {
         if response.provider_id.as_deref() != Some(response.presenter.presenter_id.as_str()) {
             return Err(deny("provider identity is not the presented presenter"));
         }
+        self.verify_live_capability_audience(&grant, &catalog, &response)?;
 
         self.verify_issuer(&grant)?;
         self.verify_live_revocation(&grant)?;
@@ -449,6 +488,11 @@ impl World {
             .get(&budget_key)
             .ok_or_else(|| deny("capability budget account is not available"))?
             .remaining_units;
+        let budget_before_spent = self
+            .capability_budget_accounts
+            .get(&budget_key)
+            .ok_or_else(|| deny("capability budget account is not available"))?
+            .spent_units;
         let reservation_units =
             budget_reservation_units(response.envelope.payload.len(), &manifest.limits)?;
         if budget_before < reservation_units {
@@ -554,6 +598,13 @@ impl World {
             WorldEventBody::CapabilityAuthorization(
                 CapabilityAuthorizationEvent::CommandCommitted {
                     budget_key,
+                    budget_before_remaining_units: budget_before,
+                    budget_before_spent_units: budget_before_spent,
+                    state_hash_before: receipt.state_hash_before.clone(),
+                    receipt_hash:
+                        super::capability_authorization_events::authorization_receipt_hash(
+                            &receipt,
+                        )?,
                     budget_account,
                     grant,
                     nonce_key: nonce_key_hash,
@@ -576,6 +627,12 @@ impl World {
             .get(&issuer.issuer_id)
             .ok_or_else(|| deny("issuer has no finalized authority record"))?;
         validate_authority_record(authority)?;
+        let proof = self
+            .capability_revocation_state
+            .authority_finality_proofs
+            .get(&issuer.issuer_id)
+            .ok_or_else(|| deny("issuer has no replayable finality proof"))?;
+        self.verify_capability_authority_finality_proof(authority, proof)?;
         if issuer.issuer_kind != authority.issuer_kind
             || issuer.governance_epoch != authority.governance_epoch
             || issuer.finalized_receipt_id != authority.finalized_receipt_id
@@ -692,6 +749,7 @@ impl World {
         {
             return Err(deny("live authorization changed before commit"));
         }
+        self.verify_live_capability_audience(grant, catalog, response)?;
         if manifest.module_id != response.selected_entry.module_id
             || manifest.version != response.selected_entry.module_version
         {
@@ -726,65 +784,6 @@ impl World {
             return Err(deny("grant is revoked or superseded"));
         }
         Ok(())
-    }
-
-    fn verify_parent_chain(&self, grant: &CapabilityGrantV2) -> Result<(), WorldError> {
-        let mut visited = BTreeSet::new();
-        self.verify_parent_chain_inner(grant, &mut visited)
-    }
-
-    fn verify_parent_chain_inner(
-        &self,
-        grant: &CapabilityGrantV2,
-        visited: &mut BTreeSet<String>,
-    ) -> Result<(), WorldError> {
-        let Some(parent_id) = &grant.parent_grant_id else {
-            return Ok(());
-        };
-        if !visited.insert(parent_id.clone()) {
-            return Err(deny("delegated grant parent chain contains a cycle"));
-        }
-        let parent = self
-            .capability_grants_v2
-            .get(parent_id)
-            .ok_or_else(|| deny("parent grant is not in the durable registry"))?;
-        let parent: CapabilityGrantV2 = serde_json::from_value(parent.clone())
-            .map_err(|_| deny("parent grant is malformed"))?;
-        parent
-            .validate()
-            .map_err(|error| deny(format!("parent grant validation: {error}")))?;
-        if !parent
-            .body_hash_matches()
-            .map_err(|error| deny(format!("parent grant body hash: {error}")))?
-            || parent
-                .expected_grant_id()
-                .map_err(|error| deny(format!("parent grant id hash: {error}")))?
-                != parent.grant_id
-        {
-            return Err(deny("parent grant canonical body hash or id mismatch"));
-        }
-        if parent.expires_at_tick.is_none()
-            || parent
-                .expires_at_tick
-                .is_some_and(|expiry| self.state.time > expiry)
-            || parent.issued_at_tick > self.state.time
-        {
-            return Err(deny("parent grant lifetime is not currently valid"));
-        }
-        self.verify_issuer(&parent)?;
-        self.verify_live_revocation(&parent)?;
-        let expiry_attenuates = match (parent.expires_at_tick, grant.expires_at_tick) {
-            (Some(parent_expiry), Some(child_expiry)) => child_expiry <= parent_expiry,
-            _ => false,
-        };
-        if parent.status != "verified"
-            || parent.delegation_depth <= grant.delegation_depth
-            || !expiry_attenuates
-            || !parent.scope.contains_subset(&grant.scope)
-        {
-            return Err(deny("delegated grant does not attenuate its parent"));
-        }
-        self.verify_parent_chain_inner(&parent, visited)
     }
 
     fn verify_catalog_freshness(
@@ -1094,6 +1093,15 @@ pub(super) fn validate_authority_record(
     if record.finality_status != "finalized" {
         return Err(deny("authority record is not finalized"));
     }
+    if record
+        .authority_rotation_receipt_id
+        .as_deref()
+        .is_some_and(|receipt| receipt.trim().is_empty())
+    {
+        return Err(deny(
+            "capability authority rotation receipt cannot be empty",
+        ));
+    }
     let key_bytes = hex::decode(record.public_key_hex.trim())
         .map_err(|_| deny("authority record public key is invalid hex"))?;
     let key_bytes: [u8; 32] = key_bytes
@@ -1106,12 +1114,29 @@ pub(super) fn validate_authority_record(
         .iter()
         .any(|grant_id| grant_id.trim().is_empty())
         || record.superseded_by.iter().any(|(grant_id, replacement)| {
-            grant_id.trim().is_empty() || replacement.trim().is_empty()
+            grant_id == replacement
+                || !is_canonical_grant_id(grant_id)
+                || !is_canonical_grant_id(replacement)
+                || record.revoked_grant_ids.contains(replacement)
         })
     {
-        return Err(deny("authority record contains an empty revocation id"));
+        return Err(deny("authority record contains an invalid supersession id"));
+    }
+    for (grant_id, replacement_id) in &record.superseded_by {
+        let mut cursor = replacement_id.as_str();
+        let mut visited = BTreeSet::new();
+        while let Some(next_target) = record.superseded_by.get(cursor) {
+            if !visited.insert(cursor.to_string()) || next_target == grant_id {
+                return Err(deny("authority record supersession graph contains a cycle"));
+            }
+            cursor = next_target.as_str();
+        }
     }
     Ok(())
+}
+
+fn is_canonical_grant_id(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 pub(super) fn validate_agent_identity(

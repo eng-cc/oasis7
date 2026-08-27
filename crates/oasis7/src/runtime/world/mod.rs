@@ -15,6 +15,7 @@ mod capability_authorization;
 mod capability_authorization_admin;
 mod capability_authorization_events;
 mod capability_authorization_state;
+mod capability_authorization_validation;
 mod economy;
 mod effects;
 mod event_processing;

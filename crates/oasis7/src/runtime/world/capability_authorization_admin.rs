@@ -45,14 +45,6 @@ impl World {
         {
             return Err(deny("authority record world does not match live world"));
         }
-        if let Some(existing) = self
-            .capability_revocation_state
-            .authority_records
-            .get(&record.issuer_id)
-            && existing != &record
-        {
-            return Err(deny("authority record is immutable"));
-        }
         self.append_event(
             WorldEventBody::CapabilityAuthorization(
                 CapabilityAuthorizationEvent::AuthorityInstalledWithProof { record, proof },
@@ -60,6 +52,88 @@ impl World {
             None,
         )?;
         Ok(())
+    }
+
+    /// Apply a quorum-proof-bearing revocation transition.  The updated
+    /// authority record is journaled as the transition evidence; replay
+    /// verifies that it is monotonic before exposing the new revocation set.
+    pub fn revoke_capability_grant_v2_with_finality_proof(
+        &mut self,
+        grant_id: &str,
+        mut record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        if grant_id.trim().is_empty() {
+            return Err(deny("capability revocation grant id is required"));
+        }
+        record.revoked_grant_ids.insert(grant_id.to_string());
+        self.install_capability_authority_record_with_finality_proof(record, proof)
+    }
+
+    /// Apply a proof-bearing immutable supersession transition. The
+    /// replacement may be issued in the same governed batch; replay checks
+    /// canonical ids, monotonic state, and cycle freedom before use.
+    pub fn supersede_capability_grant_v2_with_finality_proof(
+        &mut self,
+        grant_id: &str,
+        replacement_grant_id: &str,
+        mut record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        if grant_id.trim().is_empty() || replacement_grant_id.trim().is_empty() {
+            return Err(deny("capability supersession grant ids are required"));
+        }
+        if grant_id == replacement_grant_id {
+            return Err(deny("capability supersession cannot target itself"));
+        }
+        record
+            .superseded_by
+            .insert(grant_id.to_string(), replacement_grant_id.to_string());
+        self.install_capability_authority_record_with_finality_proof(record, proof)
+    }
+
+    /// Apply a proof-bearing trust-root/key rotation.  The authority
+    /// transition validator requires a newer key epoch and a non-empty
+    /// rotation receipt, and immediately stops accepting grants signed by the
+    /// prior key epoch.
+    pub fn rotate_capability_trust_root_with_finality_proof(
+        &mut self,
+        record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        self.install_capability_authority_record_with_finality_proof(record, proof)
+    }
+
+    pub fn revoke_capability_grant_v2_with_proof(
+        &mut self,
+        grant_id: &str,
+        record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        self.revoke_capability_grant_v2_with_finality_proof(grant_id, record, proof)
+    }
+
+    pub fn supersede_capability_grant_v2_with_proof(
+        &mut self,
+        grant_id: &str,
+        replacement_grant_id: &str,
+        record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        self.supersede_capability_grant_v2_with_finality_proof(
+            grant_id,
+            replacement_grant_id,
+            record,
+            proof,
+        )
+    }
+
+    pub fn rotate_capability_trust_root_with_proof(
+        &mut self,
+        record: CapabilityAuthorityRecord,
+        proof: CapabilityAuthorityFinalityProof,
+    ) -> Result<(), WorldError> {
+        self.rotate_capability_trust_root_with_finality_proof(record, proof)
     }
 
     /// Install the durable owner/generation binding for a live Agent subject.

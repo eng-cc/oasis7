@@ -1,5 +1,4 @@
 use super::*;
-
 impl World {
     pub(crate) fn governance_finality_registry_epoch_snapshot(
         &self,
@@ -31,7 +30,6 @@ impl World {
             validator_stakes: registry.validator_stakes.clone(),
         })
     }
-
     pub(crate) fn normalize_governance_finality_epoch_snapshot(
         &self,
         snapshot: &mut GovernanceFinalityEpochSnapshot,
@@ -160,7 +158,6 @@ impl World {
         snapshot.validator_stakes = normalized_stakes;
         Ok(())
     }
-
     pub(crate) fn validate_governance_finality_signer_registry(
         &self,
         mut registry: GovernanceFinalitySignerRegistry,
@@ -270,7 +267,6 @@ impl World {
         registry.validator_stakes = normalized_stakes;
         Ok(registry)
     }
-
     fn validate_governance_threshold_signer_policy(
         account_id: &str,
         mut policy: GovernanceThresholdSignerPolicy,
@@ -304,7 +300,6 @@ impl World {
         policy.allowed_public_keys = normalized_public_keys;
         Ok(policy)
     }
-
     pub(crate) fn validate_governance_main_token_controller_registry(
         mut registry: GovernanceMainTokenControllerRegistry,
     ) -> Result<GovernanceMainTokenControllerRegistry, WorldError> {
@@ -379,11 +374,9 @@ impl World {
         registry.restricted_starter_claim_admin_account_ids = normalized_restricted_admins;
         Ok(registry)
     }
-
     pub(crate) fn current_governance_epoch(&self) -> u64 {
         self.governance_epoch_for_time(self.state.time)
     }
-
     fn governance_epoch_for_time(&self, time: u64) -> u64 {
         let epoch_len = self.governance_execution_policy.epoch_length_ticks.max(1);
         time / epoch_len
@@ -739,6 +732,44 @@ impl World {
                 proposal.status = ProposalStatus::Applied {
                     manifest_hash: applied_hash,
                 };
+            }
+            GovernanceEvent::FinalityEpochSnapshotSet { snapshot, previous } => {
+                let current = self
+                    .governance_finality_epoch_snapshots
+                    .get(&snapshot.epoch_id)
+                    .cloned();
+                if current != *previous {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "governance finality snapshot predecessor drift: epoch_id={}",
+                            snapshot.epoch_id
+                        ),
+                    });
+                }
+                let mut normalized = snapshot.clone();
+                self.normalize_governance_finality_epoch_snapshot(&mut normalized)?;
+                if normalized != *snapshot {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "governance finality snapshot normalization drift: epoch_id={}",
+                            snapshot.epoch_id
+                        ),
+                    });
+                }
+                self.governance_finality_epoch_snapshots
+                    .insert(snapshot.epoch_id, snapshot.clone());
+            }
+            GovernanceEvent::FinalityEpochSnapshotRemoved { epoch_id, snapshot } => {
+                if snapshot.epoch_id != *epoch_id
+                    || self.governance_finality_epoch_snapshots.get(epoch_id) != Some(snapshot)
+                {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "governance finality snapshot removal drift: epoch_id={epoch_id}"
+                        ),
+                    });
+                }
+                self.governance_finality_epoch_snapshots.remove(epoch_id);
             }
             GovernanceEvent::EmergencyBrakeActivated {
                 active_until_tick,

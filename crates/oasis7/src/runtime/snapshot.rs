@@ -84,6 +84,11 @@ pub struct Snapshot {
     pub state: WorldState,
     pub journal_len: usize,
     pub last_event_id: WorldEventId,
+    /// Canonical commitment to the journal prefix represented by this
+    /// checkpoint.  Older snapshots may omit it and are accepted only for
+    /// compatibility; newly written checkpoints always include it.
+    #[serde(default)]
+    pub journal_commitment: String,
     #[serde(default)]
     pub event_id_era: u64,
     pub next_action_id: ActionId,

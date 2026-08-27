@@ -111,6 +111,10 @@ impl World {
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
         let mut replaying_tick: Option<WorldTime> = None;
         let mut previous_event_time = self.state.time;
+        let require_capability_commit = self.capability_authorization_receipts.is_empty()
+            && !self.capability_invocation_contexts.is_empty();
+        let mut capability_state_update_seen = false;
+        let mut capability_command_commit_seen = false;
         for event in events {
             if event.time < previous_event_time {
                 return Err(WorldError::ResourceBalanceInvalid {
@@ -125,6 +129,19 @@ impl World {
                     self.record_tick_consensus_for_tick(tick)?;
                 }
             }
+            if require_capability_commit {
+                match &event.body {
+                    WorldEventBody::ModuleStateUpdated(_) => {
+                        capability_state_update_seen = true;
+                    }
+                    WorldEventBody::CapabilityAuthorization(
+                        super::super::CapabilityAuthorizationEvent::CommandCommitted { .. },
+                    ) => {
+                        capability_command_commit_seen = true;
+                    }
+                    _ => {}
+                }
+            }
             self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
             self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
@@ -133,6 +150,12 @@ impl World {
         }
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;
+        }
+        if require_capability_commit
+            && capability_state_update_seen
+            && !capability_command_commit_seen
+        {
+            return Err(WorldError::JournalMismatch);
         }
         Ok(())
     }
