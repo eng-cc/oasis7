@@ -39,6 +39,10 @@ query($ids: [ID!]!) {
         }
       }
       fieldValues(first: 100) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           ... on ProjectV2ItemFieldTextValue {
             text
@@ -309,6 +313,9 @@ def project_item_from_graphql_node(node: dict[str, Any]) -> dict[str, Any]:
         "content": node.get("content") or {},
         "_project_id": project.get("id") or "",
         "_project_number": project.get("number") or "",
+        "_field_values_has_next_page": bool(
+            ((node.get("fieldValues") or {}).get("pageInfo") or {}).get("hasNextPage")
+        ),
     }
     for field_value_node in ((node.get("fieldValues") or {}).get("nodes") or []):
         field = field_value_node.get("field") or {}

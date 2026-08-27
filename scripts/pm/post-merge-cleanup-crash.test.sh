@@ -72,6 +72,7 @@ import json,sys
 j=json.load(open(sys.argv[1])); assert all(j[k] for k in ('worktree_removed','branch_deleted','terminal_receipt_committed')),j
 PY
   [[ ! -e "$worktree" ]]; ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+  [[ -z "$(git -C "$repo" ls-remote --heads origin "refs/heads/$branch")" ]]
 }
 
 run_case after_worktree TPM_CLEANUP_FAULT_AFTER_WORKTREE_REMOVE 86

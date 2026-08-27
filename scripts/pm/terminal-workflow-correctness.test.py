@@ -57,8 +57,10 @@ class TerminalWorkflowCorrectness(unittest.TestCase):
         start = text.index("def command_record_pr")
         end = text.index("\ndef command_", start + 1)
         command = text[start:end]
-        self.assertIn('record["status"] = "pr_watch"', command)
-        self.assertIn('record["workflow_phase"] = "pr_watch"', command)
+        self.assertIn('target_status = "committed" if is_draft_candidate else "pr_watch"', command)
+        self.assertIn('target_phase = "verification" if is_draft_candidate else "pr_watch"', command)
+        self.assertIn('record["status"] = target_status', command)
+        self.assertIn('record["workflow_phase"] = target_phase', command)
 
 
 if __name__ == "__main__":

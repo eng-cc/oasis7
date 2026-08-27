@@ -74,11 +74,9 @@ if [[ -f "$terminal_receipt" ]]; then
   cleanup_needed=0
   [[ -e "$task_worktree" ]] && cleanup_needed=1
   git -C "$repo_root" show-ref --verify --quiet "refs/heads/$task_branch" && cleanup_needed=1
-  if [[ "$ledger_existed" == 1 ]]; then
-    remote_branch="$(git -C "$repo_root" ls-remote --heads origin "refs/heads/$task_branch")" \
-      || fail "cannot read remote task branch during terminal reconciliation"
-    [[ -n "$remote_branch" ]] && cleanup_needed=1
-  fi
+  remote_branch="$(git -C "$repo_root" ls-remote --heads origin "refs/heads/$task_branch")" \
+    || fail "cannot read remote task branch during terminal reconciliation"
+  [[ -n "$remote_branch" ]] && cleanup_needed=1
   if [[ "$cleanup_needed" == 1 ]]; then
     cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
       --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
