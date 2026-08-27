@@ -567,9 +567,18 @@ def command_audit(args: argparse.Namespace) -> int:
         tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     mapped_tasks = mapping.get("tasks", {})
     retired_files = retired_task_files(root)
+    canonical_project = mapping.get("project") or {}
+    canonical_project_owner = str(canonical_project.get("owner") or "")
 
     errors: list[str] = []
     warnings: list[str] = []
+    if not canonical_project_owner:
+        errors.append("canonical mapping missing project owner")
+    elif str(args.project_owner or "") != canonical_project_owner:
+        errors.append(
+            "configured Project owner does not match canonical mapping owner: "
+            f"{args.project_owner!r} != {canonical_project_owner!r}"
+        )
     if task_uid and not tasks:
         errors.append(f"{task_uid}: task not found in selected mapping/archive records")
     try:
@@ -607,6 +616,13 @@ def command_audit(args: argparse.Namespace) -> int:
             errors.append(f"{uid}: mapping project_item_id does not match live item")
         if expected_live_project_id and str(item.get("_project_id") or "") != expected_live_project_id:
             errors.append(f"{uid}: live item project_id does not match configured Project")
+        if not args.full_list:
+            if str(item.get("_project_owner") or "") != canonical_project_owner:
+                errors.append(f"{uid}: live item project_owner does not match canonical mapping")
+            if item.get("_field_values_has_next_page") is not False:
+                errors.append(
+                    f"{uid}: live Project item fieldValues pagination is incomplete or unknown"
+                )
         content = item.get("content") or {}
         if record.get("issue_url") and str(record.get("issue_url")) != str(content.get("url") or ""):
             errors.append(f"{uid}: mapping issue_url does not match live item content")
