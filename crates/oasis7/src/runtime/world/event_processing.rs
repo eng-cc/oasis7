@@ -111,10 +111,19 @@ impl World {
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
         let mut replaying_tick: Option<WorldTime> = None;
         let mut previous_event_time = self.state.time;
-        let require_capability_commit = self.capability_authorization_receipts.is_empty()
-            && !self.capability_invocation_contexts.is_empty();
-        let mut capability_state_update_seen = false;
-        let mut capability_command_commit_seen = false;
+        // A stale snapshot can contain historical receipts and more than one
+        // pending invocation context.  Recovery must not use either of those
+        // facts as a global gate: a state update for one nonce needs its own
+        // command commit, even when another nonce already has a receipt or a
+        // commit in the same journal tail.  Keep the identity pair rather than
+        // the hashed map key so this also covers legacy grant-id map entries.
+        let mut pending_capability_contexts: BTreeSet<(String, String)> = self
+            .capability_invocation_contexts
+            .values()
+            .map(|context| (context.grant_id.clone(), context.response_nonce.clone()))
+            .collect();
+        let mut capability_state_updates: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut capability_command_commits: BTreeSet<(String, String)> = BTreeSet::new();
         for event in events {
             if event.time < previous_event_time {
                 return Err(WorldError::ResourceBalanceInvalid {
@@ -129,31 +138,53 @@ impl World {
                     self.record_tick_consensus_for_tick(tick)?;
                 }
             }
-            if require_capability_commit {
-                match &event.body {
-                    WorldEventBody::ModuleStateUpdated(update) => {
-                        // ModuleStateUpdated is also emitted by ordinary
-                        // module ticks and commands.  Only a state update
-                        // carrying the trace/module identity of one of the
-                        // pending trusted invocation contexts indicates a
-                        // capability command that may have crashed before
-                        // its CommandCommitted journal event.  Treating an
-                        // unrelated module update as that marker rejects
-                        // valid stale-snapshot recovery with JournalMismatch.
-                        capability_state_update_seen = capability_state_update_seen
-                            || self.capability_invocation_contexts.values().any(|context| {
-                                context.module_id == update.module_id
-                                    && update.trace_id
-                                        == format!("trusted-command-{}", context.response_nonce)
-                            });
+            match &event.body {
+                WorldEventBody::ModuleStateUpdated(update) => {
+                    // ModuleStateUpdated is also emitted by ordinary module
+                    // ticks and commands.  Only a state update carrying the
+                    // trace/module identity of a pending trusted invocation
+                    // context indicates a capability command that may have
+                    // crashed before its CommandCommitted journal event.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == update.module_id
+                            && update.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_state_updates.insert(identity);
+                            break;
+                        }
                     }
-                    WorldEventBody::CapabilityAuthorization(
-                        super::super::CapabilityAuthorizationEvent::CommandCommitted { .. },
-                    ) => {
-                        capability_command_commit_seen = true;
-                    }
-                    _ => {}
                 }
+                WorldEventBody::CapabilityAuthorization(
+                    super::super::CapabilityAuthorizationEvent::CommandCommitted {
+                        grant,
+                        receipt,
+                        ..
+                    },
+                ) => {
+                    if let Some(response_nonce) = receipt.response_nonce.as_deref() {
+                        let identity = (grant.grant_id.clone(), response_nonce.to_string());
+                        if pending_capability_contexts.contains(&identity) {
+                            capability_command_commits.insert(identity);
+                        }
+                    }
+                }
+                WorldEventBody::CapabilityAuthorization(
+                    super::super::CapabilityAuthorizationEvent::InvocationContextInstalled {
+                        context,
+                        ..
+                    },
+                ) => {
+                    // A snapshot may precede the context-install event itself.
+                    // Include that context once its durable installation is
+                    // replayed so a later state update cannot bypass the
+                    // per-context crash-window check.
+                    pending_capability_contexts
+                        .insert((context.grant_id.clone(), context.response_nonce.clone()));
+                }
+                _ => {}
             }
             self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
@@ -164,9 +195,9 @@ impl World {
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;
         }
-        if require_capability_commit
-            && capability_state_update_seen
-            && !capability_command_commit_seen
+        if capability_state_updates
+            .iter()
+            .any(|identity| !capability_command_commits.contains(identity))
         {
             return Err(WorldError::JournalMismatch);
         }
