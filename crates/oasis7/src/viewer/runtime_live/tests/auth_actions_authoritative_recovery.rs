@@ -1041,6 +1041,13 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
         .expect_err("old key should be rejected after rotation");
     assert_eq!(stale_err.code, "session_revoked");
 
+    let replaces_intent_id = server
+        .world
+        .state()
+        .agents
+        .get(agent_id.as_str())
+        .and_then(|cell| cell.intent.as_ref())
+        .map(|intent| intent.intent_id.clone());
     let rotated_request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
             agent_id: agent_id.clone(),
@@ -1053,7 +1060,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             world_id: None,
             reorg_epoch: None,
             authority_scope: None,
-            replaces_intent_id: None,
+            replaces_intent_id,
         },
         1,
         public_key_v2.as_str(),
