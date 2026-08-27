@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -115,6 +116,9 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
             for effect in ledger_effects
         )
     )
+    project_item_identity = not project_bound
+    project_fields_complete = not project_bound
+    project_item_bound = not project_bound
     project_done = not project_bound
     project_live: dict = {}
     if project_bound:
@@ -126,9 +130,36 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
             project_live = module.fetch_project_items_by_ids([str(record["project_item_id"])]).get(
                 str(record["project_item_id"])
             ) or {}
-            project_done = all(project_live.get(name) == value for name, value in {
-                "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
-            }.items())
+            project = mapping.get("project") or {}
+            content = project_live.get("content") or {}
+            expected_url = (
+                f"https://github.com/{record.get('repository')}/issues/{record.get('issue_number')}"
+            )
+            project_item_bound = str(project_live.get("id") or "") == str(record.get("project_item_id"))
+            project_item_identity = (
+                project_item_bound
+                and bool(project.get("id"))
+                and bool(project.get("number"))
+                and str(project_live.get("_project_id") or "") == str(project.get("id"))
+                and str(project_live.get("_project_number") or "") == str(project.get("number"))
+                and str(content.get("number") or "") == str(record.get("issue_number"))
+                and str(content.get("url") or "") == expected_url
+                and bool(re.search(
+                    rf"^task_uid:\s*{re.escape(task_uid)}$",
+                    str(content.get("body") or ""),
+                    re.MULTILINE,
+                ))
+            )
+            # The Project helper returns this marker from the GraphQL pageInfo;
+            # a truncated fieldValues page is not a terminal readback.
+            project_fields_complete = project_live.get("_field_values_has_next_page") is False
+            project_done = (
+                project_item_identity
+                and project_fields_complete
+                and all(project_live.get(name) == value for name, value in {
+                    "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
+                }.items())
+            )
     checks = {
         "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",
         "terminal_receipt_chain_valid": terminal_identity,
@@ -144,6 +175,9 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
             and tombstone_data.get("checkout_recreation_forbidden") is True
         ),
         "issue_closed": str(issue.get("state") or "").upper() == "CLOSED",
+        "project_item_bound": project_item_bound,
+        "project_item_identity": project_item_identity,
+        "project_field_values_complete": project_fields_complete,
         "project_terminal": project_done,
         "pr_merged": str(pr.get("state") or "").upper() == "MERGED" and bool(pr.get("mergedAt"))
                      and pr.get("headRefName") == branch,
