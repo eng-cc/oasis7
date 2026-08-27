@@ -117,7 +117,11 @@ python3 - "$TMP/retry.json" <<'PY'
 import json,sys
 r=json.load(open(sys.argv[1])); assert r["status"]=="already_finalized" and r["pr_number"]==7,r
 PY
-test "$(cat "$SEQUENCE")" = finalize
+# The fixture leaves the canonical checkout directory present after its mocked
+# cleanup, modeling a post-terminal checkout resurrection. Resume must run the
+# receipt-bound cleanup again before finalizer readback.
+printf '%s\n' cleanup finalize >"$TMP/retry-expected"
+cmp "$TMP/retry-expected" "$SEQUENCE"
 
 # Build a real squash/rebase-shaped history.  The task head is not an
 # ancestor of origin/main, so the orchestrator must derive and bind a

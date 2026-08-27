@@ -107,6 +107,19 @@ if grep -q 'time\.time_ns()' scripts/ci-compile-metrics.sh; then
   echo "compile metrics elapsed timing must not use adjustable wall-clock time" >&2
   exit 1
 fi
+
+# A linked checkout must be deregistered before its temporary directory is
+# removed.  Deleting the directory alone leaks .git/worktrees metadata.
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("scripts/ci-compile-metrics.sh").read_text(encoding="utf-8")
+cleanup = source[source.index("cleanup() {"):source.index("trap cleanup EXIT")]
+remove_pos = cleanup.find("worktree remove")
+rm_pos = cleanup.find("rm -rf")
+if remove_pos < 0 or rm_pos < 0 or remove_pos > rm_pos:
+    raise SystemExit("compile-metrics cleanup must git worktree remove before rm -rf")
+PY
 if ! grep -Eq 'git fetch --no-tags --depth=1 origin -- "\$\{BASELINE_REF\}"' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must fetch an optional baseline explicitly" >&2
   exit 1

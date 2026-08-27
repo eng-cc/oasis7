@@ -72,6 +72,25 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
 
+def _write_terminal_tombstone(terminal_path: pathlib.Path, record: dict,
+                              terminal_digest: str) -> pathlib.Path:
+    """Publish the app-facing prohibition on recreating a finalized checkout."""
+    tombstone_path=terminal_path.with_name("terminal-tombstone.json")
+    tombstone={
+        "schema":"oasis7_terminal_tombstone_v1",
+        "task_uid":record.get("task_uid"),
+        "repository":record.get("repository"),
+        "issue_number":record.get("issue_number"),
+        "pr_number":record.get("pr_number"),
+        "canonical_worktree":record.get("canonical_worktree"),
+        "task_branch":record.get("task_branch"),
+        "workflow_phase":"post_merge_done",
+        "terminal_receipt_sha256":terminal_digest,
+        "checkout_recreation_forbidden":True,
+    }
+    durable_store.replace_json(tombstone_path,tombstone)
+    return tombstone_path
+
 def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
     """Self-validating terminal authority; no prevalidated object is accepted."""
     root=pathlib.Path(root).resolve(); path=root/".pm/github-project-sync/tasks.json"
@@ -129,6 +148,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
             _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
             if str(issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
         _ledger_transition(ledger_path,task_uid,"issue_close","committed")
+        _write_terminal_tombstone(terminal_path,record,terminal_digest)
         print(json.dumps({"status":"already_finalized","task_uid":task_uid},sort_keys=True)); return 0
     if record.get("workflow_phase")!="main_sync": fail("terminal commit requires main_sync")
     receipt=terminal; digest=terminal_digest
@@ -212,6 +232,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     _ledger_transition(ledger_path,task_uid,"issue_close","readback",closed_issue)
     if str(closed_issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
     _ledger_transition(ledger_path,task_uid,"issue_close","committed")
+    _write_terminal_tombstone(terminal_path,record,terminal_digest)
     print(json.dumps({"status":"finalized","task_uid":task_uid},sort_keys=True)); return 0
 
 def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:

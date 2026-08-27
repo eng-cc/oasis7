@@ -132,6 +132,8 @@ approval or the up-to-date protection represented by `BEHIND`. No separate colla
 A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and
 post-merge finalization have completed in that order.
 
+`done` is not terminal reconciliation; only `post_merge_done` proves receipts, finalizer ledger, closed Issue, terminal Project fields, absent task checkout/branch, and an external terminal tombstone with `checkout_recreation_forbidden: true`; audit one task read-only with `terminal-task-audit.py --task-uid <uid> --json`, and only explicit `--resume-finalizer` grants receipt-bound repair.
+
 ## State, gate, and PM mapping
 | Workflow state | Gate meaning | GitHub Project status | Resume authority |
 | --- | --- | --- | --- |

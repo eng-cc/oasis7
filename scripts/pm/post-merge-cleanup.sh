@@ -195,11 +195,11 @@ if [[ -n "$JOURNAL_BRANCH_TIP" ]]; then
   [[ "$JOURNAL_BRANCH_TIP" == "$BRANCH_TIP" ]] \
     || die "cleanup journal branch tip identity mismatch"
 fi
-[[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" != 1 ]] \
-  || die "cleanup journal says branch_deleted but canonical worktree reappeared"
 if [[ "$BRANCH_DELETED" == 1 ]]; then
-  ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
-    || die "cleanup journal says branch_deleted but branch still exists"
+  if [[ "$WORKTREE_REAPPEARED" != 1 ]]; then
+    ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
+      || die "cleanup journal says branch_deleted but branch still exists"
+  fi
 elif [[ "$WORKTREE_REMOVED" == 1 ]]; then
   git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
     || die "cleanup journal does not prove branch deletion and branch is already missing"
@@ -377,7 +377,7 @@ PY
     # remove the reconciled canonical worktree before deleting its branch.
     git -C "$REPO_ROOT" worktree remove "$WORKTREE"
   fi
-  if [[ "$BRANCH_DELETED" != 1 ]]; then
+  if [[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" == 1 ]]; then
     if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
       # -D is safe only after the repository-generated patch proof above has
       # bound this exact branch tip to the integration tree.
@@ -390,6 +390,21 @@ PY
       git -C "$REPO_ROOT" branch -d "$BRANCH"
     fi
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["branch_deleted"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
+  fi
+  # The merged PR binds the exact head. Delete a same-head remote task branch
+  # idempotently; refuse to delete if the name was reused for another commit.
+  if [[ "$RECORDED_REPOSITORY" != fixture/* ]]; then
+    REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
+      || die "remote task branch readback failed"
+    if [[ -n "$REMOTE_BRANCH_LINE" ]]; then
+      REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
+      [[ "$REMOTE_BRANCH_TIP" == "$BRANCH_TIP" ]] \
+        || die "remote task branch tip disagrees with merged PR head"
+      git -C "$REPO_ROOT" push origin --delete "$BRANCH" >/dev/null \
+        || die "remote task branch deletion failed"
+      [[ -z "$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" ]] \
+        || die "remote task branch deletion readback failed"
+    fi
   fi
   mkdir -p "$(dirname "$TERMINAL_RECEIPT_OUTPUT")"
   TMP_TERMINAL="$(mktemp "$(dirname "$TERMINAL_RECEIPT_OUTPUT")/.terminal-cleanup.XXXXXX")"
