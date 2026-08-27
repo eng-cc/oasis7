@@ -367,6 +367,10 @@ impl TimeoutThenCheckpointNetwork {
             .clone()
     }
 
+    fn commit_attempts(&self) -> Vec<u64> {
+        self.attempts.lock().expect("lock commit attempts").clone()
+    }
+
     fn fetch_blob_response(&self, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
         let request =
             serde_json::from_slice::<replication::FetchBlobRequest>(payload).map_err(|err| {
@@ -782,6 +786,66 @@ fn high_checkpoint_without_complete_provider_stays_fail_closed_with_blob_hash() 
         err.to_string()
             .contains("execution checkpoint blob not found hash="),
         "failure must retain an actionable missing-closure signature: {err}",
+    );
+    fixture.cleanup();
+}
+
+#[test]
+fn high_checkpoint_all_sidecarless_providers_are_attempted_but_authoritative_validation_stays_fail_closed() {
+    let _nonce_lock =
+        super::storage_replication_first_ready_checkpoint_tests::lock_checkpoint_probe_nonce();
+    let world_id = "world-gap-sync-all-sidecarless-providers-fail-closed";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 254, 255);
+    fixture
+        .network
+        .set_connected_peers(&["provider-a", "provider-b"]);
+    let expected_head = WorldHeadAnnounce {
+        world_id: world_id.to_string(),
+        height: fixture.checkpoint_height,
+        block_hash: format!("block-{}", fixture.checkpoint_height),
+        state_root: format!("exec-state-{}", fixture.checkpoint_height),
+        timestamp_ms: 8_000,
+        signature: String::new(),
+    };
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+    let mut execution_hook: Option<&mut dyn NodeExecutionHook> = Some(&mut install_hook);
+    let mut progress_callback: Option<
+        &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+    > = None;
+
+    let result = fixture.engine.try_sync_high_replication_checkpoint_boundary(
+        &fixture.endpoint,
+        "node-b",
+        world_id,
+        &mut fixture.replication,
+        fixture.checkpoint_height,
+        0,
+        Some(&expected_head),
+        &mut execution_hook,
+        &mut progress_callback,
+    );
+
+    assert_eq!(result.expect("sidecar-less candidate should be rejected"), false);
+    assert_eq!(
+        fixture.network.commit_attempts(),
+        vec![fixture.checkpoint_height, fixture.checkpoint_height],
+        "all eligible providers must be attempted before the authoritative gate rejects the candidate",
+    );
+    assert!(
+        install_hook.installed.is_empty(),
+        "sidecar-less provider responses must not install a checkpoint: {:?}",
+        install_hook.installed,
+    );
+    assert_eq!(fixture.engine.committed_height, 0);
+    assert_eq!(fixture.engine.replication_persisted_height, 0);
+    assert_eq!(fixture.engine.last_execution_height, 0);
+    assert!(
+        fixture
+            .replication
+            .load_commit_message_by_height(world_id, fixture.checkpoint_height)
+            .expect("inspect rejected checkpoint persistence")
+            .is_none(),
+        "rejected sidecar-less checkpoint must not be persisted",
     );
     fixture.cleanup();
 }

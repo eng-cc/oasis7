@@ -250,7 +250,7 @@ impl PosNodeEngine {
             world_id,
             replication_runtime,
             height,
-            |endpoint, request| endpoint.request_fetch_commit_for_gap_sync_single_probe(request),
+            |endpoint, request| endpoint.request_fetch_commit_for_high_checkpoint_probe(request),
         )
     }
 
