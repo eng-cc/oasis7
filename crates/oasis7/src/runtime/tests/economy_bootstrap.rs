@@ -82,6 +82,65 @@ fn start_and_settle_recipe(world: &mut World, sandbox: &mut WasmExecutor) {
     }
 }
 
+fn establish_stable_stage_fixture(world: &mut World, sandbox: &mut WasmExecutor) {
+    let mut spec = factory_spec(
+        "factory.stable-line.fixture",
+        "Stable Line Fixture",
+        1,
+        &["fixture"],
+        &[],
+    );
+    spec.build_time_ticks = 1;
+    spec.base_power_draw = 0;
+    spec.recipe_slots = 1;
+    spec.maintenance_per_tick = 0;
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-stable-line-fixture".to_string(),
+        spec,
+    });
+    step_twice(world, sandbox);
+    assert!(world.has_factory("factory.stable-line.fixture"));
+
+    world
+        .set_material_balance("stable_line_marker", 1)
+        .expect("seed stable-line marker");
+    let plan = RecipeExecutionPlan::accepted(
+        1,
+        vec![MaterialStack::new("stable_line_marker", 1)],
+        vec![MaterialStack::new("stable_line_marker", 1)],
+        Vec::new(),
+        0,
+        1,
+    );
+    for _ in 0..3 {
+        world.submit_action(Action::ScheduleRecipe {
+            requester_agent_id: "builder-a".to_string(),
+            factory_id: "factory.stable-line.fixture".to_string(),
+            recipe_id: "recipe.stable-line.fixture".to_string(),
+            plan: plan.clone(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
+        });
+        start_and_settle_recipe(world, sandbox);
+    }
+
+    let fixture = world
+        .state()
+        .factories
+        .get("factory.stable-line.fixture")
+        .expect("stable-line fixture factory");
+    assert_eq!(fixture.production.same_recipe_repeat_count, 3);
+    assert_eq!(world.state().industry_progress.completed_recipe_jobs, 3);
+    assert_eq!(
+        world.state().industry_progress.stage,
+        IndustryStage::ScaleOut
+    );
+    assert!(world.state().gameplay_policy.electricity_tax_bps > 0);
+    assert_eq!(world.material_balance("stable_line_marker"), 1);
+}
+
 #[test]
 fn m4_builtin_module_ids_manifest_matches_runtime_constants() {
     let expected = vec![
@@ -267,6 +326,8 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
         .set_material_balance("hardware_part", 40)
         .expect("seed hardware parts");
 
+    establish_stable_stage_fixture(&mut world, &mut wasm);
+
     world.submit_action(Action::BuildFactoryWithModule {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-smelter".to_string(),
@@ -324,7 +385,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
             "factory.assembler.mk1",
             "Assembler MK1",
             3,
-            &["assembler", "precision"],
+            &["assembler", "precision", "heavy"],
             &[
                 ("structural_frame", 8),
                 ("iron_ingot", 10),
@@ -374,6 +435,11 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
         deterministic_seed: 20260214,
     });
     start_and_settle_recipe(&mut world, &mut wasm);
+
+    assert_eq!(
+        world.state().industry_progress.stage,
+        IndustryStage::Governance
+    );
 
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
@@ -439,6 +505,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
         71
     );
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 400);
+    assert_eq!(world.material_balance("stable_line_marker"), 1);
 
     let rejected_events = world
         .journal()
