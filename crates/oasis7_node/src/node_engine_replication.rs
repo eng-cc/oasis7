@@ -13,58 +13,6 @@ use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
-    fn record_replication_gap_sync_repair_attempt(
-        &mut self,
-        height: u64,
-        repair_summary: String,
-        route_snapshot: NodeReplicationGapSyncRouteSnapshot,
-    ) {
-        self.last_replication_gap_sync_repair_attempt_height = Some(height);
-        self.last_replication_gap_sync_repair_attempt_summary = Some(repair_summary);
-        self.last_replication_gap_sync_repair_attempt_route_snapshot = Some(route_snapshot);
-    }
-    fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
-        if self
-            .last_replication_gap_sync_blocked_height
-            .map(|height| self.replication_persisted_height >= height)
-            .unwrap_or(false)
-        {
-            self.last_replication_gap_sync_blocked_height = None;
-            self.last_replication_gap_sync_blocked_reason = None;
-            self.last_replication_gap_sync_blocked_at_ms = None;
-            self.last_replication_gap_sync_repair_attempt_height = None;
-            self.last_replication_gap_sync_repair_attempt_summary = None;
-            self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
-        }
-    }
-    fn advance_contiguous_replication_persisted_height(
-        &mut self,
-        replication_runtime: &ReplicationRuntime,
-        world_id: &str,
-        observed_latest_height: u64,
-    ) -> Result<(), NodeError> {
-        let mut next_height = checked_replication_successor(
-            self.replication_persisted_height,
-            "replication_persisted_height",
-            "advancing contiguous replication persisted height",
-        )?;
-        while next_height <= observed_latest_height {
-            if replication_runtime
-                .load_commit_message_by_height(world_id, next_height)?
-                .is_none()
-            {
-                break;
-            }
-            self.replication_persisted_height = next_height;
-            next_height = checked_replication_successor(
-                next_height,
-                "next_height",
-                "advancing contiguous replication persisted height cursor",
-            )?;
-        }
-        self.clear_replication_gap_sync_blocked_if_unblocked();
-        Ok(())
-    }
     pub(super) fn broadcast_local_replication(
         &mut self,
         gossip_endpoint: Option<&GossipEndpoint>,
@@ -763,15 +711,36 @@ impl PosNodeEngine {
             // execute the height-one tail before a checkpoint bootstrap.
             return Ok(());
         }
-        if self.should_defer_fresh_observer_checkpoint_retry() {
+        let cached_high_checkpoint_height = if self.checkpoint_bootstrap_enabled
+            && self.committed_height == 0
+            && self.replication_persisted_height == 0
+            && self.last_execution_height == 0
+        {
+            // A cached high peer head is a bounded discovery hint for a fresh
+            // observer when the world-head route is temporarily unavailable.
+            // `cached_high_checkpoint_head` only returns a complete,
+            // authenticated peer binding; checkpoint payload and lineage
+            // verification below remain authoritative before installation.
+            self.cached_high_checkpoint_head(world_id)
+                .map(|head| head.height)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let cached_head_without_world_head =
+            advertised_world_head.is_none() && cached_high_checkpoint_height > 0;
+        if self.should_defer_fresh_observer_checkpoint_retry() && !cached_head_without_world_head {
             return Ok(());
         }
-        let advertised_network_height = self.network_committed_height.max(
-            advertised_world_head
-                .as_ref()
-                .map(|head| head.height)
-                .unwrap_or(0),
-        );
+        let advertised_network_height = self
+            .network_committed_height
+            .max(
+                advertised_world_head
+                    .as_ref()
+                    .map(|head| head.height)
+                    .unwrap_or(0),
+            )
+            .max(cached_high_checkpoint_height);
         let expected_checkpoint_head = advertised_world_head
             .as_ref()
             .filter(|head| head.height == advertised_network_height);
@@ -837,7 +806,14 @@ impl PosNodeEngine {
                     Err(err) => return Err(err),
                 }
             }
-            if self.hold_fresh_observer_for_high_peer_heads(advertised_network_height) {
+            // When this runs from the runtime tick, consensus has already
+            // observed the high peer head. Hold at height zero after failed
+            // checkpoint probes so the tick can publish that authority
+            // snapshot and retry preflight on the next tick. Direct repair
+            // callers retain the terminal mismatch when no closure exists.
+            if self.hold_fresh_observer_for_high_peer_heads(advertised_network_height)
+                && (!cached_head_without_world_head || progress_callback.is_some())
+            {
                 return Ok(());
             }
             if let Some(reason) = missing_checkpoint_closure_reason {
@@ -1151,50 +1127,5 @@ impl PosNodeEngine {
                 self.network_committed_height.max(advertised_network_height);
         }
         Ok(())
-    }
-    pub(super) fn refresh_replication_persisted_height(
-        &mut self,
-        replication_runtime: &ReplicationRuntime,
-        world_id: &str,
-    ) -> Result<(), NodeError> {
-        if self.replication_persisted_height == 0 {
-            let durable_writer_height = replication_runtime.writer_last_replicated_height();
-            for durable_baseline_height in [self.committed_height, durable_writer_height] {
-                if durable_baseline_height == 0 {
-                    continue;
-                }
-                if replication_runtime
-                    .load_commit_message_by_height(world_id, durable_baseline_height)?
-                    .is_some()
-                {
-                    self.replication_persisted_height = durable_baseline_height;
-                    break;
-                }
-            }
-            if self.replication_persisted_height == 0 {
-                self.refresh_replication_persisted_height_from_local_execution_baseline();
-            }
-        }
-        let observed_latest_height =
-            replication_runtime.latest_persisted_commit_height(world_id)?;
-        self.advance_contiguous_replication_persisted_height(
-            replication_runtime,
-            world_id,
-            observed_latest_height,
-        )?;
-        Ok(())
-    }
-    fn refresh_replication_persisted_height_from_local_execution_baseline(&mut self) {
-        if !self.require_execution_on_commit
-            || self.committed_height == 0
-            || self.last_execution_height < self.committed_height
-            || self.last_committed_block_hash.is_none()
-            || self.last_execution_block_hash.is_none()
-            || self.last_execution_state_root.is_none()
-        {
-            return;
-        }
-        self.replication_persisted_height = self.committed_height;
-        self.clear_replication_gap_sync_blocked_if_unblocked();
     }
 }
