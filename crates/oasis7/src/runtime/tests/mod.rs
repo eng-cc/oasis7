@@ -77,6 +77,7 @@ mod capability_grant_v2;
 mod capability_grant_v2_lifecycle;
 mod capability_grant_v2_recovery_regressions;
 mod capability_grant_v2_regressions;
+mod capability_grant_v2_selector_authz_regressions;
 mod data_access_control;
 mod economy;
 mod economy_bootstrap;

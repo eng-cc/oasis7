@@ -997,6 +997,7 @@ pub(super) fn scope_matches_command(
         })
         && serde_json::from_slice::<serde_json::Value>(payload)
             .ok()
+            .or_else(|| serde_cbor::from_slice::<serde_json::Value>(payload).ok())
             .is_some_and(|value| scope_selectors_match_json(&grant.scope, &value))
 }
 
@@ -1053,16 +1054,45 @@ fn selector_matches_json(
     payload: &serde_json::Value,
     field: &str,
 ) -> bool {
+    let mut target_values = Vec::new();
+    collect_target_values(payload, field, &mut target_values);
+
     match selectors {
         // An omitted selector is not an implicit wildcard.  It can authorize
         // an un-targeted payload, but must reject a payload that attempts to
         // supply a target without a corresponding grant allowlist.
-        None => payload.get(field).is_none(),
+        None => target_values.is_empty(),
         Some(selectors) => {
-            let Some(value) = payload.get(field).and_then(serde_json::Value::as_str) else {
-                return false;
-            };
-            selectors.iter().any(|selector| selector == value)
+            !target_values.is_empty()
+                && target_values
+                    .iter()
+                    .all(|value| selectors.iter().any(|selector| selector == value))
         }
+    }
+}
+
+fn collect_target_values<'a>(
+    payload: &'a serde_json::Value,
+    field: &str,
+    values: &mut Vec<&'a str>,
+) {
+    match payload {
+        serde_json::Value::Object(fields) => {
+            for (name, value) in fields {
+                if name.eq_ignore_ascii_case(field) {
+                    if let Some(value) = value.as_str() {
+                        values.push(value);
+                    }
+                } else {
+                    collect_target_values(value, field, values);
+                }
+            }
+        }
+        serde_json::Value::Array(values_array) => {
+            for value in values_array {
+                collect_target_values(value, field, values);
+            }
+        }
+        _ => {}
     }
 }
