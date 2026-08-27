@@ -601,6 +601,56 @@ fn stale_capability_context_replay_ignores_unrelated_module_state_tail() {
 }
 
 #[test]
+fn completed_context_replay_ignores_ordinary_trusted_trace_tail() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let trusted_trace_id = format!("trusted-command-{}", response.response_nonce);
+    execute_without_invocation_context(
+        &mut world,
+        grant,
+        catalog,
+        response,
+        &mut RecordingSandbox::default(),
+    )
+    .expect("the completed capability context should have a durable receipt");
+
+    let stale_snapshot = world.snapshot();
+    assert!(!stale_snapshot.capability_authorization_receipts.is_empty());
+    let mut journal = world.journal().clone();
+    let next_event_id = journal
+        .events
+        .last()
+        .map(|event| event.id.saturating_add(1))
+        .expect("completed command should leave a journal tail");
+    journal.append(WorldEvent {
+        id: next_event_id,
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::ModuleStateUpdated(oasis7_wasm_abi::ModuleStateUpdate {
+            module_id: MODULE_ID.to_string(),
+            trace_id: trusted_trace_id,
+            state: vec![0x7a],
+        }),
+    });
+
+    let recovered = World::from_snapshot(stale_snapshot, journal).expect(
+        "a completed context must not turn an ordinary matching trace into JournalMismatch",
+    );
+    assert_eq!(
+        recovered.state().module_states.get(MODULE_ID),
+        Some(&vec![0x7a]),
+        "the ordinary module update should still replay after the completed context"
+    );
+}
+
+#[test]
 fn trusted_executor_rejects_future_issued_grant_before_sandbox() {
     let mut world = fixture_world();
     let future_tick = world.state().time.saturating_add(1);

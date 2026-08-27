@@ -1,3 +1,4 @@
+use super::super::capability_authorization::CapabilityInvocationContext;
 use super::super::{
     Action, ActionEnvelope, ActionId, CausedBy, CrisisStatus, DomainEvent, EconomicContractStatus,
     EpochSettlementReport, GovernanceEvent, GovernanceProposalStatus, MainTokenConfig,
@@ -106,6 +107,63 @@ impl World {
             .min(ECONOMIC_CONTRACT_SUCCESS_REPUTATION_REWARD_CAP)
     }
 
+    /// A context remains pending until its nonce and accepted receipt form a
+    /// complete durable lifecycle record.  Contexts are intentionally kept in
+    /// the snapshot after completion for audit/replay binding, so their mere
+    /// presence cannot be used as evidence of an interrupted command.
+    fn capability_context_has_durable_completion(
+        &self,
+        context: &CapabilityInvocationContext,
+    ) -> bool {
+        let Some(encoded_grant) = self.capability_grants_v2.get(&context.grant_id) else {
+            return false;
+        };
+        let Ok(grant) =
+            serde_json::from_value::<oasis7_wasm_abi::CapabilityGrantV2>(encoded_grant.clone())
+        else {
+            return false;
+        };
+        let Ok(nonce_key) = super::capability_authorization_events::authorization_nonce_key(
+            &grant,
+            context.response_nonce.as_str(),
+        ) else {
+            return false;
+        };
+        let Some(nonce_record) = self.capability_nonce_records.get(&nonce_key) else {
+            return false;
+        };
+        if nonce_record.state != "committed" {
+            return false;
+        }
+        let Some(receipt_id) = nonce_record.committed_receipt_id.as_deref() else {
+            return false;
+        };
+        let Some(receipt) = self.capability_authorization_receipts.get(receipt_id) else {
+            return false;
+        };
+        let Ok(subject) = serde_json::to_value(&context.subject) else {
+            return false;
+        };
+        let Ok(presenter) = serde_json::to_value(&context.presenter) else {
+            return false;
+        };
+        let Ok(audience) = serde_json::to_value(&context.audience) else {
+            return false;
+        };
+        receipt.decision == "accepted"
+            && receipt.grant_id.as_deref() == Some(context.grant_id.as_str())
+            && receipt.response_nonce.as_deref() == Some(context.response_nonce.as_str())
+            && receipt.authorization_nonce_key_hash.as_deref() == Some(nonce_key.as_str())
+            && receipt.subject == subject
+            && receipt.presenter.as_ref() == Some(&presenter)
+            && receipt.audience == audience
+            && receipt.catalog_snapshot_id.as_deref() == Some(context.catalog_snapshot_id.as_str())
+            && receipt.module_id.as_deref() == Some(context.module_id.as_str())
+            && receipt.module_version.as_deref() == Some(context.module_version.as_str())
+            && nonce_record.request_hash == receipt.canonical_request_hash
+            && nonce_record.outcome_hash == receipt.canonical_result_hash
+    }
+
     pub(super) fn replay_from(&mut self, start_index: usize) -> Result<(), WorldError> {
         let start_index = start_index.min(self.journal.events.len());
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
@@ -120,6 +178,7 @@ impl World {
         let mut pending_capability_contexts: BTreeSet<(String, String)> = self
             .capability_invocation_contexts
             .values()
+            .filter(|context| !self.capability_context_has_durable_completion(context))
             .map(|context| (context.grant_id.clone(), context.response_nonce.clone()))
             .collect();
         let mut capability_state_updates: BTreeSet<(String, String)> = BTreeSet::new();
@@ -181,8 +240,10 @@ impl World {
                     // Include that context once its durable installation is
                     // replayed so a later state update cannot bypass the
                     // per-context crash-window check.
-                    pending_capability_contexts
-                        .insert((context.grant_id.clone(), context.response_nonce.clone()));
+                    let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                    if !self.capability_context_has_durable_completion(context) {
+                        pending_capability_contexts.insert(identity);
+                    }
                 }
                 _ => {}
             }
