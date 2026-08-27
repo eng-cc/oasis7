@@ -1,6 +1,6 @@
 use oasis7_wasm_abi::{
-    ModuleCallInput, ModuleCallOrigin, ModuleCallRequest, ModuleContext, ModuleLimits,
-    ModuleOutput, ModuleSandbox,
+    ModuleCallCaller, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest, ModuleContext,
+    ModuleLimits, ModuleOutput, ModuleSandbox,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -1103,6 +1103,9 @@ fn build_micro_depot_wasm_call_request(
             origin: ModuleCallOrigin {
                 kind: "micro_depot_quote".to_string(),
                 id: input.action.action_id.to_string(),
+            },
+            caller: ModuleCallCaller::System {
+                system_id: "micro_depot_quote".to_string(),
             },
             limits: limits.clone(),
             stage: Some("micro_depot_evaluate_quote".to_string()),

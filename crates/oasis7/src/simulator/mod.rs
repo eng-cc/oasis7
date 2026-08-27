@@ -43,6 +43,7 @@ mod world_model;
 mod tests;
 
 // Re-export all public types
+pub use crate::capability_invocation_context::CapabilityInvocationContext;
 pub use agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
     LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
@@ -64,11 +65,11 @@ pub use decision_provider::{
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, DecisionProvider, DecisionProviderError,
     DecisionRequest, DecisionRequestContractError, DecisionResponse, FeedbackEnvelope,
     GoldenDecisionFixture, MemoryWriteIntent, MockDecisionProvider, MockDecisionProviderState,
-    ObservationEnvelope, ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics,
-    ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
-    ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
-    ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry, golden_decision_provider_fixtures,
+    ObservationEnvelope, ProviderBackedAgentBehavior, ProviderCapabilityContext, ProviderDecision,
+    ProviderDiagnostics, ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
+    ProviderMissionContext, ProviderModuleCommand, ProviderNavigationNode, ProviderNearbyEntity,
+    ProviderObservation, ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage,
+    ProviderTraceEnvelope, ProviderTranscriptEntry, golden_decision_provider_fixtures,
 };
 pub use fragment_physics::{
     CM3_PER_M3, CompoundComposition, CuboidSizeCm, FragmentBlock, FragmentBlockField,
@@ -154,6 +155,8 @@ pub use persist::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_adapter::ProviderLoopbackAdapter;
+#[cfg(not(target_arch = "wasm32"))]
+pub use provider_loopback_adapter::{RuntimeTrustedModuleExecutor, TrustedModuleCommandExecutor};
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_http::{
     LOOPBACK_HTTP_PROVIDER_TRANSPORT, PROVIDER_PHASE1_ACTION_SET_ALIAS, ProviderAgentChatRequest,

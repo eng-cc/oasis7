@@ -13,6 +13,7 @@ pub enum AuditEventKind {
     Domain,
     EffectQueued,
     ReceiptAppended,
+    CapabilityAuthorization,
     PolicyDecision,
     RuleDecision,
     ActionOverridden,

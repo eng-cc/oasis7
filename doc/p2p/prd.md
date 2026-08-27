@@ -29,6 +29,14 @@
 - node block、action root、execution block/state roots、journal 与 snapshot references 作为同一权威记录持久化。被拒动作必须显式 requeue 或失败；execution/root/journal/proof mismatch 阻断恢复，不能继续推进状态。
 - 本合同只拥有共识载荷完整性、提交顺序与恢复一致性，不代表 topology health、deployment、release readiness、市场规则或玩家体验结论。
 
+#### ExecutionReceipt、validator 重执行与 distributed finality 分层
+
+- `ExecutionReceipt` 是 world-runtime 对确定性执行产物的 commitment/receipt，不是 consensus certificate，也不是 distributed finality。receipt 的字段、编码和 replay 语义由 [`doc/world-runtime/prd.md`](../world-runtime/prd.md) 拥有；本 PRD 只约束它如何进入 proposal、vote、commit 与 recovery 链路，不复制 runtime schema。
+- proposer 可以提交候选 receipt，但 active validator 在投票前必须从同一 committed parent state、同一 runtime/manifest 与同一确定排序的 action sequence 重执行，并独立重算和匹配 `action_root`、execution/event commitment 与 next `state_root`。缺少 artifact、执行 fault 或任一 root/commitment 不匹配时必须拒绝投票与提交，并阻断恢复；重启或本地修补不能替代该验证。
+- p2p/consensus 才负责 proposal ordering、validator-set/round 状态、签名投票、quorum/commit certificate 与 finality。只有验证现有 BFT 目标所要求的、绑定 world/height/round/roots/validator-set 的 quorum certificate 后，才能推进 committed height、replication、checkpoint 或向 light client 宣告 final；单个 receipt 或本地签名不足以宣称 finality。
+- `tick_consensus_records`、`TickBlock`、`TickCertificate` 等旧记录仅作为 snapshot/replay/diagnostic compatibility surface。尤其是本地 threshold-1 或 process-local record/certificate 不得解释为 distributed finality，不得单独驱动投票、committed height、replication、checkpoint 或 light-client final 状态；迁移期间按兼容读取与 receipt conformance 逐步切换。
+- `WorldTick`、consensus height 与 wall-clock slot 仍是可兼容但不同的时间身份；tick 记录的存在不改变上述 execution-versus-finality 边界，也不改变本 PRD 后文既有的 BFT target/current-prototype 区分。
+
 ### 分布式运行时、PoS 与复制恢复合同
 
 - 分布式状态由内容寻址 blob、snapshot/journal、world head 与 execution record 共同锚定；head follower 和恢复路径只能接受可验证的同 world 单调进展。state root、journal、checkpoint 或 proof 不一致时必须停止恢复，不能以重启、覆盖或跳过失败项推进状态。

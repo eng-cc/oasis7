@@ -320,6 +320,10 @@ fn main() {
         run_report.decision_counts.wait_ticks
     );
     println!("decision_act: {}", run_report.decision_counts.act);
+    println!(
+        "decision_module_command: {}",
+        run_report.decision_counts.module_command
+    );
     println!("trace_count: {}", run_report.trace_counts.traces);
     println!(
         "llm_skipped_ticks: {}",

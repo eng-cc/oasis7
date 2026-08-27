@@ -1,3 +1,4 @@
+use super::super::capability_authorization::CapabilityInvocationContext;
 use super::super::{
     Action, ActionEnvelope, ActionId, CausedBy, CrisisStatus, DomainEvent, EconomicContractStatus,
     EpochSettlementReport, GovernanceEvent, GovernanceProposalStatus, MainTokenConfig,
@@ -106,11 +107,82 @@ impl World {
             .min(ECONOMIC_CONTRACT_SUCCESS_REPUTATION_REWARD_CAP)
     }
 
+    /// A context remains pending until its nonce and accepted receipt form a
+    /// complete durable lifecycle record.  Contexts are intentionally kept in
+    /// the snapshot after completion for audit/replay binding, so their mere
+    /// presence cannot be used as evidence of an interrupted command.
+    fn capability_context_has_durable_completion(
+        &self,
+        context: &CapabilityInvocationContext,
+    ) -> bool {
+        let Some(encoded_grant) = self.capability_grants_v2.get(&context.grant_id) else {
+            return false;
+        };
+        let Ok(grant) =
+            serde_json::from_value::<oasis7_wasm_abi::CapabilityGrantV2>(encoded_grant.clone())
+        else {
+            return false;
+        };
+        let Ok(nonce_key) = super::capability_authorization_events::authorization_nonce_key(
+            &grant,
+            context.response_nonce.as_str(),
+        ) else {
+            return false;
+        };
+        let Some(nonce_record) = self.capability_nonce_records.get(&nonce_key) else {
+            return false;
+        };
+        if nonce_record.state != "committed" {
+            return false;
+        }
+        let Some(receipt_id) = nonce_record.committed_receipt_id.as_deref() else {
+            return false;
+        };
+        let Some(receipt) = self.capability_authorization_receipts.get(receipt_id) else {
+            return false;
+        };
+        let Ok(subject) = serde_json::to_value(&context.subject) else {
+            return false;
+        };
+        let Ok(presenter) = serde_json::to_value(&context.presenter) else {
+            return false;
+        };
+        let Ok(audience) = serde_json::to_value(&context.audience) else {
+            return false;
+        };
+        receipt.decision == "accepted"
+            && receipt.grant_id.as_deref() == Some(context.grant_id.as_str())
+            && receipt.response_nonce.as_deref() == Some(context.response_nonce.as_str())
+            && receipt.authorization_nonce_key_hash.as_deref() == Some(nonce_key.as_str())
+            && receipt.subject == subject
+            && receipt.presenter.as_ref() == Some(&presenter)
+            && receipt.audience == audience
+            && receipt.catalog_snapshot_id.as_deref() == Some(context.catalog_snapshot_id.as_str())
+            && receipt.module_id.as_deref() == Some(context.module_id.as_str())
+            && receipt.module_version.as_deref() == Some(context.module_version.as_str())
+            && nonce_record.request_hash == receipt.canonical_request_hash
+            && nonce_record.outcome_hash == receipt.canonical_result_hash
+    }
+
     pub(super) fn replay_from(&mut self, start_index: usize) -> Result<(), WorldError> {
         let start_index = start_index.min(self.journal.events.len());
         let events: Vec<WorldEvent> = self.journal.events[start_index..].to_vec();
         let mut replaying_tick: Option<WorldTime> = None;
         let mut previous_event_time = self.state.time;
+        // A stale snapshot can contain historical receipts and more than one
+        // pending invocation context.  Recovery must not use either of those
+        // facts as a global gate: a state update for one nonce needs its own
+        // command commit, even when another nonce already has a receipt or a
+        // commit in the same journal tail.  Keep the identity pair rather than
+        // the hashed map key so this also covers legacy grant-id map entries.
+        let mut pending_capability_contexts: BTreeSet<(String, String)> = self
+            .capability_invocation_contexts
+            .values()
+            .filter(|context| !self.capability_context_has_durable_completion(context))
+            .map(|context| (context.grant_id.clone(), context.response_nonce.clone()))
+            .collect();
+        let mut capability_command_activity: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut capability_command_commits: BTreeSet<(String, String)> = BTreeSet::new();
         for event in events {
             if event.time < previous_event_time {
                 return Err(WorldError::ResourceBalanceInvalid {
@@ -125,6 +197,119 @@ impl World {
                     self.record_tick_consensus_for_tick(tick)?;
                 }
             }
+            match &event.body {
+                WorldEventBody::ModuleStateUpdated(update) => {
+                    // ModuleStateUpdated is also emitted by ordinary module
+                    // ticks and commands.  Only a state update carrying the
+                    // trace/module identity of a pending trusted invocation
+                    // context indicates a capability command that may have
+                    // crashed before its CommandCommitted journal event.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == update.module_id
+                            && update.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_command_activity.insert(identity);
+                            break;
+                        }
+                    }
+                }
+                WorldEventBody::ModuleRuntimeCharged(charge) => {
+                    // Trusted commands charge runtime resources before their
+                    // output events.  Treat that charge as command activity
+                    // so an effect-only or emit-only tail cannot be replayed
+                    // without the following CommandCommitted event.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == charge.module_id
+                            && charge.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_command_activity.insert(identity);
+                            break;
+                        }
+                    }
+                }
+                WorldEventBody::EffectQueued(intent) => {
+                    // EffectIntent does not carry the command nonce, so use
+                    // the durable v2 effect grant and its audience/subject
+                    // binding to distinguish a trusted command effect from a
+                    // legacy or unrelated module effect.  This covers hosts
+                    // without an artifact owner (and therefore without a
+                    // ModuleRuntimeCharged event).
+                    if let super::super::EffectOrigin::Module { module_id } = &intent.origin
+                        && let Some(encoded_grant) = self.capability_grants_v2.get(&intent.cap_ref)
+                        && let Ok(effect_grant) = serde_json::from_value::<
+                            oasis7_wasm_abi::CapabilityGrantV2,
+                        >(encoded_grant.clone())
+                    {
+                        for context in self.capability_invocation_contexts.values() {
+                            let identity =
+                                (context.grant_id.clone(), context.response_nonce.clone());
+                            if pending_capability_contexts.contains(&identity)
+                                && module_id == &context.module_id
+                                && effect_grant.scope.object_kind == "effect"
+                                && effect_grant.scope.module_id == context.module_id
+                                && effect_grant.subject == context.subject
+                                && effect_grant.audience == context.audience
+                            {
+                                capability_command_activity.insert(identity);
+                                break;
+                            }
+                        }
+                    }
+                }
+                WorldEventBody::ModuleEmitted(event) => {
+                    // ModuleEmitted carries the same host-bound trusted trace
+                    // as state updates.  It is therefore independently
+                    // sufficient to identify a command tail that still needs
+                    // its durable authorization commit.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == event.module_id
+                            && event.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_command_activity.insert(identity);
+                            break;
+                        }
+                    }
+                }
+                WorldEventBody::CapabilityAuthorization(
+                    super::super::CapabilityAuthorizationEvent::CommandCommitted {
+                        grant,
+                        receipt,
+                        ..
+                    },
+                ) => {
+                    if let Some(response_nonce) = receipt.response_nonce.as_deref() {
+                        let identity = (grant.grant_id.clone(), response_nonce.to_string());
+                        if pending_capability_contexts.contains(&identity) {
+                            capability_command_commits.insert(identity);
+                        }
+                    }
+                }
+                WorldEventBody::CapabilityAuthorization(
+                    super::super::CapabilityAuthorizationEvent::InvocationContextInstalled {
+                        context,
+                        ..
+                    },
+                ) => {
+                    // A snapshot may precede the context-install event itself.
+                    // Include that context once its durable installation is
+                    // replayed so a later state update cannot bypass the
+                    // per-context crash-window check.
+                    let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                    if !self.capability_context_has_durable_completion(context) {
+                        pending_capability_contexts.insert(identity);
+                    }
+                }
+                _ => {}
+            }
             self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
             self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
@@ -133,6 +318,12 @@ impl World {
         }
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;
+        }
+        if capability_command_activity
+            .iter()
+            .any(|identity| !capability_command_commits.contains(identity))
+        {
+            return Err(WorldError::JournalMismatch);
         }
         Ok(())
     }
@@ -623,7 +814,7 @@ impl World {
                 }
             }
             WorldEventBody::EffectQueued(intent) => {
-                self.push_pending_effect_bounded(intent.clone());
+                self.push_pending_effect_bounded(intent.clone())?;
             }
             WorldEventBody::ReceiptAppended(receipt) => {
                 let mut removed = false;
@@ -641,6 +832,9 @@ impl World {
                         intent_id: receipt.intent_id.clone(),
                     });
                 }
+            }
+            WorldEventBody::CapabilityAuthorization(event) => {
+                self.apply_capability_authorization_event(event, time)?;
             }
             WorldEventBody::PolicyDecisionRecorded(_) => {}
             WorldEventBody::RuleDecisionRecorded(_) => {}

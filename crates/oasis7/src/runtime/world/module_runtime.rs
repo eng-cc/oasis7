@@ -2,8 +2,10 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use oasis7_wasm_abi::{
-    ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest,
-    ModuleContext, ModuleEmitEvent, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
+    ModuleCallCaller, ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin,
+    ModuleCallRequest, ModuleCommandEnvelope, ModuleContext, ModuleEmitEvent,
+    ModuleInvocationProvenance, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
+    validate_module_command_declarations, validate_module_command_envelope,
 };
 use oasis7_wasm_router::{
     PreparedSubscription, prepare_subscriptions, prepared_module_subscribes_to_action,
@@ -182,6 +184,128 @@ impl World {
             input,
             sandbox,
         )
+    }
+
+    /// Execute a declared module command through the existing metered call path.
+    ///
+    /// Command admission is intentionally completed before the sandbox is
+    /// touched: the active manifest and its declarations are checked, the
+    /// envelope is checked against those declarations, and the canonical CBOR
+    /// representation is produced while the world is still unchanged. The
+    /// existing `execute_module_call` remains authoritative for artifact
+    /// loading, sandbox invocation, metering, policy hooks, and output events.
+    pub fn execute_module_command(
+        &mut self,
+        module_id: &str,
+        trace_id: impl Into<String>,
+        envelope: ModuleCommandEnvelope,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<ModuleOutput, WorldError> {
+        self.execute_module_command_with_provenance(
+            module_id,
+            trace_id,
+            envelope,
+            ModuleInvocationProvenance {
+                caller: ModuleCallCaller::LegacyUnspecified,
+                origin: ModuleCallOrigin {
+                    kind: "legacy_unspecified".to_string(),
+                    id: "legacy_unspecified".to_string(),
+                },
+            },
+            sandbox,
+        )
+    }
+
+    /// Execute a module command while keeping invocation provenance outside
+    /// the untrusted command envelope.  The host validates every manifest
+    /// capability at the current world time before any artifact cache or
+    /// sandbox operation can occur, then injects the trusted provenance into
+    /// the module call context and puts the canonical command bytes in the
+    /// action slot.
+    pub fn execute_module_command_with_provenance(
+        &mut self,
+        module_id: &str,
+        trace_id: impl Into<String>,
+        envelope: ModuleCommandEnvelope,
+        provenance: ModuleInvocationProvenance,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<ModuleOutput, WorldError> {
+        let manifest = self.active_module_manifest(module_id)?.clone();
+        self.validate_required_module_capabilities(&manifest)?;
+        validate_module_command_declarations(&manifest.abi_contract.declarations).map_err(
+            |error| WorldError::ModuleChangeInvalid {
+                reason: format!(
+                    "module command declarations invalid for {}: {error}",
+                    manifest.module_id
+                ),
+            },
+        )?;
+        validate_module_command_envelope(&envelope, &manifest.abi_contract.declarations).map_err(
+            |error| WorldError::ModuleChangeInvalid {
+                reason: format!("module command envelope invalid for {module_id}: {error}"),
+            },
+        )?;
+        let canonical_input =
+            envelope
+                .encode_canonical()
+                .map_err(|error| WorldError::ModuleChangeInvalid {
+                    reason: format!("module command envelope canonical encoding failed: {error}"),
+                })?;
+
+        let trace_id = trace_id.into();
+        let world_config_hash = self.current_manifest_hash()?;
+        let module_manifest_hash = hash_json(&manifest)?;
+        let state = match manifest.kind {
+            ModuleKind::Reducer => Some(
+                self.state
+                    .module_states
+                    .get(module_id)
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
+            ModuleKind::Pure => None,
+        };
+        let input = ModuleCallInput {
+            ctx: ModuleContext {
+                v: "wasm-1".to_string(),
+                module_id: module_id.to_string(),
+                trace_id: trace_id.clone(),
+                time: self.state.time,
+                origin: provenance.origin,
+                caller: provenance.caller,
+                limits: manifest.limits.clone(),
+                stage: Some("module_command".to_string()),
+                world_config_hash: Some(world_config_hash),
+                manifest_hash: Some(module_manifest_hash),
+                journal_height: Some(self.journal.events.len() as u64),
+                module_version: Some(manifest.version.clone()),
+                module_kind: Some(module_kind_label(&manifest.kind).to_string()),
+                module_role: Some(module_role_label(&manifest.role).to_string()),
+            },
+            event: None,
+            action: Some(canonical_input),
+            state,
+        };
+        let input_bytes = to_canonical_cbor(&input)?;
+
+        self.execute_module_call_with_manifest_and_state_key(
+            module_id,
+            module_id,
+            &manifest,
+            trace_id,
+            input_bytes,
+            sandbox,
+        )
+    }
+
+    fn validate_required_module_capabilities(
+        &self,
+        manifest: &ModuleManifest,
+    ) -> Result<(), WorldError> {
+        for cap in &manifest.required_caps {
+            self.validate_module_required_capability(cap)?;
+        }
+        Ok(())
     }
 
     pub(super) fn execute_module_call_with_manifest_and_state_key(
@@ -375,6 +499,7 @@ impl World {
                     kind: "event".to_string(),
                     id: event.id.to_string(),
                 },
+                caller: ModuleCallCaller::LegacyUnspecified,
                 limits: manifest.limits.clone(),
                 stage: Some("post_event".to_string()),
                 world_config_hash: world_config_hash.clone(),
@@ -489,6 +614,7 @@ impl World {
                     kind: "action".to_string(),
                     id: envelope.id.to_string(),
                 },
+                caller: ModuleCallCaller::LegacyUnspecified,
                 limits: manifest.limits.clone(),
                 stage: Some(subscription_stage_label(stage).to_string()),
                 world_config_hash: world_config_hash.clone(),
@@ -842,7 +968,7 @@ impl World {
         Ok(())
     }
 
-    fn call_module_raw(
+    pub(super) fn call_module_raw(
         &mut self,
         module_id: &str,
         trace_id: &str,
@@ -932,6 +1058,9 @@ impl World {
                 origin: ModuleCallOrigin {
                     kind: "module_policy".to_string(),
                     id: trace_id.to_string(),
+                },
+                caller: ModuleCallCaller::Module {
+                    module_id: module_id.to_string(),
                 },
                 limits: policy_manifest.limits.clone(),
                 stage: Some("module_policy".to_string()),

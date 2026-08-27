@@ -14,6 +14,7 @@ mod audit;
 mod blob_store;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
+mod capability_authorization;
 mod consensus;
 mod effect;
 mod error;
@@ -71,6 +72,14 @@ pub use crate::chain_resource_schema::{
 
 // Audit
 pub use audit::{AuditCausedBy, AuditEventKind, AuditFilter};
+
+// Trusted module authorization (v2)
+pub use capability_authorization::{
+    CapabilityAgentIdentity, CapabilityAuthorityFinalityBinding, CapabilityAuthorityFinalityProof,
+    CapabilityAuthorityRecord, CapabilityAuthorizationAuditReceipt,
+    CapabilityAuthorizationNonceRecord, CapabilityBudgetAccount, CapabilityEffectReceiptLink,
+    CapabilityInvocationContext, CapabilityRevocationState,
+};
 
 // Effect system
 pub use effect::{
@@ -133,11 +142,12 @@ pub use modules::{
     FactoryModuleSpec, FactoryProfileV1, GameplayContract, GameplayModuleKind,
     MaterialDefaultPriority, MaterialProfileV1, MaterialStack, MaterialTransportLossClass,
     ModuleAbiContract, ModuleActivation, ModuleArtifact, ModuleArtifactIdentity, ModuleCache,
-    ModuleChangeSet, ModuleDeactivation, ModuleEvent, ModuleEventKind, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi, ProductModuleSpec, ProductProfileV1,
-    ProductValidationDecision, ProductValidationRequest, RecipeExecutionPlan,
-    RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec, RecipeProfileV1,
+    ModuleChangeSet, ModuleCommandCatalogEntry, ModuleDeactivation, ModuleEvent, ModuleEventKind,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole,
+    ModuleSubscription, ModuleSubscriptionStage, ModuleUpgrade, ProductModuleApi,
+    ProductModuleSpec, ProductProfileV1, ProductValidationDecision, ProductValidationRequest,
+    RecipeExecutionPlan, RecipeExecutionRequest, RecipeModuleApi, RecipeModuleSpec,
+    RecipeProfileV1, module_command_catalog,
 };
 
 // Node points
@@ -277,4 +287,6 @@ pub use world::{
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
-pub use world_event::{ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody};
+pub use world_event::{
+    CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
+};

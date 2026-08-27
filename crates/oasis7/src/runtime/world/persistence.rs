@@ -1,14 +1,4 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::VecDeque;
-use std::fs;
-use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use oasis7_distfs::{assemble_journal, assemble_snapshot};
-use oasis7_proto::distributed::SnapshotManifest;
-use serde::{Deserialize, Serialize};
-
+use super::super::capability_authorization::CapabilityRevocationState;
 use super::super::util::{hash_json, read_json_from_path, write_json_to_path};
 use super::super::{
     Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, SegmentConfig, Snapshot,
@@ -16,6 +6,15 @@ use super::super::{
 };
 use super::World;
 use super::module_tick_runtime::ModuleTickRoutingMetrics;
+use oasis7_distfs::{assemble_journal, assemble_snapshot};
+use oasis7_proto::distributed::SnapshotManifest;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::VecDeque;
+use std::fs;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 #[path = "authoritative_recovery_generation.rs"]
 mod authoritative_recovery_generation;
 pub use authoritative_recovery_generation::{
@@ -174,26 +173,21 @@ struct DistfsRecoveryAuditRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
 }
-
 fn tick_consensus_archive_path(dir: &Path) -> std::path::PathBuf {
     dir.join(TICK_CONSENSUS_ARCHIVE_FILE)
 }
-
 fn tick_consensus_archive_index_path(dir: &Path) -> std::path::PathBuf {
     dir.join(TICK_CONSENSUS_ARCHIVE_INDEX_FILE)
 }
-
 fn tick_consensus_archive_segments_dir(dir: &Path) -> std::path::PathBuf {
     dir.join(TICK_CONSENSUS_ARCHIVE_SEGMENTS_DIR)
 }
-
 fn tick_consensus_archive_segment_relative_path(
     from_tick: WorldTime,
     to_tick: WorldTime,
 ) -> String {
     format!("{TICK_CONSENSUS_ARCHIVE_SEGMENTS_DIR}/segment-{from_tick:020}-{to_tick:020}.json")
 }
-
 fn tick_consensus_hot_tick_bounds(
     records: &[TickConsensusRecord],
 ) -> (Option<WorldTime>, Option<WorldTime>) {
@@ -202,7 +196,6 @@ fn tick_consensus_hot_tick_bounds(
         records.last().map(|record| record.block.header.tick),
     )
 }
-
 fn split_tick_consensus_snapshot_for_persistence(
     snapshot: &Snapshot,
 ) -> (Snapshot, Option<TickConsensusArchiveFile>) {
@@ -234,7 +227,6 @@ fn split_tick_consensus_snapshot_for_persistence(
         Some(TickConsensusArchiveFile { archived_records }),
     )
 }
-
 fn build_tick_consensus_archive_index(
     snapshot: &Snapshot,
     archive: &TickConsensusArchiveFile,
@@ -247,7 +239,6 @@ fn build_tick_consensus_archive_index(
 > {
     let mut archived_segments = Vec::new();
     let mut segment_files = Vec::new();
-
     for records_chunk in archive
         .archived_records
         .chunks(TICK_CONSENSUS_ARCHIVE_SEGMENT_LEN)
@@ -295,7 +286,6 @@ fn build_tick_consensus_archive_index(
         segment_files,
     ))
 }
-
 fn persist_tick_consensus_archive(
     dir: &Path,
     snapshot: &Snapshot,
@@ -333,7 +323,6 @@ fn persist_tick_consensus_archive(
         }
     }
 }
-
 fn load_tick_consensus_archive_records_from_index(
     dir: &Path,
     snapshot: &Snapshot,
@@ -342,7 +331,6 @@ fn load_tick_consensus_archive_records_from_index(
     if !archive_index_path.exists() {
         return Ok(None);
     }
-
     let archive_index: TickConsensusArchiveIndex =
         read_json_from_path(archive_index_path.as_path())?;
     if archive_index.hot_from_tick != snapshot.tick_consensus_hot_from_tick
@@ -457,11 +445,9 @@ fn load_tick_consensus_archive_records_from_index(
 
     Ok(Some(archived_records))
 }
-
 fn tick_consensus_archive_segment_missing(reason: &str) -> bool {
     reason.starts_with("tick consensus archive segment missing:")
 }
-
 fn load_tick_consensus_legacy_archive_records(
     dir: &Path,
     snapshot: &Snapshot,
@@ -487,7 +473,6 @@ fn load_tick_consensus_legacy_archive_records(
     }
     Ok(archive.archived_records)
 }
-
 fn hydrate_tick_consensus_snapshot_from_archive(
     dir: &Path,
     snapshot: &mut Snapshot,
@@ -535,7 +520,6 @@ fn hydrate_tick_consensus_snapshot_from_archive(
     };
     hydrate_tick_consensus_snapshot_from_archived_records(snapshot, archived_records)
 }
-
 fn hydrate_tick_consensus_snapshot_from_archived_records(
     snapshot: &mut Snapshot,
     archived_records: Vec<TickConsensusRecord>,
@@ -563,7 +547,6 @@ fn hydrate_tick_consensus_snapshot_from_archived_records(
     snapshot.tick_consensus_hot_to_tick = hot_to_tick;
     Ok(())
 }
-
 fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapshot, WorldError> {
     if let Some((mut snapshot, _)) = World::try_load_from_distfs_sidecar(dir)? {
         if !World::has_indexed_sidecar_generation(dir)? {
@@ -575,7 +558,6 @@ fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapsho
     hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
     Ok(snapshot)
 }
-
 fn validate_compatible_legacy_distfs_payloads(
     dir: &Path,
     selected_manifest: &SnapshotManifest,
@@ -603,7 +585,6 @@ fn validate_compatible_legacy_distfs_payloads(
     }
     Ok(())
 }
-
 fn load_json_snapshot_if_newer_chain_resource_context(
     dir: &Path,
     distfs_snapshot: &Snapshot,
@@ -636,18 +617,15 @@ fn load_json_snapshot_if_newer_chain_resource_context(
     }
     Ok(None)
 }
-
 fn chain_resource_manifest_is_bound(manifest: &super::super::ChainResourceManifest) -> bool {
     manifest.is_schema_current() && manifest.world_id != "unbound" && manifest.chain_id != "unbound"
 }
-
 fn chain_resource_manifest_has_external_context(
     manifest: &super::super::ChainResourceManifest,
 ) -> bool {
     chain_resource_manifest_is_bound(manifest)
         && !(manifest.world_id == DISTFS_WORLD_ID_FALLBACK && manifest.chain_id == "runtime-chain")
 }
-
 fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result<(), WorldError> {
     let mut previous_block_hash = None;
     let mut previous_height: Option<u64> = None;
@@ -703,7 +681,6 @@ fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result
     }
     Ok(())
 }
-
 impl World {
     // ---------------------------------------------------------------------
     // Persistence
@@ -769,6 +746,7 @@ impl World {
             state: self.state.clone(),
             journal_len: self.journal.len(),
             last_event_id: self.next_event_id.saturating_sub(1),
+            journal_commitment: self.journal.commitment().unwrap_or_default(),
             event_id_era: self.next_event_id_era,
             next_action_id: self.next_action_id,
             action_id_era: self.next_action_id_era,
@@ -782,6 +760,14 @@ impl World {
             module_tick_schedule: self.module_tick_schedule.clone(),
             module_tick_routing_metrics: self.module_tick_routing_metrics.deterministic_snapshot(),
             capabilities: self.capabilities.clone(),
+            capability_grants_v2: self.capability_grants_v2.clone(),
+            capability_revocation_state: self.capability_revocation_state.clone(),
+            capability_nonce_records: self.capability_nonce_records.clone(),
+            capability_authorization_receipts: self.capability_authorization_receipts.clone(),
+            capability_invocation_contexts: self.capability_invocation_contexts.clone(),
+            capability_authorization_root: self.capability_authorization_root.clone(),
+            capability_budget_accounts: self.capability_budget_accounts.clone(),
+            capability_effect_receipt_links: self.capability_effect_receipt_links.clone(),
             policies: self.policies.clone(),
             proposals: self.proposals.clone(),
             scheduler_cursor: self.scheduler_cursor.clone(),
@@ -803,6 +789,7 @@ impl World {
                 .tick_consensus_rejection_audit_events
                 .clone(),
             governance_execution_policy: self.governance_execution_policy.clone(),
+            governance_finality_epoch_snapshots: self.governance_finality_epoch_snapshots.clone(),
             governance_emergency_brake_until_tick: self.governance_emergency_brake_until_tick,
             governance_identity_penalties: self.governance_identity_penalties.clone(),
             next_governance_identity_penalty_id: self.next_governance_identity_penalty_id,
@@ -1027,6 +1014,18 @@ impl World {
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
+        validate_journal_event_sequence(&journal)?;
+        if snapshot.journal_len > 0
+            && journal.events[snapshot.journal_len - 1].id != snapshot.last_event_id
+        {
+            return Err(WorldError::JournalMismatch);
+        }
+        if !snapshot.journal_commitment.is_empty() {
+            let actual = hash_json(&journal.events[..snapshot.journal_len].to_vec())?;
+            if actual != snapshot.journal_commitment {
+                return Err(WorldError::JournalMismatch);
+            }
+        }
         snapshot.rollback_authority_registry.validate()?;
 
         let mut world = Self::new_with_state(snapshot.state);
@@ -1059,6 +1058,31 @@ impl World {
             snapshot.module_tick_routing_metrics,
         );
         world.capabilities = snapshot.capabilities;
+        world.capability_grants_v2 = snapshot.capability_grants_v2;
+        world.capability_revocation_state = snapshot.capability_revocation_state;
+        world.capability_nonce_records = snapshot.capability_nonce_records;
+        world.capability_authorization_receipts = snapshot.capability_authorization_receipts;
+        world.capability_invocation_contexts = snapshot.capability_invocation_contexts;
+        world.capability_authorization_root = snapshot.capability_authorization_root;
+        world.capability_budget_accounts = snapshot.capability_budget_accounts;
+        world.capability_effect_receipt_links = snapshot.capability_effect_receipt_links;
+        if world.capability_authorization_root.is_empty() {
+            let has_v2_authorization_state = !world.capability_grants_v2.is_empty()
+                || world.capability_revocation_state != CapabilityRevocationState::default()
+                || !world.capability_nonce_records.is_empty()
+                || !world.capability_authorization_receipts.is_empty()
+                || !world.capability_invocation_contexts.is_empty()
+                || !world.capability_budget_accounts.is_empty()
+                || !world.capability_effect_receipt_links.is_empty();
+            if has_v2_authorization_state {
+                return Err(super::capability_authorization::deny(
+                    "capability authorization root is required when v2 state is populated",
+                ));
+            }
+            world.refresh_capability_authorization_root()?;
+        } else {
+            world.verify_capability_authorization_root()?;
+        }
         world.policies = snapshot.policies;
         world.proposals = snapshot.proposals;
         world.scheduler_cursor = snapshot.scheduler_cursor;
@@ -1074,12 +1098,30 @@ impl World {
         world.tick_consensus_rejection_audit_events =
             snapshot.tick_consensus_rejection_audit_events;
         world.governance_execution_policy = snapshot.governance_execution_policy;
+        world.governance_finality_epoch_snapshots = snapshot.governance_finality_epoch_snapshots;
         Self::validate_governance_execution_policy(&world.governance_execution_policy)?;
         world.governance_emergency_brake_until_tick =
             snapshot.governance_emergency_brake_until_tick;
         world.governance_identity_penalties = snapshot.governance_identity_penalties;
         world.next_governance_identity_penalty_id =
             snapshot.next_governance_identity_penalty_id.max(1);
+        for (issuer_id, record) in &world.capability_revocation_state.authority_records {
+            let proof = world
+                .capability_revocation_state
+                .authority_finality_proofs
+                .get(issuer_id)
+                .ok_or_else(|| {
+                    super::capability_authorization::deny(
+                        "authority record is missing its replayable finality proof",
+                    )
+                })?;
+            if proof.binding.issuer_id != *issuer_id {
+                return Err(super::capability_authorization::deny(
+                    "authority finality proof issuer binding is invalid",
+                ));
+            }
+            world.verify_capability_authority_finality_proof(record, proof)?;
+        }
         world.enforce_pending_action_limit();
         world.enforce_pending_effect_limit();
         world.enforce_inflight_effect_limit();
@@ -1139,4 +1181,19 @@ impl World {
         write_json_to_path(&journal_segments, journal_segments_path.as_path())?;
         Ok(())
     }
+}
+
+fn validate_journal_event_sequence(journal: &Journal) -> Result<(), WorldError> {
+    for pair in journal.events.windows(2) {
+        let previous = pair[0].id;
+        let expected = if previous == u64::MAX {
+            1
+        } else {
+            previous.saturating_add(1)
+        };
+        if pair[1].id != expected {
+            return Err(WorldError::JournalMismatch);
+        }
+    }
+    Ok(())
 }

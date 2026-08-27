@@ -1,5 +1,6 @@
 extern crate self as oasis7;
 
+pub mod capability_invocation_context;
 pub mod chain_pos_defaults;
 pub mod chain_resource_schema;
 pub mod collect_data_auth;

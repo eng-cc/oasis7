@@ -1,0 +1,249 @@
+//! Contract tests for the governed open-module command ABI.
+//!
+//! These tests pin the versioned command surface without weakening the legacy
+//! manifest decoding assertions.  The deterministic-encoding fixture exercises
+//! the ABI's production canonical-CBOR helper rather than relying on
+//! a non-canonical declaration-order encoding.
+
+use std::collections::BTreeMap;
+
+use oasis7_wasm_abi::{
+    ModuleAbiContract, ModuleCommandDeclaration, ModuleCommandEnvelope, ModuleKind, ModuleLimits,
+    ModuleManifest, ModuleRole, ModuleSchemaDeclarations, encode_canonical_cbor,
+    validate_module_command_declarations, validate_module_command_envelope,
+};
+
+const VALID_SCHEMA_HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn declaration(namespace: &str, name: &str) -> ModuleCommandDeclaration {
+    ModuleCommandDeclaration {
+        namespace: namespace.to_string(),
+        name: name.to_string(),
+        schema_version: 1,
+        schema_hash: VALID_SCHEMA_HASH.to_string(),
+        max_payload_bytes: 4096,
+    }
+}
+
+fn manifest_with_commands(commands: Vec<ModuleCommandDeclaration>) -> ModuleManifest {
+    ModuleManifest {
+        module_id: "module.bank".to_string(),
+        name: "Bank commands".to_string(),
+        version: "1.0.0".to_string(),
+        kind: ModuleKind::Pure,
+        role: ModuleRole::Domain,
+        wasm_hash: VALID_SCHEMA_HASH.to_string(),
+        interface_version: "wasm-1".to_string(),
+        exports: vec!["call".to_string()],
+        subscriptions: Vec::new(),
+        required_caps: Vec::new(),
+        abi_contract: ModuleAbiContract {
+            declarations: ModuleSchemaDeclarations {
+                commands,
+                ..ModuleSchemaDeclarations::default()
+            },
+            ..ModuleAbiContract::default()
+        },
+        artifact_identity: None,
+        limits: ModuleLimits::default(),
+    }
+}
+
+#[test]
+fn legacy_manifest_deserializes_with_empty_command_declarations() {
+    let legacy = serde_json::json!({
+        "module_id": "legacy.module",
+        "name": "Legacy",
+        "version": "0.1.0",
+        "kind": "pure",
+        "wasm_hash": VALID_SCHEMA_HASH,
+        "interface_version": "wasm-1",
+        "abi_contract": {},
+        "limits": {}
+    });
+
+    let manifest: ModuleManifest = serde_json::from_value(legacy).expect("legacy manifest");
+    assert!(manifest.abi_contract.declarations.commands.is_empty());
+}
+
+#[test]
+fn command_declaration_validation_accepts_versioned_schema_and_bound() {
+    let declarations = ModuleSchemaDeclarations {
+        commands: vec![declaration("bank.acme", "open_account")],
+        ..ModuleSchemaDeclarations::default()
+    };
+
+    assert!(validate_module_command_declarations(&declarations).is_ok());
+}
+
+#[test]
+fn command_declaration_validation_rejects_reserved_duplicate_zero_and_malformed_entries() {
+    for invalid in [
+        {
+            let value = declaration("core", "open_account");
+            value
+        },
+        {
+            let value = declaration("kernel", "open_account");
+            value
+        },
+        {
+            let mut value = declaration("bank.acme", "open_account");
+            value.schema_version = 0;
+            value
+        },
+        {
+            let mut value = declaration("bank.acme", "open_account");
+            value.schema_hash = "not-a-sha256".to_string();
+            value
+        },
+        {
+            let mut value = declaration("bank.acme", "open_account");
+            value.max_payload_bytes = 0;
+            value
+        },
+        {
+            let mut value = declaration("bank.acme", "open_account");
+            value.max_payload_bytes = u64::MAX;
+            value
+        },
+    ] {
+        assert!(
+            validate_module_command_declarations(&ModuleSchemaDeclarations {
+                commands: vec![invalid],
+                ..ModuleSchemaDeclarations::default()
+            })
+            .is_err()
+        );
+    }
+
+    let duplicate = ModuleSchemaDeclarations {
+        commands: vec![
+            declaration("bank.acme", "open_account"),
+            declaration("bank.acme", "open_account"),
+        ],
+        ..ModuleSchemaDeclarations::default()
+    };
+    assert!(validate_module_command_declarations(&duplicate).is_err());
+}
+
+#[test]
+fn command_envelope_roundtrips_canonically_and_rejects_before_execution() {
+    let manifest = manifest_with_commands(vec![declaration("bank.acme", "open_account")]);
+    let envelope = ModuleCommandEnvelope {
+        namespace: "bank.acme".to_string(),
+        name: "open_account".to_string(),
+        schema_version: 1,
+        schema_hash: VALID_SCHEMA_HASH.to_string(),
+        payload: vec![0xa1, 0x61, 0x69, 0x01],
+    };
+
+    let encoded = envelope.encode_canonical().expect("canonical envelope");
+    assert_eq!(
+        encoded,
+        envelope.encode_canonical().expect("deterministic encoding")
+    );
+    assert_eq!(
+        ModuleCommandEnvelope::decode_canonical(&encoded).unwrap(),
+        envelope
+    );
+    let mut declaration_order = Vec::new();
+    ciborium::ser::into_writer(&envelope, &mut declaration_order)
+        .expect("encode declaration order");
+    assert_ne!(
+        declaration_order, encoded,
+        "struct declaration order must not be accepted as canonical"
+    );
+    assert!(matches!(
+        ModuleCommandEnvelope::decode_canonical(&declaration_order),
+        Err(oasis7_wasm_abi::ModuleCommandValidationError::NonCanonicalEncoding)
+    ));
+    assert!(
+        validate_module_command_envelope(&envelope, &manifest.abi_contract.declarations).is_ok()
+    );
+
+    for invalid in [
+        ModuleCommandEnvelope {
+            namespace: "unknown.acme".to_string(),
+            ..envelope.clone()
+        },
+        ModuleCommandEnvelope {
+            name: "close_account".to_string(),
+            ..envelope.clone()
+        },
+        ModuleCommandEnvelope {
+            schema_version: 2,
+            ..envelope.clone()
+        },
+        ModuleCommandEnvelope {
+            schema_hash: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                .to_string(),
+            ..envelope.clone()
+        },
+        ModuleCommandEnvelope {
+            namespace: "core".to_string(),
+            ..envelope.clone()
+        },
+        ModuleCommandEnvelope {
+            payload: vec![0; 4097],
+            ..envelope.clone()
+        },
+    ] {
+        assert!(
+            validate_module_command_envelope(&invalid, &manifest.abi_contract.declarations)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn canonical_cbor_orders_map_keys_by_encoded_key_length() {
+    // RFC 8949 deterministic encoding orders map keys by the length of their
+    // encoded key first, then by the encoded bytes.  The encoded text key
+    // "b" is two bytes (`61 62`), while "aa" is three (`62 61 61`), so the
+    // deterministic order is "b", "aa" even though Rust's BTreeMap order is
+    // "aa", "b".
+    let mut payload = BTreeMap::new();
+    payload.insert("aa".to_string(), 1_u8);
+    payload.insert("b".to_string(), 2_u8);
+
+    let expected_rfc8949_bytes = [
+        0xa2, // map(2)
+        0x61, 0x62, 0x02, // "b": 2
+        0x62, 0x61, 0x61, 0x01, // "aa": 1
+    ];
+
+    let mut declaration_order = Vec::new();
+    ciborium::ser::into_writer(&payload, &mut declaration_order).expect("encode map payload");
+    assert_ne!(
+        declaration_order, expected_rfc8949_bytes,
+        "declaration-order CBOR must not be treated as the ABI canonical encoder"
+    );
+    let encoded = encode_canonical_cbor(&payload).expect("encode canonical map payload");
+    assert_eq!(
+        encoded, expected_rfc8949_bytes,
+        "canonical helper must use RFC 8949 deterministic map ordering; actual={encoded:02x?}"
+    );
+}
+
+#[test]
+fn canonical_cbor_normalizes_nested_maps() {
+    let mut inner = BTreeMap::new();
+    inner.insert("aa".to_string(), 1_u8);
+    inner.insert("b".to_string(), 2_u8);
+    let payload = BTreeMap::from([("outer".to_string(), inner)]);
+
+    let expected_rfc8949_bytes = [
+        0xa1, // map(1)
+        0x65, 0x6f, 0x75, 0x74, 0x65, 0x72, // "outer"
+        0xa2, // map(2)
+        0x61, 0x62, 0x02, // "b": 2
+        0x62, 0x61, 0x61, 0x01, // "aa": 1
+    ];
+
+    let encoded = encode_canonical_cbor(&payload).expect("canonical nested map payload");
+    assert_eq!(
+        encoded, expected_rfc8949_bytes,
+        "canonical helper must normalize nested maps; actual={encoded:02x?}"
+    );
+}

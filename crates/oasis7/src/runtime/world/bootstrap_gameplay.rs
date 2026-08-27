@@ -165,6 +165,7 @@ fn m5_gameplay_manifest(
                 min_players,
                 max_players,
             }),
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: vec![

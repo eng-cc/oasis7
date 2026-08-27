@@ -2,13 +2,156 @@ use super::super::*;
 use super::pos;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::{
-    ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleEffectIntent,
-    ModuleEmit, ModuleOutput, ModuleSandbox, ModuleTickLifecycleDirective,
+    ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallRequest,
+    ModuleCommandDeclaration, ModuleEffectIntent, ModuleEmit, ModuleOutput, ModuleSandbox,
+    ModuleSchemaDeclarations, ModuleTickLifecycleDirective,
 };
 use oasis7_wasm_executor::FixedSandbox;
 #[cfg(not(feature = "wasmtime"))]
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde_json::json;
+
+fn command_declaration(
+    namespace: &str,
+    name: &str,
+    schema_version: u32,
+    schema_hash: &str,
+    max_payload_bytes: u64,
+) -> ModuleCommandDeclaration {
+    ModuleCommandDeclaration {
+        namespace: namespace.to_string(),
+        name: name.to_string(),
+        schema_version,
+        schema_hash: schema_hash.to_string(),
+        max_payload_bytes,
+    }
+}
+
+fn registry_record(
+    module_id: &str,
+    version: &str,
+    commands: Vec<ModuleCommandDeclaration>,
+) -> ModuleRecord {
+    ModuleRecord {
+        manifest: ModuleManifest {
+            module_id: module_id.to_string(),
+            name: module_id.to_string(),
+            version: version.to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::AgentInternal,
+            wasm_hash: format!("{module_id}-{version}"),
+            interface_version: "wasm-1".to_string(),
+            exports: vec!["call".to_string()],
+            subscriptions: Vec::new(),
+            required_caps: Vec::new(),
+            abi_contract: ModuleAbiContract {
+                declarations: ModuleSchemaDeclarations { commands },
+                ..ModuleAbiContract::default()
+            },
+            artifact_identity: None,
+            limits: ModuleLimits::default(),
+        },
+        registered_at: 0,
+        registered_by: "test".to_string(),
+        audit_event_id: None,
+    }
+}
+
+#[test]
+fn module_command_catalog_is_active_sorted_and_defensively_filters_invalid() {
+    let hash_a = "00".repeat(32);
+    let hash_b = "ff".repeat(32);
+    let mut registry = ModuleRegistry::default();
+
+    let alpha_version = "1.0.0";
+    let alpha_key = ModuleRegistry::record_key("m.alpha", alpha_version);
+    registry.records.insert(
+        alpha_key,
+        registry_record(
+            "m.alpha",
+            alpha_version,
+            vec![
+                command_declaration("zeta", "write", 1, &hash_b, 128),
+                command_declaration("alpha", "read", 1, &hash_a, 256),
+            ],
+        ),
+    );
+    registry
+        .active
+        .insert("m.alpha".to_string(), alpha_version.to_string());
+
+    let zeta_version = "2.0.0";
+    let zeta_key = ModuleRegistry::record_key("m.zeta", zeta_version);
+    registry.records.insert(
+        zeta_key,
+        registry_record(
+            "m.zeta",
+            zeta_version,
+            vec![command_declaration("alpha", "read", 1, &hash_b, 64)],
+        ),
+    );
+    registry
+        .active
+        .insert("m.zeta".to_string(), zeta_version.to_string());
+
+    registry.records.insert(
+        ModuleRegistry::record_key("m.inactive", "1.0.0"),
+        registry_record(
+            "m.inactive",
+            "1.0.0",
+            vec![command_declaration("ignored", "read", 1, &hash_a, 32)],
+        ),
+    );
+
+    let invalid_version = "1.0.0";
+    registry.records.insert(
+        ModuleRegistry::record_key("m.invalid", invalid_version),
+        registry_record(
+            "m.invalid",
+            invalid_version,
+            vec![command_declaration(
+                "core",
+                "should_not_project",
+                1,
+                &hash_a,
+                32,
+            )],
+        ),
+    );
+    registry
+        .active
+        .insert("m.invalid".to_string(), invalid_version.to_string());
+
+    let catalog = module_command_catalog(&registry);
+    assert_eq!(catalog.len(), 3);
+    assert_eq!(
+        catalog
+            .iter()
+            .map(|entry| (
+                entry.module_id.as_str(),
+                entry.module_version.as_str(),
+                entry.namespace.as_str(),
+                entry.name.as_str(),
+                entry.schema_version,
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("m.alpha", "1.0.0", "alpha", "read", 1),
+            ("m.alpha", "1.0.0", "zeta", "write", 1),
+            ("m.zeta", "2.0.0", "alpha", "read", 1),
+        ]
+    );
+    assert_eq!(catalog[0].schema_hash, hash_a);
+    assert_eq!(catalog[0].max_payload_bytes, 256);
+    assert!(catalog.iter().all(|entry| entry.module_id != "m.inactive"));
+    assert!(catalog.iter().all(|entry| entry.module_id != "m.invalid"));
+}
+
+#[test]
+fn world_module_command_catalog_is_empty_without_active_modules() {
+    let world = World::new();
+    assert!(world.module_command_catalog().is_empty());
+}
 
 #[test]
 fn apply_module_changes_registers_and_activates() {
@@ -16,6 +159,7 @@ fn apply_module_changes_registers_and_activates() {
     world.add_capability(CapabilityGrant::allow_all("cap.weather"));
     let wasm_bytes = b"dummy-wasm-weather";
     let wasm_hash = util::sha256_hex(wasm_bytes);
+    let schema_hash = "01".repeat(32);
     world
         .register_module_artifact(wasm_hash.clone(), wasm_bytes)
         .unwrap();
@@ -27,7 +171,18 @@ fn apply_module_changes_registers_and_activates() {
         role: ModuleRole::Domain,
         wasm_hash: wasm_hash.clone(),
         interface_version: "wasm-1".to_string(),
-        abi_contract: ModuleAbiContract::default(),
+        abi_contract: ModuleAbiContract {
+            declarations: ModuleSchemaDeclarations {
+                commands: vec![ModuleCommandDeclaration {
+                    namespace: "weather".to_string(),
+                    name: "observe".to_string(),
+                    schema_version: 1,
+                    schema_hash: schema_hash.clone(),
+                    max_payload_bytes: 128,
+                }],
+            },
+            ..ModuleAbiContract::default()
+        },
         exports: vec!["reduce".to_string()],
         subscriptions: vec![ModuleSubscription {
             event_kinds: vec!["WeatherTick".to_string()],
@@ -82,6 +237,18 @@ fn apply_module_changes_registers_and_activates() {
             .active
             .get(&module_manifest.module_id),
         Some(&module_manifest.version)
+    );
+    assert_eq!(
+        world.module_command_catalog(),
+        vec![ModuleCommandCatalogEntry {
+            module_id: "m.weather".to_string(),
+            module_version: "0.1.0".to_string(),
+            namespace: "weather".to_string(),
+            name: "observe".to_string(),
+            schema_version: 1,
+            schema_hash,
+            max_payload_bytes: 128,
+        }]
     );
 
     let module_events: Vec<_> = world
@@ -288,6 +455,7 @@ fn module_call_resolves_effect_cap_from_cap_slot() {
             )]),
             policy_hooks: Vec::new(),
             gameplay: None,
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),
@@ -378,6 +546,7 @@ fn module_call_rejects_effect_with_unbound_cap_slot() {
             cap_slots: std::collections::BTreeMap::new(),
             policy_hooks: Vec::new(),
             gameplay: None,
+            declarations: Default::default(),
         },
         exports: vec!["reduce".to_string()],
         subscriptions: Vec::new(),
@@ -604,7 +773,7 @@ impl ModuleSandbox for PurePolicyHookSandbox {
     }
 }
 
-fn activate_module_manifest(world: &mut World, manifest: ModuleManifest) {
+pub(super) fn activate_module_manifest(world: &mut World, manifest: ModuleManifest) {
     let changes = ModuleChangeSet {
         register: vec![manifest.clone()],
         activate: vec![ModuleActivation {

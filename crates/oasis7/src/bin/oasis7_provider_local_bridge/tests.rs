@@ -17,6 +17,8 @@ use std::thread;
 mod tests_agent_chat;
 #[path = "tests_newapi_bridge_state.rs"]
 mod tests_newapi_bridge_state;
+#[path = "tests_options.rs"]
+mod tests_options;
 #[path = "tests_query_parsing.rs"]
 mod tests_query_parsing;
 
@@ -68,6 +70,30 @@ fn parse_model_decision_accepts_code_fence_and_maps_move_agent() {
             },
         }
     );
+}
+
+#[test]
+fn parse_model_decision_accepts_typed_module_command_without_core_action_mapping() {
+    let request = sample_request();
+    let raw = r#"{
+        "decision":"module_command",
+        "module_command":{
+            "module_id":"m.weather",
+            "module_version":"0.1.0",
+            "namespace":"weather",
+            "name":"observe",
+            "schema_version":1,
+            "schema_hash":"0000000000000000000000000000000000000000000000000000000000000000",
+            "payload":[1,2,3]
+        }
+    }"#;
+    let (decision, repairs) =
+        parse_model_decision("agent-1", &request, raw).expect("typed module command");
+    assert_eq!(repairs, 0);
+    let encoded = serde_json::to_value(decision).expect("encode typed module command");
+    assert_eq!(encoded["decision"], "module_command");
+    assert!(encoded["module_command"].is_object());
+    assert!(encoded.get("action").is_none());
 }
 
 #[test]
@@ -967,46 +993,6 @@ fn maybe_auto_topup_letai_user_reports_missing_amount_as_skipped() {
 }
 
 #[test]
-fn parse_options_rejects_short_auth_token() {
-    let err = parse_options(["--auth-token", "too-short"].into_iter()).expect_err("short token");
-    assert!(err.contains("at least 24 characters"));
-}
-
-#[test]
-fn parse_options_rejects_auth_route_map_with_short_tokens() {
-    let auth_map_path = std::env::temp_dir().join(format!(
-        "oasis7-provider-bridge-auth-map-{}.json",
-        std::process::id()
-    ));
-    fs::write(
-        auth_map_path.as_path(),
-        serde_json::to_vec(&serde_json::json!({
-            "too-short": "alice"
-        }))
-        .expect("encode auth map"),
-    )
-    .expect("write auth map");
-    let err = parse_options(
-        [
-            "--auth-route-map",
-            auth_map_path.to_str().expect("utf8 path"),
-        ]
-        .into_iter(),
-    )
-    .expect_err("short auth route token should fail");
-    assert!(err.contains("did not contain any usable entries"));
-    let _ = fs::remove_file(auth_map_path);
-}
-
-#[test]
-fn route_label_env_clears_label_when_absent() {
-    assert_eq!(
-        route_label_env(None),
-        vec![("OASIS7_REMOTE_LLM_ROUTE_LABEL", String::new())]
-    );
-}
-
-#[test]
 fn resolve_newapi_bridge_route_label_requires_active_binding() {
     let _guard = newapi_bridge_state_env_guard();
     let state_path = std::env::temp_dir().join(format!(
@@ -1185,12 +1171,15 @@ fn sample_request() -> DecisionRequest {
                 ActionCatalogEntry::new("move_agent", "move to a visible location"),
                 ActionCatalogEntry::new("wait", "do nothing this tick"),
             ],
+            module_command_catalog: Vec::new(),
             timeout_budget_ms: 7000,
         },
         provider_config_ref: Some("provider://local-bridge".to_string()),
         agent_profile: Some(DEFAULT_PROVIDER_AGENT_PROFILE.to_string()),
         fixture_id: None,
         replay_id: None,
+        capability_catalog: None,
+        capability_invocation_context: None,
         timeout_budget_ms: 7000,
     }
 }

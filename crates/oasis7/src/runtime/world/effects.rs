@@ -2,8 +2,8 @@ use super::super::util::sha256_hex;
 use serde_json::Value as JsonValue;
 
 use super::super::{
-    CausedBy, EffectIntent, EffectOrigin, EffectReceipt, PolicyDecisionRecord, WorldError,
-    WorldEventBody, WorldEventId,
+    CapabilityAuthorizationEvent, CausedBy, EffectIntent, EffectOrigin, EffectReceipt,
+    PolicyDecisionRecord, WorldError, WorldEventBody, WorldEventId,
 };
 use super::World;
 
@@ -86,7 +86,17 @@ impl World {
         Ok(intent)
     }
 
-    pub fn ingest_receipt(
+    pub fn ingest_receipt(&mut self, receipt: EffectReceipt) -> Result<WorldEventId, WorldError> {
+        // Receipt ingestion also closes the durable authorization link for a
+        // trusted command effect.  Stage both the effect acknowledgement and
+        // the audit update so a malformed receipt cannot leave half a commit.
+        let mut staged = self.clone();
+        let event_id = staged.ingest_receipt_staged(receipt)?;
+        *self = staged;
+        Ok(event_id)
+    }
+
+    fn ingest_receipt_staged(
         &mut self,
         mut receipt: EffectReceipt,
     ) -> Result<WorldEventId, WorldError> {
@@ -101,13 +111,34 @@ impl World {
             });
         }
 
+        if let Some(link) = self.capability_effect_receipt_links.get(&receipt.intent_id) {
+            let authorization_receipt_id = link.authorization_receipt_id.clone();
+            // Close the authorization link first.  The subsequent receipt
+            // signature is therefore anchored to a journal that already
+            // contains the durable authorization closure; a signed receipt
+            // cannot be replayed as if it predated that closure.
+            self.append_event(
+                WorldEventBody::CapabilityAuthorization(
+                    CapabilityAuthorizationEvent::EffectReceiptCommitted {
+                        intent_id: receipt.intent_id.clone(),
+                        authorization_receipt_id,
+                        effect_receipt_id: receipt.intent_id.clone(),
+                    },
+                ),
+                Some(CausedBy::Effect {
+                    intent_id: receipt.intent_id.clone(),
+                }),
+            )?;
+        }
+
         self.finalize_receipt_signature(&mut receipt)?;
-        self.append_event(
+        let event_id = self.append_event(
             WorldEventBody::ReceiptAppended(receipt.clone()),
             Some(CausedBy::Effect {
-                intent_id: receipt.intent_id,
+                intent_id: receipt.intent_id.clone(),
             }),
-        )
+        )?;
+        Ok(event_id)
     }
 
     fn finalize_receipt_signature(&self, receipt: &mut EffectReceipt) -> Result<(), WorldError> {

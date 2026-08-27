@@ -119,6 +119,7 @@ fn align_generated_bootstrap_world_to_commit_height(
     let mut snapshot = world.snapshot();
     snapshot.state.time = commit_height;
     snapshot.journal_len = 0;
+    snapshot.journal_commitment = Journal::new().commitment()?;
     snapshot.last_event_id = 0;
     snapshot.event_id_era = 0;
     snapshot.tick_consensus_records.clear();
@@ -379,5 +380,20 @@ mod tests {
         assert_eq!(aligned.state().agents.len(), 2);
         assert!(aligned.state().agents.contains_key("runtime-agent-0"));
         assert!(aligned.state().agents.contains_key("runtime-agent-1"));
+
+        let aligned_snapshot = aligned.snapshot();
+        assert_eq!(
+            aligned_snapshot.journal_commitment,
+            Journal::new()
+                .commitment()
+                .expect("empty journal commitment")
+        );
+        let mut tampered_snapshot = aligned_snapshot;
+        tampered_snapshot.journal_commitment = "tampered".to_string();
+        assert_eq!(
+            World::from_snapshot(tampered_snapshot, Journal::new())
+                .expect_err("tampered empty journal commitment must fail"),
+            WorldError::JournalMismatch
+        );
     }
 }

@@ -30,6 +30,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                 }
                 (AgentDecision::WaitTicks(ticks), None)
             }
+            AgentDecision::ModuleCommand { response } => {
+                (AgentDecision::ModuleCommand { response }, None)
+            }
         }
     }
 

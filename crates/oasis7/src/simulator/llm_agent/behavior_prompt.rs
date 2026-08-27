@@ -267,6 +267,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             }
             AgentDecision::Wait => "wait".to_string(),
             AgentDecision::WaitTicks(_) => "wait_ticks".to_string(),
+            AgentDecision::ModuleCommand { .. } => "module_command".to_string(),
         }
     }
 

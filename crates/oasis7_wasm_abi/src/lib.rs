@@ -1,19 +1,20 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt;
 use std::sync::Arc;
-
+mod canonical_cbor;
+mod capability_v2;
 mod economy;
-
+pub use canonical_cbor::encode_canonical_cbor;
+pub use capability_v2::*;
 pub use economy::*;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleKind {
     Reducer,
     Pure,
 }
-
 impl ModuleKind {
     pub fn entrypoint(&self) -> &'static str {
         match self {
@@ -22,23 +23,26 @@ impl ModuleKind {
         }
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModuleLimits {
+    #[serde(default)]
     pub max_mem_bytes: u64,
+    #[serde(default)]
     pub max_gas: u64,
+    #[serde(default)]
     pub max_call_rate: u32,
+    #[serde(default)]
     pub max_output_bytes: u64,
+    #[serde(default)]
     pub max_effects: u32,
+    #[serde(default)]
     pub max_emits: u32,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleArtifact {
     pub wasm_hash: String,
     pub bytes: Arc<[u8]>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModuleArtifactIdentity {
     pub source_hash: String,
@@ -47,11 +51,9 @@ pub struct ModuleArtifactIdentity {
     pub signature_scheme: String,
     pub artifact_signature: String,
 }
-
 impl ModuleArtifactIdentity {
     pub const SIGNATURE_SCHEME_ED25519: &'static str = "ed25519";
     pub const SIGNATURE_PREFIX_ED25519_V1: &'static str = "modsig:ed25519:v1:";
-
     pub fn is_complete(&self) -> bool {
         !self.source_hash.trim().is_empty()
             && !self.build_manifest_hash.trim().is_empty()
@@ -59,7 +61,6 @@ impl ModuleArtifactIdentity {
             && !self.signature_scheme.trim().is_empty()
             && !self.artifact_signature.trim().is_empty()
     }
-
     pub fn signing_payload_v1(
         wasm_hash: &str,
         source_hash: &str,
@@ -71,19 +72,16 @@ impl ModuleArtifactIdentity {
         )
         .into_bytes()
     }
-
     pub fn expected_signature_prefix(&self) -> Option<&'static str> {
         match self.signature_scheme.as_str() {
             Self::SIGNATURE_SCHEME_ED25519 => Some(Self::SIGNATURE_PREFIX_ED25519_V1),
             _ => None,
         }
     }
-
     pub fn has_unsigned_prefix(&self) -> bool {
         self.artifact_signature.starts_with("unsigned:")
     }
 }
-
 #[derive(Debug, Clone)]
 pub struct BoundedLruCache<V> {
     capacity: usize,
@@ -92,7 +90,6 @@ pub struct BoundedLruCache<V> {
     keys_by_recent: BTreeMap<u128, String>,
     next_recent: u128,
 }
-
 impl<V: PartialEq> PartialEq for BoundedLruCache<V> {
     fn eq(&self, other: &Self) -> bool {
         self.capacity == other.capacity
@@ -100,9 +97,7 @@ impl<V: PartialEq> PartialEq for BoundedLruCache<V> {
             && self.lru_keys().eq(other.lru_keys())
     }
 }
-
 impl<V: Eq> Eq for BoundedLruCache<V> {}
-
 impl<V> BoundedLruCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -113,34 +108,27 @@ impl<V> BoundedLruCache<V> {
             next_recent: 0,
         }
     }
-
     pub fn capacity(&self) -> usize {
         self.capacity
     }
-
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
-
     pub fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity;
         self.prune();
     }
-
     pub fn insert(&mut self, key: String, value: V) {
         self.cache.insert(key.clone(), value);
         self.touch(&key);
         self.prune();
     }
-
     pub fn lru_keys(&self) -> impl Iterator<Item = &str> {
         self.keys_by_recent.values().map(String::as_str)
     }
-
     fn touch(&mut self, key: &str) {
         if !self.cache.contains_key(key) {
             return;
@@ -152,7 +140,6 @@ impl<V> BoundedLruCache<V> {
         }
         self.keys_by_recent.insert(recent, key.to_string());
     }
-
     fn prune(&mut self) {
         if self.capacity == 0 {
             self.cache.clear();
@@ -170,7 +157,6 @@ impl<V> BoundedLruCache<V> {
             }
         }
     }
-
     pub fn get_cloned(&mut self, key: &str) -> Option<V>
     where
         V: Clone,
@@ -180,14 +166,12 @@ impl<V> BoundedLruCache<V> {
         Some(value)
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoundedFifoCache<V> {
     capacity: usize,
     cache: BTreeMap<String, V>,
     insertion_order: VecDeque<String>,
 }
-
 impl<V> BoundedFifoCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -196,27 +180,22 @@ impl<V> BoundedFifoCache<V> {
             insertion_order: VecDeque::new(),
         }
     }
-
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
-
     pub fn insert(&mut self, key: String, value: V) {
         if self.capacity == 0 {
             self.cache.clear();
             self.insertion_order.clear();
             return;
         }
-
         if let Some(entry) = self.cache.get_mut(&key) {
             *entry = value;
             return;
         }
-
         while self.cache.len() >= self.capacity {
             if let Some(evicted) = self.insertion_order.pop_front() {
                 self.cache.remove(&evicted);
@@ -426,6 +405,291 @@ pub struct ModuleAbiContract {
     pub policy_hooks: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gameplay: Option<GameplayContract>,
+    #[serde(default, skip_serializing_if = "ModuleSchemaDeclarations::is_empty")]
+    pub declarations: ModuleSchemaDeclarations,
+}
+
+/// The largest command payload the ABI admits before a module is invoked.
+pub const MAX_MODULE_COMMAND_PAYLOAD_BYTES: usize = 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ModuleSchemaDeclarations {
+    #[serde(default)]
+    pub commands: Vec<ModuleCommandDeclaration>,
+}
+
+impl ModuleSchemaDeclarations {
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
+}
+
+/// Agent-facing projection of a command declared by an active module.
+///
+/// This is a declaration DTO rather than a capability grant: consumers may
+/// use it for schema discovery, but it does not authorize invocation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ModuleCommandCatalogEntry {
+    pub module_id: String,
+    pub module_version: String,
+    pub namespace: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub schema_hash: String,
+    pub max_payload_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleCommandDeclaration {
+    pub namespace: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub schema_hash: String,
+    pub max_payload_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleCommandEnvelope {
+    pub namespace: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub schema_hash: String,
+    pub payload: Vec<u8>,
+}
+
+impl ModuleCommandEnvelope {
+    /// Encode the envelope using RFC 8949 deterministic CBOR map ordering.
+    pub fn encode_canonical(&self) -> Result<Vec<u8>, ModuleCommandValidationError> {
+        encode_canonical_cbor(self)
+    }
+
+    /// Decode only canonical CBOR: decoding and re-encoding must be byte exact.
+    pub fn decode_canonical(bytes: &[u8]) -> Result<Self, ModuleCommandValidationError> {
+        let envelope: Self = ciborium::de::from_reader(bytes)
+            .map_err(|error| ModuleCommandValidationError::CanonicalDecoding(error.to_string()))?;
+        let canonical = envelope.encode_canonical()?;
+        if canonical != bytes {
+            return Err(ModuleCommandValidationError::NonCanonicalEncoding);
+        }
+        Ok(envelope)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModuleCommandValidationError {
+    InvalidNamespace(String),
+    ReservedNamespace(String),
+    InvalidName(String),
+    InvalidSchemaVersion,
+    InvalidSchemaHash(String),
+    InvalidPayloadBound(u64),
+    InvalidPayloadSize(usize),
+    DuplicateDeclaration {
+        namespace: String,
+        name: String,
+        schema_version: u32,
+    },
+    UnknownDeclaration {
+        namespace: String,
+        name: String,
+        schema_version: u32,
+    },
+    SchemaHashMismatch,
+    PayloadExceedsDeclaration {
+        actual: usize,
+        max: u64,
+    },
+    CanonicalEncoding(String),
+    CanonicalDecoding(String),
+    NonCanonicalEncoding,
+}
+
+impl fmt::Display for ModuleCommandValidationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidNamespace(value) => {
+                write!(formatter, "invalid command namespace: {value}")
+            }
+            Self::ReservedNamespace(value) => {
+                write!(formatter, "reserved command namespace: {value}")
+            }
+            Self::InvalidName(value) => write!(formatter, "invalid command name: {value}"),
+            Self::InvalidSchemaVersion => {
+                formatter.write_str("schema version must be greater than zero")
+            }
+            Self::InvalidSchemaHash(value) => write!(
+                formatter,
+                "schema hash must be lowercase SHA-256 hex: {value}"
+            ),
+            Self::InvalidPayloadBound(value) => write!(
+                formatter,
+                "payload bound is outside 1..={MAX_MODULE_COMMAND_PAYLOAD_BYTES}: {value}"
+            ),
+            Self::InvalidPayloadSize(value) => write!(
+                formatter,
+                "payload size is outside 1..={MAX_MODULE_COMMAND_PAYLOAD_BYTES}: {value}"
+            ),
+            Self::DuplicateDeclaration {
+                namespace,
+                name,
+                schema_version,
+            } => write!(
+                formatter,
+                "duplicate declaration {namespace}:{name}@{schema_version}"
+            ),
+            Self::UnknownDeclaration {
+                namespace,
+                name,
+                schema_version,
+            } => write!(
+                formatter,
+                "unknown declaration {namespace}:{name}@{schema_version}"
+            ),
+            Self::SchemaHashMismatch => {
+                formatter.write_str("schema hash does not match declaration")
+            }
+            Self::PayloadExceedsDeclaration { actual, max } => write!(
+                formatter,
+                "payload size {actual} exceeds declaration bound {max}"
+            ),
+            Self::CanonicalEncoding(error) => {
+                write!(formatter, "canonical CBOR encoding failed: {error}")
+            }
+            Self::CanonicalDecoding(error) => {
+                write!(formatter, "canonical CBOR decoding failed: {error}")
+            }
+            Self::NonCanonicalEncoding => formatter.write_str("CBOR encoding is not canonical"),
+        }
+    }
+}
+
+impl std::error::Error for ModuleCommandValidationError {}
+
+pub fn validate_module_command_declarations(
+    declarations: &ModuleSchemaDeclarations,
+) -> Result<(), ModuleCommandValidationError> {
+    let mut seen = BTreeSet::new();
+    for declaration in &declarations.commands {
+        validate_namespace(&declaration.namespace)?;
+        validate_name(&declaration.name)?;
+        if declaration.schema_version == 0 {
+            return Err(ModuleCommandValidationError::InvalidSchemaVersion);
+        }
+        validate_schema_hash(&declaration.schema_hash)?;
+        if declaration.max_payload_bytes == 0
+            || declaration.max_payload_bytes > MAX_MODULE_COMMAND_PAYLOAD_BYTES as u64
+        {
+            return Err(ModuleCommandValidationError::InvalidPayloadBound(
+                declaration.max_payload_bytes,
+            ));
+        }
+        let key = (
+            declaration.namespace.as_str(),
+            declaration.name.as_str(),
+            declaration.schema_version,
+        );
+        if !seen.insert(key) {
+            return Err(ModuleCommandValidationError::DuplicateDeclaration {
+                namespace: declaration.namespace.clone(),
+                name: declaration.name.clone(),
+                schema_version: declaration.schema_version,
+            });
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_module_command_envelope(
+    envelope: &ModuleCommandEnvelope,
+    declarations: &ModuleSchemaDeclarations,
+) -> Result<(), ModuleCommandValidationError> {
+    validate_module_command_declarations(declarations)?;
+    validate_namespace(&envelope.namespace)?;
+    validate_name(&envelope.name)?;
+    if envelope.schema_version == 0 {
+        return Err(ModuleCommandValidationError::InvalidSchemaVersion);
+    }
+    validate_schema_hash(&envelope.schema_hash)?;
+    if envelope.payload.is_empty() {
+        return Err(ModuleCommandValidationError::InvalidPayloadSize(0));
+    }
+    if envelope.payload.len() > MAX_MODULE_COMMAND_PAYLOAD_BYTES {
+        return Err(ModuleCommandValidationError::InvalidPayloadSize(
+            envelope.payload.len(),
+        ));
+    }
+
+    let declaration = declarations.commands.iter().find(|declaration| {
+        declaration.namespace == envelope.namespace
+            && declaration.name == envelope.name
+            && declaration.schema_version == envelope.schema_version
+    });
+    let declaration =
+        declaration.ok_or_else(|| ModuleCommandValidationError::UnknownDeclaration {
+            namespace: envelope.namespace.clone(),
+            name: envelope.name.clone(),
+            schema_version: envelope.schema_version,
+        })?;
+    if declaration.schema_hash != envelope.schema_hash {
+        return Err(ModuleCommandValidationError::SchemaHashMismatch);
+    }
+    if envelope.payload.len() > declaration.max_payload_bytes as usize {
+        return Err(ModuleCommandValidationError::PayloadExceedsDeclaration {
+            actual: envelope.payload.len(),
+            max: declaration.max_payload_bytes,
+        });
+    }
+    Ok(())
+}
+
+fn validate_namespace(namespace: &str) -> Result<(), ModuleCommandValidationError> {
+    if namespace == "core"
+        || namespace.starts_with("core.")
+        || namespace == "kernel"
+        || namespace.starts_with("kernel.")
+    {
+        return Err(ModuleCommandValidationError::ReservedNamespace(
+            namespace.to_string(),
+        ));
+    }
+    if namespace.is_empty()
+        || namespace
+            .split('.')
+            .any(|segment| !is_local_identifier(segment))
+    {
+        return Err(ModuleCommandValidationError::InvalidNamespace(
+            namespace.to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_name(name: &str) -> Result<(), ModuleCommandValidationError> {
+    if !is_local_identifier(name) {
+        return Err(ModuleCommandValidationError::InvalidName(name.to_string()));
+    }
+    Ok(())
+}
+
+fn is_local_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(character) if character.is_ascii_lowercase())
+        && chars.all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+}
+
+fn validate_schema_hash(hash: &str) -> Result<(), ModuleCommandValidationError> {
+    if hash.len() != 64
+        || !hash
+            .bytes()
+            .all(|character| character.is_ascii_digit() || (b'a'..=b'f').contains(&character))
+    {
+        return Err(ModuleCommandValidationError::InvalidSchemaHash(
+            hash.to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -570,10 +834,44 @@ pub struct ModuleCallRequest {
     pub wasm_bytes: Arc<[u8]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModuleCallOrigin {
     pub kind: String,
     pub id: String,
+}
+
+/// The trusted host-side identity that initiated a module invocation.
+///
+/// Caller provenance is deliberately carried by [`ModuleContext`] rather than
+/// [`ModuleCommandEnvelope`].  The envelope is untrusted command data and may
+/// be supplied by an Agent or another module; the host must inject this value
+/// at the invocation boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ModuleCallCaller {
+    /// An invocation produced through a legacy host path that has no caller
+    /// identity yet.  This is the serde default for pre-provenance inputs.
+    #[default]
+    LegacyUnspecified,
+    System {
+        system_id: String,
+    },
+    Agent {
+        agent_id: String,
+    },
+    Module {
+        module_id: String,
+    },
+}
+
+/// Trusted host-side provenance for a module invocation.
+///
+/// This type is not part of [`ModuleCommandEnvelope`]: command payloads must
+/// not be able to self-assert their caller or origin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleInvocationProvenance {
+    pub caller: ModuleCallCaller,
+    pub origin: ModuleCallOrigin,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -583,6 +881,10 @@ pub struct ModuleContext {
     pub trace_id: String,
     pub time: u64,
     pub origin: ModuleCallOrigin,
+    /// Host-injected caller identity.  Missing on legacy serialized contexts
+    /// decodes as `LegacyUnspecified` for wire compatibility.
+    #[serde(default)]
+    pub caller: ModuleCallCaller,
     pub limits: ModuleLimits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<String>,

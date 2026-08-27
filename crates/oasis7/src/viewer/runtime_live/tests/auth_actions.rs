@@ -282,6 +282,7 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
                                 target_agent_id: None,
                             },
                         },
+                        module_command: None,
                         provider_error: None,
                         diagnostics: crate::simulator::ProviderDiagnostics::default(),
                         trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
@@ -395,6 +396,7 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
                                 target_agent_id: None,
                             },
                         },
+                        module_command: None,
                         provider_error: None,
                         diagnostics: crate::simulator::ProviderDiagnostics::default(),
                         trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
@@ -408,6 +410,7 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
                 ("POST", "/v1/world-simulator/decision", _) => {
                     let response = crate::simulator::DecisionResponse {
                         decision: crate::simulator::ProviderDecision::Wait,
+                        module_command: None,
                         provider_error: Some(crate::simulator::ProviderErrorEnvelope {
                             code: "provider_unauthorized".to_string(),
                             message: "missing provider token".to_string(),
@@ -582,6 +585,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                                 target_agent_id: None,
                             },
                         },
+                        module_command: None,
                         provider_error: None,
                         diagnostics: crate::simulator::ProviderDiagnostics::default(),
                         trace_payload: crate::simulator::ProviderTraceEnvelope::default(),

@@ -246,15 +246,39 @@ impl World {
         mut snapshot: GovernanceFinalityEpochSnapshot,
     ) -> Result<(), WorldError> {
         self.normalize_governance_finality_epoch_snapshot(&mut snapshot)?;
-        self.governance_finality_epoch_snapshots
-            .insert(snapshot.epoch_id, snapshot);
+        let previous = self
+            .governance_finality_epoch_snapshots
+            .get(&snapshot.epoch_id)
+            .cloned();
+        if previous.as_ref() == Some(&snapshot) {
+            return Ok(());
+        }
+        self.append_event(
+            WorldEventBody::Governance(GovernanceEvent::FinalityEpochSnapshotSet {
+                snapshot,
+                previous,
+            }),
+            None,
+        )?;
         Ok(())
     }
 
     pub fn remove_governance_finality_epoch_snapshot(&mut self, epoch_id: u64) -> bool {
-        self.governance_finality_epoch_snapshots
-            .remove(&epoch_id)
-            .is_some()
+        let Some(snapshot) = self
+            .governance_finality_epoch_snapshots
+            .get(&epoch_id)
+            .cloned()
+        else {
+            return false;
+        };
+        self.append_event(
+            WorldEventBody::Governance(GovernanceEvent::FinalityEpochSnapshotRemoved {
+                epoch_id,
+                snapshot,
+            }),
+            None,
+        )
+        .is_ok()
     }
 
     pub fn set_governance_finality_signer_registry(

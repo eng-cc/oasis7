@@ -3,8 +3,11 @@ use std::error::Error;
 use std::fmt;
 use std::time::Instant;
 
+use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot, ModuleCommandCatalogEntry};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+use crate::capability_invocation_context::CapabilityInvocationContext;
 
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
@@ -12,6 +15,8 @@ use super::{
     LlmPromptSectionTrace, LlmStepTrace, Observation, WorldEvent, WorldTime,
 };
 
+#[path = "decision_provider_capability.rs"]
+mod decision_provider_capability;
 #[path = "decision_provider_support.rs"]
 mod decision_provider_support;
 
@@ -20,6 +25,9 @@ const MAX_RECENT_EVENT_SUMMARIES: usize = 8;
 pub const DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION: &str = "oc_dual_obs_v1";
 pub const DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION: &str = "oc_dual_act_v1";
 
+pub use decision_provider_capability::{
+    DecisionRequestContractError, ProviderCapabilityContext, ProviderModuleCommand,
+};
 pub use decision_provider_support::{
     GoldenDecisionFixture, MockDecisionProvider, MockDecisionProviderState,
     golden_decision_provider_fixtures,
@@ -183,6 +191,8 @@ pub struct ObservationEnvelope {
     pub memory_summary: Option<String>,
     #[serde(default)]
     pub action_catalog: Vec<ActionCatalogEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_command_catalog: Vec<ModuleCommandCatalogEntry>,
     pub timeout_budget_ms: u64,
 }
 
@@ -197,59 +207,17 @@ pub struct DecisionRequest {
     pub fixture_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replay_id: Option<String>,
+    /// Subject-bound capability discovery produced by the trusted runtime.
+    /// Providers may use this to build a tool schema, but cannot extend or
+    /// mutate it.  The host revalidates the returned response against the
+    /// same snapshot before execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_catalog: Option<CapabilityCatalogSnapshot>,
+    /// Host-bound invocation identity.  This is transport context, not a
+    /// bearer grant; response identity and nonce must match it exactly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_invocation_context: Option<CapabilityInvocationContext>,
     pub timeout_budget_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecisionRequestContractError {
-    pub code: String,
-    pub message: String,
-}
-
-impl DecisionRequestContractError {
-    fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for DecisionRequestContractError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
-    }
-}
-
-impl Error for DecisionRequestContractError {}
-
-impl DecisionRequest {
-    pub fn validate_contract(&self) -> Result<(), DecisionRequestContractError> {
-        if self.observation.observation_schema_version
-            != DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION
-        {
-            return Err(DecisionRequestContractError::new(
-                "unsupported_schema_version",
-                format!(
-                    "unsupported observation_schema_version `{}`; expected {}",
-                    self.observation.observation_schema_version,
-                    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION
-                ),
-            ));
-        }
-        if self.observation.action_schema_version != DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION {
-            return Err(DecisionRequestContractError::new(
-                "unsupported_schema_version",
-                format!(
-                    "unsupported action_schema_version `{}`; expected {}",
-                    self.observation.action_schema_version, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION
-                ),
-            ));
-        }
-        self.observation
-            .observation
-            .validate_for_mode(self.observation.mode)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -266,6 +234,14 @@ pub enum ProviderDecision {
     Query {
         query_ref: String,
         query: AgentQuery,
+    },
+    ModuleCommand {
+        module_command: ProviderModuleCommand,
+    },
+    /// A complete v2 response.  The host must validate it against its bound
+    /// catalog/context before invoking the runtime executor.
+    ModuleCommandResponse {
+        response: AgentCommandResponse,
     },
 }
 
@@ -340,6 +316,11 @@ pub struct MemoryWriteIntent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecisionResponse {
     pub decision: ProviderDecision,
+    /// Optional typed module command carried by providers that use the
+    /// response extension field. It remains separate from core `decision` so
+    /// legacy providers can continue returning ordinary actions unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module_command: Option<ProviderModuleCommand>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_error: Option<ProviderErrorEnvelope>,
     #[serde(default)]
@@ -355,6 +336,7 @@ impl DecisionResponse {
         let provider_id = provider_id.into();
         Self {
             decision: ProviderDecision::Wait,
+            module_command: None,
             provider_error: None,
             diagnostics: ProviderDiagnostics {
                 provider_id: Some(provider_id.clone()),
@@ -443,6 +425,8 @@ pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
     agent_id: String,
     provider: P,
     action_catalog: Vec<ActionCatalogEntry>,
+    module_command_catalog: Vec<ModuleCommandCatalogEntry>,
+    capability_context: Option<ProviderCapabilityContext>,
     provider_config_ref: Option<String>,
     agent_profile: Option<String>,
     execution_mode: ProviderExecutionMode,
@@ -469,6 +453,8 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             agent_id: agent_id.into(),
             provider,
             action_catalog,
+            module_command_catalog: Vec::new(),
+            capability_context: None,
             provider_config_ref: None,
             agent_profile: None,
             execution_mode: ProviderExecutionMode::HeadlessAgent,
@@ -489,6 +475,52 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     pub fn with_provider_config_ref(mut self, provider_config_ref: impl Into<String>) -> Self {
         self.provider_config_ref = Some(provider_config_ref.into());
         self
+    }
+
+    /// Attach the current active-module command projection for provider
+    /// discovery. This is descriptive only; it does not grant authority.
+    pub fn with_module_command_catalog(
+        mut self,
+        module_command_catalog: Vec<ModuleCommandCatalogEntry>,
+    ) -> Self {
+        self.module_command_catalog = module_command_catalog;
+        self
+    }
+
+    /// Attach the runtime-produced subject-bound catalog and invocation
+    /// context for the next provider request.  The provider receives a copy;
+    /// the behavior retains the immutable context and validates the typed
+    /// response before surfacing it as a module decision.
+    pub fn with_capability_context(mut self, context: ProviderCapabilityContext) -> Self {
+        self.set_capability_context(Some(context));
+        self
+    }
+
+    pub fn set_capability_context(&mut self, context: Option<ProviderCapabilityContext>) {
+        self.module_command_catalog = context
+            .as_ref()
+            .map(|context| {
+                context
+                    .catalog
+                    .entries
+                    .iter()
+                    .map(|entry| ModuleCommandCatalogEntry {
+                        module_id: entry.module_id.clone(),
+                        module_version: entry.module_version.clone(),
+                        namespace: entry.namespace.clone(),
+                        name: entry.command.clone(),
+                        schema_version: entry.schema_version,
+                        schema_hash: entry.schema_hash.clone(),
+                        max_payload_bytes: entry.max_payload_bytes,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.capability_context = context;
+    }
+
+    pub fn capability_context(&self) -> Option<&ProviderCapabilityContext> {
+        self.capability_context.as_ref()
     }
 
     pub fn with_agent_profile(mut self, agent_profile: impl Into<String>) -> Self {
@@ -615,12 +647,21 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
                 recent_event_summary: self.recent_event_summary.iter().cloned().collect(),
                 memory_summary: memory_summary.clone(),
                 action_catalog: self.action_catalog.clone(),
+                module_command_catalog: self.module_command_catalog.clone(),
                 timeout_budget_ms: self.timeout_budget_ms,
             },
             provider_config_ref: self.provider_config_ref.clone(),
             agent_profile: self.agent_profile.clone(),
             fixture_id: self.fixture_id.clone(),
             replay_id: self.replay_id.clone(),
+            capability_catalog: self
+                .capability_context
+                .as_ref()
+                .map(|context| context.catalog.clone()),
+            capability_invocation_context: self
+                .capability_context
+                .as_ref()
+                .map(|context| context.invocation.clone()),
             timeout_budget_ms: self.timeout_budget_ms,
         }
     }
@@ -1002,43 +1043,105 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
             .provider_error
             .as_ref()
             .map(|error| format!("{}: {}", error.code, error.message));
-        let (decision, parse_error) = match &response.decision {
-            ProviderDecision::Wait => (AgentDecision::Wait, None),
-            ProviderDecision::WaitTicks { ticks } => (AgentDecision::WaitTicks(*ticks), None),
-            ProviderDecision::Act { action_ref, action } => {
-                if self
-                    .action_catalog
-                    .iter()
-                    .any(|entry| entry.action_ref == *action_ref)
-                {
-                    (AgentDecision::Act(action.clone()), None)
-                } else {
-                    provider_error = provider_error
-                        .or_else(|| Some(format!("provider_invalid_action_ref: {action_ref}")));
+        let (decision, parse_error) = if let Some(module_command) = response.module_command.as_ref()
+        {
+            provider_error = provider_error.or_else(|| {
+                Some("module_command_unroutable: no trusted module executor".to_string())
+            });
+            (
+                AgentDecision::Wait,
+                Some(format!(
+                    "module_command_unroutable: {}:{}:{}:{}",
+                    module_command.module_id,
+                    module_command.module_version,
+                    module_command.namespace,
+                    module_command.name
+                )),
+            )
+        } else {
+            match &response.decision {
+                ProviderDecision::Wait => (AgentDecision::Wait, None),
+                ProviderDecision::WaitTicks { ticks } => (AgentDecision::WaitTicks(*ticks), None),
+                ProviderDecision::Act { action_ref, action } => {
+                    if self
+                        .action_catalog
+                        .iter()
+                        .any(|entry| entry.action_ref == *action_ref)
+                    {
+                        (AgentDecision::Act(action.clone()), None)
+                    } else {
+                        provider_error = provider_error
+                            .or_else(|| Some(format!("provider_invalid_action_ref: {action_ref}")));
+                        (
+                            AgentDecision::Wait,
+                            Some(format!(
+                                "unknown action_ref returned by provider: {action_ref}"
+                            )),
+                        )
+                    }
+                }
+                ProviderDecision::Query { query_ref, query } => {
+                    if self
+                        .action_catalog
+                        .iter()
+                        .any(|entry| entry.action_ref == *query_ref)
+                    {
+                        (AgentDecision::Query(query.clone()), None)
+                    } else {
+                        provider_error = provider_error
+                            .or_else(|| Some(format!("provider_invalid_query_ref: {query_ref}")));
+                        (
+                            AgentDecision::Wait,
+                            Some(format!(
+                                "unknown query_ref returned by provider: {query_ref}"
+                            )),
+                        )
+                    }
+                }
+                ProviderDecision::ModuleCommand { module_command } => {
+                    provider_error = provider_error.or_else(|| {
+                        Some("module_command_unroutable: no trusted module executor".to_string())
+                    });
                     (
                         AgentDecision::Wait,
                         Some(format!(
-                            "unknown action_ref returned by provider: {action_ref}"
+                            "module_command_unroutable: {}:{}:{}:{}",
+                            module_command.module_id,
+                            module_command.module_version,
+                            module_command.namespace,
+                            module_command.name
                         )),
                     )
                 }
-            }
-            ProviderDecision::Query { query_ref, query } => {
-                if self
-                    .action_catalog
-                    .iter()
-                    .any(|entry| entry.action_ref == *query_ref)
-                {
-                    (AgentDecision::Query(query.clone()), None)
-                } else {
-                    provider_error = provider_error
-                        .or_else(|| Some(format!("provider_invalid_query_ref: {query_ref}")));
-                    (
-                        AgentDecision::Wait,
-                        Some(format!(
-                            "unknown query_ref returned by provider: {query_ref}"
-                        )),
-                    )
+                ProviderDecision::ModuleCommandResponse { response } => {
+                    match self.capability_context.as_ref() {
+                        Some(context) => match context.validate_response(response) {
+                            Ok(()) => (
+                                AgentDecision::ModuleCommand {
+                                    response: response.clone(),
+                                },
+                                None,
+                            ),
+                            Err(error) => {
+                                provider_error = provider_error.or_else(|| Some(error.to_string()));
+                                (
+                                    AgentDecision::Wait,
+                                    Some(format!("{}: {}", error.code, error.message)),
+                                )
+                            }
+                        },
+                        None => {
+                            provider_error = provider_error
+                                .or_else(|| Some("module_command_context_unavailable".to_string()));
+                            (
+                                AgentDecision::Wait,
+                                Some(
+                                    "module_command_context_unavailable: trusted runtime context is not attached"
+                                        .to_string(),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         };

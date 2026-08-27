@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use oasis7_wasm_abi::validate_module_command_declarations;
 use oasis7_wasm_router::{validate_subscription_filters, validate_subscription_stage};
 
 use super::super::{
-    ModuleArtifactIdentity, ModuleLimits, ModuleManifest, ModuleRegistry, WorldError,
+    ModuleArtifactIdentity, ModuleCommandCatalogEntry, ModuleLimits, ModuleManifest,
+    ModuleRegistry, WorldError, module_command_catalog,
 };
 use super::World;
 
@@ -12,6 +14,11 @@ const IDENTITY_HASH_SIGNATURE_SCHEME: &str = "identity_hash_v1";
 const IDENTITY_HASH_SIGNATURE_PREFIX: &str = "idhash:";
 
 impl World {
+    /// Return the deterministic Agent-facing catalog for active module commands.
+    pub fn module_command_catalog(&self) -> Vec<ModuleCommandCatalogEntry> {
+        module_command_catalog(&self.module_registry)
+    }
+
     pub(super) fn validate_module_changes(
         &self,
         changes: &super::super::ModuleChangeSet,
@@ -206,17 +213,10 @@ impl World {
         self.validate_module_limits(&module.module_id, &module.limits)?;
 
         for cap in &module.required_caps {
-            let grant =
-                self.capabilities
-                    .get(cap)
-                    .ok_or_else(|| WorldError::ModuleChangeInvalid {
-                        reason: format!("module cap missing {cap}"),
-                    })?;
-            if grant.is_expired(self.state.time) {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("module cap expired {cap}"),
-                });
-            }
+            self.validate_module_required_capability(cap)
+                .map_err(|error| WorldError::ModuleChangeInvalid {
+                    reason: format!("module cap admission failed {cap}: {error:?}"),
+                })?;
         }
 
         Ok(())
@@ -430,6 +430,15 @@ impl World {
                 });
             }
         }
+
+        validate_module_command_declarations(&contract.declarations).map_err(|error| {
+            WorldError::ModuleChangeInvalid {
+                reason: format!(
+                    "module command declarations invalid for {}: {error}",
+                    module.module_id
+                ),
+            }
+        })?;
 
         self.validate_gameplay_contract_for_manifest(module)?;
 

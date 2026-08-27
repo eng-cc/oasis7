@@ -1,8 +1,8 @@
 use oasis7_wasm_abi::{
-    FactoryBuildDecision, FactoryBuildRequest, MaterialStack, ModuleCallErrorCode,
-    ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleContext, ModuleKind, ModuleOutput,
-    ModuleSandbox, ProductValidationDecision, ProductValidationRequest, RecipeExecutionPlan,
-    RecipeExecutionRequest,
+    FactoryBuildDecision, FactoryBuildRequest, MaterialStack, ModuleCallCaller,
+    ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleContext,
+    ModuleKind, ModuleOutput, ModuleSandbox, ProductValidationDecision, ProductValidationRequest,
+    RecipeExecutionPlan, RecipeExecutionRequest,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -852,6 +852,7 @@ impl World {
                 kind: "action".to_string(),
                 id: trace_id.to_string(),
             },
+            caller: ModuleCallCaller::LegacyUnspecified,
             limits: manifest.limits.clone(),
             stage: Some("economy_action".to_string()),
             world_config_hash: Some(world_config_hash.clone()),

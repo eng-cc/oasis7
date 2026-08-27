@@ -4,11 +4,19 @@ use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use super::capability_authorization::{
+    CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
+    CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
+    CapabilityRevocationState,
+};
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
 use super::events::ActionEnvelope;
-use super::governance::{GovernanceExecutionPolicy, GovernanceIdentityPenaltyRecord, Proposal};
+use super::governance::{
+    GovernanceExecutionPolicy, GovernanceFinalityEpochSnapshot, GovernanceIdentityPenaltyRecord,
+    Proposal,
+};
 use super::manifest::Manifest;
 use super::modules::{ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
@@ -76,6 +84,11 @@ pub struct Snapshot {
     pub state: WorldState,
     pub journal_len: usize,
     pub last_event_id: WorldEventId,
+    /// Canonical commitment to the journal prefix represented by this
+    /// checkpoint.  Older snapshots may omit it and are accepted only for
+    /// compatibility; newly written checkpoints always include it.
+    #[serde(default)]
+    pub journal_commitment: String,
     #[serde(default)]
     pub event_id_era: u64,
     pub next_action_id: ActionId,
@@ -95,6 +108,24 @@ pub struct Snapshot {
     #[serde(default)]
     pub module_tick_routing_metrics: ModuleTickRoutingDeterministicSnapshot,
     pub capabilities: BTreeMap<String, CapabilityGrant>,
+    /// Versioned trusted-module authorization state.  All fields default to
+    /// empty for snapshots written before CapabilityGrantV2 existed.
+    #[serde(default)]
+    pub capability_grants_v2: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub capability_revocation_state: CapabilityRevocationState,
+    #[serde(default)]
+    pub capability_nonce_records: BTreeMap<String, CapabilityAuthorizationNonceRecord>,
+    #[serde(default)]
+    pub capability_authorization_receipts: BTreeMap<String, CapabilityAuthorizationAuditReceipt>,
+    #[serde(default)]
+    pub capability_invocation_contexts: BTreeMap<String, CapabilityInvocationContext>,
+    #[serde(default)]
+    pub capability_authorization_root: String,
+    #[serde(default)]
+    pub capability_budget_accounts: BTreeMap<String, CapabilityBudgetAccount>,
+    #[serde(default)]
+    pub capability_effect_receipt_links: BTreeMap<String, CapabilityEffectReceiptLink>,
     pub policies: PolicySet,
     #[serde(deserialize_with = "deserialize_btreemap_u64_keys")]
     pub proposals: BTreeMap<ProposalId, Proposal>,
@@ -119,6 +150,8 @@ pub struct Snapshot {
     pub tick_consensus_rejection_audit_events: Vec<TickConsensusRejectionAuditEvent>,
     #[serde(default)]
     pub governance_execution_policy: GovernanceExecutionPolicy,
+    #[serde(default)]
+    pub governance_finality_epoch_snapshots: BTreeMap<u64, GovernanceFinalityEpochSnapshot>,
     #[serde(default)]
     pub governance_emergency_brake_until_tick: Option<WorldTime>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -190,6 +223,15 @@ impl Journal {
 
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+
+    /// Return the canonical commitment for this journal's event sequence.
+    ///
+    /// Snapshots use the commitment of their represented journal prefix, so
+    /// callers that intentionally replace that prefix can recompute the
+    /// commitment without duplicating the hashing convention.
+    pub fn commitment(&self) -> Result<String, WorldError> {
+        super::util::hash_json(&self.events)
     }
 
     pub fn to_json(&self) -> Result<String, WorldError> {

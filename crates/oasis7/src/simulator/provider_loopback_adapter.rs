@@ -3,6 +3,89 @@ use super::{
     FeedbackEnvelope, ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient,
     ProviderLoopbackHttpError,
 };
+use oasis7_wasm_abi::{
+    AgentCommandResponse, CapabilityCatalogSnapshot, CapabilityGrantV2, ModuleCommandDeclaration,
+    ModuleCommandValidationError, ModuleSchemaDeclarations, validate_module_command_declarations,
+};
+
+/// Host-owned seam between the simulator provider loop and the runtime
+/// capability executor.  Provider output is accepted as a typed response,
+/// but only this adapter may hand it to `runtime::World`.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait TrustedModuleCommandExecutor {
+    fn execute_trusted_module_command(
+        &mut self,
+        response: AgentCommandResponse,
+    ) -> Result<crate::runtime::CapabilityAuthorizationAuditReceipt, crate::runtime::WorldError>;
+}
+
+/// Concrete runtime adapter used by host loops.  The grant, catalog and
+/// invocation context are supplied by trusted runtime code and are never
+/// selected from provider output.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct RuntimeTrustedModuleExecutor<'a> {
+    world: &'a mut crate::runtime::World,
+    grant: CapabilityGrantV2,
+    catalog: CapabilityCatalogSnapshot,
+    invocation: crate::capability_invocation_context::CapabilityInvocationContext,
+    sandbox: &'a mut dyn oasis7_wasm_abi::ModuleSandbox,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<'a> RuntimeTrustedModuleExecutor<'a> {
+    pub fn new(
+        world: &'a mut crate::runtime::World,
+        grant: CapabilityGrantV2,
+        catalog: CapabilityCatalogSnapshot,
+        invocation: crate::capability_invocation_context::CapabilityInvocationContext,
+        sandbox: &'a mut dyn oasis7_wasm_abi::ModuleSandbox,
+    ) -> Self {
+        Self {
+            world,
+            grant,
+            catalog,
+            invocation,
+            sandbox,
+        }
+    }
+
+    /// Execute one already validated provider response through the runtime
+    /// authorization boundary.  The response is never converted into a core
+    /// simulator `Action`.
+    pub fn execute(
+        &mut self,
+        response: AgentCommandResponse,
+    ) -> Result<crate::runtime::CapabilityAuthorizationAuditReceipt, crate::runtime::WorldError>
+    {
+        let context = super::ProviderCapabilityContext {
+            catalog: self.catalog.clone(),
+            invocation: self.invocation.clone(),
+        };
+        context.validate_response(&response).map_err(|error| {
+            crate::runtime::WorldError::CapabilityAuthorizationDenied {
+                reason: error.to_string(),
+            }
+        })?;
+        self.world.execute_trusted_module_command(
+            self.grant.clone(),
+            self.catalog.clone(),
+            response,
+            &mut (),
+            self.sandbox,
+        )
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl TrustedModuleCommandExecutor for RuntimeTrustedModuleExecutor<'_> {
+    fn execute_trusted_module_command(
+        &mut self,
+        response: AgentCommandResponse,
+    ) -> Result<crate::runtime::CapabilityAuthorizationAuditReceipt, crate::runtime::WorldError>
+    {
+        self.execute(response)
+    }
+}
 
 const DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID: &str = "provider_loopback_http";
 const PHASE1_ALLOWED_ACTION_REFS: &[&str] = &[
@@ -79,6 +162,63 @@ impl ProviderLoopbackAdapter {
                 error.message.clone(),
                 error.retryable,
                 response.trace_payload.upstream_trace.clone(),
+            ));
+        }
+        if let ProviderDecision::ModuleCommandResponse {
+            response: command_response,
+        } = &response.decision
+        {
+            if response.module_command.is_some() {
+                return Err(DecisionProviderError::new(
+                    "module_command_ambiguous",
+                    "typed module response cannot be accompanied by a legacy module_command",
+                    false,
+                ));
+            }
+            let Some(catalog) = request.capability_catalog.as_ref() else {
+                return Err(DecisionProviderError::new(
+                    "module_command_catalog_unavailable",
+                    "typed AgentCommandResponse requires a trusted runtime catalog",
+                    false,
+                ));
+            };
+            let Some(context) = request.capability_invocation_context.as_ref() else {
+                return Err(DecisionProviderError::new(
+                    "module_command_context_unavailable",
+                    "typed AgentCommandResponse requires a trusted invocation context",
+                    false,
+                ));
+            };
+            command_response.validate().map_err(|error| {
+                DecisionProviderError::new(
+                    "module_command_response_invalid",
+                    error.to_string(),
+                    false,
+                )
+            })?;
+            if !command_response.matches_catalog(catalog)
+                || command_response.subject != context.subject
+                || command_response.presenter != context.presenter
+                || command_response.audience != context.audience
+                || command_response.catalog_snapshot_id != context.catalog_snapshot_id
+                || command_response.response_nonce != context.response_nonce
+                || command_response.selected_entry.module_id != context.module_id
+                || command_response.selected_entry.module_version != context.module_version
+            {
+                return Err(DecisionProviderError::new(
+                    "module_command_context_mismatch",
+                    "typed AgentCommandResponse does not match trusted catalog/context",
+                    false,
+                ));
+            }
+            return Ok(());
+        }
+        if let Some(module_command) = response.module_command.as_ref() {
+            validate_module_command_response(request, module_command)?;
+            return Err(DecisionProviderError::new(
+                "module_command_unroutable",
+                "provider returned a valid module command but no trusted module executor is attached",
+                false,
             ));
         }
         match &response.decision {
@@ -160,7 +300,52 @@ impl ProviderLoopbackAdapter {
                     )),
                 }
             }
+            ProviderDecision::ModuleCommand { module_command } => {
+                validate_module_command_response(request, module_command)?;
+                Err(DecisionProviderError::new(
+                    "module_command_unroutable",
+                    "provider returned a valid module command but no trusted module executor is attached",
+                    false,
+                ))
+            }
+            ProviderDecision::ModuleCommandResponse { .. } => {
+                // The complete response was checked above against the
+                // runtime-produced catalog and host context.
+                Ok(())
+            }
         }
+    }
+
+    /// Route a typed v2 provider response into a trusted host executor.
+    ///
+    /// This is the explicit bridge seam used by host loops: validation is
+    /// completed against the request's runtime-produced catalog and bound
+    /// invocation context before the executor is called.  Legacy
+    /// `ProviderModuleCommand` values remain intentionally unroutable.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn execute_trusted_module_command<E: TrustedModuleCommandExecutor>(
+        &self,
+        request: &DecisionRequest,
+        response: DecisionResponse,
+        executor: &mut E,
+    ) -> Result<crate::runtime::CapabilityAuthorizationAuditReceipt, DecisionProviderError> {
+        self.validate_response(request, &response)?;
+        let ProviderDecision::ModuleCommandResponse { response } = response.decision else {
+            return Err(DecisionProviderError::new(
+                "module_command_not_typed",
+                "only typed ModuleCommandResponse values may cross the trusted module bridge",
+                false,
+            ));
+        };
+        executor
+            .execute_trusted_module_command(response)
+            .map_err(|error| {
+                DecisionProviderError::new(
+                    "trusted_module_execution_failed",
+                    format!("trusted module executor rejected command: {error:?}"),
+                    false,
+                )
+            })
     }
 
     fn map_http_error(error: ProviderLoopbackHttpError) -> DecisionProviderError {
@@ -203,6 +388,77 @@ impl ProviderLoopbackAdapter {
             false,
         ))
     }
+}
+
+fn validate_module_command_response(
+    request: &DecisionRequest,
+    command: &super::ProviderModuleCommand,
+) -> Result<(), DecisionProviderError> {
+    let declaration = ModuleCommandDeclaration {
+        namespace: command.namespace.clone(),
+        name: command.name.clone(),
+        schema_version: command.schema_version,
+        schema_hash: command.schema_hash.clone(),
+        max_payload_bytes: command.payload.len().max(1) as u64,
+    };
+    if let Err(error) = validate_module_command_declarations(&ModuleSchemaDeclarations {
+        commands: vec![declaration],
+    }) {
+        let code = match error {
+            ModuleCommandValidationError::ReservedNamespace(_) => {
+                "module_command_reserved_namespace"
+            }
+            ModuleCommandValidationError::InvalidNamespace(_)
+            | ModuleCommandValidationError::InvalidName(_)
+            | ModuleCommandValidationError::InvalidSchemaVersion
+            | ModuleCommandValidationError::InvalidSchemaHash(_)
+            | ModuleCommandValidationError::InvalidPayloadBound(_) => {
+                "module_command_invalid_declaration"
+            }
+            _ => "module_command_invalid_declaration",
+        };
+        return Err(DecisionProviderError::new(code, error.to_string(), false));
+    }
+
+    let Some(catalog_entry) = request
+        .observation
+        .module_command_catalog
+        .iter()
+        .find(|entry| {
+            entry.module_id == command.module_id
+                && entry.module_version == command.module_version
+                && entry.namespace == command.namespace
+                && entry.name == command.name
+                && entry.schema_version == command.schema_version
+        })
+    else {
+        return Err(DecisionProviderError::new(
+            "module_command_identity_mismatch",
+            "provider module command does not match an exact catalog identity",
+            false,
+        ));
+    };
+    if catalog_entry.schema_hash != command.schema_hash {
+        return Err(DecisionProviderError::new(
+            "module_command_schema_hash_mismatch",
+            "provider module command schema_hash does not match the catalog",
+            false,
+        ));
+    }
+    if command.payload.is_empty()
+        || command.payload.len() > catalog_entry.max_payload_bytes as usize
+    {
+        return Err(DecisionProviderError::new(
+            "module_command_payload_too_large",
+            format!(
+                "provider module command payload size {} exceeds catalog bound {}",
+                command.payload.len(),
+                catalog_entry.max_payload_bytes
+            ),
+            false,
+        ));
+    }
+    Ok(())
 }
 
 impl DecisionProvider for ProviderLoopbackAdapter {

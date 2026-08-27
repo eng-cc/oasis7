@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
+use oasis7_wasm_abi::AgentCommandResponse;
+
 use super::kernel::{
     MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
     Observation, RejectReason, WorldEvent, WorldEventKind,
@@ -66,6 +68,11 @@ pub enum AgentDecision {
     Act(Action),
     /// The agent requests read-only information from the current world snapshot.
     Query(AgentQuery),
+    /// A provider-produced capability response.  This is deliberately a
+    /// separate decision lane: the simulator runner must never turn a typed
+    /// module response into a core [`Action`].  A trusted host adapter owns
+    /// execution against the runtime World.
+    ModuleCommand { response: AgentCommandResponse },
     /// The agent decides to wait/skip this turn.
     Wait,
     /// The agent decides to wait for a specific number of ticks.

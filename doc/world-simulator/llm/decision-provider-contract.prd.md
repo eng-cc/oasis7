@@ -45,6 +45,7 @@
 | 反馈回写 | `FeedbackEnvelope` | runtime 执行结果回写给 provider | `executed/rejected -> feedback_pushed` | 保持 action_id / event 顺序 | 仅 owner agent 可读自身反馈 |
 | 可观测性桥接 | `TraceEnvelope -> AgentDecisionTrace` | provider trace 映射到现有 viewer/QA 诊断面 | `trace_pending -> trace_emitted` | trace 与 world time 对齐 | 不得泄露敏感凭据 |
 | 记忆同步策略 | `MemoryContextSnapshot/MemoryWriteIntent` | provider 只读注入上下文；写回需经本地策略裁决 | `memory_read -> decide -> optional_memory_write` | 本地 memory 为权威来源 | 外部 memory 为可选缓存 |
+| 受治理 capability discovery | `CapabilitySnapshot/CapabilityRef` | provider 看到安全 core/kernel 工具与当前 active module 的受限 projection | `snapshot_issued -> proposed -> binding_checked -> validated/rejected` | 每个 capability 绑定 namespace、version、schema ref、identity hash、caps 与 runtime cost quote | discovery 不授予写权；runtime 仍是唯一裁定者 |
 | Provider 评估 | `valid_action_rate/timeout_rate/p95_latency/trace_completeness` | 使用固定 fixture 对比 provider 表现 | `bench_pending -> bench_done` | 按场景/agent 类型分层统计 | QA 可复核 |
 | runtime-live 决策桥 | `AgentRunner/AgentBehavior/DecisionProvider/AgentDecisionTrace` | provider 只提出候选；runtime 校验并执行 | `observed -> proposed/wait -> validated -> executed/rejected` | trace、action、result 与事件保持因果关联 | provider 失败或未知动作不得触发替代启发式动作 |
 - Acceptance Criteria:
@@ -54,17 +55,23 @@
   - AC-4: 文档中冻结最小动作映射策略：只允许先在低频、低破坏性动作集上试点（例如 `wait`、`move`、`chat`、有限查询）。
   - AC-5: 文档中定义统一失败策略与 trace 回写规范，保持与 `AgentDecisionTrace`、`ActionRejected`、viewer 调试面一致。
   - AC-6: 文档中定义 required/full 验证矩阵，并可追溯到本专题项目任务。
+  - AC-7: capability discovery 必须以安全 core/kernel surface 为稳定基线，并仅从当前 active module manifest/ABI projection 生成动态 capability；每个 projection 都绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime cost quote。
+  - AC-8: capability 未知、已撤销、未激活、权限不匹配、schema/identity hash 漂移或 cost quote 过期时，必须 fail closed，留下稳定 trace/error，并收敛为 `Wait` 或 `ActionRejected`；不得按名称猜测、静默改绑或执行 fallback。
+  - AC-9: LLM/provider 输出只能是绑定上述 capability 的结构化 intent；intent 必须进入现有 runtime authoritative pipeline，由 runtime 重新校验并决定是否产生权威状态变化。
+  - AC-10: 现有 closed `Action` adapter 保持可读写兼容并与动态 capability 共同进入同一执行管线；迁移按低风险 module 试点渐进进行，不以 capability discovery 取代现有 vertical slice。
 - Non-Goals:
   - 不在本轮直接把 `Local Provider` 接入主线模拟代码。
   - 不在本轮重写现有 `LlmAgentBehavior`、memory 系统或 runtime kernel。
   - 不在本轮把 `Moltbook` 等社交层能力引入 world-simulator。
   - 不在本轮把外部 provider 用于高频战斗/经济核心 actor。
+  - capability discovery 不承诺任意 module 上传、source compile、安装或激活；这些仍由受治理的 runtime/WASM 生命周期决定。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements:
   - provider 必须支持结构化输入/输出，而不是仅依赖自由文本解析。
   - provider 必须能够暴露或适配“受限工具/动作白名单”，避免任意外部副作用。
   - provider 最好支持会话级 trace、tool trace、latency 指标与 message transcript 导出，便于映射为 `AgentDecisionTrace`。
+  - tool 输入由稳定的安全 core/kernel tools 与 active module manifest/ABI projection 派生的动态 tools 组成；provider 不得自行添加、修改或声称激活工具，且 discovery 不授予安装、部署或上传权限。
 - Evaluation Strategy:
   - `test_tier_required`: 文档冻结 + golden fixtures + mock provider 验证 + error policy 审查。
   - `test_tier_full`: 引入真实 `Local ProviderAdapter` 后，对低频 NPC 场景执行多轮闭环，比较有效动作率、超时率、trace 完整度与单步成本。
@@ -89,23 +96,33 @@
 - Standard Contracts:
   - `ObservationEnvelope`: `agent_id`、`world_time`、局部可见世界状态、近期事件摘要、记忆摘要、预算与动作白名单。
   - `DecisionRequest`: `observation + action_catalog + provider_config_ref + timeout_budget`。
-  - `DecisionResponse`: `decision(wait/act) + action_ref + args + provider_error? + diagnostics + trace_payload`。
+  - `DecisionResponse`: `decision(wait/act) + action_ref + args + provider_error? + diagnostics + trace_payload`；`act` 仍只是候选 intent。
   - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
+- `CapabilitySnapshot`: 本轮 catalog 的 identity/digest；每个动态 capability 绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime `cost_quote`。
 - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
 - 内置 Responses provider 的具体基线也由本专题承载，但不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority；provider-agnostic contract 仍是外部接入的唯一边界。
 - 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。
 - `--jobs` 只描述执行并行度，不是行为等价或性能比较的充分条件。外部 provider 的非确定性运行必须在相同输入下重复采样；任一场景的 timeout、invalid output、stuck-loop、trace-completeness 缺口或未解释的错误不能因聚合均值/总量而被掩盖。
 - 工业调试注入属于显式 debug capability，不属于普通 `ActionCatalog`、默认体验或 provider parity 样本。provider 只能选择当前 catalog 中已声明且经 runtime 校验的候选动作；资源、精炼 quote、经济与 replay 语义不由 provider contract 重定义。
 - 已完成的历史多场景/工业长跑样本只保留为实现与风险演进证据；其旧阈值、prompt、计数或成功结论不得提升为当前 provider 成本、稳定性、parity 或发布准入证明。实际 parity/rollout 门槛以 `provider-agent-experience-parity.prd.md` 为准。
+
+### 受治理 capability discovery 与兼容迁移
+
+- catalog 保留安全 core/kernel tools 与现有 closed `Action` adapter；动态 tools 只由当前 active module manifest/ABI projection 派生。projection 是受限 provider 视图，不复制 WASM wire ABI，也不授予安装、部署、上传或激活权限。
+- 每个 `CapabilityRef` 必须绑定 `namespace`、`version`、`schema_ref`、manifest/artifact/interface hash、声明的 `caps` 与 runtime 生成的 `cost_quote`，并受本轮 `CapabilitySnapshot` identity/digest 约束；provider 不得按名称或自然语言相似度重绑定。
+- provider/LLM 只返回绑定 capability 的结构化 intent；runtime 重新做权限、schema、预算和实际成本校验，并将 intent 送入既有 authoritative execution/replay/receipt pipeline。工具成功不是 world fact，实际结果只来自 committed runtime feedback。
+- 未知、revoked、未激活、版本/schema/hash/caps 漂移、snapshot 过期或 cost quote 缺失/过期/超预算时必须 fail closed，写稳定 trace/error 并收敛为 `Wait` 或 `ActionRejected`；不得 fallback、猜测重绑或生成替代动作。catalog 变化时旧 intent 失效，需重新 discovery。
+- closed Action 与动态 module capability 共享同一 guard、执行管线和 trace；先用 mock projection/fixture 验证，再在低频低破坏性 module 上渐进迁移，保留旧 action 的兼容读写与 replay 路径，直到证据闭合。
 - Local Provider Adapter Strategy:
   - 使用 adapter 把 `ObservationEnvelope` 转成 `Local Provider` 可消费的会话输入。
-  - 通过有限 `tool`/`action` 暴露 world 可执行动作，而不是开放任意外部命令。
+  - 通过稳定 core/kernel tools 加上当前 active module 的受治理 capability projection 暴露 world 可执行候选，而不是开放任意外部命令。
   - adapter 负责把 `Local Provider` 的结果收敛为 `DecisionResponse`，并将 provider trace 映射到本地 trace 结构。
   - 首期 PoC 仅允许低频动作集，禁止直接接管高频 tick actor 与强一致经济关键路径。
 - Edge Cases & Error Handling:
   - provider 超时：返回 `Wait`，同时记录 `llm_error=provider_timeout`。
   - provider 输出未知动作：由 action catalog guard 拒绝或收敛为 `Wait`，写入稳定 `error_code`；两者都不得提交状态变更动作。
   - provider 工具调用次数超限：adapter 终止会话并输出结构化错误。
+  - capability 绑定或 catalog 在 discovery 后改变：尚未提交的 intent 失效并重新请求；已 committed action 只按权威 receipt/replay 继续，不重新请求 provider。
   - memory 写回冲突：以本地 memory 为准，provider 仅提交 write intent。
   - 网络故障 / API 401 / 插件不可用：按 provider_error 分类，不影响 runtime 主循环稳定性。
   - runtime 新增的事件/状态不得被 bridge 静默丢弃：协议以版本化 schema 或 exhaustiveness gate 失败；snapshot/event 保持因果顺序，DecisionTrace 可关联到 proposal、runtime result 与反馈。

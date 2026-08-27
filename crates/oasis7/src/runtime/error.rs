@@ -56,6 +56,18 @@ pub enum WorldError {
         cap_ref: String,
         kind: String,
     },
+    /// A v2 module command failed a live authorization check.  This is kept
+    /// separate from the legacy effect capability errors so callers cannot
+    /// accidentally treat a legacy `allow_all` grant as v2 authority.
+    CapabilityAuthorizationDenied {
+        reason: String,
+    },
+    /// A durable v2 execution nonce was already used for another request.
+    CapabilityNonceConflict {
+        nonce_key_hash: String,
+        committed_request_hash: String,
+        supplied_request_hash: String,
+    },
     PolicyDenied {
         intent_id: String,
         reason: String,
