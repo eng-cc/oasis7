@@ -913,6 +913,48 @@ def project_refresh_graphql(query: str, variables: list[str]) -> dict[str, Any]:
     return json.loads(run_text(["gh", "api", "graphql", "-f", f"query={query}", *variables]))
 
 
+def refresh_project_identity(
+    node: dict[str, Any],
+    canonical_owner: str,
+    canonical_number: int,
+    canonical_project_id: str,
+) -> None:
+    project = node.get("project")
+    if not isinstance(project, dict):
+        die("refresh-task: live Project item is missing Project identity")
+    project_id = str(project.get("id") or "")
+    owner = project.get("owner")
+    owner = owner if isinstance(owner, dict) else {}
+    project_owner = str(owner.get("login") or "")
+    try:
+        project_number = int(project.get("number"))
+    except (TypeError, ValueError):
+        die("refresh-task: live Project identity has an invalid number")
+    if not project_id or not project_owner:
+        die("refresh-task: live Project identity is incomplete")
+    if project_owner != canonical_owner:
+        die(
+            "refresh-task: live Project owner does not match canonical owner: "
+            f"{project_owner!r} != {canonical_owner!r}"
+        )
+    if project_number != canonical_number:
+        die(
+            "refresh-task: live Project number does not match canonical Project: "
+            f"{project_number!r} != {canonical_number!r}"
+        )
+    if canonical_project_id and project_id != canonical_project_id:
+        die(
+            "refresh-task: live Project id does not match canonical Project: "
+            f"{project_id!r} != {canonical_project_id!r}"
+        )
+    field_values = node.get("fieldValues")
+    field_values = field_values if isinstance(field_values, dict) else {}
+    page_info = field_values.get("pageInfo")
+    page_info = page_info if isinstance(page_info, dict) else {}
+    if page_info.get("hasNextPage") is not False:
+        die("refresh-task: live Project item fieldValues pagination is incomplete or unknown")
+
+
 def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
@@ -945,16 +987,36 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         die("refresh-task: no registered canonical task worktree identity is available")
     repository_identity = identity_candidates[0]
     live["worktree_hint"] = repository_identity["canonical_worktree"]
+    project = latest.get("project") or {}
+    project = project if isinstance(project, dict) else {}
+    canonical_owner = str(project.get("owner") or args.project_owner or "")
+    try:
+        canonical_number = int(project.get("number") or args.project_number)
+    except (TypeError, ValueError):
+        die("refresh-task: canonical Project number is invalid")
+    canonical_project_id = str(project.get("id") or "")
+    if canonical_owner != str(args.project_owner or "") or canonical_number != int(args.project_number):
+        die("refresh-task: configured Project identity does not match canonical mapping")
     recovered: dict[str, Any] = {}
     item_id = str(existing.get("project_item_id") or "")
     project_fields: dict[str, str] = {}
+    selected_node: dict[str, Any] | None = None
     if item_id:
         query = """
         query($ids: [ID!]!) {
           nodes(ids: $ids) {
             ... on ProjectV2Item {
               id
+              project {
+                id
+                number
+                owner {
+                  ... on Organization { login }
+                  ... on User { login }
+                }
+              }
               fieldValues(first: 100) {
+                pageInfo { hasNextPage }
                 nodes {
                   ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
                   ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
@@ -966,16 +1028,37 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         """
         payload = project_refresh_graphql(query, ["-F", f"ids[]={item_id}"])
         nodes = ((payload.get("data") or {}).get("nodes") or [])
+        if nodes:
+            selected_node = nodes[0]
+            if not isinstance(selected_node, dict):
+                die("refresh-task: live Project item readback is malformed")
+            refresh_project_identity(
+                selected_node,
+                canonical_owner,
+                canonical_number,
+                canonical_project_id,
+            )
     else:
         query = """
         query($q: String!) {
           search(query: $q, type: ISSUE, first: 2) {
             nodes { ... on Issue { number url body projectItems(first: 20) { nodes {
-              id project { number }
-              fieldValues(first: 100) { nodes {
+              id
+              project {
+                id
+                number
+                owner {
+                  ... on Organization { login }
+                  ... on User { login }
+                }
+              }
+              fieldValues(first: 100) {
+                pageInfo { hasNextPage }
+                nodes {
                 ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
                 ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
-              } }
+                }
+              }
             } } } }
           }
         }
@@ -987,18 +1070,36 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         nodes = []
         if len(matches) == 1:
             for node in ((matches[0].get("projectItems") or {}).get("nodes") or []):
-                if int((node.get("project") or {}).get("number") or 0) == int(args.project_number):
-                    nodes = [node]
-                    item_id = str(node.get("id") or "")
-                    recovered = {"project_item_id": item_id, "issue_url": matches[0].get("url"),
-                                 "issue_number": matches[0].get("number")}
-                    break
+                project_node = node.get("project") if isinstance(node, dict) else None
+                project_number = project_node.get("number") if isinstance(project_node, dict) else None
+                try:
+                    is_canonical_number = int(project_number) == canonical_number
+                except (TypeError, ValueError):
+                    is_canonical_number = False
+                if not is_canonical_number:
+                    continue
+                if not isinstance(node, dict):
+                    die("refresh-task: live Project item readback is malformed")
+                refresh_project_identity(
+                    node,
+                    canonical_owner,
+                    canonical_number,
+                    canonical_project_id,
+                )
+                nodes = [node]
+                selected_node = node
+                item_id = str(node.get("id") or "")
+                if not item_id:
+                    die("refresh-task: live Project item identity is missing")
+                recovered = {"project_item_id": item_id, "issue_url": matches[0].get("url"),
+                             "issue_number": matches[0].get("number")}
+                break
         # The issue is still authoritative when its project item is temporarily
         # unavailable to this refresh query.  Preserve the refreshed issue and
         # repository identity; a later refresh can recover the project fields.
     if item_id:
-        if nodes:
-            for value in (((nodes[0] or {}).get("fieldValues") or {}).get("nodes") or []):
+        if selected_node:
+            for value in (((selected_node.get("fieldValues") or {}).get("nodes")) or []):
                 field_name = str(((value.get("field") or {}).get("name") or ""))
                 field_value = str(value.get("name") or value.get("text") or "")
                 if field_name and field_value:
