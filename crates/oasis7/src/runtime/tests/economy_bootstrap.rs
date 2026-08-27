@@ -234,6 +234,9 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
 
     world.set_resource_balance(ResourceKind::Electricity, 400);
     world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 400)
+        .expect("seed builder electricity");
+    world
         .set_material_balance("structural_frame", 40)
         .expect("seed structural frames");
     world
@@ -429,7 +432,13 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     assert_eq!(world.material_balance("calibration_scrap"), 2);
     assert_eq!(world.material_balance("precision_scrap"), 1);
     assert_eq!(world.material_balance("structural_waste"), 1);
-    assert_eq!(world.resource_balance(ResourceKind::Electricity), 71);
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder electricity"),
+        71
+    );
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 400);
 
     let rejected_events = world
         .journal()
