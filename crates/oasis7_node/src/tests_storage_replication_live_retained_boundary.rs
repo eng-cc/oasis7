@@ -1014,3 +1014,5 @@ fn authenticated_head_accepts_checkpoint_with_quorum_signed_lineage_envelope() {
 
 #[path = "tests_checkpoint_lineage_authority.rs"]
 mod checkpoint_lineage_authority_tests;
+#[path = "tests_checkpoint_lineage_source_persistence.rs"]
+mod checkpoint_lineage_source_persistence_tests;

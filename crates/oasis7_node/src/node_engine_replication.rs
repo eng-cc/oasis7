@@ -117,6 +117,8 @@ impl PosNodeEngine {
             execution_state_root,
             execution_checkpoint,
         )? {
+            replication
+                .persist_local_checkpoint_message_for_lineage(node_id, world_id, &message)?;
             if let Some(endpoint) = network_endpoint {
                 if let Some(payload) = parse_replication_commit_payload(message.payload.as_slice())
                 {
@@ -162,7 +164,6 @@ impl PosNodeEngine {
                 ),
             });
         }
-
         let Some(endpoint) = network_endpoint else {
             return Ok(());
         };
@@ -180,7 +181,6 @@ impl PosNodeEngine {
             self.clear_storage_challenge_network_degraded();
             return Ok(());
         }
-
         let mut successful_matches = 0usize;
         let mut attempted_probes = 0usize;
         let mut total_samples = 0usize;
