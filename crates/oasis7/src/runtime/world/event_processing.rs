@@ -181,7 +181,7 @@ impl World {
             .filter(|context| !self.capability_context_has_durable_completion(context))
             .map(|context| (context.grant_id.clone(), context.response_nonce.clone()))
             .collect();
-        let mut capability_state_updates: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut capability_command_activity: BTreeSet<(String, String)> = BTreeSet::new();
         let mut capability_command_commits: BTreeSet<(String, String)> = BTreeSet::new();
         for event in events {
             if event.time < previous_event_time {
@@ -211,7 +211,70 @@ impl World {
                             && update.trace_id
                                 == format!("trusted-command-{}", context.response_nonce)
                         {
-                            capability_state_updates.insert(identity);
+                            capability_command_activity.insert(identity);
+                            break;
+                        }
+                    }
+                }
+                WorldEventBody::ModuleRuntimeCharged(charge) => {
+                    // Trusted commands charge runtime resources before their
+                    // output events.  Treat that charge as command activity
+                    // so an effect-only or emit-only tail cannot be replayed
+                    // without the following CommandCommitted event.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == charge.module_id
+                            && charge.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_command_activity.insert(identity);
+                            break;
+                        }
+                    }
+                }
+                WorldEventBody::EffectQueued(intent) => {
+                    // EffectIntent does not carry the command nonce, so use
+                    // the durable v2 effect grant and its audience/subject
+                    // binding to distinguish a trusted command effect from a
+                    // legacy or unrelated module effect.  This covers hosts
+                    // without an artifact owner (and therefore without a
+                    // ModuleRuntimeCharged event).
+                    if let super::super::EffectOrigin::Module { module_id } = &intent.origin
+                        && let Some(encoded_grant) = self.capability_grants_v2.get(&intent.cap_ref)
+                        && let Ok(effect_grant) = serde_json::from_value::<
+                            oasis7_wasm_abi::CapabilityGrantV2,
+                        >(encoded_grant.clone())
+                    {
+                        for context in self.capability_invocation_contexts.values() {
+                            let identity =
+                                (context.grant_id.clone(), context.response_nonce.clone());
+                            if pending_capability_contexts.contains(&identity)
+                                && module_id == &context.module_id
+                                && effect_grant.scope.object_kind == "effect"
+                                && effect_grant.scope.module_id == context.module_id
+                                && effect_grant.subject == context.subject
+                                && effect_grant.audience == context.audience
+                            {
+                                capability_command_activity.insert(identity);
+                                break;
+                            }
+                        }
+                    }
+                }
+                WorldEventBody::ModuleEmitted(event) => {
+                    // ModuleEmitted carries the same host-bound trusted trace
+                    // as state updates.  It is therefore independently
+                    // sufficient to identify a command tail that still needs
+                    // its durable authorization commit.
+                    for context in self.capability_invocation_contexts.values() {
+                        let identity = (context.grant_id.clone(), context.response_nonce.clone());
+                        if pending_capability_contexts.contains(&identity)
+                            && context.module_id == event.module_id
+                            && event.trace_id
+                                == format!("trusted-command-{}", context.response_nonce)
+                        {
+                            capability_command_activity.insert(identity);
                             break;
                         }
                     }
@@ -256,7 +319,7 @@ impl World {
         if let Some(tick) = replaying_tick {
             self.record_tick_consensus_for_tick(tick)?;
         }
-        if capability_state_updates
+        if capability_command_activity
             .iter()
             .any(|identity| !capability_command_commits.contains(identity))
         {

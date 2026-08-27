@@ -2,6 +2,7 @@
 
 use super::super::*;
 use super::capability_grant_v2::*;
+use oasis7_wasm_abi::{ModuleEffectIntent, ModuleEmit, ModuleOutput};
 use serde_json::json;
 
 #[test]
@@ -173,4 +174,223 @@ fn capability_recovery_requires_a_commit_for_each_pending_context() {
     let error = World::from_snapshot(stale_snapshot, journal)
         .expect_err("one matching commit must not discharge another pending context");
     assert!(matches!(error, WorldError::JournalMismatch));
+}
+
+#[test]
+fn capability_recovery_rejects_effect_only_tail_before_command_commit() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({
+        "grant_nonce": "effect-only-crash-window"
+    })));
+    install_budget_for_grant(&mut world, &grant, 128);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({
+            "response_nonce": "effect-only-response"
+        })),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let stale_snapshot = world.snapshot();
+
+    let effect_grant = signed_effect_grant();
+    let mut sandbox = ConfiguredSandbox {
+        calls: 0,
+        output: ModuleOutput {
+            new_state: None,
+            effects: vec![ModuleEffectIntent {
+                kind: "weather.publish".to_string(),
+                params: json!({"station": "station-crash-window"}),
+                cap_ref: effect_grant.grant_id,
+                cap_slot: None,
+            }],
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 16,
+        },
+    };
+    execute_without_invocation_context(
+        &mut world,
+        grant.clone(),
+        catalog.clone(),
+        response.clone(),
+        &mut sandbox,
+    )
+    .expect("effect-only command should commit before the simulated crash");
+
+    let mut incomplete_journal = world.journal().clone();
+    let commit = incomplete_journal
+        .events
+        .pop()
+        .expect("effect-only command commit event");
+    assert!(matches!(
+        commit.body,
+        WorldEventBody::CapabilityAuthorization(CapabilityAuthorizationEvent::CommandCommitted {
+            receipt,
+            ..
+        }) if receipt.response_nonce.as_deref() == Some("effect-only-response")
+    ));
+    let queued_intent = incomplete_journal
+        .events
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::EffectQueued(intent)
+                if intent.kind == "weather.publish"
+                    && intent.params["station"] == "station-crash-window" =>
+            {
+                Some(intent.intent_id.clone())
+            }
+            _ => None,
+        })
+        .expect("crash tail contains the effect before CommandCommitted");
+    assert!(!incomplete_journal.events.iter().any(|event| matches!(
+        &event.body,
+        WorldEventBody::CapabilityAuthorization(
+            CapabilityAuthorizationEvent::CommandCommitted { receipt, .. }
+        ) if receipt.response_nonce.as_deref() == Some("effect-only-response")
+    )));
+
+    let recovery = World::from_snapshot(stale_snapshot, incomplete_journal);
+    match recovery {
+        Err(error) => assert!(matches!(error, WorldError::JournalMismatch)),
+        Ok(mut recovered) => {
+            assert_eq!(
+                recovered.pending_effects_len(),
+                0,
+                "an incomplete authorization must not leave a dispatchable effect"
+            );
+            assert!(
+                !recovered
+                    .capability_effect_receipt_links()
+                    .contains_key(&queued_intent),
+                "an effect without CommandCommitted must never be receipt-unlinked"
+            );
+            let mut retry_sandbox = ConfiguredSandbox {
+                calls: 0,
+                output: ModuleOutput {
+                    new_state: None,
+                    effects: Vec::new(),
+                    emits: Vec::new(),
+                    tick_lifecycle: None,
+                    output_bytes: 0,
+                },
+            };
+            let retry = execute_without_invocation_context(
+                &mut recovered,
+                grant,
+                catalog,
+                response,
+                &mut retry_sandbox,
+            );
+            assert!(
+                retry.is_err(),
+                "an incomplete effect-only transaction must not be retryable"
+            );
+            assert_eq!(
+                retry_sandbox.calls, 0,
+                "crash recovery must not execute the effect command a second time"
+            );
+            panic!("effect-only crash tail was accepted instead of returning JournalMismatch");
+        }
+    }
+}
+
+#[test]
+fn capability_recovery_rejects_emit_only_tail_before_command_commit() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({
+        "grant_nonce": "emit-only-crash-window"
+    })));
+    install_budget_for_grant(&mut world, &grant, 128);
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({
+            "response_nonce": "emit-only-response"
+        })),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let stale_snapshot = world.snapshot();
+
+    let mut sandbox = ConfiguredSandbox {
+        calls: 0,
+        output: ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: vec![ModuleEmit {
+                kind: "weather.crash-window".to_string(),
+                payload: json!({"station": "station-crash-window"}),
+            }],
+            tick_lifecycle: None,
+            output_bytes: 16,
+        },
+    };
+    execute_without_invocation_context(
+        &mut world,
+        grant.clone(),
+        catalog.clone(),
+        response.clone(),
+        &mut sandbox,
+    )
+    .expect("emit-only command should commit before the simulated crash");
+
+    let mut incomplete_journal = world.journal().clone();
+    let commit = incomplete_journal
+        .events
+        .pop()
+        .expect("emit-only command commit event");
+    assert!(matches!(
+        commit.body,
+        WorldEventBody::CapabilityAuthorization(CapabilityAuthorizationEvent::CommandCommitted {
+            receipt,
+            ..
+        }) if receipt.response_nonce.as_deref() == Some("emit-only-response")
+    ));
+    assert!(incomplete_journal.events.iter().any(|event| matches!(
+        &event.body,
+        WorldEventBody::ModuleEmitted(event)
+            if event.kind == "weather.crash-window"
+                && event.payload["station"] == "station-crash-window"
+    )));
+    assert!(!incomplete_journal.events.iter().any(|event| matches!(
+        &event.body,
+        WorldEventBody::CapabilityAuthorization(
+            CapabilityAuthorizationEvent::CommandCommitted { receipt, .. }
+        ) if receipt.response_nonce.as_deref() == Some("emit-only-response")
+    )));
+
+    let recovery = World::from_snapshot(stale_snapshot, incomplete_journal);
+    match recovery {
+        Err(error) => assert!(matches!(error, WorldError::JournalMismatch)),
+        Ok(mut recovered) => {
+            let mut retry_sandbox = ConfiguredSandbox {
+                calls: 0,
+                output: ModuleOutput {
+                    new_state: None,
+                    effects: Vec::new(),
+                    emits: Vec::new(),
+                    tick_lifecycle: None,
+                    output_bytes: 0,
+                },
+            };
+            let retry = execute_without_invocation_context(
+                &mut recovered,
+                grant,
+                catalog,
+                response,
+                &mut retry_sandbox,
+            );
+            assert!(
+                retry.is_err(),
+                "an incomplete emit-only transaction must not be retryable"
+            );
+            assert_eq!(
+                retry_sandbox.calls, 0,
+                "crash recovery must not execute the emit command a second time"
+            );
+            panic!("emit-only crash tail was accepted instead of returning JournalMismatch");
+        }
+    }
 }
