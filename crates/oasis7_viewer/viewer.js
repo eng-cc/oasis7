@@ -16166,8 +16166,6 @@ const INTENT_STATUS_LABELS = {
   proposed: ["已提出", "Proposed"],
   submitted: ["已提交", "Submitted"],
   accepted: ["已接受", "Accepted"],
-  accepted_new: ["已接受", "Accepted"],
-  reprioritized: ["已接受", "Accepted"],
   blocked: ["受阻", "Blocked"],
   completed: ["已完成", "Completed"],
   rejected: ["已拒绝", "Rejected"],
@@ -16203,22 +16201,33 @@ function boundedSafeText(value2) {
   }
   return `${chars.slice(0, MAX_PLAYER_SAFE_COPY_CHARS - 1).join("")}…`;
 }
-function hasAuthoritativePosition(intent) {
-  const eventSeq = textValue(intent.event_seq);
-  return /^\d+$/.test(eventSeq);
-}
-function hasReceiptReference(receiptRef) {
-  if (typeof receiptRef === "string") {
-    return textValue(receiptRef).length > 0;
+function counterIdentity(value2) {
+  if (typeof value2 === "number") {
+    return Number.isSafeInteger(value2) && value2 >= 0 ? String(value2) : null;
   }
+  const raw2 = textValue(value2);
+  if (!/^\d+$/.test(raw2)) {
+    return null;
+  }
+  try {
+    return BigInt(raw2).toString();
+  } catch (_error) {
+    return null;
+  }
+}
+function hasAuthoritativePosition(intent) {
+  return textValue(intent.agent_id).length > 0 && textValue(intent.world_id).length > 0 && counterIdentity(intent.reorg_epoch) !== null && counterIdentity(intent.logical_time) !== null && counterIdentity(intent.event_seq) !== null && counterIdentity(intent.updated_at) !== null;
+}
+function hasReceiptReference(receiptRef, intent) {
   if (!receiptRef || typeof receiptRef !== "object") {
     return false;
   }
-  const requiredFields = ["intent_id", "world_id", "reorg_epoch", "logical_time", "event_seq", "receipt_id"];
-  return requiredFields.every((field) => {
-    const value2 = receiptRef[field];
-    return typeof value2 === "string" ? value2.trim().length > 0 : Number.isFinite(value2);
-  });
+  const receiptIdentity = textValue(receiptRef.receipt_id);
+  const receiptEventId = receiptIdentity.startsWith("world-event:") ? counterIdentity(receiptIdentity.slice("world-event:".length)) : null;
+  if (textValue(receiptRef.intent_id) !== textValue(intent?.intent_id) || textValue(receiptRef.world_id) !== textValue(intent?.world_id) || receiptEventId === null || receiptEventId === "0") {
+    return false;
+  }
+  return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch) && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time) && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
 }
 function intentCopy(locale, key) {
   const zh = String(locale || "").toLowerCase().startsWith("zh");
@@ -16230,6 +16239,7 @@ function intentCopy(locale, key) {
     stale: ["陈旧意图", "Stale intent"],
     current: ["当前", "Current"],
     reconnecting: ["重新连接中", "Reconnecting"],
+    offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
     needsConfirmation: ["需要确认", "Needs confirmation"],
     reason: ["原因", "Reason"],
     reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
@@ -16272,7 +16282,17 @@ function describeIntentReason(intent, locale, status) {
     reasonSummary: boundedSafeText(intent.reason_summary)
   };
 }
-function describeAgentIntent(intent, locale = "en") {
+function connectionPresentationState(connectionStatus) {
+  const status = textValue(connectionStatus).toLowerCase();
+  if (!status || status === "connected") {
+    return "connected";
+  }
+  if (status === "connecting" || status === "reconnecting") {
+    return "reconnecting";
+  }
+  return "offline";
+}
+function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
   if (!intent || typeof intent !== "object") {
     return {
       kind: "unavailable",
@@ -16283,6 +16303,21 @@ function describeAgentIntent(intent, locale = "en") {
     return {
       kind: "unavailable",
       label: intentCopy(locale, "unavailable")
+    };
+  }
+  const connection = connectionPresentationState(connectionStatus);
+  if (connection === "reconnecting") {
+    return {
+      kind: "reconnecting",
+      label: intentCopy(locale, "reconnecting"),
+      statusLabel: "",
+      message: ""
+    };
+  }
+  if (connection === "offline") {
+    return {
+      kind: "unavailable",
+      label: intentCopy(locale, "offline")
     };
   }
   const controlState = textValue(intent.control_state).toLowerCase();
@@ -16331,7 +16366,7 @@ function describeAgentIntent(intent, locale = "en") {
       label: intentCopy(locale, "unavailable")
     };
   }
-  if (status === "completed" && !hasReceiptReference(intent.receipt_ref)) {
+  if (status === "completed" && !hasReceiptReference(intent.receipt_ref, intent)) {
     return {
       kind: "unavailable",
       label: intentCopy(locale, "unavailable")
@@ -16381,7 +16416,7 @@ function describeAgentIntent(intent, locale = "en") {
 }
 function AgentIntentSurface(props) {
   const locale = () => props.locale || "en";
-  const model = () => describeAgentIntent(props.intent, locale());
+  const model = () => describeAgentIntent(props.intent, locale(), props.connectionStatus);
   return (() => {
     var _el$ = _tmpl$6$1(), _el$2 = _el$.firstChild;
     insert(_el$2, () => intentCopy(locale(), "heading"));
@@ -20696,6 +20731,13 @@ function InteractionPanel() {
   };
   const selectedAgentActivity = () => state.snapshot?.model?.agents?.[agentId()]?.activity;
   const selectedAgentIntent = () => state.snapshot?.player_gameplay?.primary_intent;
+  const selectedAgentIntentConnectionStatus = () => {
+    const status = state.connectionStatus;
+    if (status === "error" && String(state.lastError || "").startsWith("pixel_world_host:")) {
+      return "connected";
+    }
+    return status;
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -20820,6 +20862,9 @@ function InteractionPanel() {
         },
         get locale() {
           return locale();
+        },
+        get connectionStatus() {
+          return selectedAgentIntentConnectionStatus();
         }
       }), _el$304);
       insert(_el$301, createComponent(Show, {
@@ -22038,18 +22083,38 @@ function installViewerVisualFixture() {
       setPromptOverridesVisible(false);
     },
     agent_intent_v2() {
+      const requestedStatus = String(new URLSearchParams(window.location.search || "").get("intent_status") || "accepted").trim().toLowerCase();
+      const status = ["accepted", "blocked", "completed"].includes(requestedStatus) ? requestedStatus : "accepted";
+      const intentId = "agent-intent-v2:headed-acceptance";
+      const worldId = "live-formal-release-default";
       injectSnapshot(viewerFixtureBaseSnapshot({
         player_gameplay: {
           primary_intent: {
             schema_version: 2,
-            intent_id: "agent-intent-v2:headed-acceptance",
-            status: "accepted",
-            message: "Stabilize power before expanding the iron line.",
-            resume_required: false,
+            intent_id: intentId,
+            status,
+            message: status === "completed" ? "Agent guidance completed with a confirmed world receipt." : status === "blocked" ? "Agent guidance is blocked pending a runtime recheck." : "Agent guidance accepted; the Agent will evaluate its next world action.",
+            resume_required: status === "blocked",
             source_class: "runtime_projection",
             freshness: "current",
             control_state: "controllable",
-            event_seq: "42"
+            agent_id: "agent-0",
+            world_id: worldId,
+            reorg_epoch: 0,
+            logical_time: 7,
+            updated_at: 7,
+            event_seq: "42",
+            effect_intent_id: status === "completed" ? "effect-intent-v2:headed-acceptance" : null,
+            receipt_ref: status === "completed" ? {
+              intent_id: intentId,
+              world_id: worldId,
+              reorg_epoch: 0,
+              logical_time: 7,
+              event_seq: "42",
+              receipt_id: "world-event:43"
+            } : null,
+            reason_summary: status === "blocked" ? "World prerequisites changed before execution." : null,
+            next_step: status === "blocked" ? "Review the world state, then resume when ready." : null
           }
         }
       }), {

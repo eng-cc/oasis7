@@ -10,6 +10,17 @@ use super::types::{ActionId, WorldTime};
 /// Schema version for the runtime-owned Agent Intent representation.
 pub const AGENT_INTENT_V2_SCHEMA_VERSION: u32 = 2;
 
+/// Authority identity supplied by the authenticated transport when a player
+/// intent enters the runtime. These fields are part of the durable request
+/// digest, but remain optional for legacy callers and snapshots.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentIntentAuthorityContext {
+    pub intent_tick: Option<u64>,
+    pub world_id: Option<String>,
+    pub reorg_epoch: Option<u64>,
+    pub authority_scope: Option<String>,
+}
+
 /// The canonical runtime intent currently associated with an agent.
 ///
 /// This deliberately contains only runtime authority fields.  Viewer
@@ -27,6 +38,18 @@ pub struct AgentIntentV2 {
     /// Effect intent whose committed receipt may complete this intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_intent_id: Option<String>,
+    /// Authenticated client authority position, when supplied by the transport.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_tick: Option<u64>,
+    /// Canonical world identity for the authenticated request, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_id: Option<String>,
+    /// Reorg epoch bound to the authenticated request, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reorg_epoch: Option<u64>,
+    /// Player-facing authority scope, never raw auth material.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_scope: Option<String>,
     pub status: String,
     pub source: String,
     pub logical_time: WorldTime,

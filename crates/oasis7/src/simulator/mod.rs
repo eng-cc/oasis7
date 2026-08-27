@@ -11,6 +11,7 @@
 //! - `power`: Power system (M4 social system)
 
 mod agent;
+mod agent_intent_summary;
 mod asteroid_fragment;
 mod chunking;
 mod decision_provider;
@@ -46,6 +47,12 @@ pub use agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
     LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
     LlmEffectReceiptTrace, LlmPromptSectionTrace, LlmStepTrace, MicroDepotQuoteRequest,
+};
+pub use agent_intent_summary::{
+    AGENT_INTENT_SUMMARY_MAX_CHARS, AGENT_INTENT_SUMMARY_SCHEMA_VERSION,
+    AUTHORITATIVE_AGENT_INTENT_SOURCES, AgentIntentKindV1, AgentIntentSourceV1,
+    AgentIntentStatusV1, AgentIntentSummaryError, AgentIntentSummaryTemplateV1,
+    AgentIntentSummaryV1, canonical_agent_intent_summary,
 };
 pub use asteroid_fragment::generate_fragments;
 pub use chunking::{

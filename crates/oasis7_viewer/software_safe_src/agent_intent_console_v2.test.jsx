@@ -25,6 +25,9 @@ function acceptedIntent(overrides = {}) {
   return {
     schema_version: 2,
     intent_id: "agent-intent-v2:test",
+    agent_id: AGENT_ID,
+    world_id: "live-runtime-test",
+    reorg_epoch: 0,
     status: "accepted",
     message: "Stabilize power before expanding the iron line.",
     resume_required: false,
@@ -33,6 +36,7 @@ function acceptedIntent(overrides = {}) {
     control_state: "controllable",
     logical_time: 7,
     event_seq: "11",
+    updated_at: 7,
     ...overrides,
   };
 }
@@ -40,7 +44,15 @@ function acceptedIntent(overrides = {}) {
 function completedIntent(overrides = {}) {
   return acceptedIntent({
     status: "completed",
-    receipt_ref: "receipt-intent-v2:test",
+    effect_intent_id: "effect-intent-v2:test",
+    receipt_ref: {
+      intent_id: "agent-intent-v2:test",
+      world_id: "live-runtime-test",
+      reorg_epoch: 0,
+      logical_time: 7,
+      event_seq: "11",
+      receipt_id: "world-event:12",
+    },
     ...overrides,
   });
 }
@@ -142,5 +154,43 @@ describe("Agent Console V2 authoritative intent", () => {
     await waitFor(() => expect(within(surface).getByText("Completed")).toBeInTheDocument());
     expect(surface).toHaveTextContent("Stabilize power before expanding the iron line.");
     expect(surface).not.toHaveTextContent(/receipt-intent-v2|runtime_projection/i);
+  }, 60000);
+
+  it.each([
+    ["accepted_new", { status: "accepted_new" }],
+    ["reprioritized", { status: "reprioritized" }],
+    ["missing agent position", { agent_id: undefined }],
+  ])("fails closed for non-canonical or incomplete %s metadata", async (_label, overrides) => {
+    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent(overrides)));
+    const intentSurface = surface.querySelector(".agent-intent");
+    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
+    expect(intentSurface).not.toHaveTextContent(/Accepted|Stabilize power/i);
+  }, 60000);
+
+  it.each([
+    ["raw receipt string", "world-event:12"],
+    ["wrong intent identity", { ...completedIntent().receipt_ref, intent_id: "other-intent" }],
+    ["wrong world identity", { ...completedIntent().receipt_ref, world_id: "other-world" }],
+    ["wrong event position", { ...completedIntent().receipt_ref, event_seq: "13" }],
+  ])("fails closed for %s", async (_label, receiptRef) => {
+    const surface = await commandSurfaceFor(intentSnapshot(completedIntent({ receipt_ref: receiptRef })));
+    const intentSurface = surface.querySelector(".agent-intent");
+    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
+    expect(intentSurface).not.toHaveTextContent("Completed");
+  }, 60000);
+
+  it("redacts the retained intent while the runtime connection is reconnecting or offline", async () => {
+    const app = await renderViewerApp(intentSnapshot(acceptedIntent()));
+    dispose = app.dispose;
+    app.core.applySelection({ kind: "agent", id: AGENT_ID });
+    const intentSurface = app.container.querySelector("#viewer-details-panel .agent-intent");
+    app.core.state.connectionStatus = "reconnecting";
+    await waitFor(() => expect(within(intentSurface).getByText("Reconnecting")).toBeInTheDocument());
+    expect(intentSurface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
+    expect(intentSurface).not.toHaveTextContent("Accepted");
+
+    app.core.state.connectionStatus = "disconnected";
+    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable — world connection lost")).toBeInTheDocument());
+    expect(intentSurface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
   }, 60000);
 });

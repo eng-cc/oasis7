@@ -656,7 +656,7 @@ fn runtime_prompt_control_keeps_the_canonical_primary_intent_truth() {
         unchanged
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("unchanged")
+        Some("accepted")
     );
     assert_eq!(
         unchanged
@@ -675,7 +675,7 @@ fn runtime_prompt_control_keeps_the_canonical_primary_intent_truth() {
         resume_required
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("resume_required")
+        Some("blocked")
     );
     assert_eq!(
         resume_required

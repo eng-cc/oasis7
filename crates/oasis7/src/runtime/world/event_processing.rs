@@ -559,9 +559,14 @@ impl World {
     ) -> Result<(), WorldError> {
         match body {
             WorldEventBody::Domain(event) => {
-                self.validate_agent_intent_receipt_reference(event, envelope_event_seq)?;
-                self.state
-                    .apply_domain_event_at(event, time, envelope_event_seq)?;
+                let committed_receipt_event_id =
+                    self.validate_agent_intent_receipt_reference(event, envelope_event_seq)?;
+                self.state.apply_domain_event_at(
+                    event,
+                    time,
+                    envelope_event_seq,
+                    committed_receipt_event_id,
+                )?;
                 self.state.route_domain_event(event);
                 if let super::super::DomainEvent::ModuleInstalled {
                     instance_id,
@@ -660,12 +665,12 @@ impl World {
         &self,
         event: &DomainEvent,
         envelope_event_seq: Option<WorldEventId>,
-    ) -> Result<(), WorldError> {
+    ) -> Result<Option<WorldEventId>, WorldError> {
         let DomainEvent::AgentIntentTransitioned { intent } = event else {
-            return Ok(());
+            return Ok(None);
         };
         if intent.status != "completed" {
-            return Ok(());
+            return Ok(None);
         }
         let receipt_event_id = intent
             .receipt_ref
@@ -678,9 +683,9 @@ impl World {
                     .to_string(),
             })?;
         let Some(envelope_event_seq) = envelope_event_seq else {
-            // Direct WorldState reducers validate the reference shape. The
-            // journal-backed World path below additionally proves commitment.
-            return Ok(());
+            // The state reducer will fail closed without the witness. Keep
+            // this validator side-effect free for any non-journal caller.
+            return Ok(None);
         };
         if receipt_event_id >= envelope_event_seq {
             return Err(WorldError::ResourceBalanceInvalid {
@@ -711,6 +716,6 @@ impl World {
                 ),
             });
         }
-        Ok(())
+        Ok(Some(receipt_event_id))
     }
 }

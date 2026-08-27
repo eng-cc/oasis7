@@ -4,8 +4,6 @@ const INTENT_STATUS_LABELS = {
   proposed: ["已提出", "Proposed"],
   submitted: ["已提交", "Submitted"],
   accepted: ["已接受", "Accepted"],
-  accepted_new: ["已接受", "Accepted"],
-  reprioritized: ["已接受", "Accepted"],
   blocked: ["受阻", "Blocked"],
   completed: ["已完成", "Completed"],
   rejected: ["已拒绝", "Rejected"],
@@ -51,23 +49,49 @@ function boundedSafeText(value) {
   return `${chars.slice(0, MAX_PLAYER_SAFE_COPY_CHARS - 1).join("")}…`;
 }
 
-function hasAuthoritativePosition(intent) {
-  const eventSeq = textValue(intent.event_seq);
-  return /^\d+$/.test(eventSeq);
+function counterIdentity(value) {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
+  }
+  const raw = textValue(value);
+  if (!/^\d+$/.test(raw)) {
+    return null;
+  }
+  try {
+    return BigInt(raw).toString();
+  } catch (_error) {
+    return null;
+  }
 }
 
-function hasReceiptReference(receiptRef) {
-  if (typeof receiptRef === "string") {
-    return textValue(receiptRef).length > 0;
-  }
+function hasAuthoritativePosition(intent) {
+  return textValue(intent.agent_id).length > 0
+    && textValue(intent.world_id).length > 0
+    && counterIdentity(intent.reorg_epoch) !== null
+    && counterIdentity(intent.logical_time) !== null
+    && counterIdentity(intent.event_seq) !== null
+    && counterIdentity(intent.updated_at) !== null;
+}
+
+function hasReceiptReference(receiptRef, intent) {
   if (!receiptRef || typeof receiptRef !== "object") {
     return false;
   }
-  const requiredFields = ["intent_id", "world_id", "reorg_epoch", "logical_time", "event_seq", "receipt_id"];
-  return requiredFields.every((field) => {
-    const value = receiptRef[field];
-    return typeof value === "string" ? value.trim().length > 0 : Number.isFinite(value);
-  });
+  const receiptIdentity = textValue(receiptRef.receipt_id);
+  const receiptEventId = receiptIdentity.startsWith("world-event:")
+    ? counterIdentity(receiptIdentity.slice("world-event:".length))
+    : null;
+  if (
+    textValue(receiptRef.intent_id) !== textValue(intent?.intent_id)
+    || textValue(receiptRef.world_id) !== textValue(intent?.world_id)
+    || receiptEventId === null
+    || receiptEventId === "0"
+  ) {
+    return false;
+  }
+  return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch)
+    && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time)
+    && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
 }
 
 function intentCopy(locale, key) {
@@ -80,6 +104,7 @@ function intentCopy(locale, key) {
     stale: ["陈旧意图", "Stale intent"],
     current: ["当前", "Current"],
     reconnecting: ["重新连接中", "Reconnecting"],
+    offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
     needsConfirmation: ["需要确认", "Needs confirmation"],
     reason: ["原因", "Reason"],
     reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
@@ -116,7 +141,18 @@ function describeIntentReason(intent, locale, status) {
   };
 }
 
-function describeAgentIntent(intent, locale = "en") {
+function connectionPresentationState(connectionStatus) {
+  const status = textValue(connectionStatus).toLowerCase();
+  if (!status || status === "connected") {
+    return "connected";
+  }
+  if (status === "connecting" || status === "reconnecting") {
+    return "reconnecting";
+  }
+  return "offline";
+}
+
+function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
   if (!intent || typeof intent !== "object") {
     return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
   }
@@ -126,6 +162,14 @@ function describeAgentIntent(intent, locale = "en") {
     || textValue(intent.source_class) !== "runtime_projection"
   ) {
     return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  }
+
+  const connection = connectionPresentationState(connectionStatus);
+  if (connection === "reconnecting") {
+    return { kind: "reconnecting", label: intentCopy(locale, "reconnecting"), statusLabel: "", message: "" };
+  }
+  if (connection === "offline") {
+    return { kind: "unavailable", label: intentCopy(locale, "offline") };
   }
 
   const controlState = textValue(intent.control_state).toLowerCase();
@@ -156,7 +200,7 @@ function describeAgentIntent(intent, locale = "en") {
     return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
   }
 
-  if (status === "completed" && !hasReceiptReference(intent.receipt_ref)) {
+  if (status === "completed" && !hasReceiptReference(intent.receipt_ref, intent)) {
     return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
   }
 
@@ -190,7 +234,7 @@ function describeAgentIntent(intent, locale = "en") {
 
 export function AgentIntentSurface(props) {
   const locale = () => props.locale || "en";
-  const model = () => describeAgentIntent(props.intent, locale());
+  const model = () => describeAgentIntent(props.intent, locale(), props.connectionStatus);
 
   return (
     <section class="agent-intent" data-agent-intent-state={model().kind} aria-live="polite">

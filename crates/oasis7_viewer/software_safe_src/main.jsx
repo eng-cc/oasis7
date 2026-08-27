@@ -3256,6 +3256,16 @@ function InteractionPanel() {
   };
   const selectedAgentActivity = () => core.state.snapshot?.model?.agents?.[agentId()]?.activity;
   const selectedAgentIntent = () => core.state.snapshot?.player_gameplay?.primary_intent;
+  const selectedAgentIntentConnectionStatus = () => {
+    const status = core.state.connectionStatus;
+    // A software-safe canvas fallback can report a renderer diagnostic through
+    // the shared error channel while the runtime transport remains usable.
+    // Keep that diagnostic from masquerading as a disconnected authority.
+    if (status === "error" && String(core.state.lastError || "").startsWith("pixel_world_host:")) {
+      return "connected";
+    }
+    return status;
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3363,7 +3373,11 @@ function InteractionPanel() {
         </Badge>
       </div>
       <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
-      <AgentIntentSurface intent={selectedAgentIntent()} locale={locale()} />
+      <AgentIntentSurface
+        intent={selectedAgentIntent()}
+        locale={locale()}
+        connectionStatus={selectedAgentIntentConnectionStatus()}
+      />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -4255,18 +4269,42 @@ function installViewerVisualFixture() {
       core.setPromptOverridesVisible(false);
     },
     agent_intent_v2() {
+      const requestedStatus = String(new URLSearchParams(window.location.search || "").get("intent_status") || "accepted").trim().toLowerCase();
+      const status = ["accepted", "blocked", "completed"].includes(requestedStatus) ? requestedStatus : "accepted";
+      const intentId = "agent-intent-v2:headed-acceptance";
+      const worldId = "live-formal-release-default";
       core.injectSnapshot(viewerFixtureBaseSnapshot({
         player_gameplay: {
           primary_intent: {
             schema_version: 2,
-            intent_id: "agent-intent-v2:headed-acceptance",
-            status: "accepted",
-            message: "Stabilize power before expanding the iron line.",
-            resume_required: false,
+            intent_id: intentId,
+            status,
+            message: status === "completed"
+              ? "Agent guidance completed with a confirmed world receipt."
+              : status === "blocked"
+                ? "Agent guidance is blocked pending a runtime recheck."
+                : "Agent guidance accepted; the Agent will evaluate its next world action.",
+            resume_required: status === "blocked",
             source_class: "runtime_projection",
             freshness: "current",
             control_state: "controllable",
+            agent_id: "agent-0",
+            world_id: worldId,
+            reorg_epoch: 0,
+            logical_time: 7,
+            updated_at: 7,
             event_seq: "42",
+            effect_intent_id: status === "completed" ? "effect-intent-v2:headed-acceptance" : null,
+            receipt_ref: status === "completed" ? {
+              intent_id: intentId,
+              world_id: worldId,
+              reorg_epoch: 0,
+              logical_time: 7,
+              event_seq: "42",
+              receipt_id: "world-event:43",
+            } : null,
+            reason_summary: status === "blocked" ? "World prerequisites changed before execution." : null,
+            next_step: status === "blocked" ? "Review the world state, then resume when ready." : null,
           },
         },
       }), { returnState: false });

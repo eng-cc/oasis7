@@ -691,7 +691,7 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
     assert_eq!(canonical_intent.status, "accepted");
     assert_eq!(
         canonical_intent.summary,
-        "Prioritize the iron line before expanding."
+        "Agent guidance accepted; the Agent will evaluate its next world action."
     );
     assert_eq!(canonical_intent.agent_id, agent_id);
     assert_eq!(canonical_intent.logical_time, ack.accepted_at_tick);
@@ -706,15 +706,15 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
         contract
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("accepted_new"),
+        Some("accepted"),
         "an accepted instruction must publish a durable primary-intent handoff, not only transient feedback"
     );
     assert_eq!(
         contract
             .pointer("/primary_intent/message")
             .and_then(serde_json::Value::as_str),
-        Some("Prioritize the iron line before expanding."),
-        "the durable handoff must retain the accepted player instruction verbatim"
+        Some("Agent guidance accepted; the Agent will evaluate its next world action."),
+        "the durable handoff must expose only the canonical player-safe summary"
     );
     assert_eq!(
         contract
@@ -732,6 +732,30 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
             .pointer("/primary_intent/intent_id")
             .and_then(serde_json::Value::as_str),
         Some(canonical_intent.intent_id.as_str())
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/agent_id")
+            .and_then(serde_json::Value::as_str),
+        Some(agent_id.as_str())
+    );
+    assert_eq!(
+        contract
+            .pointer("/primary_intent/world_id")
+            .and_then(serde_json::Value::as_str),
+        Some("live-runtime-minimal")
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/reorg_epoch"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/logical_time"),
+        Some(&serde_json::json!(canonical_intent.logical_time))
+    );
+    assert_eq!(
+        contract.pointer("/primary_intent/updated_at"),
+        Some(&serde_json::json!(canonical_intent.updated_at))
     );
     assert_eq!(
         contract.pointer("/primary_intent/source_class"),
@@ -817,13 +841,13 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
         contract
             .pointer("/primary_intent/status")
             .and_then(serde_json::Value::as_str),
-        Some("reprioritized")
+        Some("accepted")
     );
     assert_eq!(
         contract
             .pointer("/primary_intent/message")
             .and_then(serde_json::Value::as_str),
-        Some("Stabilize power before expanding the iron line.")
+        Some("Agent guidance accepted; the Agent will evaluate its next world action.")
     );
     assert_eq!(
         contract
@@ -839,7 +863,7 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
     assert_eq!(canonical_intent.status, "accepted");
     assert_eq!(
         canonical_intent.summary,
-        "Stabilize power before expanding the iron line."
+        "Agent guidance accepted; the Agent will evaluate its next world action."
     );
 }
 

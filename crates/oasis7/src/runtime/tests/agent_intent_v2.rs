@@ -258,15 +258,14 @@ fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
             )
             .is_err()
     );
-    state
-        .apply_domain_event(
-            &intent_event("AgentIntentTransitioned", completed.clone()),
-            9,
-        )
-        .unwrap();
-    assert_eq!(
-        state.agents[AGENT_ID].intent.as_ref().unwrap().receipt_ref,
-        Some("world-event:14".to_string())
+    assert!(
+        state
+            .apply_domain_event(
+                &intent_event("AgentIntentTransitioned", completed.clone()),
+                9,
+            )
+            .is_err(),
+        "direct WorldState reducers must not accept a completion without a committed receipt witness"
     );
 }
 
@@ -431,7 +430,7 @@ fn replay_rejects_an_intent_payload_that_does_not_match_its_world_event_envelope
 }
 
 #[test]
-fn world_api_exact_historical_retry_returns_original_without_reactivating_it() {
+fn world_api_exact_historical_retry_returns_latest_terminal_without_reactivating_it() {
     let mut state = WorldState::default();
     state
         .agents
@@ -449,7 +448,17 @@ fn world_api_exact_historical_retry_returns_original_without_reactivating_it() {
         .record_agent_chat_intent("player-history", AGENT_ID, 1, "Start recipe")
         .unwrap();
 
-    assert_eq!(replay, original);
+    let latest_terminal = world
+        .state()
+        .agent_intent_ledger
+        .values()
+        .find(|intent| {
+            intent.actor_id == "player-history" && intent.intent_id != before_retry.intent_id
+        })
+        .expect("superseded intent disposition");
+    assert_eq!(latest_terminal.status, "superseded");
+    assert!(latest_terminal.event_seq > original);
+    assert_eq!(replay, latest_terminal.event_seq);
     assert_eq!(
         world.state().agents[AGENT_ID].intent.as_ref(),
         Some(&before_retry)
@@ -499,4 +508,263 @@ fn replay_rejects_receipt_committed_for_a_different_effect_intent() {
     });
 
     assert!(World::from_snapshot(snapshot, journal).is_err());
+}
+
+#[test]
+fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let world = World::new_with_state(state);
+    let snapshot = world.snapshot();
+    let mut accepted =
+        canonical_intent("intent-receipt-committed", "accepted", "Start recipe", None);
+    accepted["effect_intent_id"] = serde_json::json!("effect-receipt-committed");
+    accepted["event_seq"] = serde_json::json!(1);
+    let mut completed = accepted.clone();
+    completed["status"] = serde_json::json!("completed");
+    completed["event_seq"] = serde_json::json!(4);
+    completed["updated_at"] = serde_json::json!(8);
+    completed["receipt_ref"] = serde_json::json!("world-event:3");
+    let journal = Journal {
+        events: vec![
+            WorldEvent {
+                id: 1,
+                time: 7,
+                caused_by: None,
+                body: WorldEventBody::Domain(DomainEvent::AgentIntentAccepted {
+                    intent: serde_json::from_value(accepted).expect("accepted intent"),
+                }),
+            },
+            WorldEvent {
+                id: 2,
+                time: 7,
+                caused_by: None,
+                body: WorldEventBody::EffectQueued(EffectIntent {
+                    intent_id: "effect-receipt-committed".to_string(),
+                    kind: "test_effect".to_string(),
+                    params: serde_json::json!({}),
+                    cap_ref: "test".to_string(),
+                    origin: EffectOrigin::System,
+                }),
+            },
+            WorldEvent {
+                id: 3,
+                time: 7,
+                caused_by: None,
+                body: WorldEventBody::ReceiptAppended(EffectReceipt {
+                    intent_id: "effect-receipt-committed".to_string(),
+                    status: "ok".to_string(),
+                    payload: serde_json::json!({}),
+                    cost_cents: None,
+                    signature: None,
+                }),
+            },
+            WorldEvent {
+                id: 4,
+                time: 8,
+                caused_by: None,
+                body: WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned {
+                    intent: serde_json::from_value(completed).expect("completed intent"),
+                }),
+            },
+        ],
+    };
+
+    let restored = World::from_snapshot(snapshot, journal).expect("committed receipt replay");
+    assert_eq!(
+        restored.state().agents[AGENT_ID]
+            .intent
+            .as_ref()
+            .expect("completed intent")
+            .status,
+        "completed"
+    );
+}
+
+#[test]
+fn durable_record_result_identifies_exact_replay() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let context = AgentIntentAuthorityContext {
+        intent_tick: Some(7),
+        world_id: Some("runtime-world".to_string()),
+        reorg_epoch: Some(2),
+        authority_scope: Some("player_agent_chat".to_string()),
+    };
+    let first = world
+        .record_agent_chat_intent_with_authority(
+            "player-replay",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            context.clone(),
+        )
+        .expect("first durable intent");
+    assert!(matches!(first, AgentIntentRecordOutcome::Accepted { .. }));
+
+    let replay = world
+        .record_agent_chat_intent_with_authority(
+            "player-replay",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            context,
+        )
+        .expect("durable replay");
+    assert!(matches!(replay, AgentIntentRecordOutcome::Replayed { .. }));
+    assert_eq!(first.event_seq(), replay.event_seq());
+    assert_eq!(world.journal().events.len(), 1);
+    let intent = world.state().agents[AGENT_ID]
+        .intent
+        .as_ref()
+        .expect("accepted runtime intent");
+    assert_eq!(
+        intent.summary,
+        "Agent guidance accepted; the Agent will evaluate its next world action."
+    );
+    assert!(!intent.summary.contains("Start recipe"));
+}
+
+#[test]
+fn durable_digest_binds_intent_tick_world_reorg_and_authority_scope() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let original_context = AgentIntentAuthorityContext {
+        intent_tick: Some(7),
+        world_id: Some("runtime-world".to_string()),
+        reorg_epoch: Some(2),
+        authority_scope: Some("player_agent_chat".to_string()),
+    };
+    world
+        .record_agent_chat_intent_with_authority(
+            "player-digest",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            original_context,
+        )
+        .expect("first durable intent");
+
+    for changed_context in [
+        AgentIntentAuthorityContext {
+            intent_tick: Some(8),
+            world_id: Some("runtime-world".to_string()),
+            reorg_epoch: Some(2),
+            authority_scope: Some("player_agent_chat".to_string()),
+        },
+        AgentIntentAuthorityContext {
+            intent_tick: Some(7),
+            world_id: Some("other-world".to_string()),
+            reorg_epoch: Some(2),
+            authority_scope: Some("player_agent_chat".to_string()),
+        },
+        AgentIntentAuthorityContext {
+            intent_tick: Some(7),
+            world_id: Some("runtime-world".to_string()),
+            reorg_epoch: Some(3),
+            authority_scope: Some("player_agent_chat".to_string()),
+        },
+        AgentIntentAuthorityContext {
+            intent_tick: Some(7),
+            world_id: Some("runtime-world".to_string()),
+            reorg_epoch: Some(2),
+            authority_scope: Some("other_scope".to_string()),
+        },
+    ] {
+        assert!(
+            world
+                .record_agent_chat_intent_with_authority(
+                    "player-digest",
+                    AGENT_ID,
+                    1,
+                    "Start recipe",
+                    changed_context,
+                )
+                .is_err(),
+            "same intent identity with changed authority binding must conflict"
+        );
+    }
+}
+
+#[test]
+fn durable_replay_returns_latest_terminal_disposition_event_seq() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let context = AgentIntentAuthorityContext {
+        intent_tick: Some(7),
+        world_id: Some("runtime-world".to_string()),
+        reorg_epoch: Some(2),
+        authority_scope: Some("player_agent_chat".to_string()),
+    };
+    let accepted = world
+        .record_agent_chat_intent_with_authority(
+            "player-terminal-replay",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            context.clone(),
+        )
+        .expect("accepted intent");
+    let accepted_intent = world.state().agents[AGENT_ID]
+        .intent
+        .clone()
+        .expect("accepted runtime intent");
+    let mut rejected = accepted_intent.clone();
+    rejected.status = "rejected".to_string();
+    rejected.event_seq = accepted.event_seq().saturating_add(1);
+    rejected.updated_at = 8;
+    rejected.reason_code = Some("policy_denied".to_string());
+    rejected.reason_summary = Some("This instruction is not permitted".to_string());
+
+    let mut terminal_state = world.state().clone();
+    terminal_state
+        .apply_domain_event(
+            &DomainEvent::AgentIntentTransitioned {
+                intent: rejected.clone(),
+            },
+            8,
+        )
+        .expect("record terminal disposition");
+    let mut world = World::new_with_state(terminal_state);
+    let replay = world
+        .record_agent_chat_intent_with_authority(
+            "player-terminal-replay",
+            AGENT_ID,
+            1,
+            "Start recipe",
+            context,
+        )
+        .expect("durable terminal replay");
+
+    assert!(matches!(
+        replay,
+        AgentIntentRecordOutcome::Replayed { event_seq } if event_seq == rejected.event_seq
+    ));
+}
+
+#[test]
+fn provider_advisory_intent_cannot_become_runtime_accepted() {
+    let mut advisory = canonical_intent("intent-advisory-1", "accepted", "Start recipe", None);
+    advisory["source"] = serde_json::json!("provider_advisory");
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentAccepted", advisory), 7)
+            .is_err(),
+        "provider advisory output must not enter the accepted runtime lifecycle"
+    );
 }

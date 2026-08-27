@@ -3,6 +3,7 @@
 mod actions;
 mod agent_claims;
 mod agent_intent;
+pub use agent_intent::AgentIntentRecordOutcome;
 mod audit;
 mod base_layer;
 mod body;

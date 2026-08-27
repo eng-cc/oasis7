@@ -124,6 +124,10 @@ export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en
   core.initializeSoftwareSafeCore();
   core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
+  // The fixture injects a complete runtime snapshot, so model the transport
+  // state that produced it as connected. Tests that exercise reconnect/offline
+  // redaction explicitly override this state afterward.
+  core.state.connectionStatus = "connected";
   core.state.auth = {
     ...core.state.auth,
     available: true,
@@ -138,5 +142,6 @@ export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en
   };
   main.__markStarterOcOnboardingCompleteForTest("agent-0");
   const dispose = main.mountViewerApp(appRoot);
+  core.requestRender();
   return { container: appRoot, core, dispose };
 }

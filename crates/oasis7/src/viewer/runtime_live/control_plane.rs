@@ -10,18 +10,22 @@ use super::super::protocol::{
     AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
 };
-use crate::runtime::World as RuntimeWorld;
+use crate::runtime::{AgentIntentAuthorityContext, World as RuntimeWorld};
 use crate::simulator::{
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, PromptUpdateOperation, WorldEventKind,
 };
 use sha2::{Digest, Sha256};
 
 mod agent_chat_intent;
+#[path = "control_plane/auth_helpers.rs"]
+mod auth_helpers;
 mod llm_sidecar;
 #[path = "control_plane/prompt_profile.rs"]
 mod prompt_profile;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
+pub(super) use auth_helpers::map_auth_verify_error_code;
+use auth_helpers::{hosted_strong_auth_grant_public_key_from_env, hosted_strong_auth_now_unix_ms};
 pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
@@ -56,25 +60,6 @@ pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
             )
         })
         .unwrap_or(false)
-}
-
-fn hosted_strong_auth_grant_public_key_from_env() -> Result<String, String> {
-    std::env::var(HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV)
-        .ok()
-        .map(|raw| raw.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "hosted strong auth backend grant signer is not configured on this runtime".to_string()
-        })
-}
-
-fn hosted_strong_auth_now_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX)
 }
 
 impl ViewerRuntimeLiveServer {
@@ -519,18 +504,48 @@ impl ViewerRuntimeLiveServer {
         // Commit the canonical intent before touching the provider or emitting
         // a local echo. A provider timeout must never leave an observable chat
         // side effect whose runtime authority was not persisted.
-        self.world
-            .record_agent_chat_intent(
+        let record_outcome = self
+            .world
+            .record_agent_chat_intent_with_authority(
                 verified.player_id.as_str(),
                 agent_id.as_str(),
                 intent.intent_seq,
                 message.as_str(),
+                AgentIntentAuthorityContext {
+                    intent_tick: intent.intent_tick,
+                    world_id: Some(self.config.world_id.clone()),
+                    reorg_epoch: Some(self.reorg_epoch),
+                    authority_scope: Some("player_agent_chat".to_string()),
+                },
             )
             .map_err(|error| AgentChatError {
                 code: "intent_persistence_failed".to_string(),
                 message: format!("failed to persist canonical agent intent: {error:?}"),
                 agent_id: Some(agent_id.clone()),
             })?;
+        if record_outcome.is_replay() {
+            // A durable replay remains authoritative after sidecar cache loss;
+            // suppress duplicate provider and echo effects for the same tuple.
+            let ack = AgentChatAck {
+                agent_id: agent_id.clone(),
+                accepted_at_tick: self.world.state().time,
+                message_len: message.chars().count(),
+                player_id: Some(player_id),
+                intent_tick: intent.intent_tick,
+                intent_seq: Some(intent.intent_seq),
+                idempotent_replay: true,
+            };
+            self.llm_sidecar.record_chat_intent_ack(
+                verified.player_id.as_str(),
+                agent_id.as_str(),
+                intent.intent_seq,
+                intent.intent_tick,
+                message.as_str(),
+                public_key.as_deref(),
+                &ack,
+            );
+            return Ok(ack);
+        }
         let chat_echo_enabled = self.config.agent_chat_echo_enabled;
         match self.llm_sidecar.push_chat_message(
             &self.world,
@@ -1156,20 +1171,4 @@ pub(super) fn ensure_expected_prompt_version_runtime(
         }
     }
     Ok(())
-}
-
-pub(super) fn map_auth_verify_error_code(message: &str) -> &'static str {
-    if message.contains("nonce") {
-        return "auth_nonce_invalid";
-    }
-    if message.contains("signature") || message.contains("awviewauth:v1") {
-        return "auth_signature_invalid";
-    }
-    if message.contains("player_id") || message.contains("public_key") {
-        return "auth_claim_mismatch";
-    }
-    if message.contains("required") || message.contains("empty") {
-        return "auth_claim_invalid";
-    }
-    "auth_invalid"
 }

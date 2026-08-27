@@ -566,7 +566,7 @@ pub struct ModuleReleaseManifestMappingState {
 pub struct WorldState {
     pub time: WorldTime,
     pub agents: BTreeMap<String, AgentCell>,
-    /// Durable intent history used for idempotency after the current intent is replaced.
+    /// Latest durable intent disposition used for idempotency after replacement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub agent_intent_ledger: BTreeMap<String, AgentIntentV2>,
     #[serde(default)]
@@ -1027,7 +1027,7 @@ impl WorldState {
         event: &DomainEvent,
         now: WorldTime,
     ) -> Result<(), WorldError> {
-        self.apply_domain_event_at(event, now, None)
+        self.apply_domain_event_at(event, now, None, None)
     }
 
     pub(crate) fn apply_domain_event_at(
@@ -1035,14 +1035,18 @@ impl WorldState {
         event: &DomainEvent,
         now: WorldTime,
         envelope_event_seq: Option<WorldEventId>,
+        committed_receipt_event_id: Option<WorldEventId>,
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
             DomainEvent::AgentIntentAccepted { .. }
             | DomainEvent::AgentIntentReplaced { .. }
-            | DomainEvent::AgentIntentTransitioned { .. } => {
-                self.apply_domain_event_intent(event, now, envelope_event_seq)?
-            }
+            | DomainEvent::AgentIntentTransitioned { .. } => self.apply_domain_event_intent(
+                event,
+                now,
+                envelope_event_seq,
+                committed_receipt_event_id,
+            )?,
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
             | DomainEvent::ActionAccepted { .. }
