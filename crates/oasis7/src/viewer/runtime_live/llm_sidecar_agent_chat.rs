@@ -1,5 +1,35 @@
 use super::*;
 
+fn validate_provider_agent_chat_response(
+    requested_agent_id: &str,
+    response: crate::simulator::ProviderAgentChatResponse,
+) -> Result<String, RuntimeProviderAgentChatRequestError> {
+    if response.agent_id.trim() != requested_agent_id {
+        return Err(RuntimeProviderAgentChatRequestError {
+            retryable: false,
+            error: AgentChatError {
+                code: "provider_agent_chat_agent_mismatch".to_string(),
+                message: "provider returned a response for a different Agent".to_string(),
+                agent_id: Some(requested_agent_id.to_string()),
+            },
+        });
+    }
+
+    let reply = response.message.trim();
+    if reply.is_empty() {
+        return Err(RuntimeProviderAgentChatRequestError {
+            retryable: true,
+            error: AgentChatError {
+                code: "provider_empty_chat_response".to_string(),
+                message: "provider returned an empty agent chat response".to_string(),
+                agent_id: Some(requested_agent_id.to_string()),
+            },
+        });
+    }
+
+    Ok(reply.to_string())
+}
+
 impl RuntimeLlmSidecar {
     pub(super) fn request_provider_agent_chat(
         &self,
@@ -116,17 +146,47 @@ impl RuntimeLlmSidecar {
                 });
             }
         };
-        let reply = response.message.trim();
-        if reply.is_empty() {
-            return Err(RuntimeProviderAgentChatRequestError {
-                retryable: true,
-                error: AgentChatError {
-                    code: "provider_empty_chat_response".to_string(),
-                    message: "provider returned an empty agent chat response".to_string(),
-                    agent_id: Some(agent_id.to_string()),
-                },
-            });
-        }
-        Ok(Some(reply.to_string()))
+        let reply = validate_provider_agent_chat_response(agent_id, response)?;
+        Ok(Some(reply))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::simulator::ProviderAgentChatResponse;
+
+    #[test]
+    fn provider_response_agent_mismatch_is_non_retryable_and_not_returned() {
+        let response = ProviderAgentChatResponse {
+            agent_id: "agent-1".to_string(),
+            message: "private response for another Agent".to_string(),
+            location_id: None,
+        };
+
+        let error = validate_provider_agent_chat_response("agent-0", response)
+            .expect_err("a response for another Agent must be rejected");
+
+        assert!(!error.retryable);
+        assert_eq!(error.error.code, "provider_agent_chat_agent_mismatch");
+        assert_eq!(
+            error.error.message,
+            "provider returned a response for a different Agent"
+        );
+        assert_eq!(error.error.agent_id.as_deref(), Some("agent-0"));
+    }
+
+    #[test]
+    fn provider_response_agent_id_is_trimmed_before_exact_match() {
+        let response = ProviderAgentChatResponse {
+            agent_id: "  agent-0  ".to_string(),
+            message: "  hello Agent  ".to_string(),
+            location_id: None,
+        };
+
+        let reply = validate_provider_agent_chat_response("agent-0", response)
+            .expect("matching provider Agent response should be accepted");
+
+        assert_eq!(reply, "hello Agent");
     }
 }

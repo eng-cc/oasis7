@@ -12,7 +12,8 @@ use super::super::protocol::{
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
 };
 use crate::runtime::{
-    AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, World as RuntimeWorld,
+    AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
+    World as RuntimeWorld,
 };
 use crate::simulator::{
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, PromptUpdateOperation, WorldEventKind,
@@ -65,6 +66,18 @@ pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+fn provider_reply_matches_current_intent(
+    current: Option<&AgentIntentV2>,
+    pending_intent_id: Option<&str>,
+    pending_request_digest: Option<&str>,
+) -> bool {
+    current.is_some_and(|current| {
+        pending_intent_id == Some(current.intent_id.as_str())
+            && pending_request_digest == Some(current.request_digest.as_str())
+            && matches!(current.status.as_str(), "accepted" | "blocked")
+    })
 }
 
 impl ViewerRuntimeLiveServer {
@@ -700,7 +713,25 @@ impl ViewerRuntimeLiveServer {
             .llm_sidecar
             .drain_provider_agent_chat_replies_with_identity(&self.world);
         for (pending, message) in replies {
-            self.enqueue_agent_chat_reply_event(pending.agent_id.as_str(), message.as_str());
+            let current = self
+                .world
+                .state()
+                .agents
+                .get(pending.agent_id.as_str())
+                .and_then(|cell| cell.intent.as_ref());
+            if provider_reply_matches_current_intent(
+                current,
+                pending.intent_id.as_deref(),
+                pending.request_digest.as_deref(),
+            ) {
+                self.enqueue_agent_chat_reply_event(pending.agent_id.as_str(), message.as_str());
+            } else {
+                tracing::debug!(
+                    agent_id = pending.agent_id.as_str(),
+                    intent_id = pending.intent_id.as_deref().unwrap_or(""),
+                    "discarding stale provider agent-chat reply"
+                );
+            }
         }
         let mut errors = Vec::with_capacity(failures.len());
         for failure in failures {
@@ -1017,4 +1048,83 @@ pub(super) fn ensure_expected_prompt_version_runtime(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn current_intent(status: &str) -> AgentIntentV2 {
+        AgentIntentV2 {
+            schema_version: crate::runtime::AGENT_INTENT_V2_SCHEMA_VERSION,
+            agent_id: "agent-1".to_string(),
+            intent_id: "intent-1".to_string(),
+            kind: "agent_chat".to_string(),
+            summary: "safe lifecycle summary".to_string(),
+            target_id: None,
+            effect_intent_id: None,
+            intent_tick: None,
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            status: status.to_string(),
+            source: "player".to_string(),
+            logical_time: 1,
+            event_seq: 1,
+            updated_at: 1,
+            receipt_ref: None,
+            reason_code: None,
+            reason_summary: None,
+            replaced_by: None,
+            actor_id: "player-1".to_string(),
+            request_digest: "digest-1".to_string(),
+        }
+    }
+
+    #[test]
+    fn async_provider_reply_requires_exact_current_identity_and_live_status() {
+        let accepted = current_intent("accepted");
+        assert!(provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("intent-1"),
+            Some("digest-1")
+        ));
+
+        let blocked = current_intent("blocked");
+        assert!(provider_reply_matches_current_intent(
+            Some(&blocked),
+            Some("intent-1"),
+            Some("digest-1")
+        ));
+
+        for status in [
+            "rejected",
+            "expired",
+            "cancelled",
+            "completed",
+            "superseded",
+        ] {
+            let terminal = current_intent(status);
+            assert!(!provider_reply_matches_current_intent(
+                Some(&terminal),
+                Some("intent-1"),
+                Some("digest-1")
+            ));
+        }
+        assert!(!provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("other-intent"),
+            Some("digest-1")
+        ));
+        assert!(!provider_reply_matches_current_intent(
+            Some(&accepted),
+            Some("intent-1"),
+            Some("other-digest")
+        ));
+        assert!(!provider_reply_matches_current_intent(
+            None,
+            Some("intent-1"),
+            Some("digest-1")
+        ));
+    }
 }

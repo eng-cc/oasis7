@@ -277,9 +277,22 @@ impl World {
                 current.status
             )));
         }
-        if current.world_id.as_deref().map(str::trim).is_none() || current.reorg_epoch.is_none() {
+        if current
+            .world_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+            || current.reorg_epoch.is_none()
+            || current
+                .authority_scope
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+        {
             return Err(invalid_intent(
-                "completed intent requires world_id and reorg_epoch authority context",
+                "completed intent requires the full world_id, reorg_epoch, and authority_scope tuple",
             ));
         }
         let expected_effect_intent_id = current

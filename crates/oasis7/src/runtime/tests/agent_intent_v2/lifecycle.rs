@@ -1,6 +1,61 @@
 use super::*;
 
 #[test]
+fn replay_rejects_receipt_committed_for_a_different_effect_intent() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    let snapshot = world.snapshot();
+    world
+        .record_agent_chat_intent("player-receipt", AGENT_ID, 1, "Start recipe")
+        .unwrap();
+    let mut journal = world.journal().clone();
+    let accepted_event = journal
+        .events
+        .iter_mut()
+        .find(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { .. })
+            )
+        })
+        .expect("find accepted intent event");
+    let WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent }) =
+        &mut accepted_event.body
+    else {
+        panic!("expected accepted intent");
+    };
+    intent.effect_intent_id = Some("effect-for-this-intent".to_string());
+    let mut completed = intent.clone();
+    completed.status = "completed".to_string();
+    completed.event_seq = 5;
+    completed.updated_at = completed.updated_at.saturating_add(1);
+    completed.receipt_ref = Some("world-event:4".to_string());
+    journal.events.push(WorldEvent {
+        id: 4,
+        time: 7,
+        caused_by: None,
+        body: WorldEventBody::ReceiptAppended(EffectReceipt {
+            intent_id: "different-effect-intent".to_string(),
+            status: "ok".to_string(),
+            payload: serde_json::json!({}),
+            cost_cents: None,
+            signature: None,
+        }),
+    });
+    journal.events.push(WorldEvent {
+        id: 5,
+        time: 8,
+        caused_by: None,
+        body: WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned { intent: completed }),
+    });
+
+    assert!(World::from_snapshot(snapshot, journal).is_err());
+}
+
+#[test]
 fn durable_record_result_identifies_exact_replay() {
     let mut state = WorldState::default();
     state
@@ -350,5 +405,136 @@ fn provider_advisory_intent_cannot_become_runtime_accepted() {
             .apply_domain_event(&intent_event("AgentIntentAccepted", advisory), 7)
             .is_err(),
         "provider advisory output must not enter the accepted runtime lifecycle"
+    );
+}
+
+#[test]
+fn accepted_domain_event_requires_submitted_predecessor_but_exact_replay_is_idempotent() {
+    let accepted = canonical_intent("intent-accepted-boundary", "accepted", "Start recipe", None);
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentAccepted", accepted.clone()), 7)
+            .is_err(),
+        "an accepted event cannot create or promote an intent without submitted state"
+    );
+    assert!(state.agent_intent_ledger.is_empty());
+
+    apply_accepted_lifecycle(&mut state, accepted.clone());
+    let snapshot = serde_json::to_vec(&state).expect("encode accepted state");
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 99)
+        .expect("exact historical accepted replay is a no-op");
+    assert_eq!(
+        serde_json::to_vec(&state).expect("encode replayed state"),
+        snapshot
+    );
+}
+
+#[test]
+fn replacement_and_superseded_transition_require_explicit_accepted_or_blocked_source() {
+    let proposed = phase_intent("intent-replace-proposed", "proposed");
+    let mut superseded = proposed.clone();
+    superseded["status"] = serde_json::json!("superseded");
+    superseded["summary"] = serde_json::json!(lifecycle_summary("superseded"));
+    superseded["replaced_by"] = serde_json::json!("intent-replacement");
+    superseded["event_seq"] = serde_json::json!(12);
+    superseded["updated_at"] = serde_json::json!(8);
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    state
+        .apply_domain_event(&intent_event("AgentIntentProposed", proposed), 7)
+        .expect("persist proposed source");
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentReplaced", superseded.clone()), 8)
+            .is_err(),
+        "proposed intent cannot be replaced"
+    );
+
+    let accepted = canonical_intent("intent-replace-accepted", "accepted", "Start recipe", None);
+    let mut accepted_state = WorldState::default();
+    accepted_state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    apply_accepted_lifecycle(&mut accepted_state, accepted.clone());
+    let mut missing_link = accepted.clone();
+    missing_link["status"] = serde_json::json!("superseded");
+    missing_link["summary"] = serde_json::json!(lifecycle_summary("superseded"));
+    missing_link["event_seq"] = serde_json::json!(20);
+    missing_link["updated_at"] = serde_json::json!(9);
+    assert!(
+        accepted_state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", missing_link), 9)
+            .is_err(),
+        "superseded transition requires a replacement identity"
+    );
+}
+
+#[test]
+fn provider_advisory_is_durable_without_occupying_authoritative_intent_slot() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    let mut world = World::new_with_state(state);
+    world
+        .record_provider_advisory_proposed(
+            AGENT_ID,
+            "provider-advisory-slot",
+            "start_recipe",
+            Some("factory-1".to_string()),
+        )
+        .expect("persist advisory proposal");
+    assert!(
+        world.state().agents[AGENT_ID].intent.is_none(),
+        "provider advisory must not block the current authoritative intent slot"
+    );
+    assert_eq!(
+        world
+            .state()
+            .agent_intent_ledger
+            .get("provider-advisory-slot")
+            .map(|intent| intent.source.as_str()),
+        Some("provider_advisory")
+    );
+    world
+        .record_agent_chat_intent("player-after-advisory", AGENT_ID, 1, "Start recipe")
+        .expect("authenticated player intent remains independently admissible");
+    assert_eq!(
+        world.state().agents[AGENT_ID]
+            .intent
+            .as_ref()
+            .map(|intent| intent.source.as_str()),
+        Some("player")
+    );
+}
+
+#[test]
+fn intent_updated_at_cannot_rewind_during_transition() {
+    let accepted = canonical_intent("intent-monotonic-time", "accepted", "Start recipe", None);
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    apply_accepted_lifecycle(&mut state, accepted.clone());
+    let mut rejected = accepted;
+    rejected["status"] = serde_json::json!("rejected");
+    rejected["summary"] = serde_json::json!(lifecycle_summary("rejected"));
+    rejected["reason_code"] = serde_json::json!("policy_denied");
+    rejected["reason_summary"] = serde_json::json!("This instruction is not permitted");
+    rejected["event_seq"] = serde_json::json!(12);
+    rejected["updated_at"] = serde_json::json!(6);
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", rejected), 6)
+            .is_err(),
+        "a later lifecycle event cannot rewind updated_at"
     );
 }

@@ -144,6 +144,21 @@ fn validate_transition_time(intent: &AgentIntentV2, now: WorldTime) -> Result<()
     Ok(())
 }
 
+fn validate_transition_time_after_current(
+    intent: &AgentIntentV2,
+    now: WorldTime,
+    current: &AgentIntentV2,
+) -> Result<(), WorldError> {
+    validate_transition_time(intent, now)?;
+    if intent.updated_at < current.updated_at {
+        return Err(invalid_intent(format!(
+            "updated_at {} cannot precede current intent timestamp {}",
+            intent.updated_at, current.updated_at
+        )));
+    }
+    Ok(())
+}
+
 fn validate_receipt_reference(
     intent: &AgentIntentV2,
     committed_receipt_event_id: Option<u64>,
@@ -163,9 +178,15 @@ fn validate_receipt_reference(
         .filter(|value| !value.is_empty())
         .is_none()
         || intent.reorg_epoch.is_none()
+        || intent
+            .authority_scope
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
     {
         return Err(invalid_intent(
-            "completed transition requires world_id and reorg_epoch authority context",
+            "completed transition requires the full world_id, reorg_epoch, and authority_scope tuple",
         ));
     }
     if intent
@@ -268,6 +289,27 @@ impl WorldState {
                         intent.status
                     )));
                 }
+
+                // Provider guidance is durable audit data, not the current
+                // authoritative intent. Keeping it out of the single active
+                // slot lets a later authenticated player request proceed
+                // independently while preserving the proposal in the ledger.
+                if intent.source == SOURCE_PROVIDER_ADVISORY {
+                    validate_transition_time(intent, now)?;
+                    if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                        if recorded == intent {
+                            return Ok(());
+                        }
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable provider advisory payload",
+                            intent.intent_id
+                        )));
+                    }
+                    self.agent_intent_ledger
+                        .insert(intent.intent_id.clone(), intent.clone());
+                    return Ok(());
+                }
+
                 if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
                     if recorded == intent {
                         return Ok(());
@@ -367,7 +409,7 @@ impl WorldState {
                         "submission event_seq must advance the proposed intent",
                     ));
                 }
-                validate_transition_time(intent, now)?;
+                validate_transition_time_after_current(intent, now, &current)?;
                 cell.intent = Some(intent.clone());
                 self.agent_intent_ledger
                     .insert(intent.intent_id.clone(), intent.clone());
@@ -410,15 +452,17 @@ impl WorldState {
 
                 match existing {
                     None => {
-                        validate_transition_time(intent, now)?;
-                        cell.intent = Some(intent.clone());
+                        return Err(invalid_intent(format!(
+                            "accepted intent {} requires a submitted predecessor",
+                            intent.intent_id
+                        )));
                     }
                     Some(current) if current == *intent => {
                         // Exact replay is intentionally a no-op: do not refresh
                         // timestamps or mutate Activity/Receipt state.
                     }
                     Some(current) if current.intent_id == intent.intent_id => {
-                        if !matches!(current.status.as_str(), STATUS_PROPOSED | STATUS_SUBMITTED)
+                        if current.status != STATUS_SUBMITTED
                             || !immutable_payload_matches(&current, intent)
                         {
                             return Err(invalid_intent(format!(
@@ -431,16 +475,12 @@ impl WorldState {
                                 "accepted event_seq must advance the pending intent",
                             ));
                         }
-                        validate_transition_time(intent, now)?;
-                        cell.intent = Some(intent.clone());
-                    }
-                    Some(current) if TERMINAL_STATUSES.contains(&current.status.as_str()) => {
-                        validate_transition_time(intent, now)?;
+                        validate_transition_time_after_current(intent, now, &current)?;
                         cell.intent = Some(intent.clone());
                     }
                     Some(current) => {
                         return Err(invalid_intent(format!(
-                            "active intent {} must be explicitly replaced before accepting {}",
+                            "only submitted intent can be accepted; current {} is {}",
                             current.intent_id, intent.intent_id
                         )));
                     }
@@ -483,10 +523,10 @@ impl WorldState {
                         // Exact replay of the replacement is a no-op.
                     }
                     Some(current) if current.intent_id == intent.intent_id => {
-                        if TERMINAL_STATUSES.contains(&current.status.as_str()) {
+                        if !matches!(current.status.as_str(), STATUS_ACCEPTED | STATUS_BLOCKED) {
                             return Err(invalid_intent(format!(
-                                "terminal intent {} cannot be replaced again",
-                                current.intent_id
+                                "only accepted or blocked intent can be replaced, got {}",
+                                current.status
                             )));
                         }
                         if !immutable_payload_matches(&current, intent) {
@@ -499,7 +539,7 @@ impl WorldState {
                                 "replacement event_seq must advance the current intent",
                             ));
                         }
-                        validate_transition_time(intent, now)?;
+                        validate_transition_time_after_current(intent, now, &current)?;
                         cell.intent = Some(intent.clone());
                     }
                     Some(current) => {
@@ -519,6 +559,18 @@ impl WorldState {
                     .insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentTransitioned { .. } => {
+                if intent.status == STATUS_SUPERSEDED {
+                    let Some(replaced_by) = intent.replaced_by.as_deref() else {
+                        return Err(invalid_intent(
+                            "superseded transition requires a non-empty replaced_by",
+                        ));
+                    };
+                    if replaced_by.trim().is_empty() {
+                        return Err(invalid_intent(
+                            "superseded transition requires a non-empty replaced_by",
+                        ));
+                    }
+                }
                 if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
                     if recorded == intent {
                         return Ok(());
@@ -596,7 +648,7 @@ impl WorldState {
                 {
                     return Err(invalid_intent("blocked transition requires a reason_code"));
                 }
-                validate_transition_time(intent, now)?;
+                validate_transition_time_after_current(intent, now, &current)?;
                 cell.intent = Some(intent.clone());
                 self.agent_intent_ledger
                     .insert(intent.intent_id.clone(), intent.clone());

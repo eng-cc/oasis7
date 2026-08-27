@@ -55,6 +55,37 @@ fn intent_event(event_type: &str, intent: serde_json::Value) -> DomainEvent {
     .expect("decode canonical AgentIntentV2 runtime event")
 }
 
+/// Build the canonical lifecycle that precedes an accepted reducer event.
+///
+/// Domain-event replay must preserve the production proposed -> submitted ->
+/// accepted ordering; tests that exercise an accepted event directly use this
+/// helper so they do not accidentally encode a bypass of that boundary.
+fn apply_accepted_lifecycle(state: &mut WorldState, accepted: serde_json::Value) {
+    let accepted_event_seq = accepted["event_seq"]
+        .as_u64()
+        .expect("accepted intent event_seq");
+    let updated_at = accepted["updated_at"]
+        .as_u64()
+        .expect("accepted intent updated_at");
+    let mut proposed = accepted.clone();
+    proposed["status"] = serde_json::json!("proposed");
+    proposed["summary"] = serde_json::json!(lifecycle_summary("proposed"));
+    proposed["event_seq"] = serde_json::json!(accepted_event_seq.saturating_sub(2));
+    state
+        .apply_domain_event(&intent_event("AgentIntentProposed", proposed), updated_at)
+        .expect("persist proposed intent before acceptance");
+    let mut submitted = accepted.clone();
+    submitted["status"] = serde_json::json!("submitted");
+    submitted["summary"] = serde_json::json!(lifecycle_summary("submitted"));
+    submitted["event_seq"] = serde_json::json!(accepted_event_seq.saturating_sub(1));
+    state
+        .apply_domain_event(&intent_event("AgentIntentSubmitted", submitted), updated_at)
+        .expect("persist submitted intent before acceptance");
+    state
+        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), updated_at)
+        .expect("accept submitted intent");
+}
+
 fn lifecycle_summary(status: &str) -> &'static str {
     match status {
         "proposed" => "Agent guidance is proposed and not yet accepted.",
@@ -171,9 +202,7 @@ fn duplicate_intent_identity_is_idempotent_and_conflict_is_not_silent() {
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
     let accepted_event = intent_event("AgentIntentAccepted", accepted.clone());
-    state
-        .apply_domain_event(&accepted_event, 7)
-        .expect("accept intent");
+    apply_accepted_lifecycle(&mut state, accepted.clone());
     let after_accept = serde_json::to_vec(&state).expect("encode accepted state");
 
     state
@@ -213,9 +242,7 @@ fn replaced_intent_event_is_replayable_without_promoting_activity_or_receipt() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
-        .expect("accept original intent");
+    apply_accepted_lifecycle(&mut state, accepted);
     state
         .apply_domain_event(&intent_event("AgentIntentReplaced", superseded), 8)
         .expect("replace original intent");
@@ -263,9 +290,7 @@ fn blocked_intent_can_resume_but_completion_requires_a_committed_receipt() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, accepted);
     state
         .apply_domain_event(&intent_event("AgentIntentTransitioned", blocked), 7)
         .unwrap();
@@ -415,11 +440,15 @@ fn provider_advisory_can_persist_only_as_a_proposed_suggestion() {
     state
         .apply_domain_event(&event, 7)
         .expect("provider advisory proposed intent is a safe suggestion");
+    assert!(
+        state.agents[AGENT_ID].intent.is_none(),
+        "advisory must not occupy the authoritative current intent slot"
+    );
     assert_eq!(
-        state.agents[AGENT_ID]
-            .intent
-            .as_ref()
-            .expect("advisory intent")
+        state
+            .agent_intent_ledger
+            .get("intent-advisory-proposed")
+            .expect("advisory ledger entry")
             .source,
         "provider_advisory"
     );
@@ -452,11 +481,16 @@ fn provider_advisory_runtime_api_persists_and_replays_a_proposed_suggestion() {
         )
         .expect("persist provider advisory proposal");
     assert_eq!(first.status, "proposed");
+    assert!(
+        world.state().agents[AGENT_ID].intent.is_none(),
+        "proposed advisory must remain separate from the authoritative slot"
+    );
     assert_eq!(
-        world.state().agents[AGENT_ID]
-            .intent
-            .as_ref()
-            .expect("proposed advisory")
+        world
+            .state()
+            .agent_intent_ledger
+            .get("provider-advisory-1")
+            .expect("proposed advisory ledger entry")
             .source,
         "provider_advisory"
     );
@@ -687,9 +721,7 @@ fn terminal_intent_is_immutable_and_transition_replay_is_idempotent() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, accepted);
     let event = intent_event("AgentIntentTransitioned", rejected);
     state.apply_domain_event(&event, 8).unwrap();
     let terminal = serde_json::to_vec(&state).unwrap();
@@ -716,9 +748,7 @@ fn transition_rejects_mutating_immutable_payload_or_rewinding_event_sequence() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, accepted);
     let before = serde_json::to_vec(&state).unwrap();
 
     assert!(
@@ -753,15 +783,11 @@ fn historical_duplicate_after_terminal_replacement_is_an_idempotent_noop() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", old.clone()), 7)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, old.clone());
     state
         .apply_domain_event(&intent_event("AgentIntentReplaced", superseded), 8)
         .unwrap();
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", new), 9)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, new);
     state
         .apply_domain_event(&intent_event("AgentIntentTransitioned", terminal), 10)
         .unwrap();
@@ -787,9 +813,7 @@ fn completion_requires_a_nonzero_committed_world_event_reference() {
     state
         .agents
         .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    state
-        .apply_domain_event(&intent_event("AgentIntentAccepted", accepted), 7)
-        .unwrap();
+    apply_accepted_lifecycle(&mut state, accepted);
     assert!(
         state
             .apply_domain_event(&intent_event("AgentIntentTransitioned", completed), 8)
@@ -1052,61 +1076,6 @@ fn proposed_or_submitted_intent_cannot_be_superseded() {
 }
 
 #[test]
-fn replay_rejects_receipt_committed_for_a_different_effect_intent() {
-    let mut state = WorldState::default();
-    state
-        .agents
-        .insert(AGENT_ID.to_string(), legacy_agent_cell());
-    let mut world = World::new_with_state(state);
-    let snapshot = world.snapshot();
-    world
-        .record_agent_chat_intent("player-receipt", AGENT_ID, 1, "Start recipe")
-        .unwrap();
-    let mut journal = world.journal().clone();
-    let accepted_event = journal
-        .events
-        .iter_mut()
-        .find(|event| {
-            matches!(
-                &event.body,
-                WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { .. })
-            )
-        })
-        .expect("find accepted intent event");
-    let WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent }) =
-        &mut accepted_event.body
-    else {
-        panic!("expected accepted intent");
-    };
-    intent.effect_intent_id = Some("effect-for-this-intent".to_string());
-    let mut completed = intent.clone();
-    completed.status = "completed".to_string();
-    completed.event_seq = 5;
-    completed.updated_at = completed.updated_at.saturating_add(1);
-    completed.receipt_ref = Some("world-event:4".to_string());
-    journal.events.push(WorldEvent {
-        id: 4,
-        time: 7,
-        caused_by: None,
-        body: WorldEventBody::ReceiptAppended(EffectReceipt {
-            intent_id: "different-effect-intent".to_string(),
-            status: "ok".to_string(),
-            payload: serde_json::json!({}),
-            cost_cents: None,
-            signature: None,
-        }),
-    });
-    journal.events.push(WorldEvent {
-        id: 5,
-        time: 8,
-        caused_by: None,
-        body: WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned { intent: completed }),
-    });
-
-    assert!(World::from_snapshot(snapshot, journal).is_err());
-}
-
-#[test]
 fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit() {
     let mut state = WorldState::default();
     state
@@ -1119,17 +1088,42 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
     accepted["effect_intent_id"] = serde_json::json!("effect-receipt-committed");
     accepted["world_id"] = serde_json::json!("runtime-world");
     accepted["reorg_epoch"] = serde_json::json!(2);
-    accepted["event_seq"] = serde_json::json!(1);
+    accepted["authority_scope"] = serde_json::json!("player_agent_chat");
+    accepted["event_seq"] = serde_json::json!(3);
+    let mut proposed = accepted.clone();
+    proposed["status"] = serde_json::json!("proposed");
+    proposed["summary"] = serde_json::json!(lifecycle_summary("proposed"));
+    proposed["event_seq"] = serde_json::json!(1);
+    let mut submitted = accepted.clone();
+    submitted["status"] = serde_json::json!("submitted");
+    submitted["summary"] = serde_json::json!(lifecycle_summary("submitted"));
+    submitted["event_seq"] = serde_json::json!(2);
     let mut completed = accepted.clone();
     completed["status"] = serde_json::json!("completed");
     completed["summary"] = serde_json::json!(lifecycle_summary("completed"));
-    completed["event_seq"] = serde_json::json!(4);
+    completed["event_seq"] = serde_json::json!(6);
     completed["updated_at"] = serde_json::json!(8);
-    completed["receipt_ref"] = serde_json::json!("world-event:3");
+    completed["receipt_ref"] = serde_json::json!("world-event:5");
     let journal = Journal {
         events: vec![
             WorldEvent {
                 id: 1,
+                time: 7,
+                caused_by: None,
+                body: WorldEventBody::Domain(DomainEvent::AgentIntentProposed {
+                    intent: serde_json::from_value(proposed).expect("proposed intent"),
+                }),
+            },
+            WorldEvent {
+                id: 2,
+                time: 7,
+                caused_by: None,
+                body: WorldEventBody::Domain(DomainEvent::AgentIntentSubmitted {
+                    intent: serde_json::from_value(submitted).expect("submitted intent"),
+                }),
+            },
+            WorldEvent {
+                id: 3,
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::Domain(DomainEvent::AgentIntentAccepted {
@@ -1137,7 +1131,7 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
                 }),
             },
             WorldEvent {
-                id: 2,
+                id: 4,
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::EffectQueued(EffectIntent {
@@ -1149,7 +1143,7 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
                 }),
             },
             WorldEvent {
-                id: 3,
+                id: 5,
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::ReceiptAppended(EffectReceipt {
@@ -1161,7 +1155,7 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
                 }),
             },
             WorldEvent {
-                id: 4,
+                id: 6,
                 time: 8,
                 caused_by: None,
                 body: WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned {
