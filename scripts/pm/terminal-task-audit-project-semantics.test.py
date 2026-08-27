@@ -64,14 +64,20 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
             ], check=True, text=True, capture_output=True)
             payload = {"data": {"nodes": [{
                 "id": item.get("id", "ITEM1"),
-                "project": {"id": item.get("_project_id", "PVT_actual"), "number": item.get("_project_number", 7)},
+                "project": {
+                    "id": item.get("_project_id", "PVT_actual"),
+                    "number": item.get("_project_number", 7),
+                    "owner": {"login": item.get("_project_owner", "fixture-owner")},
+                },
                 "content": {
                     "body": item.get("_body", f"task_uid: {UID}"),
                     "number": item.get("_issue_number", 11),
                     "url": item.get("_issue_url", "https://github.com/fixture/repo/issues/11"),
                 },
                 "fieldValues": {
-                    "pageInfo": {"hasNextPage": item.get("_field_values_has_next_page", False)},
+                    **({} if item.get("_omit_field_values_page_info") else {
+                        "pageInfo": {"hasNextPage": item.get("_field_values_has_next_page", False)},
+                    }),
                     "nodes": [
                         {"name": item.get("Status", "Done"), "field": {"name": "Status"}},
                         {"name": item.get("PM Status", "done"), "field": {"name": "PM Status"}},
@@ -136,7 +142,11 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
             ({"_issue_number": 12}, "project_item_identity"),
             ({"_issue_url": "https://github.com/other/repo/issues/11"}, "project_item_identity"),
             ({"_body": "task_uid: task_ffffffffffffffffffffffffffffffff"}, "project_item_identity"),
+            ({"_project_owner": "foreign-owner"}, "project_item_identity"),
+            ({"_project_owner": None}, "project_item_identity"),
             ({"_field_values_has_next_page": True}, "project_field_values_complete"),
+            ({"_omit_field_values_page_info": True}, "project_field_values_complete"),
+            ({"_field_values_has_next_page": "false"}, "project_field_values_complete"),
         )
         for item, failed_check in cases:
             with self.subTest(item=item):

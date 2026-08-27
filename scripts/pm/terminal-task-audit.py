@@ -139,7 +139,9 @@ def audit(root: pathlib.Path, task_uid: str) -> dict:
             project_item_identity = (
                 project_item_bound
                 and bool(project.get("number"))
+                and bool(project.get("owner"))
                 and str(project_live.get("_project_number") or "") == str(project.get("number"))
+                and str(project_live.get("_project_owner") or "") == str(project.get("owner") or "")
                 and str(project.get("repo") or "") == str(record.get("repository") or "")
                 and str(content.get("number") or "") == str(record.get("issue_number"))
                 and str(content.get("url") or "") == expected_url

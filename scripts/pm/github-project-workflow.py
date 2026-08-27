@@ -24,6 +24,14 @@ query($ids: [ID!]!) {
       project {
         id
         number
+        owner {
+          ... on Organization {
+            login
+          }
+          ... on User {
+            login
+          }
+        }
       }
       content {
         ... on Issue {
@@ -307,17 +315,25 @@ def item_task_uid(item: dict[str, Any]) -> str:
 
 
 def project_item_from_graphql_node(node: dict[str, Any]) -> dict[str, Any]:
-    project = node.get("project") or {}
+    project = node.get("project")
+    project = project if isinstance(project, dict) else {}
+    owner = project.get("owner")
+    owner = owner if isinstance(owner, dict) else {}
+    field_values = node.get("fieldValues")
+    page_info = field_values.get("pageInfo") if isinstance(field_values, dict) else None
+    has_next_page = page_info.get("hasNextPage") if isinstance(page_info, dict) else None
+    field_value_nodes = field_values.get("nodes") if isinstance(field_values, dict) else []
     item: dict[str, Any] = {
         "id": node.get("id") or "",
         "content": node.get("content") or {},
         "_project_id": project.get("id") or "",
         "_project_number": project.get("number") or "",
-        "_field_values_has_next_page": bool(
-            ((node.get("fieldValues") or {}).get("pageInfo") or {}).get("hasNextPage")
-        ),
+        "_project_owner": owner.get("login") or "",
+        # Preserve an absent or malformed pageInfo as unknown.  Treating it as
+        # false would turn an incomplete GraphQL read into terminal evidence.
+        "_field_values_has_next_page": has_next_page if isinstance(has_next_page, bool) else None,
     }
-    for field_value_node in ((node.get("fieldValues") or {}).get("nodes") or []):
+    for field_value_node in field_value_nodes or []:
         field = field_value_node.get("field") or {}
         field_name = str(field.get("name") or "")
         if not field_name:

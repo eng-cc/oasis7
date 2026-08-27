@@ -59,7 +59,7 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
     item=project_workflow.fetch_project_items_by_ids([item_id]).get(item_id) or {}
     # The bound-node query exposes nested fieldValues pageInfo. A terminal
     # decision must fail closed instead of silently accepting a truncated page.
-    if item.get("_field_values_has_next_page"):
+    if item.get("_field_values_has_next_page") is not False:
         fail("bound Project item fieldValues pagination is incomplete")
     if (str(item.get("id") or "")!=item_id or str(item.get("_project_id") or "")!=project_id
             or str(item.get("_project_number") or "")!=str(number)):
