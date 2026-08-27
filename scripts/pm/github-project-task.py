@@ -59,9 +59,21 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
 save_mapping = durable_store.replace_json
 
 
-def merge_task_mapping(path: pathlib.Path, task_uid: str, record: dict[str, Any]) -> None:
+def merge_task_mapping(
+    path: pathlib.Path,
+    task_uid: str,
+    record: dict[str, Any],
+    project: dict[str, Any] | None = None,
+) -> None:
     """Reload under lock and merge only one task, preventing lost updates."""
     def update(latest: dict[str, Any]) -> None:
+        if project:
+            latest_project = latest.get("project")
+            latest_project = latest_project if isinstance(latest_project, dict) else {}
+            for key, value in project.items():
+                if value not in (None, "") and latest_project.get(key) in (None, ""):
+                    latest_project[key] = value
+            latest["project"] = latest_project
         latest_record = dict((latest.setdefault("tasks", {}).get(task_uid) or {}))
         for key, value in record.items():
             if key in {"claim_verifications", "evidence_comments"}:
@@ -918,7 +930,7 @@ def refresh_project_identity(
     canonical_owner: str,
     canonical_number: int,
     canonical_project_id: str,
-) -> None:
+) -> dict[str, Any]:
     project = node.get("project")
     if not isinstance(project, dict):
         die("refresh-task: live Project item is missing Project identity")
@@ -953,6 +965,7 @@ def refresh_project_identity(
     page_info = page_info if isinstance(page_info, dict) else {}
     if page_info.get("hasNextPage") is not False:
         die("refresh-task: live Project item fieldValues pagination is incomplete or unknown")
+    return {"id": project_id, "number": project_number, "owner": project_owner}
 
 
 def command_refresh_task(args: argparse.Namespace) -> int:
@@ -1001,6 +1014,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     item_id = str(existing.get("project_item_id") or "")
     project_fields: dict[str, str] = {}
     selected_node: dict[str, Any] | None = None
+    live_project_identity: dict[str, Any] | None = None
     if item_id:
         query = """
         query($ids: [ID!]!) {
@@ -1032,7 +1046,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
             selected_node = nodes[0]
             if not isinstance(selected_node, dict):
                 die("refresh-task: live Project item readback is malformed")
-            refresh_project_identity(
+            live_project_identity = refresh_project_identity(
                 selected_node,
                 canonical_owner,
                 canonical_number,
@@ -1080,7 +1094,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                     continue
                 if not isinstance(node, dict):
                     die("refresh-task: live Project item readback is malformed")
-                refresh_project_identity(
+                live_project_identity = refresh_project_identity(
                     node,
                     canonical_owner,
                     canonical_number,
@@ -1131,7 +1145,15 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     # Local cache identity is never accepted from stale issue/project/cache
     # values.  Every refresh overwrites it from current registered git facts.
     record.update(repository_identity)
-    merge_task_mapping(mapping_path, args.task_uid, record)
+    project_patch = None
+    if live_project_identity:
+        project_patch = {
+            "owner": live_project_identity["owner"],
+            "number": live_project_identity["number"],
+            "repo": args.repo,
+            "id": live_project_identity["id"],
+        }
+    merge_task_mapping(mapping_path, args.task_uid, record, project=project_patch)
     committed = (load_mapping(mapping_path).get("tasks") or {}).get(args.task_uid) or record
     payload = {
         "status": "refreshed",
