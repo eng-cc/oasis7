@@ -75,6 +75,7 @@ mod builtin_wasm_identity;
 mod builtin_wasm_materializer;
 mod capability_grant_v2;
 mod capability_grant_v2_lifecycle;
+mod capability_grant_v2_recovery_regressions;
 mod capability_grant_v2_regressions;
 mod data_access_control;
 mod economy;
