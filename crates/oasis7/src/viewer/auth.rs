@@ -14,6 +14,12 @@ mod fragment_refill_preview;
 pub use fragment_refill_preview::{
     sign_fragment_refill_preview_auth_proof, verify_fragment_refill_preview_auth_proof,
 };
+#[path = "auth/agent_chat.rs"]
+mod agent_chat;
+pub use agent_chat::{
+    sign_agent_chat_auth_proof, verify_agent_chat_auth_proof,
+    verify_agent_chat_auth_proof_with_authority,
+};
 mod refine_quote;
 pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
 mod schedule_recipe_quote;
@@ -73,6 +79,12 @@ pub const HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV: &str =
     "OASIS7_HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY";
 const HOSTED_REGISTRATION_GRANT_TTL_MS: u64 = 30_000;
 pub const VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX: &str = "awviewauth:v1:";
+/// Domain-separated authority scope for player-authenticated Agent Intent chat.
+///
+/// The value is included in the signed request envelope.  Callers that accept
+/// an authoritative V2 intent should additionally compare it with this value
+/// (and with their current world/reorg tuple) before consuming the nonce.
+pub const AGENT_CHAT_AUTHORITY_SCOPE: &str = "player_agent_chat";
 const VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION: u8 = 1;
 pub const VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX: &str = "awhostedgrant:v1:";
 
@@ -143,6 +155,14 @@ struct AgentChatSigningPayload<'a> {
     intent_tick: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     intent_seq: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    world_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reorg_epoch: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    authority_scope: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replaces_intent_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -528,93 +548,6 @@ pub fn verify_hosted_prompt_control_rollback_strong_auth_grant(
     )
 }
 
-pub fn sign_agent_chat_auth_proof(
-    request: &AgentChatRequest,
-    nonce: u64,
-    signer_public_key_hex: &str,
-    signer_private_key_hex: &str,
-) -> Result<PlayerAuthProof, String> {
-    if nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let player_id =
-        normalize_required_optional_field(request.player_id.as_deref(), "agent_chat player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "agent_chat public_key",
-    )?;
-    let signer_public_key =
-        normalize_public_key_field(signer_public_key_hex, "agent_chat signer public key")?;
-    if signer_public_key != request_public_key {
-        return Err("agent_chat public_key does not match signer public key".to_string());
-    }
-
-    let signing_key =
-        signing_key_from_hex(signer_private_key_hex, "agent_chat signer private key")?;
-    verify_keypair_match(
-        &signing_key,
-        signer_public_key.as_str(),
-        "agent_chat signer public key",
-    )?;
-
-    let signing_payload = build_agent_chat_signing_payload(
-        request,
-        player_id.as_str(),
-        request_public_key.as_str(),
-        nonce,
-    )?;
-    sign_player_auth_proof(
-        signing_key,
-        player_id,
-        signer_public_key,
-        nonce,
-        signing_payload,
-    )
-}
-
-pub fn verify_agent_chat_auth_proof(
-    request: &AgentChatRequest,
-    proof: &PlayerAuthProof,
-) -> Result<VerifiedPlayerAuth, String> {
-    verify_proof_scheme(proof)?;
-    let request_player_id =
-        normalize_required_optional_field(request.player_id.as_deref(), "agent_chat player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "agent_chat public_key",
-    )?;
-    let proof_player_id =
-        normalize_required_field(proof.player_id.as_str(), "auth proof player_id")?;
-    let proof_public_key =
-        normalize_public_key_field(proof.public_key.as_str(), "auth proof public key")?;
-    if request_player_id != proof_player_id {
-        return Err("auth proof player_id does not match request player_id".to_string());
-    }
-    if request_public_key != proof_public_key {
-        return Err("auth proof public_key does not match request public_key".to_string());
-    }
-    if proof.nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let signing_payload = build_agent_chat_signing_payload(
-        request,
-        proof_player_id.as_str(),
-        proof_public_key.as_str(),
-        proof.nonce,
-    )?;
-    verify_player_auth_signature(
-        proof_public_key.as_str(),
-        proof.signature.as_str(),
-        signing_payload.as_slice(),
-    )?;
-    Ok(VerifiedPlayerAuth {
-        player_id: proof_player_id,
-        public_key: proof_public_key,
-        nonce: proof.nonce,
-        hosted_registration_nonce: None,
-    })
-}
-
 pub fn sign_gameplay_action_auth_proof(
     request: &GameplayActionRequest,
     nonce: u64,
@@ -948,6 +881,11 @@ fn build_agent_chat_signing_payload(
         Some(value) => Some(value),
         None => None,
     };
+    let authority = normalize_agent_chat_authority(request)?;
+    let replaces_intent_id = normalize_optional_agent_chat_field(
+        request.replaces_intent_id.as_deref(),
+        "agent_chat replaces_intent_id",
+    )?;
     let payload = AgentChatSigningPayload {
         operation: "agent_chat",
         agent_id: request.agent_id.as_str(),
@@ -957,8 +895,48 @@ fn build_agent_chat_signing_payload(
         message: request.message.as_str(),
         intent_tick: request.intent_tick,
         intent_seq,
+        world_id: authority.as_ref().map(|(world_id, _, _)| world_id.as_str()),
+        reorg_epoch: authority.as_ref().map(|(_, reorg_epoch, _)| *reorg_epoch),
+        authority_scope: authority
+            .as_ref()
+            .map(|(_, _, authority_scope)| authority_scope.as_str()),
+        replaces_intent_id: replaces_intent_id.as_deref(),
     };
     encode_signing_payload(payload)
+}
+
+/// Return the normalized authority tuple carried by an Agent Chat request.
+///
+/// The tuple is optional only for legacy requests.  When any member is
+/// present, all three members are required so a caller cannot accidentally
+/// sign a partially scoped intent.
+fn normalize_agent_chat_authority(
+    request: &AgentChatRequest,
+) -> Result<Option<(String, u64, String)>, String> {
+    match (
+        request.world_id.as_deref(),
+        request.reorg_epoch,
+        request.authority_scope.as_deref(),
+    ) {
+        (None, None, None) => Ok(None),
+        (Some(world_id), Some(reorg_epoch), Some(authority_scope)) => Ok(Some((
+            normalize_required_field(world_id, "agent_chat world_id")?,
+            reorg_epoch,
+            normalize_required_field(authority_scope, "agent_chat authority_scope")?,
+        ))),
+        _ => Err(
+            "agent_chat authority envelope must include world_id, reorg_epoch, and authority_scope"
+                .to_string(),
+        ),
+    }
+}
+
+fn normalize_optional_agent_chat_field(
+    raw: Option<&str>,
+    label: &str,
+) -> Result<Option<String>, String> {
+    raw.map(|value| normalize_required_field(value, label))
+        .transpose()
 }
 
 fn build_gameplay_action_signing_payload(

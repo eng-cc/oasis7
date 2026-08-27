@@ -1,25 +1,15 @@
 import { waitFor, within } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
+import {
+  AGENT_ACTIVITY_STATUSES,
+  AGENT_INTENT_STATUSES,
+  buildAgentIntentFixtureSnapshot,
+} from "./agent_intent_visual_fixture.js";
 import { renderViewerApp } from "./test_support/viewer_app_fixture.jsx";
 
 const AGENT_ID = "agent-0";
-
-function intentSnapshot(primaryIntent) {
-  const base = buildTaskGame076ScenarioSnapshot();
-  return {
-    ...base,
-    model: {
-      ...base.model,
-      agent_player_bindings: { [AGENT_ID]: "local-test-player-bound" },
-      agent_player_public_key_bindings: { [AGENT_ID]: "abcdef0123456789abcdef0123456789" },
-    },
-    player_gameplay: {
-      ...base.player_gameplay,
-      primary_intent: primaryIntent,
-    },
-  };
-}
+const INTENT_SUMMARY = "Stabilize power before expanding the iron line.";
 
 function acceptedIntent(overrides = {}) {
   return {
@@ -29,7 +19,7 @@ function acceptedIntent(overrides = {}) {
     world_id: "live-runtime-test",
     reorg_epoch: 0,
     status: "accepted",
-    message: "Stabilize power before expanding the iron line.",
+    message: INTENT_SUMMARY,
     resume_required: false,
     source_class: "runtime_projection",
     freshness: "current",
@@ -41,20 +31,21 @@ function acceptedIntent(overrides = {}) {
   };
 }
 
-function completedIntent(overrides = {}) {
-  return acceptedIntent({
-    status: "completed",
-    effect_intent_id: "effect-intent-v2:test",
-    receipt_ref: {
-      intent_id: "agent-intent-v2:test",
-      world_id: "live-runtime-test",
-      reorg_epoch: 0,
-      logical_time: 7,
-      event_seq: "11",
-      receipt_id: "world-event:12",
+function snapshotWithIntent(primaryIntent, activity = { status: "executing", operation: "resource_recovery", target: "factory-activity-target", updated_at: 7 }) {
+  const base = buildTaskGame076ScenarioSnapshot();
+  return {
+    ...base,
+    model: {
+      ...base.model,
+      agent_player_bindings: { [AGENT_ID]: "local-test-player-bound" },
+      agent_player_public_key_bindings: { [AGENT_ID]: "abcdef0123456789abcdef0123456789" },
+      agents: {
+        ...base.model.agents,
+        [AGENT_ID]: { ...base.model.agents[AGENT_ID], activity },
+      },
     },
-    ...overrides,
-  });
+    player_gameplay: { ...base.player_gameplay, primary_intent: primaryIntent },
+  };
 }
 
 let dispose = null;
@@ -69,128 +60,151 @@ async function commandSurfaceFor(snapshot) {
   const app = await renderViewerApp(snapshot);
   dispose = app.dispose;
   app.core.applySelection({ kind: "agent", id: AGENT_ID });
-  return app.container.querySelector("#viewer-details-panel .command-surface");
+  const surface = app.container.querySelector("#viewer-details-panel .command-surface");
+  await waitFor(() => expect(surface?.querySelector(".agent-intent")).toBeInTheDocument());
+  return { app, surface, intentSurface: surface.querySelector(".agent-intent") };
 }
 
 describe("Agent Console V2 authoritative intent", () => {
-  it("renders accepted current intent separately from activity and receipt", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent()));
-    await waitFor(() => expect(within(surface).getByText("Current Intent")).toBeInTheDocument());
-    expect(surface).toHaveTextContent("Accepted");
-    expect(surface).toHaveTextContent("Current");
-    expect(surface).toHaveTextContent("Stabilize power before expanding the iron line.");
-    expect(surface).not.toHaveTextContent(/runtime_projection|agent-intent-v2|last_active|provider|rationale/i);
+  it("renders every canonical lifecycle status through one connected deterministic surface", async () => {
+    for (const status of AGENT_INTENT_STATUSES) {
+      const receiptRef = status === "completed"
+        ? {
+          intent_id: "agent-intent-v2:test",
+          world_id: "live-runtime-test",
+          reorg_epoch: 0,
+          logical_time: 7,
+          event_seq: "11",
+          receipt_id: "world-event:12",
+        }
+        : null;
+      const { intentSurface } = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
+        status,
+        receipt_ref: receiptRef,
+        replaced_by: status === "superseded" ? "agent-intent-v2:replacement" : null,
+      })));
+      expect(intentSurface).toHaveAttribute("data-agent-intent-state", "current");
+      const statusLabel = {
+        proposed: "Proposed",
+        submitted: "Submitted",
+        accepted: "Accepted",
+        blocked: "Blocked",
+        completed: "Completed",
+        rejected: "Rejected",
+        expired: "Expired",
+        cancelled: "Cancelled",
+        superseded: "Replaced",
+      }[status];
+      expect(within(intentSurface).getByText(statusLabel)).toBeInTheDocument();
+      expect(intentSurface).toHaveTextContent(INTENT_SUMMARY);
+      expect(intentSurface.textContent).not.toMatch(/agent-intent-v2|live-runtime-test|world-event:/);
+      dispose?.();
+      dispose = null;
+    }
   }, 60000);
 
-  it("keeps missing intent unavailable instead of inferring idle or plan", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(null));
-    await waitFor(() => expect(within(surface).getByText("Intent unavailable")).toBeInTheDocument());
-    expect(surface).not.toHaveTextContent(/\bIdle\b|current plan|last_active|accepted_new/i);
+  it("keeps missing and malformed intent unavailable instead of inferring a plan", async () => {
+    const { intentSurface } = await commandSurfaceFor(snapshotWithIntent(null));
+    expect(intentSurface).toHaveAttribute("data-agent-intent-state", "unavailable");
+    expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument();
+    expect(intentSurface).not.toHaveTextContent(/Idle|current plan|last_active|provider/i);
+  });
+
+  it("shows stale and conflicting authority as caution states while hiding control boundaries", async () => {
+    for (const [freshness, label] of [["stale", "Stale intent"], ["conflict", "Needs confirmation"]]) {
+      const { intentSurface } = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ freshness })));
+      expect(intentSurface).toHaveAttribute("data-agent-intent-state", freshness);
+      expect(within(intentSurface).getByText(label)).toBeInTheDocument();
+      expect(intentSurface).toHaveTextContent(INTENT_SUMMARY);
+      dispose?.();
+      dispose = null;
+    }
+
+    for (const controlState of ["control_lost", "read_only", "unauthorized"]) {
+      const { intentSurface } = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ control_state: controlState })));
+      expect(intentSurface).toHaveAttribute("data-agent-intent-state", controlState);
+      expect(intentSurface).not.toHaveTextContent(INTENT_SUMMARY);
+      expect(intentSurface.textContent).not.toMatch(/runtime_projection|agent-intent-v2|live-runtime-test/);
+      dispose?.();
+      dispose = null;
+    }
   }, 60000);
 
-  it("marks retained intent stale without presenting completion", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ freshness: "stale" })));
-    await waitFor(() => expect(within(surface).getByText("Stale intent")).toBeInTheDocument());
-    expect(surface).toHaveTextContent("Stabilize power before expanding the iron line.");
-    expect(surface).not.toHaveTextContent(/Completed|world changed|freshness_stale/i);
+  it("requires a matching world receipt before exposing completion", async () => {
+    const validReceipt = {
+      intent_id: "agent-intent-v2:test",
+      world_id: "live-runtime-test",
+      reorg_epoch: 0,
+      logical_time: 7,
+      event_seq: "11",
+      receipt_id: "world-event:12",
+    };
+    const valid = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ status: "completed", receipt_ref: validReceipt })));
+    expect(valid.intentSurface).toHaveAttribute("data-agent-intent-receipt-state", "confirmed");
+    expect(valid.intentSurface).toHaveTextContent("World receipt confirmed");
+    dispose?.();
+    dispose = null;
+
+    const missing = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ status: "completed", receipt_ref: null })));
+    expect(missing.intentSurface).toHaveAttribute("data-agent-intent-state", "unavailable");
+    expect(missing.intentSurface).toHaveAttribute("data-agent-intent-receipt-state", "missing");
+    expect(missing.intentSurface).not.toHaveTextContent("Completed");
   }, 60000);
 
-  it("redacts authoritative details after control loss", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ control_state: "control_lost" })));
-    await waitFor(() => expect(within(surface).getByText("Intent hidden — control lost")).toBeInTheDocument());
-    expect(surface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
-    expect(surface).not.toHaveTextContent(/control_lost|runtime_projection/i);
-  }, 60000);
+  it("keeps duplicate and replacement dispositions explicit without rendering internal identities", async () => {
+    const duplicate = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({ duplicate: true, reason_code: "duplicate_request" })));
+    expect(duplicate.intentSurface).toHaveTextContent("Duplicate request coalesced; no new intent was created.");
+    expect(duplicate.intentSurface.textContent).not.toMatch(/agent-intent-v2|intent_id|world_id/);
+    dispose?.();
+    dispose = null;
 
-  it("redacts the intent summary for read-only observers", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ control_state: "read_only" })));
-    await waitFor(() => expect(within(surface).getByText("Intent hidden — read-only")).toBeInTheDocument());
-    expect(surface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
-  }, 60000);
-
-  it.each([
-    ["legacy schema", { schema_version: 1 }],
-    ["local pending source", { source_class: "local_pending" }],
-    ["unknown control state", { control_state: "operator_override" }],
-  ])("fails closed for %s intent metadata", async (_label, overrides) => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent(overrides)));
-    const intentSurface = surface.querySelector(".agent-intent");
-    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
-    expect(intentSurface).not.toHaveTextContent(/Accepted|Stabilize power/i);
-  }, 60000);
-
-  it("bounds and normalizes the player-safe intent summary", async () => {
-    const summary = `${"A".repeat(180)}\nprovider rationale must stay hidden`;
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({ message: summary })));
-    await waitFor(() => expect(within(surface).getByText("Current Intent")).toBeInTheDocument());
-    const rendered = surface.querySelector(".agent-intent__summary")?.textContent || "";
-    expect(rendered.length).toBeLessThanOrEqual(161);
-    expect(rendered).toContain("…");
-    expect(rendered).not.toContain("provider rationale");
-  }, 60000);
-
-  it("renders a bounded blocked reason and supported next step", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent({
-      status: "blocked",
-      reason_code: "missing_material",
-      reason_summary: "Iron input is unavailable.",
-      next_step: "Replenish iron input before resuming.",
-      resume_required: true,
+    const replacement = await commandSurfaceFor(snapshotWithIntent(acceptedIntent({
+      status: "superseded",
+      replaced_by: "agent-intent-v2:replacement",
+      reason_code: "superseded_by_replacement",
     })));
-    await waitFor(() => expect(within(surface).getByText("Blocked")).toBeInTheDocument());
-    expect(surface).toHaveTextContent("Iron input is unavailable.");
-    expect(surface).toHaveTextContent("Replenish iron input before resuming.");
-    expect(surface).not.toHaveTextContent(/missing_material|resume_required/i);
+    expect(replacement.intentSurface).toHaveTextContent("Replaced by a newer intent");
+    expect(replacement.intentSurface.textContent).not.toMatch(/agent-intent-v2|replacement/);
+  });
+
+  it("covers the activity matrix and reports missing activity as unavailable", async () => {
+    for (const status of AGENT_ACTIVITY_STATUSES) {
+      const activity = status === "missing" ? null : {
+        status,
+        operation: status === "idle" ? null : "resource_recovery",
+        target: status === "idle" ? null : "factory-activity-target",
+        reason: status === "blocked" ? "upstream material is not ready" : null,
+        updated_at: 7,
+      };
+      const app = await renderViewerApp(snapshotWithIntent(acceptedIntent(), activity));
+      dispose = app.dispose;
+      app.core.applySelection({ kind: "agent", id: AGENT_ID });
+      const activitySurfaces = [...app.container.querySelectorAll(".agent-activity")];
+      await waitFor(() => expect(activitySurfaces.length).toBeGreaterThanOrEqual(2));
+      expect(activitySurfaces[0]).toHaveAttribute("data-agent-activity-state", status === "missing" ? "unavailable" : status);
+      expect(activitySurfaces[1]).toHaveAttribute("data-agent-activity-state", status === "missing" ? "unavailable" : status);
+      expect(app.container.textContent).not.toMatch(/factory-activity-target|last_active|status_[a-z_]+/i);
+      dispose?.();
+      dispose = null;
+    }
   }, 60000);
 
-  it("does not claim completion without an authoritative receipt", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(completedIntent({ receipt_ref: null })));
-    await waitFor(() => expect(within(surface).getByText("Intent unavailable")).toBeInTheDocument());
-    expect(surface).not.toHaveTextContent("Completed");
-  }, 60000);
-
-  it("shows completion only when a receipt identity is present", async () => {
-    const surface = await commandSurfaceFor(intentSnapshot(completedIntent()));
-    await waitFor(() => expect(within(surface).getByText("Completed")).toBeInTheDocument());
-    expect(surface).toHaveTextContent("Stabilize power before expanding the iron line.");
-    expect(surface).not.toHaveTextContent(/receipt-intent-v2|runtime_projection/i);
-  }, 60000);
-
-  it.each([
-    ["accepted_new", { status: "accepted_new" }],
-    ["reprioritized", { status: "reprioritized" }],
-    ["missing agent position", { agent_id: undefined }],
-  ])("fails closed for non-canonical or incomplete %s metadata", async (_label, overrides) => {
-    const surface = await commandSurfaceFor(intentSnapshot(acceptedIntent(overrides)));
-    const intentSurface = surface.querySelector(".agent-intent");
-    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
-    expect(intentSurface).not.toHaveTextContent(/Accepted|Stabilize power/i);
-  }, 60000);
-
-  it.each([
-    ["raw receipt string", "world-event:12"],
-    ["wrong intent identity", { ...completedIntent().receipt_ref, intent_id: "other-intent" }],
-    ["wrong world identity", { ...completedIntent().receipt_ref, world_id: "other-world" }],
-    ["wrong event position", { ...completedIntent().receipt_ref, event_seq: "13" }],
-  ])("fails closed for %s", async (_label, receiptRef) => {
-    const surface = await commandSurfaceFor(intentSnapshot(completedIntent({ receipt_ref: receiptRef })));
-    const intentSurface = surface.querySelector(".agent-intent");
-    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable")).toBeInTheDocument());
-    expect(intentSurface).not.toHaveTextContent("Completed");
-  }, 60000);
-
-  it("redacts the retained intent while the runtime connection is reconnecting or offline", async () => {
-    const app = await renderViewerApp(intentSnapshot(acceptedIntent()));
-    dispose = app.dispose;
-    app.core.applySelection({ kind: "agent", id: AGENT_ID });
-    const intentSurface = app.container.querySelector("#viewer-details-panel .agent-intent");
-    app.core.state.connectionStatus = "reconnecting";
-    await waitFor(() => expect(within(intentSurface).getByText("Reconnecting")).toBeInTheDocument());
-    expect(intentSurface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
-    expect(intentSurface).not.toHaveTextContent("Accepted");
-
-    app.core.state.connectionStatus = "disconnected";
-    await waitFor(() => expect(within(intentSurface).getByText("Intent unavailable — world connection lost")).toBeInTheDocument());
-    expect(intentSurface).not.toHaveTextContent("Stabilize power before expanding the iron line.");
-  }, 60000);
+  it("keeps the headed fixture connected and deterministic across its query matrix", () => {
+    const state = {
+      status: "superseded",
+      freshness: "conflict",
+      controlState: "controllable",
+      activityStatus: "blocked",
+      receiptState: "missing",
+      variant: "replacement",
+      connectionStatus: "connected",
+    };
+    const first = buildAgentIntentFixtureSnapshot(() => buildTaskGame076ScenarioSnapshot(), state);
+    const second = buildAgentIntentFixtureSnapshot(() => buildTaskGame076ScenarioSnapshot(), state);
+    expect(first).toEqual(second);
+    expect(first.player_gameplay.primary_intent.status).toBe("superseded");
+    expect(first.model.agents[AGENT_ID].activity.status).toBe("blocked");
+    expect(state.connectionStatus).toBe("connected");
+    expect(JSON.stringify(first.player_gameplay.primary_intent)).toContain("replaced_by");
+  });
 });

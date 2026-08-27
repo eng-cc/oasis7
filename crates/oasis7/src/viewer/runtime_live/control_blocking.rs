@@ -204,6 +204,9 @@ impl ViewerRuntimeLiveServer {
                     schema_version: Some(2),
                     intent_id: None,
                     agent_id: Some(agent_id.to_string()),
+                    kind: None,
+                    source: None,
+                    target_id: None,
                     world_id: None,
                     reorg_epoch: None,
                     logical_time: None,
@@ -222,11 +225,9 @@ impl ViewerRuntimeLiveServer {
                 Some({
                     let status =
                         canonical_player_intent_status(&intent.status).unwrap_or("unavailable");
-                    let has_authority_position = intent
-                        .world_id
-                        .as_deref()
-                        .is_some_and(|world_id| !world_id.trim().is_empty())
-                        && intent.reorg_epoch.is_some();
+                    let has_authority_position = intent.world_id.as_deref()
+                        == Some(self.config.world_id.as_str())
+                        && intent.reorg_epoch == Some(self.reorg_epoch);
                     crate::simulator::persist::PlayerGameplayPrimaryIntent {
                         status: status.to_string(),
                         message: Some(intent.summary.clone()),
@@ -234,6 +235,9 @@ impl ViewerRuntimeLiveServer {
                         schema_version: Some(intent.schema_version),
                         intent_id: Some(intent.intent_id.clone()),
                         agent_id: Some(intent.agent_id.clone()),
+                        kind: Some(intent.kind.clone()),
+                        source: Some(intent.source.clone()),
+                        target_id: intent.target_id.clone(),
                         world_id: intent.world_id.clone(),
                         reorg_epoch: intent.reorg_epoch,
                         logical_time: Some(intent.logical_time),
@@ -280,6 +284,9 @@ impl ViewerRuntimeLiveServer {
                             schema_version: None,
                             intent_id: None,
                             agent_id: Some(agent_id.to_string()),
+                            kind: None,
+                            source: None,
+                            target_id: None,
                             world_id: None,
                             reorg_epoch: None,
                             logical_time: None,

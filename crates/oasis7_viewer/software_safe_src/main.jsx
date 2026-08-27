@@ -3261,7 +3261,6 @@ function InteractionPanel() {
     const status = core.state.connectionStatus;
     // A software-safe canvas fallback can report a renderer diagnostic through
     // the shared error channel while the runtime transport remains usable.
-    // Keep that diagnostic from masquerading as a disconnected authority.
     if (status === "error" && String(core.state.lastError || "").startsWith("pixel_world_host:")) {
       return "connected";
     }

@@ -10,19 +10,18 @@ function textValue(value) {
 }
 
 function titleCaseIdentifier(value) {
-  const text = textValue(value).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!text) {
+  const text = textValue(value)
+    .replace(/[_:-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text || /^\d+$/.test(text) || /^(?:0x|sha256|uuid)\b/i.test(text)) {
     return "";
   }
   return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function humanizedActivityValue(value) {
-  const text = textValue(value);
-  if (!text) {
-    return "";
-  }
-  return /[_-]/.test(text) ? titleCaseIdentifier(text) : text;
+function humanizedActivityValue(value, fallback = "") {
+  return titleCaseIdentifier(value) || fallback;
 }
 
 function activityCopy(locale, key) {
@@ -37,6 +36,7 @@ function activityCopy(locale, key) {
     target: ["目标", "Target"],
     reason: ["原因", "Reason"],
     operation: ["操作", "Operation"],
+    targetUnavailable: ["目标信息暂不可用", "Target unavailable"],
   }[key];
   return copy ? copy[zh ? 0 : 1] : key;
 }
@@ -47,7 +47,6 @@ export function describeAgentActivity(activity, locale = "en") {
       kind: "unavailable",
       label: activityCopy(locale, "unavailable"),
       operation: "",
-      target: "",
       targetLabel: "",
       reason: "",
     };
@@ -59,27 +58,24 @@ export function describeAgentActivity(activity, locale = "en") {
       kind: "unavailable",
       label: activityCopy(locale, "unavailable"),
       operation: "",
-      target: "",
       targetLabel: "",
       reason: "",
     };
   }
 
-  if (status === "idle") {
+  if (status === "idle" || status === "unavailable") {
     return {
-      kind: "idle",
-      label: activityCopy(locale, "idle"),
+      kind: status,
+      label: activityCopy(locale, status),
       operation: "",
-      target: "",
       targetLabel: "",
       reason: "",
     };
   }
 
   const operation = humanizedActivityValue(activity.operation);
-  const target = textValue(activity.target);
-  const targetLabel = humanizedActivityValue(target);
-  const reason = humanizedActivityValue(activity.reason);
+  const targetLabel = humanizedActivityValue(activity.target, activity.target_label || activity.targetLabel || "");
+  const reason = humanizedActivityValue(activity.reason, "");
   const statusLabel = activityCopy(locale, status);
   return {
     kind: status,
@@ -87,7 +83,6 @@ export function describeAgentActivity(activity, locale = "en") {
       ? `${statusLabel} ${operation}`
       : statusLabel,
     operation,
-    target,
     targetLabel,
     reason,
   };
@@ -106,10 +101,16 @@ export function AgentActivitySurface(props) {
           <span>{model().operation}</span>
         </div>
       </Show>
-      <Show when={model().kind !== "unavailable" && model().kind !== "idle" && model().target}>
+      <Show when={model().kind !== "unavailable" && model().kind !== "idle" && model().kind !== "unavailable" && model().targetLabel}>
         <div class="agent-activity__field">
           <span class="metric__label">{activityCopy(locale(), "target")}</span>
-          <span title={model().targetLabel}>{model().targetLabel} <span class="entity-id">({model().target})</span></span>
+          <span>{model().targetLabel}</span>
+        </div>
+      </Show>
+      <Show when={model().kind !== "unavailable" && model().kind !== "idle" && !model().targetLabel && model().operation}>
+        <div class="agent-activity__field">
+          <span class="metric__label">{activityCopy(locale(), "target")}</span>
+          <span>{activityCopy(locale(), "targetUnavailable")}</span>
         </div>
       </Show>
       <Show when={model().kind === "blocked" && model().reason}>

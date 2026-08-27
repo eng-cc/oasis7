@@ -57,7 +57,7 @@ pub use types::{
 // Agent cell
 pub use agent_cell::{
     AGENT_INTENT_V2_SCHEMA_VERSION, AgentActivityStatus, AgentActivityV1, AgentCell,
-    AgentIntentAuthorityContext, AgentIntentV2,
+    AgentIntentAuthorityContext, AgentIntentReplayDisposition, AgentIntentV2,
 };
 
 // Chain resource schema
@@ -265,7 +265,8 @@ pub use state::{
 
 // World
 pub use world::{
-    AgentIntentRecordOutcome, AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
+    AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome,
+    AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState,
     CommittedAuthoritativeRecoveryGeneration, LogisticsTransferQuote, M1ScenarioBootstrapConfig,
     MarketQuoteDecisionPreview, MarketQuoteSupplyDelta, ModuleTickRoutingDeterministicSnapshot,

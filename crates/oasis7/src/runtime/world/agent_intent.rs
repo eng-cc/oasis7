@@ -1,7 +1,7 @@
 use super::super::util::sha256_hex;
 use super::super::{
-    AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentAuthorityContext, AgentIntentV2, DomainEvent,
-    WorldError, WorldEventBody, WorldEventId,
+    AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentAuthorityContext, AgentIntentReplayDisposition,
+    AgentIntentV2, DomainEvent, WorldError, WorldEventBody, WorldEventId,
 };
 use super::World;
 use crate::simulator::canonical_agent_intent_summary;
@@ -9,7 +9,38 @@ use crate::simulator::canonical_agent_intent_summary;
 const AGENT_CHAT_INTENT_KIND: &str = "agent_chat";
 const AGENT_CHAT_INTENT_SOURCE: &str = "player";
 const AGENT_INTENT_STATUS_ACCEPTED: &str = "accepted";
+const AGENT_INTENT_STATUS_BLOCKED: &str = "blocked";
+const AGENT_INTENT_STATUS_REJECTED: &str = "rejected";
 const AGENT_INTENT_STATUS_SUPERSEDED: &str = "superseded";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentIntentProviderFailureDisposition {
+    Blocked,
+    Rejected,
+}
+
+impl AgentIntentProviderFailureDisposition {
+    fn status(self) -> &'static str {
+        match self {
+            Self::Blocked => AGENT_INTENT_STATUS_BLOCKED,
+            Self::Rejected => AGENT_INTENT_STATUS_REJECTED,
+        }
+    }
+
+    fn reason_code(self) -> &'static str {
+        match self {
+            Self::Blocked => "provider_unavailable",
+            Self::Rejected => "provider_rejected",
+        }
+    }
+
+    fn reason_summary(self) -> &'static str {
+        match self {
+            Self::Blocked => "Agent service is temporarily unavailable",
+            Self::Rejected => "Agent service rejected this instruction",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentIntentRecordOutcome {
@@ -51,7 +82,7 @@ fn derive_agent_chat_request_digest(
     authority: &AgentIntentAuthorityContext,
 ) -> String {
     let payload = format!(
-        "agent-chat-request-v2\0player={}\0agent={}\0intent_seq={}\0intent_tick={}\0world_id={}\0reorg_epoch={}\0authority_scope={}\0message={}",
+        "agent-chat-request-v2\0player={}\0agent={}\0intent_seq={}\0intent_tick={}\0world_id={}\0reorg_epoch={}\0authority_scope={}\0replaces_intent_id={}\0message={}",
         player_id,
         agent_id,
         intent_seq,
@@ -63,6 +94,7 @@ fn derive_agent_chat_request_digest(
             .reorg_epoch
             .map_or_else(|| "<none>".to_string(), |value| value.to_string()),
         authority.authority_scope.as_deref().unwrap_or("<none>"),
+        authority.replaces_intent_id.as_deref().unwrap_or("<none>"),
         message
     );
     sha256_hex(payload.as_bytes())
@@ -84,10 +116,156 @@ fn normalize_authority_context(
         .authority_scope
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    authority.replaces_intent_id = authority
+        .replaces_intent_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     Ok(authority)
 }
 
 impl World {
+    /// Resolve the durable disposition for an exact authenticated chat retry.
+    ///
+    /// A sidecar ACK is only a transport cache. This lookup binds the retry to
+    /// the same canonical digest and authority position before a caller
+    /// decides whether it can replay an ACK.
+    pub fn agent_chat_intent_replay_disposition(
+        &self,
+        player_id: &str,
+        agent_id: &str,
+        intent_seq: u64,
+        message: &str,
+        authority: AgentIntentAuthorityContext,
+    ) -> Result<Option<AgentIntentReplayDisposition>, WorldError> {
+        let authority = normalize_authority_context(authority)?;
+        let player_id = player_id.trim();
+        let agent_id = agent_id.trim();
+        let intent_id = derive_agent_chat_intent_id(player_id, agent_id, intent_seq);
+        let request_digest = derive_agent_chat_request_digest(
+            player_id,
+            agent_id,
+            intent_seq,
+            message.trim(),
+            &authority,
+        );
+        let Some(recorded) = self.state.agent_intent_ledger.get(&intent_id) else {
+            return Ok(None);
+        };
+        if recorded.actor_id == player_id
+            && recorded.agent_id == agent_id
+            && recorded.kind == AGENT_CHAT_INTENT_KIND
+            && recorded.source == AGENT_CHAT_INTENT_SOURCE
+            && recorded.request_digest == request_digest
+            && recorded.intent_tick == authority.intent_tick
+            && recorded.world_id == authority.world_id
+            && recorded.reorg_epoch == authority.reorg_epoch
+            && recorded.authority_scope == authority.authority_scope
+        {
+            return Ok(Some(recorded.into()));
+        }
+        Err(invalid_agent_intent(format!(
+            "intent_id {} conflicts with its durable request digest",
+            intent_id
+        )))
+    }
+
+    pub fn verify_agent_chat_intent_replay(
+        &self,
+        player_id: &str,
+        agent_id: &str,
+        intent_seq: u64,
+        message: &str,
+        authority: AgentIntentAuthorityContext,
+    ) -> Result<Option<WorldEventId>, WorldError> {
+        Ok(self
+            .agent_chat_intent_replay_disposition(
+                player_id, agent_id, intent_seq, message, authority,
+            )?
+            .map(|disposition| disposition.event_seq))
+    }
+
+    /// Persist a provider failure against the exact accepted Intent that
+    /// produced the provider request. Repeated delivery is idempotent.
+    pub fn transition_agent_chat_provider_failure_exact(
+        &mut self,
+        agent_id: &str,
+        intent_id: &str,
+        request_digest: &str,
+        disposition: AgentIntentProviderFailureDisposition,
+    ) -> Result<AgentIntentReplayDisposition, WorldError> {
+        let agent_id = agent_id.trim();
+        let intent_id = intent_id.trim();
+        let request_digest = request_digest.trim();
+        if agent_id.is_empty() || intent_id.is_empty() || request_digest.is_empty() {
+            return Err(invalid_agent_intent(
+                "provider failure disposition requires agent_id, intent_id, and request_digest",
+            ));
+        }
+        let Some(recorded) = self.state.agent_intent_ledger.get(intent_id).cloned() else {
+            return Err(invalid_agent_intent(format!(
+                "provider failure target {} is not in the durable ledger",
+                intent_id
+            )));
+        };
+        if recorded.agent_id != agent_id || recorded.request_digest != request_digest {
+            return Err(invalid_agent_intent(format!(
+                "provider failure target {} conflicts with its durable identity",
+                intent_id
+            )));
+        }
+        if recorded.status == disposition.status() {
+            return Ok((&recorded).into());
+        }
+        if recorded.status != AGENT_INTENT_STATUS_ACCEPTED {
+            return Err(invalid_agent_intent(format!(
+                "provider failure target {} is already {}",
+                intent_id, recorded.status
+            )));
+        }
+        let Some(current) = self
+            .state
+            .agents
+            .get(agent_id)
+            .and_then(|cell| cell.intent.clone())
+        else {
+            return Err(invalid_agent_intent(format!(
+                "provider failure target {} has no current Agent Intent",
+                intent_id
+            )));
+        };
+        if current.intent_id != intent_id {
+            return Err(invalid_agent_intent(format!(
+                "provider failure target {} is not the current Agent Intent",
+                intent_id
+            )));
+        }
+        let event_seq = self.next_event_id.max(1);
+        let mut transitioned = current;
+        transitioned.status = disposition.status().to_string();
+        transitioned.event_seq = event_seq;
+        transitioned.updated_at = self.state.time;
+        transitioned.reason_code = Some(disposition.reason_code().to_string());
+        transitioned.reason_summary = Some(disposition.reason_summary().to_string());
+        let actual = self.append_event(
+            WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned {
+                intent: transitioned,
+            }),
+            None,
+        )?;
+        if actual != event_seq {
+            return Err(invalid_agent_intent(format!(
+                "provider failure disposition event sequence drifted: expected {}, got {}",
+                event_seq, actual
+            )));
+        }
+        self.state
+            .agent_intent_ledger
+            .get(intent_id)
+            .cloned()
+            .map(|intent| (&intent).into())
+            .ok_or_else(|| invalid_agent_intent("provider failure disposition was not persisted"))
+    }
+
     /// Append a player-authenticated agent-chat intent to the canonical runtime journal.
     ///
     /// Authentication, authorization, nonce consumption, and provider enqueueing remain
@@ -225,13 +403,19 @@ impl World {
         }
 
         // An active prior intent is explicitly superseded before the new accepted intent is
-        // appended.  Terminal dispositions are already closed and can be replaced directly.
+        // appended. Terminal dispositions are already closed and can be replaced directly.
         if let Some(previous) = current {
             let terminal = matches!(
                 previous.status.as_str(),
                 "completed" | "rejected" | "expired" | "cancelled" | "superseded"
             );
             if !terminal {
+                if authority.replaces_intent_id.as_deref() != Some(previous.intent_id.as_str()) {
+                    return Err(invalid_agent_intent(format!(
+                        "active intent {} requires an explicit matching replaces_intent_id",
+                        previous.intent_id
+                    )));
+                }
                 let replacement_event_seq = self.next_event_id.max(1);
                 let replacement = AgentIntentV2 {
                     schema_version: AGENT_INTENT_V2_SCHEMA_VERSION,
@@ -269,14 +453,22 @@ impl World {
                         replacement_event_seq, actual_event_seq
                     )));
                 }
+            } else if authority.replaces_intent_id.is_some() {
+                return Err(invalid_agent_intent(
+                    "replaces_intent_id cannot target a terminal intent",
+                ));
             }
+        } else if authority.replaces_intent_id.is_some() {
+            return Err(invalid_agent_intent(
+                "replaces_intent_id requires a current active intent",
+            ));
         }
 
-        let accepted_event_seq = self.next_event_id.max(1);
-        let accepted = AgentIntentV2 {
+        let proposed_event_seq = self.next_event_id.max(1);
+        let proposed = AgentIntentV2 {
             schema_version: AGENT_INTENT_V2_SCHEMA_VERSION,
             agent_id: agent_id.to_string(),
-            intent_id,
+            intent_id: intent_id.clone(),
             kind: AGENT_CHAT_INTENT_KIND.to_string(),
             summary: player_summary,
             target_id: None,
@@ -285,18 +477,52 @@ impl World {
             world_id: authority.world_id,
             reorg_epoch: authority.reorg_epoch,
             authority_scope: authority.authority_scope,
-            status: AGENT_INTENT_STATUS_ACCEPTED.to_string(),
+            status: "proposed".to_string(),
             source: AGENT_CHAT_INTENT_SOURCE.to_string(),
             logical_time: now,
-            event_seq: accepted_event_seq,
+            event_seq: proposed_event_seq,
             updated_at: now,
             receipt_ref: None,
             reason_code: None,
             reason_summary: None,
             replaced_by: None,
             actor_id: player_id.to_string(),
-            request_digest,
+            request_digest: request_digest.clone(),
         };
+        let actual_event_seq = self.append_event(
+            WorldEventBody::Domain(DomainEvent::AgentIntentProposed {
+                intent: proposed.clone(),
+            }),
+            None,
+        )?;
+        if actual_event_seq != proposed_event_seq {
+            return Err(invalid_agent_intent(format!(
+                "proposed event sequence drifted: expected {}, got {}",
+                proposed_event_seq, actual_event_seq
+            )));
+        }
+        let submitted_event_seq = self.next_event_id.max(1);
+        let mut submitted = proposed;
+        submitted.status = "submitted".to_string();
+        submitted.event_seq = submitted_event_seq;
+        submitted.updated_at = now;
+        let actual_event_seq = self.append_event(
+            WorldEventBody::Domain(DomainEvent::AgentIntentSubmitted {
+                intent: submitted.clone(),
+            }),
+            None,
+        )?;
+        if actual_event_seq != submitted_event_seq {
+            return Err(invalid_agent_intent(format!(
+                "submitted event sequence drifted: expected {}, got {}",
+                submitted_event_seq, actual_event_seq
+            )));
+        }
+        let accepted_event_seq = self.next_event_id.max(1);
+        let mut accepted = submitted;
+        accepted.status = AGENT_INTENT_STATUS_ACCEPTED.to_string();
+        accepted.event_seq = accepted_event_seq;
+        accepted.updated_at = now;
         let actual_event_seq = self.append_event(
             WorldEventBody::Domain(DomainEvent::AgentIntentAccepted { intent: accepted }),
             None,

@@ -195,6 +195,15 @@ pub struct PlayerGameplayPrimaryIntent {
     /// Agent identity that owns this runtime-authoritative intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Canonical runtime intent kind (for example `player_instruction`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Canonical origin of the intent (for example `player_chat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Optional runtime target carried by the intent contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
     /// World identity at the position where the intent was accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_id: Option<String>,

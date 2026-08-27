@@ -1,7 +1,10 @@
 use super::*;
 
 use crate::runtime::{AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentV2};
+use crate::simulator::canonical_agent_intent_summary;
 
+const STATUS_PROPOSED: &str = "proposed";
+const STATUS_SUBMITTED: &str = "submitted";
 const STATUS_ACCEPTED: &str = "accepted";
 const STATUS_BLOCKED: &str = "blocked";
 const STATUS_SUPERSEDED: &str = "superseded";
@@ -87,6 +90,50 @@ fn validate_runtime_acceptance_source(intent: &AgentIntentV2) -> Result<(), Worl
     Ok(())
 }
 
+fn validate_player_safe_copy(intent: &AgentIntentV2) -> Result<(), WorldError> {
+    let expected = canonical_agent_intent_summary(&intent.kind, &intent.source, STATUS_ACCEPTED)
+        .map_err(|error| invalid_intent(error.to_string()))?;
+    if intent.summary != expected.text {
+        return Err(invalid_intent(
+            "accepted intent summary must use the canonical player-safe template",
+        ));
+    }
+    if let Some(reason_code) = intent.reason_code.as_deref() {
+        let expected_reason = match reason_code {
+            "insufficient_power" => "Restore power to continue",
+            "policy_denied" => "This instruction is not permitted",
+            "provider_unavailable" => "Agent service is temporarily unavailable",
+            "provider_rejected" => "Agent service rejected this instruction",
+            _ => return Err(invalid_intent("unsupported player-visible reason_code")),
+        };
+        if intent.reason_summary.as_deref() != Some(expected_reason) {
+            return Err(invalid_intent(
+                "reason_summary must match the canonical reason_code template",
+            ));
+        }
+    } else if intent.reason_summary.is_some() {
+        return Err(invalid_intent(
+            "reason_summary requires a canonical reason_code",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_transition_time(intent: &AgentIntentV2, now: WorldTime) -> Result<(), WorldError> {
+    if intent.updated_at != now {
+        return Err(invalid_intent(format!(
+            "updated_at {} does not match event time {}",
+            intent.updated_at, now
+        )));
+    }
+    if intent.logical_time > intent.updated_at {
+        return Err(invalid_intent(
+            "logical_time cannot be later than updated_at",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_receipt_reference(
     intent: &AgentIntentV2,
     committed_receipt_event_id: Option<u64>,
@@ -155,12 +202,14 @@ impl WorldState {
     pub(super) fn apply_domain_event_intent(
         &mut self,
         event: &DomainEvent,
-        _now: WorldTime,
+        now: WorldTime,
         envelope_event_seq: Option<u64>,
         committed_receipt_event_id: Option<u64>,
     ) -> Result<(), WorldError> {
         let intent = match event {
-            DomainEvent::AgentIntentAccepted { intent }
+            DomainEvent::AgentIntentProposed { intent }
+            | DomainEvent::AgentIntentSubmitted { intent }
+            | DomainEvent::AgentIntentAccepted { intent }
             | DomainEvent::AgentIntentReplaced { intent }
             | DomainEvent::AgentIntentTransitioned { intent } => intent,
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
@@ -176,6 +225,7 @@ impl WorldState {
         }
         validate_receipt_reference(intent, committed_receipt_event_id)?;
         validate_runtime_acceptance_source(intent)?;
+        validate_player_safe_copy(intent)?;
 
         if !self.agents.contains_key(&intent.agent_id) {
             return Err(WorldError::AgentNotFound {
@@ -190,6 +240,117 @@ impl WorldState {
         let existing = cell.intent.clone();
 
         match event {
+            DomainEvent::AgentIntentProposed { .. } => {
+                if intent.status != STATUS_PROPOSED {
+                    return Err(invalid_intent(format!(
+                        "proposed event must carry status {STATUS_PROPOSED}, got {}",
+                        intent.status
+                    )));
+                }
+                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if recorded == intent {
+                        return Ok(());
+                    }
+                    if !immutable_payload_matches(recorded, intent)
+                        || !matches!(recorded.status.as_str(), STATUS_SUBMITTED | STATUS_ACCEPTED)
+                    {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable ledger payload during proposal",
+                            intent.intent_id
+                        )));
+                    }
+                    // A replay of the original proposal after submission or
+                    // acceptance is a historical no-op.
+                    return Ok(());
+                }
+
+                match existing {
+                    None => {
+                        validate_transition_time(intent, now)?;
+                        cell.intent = Some(intent.clone());
+                    }
+                    Some(current) if current == *intent => {}
+                    Some(current) if current.intent_id == intent.intent_id => {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its recorded payload",
+                            intent.intent_id
+                        )));
+                    }
+                    Some(current) if TERMINAL_STATUSES.contains(&current.status.as_str()) => {
+                        validate_transition_time(intent, now)?;
+                        cell.intent = Some(intent.clone());
+                    }
+                    Some(current) => {
+                        return Err(invalid_intent(format!(
+                            "active intent {} must be explicitly replaced before proposing {}",
+                            current.intent_id, intent.intent_id
+                        )));
+                    }
+                }
+                self.agent_intent_ledger
+                    .insert(intent.intent_id.clone(), intent.clone());
+            }
+            DomainEvent::AgentIntentSubmitted { .. } => {
+                if intent.status != STATUS_SUBMITTED {
+                    return Err(invalid_intent(format!(
+                        "submitted event must carry status {STATUS_SUBMITTED}, got {}",
+                        intent.status
+                    )));
+                }
+                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if recorded == intent {
+                        return Ok(());
+                    }
+                    if !immutable_payload_matches(recorded, intent) {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable ledger payload during submission",
+                            intent.intent_id
+                        )));
+                    }
+                    if matches!(
+                        recorded.status.as_str(),
+                        STATUS_ACCEPTED | STATUS_BLOCKED | STATUS_SUPERSEDED
+                    ) || TERMINAL_STATUSES.contains(&recorded.status.as_str())
+                    {
+                        // A replay of the original submission after a later
+                        // lifecycle disposition is a historical no-op.
+                        return Ok(());
+                    }
+                }
+
+                let Some(current) = existing else {
+                    return Err(invalid_intent(format!(
+                        "submission target {} is not present",
+                        intent.intent_id
+                    )));
+                };
+                if current.intent_id != intent.intent_id {
+                    return Err(invalid_intent(format!(
+                        "submission targets {}, but current intent is {}",
+                        intent.intent_id, current.intent_id
+                    )));
+                }
+                if current.status != STATUS_PROPOSED {
+                    return Err(invalid_intent(format!(
+                        "only proposed intent can be submitted, got {}",
+                        current.status
+                    )));
+                }
+                if !immutable_payload_matches(&current, intent) {
+                    return Err(invalid_intent(
+                        "submission cannot mutate immutable intent payload",
+                    ));
+                }
+                if intent.event_seq <= current.event_seq {
+                    return Err(invalid_intent(
+                        "submission event_seq must advance the proposed intent",
+                    ));
+                }
+                validate_transition_time(intent, now)?;
+                cell.intent = Some(intent.clone());
+                self.agent_intent_ledger
+                    .insert(intent.intent_id.clone(), intent.clone());
+            }
             DomainEvent::AgentIntentAccepted { .. } => {
                 if intent.status != STATUS_ACCEPTED {
                     return Err(invalid_intent(format!(
@@ -202,32 +363,58 @@ impl WorldState {
                     if recorded == intent {
                         return Ok(());
                     }
-                    if recorded.status != STATUS_ACCEPTED
-                        && immutable_payload_matches(recorded, intent)
-                    {
+                    let promoting_pending_intent = existing.as_ref().is_some_and(|current| {
+                        current.intent_id == intent.intent_id
+                            && matches!(current.status.as_str(), STATUS_PROPOSED | STATUS_SUBMITTED)
+                            && immutable_payload_matches(current, intent)
+                    });
+                    if !immutable_payload_matches(recorded, intent) {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable ledger payload during acceptance",
+                            intent.intent_id
+                        )));
+                    }
+                    if recorded.status != STATUS_ACCEPTED && !promoting_pending_intent {
                         // A replay of the original accepted event after a later
                         // disposition is a historical no-op.
                         return Ok(());
                     }
-                    return Err(invalid_intent(format!(
-                        "intent_id {} conflicts with its durable ledger payload",
-                        intent.intent_id
-                    )));
+                    if !promoting_pending_intent {
+                        return Err(invalid_intent(format!(
+                            "intent_id {} conflicts with its durable ledger payload during acceptance",
+                            intent.intent_id
+                        )));
+                    }
                 }
 
                 match existing {
-                    None => cell.intent = Some(intent.clone()),
+                    None => {
+                        validate_transition_time(intent, now)?;
+                        cell.intent = Some(intent.clone());
+                    }
                     Some(current) if current == *intent => {
                         // Exact replay is intentionally a no-op: do not refresh
                         // timestamps or mutate Activity/Receipt state.
                     }
                     Some(current) if current.intent_id == intent.intent_id => {
-                        return Err(invalid_intent(format!(
-                            "intent_id {} conflicts with its recorded payload",
-                            intent.intent_id
-                        )));
+                        if !matches!(current.status.as_str(), STATUS_PROPOSED | STATUS_SUBMITTED)
+                            || !immutable_payload_matches(&current, intent)
+                        {
+                            return Err(invalid_intent(format!(
+                                "intent_id {} conflicts with its recorded payload",
+                                intent.intent_id
+                            )));
+                        }
+                        if intent.event_seq <= current.event_seq {
+                            return Err(invalid_intent(
+                                "accepted event_seq must advance the pending intent",
+                            ));
+                        }
+                        validate_transition_time(intent, now)?;
+                        cell.intent = Some(intent.clone());
                     }
                     Some(current) if TERMINAL_STATUSES.contains(&current.status.as_str()) => {
+                        validate_transition_time(intent, now)?;
                         cell.intent = Some(intent.clone());
                     }
                     Some(current) => {
@@ -291,6 +478,7 @@ impl WorldState {
                                 "replacement event_seq must advance the current intent",
                             ));
                         }
+                        validate_transition_time(intent, now)?;
                         cell.intent = Some(intent.clone());
                     }
                     Some(current) => {
@@ -381,6 +569,7 @@ impl WorldState {
                 {
                     return Err(invalid_intent("blocked transition requires a reason_code"));
                 }
+                validate_transition_time(intent, now)?;
                 cell.intent = Some(intent.clone());
                 self.agent_intent_ledger
                     .insert(intent.intent_id.clone(), intent.clone());

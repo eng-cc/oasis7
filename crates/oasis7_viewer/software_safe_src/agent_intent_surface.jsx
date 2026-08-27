@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 
-const INTENT_STATUS_LABELS = {
+export const INTENT_STATUS_LABELS = {
   proposed: ["已提出", "Proposed"],
   submitted: ["已提交", "Submitted"],
   accepted: ["已接受", "Accepted"],
@@ -20,10 +20,12 @@ const INTENT_REASON_LABELS = {
   world_precondition_changed: ["世界前置条件已变化", "World precondition changed"],
   precondition_changed: ["前置条件已变化", "Precondition changed"],
   agent_unavailable: ["行动体不可用", "Agent unavailable"],
+  duplicate_request: ["重复请求已合并", "Duplicate request coalesced"],
+  superseded_by_replacement: ["已由替代意图接管", "Replaced by a newer intent"],
 };
 
-const ALLOWED_CONTROL_STATES = new Set(["controllable", "read_only", "control_lost", "unavailable"]);
-const ALLOWED_FRESHNESS = new Set(["current", "stale", "reconnecting", "unknown", "conflict", "unavailable"]);
+const ALLOWED_CONTROL_STATES = new Set(["controllable", "read_only", "control_lost", "unauthorized", "unavailable"]);
+const ALLOWED_FRESHNESS = new Set(["current", "stale", "reconnecting", "conflict"]);
 const TERMINAL_INTENT_STATUSES = new Set(["completed", "rejected", "expired", "cancelled", "superseded"]);
 const MAX_PLAYER_SAFE_COPY_CHARS = 160;
 const SENSITIVE_INTERNAL_COPY = /system[_ ]?prompt|provider(?:[_ ]?rationale)?|chain[_ ]?of[_ ]?thought|memory\s*:|trace\s*:|debug\s*:|auth(?:[_ ]?(?:token|secret|proof)|\s*:)|cost[_ ]?cents/i;
@@ -32,7 +34,7 @@ function textValue(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function boundedSafeText(value) {
+export function boundedSafeText(value) {
   const normalized = textValue(value)
     .split(/\r?\n/)
     .filter((line) => !SENSITIVE_INTERNAL_COPY.test(line))
@@ -43,10 +45,9 @@ function boundedSafeText(value) {
     return "";
   }
   const chars = Array.from(normalized);
-  if (chars.length <= MAX_PLAYER_SAFE_COPY_CHARS) {
-    return normalized;
-  }
-  return `${chars.slice(0, MAX_PLAYER_SAFE_COPY_CHARS - 1).join("")}…`;
+  return chars.length <= MAX_PLAYER_SAFE_COPY_CHARS
+    ? normalized
+    : `${chars.slice(0, MAX_PLAYER_SAFE_COPY_CHARS - 1).join("")}…`;
 }
 
 function counterIdentity(value) {
@@ -73,7 +74,7 @@ function hasAuthoritativePosition(intent) {
     && counterIdentity(intent.updated_at) !== null;
 }
 
-function hasReceiptReference(receiptRef, intent) {
+export function hasReceiptReference(receiptRef, intent) {
   if (!receiptRef || typeof receiptRef !== "object") {
     return false;
   }
@@ -101,6 +102,7 @@ function intentCopy(locale, key) {
     unavailable: ["意图不可用", "Intent unavailable"],
     hiddenControlLost: ["意图已隐藏 — 控制权丢失", "Intent hidden — control lost"],
     hiddenReadOnly: ["意图已隐藏 — 只读观察", "Intent hidden — read-only"],
+    hiddenUnauthorized: ["意图已隐藏 — 未获授权", "Intent hidden — unauthorized"],
     stale: ["陈旧意图", "Stale intent"],
     current: ["当前", "Current"],
     reconnecting: ["重新连接中", "Reconnecting"],
@@ -109,6 +111,10 @@ function intentCopy(locale, key) {
     reason: ["原因", "Reason"],
     reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
     nextStep: ["下一步", "Next step"],
+    receipt: ["世界回执已确认", "World receipt confirmed"],
+    receiptMissing: ["等待世界回执", "World receipt missing"],
+    replayed: ["重复请求已合并；没有创建新的意图。", "Duplicate request coalesced; no new intent was created."],
+    replaced: ["这条意图已由较新的意图接管。", "This intent was replaced by a newer intent."],
     recheckBeforeResume: ["重新检查运行时状态后再恢复。", "Recheck runtime state before resuming."],
   }[key];
   return copy ? copy[zh ? 0 : 1] : key;
@@ -152,56 +158,64 @@ function connectionPresentationState(connectionStatus) {
   return "offline";
 }
 
-function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
+function receiptPresentation(intent, locale) {
+  if (intent.status !== "completed") {
+    return { state: "not_applicable", label: "" };
+  }
+  return hasReceiptReference(intent.receipt_ref, intent)
+    ? { state: "confirmed", label: intentCopy(locale, "receipt") }
+    : { state: "missing", label: intentCopy(locale, "receiptMissing") };
+}
+
+export function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
   if (!intent || typeof intent !== "object") {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+    return { kind: "unavailable", label: intentCopy(locale, "unavailable"), receiptState: "not_applicable" };
   }
 
-  if (
-    intent.schema_version !== 2
-    || textValue(intent.source_class) !== "runtime_projection"
-  ) {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  if (intent.schema_version !== 2 || textValue(intent.source_class) !== "runtime_projection") {
+    return { kind: "unavailable", label: intentCopy(locale, "unavailable"), receiptState: "not_applicable" };
   }
 
   const connection = connectionPresentationState(connectionStatus);
   if (connection === "reconnecting") {
-    return { kind: "reconnecting", label: intentCopy(locale, "reconnecting"), statusLabel: "", message: "" };
+    return { kind: "reconnecting", label: intentCopy(locale, "reconnecting"), statusLabel: "", message: "", receiptState: "not_applicable" };
   }
   if (connection === "offline") {
-    return { kind: "unavailable", label: intentCopy(locale, "offline") };
+    return { kind: "unavailable", label: intentCopy(locale, "offline"), receiptState: "not_applicable" };
   }
 
   const controlState = textValue(intent.control_state).toLowerCase();
   if (!ALLOWED_CONTROL_STATES.has(controlState)) {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+    return { kind: "unavailable", label: intentCopy(locale, "unavailable"), receiptState: "not_applicable" };
   }
   if (controlState === "control_lost") {
-    return { kind: "control_lost", label: intentCopy(locale, "hiddenControlLost") };
+    return { kind: "control_lost", label: intentCopy(locale, "hiddenControlLost"), receiptState: "hidden" };
   }
   if (controlState === "read_only") {
-    return { kind: "read_only", label: intentCopy(locale, "hiddenReadOnly") };
+    return { kind: "read_only", label: intentCopy(locale, "hiddenReadOnly"), receiptState: "hidden" };
   }
-  if (controlState === "unavailable") {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  if (controlState === "unauthorized") {
+    return { kind: "unauthorized", label: intentCopy(locale, "hiddenUnauthorized"), receiptState: "hidden" };
   }
-  if (!textValue(intent.intent_id) || !hasAuthoritativePosition(intent)) {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  if (controlState === "unavailable" || !textValue(intent.intent_id) || !hasAuthoritativePosition(intent)) {
+    return { kind: "unavailable", label: intentCopy(locale, "unavailable"), receiptState: "not_applicable" };
   }
 
   const status = textValue(intent.status).toLowerCase();
   const label = statusLabel(locale, status);
-  if (!label) {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
-  }
-
   const freshness = textValue(intent.freshness).toLowerCase();
-  if (!ALLOWED_FRESHNESS.has(freshness) || freshness === "unknown" || freshness === "unavailable") {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  if (!label || !ALLOWED_FRESHNESS.has(freshness)) {
+    return { kind: "unavailable", label: intentCopy(locale, "unavailable"), receiptState: "not_applicable" };
   }
 
-  if (status === "completed" && !hasReceiptReference(intent.receipt_ref, intent)) {
-    return { kind: "unavailable", label: intentCopy(locale, "unavailable") };
+  const receipt = receiptPresentation(intent, locale);
+  if (status === "completed" && receipt.state === "missing") {
+    return {
+      kind: "unavailable",
+      label: intentCopy(locale, "unavailable"),
+      receiptState: "missing",
+      receiptLabel: receipt.label,
+    };
   }
 
   const message = boundedSafeText(intent.summary || intent.message);
@@ -210,16 +224,19 @@ function describeAgentIntent(intent, locale = "en", connectionStatus = "connecte
     ? boundedSafeText(intent.next_step || intent.next_step_hint)
       || (intent.resume_required ? intentCopy(locale, "recheckBeforeResume") : "")
     : "";
+  const lifecycleNote = intent.duplicate === true || intent.replayed === true || intent.replay === true
+    ? intentCopy(locale, "replayed")
+    : textValue(intent.replaced_by)
+      ? intentCopy(locale, "replaced")
+      : "";
   if (freshness === "stale") {
-    // A retained intent can still carry a terminal-looking status, but stale
-    // authority must not be presented as a fresh completion or acceptance.
-    return { kind: "stale", label: intentCopy(locale, "stale"), statusLabel: "", message, ...reason, nextStep };
+    return { kind: "stale", label: intentCopy(locale, "stale"), statusLabel: "", message, receiptState: receipt.state, receiptLabel: receipt.label, lifecycleNote, ...reason, nextStep };
   }
   if (freshness === "reconnecting") {
-    return { kind: "reconnecting", label: intentCopy(locale, "reconnecting"), statusLabel: label, message, ...reason, nextStep };
+    return { kind: "reconnecting", label: intentCopy(locale, "reconnecting"), statusLabel: label, message, receiptState: receipt.state, receiptLabel: receipt.label, lifecycleNote, ...reason, nextStep };
   }
   if (freshness === "conflict") {
-    return { kind: "conflict", label: intentCopy(locale, "needsConfirmation"), statusLabel: label, message, ...reason, nextStep };
+    return { kind: "conflict", label: intentCopy(locale, "needsConfirmation"), statusLabel: label, message, receiptState: receipt.state, receiptLabel: receipt.label, lifecycleNote, ...reason, nextStep };
   }
 
   return {
@@ -227,6 +244,9 @@ function describeAgentIntent(intent, locale = "en", connectionStatus = "connecte
     label: intentCopy(locale, "current"),
     statusLabel: label,
     message,
+    receiptState: receipt.state,
+    receiptLabel: receipt.label,
+    lifecycleNote,
     ...reason,
     nextStep,
   };
@@ -235,14 +255,14 @@ function describeAgentIntent(intent, locale = "en", connectionStatus = "connecte
 export function AgentIntentSurface(props) {
   const locale = () => props.locale || "en";
   const model = () => describeAgentIntent(props.intent, locale(), props.connectionStatus);
-
+  const hidden = () => ["control_lost", "read_only", "unauthorized", "unavailable"].includes(model().kind);
   return (
-    <section class="agent-intent" data-agent-intent-state={model().kind} aria-live="polite">
+    <section class="agent-intent" data-agent-intent-state={model().kind} data-agent-intent-receipt-state={model().receiptState || "not_applicable"} aria-live="polite">
       <div class="agent-intent__heading metric__label">{intentCopy(locale(), "heading")}</div>
-      <Show when={["control_lost", "read_only", "unavailable"].includes(model().kind)}>
+      <Show when={hidden()}>
         <div class="agent-intent__state">{model().label}</div>
       </Show>
-      <Show when={!(["control_lost", "read_only", "unavailable"].includes(model().kind))}>
+      <Show when={!hidden()}>
         <div class="agent-intent__status-row">
           <span class="agent-intent__state">{model().label}</span>
           <Show when={model().statusLabel}>
@@ -252,11 +272,19 @@ export function AgentIntentSurface(props) {
         <Show when={model().message}>
           <div class="agent-intent__summary">{model().message}</div>
         </Show>
+        <Show when={model().receiptLabel}>
+          <div class="agent-intent__detail agent-intent__receipt">
+            <span class="metric__label">{model().receiptLabel}</span>
+          </div>
+        </Show>
         <Show when={model().reasonLabel || model().reasonSummary}>
           <div class="agent-intent__detail">
             <span class="metric__label">{intentCopy(locale(), "reason")}</span>
             <span class="agent-intent__summary">{model().reasonLabel}{model().reasonSummary ? `: ${model().reasonSummary}` : ""}</span>
           </div>
+        </Show>
+        <Show when={model().lifecycleNote}>
+          <div class="agent-intent__detail agent-intent__lifecycle">{model().lifecycleNote}</div>
         </Show>
         <Show when={model().nextStep}>
           <div class="agent-intent__detail">

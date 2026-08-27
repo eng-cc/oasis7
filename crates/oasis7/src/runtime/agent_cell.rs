@@ -19,6 +19,8 @@ pub struct AgentIntentAuthorityContext {
     pub world_id: Option<String>,
     pub reorg_epoch: Option<u64>,
     pub authority_scope: Option<String>,
+    /// Explicit active intent that this request is authorized to replace.
+    pub replaces_intent_id: Option<String>,
 }
 
 /// The canonical runtime intent currently associated with an agent.
@@ -66,6 +68,38 @@ pub struct AgentIntentV2 {
     /// Digest of the authenticated request envelope for durable retry detection.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub request_digest: String,
+}
+
+/// The safe, durable disposition returned when an authenticated request is
+/// retried against the runtime Intent ledger.
+///
+/// This intentionally excludes the request summary and other mutable payload
+/// fields. Callers use it to decide whether a retry is still accepted, blocked,
+/// or terminal without reconstructing an acceptance from a sidecar ACK.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentIntentReplayDisposition {
+    pub intent_id: String,
+    pub status: String,
+    pub event_seq: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_summary: Option<String>,
+}
+
+impl From<&AgentIntentV2> for AgentIntentReplayDisposition {
+    fn from(intent: &AgentIntentV2) -> Self {
+        Self {
+            intent_id: intent.intent_id.clone(),
+            status: intent.status.clone(),
+            event_seq: intent.event_seq,
+            receipt_ref: intent.receipt_ref.clone(),
+            reason_code: intent.reason_code.clone(),
+            reason_summary: intent.reason_summary.clone(),
+        }
+    }
 }
 
 /// The authoritative coarse-grained activity state exposed for an agent.

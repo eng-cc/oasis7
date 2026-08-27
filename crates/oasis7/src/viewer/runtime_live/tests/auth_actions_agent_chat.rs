@@ -67,6 +67,10 @@ fn runtime_agent_chat_provider_mode_reports_feedback_failure() {
             message: "hello".to_string(),
             intent_tick: Some(35),
             intent_seq: Some(35),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         35,
         public_key.as_str(),
@@ -200,6 +204,10 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
             message: "hello provider feedback".to_string(),
             intent_tick: Some(12),
             intent_seq: Some(34),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         34,
         public_key.as_str(),
@@ -336,6 +344,10 @@ fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
             message: "hello provider async failure".to_string(),
             intent_tick: Some(55),
             intent_seq: Some(55),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         55,
         public_key.as_str(),
@@ -406,6 +418,10 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
             message: "hello unbound".to_string(),
             intent_tick: Some(39),
             intent_seq: Some(39),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         39,
         public_key.as_str(),
@@ -520,6 +536,10 @@ fn runtime_agent_chat_provider_mode_skips_reply_without_agent_chat_capability() 
             message: "hello phase1 provider".to_string(),
             intent_tick: Some(13),
             intent_seq: Some(36),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         36,
         public_key.as_str(),
@@ -586,6 +606,10 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
             message: "hello".to_string(),
             intent_tick: Some(7),
             intent_seq: Some(5),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         5,
         public_key.as_str(),
@@ -612,7 +636,7 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
     assert!(!first.idempotent_replay);
 
     let replay = server
-        .handle_agent_chat(request)
+        .handle_agent_chat(request.clone())
         .expect("replay request accepted");
     assert_eq!(replay.agent_id, first.agent_id);
     assert_eq!(replay.accepted_at_tick, first.accepted_at_tick);
@@ -629,6 +653,12 @@ fn runtime_agent_chat_replay_returns_idempotent_ack() {
             .copied(),
         Some(5)
     );
+
+    server.reorg_epoch = server.reorg_epoch.saturating_add(1);
+    let stale = server
+        .handle_agent_chat(request)
+        .expect_err("cached ack must not cross a reorg epoch");
+    assert_eq!(stale.code, "auth_invalid");
 }
 
 #[test]
@@ -676,6 +706,10 @@ fn runtime_agent_chat_acceptance_publishes_durable_primary_intent_handoff() {
                 message: "Prioritize the iron line before expanding.".to_string(),
                 intent_tick: Some(92),
                 intent_seq: Some(92),
+                world_id: None,
+                reorg_epoch: None,
+                authority_scope: None,
+                replaces_intent_id: None,
             },
             92,
             public_key.as_str(),
@@ -814,6 +848,13 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
         (92, "Prioritize the iron line before expanding."),
         (93, "Stabilize power before expanding the iron line."),
     ] {
+        let replaces_intent_id = server
+            .world
+            .state()
+            .agents
+            .get(agent_id.as_str())
+            .and_then(|cell| cell.intent.as_ref())
+            .map(|intent| intent.intent_id.clone());
         server
             .handle_agent_chat(signed_agent_chat_request(
                 crate::viewer::AgentChatRequest {
@@ -824,6 +865,10 @@ fn runtime_agent_chat_reprioritizes_the_durable_primary_intent() {
                     message: message.to_string(),
                     intent_tick: Some(nonce),
                     intent_seq: Some(nonce),
+                    world_id: None,
+                    reorg_epoch: None,
+                    authority_scope: None,
+                    replaces_intent_id,
                 },
                 nonce,
                 public_key.as_str(),
@@ -966,6 +1011,10 @@ fn runtime_agent_chat_requires_starter_oc_balance() {
             message: "hello without OC".to_string(),
             intent_tick: Some(14),
             intent_seq: Some(37),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         37,
         public_key.as_str(),
@@ -1065,6 +1114,10 @@ fn runtime_agent_chat_allows_zero_balance_after_starter_oc_claim() {
             message: "hello after spent OC".to_string(),
             intent_tick: Some(40),
             intent_seq: Some(40),
+            world_id: None,
+            reorg_epoch: None,
+            authority_scope: None,
+            replaces_intent_id: None,
         },
         40,
         public_key.as_str(),

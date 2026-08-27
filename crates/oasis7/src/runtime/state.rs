@@ -1039,7 +1039,9 @@ impl WorldState {
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
         match event {
-            DomainEvent::AgentIntentAccepted { .. }
+            DomainEvent::AgentIntentProposed { .. }
+            | DomainEvent::AgentIntentSubmitted { .. }
+            | DomainEvent::AgentIntentAccepted { .. }
             | DomainEvent::AgentIntentReplaced { .. }
             | DomainEvent::AgentIntentTransitioned { .. } => self.apply_domain_event_intent(
                 event,
@@ -1193,8 +1195,4 @@ impl WorldState {
             }
         }
     }
-}
-
-fn unlock_meta_track_tiers(track: &str, track_points: i64, progress: &mut MetaProgressState) {
-    support::unlock_meta_track_tiers(track, track_points, progress)
 }

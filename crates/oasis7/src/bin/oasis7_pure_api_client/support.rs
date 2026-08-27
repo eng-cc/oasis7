@@ -78,6 +78,10 @@ pub(super) fn build_signed_agent_chat_request(
         auth: None,
         intent_tick,
         intent_seq: Some(intent_seq.unwrap_or(nonce)),
+        world_id: None,
+        reorg_epoch: None,
+        authority_scope: None,
+        replaces_intent_id: None,
     };
     let proof = sign_agent_chat_auth_proof(&request, nonce, public_key.as_str(), private_key_hex)?;
     Ok(AgentChatRequest {

@@ -1,0 +1,124 @@
+use super::*;
+
+impl RuntimeLlmSidecar {
+    pub(super) fn request_provider_agent_chat(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        player_id: &str,
+        message: &str,
+    ) -> Result<Option<String>, RuntimeProviderAgentChatRequestError> {
+        let settings = provider_settings_from_env()
+            .map_err(|message| RuntimeProviderAgentChatRequestError {
+                error: AgentChatError {
+                    code: "provider_config_invalid".to_string(),
+                    message,
+                    agent_id: Some(agent_id.to_string()),
+                },
+                retryable: false,
+            })?
+            .ok_or_else(|| RuntimeProviderAgentChatRequestError {
+                error: AgentChatError {
+                    code: "provider_config_missing".to_string(),
+                    message: "provider-backed agent chat requires provider settings".to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                },
+                retryable: true,
+            })?;
+        let client = ProviderLoopbackHttpClient::new_with_transport(
+            settings.base_url.as_str(),
+            settings.auth_token.as_deref(),
+            settings.decision_timeout_ms,
+            settings.provider_transport.as_str(),
+        )
+        .map_err(|error| RuntimeProviderAgentChatRequestError {
+            retryable: error.retryable(),
+            error: AgentChatError {
+                code: "provider_unreachable".to_string(),
+                message: error.to_string(),
+                agent_id: Some(agent_id.to_string()),
+            },
+        })?;
+        let info =
+            client
+                .provider_info()
+                .map_err(|error| RuntimeProviderAgentChatRequestError {
+                    retryable: error.retryable(),
+                    error: AgentChatError {
+                        code: "provider_unreachable".to_string(),
+                        message: error.to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    },
+                })?;
+        if !info.capabilities.iter().any(|capability| {
+            capability
+                .trim()
+                .eq_ignore_ascii_case(PROVIDER_AGENT_CHAT_CAPABILITY)
+        }) {
+            return Ok(None);
+        }
+        let agent = world.state().agents.get(agent_id);
+        let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));
+        let resources = agent.and_then(|agent| serde_json::to_value(&agent.state.resources).ok());
+        let provider_request = ProviderAgentChatRequest {
+            agent_id: agent_id.to_string(),
+            player_id: player_id.to_string(),
+            message: message.to_string(),
+            world_time: world.state().time,
+            location_id,
+            resources,
+            recent_feedback: Vec::new(),
+        };
+        let chat_request_key = provider_agent_chat_log_key(&provider_request);
+        let started = Instant::now();
+        tracing::info!(
+            chat_request_key = chat_request_key.as_str(),
+            agent_id,
+            player_id,
+            world_time = provider_request.world_time,
+            "provider-backed agent chat request started"
+        );
+        let response = match client.request_agent_chat(&provider_request) {
+            Ok(response) => {
+                tracing::info!(
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "provider-backed agent chat request succeeded"
+                );
+                response
+            }
+            Err(error) => {
+                tracing::warn!(
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    error = error.to_string().as_str(),
+                    "provider-backed agent chat request failed"
+                );
+                return Err(RuntimeProviderAgentChatRequestError {
+                    retryable: error.retryable(),
+                    error: AgentChatError {
+                        code: "provider_unreachable".to_string(),
+                        message: error.to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    },
+                });
+            }
+        };
+        let reply = response.message.trim();
+        if reply.is_empty() {
+            return Err(RuntimeProviderAgentChatRequestError {
+                retryable: true,
+                error: AgentChatError {
+                    code: "provider_empty_chat_response".to_string(),
+                    message: "provider returned an empty agent chat response".to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                },
+            });
+        }
+        Ok(Some(reply.to_string()))
+    }
+}
