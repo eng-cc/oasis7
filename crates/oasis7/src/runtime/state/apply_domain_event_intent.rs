@@ -7,6 +7,7 @@ const STATUS_PROPOSED: &str = "proposed";
 const STATUS_SUBMITTED: &str = "submitted";
 const STATUS_ACCEPTED: &str = "accepted";
 const STATUS_BLOCKED: &str = "blocked";
+const STATUS_COMPLETED: &str = "completed";
 const STATUS_SUPERSEDED: &str = "superseded";
 const SOURCE_PROVIDER_ADVISORY: &str = "provider_advisory";
 const MAX_AGENT_INTENT_SUMMARY_CHARS: usize = 512;
@@ -73,6 +74,16 @@ fn validate_common_intent(intent: &AgentIntentV2) -> Result<(), WorldError> {
     {
         return Err(invalid_intent(
             "authority_scope cannot be empty when supplied",
+        ));
+    }
+    if intent.status != STATUS_SUPERSEDED && intent.replaced_by.is_some() {
+        return Err(invalid_intent(
+            "replaced_by is only valid for an explicit superseded intent",
+        ));
+    }
+    if intent.status != STATUS_COMPLETED && intent.receipt_ref.is_some() {
+        return Err(invalid_intent(
+            "receipt_ref is only valid for a completed intent",
         ));
     }
     if intent.replaced_by.as_deref() == Some(intent.intent_id.as_str()) {
@@ -163,7 +174,7 @@ fn validate_receipt_reference(
     intent: &AgentIntentV2,
     committed_receipt_event_id: Option<u64>,
 ) -> Result<(), WorldError> {
-    if intent.status != "completed" {
+    if intent.status != STATUS_COMPLETED {
         return Ok(());
     }
     let Some(receipt_ref) = intent.receipt_ref.as_deref() else {

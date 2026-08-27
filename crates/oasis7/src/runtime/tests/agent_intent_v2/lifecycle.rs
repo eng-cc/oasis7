@@ -573,6 +573,68 @@ fn provider_advisory_is_durable_without_occupying_authoritative_intent_slot() {
 }
 
 #[test]
+fn non_superseded_transition_rejects_forged_replacement_link() {
+    let accepted = canonical_intent(
+        "intent-forged-replacement-link",
+        "accepted",
+        "Start recipe",
+        None,
+    );
+    let mut blocked = accepted.clone();
+    blocked["status"] = serde_json::json!("blocked");
+    blocked["summary"] = serde_json::json!(lifecycle_summary("blocked"));
+    blocked["reason_code"] = serde_json::json!("provider_unavailable");
+    blocked["reason_summary"] = serde_json::json!("Agent service is temporarily unavailable");
+    blocked["replaced_by"] = serde_json::json!("intent-not-authoritatively-replaced");
+    blocked["event_seq"] = serde_json::json!(12);
+    blocked["updated_at"] = serde_json::json!(8);
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    apply_accepted_lifecycle(&mut state, accepted);
+
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", blocked), 8)
+            .is_err(),
+        "replaced_by is only valid on an explicit superseding disposition"
+    );
+}
+
+#[test]
+fn non_completed_transition_rejects_forged_receipt_reference() {
+    let accepted = canonical_intent(
+        "intent-forged-receipt-link",
+        "accepted",
+        "Start recipe",
+        None,
+    );
+    let mut blocked = accepted.clone();
+    blocked["status"] = serde_json::json!("blocked");
+    blocked["summary"] = serde_json::json!(lifecycle_summary("blocked"));
+    blocked["reason_code"] = serde_json::json!("provider_unavailable");
+    blocked["reason_summary"] = serde_json::json!("Agent service is temporarily unavailable");
+    blocked["receipt_ref"] = serde_json::json!("world-event:999");
+    blocked["event_seq"] = serde_json::json!(12);
+    blocked["updated_at"] = serde_json::json!(8);
+
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert(AGENT_ID.to_string(), legacy_agent_cell());
+    apply_accepted_lifecycle(&mut state, accepted);
+
+    assert!(
+        state
+            .apply_domain_event(&intent_event("AgentIntentTransitioned", blocked), 8)
+            .is_err(),
+        "receipt_ref is only valid on a completed intent with a committed receipt"
+    );
+}
+
+#[test]
 fn intent_updated_at_cannot_rewind_during_transition() {
     let accepted = canonical_intent("intent-monotonic-time", "accepted", "Start recipe", None);
     let mut state = WorldState::default();

@@ -175,6 +175,20 @@ impl World {
     /// A sidecar ACK is only a transport cache. This lookup binds the retry to
     /// the same canonical digest and authority position before a caller
     /// decides whether it can replay an ACK.
+    ///
+    /// Direct intent recording is intentionally kept inside the trusted
+    /// runtime/viewer boundary. External clients must use the authenticated
+    /// Viewer Agent Chat path instead of minting a runtime intent directly.
+    /// ```compile_fail
+    /// fn external_bypass(
+    ///     world: &mut oasis7::runtime::World,
+    ///     authority: oasis7::runtime::AgentIntentAuthorityContext,
+    /// ) {
+    ///     let _ = world.record_agent_chat_intent_with_authority(
+    ///         "player", "agent", 1, "message", authority,
+    ///     );
+    /// }
+    /// ```
     pub fn agent_chat_intent_replay_disposition(
         &self,
         player_id: &str,
@@ -344,7 +358,7 @@ impl World {
 
     /// Append a player-authenticated agent-chat intent with the authority
     /// identity that must survive durable retry/replay.
-    pub fn record_agent_chat_intent_with_authority(
+    pub(crate) fn record_agent_chat_intent_with_authority(
         &mut self,
         player_id: &str,
         agent_id: &str,
