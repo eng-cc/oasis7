@@ -26,7 +26,7 @@ on:
       max_cargo_check_regression_pct:
         description: "Allowed cold cargo check regression percentage"
         required: false
-        default: ""
+        default: "25"
         type: string
       max_cargo_build_release_regression_pct:
         description: "Allowed cold cargo build --release regression percentage"
