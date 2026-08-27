@@ -81,7 +81,7 @@ impl World {
     ///
     /// This path deliberately creates only `AgentIntentProposed`; provider
     /// output cannot submit, accept, or complete an intent on its own.
-    pub fn record_provider_advisory_proposed(
+    pub(crate) fn record_provider_advisory_proposed(
         &mut self,
         agent_id: &str,
         intent_id: &str,
@@ -210,7 +210,7 @@ impl World {
     }
 
     /// Persist a deterministic rejection for an exact pending/accepted intent.
-    pub fn reject_agent_intent_exact(
+    pub(crate) fn reject_agent_intent_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,
@@ -225,7 +225,7 @@ impl World {
     }
 
     /// Persist expiry for an exact intent before execution or completion.
-    pub fn expire_agent_intent_exact(
+    pub(crate) fn expire_agent_intent_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,
@@ -240,7 +240,7 @@ impl World {
     }
 
     /// Persist cancellation for an exact submitted/accepted/blocked intent.
-    pub fn cancel_agent_intent_exact(
+    pub(crate) fn cancel_agent_intent_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,
@@ -260,7 +260,7 @@ impl World {
     /// intent's effect identity before the completion event is appended. The
     /// intent's world/reorg fields form the remaining authority tuple carried
     /// by the completion projection.
-    pub fn complete_agent_intent_with_receipt_exact(
+    pub(crate) fn complete_agent_intent_with_receipt_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,

@@ -176,17 +176,27 @@ impl World {
     /// the same canonical digest and authority position before a caller
     /// decides whether it can replay an ACK.
     ///
-    /// Direct intent recording is intentionally kept inside the trusted
+    /// Direct Agent Intent mutations are intentionally kept inside the trusted
     /// runtime/viewer boundary. External clients must use the authenticated
-    /// Viewer Agent Chat path instead of minting a runtime intent directly.
+    /// Viewer Agent Chat path instead of mutating runtime state directly.
     /// ```compile_fail
     /// fn external_bypass(
     ///     world: &mut oasis7::runtime::World,
     ///     authority: oasis7::runtime::AgentIntentAuthorityContext,
     /// ) {
-    ///     let _ = world.record_agent_chat_intent_with_authority(
-    ///         "player", "agent", 1, "message", authority,
+    ///     let _ = world.transition_agent_chat_provider_failure_exact(
+    ///         "agent", "intent", "digest", oasis7::runtime::AgentIntentProviderFailureDisposition::Blocked,
     ///     );
+    ///     let _ = world.reject_agent_intent_exact("agent", "intent", "digest");
+    ///     let _ = world.expire_agent_intent_exact("agent", "intent", "digest");
+    ///     let _ = world.cancel_agent_intent_exact("agent", "intent", "digest");
+    ///     let _ = world.record_provider_advisory_proposed(
+    ///         "agent", "advisory", "kind", None,
+    ///     );
+    ///     let _ = world.complete_agent_intent_with_receipt_exact(
+    ///         "agent", "intent", "digest", 1,
+    ///     );
+    ///     let _ = authority;
     /// }
     /// ```
     pub fn agent_chat_intent_replay_disposition(
@@ -246,7 +256,7 @@ impl World {
 
     /// Persist a provider failure against the exact accepted Intent that
     /// produced the provider request. Repeated delivery is idempotent.
-    pub fn transition_agent_chat_provider_failure_exact(
+    pub(crate) fn transition_agent_chat_provider_failure_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,
