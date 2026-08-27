@@ -15400,6 +15400,49 @@ function installBranchCommitmentVisualFixture(fixtures, { core: core2, setFixtur
     setFixturePlayerAuth2();
   };
 }
+function installAgentIntentV2VisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.agent_intent_v2 = () => {
+    const requestedStatus = String(
+      new URLSearchParams(window.location.search || "").get("intent_status") || "accepted"
+    ).trim().toLowerCase();
+    const status = ["accepted", "blocked", "completed"].includes(requestedStatus) ? requestedStatus : "accepted";
+    const intentId = "agent-intent-v2:headed-acceptance";
+    const worldId = "live-formal-release-default";
+    core2.injectSnapshot(viewerFixtureBaseSnapshot2({
+      player_gameplay: {
+        primary_intent: {
+          schema_version: 2,
+          intent_id: intentId,
+          status,
+          message: status === "completed" ? "Agent guidance completed with a confirmed world receipt." : status === "blocked" ? "Agent guidance is blocked pending a runtime recheck." : "Agent guidance accepted; the Agent will evaluate its next world action.",
+          resume_required: status === "blocked",
+          source_class: "runtime_projection",
+          freshness: "current",
+          control_state: "controllable",
+          agent_id: "agent-0",
+          world_id: worldId,
+          reorg_epoch: 0,
+          logical_time: 7,
+          updated_at: 7,
+          event_seq: "42",
+          effect_intent_id: status === "completed" ? "effect-intent-v2:headed-acceptance" : null,
+          receipt_ref: status === "completed" ? {
+            intent_id: intentId,
+            world_id: worldId,
+            reorg_epoch: 0,
+            logical_time: 7,
+            event_seq: "42",
+            receipt_id: "world-event:43"
+          } : null,
+          reason_summary: status === "blocked" ? "World prerequisites changed before execution." : null,
+          next_step: status === "blocked" ? "Review the world state, then resume when ready." : null
+        }
+      }
+    }), { returnState: false });
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+  };
+}
 var _tmpl$$5 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$5 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$5 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$3 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
 function ReprioritizeActionForm(props) {
   const [open, setOpen] = createSignal(false);
@@ -22082,50 +22125,6 @@ function installViewerVisualFixture() {
       setFixtureChatHistory();
       setPromptOverridesVisible(false);
     },
-    agent_intent_v2() {
-      const requestedStatus = String(new URLSearchParams(window.location.search || "").get("intent_status") || "accepted").trim().toLowerCase();
-      const status = ["accepted", "blocked", "completed"].includes(requestedStatus) ? requestedStatus : "accepted";
-      const intentId = "agent-intent-v2:headed-acceptance";
-      const worldId = "live-formal-release-default";
-      injectSnapshot(viewerFixtureBaseSnapshot({
-        player_gameplay: {
-          primary_intent: {
-            schema_version: 2,
-            intent_id: intentId,
-            status,
-            message: status === "completed" ? "Agent guidance completed with a confirmed world receipt." : status === "blocked" ? "Agent guidance is blocked pending a runtime recheck." : "Agent guidance accepted; the Agent will evaluate its next world action.",
-            resume_required: status === "blocked",
-            source_class: "runtime_projection",
-            freshness: "current",
-            control_state: "controllable",
-            agent_id: "agent-0",
-            world_id: worldId,
-            reorg_epoch: 0,
-            logical_time: 7,
-            updated_at: 7,
-            event_seq: "42",
-            effect_intent_id: status === "completed" ? "effect-intent-v2:headed-acceptance" : null,
-            receipt_ref: status === "completed" ? {
-              intent_id: intentId,
-              world_id: worldId,
-              reorg_epoch: 0,
-              logical_time: 7,
-              event_seq: "42",
-              receipt_id: "world-event:43"
-            } : null,
-            reason_summary: status === "blocked" ? "World prerequisites changed before execution." : null,
-            next_step: status === "blocked" ? "Review the world state, then resume when ready." : null
-          }
-        }
-      }), {
-        returnState: false
-      });
-      applySelection({
-        kind: "agent",
-        id: "agent-0"
-      });
-      setFixturePlayerAuth();
-    },
     gameplay_diagnostics_expanded() {
       injectSnapshot(viewerFixtureBaseSnapshot(), {
         returnState: false
@@ -22157,6 +22156,11 @@ function installViewerVisualFixture() {
       state.selectedObject = null;
     }
   };
+  installAgentIntentV2VisualFixture(fixtures, {
+    core,
+    setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
   installRefineQuotePreflightVisualFixture(fixtures, {
     core,
     setFixturePlayerAuth,
