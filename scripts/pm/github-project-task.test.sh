@@ -40,7 +40,7 @@ status=read_state("GH_PROJECT_STATUS_STATE_FILE", {"committed":"In Progress","re
 phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase") or {"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(pm_status,"execution"))
 nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
 if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
-node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"nodes":nodes}}
+node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":nodes}}
 print(json.dumps({"data":{"nodes":[node]}}))
 PY
     ;;

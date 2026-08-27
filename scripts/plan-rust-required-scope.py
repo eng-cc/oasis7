@@ -36,8 +36,12 @@ def main():
  for path in paths:
   hits=[r for r in c["rules"] if any(fnmatch.fnmatchcase(path,x) for x in r["match"])]
   if not hits: full=True; reasons.append("unclassified_or_unresolvable:"+path)
+  minimal=any(r.get("minimal") for r in hits)
   for r in hits:
-   capabilities.update(r.get("capabilities",[])); full|=bool(r.get("full")); reasons.append(r["reason"]+":"+path)
+   selected=r.get("capabilities",[])
+   if minimal: selected=[capability for capability in selected if capability!="workflow_governance"]
+   capabilities.update(selected)
+   full|=bool(r.get("full")); reasons.append(r["reason"]+":"+path)
  if full: capabilities=set(CAPABILITIES)
  vals={f:"false" for f in FIELDS.values()}
  vals.update({FIELDS[x]:"true" for x in capabilities})

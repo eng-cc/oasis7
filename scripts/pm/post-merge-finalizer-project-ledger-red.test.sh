@@ -29,11 +29,11 @@ case "$*" in
   issue\ close*) : >"$ISSUE_CLOSED"; printf '%s\n' '{}' ;;
   api\ graphql*)
     if [[ "${WRONG_CONTENT:-0}" == 1 ]]; then
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_ffffffffffffffffffffffffffffffff","number":12,"title":"wrong fixture","url":"https://github.com/fixture/repo/issues/12"},"fieldValues":{"nodes":[]}}]}}'
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_ffffffffffffffffffffffffffffffff","number":12,"title":"wrong fixture","url":"https://github.com/fixture/repo/issues/12"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}'
     elif [[ -s "$REMOTE_STATE" && "$(wc -l <"$REMOTE_STATE" | tr -d ' ')" == 3 ]]; then
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}'
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}'
     else
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[]}}]}}'
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}'
     fi ;;
   api*) python3 - "$LIVE_BODY" <<'PY'
 import json,sys
@@ -81,6 +81,7 @@ module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 base={"id":"ITEM1","_project_id":"P1","_project_number":1,
       "content":{"body":f"task_uid: {sys.argv[2]}","number":11,
                  "url":"https://github.com/fixture/repo/issues/11"},
+      "_field_values_has_next_page":False,
       "Status":"Done","PM Status":"done","Workflow Phase":"done"}
 for label,mutation in (
     ("wrong issue",{"content":{**base["content"],"number":12,"url":"https://github.com/fixture/repo/issues/12"}}),
@@ -88,6 +89,19 @@ for label,mutation in (
     ("wrong repository",{"content":{**base["content"],"url":"https://github.com/other/repo/issues/11"}}),
 ):
     item={**base,**mutation}
+    module.project_workflow.fetch_project_items_by_ids=lambda ids,item=item:{"ITEM1":item}
+    try:
+        module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")
+    except SystemExit:
+        continue
+    raise SystemExit(f"expected bound Project readback to reject {label}")
+for label, item in (
+    ("missing pageInfo", {key:value for key,value in base.items()
+                           if key != "_field_values_has_next_page"}),
+    ("null pageInfo", {**base, "_field_values_has_next_page": None}),
+    ("invalid pageInfo", {**base, "_field_values_has_next_page": "false"}),
+    ("truncated pageInfo", {**base, "_field_values_has_next_page": True}),
+):
     module.project_workflow.fetch_project_items_by_ids=lambda ids,item=item:{"ITEM1":item}
     try:
         module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")

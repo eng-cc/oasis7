@@ -16,7 +16,13 @@ UID = "task_22222222222222222222222222222222"
 
 
 class TerminalTaskAuditProjectSemantics(unittest.TestCase):
-    def run_audit(self, *, item: dict, issue_project_items: list[dict] | None = None) -> dict:
+    def run_audit(
+        self,
+        *,
+        item: dict,
+        issue_project_items: list[dict] | None = None,
+        project_repo: str = "fixture/repo",
+    ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             scratch = Path(directory)
             repo = scratch / "repo"
@@ -37,7 +43,9 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
             mapping_path = repo / ".pm/github-project-sync/tasks.json"
             mapping_path.parent.mkdir(parents=True)
             mapping_path.write_text(json.dumps({
-                "project": {"id": "P1", "number": 7},
+                # This is the canonical cache shape: Project id is not
+                # persisted, while owner/number/repo are authoritative.
+                "project": {"owner": "fixture-owner", "number": 7, "repo": project_repo},
                 "tasks": {UID: {
                     "task_uid": UID,
                     "status": "done",
@@ -56,14 +64,20 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
             ], check=True, text=True, capture_output=True)
             payload = {"data": {"nodes": [{
                 "id": item.get("id", "ITEM1"),
-                "project": {"id": item.get("_project_id", "P1"), "number": item.get("_project_number", 7)},
+                "project": {
+                    "id": item.get("_project_id", "PVT_actual"),
+                    "number": item.get("_project_number", 7),
+                    "owner": {"login": item.get("_project_owner", "fixture-owner")},
+                },
                 "content": {
                     "body": item.get("_body", f"task_uid: {UID}"),
-                    "number": 11,
-                    "url": "https://github.com/fixture/repo/issues/11",
+                    "number": item.get("_issue_number", 11),
+                    "url": item.get("_issue_url", "https://github.com/fixture/repo/issues/11"),
                 },
                 "fieldValues": {
-                    "pageInfo": {"hasNextPage": item.get("_field_values_has_next_page", False)},
+                    **({} if item.get("_omit_field_values_page_info") else {
+                        "pageInfo": {"hasNextPage": item.get("_field_values_has_next_page", False)},
+                    }),
                     "nodes": [
                         {"name": item.get("Status", "Done"), "field": {"name": "Status"}},
                         {"name": item.get("PM Status", "done"), "field": {"name": "PM Status"}},
@@ -120,10 +134,19 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
 
     def test_bound_item_rejects_field_identity_and_pagination_drift(self) -> None:
         cases = (
+            ({"Status": "In Progress"}, None),
             ({"PM Status": "pr_watch"}, None),
-            ({"_project_id": "P2"}, "project_item_identity"),
+            ({"Workflow Phase": "main_sync"}, None),
+            ({"id": "ITEM2"}, "project_item_bound"),
             ({"_project_number": 8}, "project_item_identity"),
+            ({"_issue_number": 12}, "project_item_identity"),
+            ({"_issue_url": "https://github.com/other/repo/issues/11"}, "project_item_identity"),
+            ({"_body": "task_uid: task_ffffffffffffffffffffffffffffffff"}, "project_item_identity"),
+            ({"_project_owner": "foreign-owner"}, "project_item_identity"),
+            ({"_project_owner": None}, "project_item_identity"),
             ({"_field_values_has_next_page": True}, "project_field_values_complete"),
+            ({"_omit_field_values_page_info": True}, "project_field_values_complete"),
+            ({"_field_values_has_next_page": "false"}, "project_field_values_complete"),
         )
         for item, failed_check in cases:
             with self.subTest(item=item):
@@ -131,6 +154,9 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
                 self.assertFalse(result["checks"]["project_terminal"], result)
                 if failed_check:
                     self.assertFalse(result["checks"][failed_check], result)
+
+        result = self.run_audit(item={}, project_repo="other/repo")
+        self.assertFalse(result["checks"]["project_item_identity"], result)
 
 
 if __name__ == "__main__":

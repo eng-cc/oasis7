@@ -41,6 +41,11 @@ MD
 cat > "$TMPDIR/.pm/github-project-sync/tasks.json" <<'JSON'
 {
   "version": 1,
+  "project": {
+    "number": 1,
+    "owner": "eng-cc",
+    "repo": "eng-cc/oasis7"
+  },
   "tasks": {
     "task_11111111111111111111111111111111": {
       "task_uid": "task_11111111111111111111111111111111",
