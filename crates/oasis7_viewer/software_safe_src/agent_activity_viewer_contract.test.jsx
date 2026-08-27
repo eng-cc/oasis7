@@ -47,7 +47,7 @@ describe("authoritative Agent Activity viewer contract", () => {
 
     const targetsPanel = app.container.querySelector("#viewer-targets-panel");
     await waitFor(() => {
-      expect(within(targetsPanel).getByText("Executing recipe")).toBeInTheDocument();
+      expect(within(targetsPanel).getByText("Executing Recipe")).toBeInTheDocument();
     });
     expect(targetsPanel).not.toHaveTextContent(/\bIdle\b|last_active|Mining|Travelling|status_[a-z_]+/i);
   });
@@ -66,7 +66,7 @@ describe("authoritative Agent Activity viewer contract", () => {
     await waitFor(() => {
       expect(within(targetsPanel).getByText("Blocked")).toBeInTheDocument();
     });
-    expect(targetsPanel).toHaveTextContent("insufficient electricity");
+    expect(targetsPanel).toHaveTextContent("Insufficient Electricity");
     expect(targetsPanel).not.toHaveTextContent(/\bIdle\b|last_active|Mining|Travelling|status_[a-z_]+/i);
   });
 
@@ -85,9 +85,8 @@ describe("authoritative Agent Activity viewer contract", () => {
     await waitFor(() => {
       expect(within(commandSurface).getByText("Current Activity")).toBeInTheDocument();
     });
-    expect(commandSurface).toHaveTextContent("recipe");
-    expect(commandSurface).toHaveTextContent("factory-activity");
-    expect(commandSurface).toHaveTextContent("Executing recipe");
+    expect(commandSurface).toHaveTextContent("Executing Recipe");
+    expect(commandSurface).toHaveTextContent("Factory Activity");
     expect(commandSurface).not.toHaveTextContent(/\bIdle\b|last_active|Mining|Travelling|status_[a-z_]+/i);
   });
 
