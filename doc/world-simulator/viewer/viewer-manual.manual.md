@@ -108,6 +108,45 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
   Director capability 或 receipt 因果。后续 QA 必须提供 headed `1440x1000` 与 `390x844`
   截图，并覆盖键盘、IME、CJK、长文本和无横向溢出。
 
+### World-native target handoff（目标契约，不是当前实现声明）
+
+本轮升级借鉴的是稳定的阅读框架，不是 Agentbox 的永久三栏布局。稳定的是世界舞台、
+Objective、selected-agent context、单一 `Next Move`、Receipt 和边缘导航的阅读顺序；
+Inspector、Command、World Feed 与 Diagnostics 仍按需出现，并在关闭后回到触发它的入口。
+Player 不采用永久左/中/右列，也不采用可直接执行世界动作的底部 hotbar。
+
+- **世界解释语义**：World Stage 直接表达已发布的实体身份/状态、活动/路线、关系类型/状态
+  和重大事件。周边 UI 只负责解释、定位和操作；不能由距离、同屏、靠近、数量或 event text
+  猜 owner、resource、trust、relation 或因果。
+- **实体优先**：从选中的 Agent、Facility、Territory 或 Organization 进入 contextual
+  Inspector/Console；Market、War、Governance、Production、Contracts、Relations 是实体能力，
+  不是新的一级 Player 路由。缺少权威 projection 或权限时显示 unavailable/只读恢复路径。
+- **间接控制**：玩家发送 `Ask`、`Suggest`、`Prioritize`、`Negotiate`、`Investigate`、
+  `Propose`、`Warn` 或 `Delegate` 等 guidance/template。必须能区分
+  `Guidance → Intent → accepted/rejected/blocked → Activity → World Action → Receipt`；
+  accepted 不等于 executing，executing 不等于 completed。
+- **因果与环境**：当前 presentation 只保留一个紧凑、可持续复查的 Action Receipt；新 toast
+  不能覆盖或伪造 Receipt，只有新的权威 receipt 才能替换它。World Feed 默认是收起的 ambient
+  chip，loading/empty/replay/gap/unavailable 各自有状态，绝不代替 Receipt。
+- **玩家语言与诊断**：普通界面使用 `Program`、`Protocol`、`Module`、`Contract`。WASM、ABI、
+  hash、deployment tx、runtime id、provider 和 auth material 只在显式 Diagnostics/Director
+  disclosure 中展示；raw object 不能创造一个玩家可用的 capability。
+
+可见值必须带有可追溯 source、logical position、freshness 和 permission 语义：current、Last
+known/stale、reconnecting、unknown、conflict、unavailable、control lost 要有可区分的玩家
+反馈；缺失或无权限时隐藏/脱敏/说明恢复，不用默认值或浏览器时间填空。以上是分阶段目标，
+不表示当前 Web 已完成这些改造或已获得发行放行。
+
+### World-native rollout（目标顺序）
+
+1. **P0 Shell Lite**：收敛现有 fullscreen shell 的阅读顺序、单一 Next Move、轻量 Objective/
+   selected-agent context、Receipt anchor、collapsed Feed 和 edge navigation。
+2. **P1 Context + semantics**：在已有 projection 上组合按需 Inspector/Console，并补充实体/Intent/
+   Activity/关系/事件的 headed、键盘、CJK、空态和 fallback 证据。
+3. **Deferred / contract-gated**：全局资产框、完整 capability hotbar、新资源/ownership/
+   relationship/经济字段和新的取消/批准/重排动作，待产品、玩法、runtime、agent 的规则、
+   source、freshness、permission、idempotency 与 receipt 合同明确后再实现。
+
 ### Terminal Player shell playbook
 This section describes the implemented Player-shell, World Feed, and Director
 security-boundary routes in the current task branch. It is not a release claim:
@@ -123,7 +162,10 @@ blocked until a trusted issuer is available.
    Selecting a target recenters/highlights and opens context; it never executes.
    Quote is reached from contextual Command, not a peer rail item.
 3. Action Receipt is the only player-causality surface. `accepted`/`queued` is
-   waiting, not completion; no receipt is shown explicitly as `No action receipt yet`.
+   waiting, not completion; no receipt is shown explicitly as `No action receipt yet`. The target
+   compact presentation keeps one anchor available for review until a newer authoritative receipt
+   replaces it; transient feedback cannot create a second causal surface. This target is not current
+   release evidence.
 4. World Feed is the implemented `world_feed/v1` ambient projection. Its identity/dedup
    key is `(world_id,reorg_epoch,event_seq)`, source order is ascending, and the current
    runtime emits nullable `receipt_ref=null`; a link is rendered only when runtime
@@ -173,11 +215,13 @@ failure, and tablet widths `641–1240` remain unverified. This is browser evide
 fallback surface, not a release-readiness claim.
 
 ### Target QA evidence checklist
-The implementation owner must supply headed evidence for desktop `1440x1000` and mobile `390x844`
-shell hierarchy, Director allowed/denied/stale/revoked entry (the allowed path is
+The implementation owner must supply headed evidence for desktop `1440x1000`, tablet orientations,
+and mobile `390x844` shell hierarchy, Director allowed/denied/stale/revoked entry (the allowed path is
 currently blocked by the missing trusted issuer), duplicate-ID/anchor
-checks, keyboard/IME/Escape focus return, receipt states, feed loading/empty/replay/
-gap/unavailable/reorg recovery, and English/Chinese long-text overflow. Source/package
+checks, keyboard/IME/Escape focus return, receipt states, world semantic entity/relationship/event
+rendering, entity-first contextual capabilities, Programs/Protocols disclosure, empty-world and
+missing/stale/permission-loss states, feed loading/empty/replay/gap/unavailable/reorg recovery, and
+English/Chinese long-text overflow. Source/package
 tests now cover the World Feed and fail-closed Director boundary; this manual does not
 turn those tests into issuer-backed production access or a release claim.
 
