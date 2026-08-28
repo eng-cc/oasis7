@@ -46,7 +46,7 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - Recipe、Product 与 Factory 模块定义工业规则；运行时负责授权校验、状态落地、事件、回放与拒绝语义。
 - `MaterialLedgerId` 可表示 world、agent、site 与 factory 账本。旧快照的材料兼容与 WASM 请求兼容必须由 runtime 处理，不能由产品或 Viewer 层伪造。
 - `MaterialStack.kind` 是模块/domain 拥有的字符串材料标签，可以表达 `compound`、`hardware` 等工业材料；它不能扩展、伪装或自动映射为 simulator 内建 `ResourceKind`。内建资源仅有 `Electricity | Data`，模块资产的 manifest、hash、interface、capability、limits、owner 与安装/调用拒绝继续服从 WASM ABI/runtime authority。
-- `TransferMaterial` 的即时或在途结果必须保持守恒、确定性和可审计；其具体字段、事件顺序和 ABI 以 runtime/ABI 真值为准。其中空 route binding 的 legacy direct-transfer 与显式 path/transit 的当前边界以 [`world-runtime` status matrix](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 为准，不能把 `ActionId/caused_by` trace 写成已经落地的 canonical root identity。
+- `TransferMaterial` 的即时或在途结果必须保持守恒、确定性和可审计；其具体字段、事件顺序和 ABI 以 runtime/ABI 真值为准。其中空 route/path binding 且 `auto_reroute=false` 的 zero-distance 请求保留 legacy direct-transfer compatibility；同一空 binding 下 positive-distance remains existing unbound transit。显式 route/path binding 或 `auto_reroute=true` 请求 graph mode，只有 path validation/selection 成功才成为 path-bound transit（即使有效路径距离为零）；invalid explicit binding 或无可用 graph selection 必须 atomic reject；unavailable explicit binding 只有在 `auto_reroute` 选出另一条有效 graph path 时才能替换，且不得 fallback 到 direct。该 runtime compatibility lane 不替代 gameplay authority 对玩家层 co-location/eligibility target 的定义。以上当前边界以 [`world-runtime` status matrix](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 为准，不能把 `ActionId/caused_by` trace 写成已经落地的 canonical root identity。
 
 ### 多阶段批次、预留与背压合同（PRD-WORLD_SIMULATOR-047）
 
