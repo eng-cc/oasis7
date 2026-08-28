@@ -152,7 +152,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
     def test_plan_gap_evidence_has_a_structured_fail_closed_step_contract(self) -> None:
         """Execution cannot start from a prose-only or partially mapped plan."""
         dispatch = self.section("5.2 TPM planning and subagent dispatch")
-        normalized = re.sub(r"\\s+", " ", dispatch.lower())
+        normalized = re.sub(r"\s+", " ", dispatch.lower())
         self.assertIn("plan-gap evidence", normalized)
         self.assertRegex(
             normalized,
@@ -186,7 +186,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         """The operational entrypoint must consume, not weaken, the canonical schema."""
         dispatch = self.section("5.2 TPM planning and subagent dispatch")
         skill = EXECUTING_PROJECT_TASKS.read_text(encoding="utf-8")
-        skill_normalized = re.sub(r"\\s+", " ", skill.lower())
+        skill_normalized = re.sub(r"\s+", " ", skill.lower())
         self.assertIn("plan-gap evidence", skill_normalized)
         self.assertIn("github-backed task truth", skill_normalized)
         for field in (
