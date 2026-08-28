@@ -51,6 +51,14 @@ CANONICAL_RESET_SURFACES = [
 ]
 
 
+FROZEN_HEAD_OID = subprocess.run(
+    ["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD^{commit}"],
+    check=True,
+    text=True,
+    capture_output=True,
+).stdout.strip()
+
+
 class ValidatorPairRebuildContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="oasis7-pair-rebuild-contract-")
@@ -391,6 +399,25 @@ print(json.dumps({
         adapter.chmod(0o755)
         return adapter
 
+    def _write_failure_host_adapter(self, phase_log: Path, *failed_phases: str) -> Path:
+        """Wrap the valid fixture adapter with deterministic phase failures."""
+        adapter = self._write_host_adapter()
+        source = adapter.read_text(encoding="utf-8")
+        phase_log_literal = repr(str(phase_log))
+        failed_phases_literal = repr(set(failed_phases))
+        source = source.replace(
+            "phase = sys.argv[sys.argv.index('--phase') + 1]\n",
+            "phase = sys.argv[sys.argv.index('--phase') + 1]\n"
+            f"with Path({phase_log_literal}).open('a', encoding='utf-8') as handle:\n"
+            "    handle.write(phase + '\\n')\n"
+            f"if phase in {failed_phases_literal}:\n"
+            "    raise SystemExit(42)\n",
+            1,
+        )
+        adapter.write_text(source, encoding="utf-8")
+        adapter.chmod(0o755)
+        return adapter
+
     def _write_quiescence_fixture(self) -> None:
         fixture = self._write_human_direct_ssh_fixture(
             transaction_id=self.quiescence_id,
@@ -633,7 +660,7 @@ print(json.dumps({{
             "transaction_id": authority_payload["transaction_id"],
             "nonce": authority_payload["nonce"],
             "inventory_sha256": request["inventory_sha256"],
-            "head_oid": "9c695d1f867fd8bdccd057a318bb88990ba5723e",
+            "head_oid": FROZEN_HEAD_OID,
             "issued_at": issued_at_text,
             "expires_at": expires_at_text,
         }
@@ -785,7 +812,7 @@ raise SystemExit(98)
                     "user": {"login": "human-operator-fixture"},
                     "body": body,
                     "created_at": issued_at_text,
-                    "updated_at": None,
+                    "updated_at": issued_at_text,
                     "deleted": False,
                     "revoked": False,
                 },
@@ -926,7 +953,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             "transaction_id": request["transaction_id"],
             "nonce": request["nonce"],
             "inventory_sha256": inventory_sha256,
-            "head_oid": "9c695d1f867fd8bdccd057a318bb88990ba5723e",
+            "head_oid": FROZEN_HEAD_OID,
             "issued_at": request["issued_at"],
             "expires_at": request["expires_at"],
         }
@@ -936,7 +963,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             "user": {"login": "release-authority-fixture"},
             "body": body,
             "created_at": request["issued_at"],
-            "updated_at": None,
+            "updated_at": request["issued_at"],
             "deleted": False,
             "revoked": False,
         }
@@ -1297,6 +1324,28 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
                 )
                 self.assertFalse(Path(fixture["receipt"]).exists())
 
+    def test_human_direct_ssh_rejects_authority_head_not_matching_executor_frozen_head(self) -> None:
+        fixture = self._write_live_github_fixture()
+
+        def mutate_response(response: dict[str, Any]) -> None:
+            body = json.loads(response["body"])
+            body["head_oid"] = "e" * 40
+            response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+        response = self._rewrite_github_response(fixture, mutate_response)
+        authority_head = json.loads(response["body"])["head_oid"]
+        authority_body_sha256 = hashlib.sha256(response["body"].encode()).hexdigest()
+
+        def bind_rewritten_authority(request: dict[str, Any]) -> None:
+            request["github_live"]["head_oid"] = authority_head
+            request["github_live"]["body_sha256"] = authority_body_sha256
+
+        self._rewrite_request(fixture, bind_rewritten_authority)
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(frozen|executor|head|commit|binding)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
+
     def test_human_direct_ssh_fails_closed_for_edited_deleted_revoked_or_unavailable_github_authority(self) -> None:
         for state in ("edited", "deleted", "revoked", "api_unavailable"):
             with self.subTest(state=state):
@@ -1307,7 +1356,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
                     def mutate(response: dict[str, Any], state=state) -> None:
                         response[state] = True
                         if state == "edited":
-                            response["updated_at"] = response["created_at"]
+                            response["updated_at"] = "2000-01-01T00:00:01Z"
 
                     self._rewrite_github_response(fixture, mutate)
                     result = self._run_live_human_direct_ssh(fixture)
@@ -2551,6 +2600,27 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(receipt["host_receipt"]["evidence_bindings"], receipt["adapter_binding"]["evidence_bindings"])
         self.assertTrue(receipt["host_receipt"]["captured_at"])
 
+    def test_apply_transaction_only_invocation_recovers_direct_observation_routing(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(self._write_host_adapter()),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["phase"], "applied")
+
     def test_apply_requires_host_gate_receipt(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
@@ -2619,6 +2689,43 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["phase"], "rolled_back")
         self.assertEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / transaction_id / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
+
+    def test_apply_failure_freshly_quiesces_before_automatic_rollback(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "automatic-rollback-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "apply")
+        result = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["backup", "apply", "quiesce", "rollback"])
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertIn("rollback_quiesce_receipt", transaction)
+        self.assertEqual(transaction["rollback"]["status"], "verified")
+
+    def test_apply_failure_does_not_restore_when_automatic_quiescence_fails(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "automatic-rollback-quiescence-failure-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "apply", "quiesce")
+        result = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["backup", "apply", "quiesce"])
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(transaction["phase"], "rollback_failed")
+        self.assertEqual(transaction["rollback"]["status"], "failed")
+        current_runtime = self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"
+        backup_runtime = Path(transaction["backup"]["storage-205"]["snapshot"]) / "current" / "bin" / "oasis7_chain_runtime"
+        self.assertNotEqual(sha256(current_runtime), sha256(backup_runtime))
 
     def test_rollback_rejects_tampered_backup_manifest(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)

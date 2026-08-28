@@ -162,6 +162,24 @@ def repository_executable_identity() -> dict[str, str]:
     }
 
 
+def repository_head_oid() -> str:
+    """Resolve the checkout head which live authority must authorize."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), "rev-parse", "--verify", "HEAD^{commit}"],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"capability_blocked: cannot resolve executor frozen head: {error.__class__.__name__}")
+    head_oid = result.stdout.strip().lower()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", head_oid):
+        fail("capability_blocked: executor frozen head is unavailable")
+    return head_oid
+
+
 def validate_repository_executable_identity(value: Any, label: str) -> dict[str, str]:
     expected = repository_executable_identity()
     if value != expected:
@@ -1319,6 +1337,8 @@ def _read_live_github_authority(
                 fail(f"human_direct_ssh live GitHub inventory {role}/ports override is forbidden")
     if not isinstance(expected.get("head_oid"), str) or not re.fullmatch(r"[0-9a-f]{40}", expected["head_oid"].lower()):
         fail("human_direct_ssh live GitHub head binding is malformed")
+    if expected["head_oid"].lower() != repository_head_oid():
+        fail("human_direct_ssh live GitHub head binding does not match the executor frozen head")
 
     # ``--slurp`` gives a single JSON value for paginated responses.  The
     # fake in the hermetic contract intentionally emits one object, which is
@@ -1372,10 +1392,14 @@ def _read_live_github_authority(
     if len(matches) != 1:
         fail("human_direct_ssh live GitHub authority comment was not uniquely read back")
     comment = matches[0]
+    created_at = comment.get("created_at")
+    updated_at = comment.get("updated_at")
     if (
         ("deleted" in comment and comment.get("deleted") is not False)
         or ("revoked" in comment and comment.get("revoked") is not False)
-        or comment.get("updated_at") is not None
+        or not isinstance(created_at, str)
+        or not isinstance(updated_at, str)
+        or updated_at != created_at
     ):
         fail("human_direct_ssh live GitHub authority comment is edited, deleted, or revoked")
     user = comment.get("user")
@@ -3460,6 +3484,7 @@ def apply_transaction(
         fail("apply requires live human_direct_ssh re-observation; persisted proof is audit-only")
     request_value = getattr(direct_args, "human_direct_ssh_request", None) if direct_args is not None else None
     known_hosts_value = getattr(direct_args, "known_hosts", None) if direct_args is not None else None
+    transaction: dict[str, Any] = dict(plan)
     # The wrapper's apply form historically receives only the transaction.
     # Recover the executor-bound routing paths recorded by the plan, while
     # still requiring a new live authority and direct SSH observation below.
@@ -3496,7 +3521,7 @@ def apply_transaction(
         helper.validate_receipt(Path(package["provenance"]), Path(package["directory"]), Path(plan["provenance"]["trusted_root"]["path"]))
     except SystemExit as error:
         fail(str(error).removeprefix("error: validator-pair provenance: "))
-    transaction: dict[str, Any] = dict(plan)
+    transaction = dict(plan)
     transaction["schema_version"] = SCHEMA
     transaction["transaction_id"] = f"pair-rebuild-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:10]}"
     transaction["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -3553,15 +3578,26 @@ def apply_transaction(
         write_json(path, transaction)
         rollback_errors: list[str] = []
         try:
-            transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+            # A gate failure can occur after one or both local roots have
+            # been mutated.  Re-establish the stopped-state boundary before
+            # asking the host adapter to roll back or restoring any snapshot.
+            transaction["rollback_quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+        except BaseException as rollback_quiesce_error:
+            rollback_errors.append(f"rollback quiescence: {rollback_quiesce_error}")
+        try:
+            if not rollback_errors:
+                transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
         except BaseException as rollback_callback_error:
             rollback_errors.append(f"host-adapter: {rollback_callback_error}")
-        for role in reversed(MUTATION_ORDER):
-            if role in backups:
-                try:
-                    restore_node(backups[role], transaction.get("transaction_id"))
-                except BaseException as rollback_error:
-                    rollback_errors.append(f"{role}: {rollback_error}")
+        if not rollback_errors:
+            for role in reversed(MUTATION_ORDER):
+                if role in backups:
+                    try:
+                        restore_node(backups[role], transaction.get("transaction_id"))
+                    except BaseException as rollback_error:
+                        rollback_errors.append(f"{role}: {rollback_error}")
         transaction["phase"] = "rollback_failed" if rollback_errors else "rolled_back"
         transaction["rollback"] = {
             "strategy": "same-filesystem-full-snapshot",

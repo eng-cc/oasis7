@@ -447,6 +447,8 @@ scripts/p2p-public-testnet-rebuild-validators.sh plan \
   --sequencer-rebuild-proof-verification <signed-204-rebuild-proof-verification.json> \
   --sequencer-proof-verifier <verified-runtime>/oasis7_chain_runtime \
   --consumer-impact-record <record.json> \
+  --human-direct-ssh-request <executor-bound-human-stop-request.json> \
+  --known-hosts <pinned-known-hosts> \
   --quiescence-transaction-id <executor-bound-observation-id> \
   --capacity-json <per-node-capacity.json> \
   --node storage-205=local:<stopped-node-root-205> \
@@ -455,6 +457,8 @@ scripts/p2p-public-testnet-rebuild-validators.sh plan \
   --out-dir <transaction-dir>
 scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --transaction <transaction-dir>/transaction.json \
+  --human-direct-ssh-request <same-executor-bound-human-stop-request.json> \
+  --known-hosts <same-pinned-known-hosts> \
   --host-adapter <governed-host-adapter>
 ```
 `human_direct_ssh` 是本流程唯一的人工作业停机后观察入口：独立的人类 stop 完成后，executor 必须从 live GitHub task/user authority 或 authenticated control-plane approval 重新授权，authority 绑定 repository、issue/task UID、actor、动作、两角色目标、nonce 与 expiry；调用者 stop JSON、历史 receipt、任意 adapter JSON 均不是 authority。
@@ -469,7 +473,7 @@ scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
   --out-dir <audit-dir> \
   [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
 ```
-`human_direct_ssh` 不把 request envelope 当 authority，不接受 arbitrary adapter JSON 或 caller assertion；它必须在同一调用中 live-read GitHub authority，以固定 inventory/pin 观察两角色 `active=false`、`running=false` 与 bounded health/listener。`impact=none` 仍须 direct read-only observation；`validators_already_stopped`、status snapshot、旧 receipt、遗漏/重复/伪造/stale/binding-mismatch 均不得进入 destructive phase。
+`human_direct_ssh` 不把 request envelope 当 authority，不接受 arbitrary adapter JSON 或 caller assertion；它必须在同一调用中 live-read GitHub authority，以固定 inventory/pin 观察两角色 `active=false`、`running=false` 与 bounded health/listener。供 `plan`/`apply` 使用的 executor-bound request 必须同时绑定同一个 `--consumer-impact-record` 文件的路径与 SHA-256（`impact_record_path` 与 `impact_record_sha256`）；executor 返回的 direct receipt digest 必须与该 CLI 文件逐字节一致，不能由 `validators_already_stopped`、status snapshot 或 persisted proof 推断。`impact=none` 仍须 direct read-only observation；旧 receipt、遗漏/重复/伪造/stale/binding-mismatch 均不得进入 destructive phase。
 `apply` 在任何 mutation 前必须在同一 executor 进程内重新读取 live authority 并 re-observe；不能复观测时 fail closed。跨进程时新进程必须重新取得 authority、读取固定 inventory/pins、建立 strict SSH、重新观察；持久化 proof/receipt 只供审计、故障追溯和 rollback 关联，永远不作授权。
 The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`); runtime
 transaction IDs and timestamps are assigned only after the plan is durably
