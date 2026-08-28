@@ -295,7 +295,14 @@ transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).rea
 phase = sys.argv[sys.argv.index('--phase') + 1]
 nodes = {}
 for role in transaction['mutation_order']:
-    nodes[role] = {'active': phase == 'apply', 'running': phase == 'apply'}
+    nodes[role] = {
+        'role': role,
+        'root': transaction['nodes'][role]['root'],
+        'active': phase == 'apply',
+        'running': phase == 'apply',
+        'service_state': 'running' if phase == 'apply' else 'stopped',
+        'independently_observed': True,
+    }
     if phase == 'quiesce':
         nodes[role].update({'active': False, 'running': False})
     elif phase == 'backup':
@@ -317,13 +324,18 @@ evidence = binding['evidence_bindings']
 print(json.dumps({
     'schema_version': 'oasis7.validator_pair_rebuild_host_receipt.v2',
     'phase': phase,
+    'operation': 'quiesce-only' if phase == 'quiesce' else None,
+    'quiescence_id': transaction.get('quiescence_request', {}).get('quiescence_id') if phase == 'quiesce' else None,
     'plan_digest': transaction['plan_digest'],
     'transaction_id': transaction['transaction_id'],
+    'request_digest': transaction.get('quiescence_request', {}).get('request_digest') if phase == 'quiesce' else None,
+    'impact_record_sha256': transaction.get('quiescence_request', {}).get('impact_record_sha256') if phase == 'quiesce' else None,
     'captured_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     'mutation_order': transaction['mutation_order'],
     'startup_order': transaction['startup_order'],
     'nodes': nodes,
     'observer_mutation': False,
+    'repository_executable': transaction['adapter_binding']['repository_executable'],
     'sequencer_proof_url': transaction['proof']['sequencer_proof_url'],
     'evidence_bindings': evidence,
     'identity_receipts': evidence['identity_receipts'],
@@ -336,84 +348,15 @@ print(json.dumps({
         return adapter
 
     def _write_quiescence_fixture(self) -> None:
-        impact = json.loads(self.impact.read_text(encoding="utf-8"))
-        impact_sha256 = sha256(self.impact)
-        nodes = {
-            role: {
-                "role": role,
-                "transport": "local",
-                "root": str(self.nodes[role].resolve()),
-            }
-            for role in ("storage-205", "sequencer-204")
-        }
-        request = {
-            "schema_version": "oasis7.validator_pair_rebuild_quiescence_request.v1",
-            "phase": "quiesce",
-            "quiescence_id": self.quiescence_id,
-            "transaction_id": self.quiescence_id,
-            "impact_record_sha256": impact_sha256,
-            "consumer_impact": {
-                "decision": "proceed",
-                **impact,
-            },
-            "mutation_order": ["storage-205", "sequencer-204"],
-            "startup_order": ["sequencer-204", "storage-205"],
-            "nodes": nodes,
-        }
-        request_digest = canonical_digest(request)
-        source_nodes = {
-            role: {
-                **nodes[role],
-                "active": False,
-                "running": False,
-                "service_state": "stopped",
-                "independently_observed": True,
-            }
-            for role in nodes
-        }
-        source = {
-            "schema_version": "oasis7.validator_pair_rebuild_quiescence_receipt.v1",
-            "phase": "quiesce",
-            "operation": "quiesce-only",
-            "quiescence_id": self.quiescence_id,
-            "request_digest": request_digest,
-            "impact_record_sha256": impact_sha256,
-            "captured_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
-            "mutation_order": request["mutation_order"],
-            "startup_order": request["startup_order"],
-            "nodes": source_nodes,
-        }
-        source_path = self.root / "quiescence-adapter-receipt.json"
-        source_path.write_text(json.dumps(source, indent=2) + "\n", encoding="utf-8")
-        proof = {
-            "schema_version": "oasis7.validator_pair_rebuild_quiescence_proof.v1",
-            "phase": "quiesce",
-            "quiescence_id": self.quiescence_id,
-            "transaction_id": self.quiescence_id,
-            "impact": impact["impact"],
-            "impact_record_sha256": impact_sha256,
-            "request_digest": request_digest,
-            "source_receipt_path": str(source_path),
-            "source_receipt_sha256": sha256(source_path),
-            "captured_at": source["captured_at"],
-            "mutation_order": request["mutation_order"],
-            "startup_order": request["startup_order"],
-            "roles": [
-                {
-                    "role": role,
-                    "root": source_nodes[role]["root"],
-                    "active": False,
-                    "running": False,
-                    "service_state": "stopped",
-                    "independently_observed": True,
-                    "evidence_sha256": canonical_digest(source_nodes[role]),
-                }
-                for role in request["mutation_order"]
-            ],
-            "nodes": source_nodes,
-            "independent_producer": "governed-host-adapter",
-        }
-        self.quiescence_proof.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+        fixture = self._write_human_direct_ssh_fixture(
+            transaction_id=self.quiescence_id,
+            impact_path=self.impact,
+        )
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.human_direct_fixture = fixture
+        self.quiescence_proof = Path(fixture["out"]) / "quiescence-proof.json"
+        self.assertTrue(self.quiescence_proof.exists(), result.stdout)
 
     def _write_quiescence_adapter(self, *, active: bool = False) -> Path:
         adapter = self.root / "quiescence-host-adapter.py"
@@ -447,6 +390,7 @@ print(json.dumps({{
     'mutation_order': transaction['mutation_order'],
     'startup_order': transaction['startup_order'],
     'nodes': nodes,
+    'observer_mutation': False,
 }}))
 """,
             encoding="utf-8",
@@ -486,6 +430,416 @@ print(json.dumps({{
             "--out-dir",
             str(self.out),
         ]
+
+    def _write_human_direct_ssh_fixture(
+        self,
+        *,
+        transaction_id: str = "human-direct-ssh-tx-3481",
+        impact_path: Path | None = None,
+        state: str = "quiet",
+        stale: bool = False,
+        expired: bool = False,
+        replayed: bool = False,
+        mismatched: str | None = None,
+        full_status: bool = False,
+    ) -> dict[str, Path | str]:
+        """Build a completely local human_direct_ssh fixture.
+
+        The direct-SSH protocol is deliberately exercised through fake
+        executables. A test which accidentally reaches a real ssh, sshpass,
+        curl, or systemctl binary therefore fails closed instead of touching
+        a developer or testnet host.
+        """
+        fixture = Path(tempfile.mkdtemp(prefix="human-direct-ssh-", dir=str(self.root)))
+        bin_dir = fixture / "bin"
+        bin_dir.mkdir(parents=True)
+        known_hosts = fixture / "known_hosts"
+        known_hosts.write_text(
+            "sequencer.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIsequencer-pin\n"
+            "storage.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIstorage-pin\n",
+            encoding="utf-8",
+        )
+        authority = fixture / "stop-authority.json"
+        nonce = "human-direct-ssh-nonce-3481"
+        issued_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        issued_at_text = issued_at.isoformat().replace("+00:00", "Z")
+        expires_at_text = (issued_at + dt.timedelta(minutes=15)).isoformat().replace("+00:00", "Z")
+        authority_payload = {
+            "schema_version": "oasis7.human_stop_authority.v1",
+            "task_uid": "task_0aa7659e0fd74e1a8e4bb27d7dc2416a",
+            "transaction_id": transaction_id,
+            "nonce": nonce,
+            "authorized": True,
+            "stopped_at": issued_at_text,
+            "actor": "human-operator-fixture",
+        }
+        authority.write_text(json.dumps(authority_payload, sort_keys=True) + "\n", encoding="utf-8")
+        request = {
+            "schema_version": "oasis7.human_direct_ssh_request.v1",
+            "mode": "human_direct_ssh",
+            "task_uid": authority_payload["task_uid"],
+            "transaction_id": transaction_id,
+            "request_digest": "",
+            "nonce": nonce,
+            "issued_at": issued_at_text,
+            "expires_at": expires_at_text,
+            "stop_authority_path": str(authority),
+            "stop_authority_sha256": sha256(authority),
+            "known_hosts_path": str(known_hosts),
+            "observer_mutation": False,
+            "quiescence_id": transaction_id,
+            "impact_record_path": str(impact_path) if impact_path is not None else None,
+            "impact_record_sha256": sha256(impact_path) if impact_path is not None else None,
+            "hosts": {
+                "sequencer": {
+                    "role": "sequencer",
+                    "host": "root@sequencer.example",
+                    "root": "/srv/oasis7/triad/sequencer",
+                    "service": "oasis7-triad-sequencer.service",
+                    "host_key_fingerprint": "SHA256:sequencer-fixture-pin",
+                },
+                "storage": {
+                    "role": "storage",
+                    "host": "root@storage.example",
+                    "root": "/srv/oasis7/triad/storage",
+                    "service": "oasis7-triad-storage.service",
+                    "host_key_fingerprint": "SHA256:storage-fixture-pin",
+                },
+            },
+            "readback": {
+                "process_command": "ps -eo pid=,args=",
+                "listener_command": "ss -ltn",
+                "service_readback_command": "service-readback --read-only",
+                "quiet_window_seconds": 2,
+            },
+        }
+        if stale:
+            request["issued_at"] = "2000-01-01T00:00:00Z"
+            request["expires_at"] = "2000-01-01T00:01:00Z"
+        if expired:
+            request["expires_at"] = "2000-01-01T00:01:00Z"
+        if replayed:
+            request["nonce"] = "human-direct-ssh-replayed-nonce"
+            request["replay_of_transaction_id"] = "human-direct-ssh-tx-3479"
+        if mismatched == "transaction":
+            request["transaction_id"] = "human-direct-ssh-tx-other"
+        elif mismatched == "request":
+            request["request_digest"] = "f" * 64
+        elif mismatched == "fingerprint":
+            request["hosts"]["sequencer"]["host_key_fingerprint"] = "SHA256:not-the-pinned-key"
+        elif mismatched == "role":
+            request["hosts"]["sequencer"]["role"] = "root"
+        elif mismatched == "root":
+            request["hosts"]["sequencer"]["root"] = "/tmp/caller-owned-root"
+        elif mismatched == "service":
+            request["hosts"]["sequencer"]["service"] = "caller-owned.service"
+        elif mismatched == "command":
+            request["readback"]["process_command"] = "echo caller-owned-command"
+        elif mismatched == "observer":
+            request["observer_mutation"] = True
+        if full_status:
+            request["full_status_url"] = "http://sequencer.example/v1/chain/status"
+            request["full_status_http_status"] = 204
+        if not request["request_digest"]:
+            request["request_digest"] = hashlib.sha256(
+                json.dumps(
+                    {key: value for key, value in request.items() if key != "request_digest"},
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+        request_path = fixture / "request.json"
+        request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        out_dir = fixture / "out"
+        out_dir.mkdir()
+        ssh_args_log = fixture / "ssh-argv.jsonl"
+        ssh_command_log = fixture / "ssh-command.log"
+        ssh_seam_log = fixture / "ssh-seam.jsonl"
+        sshpass_log = fixture / "sshpass-argv.jsonl"
+        systemctl_log = fixture / "systemctl.log"
+        service_log = fixture / "service-readback.log"
+        receipt_path = out_dir / "receipt.json"
+        fake_ssh = bin_dir / "ssh"
+        fake_ssh.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+secret = os.environ.get("HUMAN_DIRECT_SSH_SECRET", "")
+argv_log = Path(os.environ["HUMAN_DIRECT_SSH_ARGV_LOG"])
+command_log = Path(os.environ["HUMAN_DIRECT_SSH_COMMAND_LOG"])
+seam_log = Path(os.environ["HUMAN_DIRECT_SSH_SEAM_LOG"])
+with argv_log.open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(args, sort_keys=True) + "\\n")
+command = args[-1] if args else ""
+with command_log.open("a", encoding="utf-8") as handle:
+    handle.write(command + "\\n")
+with seam_log.open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps({
+        "environment_binding_present": bool(secret),
+        "temporary_fd_present": bool(os.environ.get("HUMAN_DIRECT_SSH_SECRET_FD")),
+    }) + "\\n")
+if secret and any(secret in value for value in args):
+    print("fixture rejected secret in ssh argv", file=sys.stderr)
+    raise SystemExit(97)
+state = os.environ.get("HUMAN_DIRECT_SSH_FAKE_STATE", "quiet")
+count = len(command_log.read_text(encoding="utf-8").splitlines())
+service_active = state == "active"
+process_active = state in ("active", "active-process")
+listener_active = state in ("active", "active-listener")
+if "ps -eo" in command or "pgrep" in command:
+    print("1234 oasis7_chain_runtime --active" if process_active else (f"quiet-observation-{count}" if state == "flapping" else ""))
+elif "ss -ltn" in command or "lsof" in command:
+    print("LISTEN 0 128 0.0.0.0:6631" if listener_active else "")
+else:
+    print(json.dumps({
+        "schema_version": "oasis7.human_direct_ssh_readback.v1",
+        "active": service_active,
+        "running": service_active,
+        "listeners": ["6631"] if service_active else [],
+        "service_state": "active" if service_active else "stopped",
+        "independently_observed": True,
+    }, sort_keys=True))
+""",
+            encoding="utf-8",
+        )
+        fake_ssh.chmod(0o755)
+        fake_sshpass = bin_dir / "sshpass"
+        fake_sshpass.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+with Path(os.environ["HUMAN_DIRECT_SSH_SSHPASS_LOG"]).open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps({"argv": sys.argv[1:], "secret_env": bool(os.environ.get("SSHPASS"))}) + "\\n")
+if len(sys.argv) < 2 or sys.argv[1] != "-e":
+    raise SystemExit(96)
+os.execv(shutil.which("ssh") or "ssh", sys.argv[2:])
+""",
+            encoding="utf-8",
+        )
+        fake_sshpass.chmod(0o755)
+        fake_systemctl = bin_dir / "systemctl"
+        fake_systemctl.write_text(
+            """#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+with Path(os.environ["HUMAN_DIRECT_SSH_SYSTEMCTL_LOG"]).open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(sys.argv[1:]) + "\\n")
+raise SystemExit(97)
+""",
+            encoding="utf-8",
+        )
+        fake_systemctl.chmod(0o755)
+        fake_service = bin_dir / "service-readback"
+        fake_service.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+
+Path(os.environ["HUMAN_DIRECT_SSH_SERVICE_LOG"]).open("a", encoding="utf-8").close()
+print(json.dumps({"read_only": True, "state": os.environ.get("HUMAN_DIRECT_SSH_FAKE_STATE", "quiet")}))
+""",
+            encoding="utf-8",
+        )
+        fake_service.chmod(0o755)
+        fake_curl = bin_dir / "curl"
+        fake_curl.write_text(
+            """#!/usr/bin/env python3
+import sys
+print("curl is forbidden in human_direct_ssh fixture", file=sys.stderr)
+raise SystemExit(98)
+""",
+            encoding="utf-8",
+        )
+        fake_curl.chmod(0o755)
+        return {
+            "fixture": fixture,
+            "bin": bin_dir,
+            "known_hosts": known_hosts,
+            "request": request_path,
+            "out": out_dir,
+            "ssh_args": ssh_args_log,
+            "ssh_commands": ssh_command_log,
+            "ssh_seam": ssh_seam_log,
+            "sshpass": sshpass_log,
+            "systemctl": systemctl_log,
+            "service": service_log,
+            "receipt": receipt_path,
+            "secret": "human-direct-ssh-fixture-secret-3481",
+            "state": state,
+        }
+
+    def _human_direct_ssh_env(self, fixture: dict[str, Path | str]) -> dict[str, str]:
+        env = os.environ.copy()
+        env["PATH"] = f"{fixture['bin']}:{env.get('PATH', '')}"
+        env["HUMAN_DIRECT_SSH_ARGV_LOG"] = str(fixture["ssh_args"])
+        env["HUMAN_DIRECT_SSH_COMMAND_LOG"] = str(fixture["ssh_commands"])
+        env["HUMAN_DIRECT_SSH_SEAM_LOG"] = str(fixture["ssh_seam"])
+        env["HUMAN_DIRECT_SSH_SSHPASS_LOG"] = str(fixture["sshpass"])
+        env["HUMAN_DIRECT_SSH_SYSTEMCTL_LOG"] = str(fixture["systemctl"])
+        env["HUMAN_DIRECT_SSH_SERVICE_LOG"] = str(fixture["service"])
+        env["HUMAN_DIRECT_SSH_FAKE_STATE"] = str(fixture["state"])
+        env["HUMAN_DIRECT_SSH_SECRET"] = str(fixture["secret"])
+        return env
+
+    def _human_direct_ssh_args(self, fixture: dict[str, Path | str], *extra: str) -> list[str]:
+        return [
+            str(WRAPPER),
+            "human_direct_ssh",
+            "--request",
+            str(fixture["request"]),
+            "--known-hosts",
+            str(fixture["known_hosts"]),
+            "--out-dir",
+            str(fixture["out"]),
+            "--credential-env",
+            "HUMAN_DIRECT_SSH_SECRET",
+            *extra,
+        ]
+
+    def _run_human_direct_ssh(self, fixture: dict[str, Path | str], *extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            self._human_direct_ssh_args(fixture, *extra),
+            text=True,
+            capture_output=True,
+            env=self._human_direct_ssh_env(fixture),
+        )
+
+    def test_human_direct_ssh_accepts_only_canonical_read_only_request(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rejects_arbitrary_adapter_input(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        adapter = Path(fixture["fixture"]) / "caller-owned-adapter.py"
+        adapter.write_text("#!/usr/bin/env python3\nraise SystemExit(0)\n", encoding="utf-8")
+        adapter.chmod(0o755)
+        result = self._run_human_direct_ssh(fixture, "--host-adapter", str(adapter))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(adapter.*(forbidden|unsupported|not allowed)|arbitrary.*adapter)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_requires_pinned_host_key_and_strict_checking(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in Path(fixture["ssh_args"]).read_text(encoding="utf-8").splitlines()]
+        self.assertGreaterEqual(len(rows), 2)
+        for args in rows:
+            self.assertIn("StrictHostKeyChecking=yes", args)
+            self.assertIn(f"UserKnownHostsFile={Path(fixture['known_hosts']).resolve()}", args)
+            self.assertNotIn("StrictHostKeyChecking=no", args)
+            self.assertNotIn("UserKnownHostsFile=/dev/null", args)
+
+    def test_human_direct_ssh_binds_fixed_role_root_service_and_command_allowlist(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = Path(fixture["ssh_commands"]).read_text(encoding="utf-8")
+        self.assertIn("ps -eo pid=,args=", commands)
+        self.assertIn("ss -ltn", commands)
+        self.assertIn("sequencer", commands)
+        self.assertIn("storage", commands)
+        self.assertNotRegex(commands, r"(?i)(systemctl|reset|stage|start|stop|rm\s+-rf|mkdir)")
+
+    def test_human_direct_ssh_rejects_non_allowlisted_role_root_service_or_command(self) -> None:
+        for field in ("role", "root", "service", "command"):
+            with self.subTest(field=field):
+                fixture = self._write_human_direct_ssh_fixture(mismatched=field)
+                result = self._run_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, rf"(?i)({field}|allow.?list|fixed|canonical|binding)")
+
+    def test_human_direct_ssh_rejects_observer_mutation_true(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(mismatched="observer")
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(observer|mutation|read.?only|quiescen)")
+
+    def test_human_direct_ssh_keeps_secret_out_of_argv_logs_and_receipt(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        secret = str(fixture["secret"])
+        for path in (fixture["ssh_args"], fixture["ssh_commands"], fixture["sshpass"], fixture["receipt"]):
+            if Path(path).exists():
+                self.assertNotIn(secret, Path(path).read_text(encoding="utf-8"))
+        self.assertNotIn(secret, result.stdout)
+        self.assertNotIn(secret, result.stderr)
+        seam_rows = [json.loads(line) for line in Path(fixture["ssh_seam"]).read_text(encoding="utf-8").splitlines()]
+        self.assertTrue(any(row["environment_binding_present"] or row["temporary_fd_present"] for row in seam_rows))
+        self.assertNotRegex(
+            Path(fixture["ssh_args"]).read_text(encoding="utf-8") if Path(fixture["ssh_args"]).exists() else "",
+            r"(?i)(--password|--secret|secret=|password=)",
+        )
+
+    def test_human_direct_ssh_rejects_stale_or_replayed_transaction_request_fingerprint_nonce(self) -> None:
+        cases = (
+            ({"stale": True}, r"(?i)(stale|expired|timestamp|nonce)"),
+            ({"expired": True}, r"(?i)(expired|expiry|stale|timestamp)"),
+            ({"replayed": True}, r"(?i)(replay|nonce|transaction)"),
+            ({"mismatched": "transaction"}, r"(?i)(transaction|binding)"),
+            ({"mismatched": "request"}, r"(?i)(request.*digest|binding|digest)"),
+            ({"mismatched": "fingerprint"}, r"(?i)(fingerprint|host.?key|binding)"),
+        )
+        for options, pattern in cases:
+            with self.subTest(options=options):
+                fixture = self._write_human_direct_ssh_fixture(**options)
+                result = self._run_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, pattern)
+
+    def test_human_direct_ssh_rejects_active_process_or_listener(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(state="active")
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(active|listener|quiescen|running)")
+
+    def test_human_direct_ssh_rejects_active_process_readback(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(state="active-process")
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(active.*process|running|quiescen)")
+
+    def test_human_direct_ssh_rejects_active_listener_readback(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(state="active-listener")
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(active.*listener|listener|quiescen)")
+
+    def test_human_direct_ssh_requires_stable_quiet_window(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(state="flapping")
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(quiet|quiescen|stable|window|changed)")
+
+    def test_human_direct_ssh_quiesce_never_uses_systemctl_or_mutation_commands(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture()
+        result = self._run_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(fixture["systemctl"]).read_text(encoding="utf-8"), "")
+        commands = Path(fixture["ssh_commands"]).read_text(encoding="utf-8")
+        self.assertNotRegex(commands, r"(?i)(systemctl|reset|stage|start|stop|kill|rm\s+-rf|mkdir|cp\s)")
+
+    def test_human_direct_ssh_forbids_full_204_chain_status(self) -> None:
+        fixture = self._write_human_direct_ssh_fixture(full_status=True)
+        result = self._run_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(204|full.*status|/v1/chain/status|status.*forbidden)")
+
 
     def test_plan_requires_verified_provenance_and_emits_both_orders(self) -> None:
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
@@ -563,33 +917,16 @@ print(json.dumps({{
             }
         )
         self.impact.write_text(json.dumps(impact), encoding="utf-8")
-        quiescence_dir = self.root / "quiescence"
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "quiesce",
-                "--consumer-impact-record",
-                str(self.impact),
-                "--quiescence-id",
-                "active-quiescence-3481",
-                "--node",
-                f"storage-205=local:{self.nodes['storage-205']}",
-                "--node",
-                f"sequencer-204=local:{self.nodes['sequencer-204']}",
-                "--host-adapter",
-                str(self._write_quiescence_adapter()),
-                "--out-dir",
-                str(quiescence_dir),
-            ],
-            text=True,
-            capture_output=True,
+        fixture = self._write_human_direct_ssh_fixture(
+            transaction_id="active-quiescence-3481",
+            impact_path=self.impact,
         )
+        result = self._run_human_direct_ssh(fixture)
         self.assertEqual(result.returncode, 0, result.stderr)
-        proof = json.loads((quiescence_dir / "quiescence-proof.json").read_text(encoding="utf-8"))
-        self.assertEqual(proof["phase"], "quiesce")
-        self.assertEqual({item["role"] for item in proof["roles"]}, {"storage-205", "sequencer-204"})
-        self.assertTrue(all(item["active"] is False and item["running"] is False for item in proof["roles"]))
+        receipt = json.loads(Path(fixture["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["phase"], "quiesce")
+        self.assertEqual(set(receipt["nodes"]), {"storage-205", "sequencer-204"})
+        self.assertTrue(all(item["active"] is False and item["running"] is False for item in receipt["nodes"].values()))
         self.assertFalse((self.nodes["storage-205"] / "backups").exists())
         self.assertFalse((self.nodes["sequencer-204"] / "backups").exists())
 
@@ -611,8 +948,13 @@ print(json.dumps({{
         adapter = self._write_quiescence_adapter()
         source = adapter.read_text(encoding="utf-8")
         source = source.replace(
-            "transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())",
-            "transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())\n# Deliberately report stopped state without observing either host.\n",
+            "    'observer_mutation': False,\n",
+            "    'observer_mutation': False,\n"
+            "    'repository_executable': {\n"
+            "        'schema_version': 'oasis7.validator_pair_rebuild_repository_executable.v1',\n"
+            "        'path': 'caller-authored-adapter.py',\n"
+            "        'sha256': '0' * 64,\n"
+            "    },\n",
         )
         adapter.write_text(source, encoding="utf-8")
         out_dir = self.root / "fabricated-quiescence"
@@ -638,8 +980,77 @@ print(json.dumps({{
             capture_output=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr.lower(), r"trusted|attest|provenance|observe")
+        self.assertRegex(result.stderr.lower(), r"capability_blocked|trusted|attest|provenance|observe")
         self.assertFalse((out_dir / "quiescence-proof.json").exists())
+
+    def test_quiesce_rejects_freshly_finalized_arbitrary_adapter_provenance(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        # This adapter is freshly written and chmod-finalized, so the current
+        # mtime/ctime heuristic accepts it even though no governed producer
+        # attestation or host observation exists.
+        adapter = self._write_quiescence_adapter()
+        out_dir = self.root / "fresh-arbitrary-quiescence"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "fresh-arbitrary-quiescence-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(adapter),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"trusted|attest|provenance|producer|observe")
+        self.assertFalse((out_dir / "quiescence-proof.json").exists())
+
+    def test_plan_rejects_hand_authored_stopped_quiescence_proof_without_producer_attestation(self) -> None:
+        generated_proof = json.loads(self.quiescence_proof.read_text(encoding="utf-8"))
+        generated_source_path = Path(generated_proof["source_receipt_path"])
+        generated_source = json.loads(generated_source_path.read_text(encoding="utf-8"))
+
+        # Re-home the producer output as a caller-authored pair.  Every
+        # currently checked digest, order, role, and stopped-state field is
+        # internally consistent, but no governed producer attestation binds
+        # this hand-authored source/proof pair to an adapter invocation.
+        hand_source_path = self.root / "hand-authored-quiescence-source.json"
+        hand_source_path.write_text(json.dumps(generated_source, indent=2) + "\n", encoding="utf-8")
+        hand_proof = copy.deepcopy(generated_proof)
+        hand_proof["source_receipt_path"] = str(hand_source_path)
+        hand_proof["source_receipt_sha256"] = sha256(hand_source_path)
+        hand_proof_path = self.root / "hand-authored-quiescence-proof.json"
+        hand_proof_path.write_text(json.dumps(hand_proof, indent=2) + "\n", encoding="utf-8")
+
+        args = self._base_args()
+        args[args.index("--stopped-quiescence-proof") + 1] = str(hand_proof_path)
+        result = subprocess.run(args, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"trusted|attest|provenance|producer")
+        self.assertFalse(self.out.exists())
 
     def test_consumer_impact_requires_strict_boolean_and_rfc3339_timestamp(self) -> None:
         spec = importlib.util.spec_from_file_location("pair_rebuild_strict_impact_test", EXECUTOR)
@@ -681,8 +1092,8 @@ print(json.dumps({{
         adapter_source = adapter.read_text(encoding="utf-8")
         adapter.write_text(
             adapter_source.replace(
-                "'startup_order': transaction['startup_order'],\n",
-                "'startup_order': transaction['startup_order'],\n    'observer_mutation': True,\n",
+                "    'observer_mutation': False,\n",
+                "    'observer_mutation': True,\n",
             ),
             encoding="utf-8",
         )
@@ -709,7 +1120,7 @@ print(json.dumps({{
             capture_output=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("observer", result.stderr.lower())
+        self.assertRegex(result.stderr.lower(), r"capability_blocked|observer")
         self.assertFalse((out_dir / "quiescence-proof.json").exists())
 
     def test_plan_rejects_symlink_stopped_quiescence_proof(self) -> None:
@@ -728,7 +1139,26 @@ print(json.dumps({{
         self.quiescence_proof.write_text(json.dumps(proof), encoding="utf-8")
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr.lower(), r"transaction.*identity|transaction_id")
+        self.assertRegex(result.stderr.lower(), r"capability_blocked|transaction.*identity|transaction_id")
+        self.assertFalse(self.out.exists())
+
+    def test_plan_requires_explicit_transaction_id_in_stopped_quiescence_source_receipt(self) -> None:
+        proof = json.loads(self.quiescence_proof.read_text(encoding="utf-8"))
+        source_path = Path(proof["source_receipt_path"])
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+        source.pop("transaction_id", None)
+        hand_source_path = self.root / "missing-source-transaction-id.json"
+        hand_source_path.write_text(json.dumps(source, indent=2) + "\n", encoding="utf-8")
+        proof["source_receipt_path"] = str(hand_source_path)
+        proof["source_receipt_sha256"] = sha256(hand_source_path)
+        hand_proof_path = self.root / "missing-source-transaction-id-proof.json"
+        hand_proof_path.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+
+        args = self._base_args()
+        args[args.index("--stopped-quiescence-proof") + 1] = str(hand_proof_path)
+        result = subprocess.run(args, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"capability_blocked|transaction.*identity|transaction_id")
         self.assertFalse(self.out.exists())
 
     def test_quiesce_requires_explicit_transaction_id_in_adapter_receipt(self) -> None:
@@ -775,36 +1205,20 @@ print(json.dumps({{
             capture_output=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr.lower(), r"transaction.*identity|transaction_id")
+        self.assertRegex(result.stderr.lower(), r"capability_blocked|transaction.*identity|transaction_id")
         self.assertFalse((out_dir / "quiescence-proof.json").exists())
 
     def test_quiesce_supports_none_impact_with_previously_stopped_validators(self) -> None:
-        out_dir = self.root / "none-impact-quiescence"
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "quiesce",
-                "--consumer-impact-record",
-                str(self.impact),
-                "--quiescence-id",
-                "none-impact-quiescence-3481",
-                "--node",
-                f"storage-205=local:{self.nodes['storage-205']}",
-                "--node",
-                f"sequencer-204=local:{self.nodes['sequencer-204']}",
-                "--host-adapter",
-                str(self._write_quiescence_adapter()),
-                "--out-dir",
-                str(out_dir),
-            ],
-            text=True,
-            capture_output=True,
+        fixture = self._write_human_direct_ssh_fixture(
+            transaction_id="none-impact-quiescence-3481",
+            impact_path=self.impact,
         )
+        result = self._run_human_direct_ssh(fixture)
         self.assertEqual(result.returncode, 0, result.stderr)
-        proof = json.loads((out_dir / "quiescence-proof.json").read_text(encoding="utf-8"))
-        self.assertEqual(proof["impact"], "none")
-        self.assertTrue(all(item["active"] is False and item["running"] is False for item in proof["roles"]))
+        receipt = json.loads(Path(fixture["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["phase"], "quiesce")
+        self.assertEqual(set(receipt["nodes"]), {"storage-205", "sequencer-204"})
+        self.assertTrue(all(item["active"] is False and item["running"] is False for item in receipt["nodes"].values()))
         self.assertFalse((self.nodes["storage-205"] / "backups").exists())
         self.assertFalse((self.nodes["sequencer-204"] / "backups").exists())
 
@@ -823,36 +1237,21 @@ print(json.dumps({{
             }
         )
         self.impact.write_text(json.dumps(impact), encoding="utf-8")
-        out_dir = self.root / "wrapper-quiescence"
-        result = subprocess.run(
-            [
-                "bash",
-                str(WRAPPER),
-                "quiesce",
-                "--consumer-impact-record",
-                str(self.impact),
-                "--quiescence-id",
-                "wrapper-quiescence-3481",
-                "--node",
-                f"storage-205=local:{self.nodes['storage-205']}",
-                "--node",
-                f"sequencer-204=local:{self.nodes['sequencer-204']}",
-                "--host-adapter",
-                str(self._write_quiescence_adapter()),
-                "--out-dir",
-                str(out_dir),
-            ],
-            text=True,
-            capture_output=True,
+        fixture = self._write_human_direct_ssh_fixture(
+            transaction_id="wrapper-quiescence-3481",
+            impact_path=self.impact,
         )
+        result = self._run_human_direct_ssh(fixture)
         self.assertEqual(result.returncode, 0, result.stderr)
         envelope = json.loads(result.stdout)
         contract = envelope["receipt_contract"]
-        self.assertEqual(contract["mode"], "quiesce")
+        self.assertEqual(contract["mode"], "human_direct_ssh")
         self.assertTrue(contract["quiescence_only"])
         self.assertFalse(contract["destructive_activity"])
         self.assertEqual(contract["reset"], "forbidden")
         self.assertEqual(contract["stage"], "forbidden")
+        self.assertEqual(contract["authority"], "human_direct_ssh")
+        self.assertEqual(contract["credential_seam"], "temporary-fd-or-environment; secret-free argv/log/receipt")
         self.assertFalse((self.nodes["storage-205"] / "backups").exists())
 
     def test_remote_identity_receipt_binds_metadata_without_local_key_access(self) -> None:
@@ -1154,10 +1553,65 @@ print(json.dumps({{
         plan_path = self.out / f"{phase}-transaction.json"
         plan_path.write_text(json.dumps(plan), encoding="utf-8")
         receipt = module.run_host_adapter(self._write_host_adapter(), plan_path, plan, phase)
+        if phase == "apply":
+            empty_surface = self.root / "empty-post-delete-surface"
+            empty_surface.mkdir(exist_ok=True)
+            empty_inventory = module.inventory_tree(empty_surface)
+            post_delete_absence = {
+                "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
+                "absent": True,
+                "target_set": list(module.RESET_SURFACES),
+                "target_set_sha256": module.reset_surface_digest(),
+                "target_inventory": {
+                    surface: empty_inventory
+                    for surface in module.RESET_SURFACES
+                },
+            }
+            for role in ("storage-205", "sequencer-204"):
+                receipt["nodes"][role]["post_delete_absence"] = copy.deepcopy(post_delete_absence)
         return module, plan, receipt
 
     def _bound_host_receipt(self):
         return self._bound_phase_receipt("apply")
+
+    def test_apply_requires_explicit_observer_mutation_false(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        receipt.pop("observer_mutation", None)
+        with self.assertRaisesRegex(SystemExit, "observer"):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def test_apply_requires_per_node_independent_observation(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        for role in ("storage-205", "sequencer-204"):
+            receipt["nodes"][role].pop("independently_observed", None)
+        with self.assertRaisesRegex(SystemExit, r"independent|observ"):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def test_apply_requires_per_node_service_state(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        for role in ("storage-205", "sequencer-204"):
+            receipt["nodes"][role].pop("service_state", None)
+        with self.assertRaisesRegex(SystemExit, r"service.?state|service"):
+            module.validate_host_receipt(receipt, plan, "apply")
+
+    def test_apply_rejects_non_exact_per_node_role_and_root_bindings(self) -> None:
+        module, plan, receipt = self._bound_host_receipt()
+        cases = {
+            "role substitution": ("role", "sequencer-204"),
+            "root substitution": ("root", str(self.nodes["sequencer-204"])),
+            "missing role": ("role", None),
+            "missing root": ("root", None),
+        }
+        for label, (field, value) in cases.items():
+            with self.subTest(binding=label):
+                candidate = copy.deepcopy(receipt)
+                node = candidate["nodes"]["storage-205"]
+                if value is None:
+                    node.pop(field, None)
+                else:
+                    node[field] = value
+                with self.assertRaisesRegex(SystemExit, r"role|root|binding"):
+                    module.validate_host_receipt(candidate, plan, "apply")
 
     def test_apply_rejects_missing_per_node_post_delete_absence_receipts(self) -> None:
         module, plan, receipt = self._bound_host_receipt()

@@ -21,13 +21,12 @@ Governed transaction contract (current path):
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
-  ./scripts/p2p-public-testnet-rebuild-validators.sh quiesce \
-    --consumer-impact-record <impact-record.json> \
-    --quiescence-id <bounded-quiescence-id> \
-    --node storage-205=local:<validator-root> \
-    --node sequencer-204=local:<validator-root> \
-    --host-adapter <governed-host-adapter> \
-    --out-dir <quiescence-dir>
+  quiesce --host-adapter is retired and fails closed; use the direct mode:
+  ./scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
+    --request <human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
+    --out-dir <quiescence-dir> \
+    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
   ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
@@ -41,12 +40,10 @@ new-epoch provenance digests, reset/stage/start and same-window health gates,
 and a rollback boundary that forbids restoring deleted chain state.
 `--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
 for the subcommands.
-`quiesce` is a bounded stop-evidence phase only: it validates an active, none,
-or unknown consumer-impact record and may invoke only the host adapter's
-quiesce-only callback. A none-impact record must assert that the validators
-are already stopped. It never preflights, resets, stages, starts, or mutates
-observer state. The resulting two-role proof is required by `plan`; the
-`validators_already_stopped` boolean alone is never sufficient.
+`quiesce --host-adapter` is retired and fails closed because caller-supplied
+JSON cannot establish host-state authority. Use `human_direct_ssh` for the
+bounded, read-only stop evidence path. It never preflights, resets, stages,
+starts, or mutates observer state.
 
 Historical SSH audit path (not the current governed transaction contract):
   ./scripts/p2p-public-testnet-rebuild-validators.sh \
@@ -111,7 +108,7 @@ cd "$repo_root"
 # governed pair transactions must go through the local-first executor.  Keep
 # this dispatch in the shell entrypoint so operators and automation have one
 # stable command surface while the executor owns the signed provenance and
-# host-adapter gates.  The envelope below is intentionally derived only from
+# direct-SSH read-only gate.  The envelope below is intentionally derived only from
 # the executor's JSON; plan mode never opens SSH, invokes systemd, or deletes a
 # path.
 receipt_contract_envelope() {
@@ -158,6 +155,17 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+REPOSITORY_EXECUTABLE_RELATIVE = "scripts/p2p-public-testnet-validator-pair-rebuild.py"
+REPOSITORY_EXECUTABLE = Path.cwd() / REPOSITORY_EXECUTABLE_RELATIVE
+if REPOSITORY_EXECUTABLE.is_symlink() or not REPOSITORY_EXECUTABLE.is_file():
+    raise SystemExit("repository-owned validator-pair executor is not a regular file")
+REPOSITORY_EXECUTABLE_IDENTITY = {
+    "schema_version": "oasis7.validator_pair_rebuild_repository_executable.v1",
+    "path": REPOSITORY_EXECUTABLE_RELATIVE,
+    "sha256": sha256_file(REPOSITORY_EXECUTABLE),
+}
 
 
 def entry(path: Path, relative: str) -> dict[str, object]:
@@ -293,7 +301,7 @@ def node_contracts() -> dict[str, object]:
             "observer_equivalents_not_mutated_by_pair_transaction": True,
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
-        if mode not in {"plan", "quiesce"}:
+        if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
             observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
             if not isinstance(observed, dict):
@@ -303,7 +311,7 @@ def node_contracts() -> dict[str, object]:
             post_delete_proof["receipt"] = observed
         backup_receipt = None
         backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
-        if mode not in {"plan", "quiesce"}:
+        if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
             if not isinstance(observed_backup, dict):
                 raise SystemExit(f"missing forensic backup receipt for {role}")
@@ -365,8 +373,8 @@ def node_contracts() -> dict[str, object]:
             },
             "stopped_quiescence_proof": {
                 "required": True,
-                "remote_activity": False if mode in {"plan", "quiesce"} else "adapter_receipt_required",
-                "proof": "independent governed host-adapter quiesce receipt binds role, digest, active=false,running=false before reset",
+                "remote_activity": False if mode in {"plan", "quiesce"} else "direct-ssh-read-only",
+                "proof": "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset",
             },
         }
         if backup_receipt is not None:
@@ -382,6 +390,7 @@ contract.update(
         "mutation_order": value.get("mutation_order", ["storage-205", "sequencer-204"]),
         "startup_order": value.get("startup_order", ["sequencer-204", "storage-205"]),
         "nodes": node_contracts(),
+        "repository_executable": REPOSITORY_EXECUTABLE_IDENTITY,
         "provenance_epoch": value.get("provenance", {}).get("epoch", "plan-bound"),
         "provenance_digests": {
             "package": {
@@ -426,17 +435,23 @@ if mode == "plan":
     contract["remote_activity"] = False
     contract["systemd_activity"] = False
     contract["destructive_activity"] = False
-elif mode == "quiesce":
+elif mode in {"quiesce", "human_direct_ssh"}:
     # Quiescence is an evidence-only transition.  It may not preflight,
     # reset, stage, start, or mutate any observer or validator state.
     contract["deterministic"] = False
-    contract["remote_activity"] = "governed-host-adapter-quiesce-only"
+    contract["remote_activity"] = "executor-owned-direct-ssh-read-only" if mode == "human_direct_ssh" else "governed-host-adapter-quiesce-only"
     contract["systemd_activity"] = False
     contract["destructive_activity"] = False
     contract["quiescence_only"] = True
     contract["preflight"] = "forbidden"
     contract["reset"] = "forbidden"
     contract["stage"] = "forbidden"
+    if mode == "human_direct_ssh":
+        contract["authority"] = "human_direct_ssh"
+        contract["provider"] = value.get("provider")
+        contract["fixed_command_allowlist"] = value.get("commands")
+        contract["host_key_pins"] = value.get("host_fingerprints")
+        contract["credential_seam"] = "temporary-fd-or-environment; secret-free argv/log/receipt"
 else:
     contract["captured_at"] = value.get("host_receipt", {}).get("captured_at")
     contract["deterministic"] = False
@@ -477,7 +492,7 @@ PY
 # historical SSH fixture contract and are intentionally not used for a current
 # destructive rebuild.
 case "${1:-}" in
-  plan|apply|rollback|quiesce)
+  plan|apply|rollback|quiesce|human_direct_ssh)
     receipt_contract_envelope "$@"
     exit $?
     ;;

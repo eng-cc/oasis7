@@ -486,6 +486,10 @@ verified identity receipts and the signed 204 rebuild proof under the governed
 trust-root allowlist; host self-report alone is not evidence. The observer gate
 remains `hold` until provider closure is independently verified. Without that receipt the local executor
 must not mark the transaction `applied`.
+The callback contract is strict across phases: every `quiesce`, `backup`, `apply`, and `rollback` host receipt must explicitly include `observer_mutation=false` (omission fails closed).
+Every callback must carry non-empty `transaction_id` exactly equal to the executor's persisted binding; for quiesce, `transaction_id == quiescence_id`, and the stopped proof/source receipt preserve that identity.
+`--quiescence-transaction-id` binds proof and never substitutes for a callback ID/file/field; `--quiescence-id` is only its CLI alias.
+The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling, and all later receipts must echo it exactly.
 Before each adapter callback the executor persists an
 `oasis7.validator_pair_rebuild_adapter_binding.v1` in the transaction. The
 binding fixes the immutable `plan_digest`, `transaction_id`, callback `phase`,
