@@ -323,7 +323,8 @@ assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validati
 
 codex_config_output="$(plan_for_paths \
   .codex/config.toml \
-  .codex/agents/repository_health_engineer.toml)"
+  .codex/agents/repository_health_engineer.toml \
+  scripts/ci-tests-codex-agent-config-required-contract.test.sh)"
 assert_key_equals "$codex_config_output" scope targeted
 assert_key_equals "$codex_config_output" selected_capabilities codex_agent_config_validation
 assert_key_equals "$codex_config_output" run_codex_agent_config_validation true
@@ -334,6 +335,8 @@ assert_key_equals "$codex_config_output" needs_node false
 assert_reason_contains "$codex_config_output" "codex_agent_config:.codex/config.toml"
 assert_reason_contains "$codex_config_output" \
   "codex_agent_config:.codex/agents/repository_health_engineer.toml"
+assert_reason_contains "$codex_config_output" \
+  "codex_agent_config_validation:scripts/ci-tests-codex-agent-config-required-contract.test.sh"
 assert_reason_absent "$codex_config_output" "unclassified_or_unresolvable:"
 
 canonical_role_cards=(
