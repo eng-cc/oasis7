@@ -48,10 +48,22 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
   给出原因与下一步。
 
 ### Staged implementation boundary
-1. 先统一 Player shell、dock、console、HUD、receipt/feed 的文档契约与稳定锚点。
-2. 再由 `viewer_engineer` 在不新增协议字段的前提下收敛默认可见性和响应式布局。
-3. 最后由 `qa_engineer` 以真实桌面/移动截图、键盘/长文本和空/不可用状态验证；本
-   PRD 不把文档决定当作运行时或发行放行证明。
+本轮把目标命名为 **World-native Player**，是当前 fullscreen world-first shell 的渐进升级，
+不是新产品入口或第二份 PRD：
+
+1. **P0 Shell Lite**：冻结并实现世界优先的稳定阅读骨架（条件性 attention → Objective →
+   一个 `Next Move` → selected-agent/Player Leverage → compact persistent Action Receipt），
+   保留 `World / Targets / Command` 和边缘入口；不增加常驻侧栏或底部动作栏。
+2. **P1 Context + semantics**：把已发布的实体、Intent、关系、路线、设施/领地状态和重大
+   World Event 以 entity-first 的 contextual capability 组合到按需 Inspector/Console；只
+   展示权威字段，并补齐真实 headed browser/可访问性证据。
+3. **Deferred / contract-gated**：全局资产栏、完整 capability hotbar、ETA/energy/cargo/
+   health、typed relationships、组织经济/治理详情，以及新的取消/批准/重排等控制，待
+   `producer_system_designer`、`gameplay_designer`、`runtime_engineer`、`agent_engineer`
+   分别提供规则、来源、权限、时效、幂等与回执合同后再排期。
+
+文档决定不是运行时或发行放行证明；每阶段只在对应 owner 的实现、自动化和 headed QA 证据
+齐备后才可宣称完成。
 
 ### Current implementation boundary
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
@@ -96,6 +108,42 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 - **Non-goals**：本目标不新增 runtime/protocol 字段，不改仿真、replay、renderer、
   Director capability、ownership、经济或玩家权限，也不从 metrics、ambient event、
   wall clock、cursor 或文案推断玩家进展。以上是目标合同，不是当前已完成或发行结论。
+
+### World-native Player convergence contract (target; extends the current authority)
+
+本节将 Agentbox 参考中有价值的“稳定框架”转译为 oasis7 的间接控制语义；稳定的是阅读位置
+和层级，不是永久占据空间的三栏。World Stage 必须直接解释可观察的语义：实体的身份/状态、
+路线与活动标记、已发布的关系线、以及有明确来源的重大事件。外围 UI 负责解释、定位和行动，
+不能把世界降格为 wallpaper。
+
+- **Stable, non-permanent frame**：`Objective`、selected Agent context、`Next Move`、
+  Receipt 和 edge navigation 具有稳定的阅读顺序/锚点；Inspector、Command、World Feed
+  和 Diagnostics 仍按需打开，可随实体或任务变化，不形成永久 Player 左/中/右栏。
+- **Entity-first capabilities**：能力从当前选中的 Agent、Facility、Territory 或
+  Organization 上下文进入。Market、War、Governance、Production、Contracts、Relations
+  等不是新的一级 Player 菜单；只有当实体的权威 projection 与玩家权限同时存在时，才显示相应
+  capability，缺失时显示 unavailable/待同步，而非补一个看似完整的卡片。
+- **Indirect-control feedback**：玩家发出的是 `Ask / Suggest / Prioritize / Negotiate /
+  Investigate / Propose / Warn / Delegate` 等高层 guidance/template，不是移动、攻击、采集等
+  直接动作。画面持续区分 `Player Guidance → Intent → accepted/rejected/blocked →
+  Agent Activity → World Action → Action Receipt`；`accepted` 不是 executing，`executing`
+  不是 completed，只有绑定 receipt 才能表达世界变化。
+- **World events and relationships**：Agent、Facility、Territory、Organization 与 route/
+  relationship/event marker 只有在 authoritative world projection 发布时才可绘制。事件可用
+  stage marker、短暂 toast 或 world highlight 分层呈现，但 ambient event 不能签署玩家因果；
+  关系线必须携带可读的 relation kind/status，不能由距离、同屏、文字或靠近目标推断。
+- **Receipt/feed presentation**：Receipt 是当前 Player/Cinematic presentation 的唯一、紧凑且
+  可持续复查的因果锚点；新 transient feedback 不得覆盖或制造第二个 causal receipt，只有新
+  的权威 receipt 才能替换它。World Feed 是右上等边缘位置的 collapsed ambient chip，默认不
+  抢焦点，展开后也只能显示环境上下文；Feed 没有 receipt 时仍保持 `receipt_ref=null`。
+- **Programs / Protocols language**：Player-facing copy 使用 `Program`、`Protocol`、
+  `Module`、`Contract` 等世界语言解释实体能力；`WASM`、ABI、hash、deployment tx、runtime
+  id、provider、auth material 等只在显式 Diagnostics/Director disclosure 中可见。程序/协议
+  的存在、版本、状态和可用操作仍必须来自权威 projection；名字或 raw object 不能创造能力。
+
+以下明确不属于本 authority：永久 Player 左/中/右列、从 Agent 靠近设施合成的 ownership、从
+数值/事件/同屏推断的 resources/relations/Trust、可直接执行世界动作的 hotbar、以及把目标/设计
+契约描述包装成已经完成的 implementation 或 release claim。
 
 ### Director entry and failure contract (implemented boundary; issuer blocked)
 - 每次 fresh load、reload、new tab 或新 session 都进入 Player；Director 不是可持久化
@@ -147,6 +195,30 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
     gameplay details、diagnostics/raw state 排列。
 - Director 模式（显式选择）：
   - 仅在显式选择后进入，允许密集工具视图；不改变玩法语义或进度。
+
+Player 的稳定性来自 slot、阅读顺序和返回路径，而非固定栏位。实体 capability 必须跟随
+selection/context 出现并可关闭；Programs/Protocols 仅是玩家语言，不是新增 runtime 字段或
+新的权限面。任何 capability 若没有 authority source、permission、freshness 和 recovery
+contract，必须保持隐藏或 unavailable。
+
+### Player-facing data honesty matrix
+
+以下是每个可见值的最小合同；实现可使用不同 DTO 名称，但不得降低语义强度。`Current` 只表示
+来源明确且与显示 position 同步的权威值；`Last known` 必须显式标记，不能用绿色 `LIVE` 或
+动画掩盖 stale。
+
+| Surface/value | Authoritative source | Missing/stale/conflict | Permission and player treatment |
+| --- | --- | --- | --- |
+| Objective / Next Move / blocker / Player Leverage | 已发布 commercial/runtime projection | 缺失即 `Unavailable`/等待说明；旧值为 `Last known`，不推进行动 | 仅按当前玩家可见/可控范围展示；不可控时保留导航或认领恢复 |
+| selected identity/location/status | world snapshot / selection projection | unknown、replay、gap、reorg、reconnecting 明确标记；不以 ID 猜名称或状态 | `name → label → stable id`；受限字段隐藏或降级为只读 |
+| Agent Intent / Activity | versioned runtime Intent/Activity projection | local pending、accepted、blocked、terminal 与 missing 分开；无 position 不能称 current | `control_state` 先于 freshness；control lost 时不得提交、重放或转移 |
+| Action Receipt | explicit committed receipt/event tuple | 无 receipt 显示 `No action receipt yet`；冲突/旧回执保留 stale/needs confirmation | 只显示玩家获准看到的 effect/reason/next；不得从 Feed 补齐 |
+| World Feed / events / relationships | runtime journal/world projection | loading/empty/replay/gap/unavailable 分开；gap/reorg 要求 snapshot recovery | 环境上下文只读；关系和事件没有 explicit source 时不显示 |
+| Program / Protocol / Module / Contract | published entity capability projection | 未发布、过期或版本冲突显示 unavailable/diagnostics；不由 raw object 猜测 | 玩家 copy 使用世界语言；技术字段只在 Diagnostics/Director disclosure |
+| global resources / ownership / trust / economy | only an explicit authoritative projection | 缺失即不显示，不以邻近、数量、event text、wall clock 推断 | 无权限时 redact/hidden；不创建 synthetic value |
+
+Source, logical position, freshness 和 permission 是保留值的最低元数据；Viewer 仅负责格式化。
+任何本表之外的新字段先由对应专业 owner 补充 source/更新、缺失/冲突、权限、因果和恢复合同。
 
 ### 因果、数据与反馈约束
 - HUD 的目标、下一步、阻塞、进度和指标必须来自权威 commercial/runtime
@@ -496,6 +568,9 @@ required after the corresponding implementation slice.
 | HUD-01 | World HUD hierarchy | headed 1440x1000 + 390x844 | attention → Objective → one Next Move CTA → Leverage/context → Receipt; optional world_read only when authoritative | viewer + visual |
 | HUD-02 | Flattened Next Move | headed 1440x1000 + 390x844 | one dominant action/route, inline blocker, no duplicate or ambient success claim | viewer + visual + QA |
 | CON-01 | Agent Console disclosure | desktop/mobile + keyboard | command/chat and selected context are default; raw/auth/operator details are collapsed Diagnostics | viewer + QA |
+| SEM-01 | World semantic rendering | headed desktop/mobile, sparse and active world | published entity state, route/activity marker, relationship kind/status, and major event are readable on the stage; no inferred relation or event causality | runtime + viewer + visual + QA |
+| CAP-01 | Entity-first contextual capability | Agent/Facility/Territory/Organization selected | capability follows selection and permission; Market/War/Governance are not peer Player routes; missing projection is unavailable, not a synthetic card | producer + runtime + viewer + QA |
+| PRO-01 | Programs/Protocols disclosure | selected entity + Diagnostics | player copy uses Program/Protocol/Module/Contract; WASM/ABI/hash/tx/runtime fields stay hidden until explicit disclosure | viewer + visual + QA |
 | CIN-01 | Cinematic / Minimal HUD | headed 1440x1000 + 390x844 + Escape/IME | explicit entry/exit, minimal objective/blocker/receipt and selected marker, focus return preserved | viewer + visual + QA |
 | DIR-01 | Director allowed | fresh Player -> explicit Diagnostics action | capability-gated, ephemeral, visibility/density only, world/selection preserved | producer + viewer |
 | DIR-02 | Director denied/stale/revoked | reload/new tab + denied entry | fail closed to Player, sanitized surfaces, recovery copy, no persistence | viewer + QA |
@@ -511,15 +586,21 @@ required after the corresponding implementation slice.
 | CTX-01 | Agent Context Lite | current/stale/missing/replay/gap/reorg | only explicit published fields render; source/freshness is honest; no inferred plan, ETA, relationship, or success | agent + runtime + viewer + QA |
 | INT-01 | Agent Intent V2 | current/accepted, blocked, completed, missing, stale, conflict, control-lost, redacted, duplicate/replacement | Activity, Intent, and Receipt remain separate; accepted/queued never imply world success; duplicate identity yields one authority result; permission and freshness are explicit | agent + runtime + viewer + QA |
 | REN-01 | Renderer unavailable recovery | headed desktop/mobile, sync and post-probe failure | recovery action is reachable and honest; retry failure preserves usable Player fallback and diagnostics | viewer + QA |
+| EMP-01 | Empty/unknown world | headed desktop/mobile, no entities or unavailable projection | world shell remains legible; empty/loading/unavailable copy names the reason and next step; no fabricated entity/resource/relationship | viewer + runtime + QA |
 
 ## 目标验收指标（实现后）
 以下指标必须由后续 Viewer/runtime 实现与本页 terminal QA matrix 的真实证据证明；
 本次文档 slice 不把它们报告为当前已通过：
 
-- 默认启动时，世界画面可视占比显著提升（右侧大面板不再常驻）。
-- 新用户无需文档可在首屏找到“打开面板”入口。
-- Player 模式下首屏技术模块数量明显减少。
-- Director 模式仍可访问原有调试能力。
+- headed 截图中 World Stage 保持最大连续可读区域；Player 不出现永久左/中/右栏，外围
+  overlay/drawer 不遮挡选中实体、主要路线或 Receipt。
+- 首屏只有一个视觉主导的 `Next Move` CTA；Objective/selected-agent context 不重复
+  动作，Receipt 与 Feed 位置和职责可一眼区分。
+- Entity selection 后 0–1 步可看到可读身份/状态和按权限过滤的 contextual capability；
+  无权威字段时显示 unavailable/恢复路径，不出现合成资源、ownership 或关系。
+- `World / Targets / Command`、焦点/键盘/IME、CJK/长文本、renderer unavailable、empty
+  world 在桌面、平板、移动 headed 证据中保持可达且无横向溢出；Director 仍只在显式能力门控
+  路径验证。
 
 ### 目标实现风险
 - 默认隐藏面板可能导致“信息不可见”感受上升。

@@ -89,12 +89,51 @@ relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs,
 verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
 idempotency, and receipt semantics before visual design is treated as implementable.
 
+### World-native interaction composition (target handoff)
+
+The visual reference contributes a stable frame, not a permanent Player layout. Keep stable slots for
+the stage, Objective, selected-agent context, one Next Move, Receipt, and edge navigation; let
+Inspector, Command, Feed, and Diagnostics appear on demand and return focus to their invoker. A
+Player left/center/right column or an always-on bottom bar is explicitly rejected.
+
+- **World explains semantics**: stage marks should make published identity, state, activity, route,
+  relationship kind/status, and major events legible at the entity. UI copy may explain or act on the
+  mark, but may not turn the stage into background decoration or infer a relation from distance,
+  proximity, co-presence, or event text.
+- **Entity-first context**: selecting an Agent, Facility, Territory, or Organization opens one
+  consistent Inspector/Console composition. Market, War, Governance, Production, Contracts, and
+  Relations are contextual capabilities, filtered by published data and player permission, not peer
+  navigation routes. A missing projection is an honest unavailable state.
+- **Indirect-control rhythm**: the primary action is a high-level guidance/template (`Ask`, `Suggest`,
+  `Prioritize`, `Negotiate`, `Investigate`, `Propose`, `Warn`, or `Delegate`). Render the sequence
+  `guidance → Intent → accepted/rejected/blocked → Activity → world action → Receipt`; accepted is
+  never executing, executing is never completed, and only a bound receipt can announce world change.
+- **Persistent causal anchor**: keep one compact Receipt anchor visible for the active Player or
+  Cinematic presentation until a newer authoritative receipt replaces it. Transient toasts may call
+  attention but cannot replace or create a receipt. Keep World Feed as a collapsed ambient chip with
+  loading/empty/replay/gap/unavailable states, never as causal feedback.
+- **Player language**: use Program, Protocol, Module, and Contract in ordinary copy. Keep WASM, ABI,
+  hashes, deployment transactions, runtime IDs, provider details, and auth material behind explicit
+  Diagnostics/Director disclosure; raw fields do not create an apparent capability.
+
+Visual states must carry source and freshness cues without exposing raw enums: current, Last known,
+stale, reconnecting, unknown, conflict, unavailable, and control lost need distinct treatment. Missing
+or unauthorized data is hidden/redacted or labeled unavailable; it is never replaced with a guessed
+resource, owner, trust, relationship, liveness, or action result. These are target design rules, not
+evidence that the current implementation already satisfies them.
+
 #### Headed visual and interaction matrix
 
 - `1440x1000`: GPU-ready Player and Cinematic; one Receipt; default hierarchy and focus return.
 - `1440x1000`: Renderer Unavailable, visible recovery, and post-probe asynchronous failure.
 - `1024x768` and `768x1024`: tablet/narrow-desktop HUD, feed, drawer, receipt, and safe areas.
 - `390x844`: Player, Targets, Command, Cinematic, long entity names, long receipt copy, fallback.
+- `390x844`: empty world and missing/stale/permission-lost entity data retain a usable stage,
+  explicit recovery copy, and non-overlapping Receipt/Feed/fallback slots.
+- Entity-selected desktop/mobile states: Agent, Facility, Territory, and Organization share the
+  contextual composition; stage semantics and relation lines remain readable in sparse worlds.
+- Program/Protocol states: ordinary copy contains no raw WASM/ABI/hash/transaction/runtime fields
+  until the user explicitly opens Diagnostics.
 - Every viewport: English/Chinese/CJK, long labels, no horizontal overflow, Tab/Shift+Tab,
   Escape priority, IME composition, visible focus, and semantic selected state.
 - Stateful regressions: reconnect continuation, gap/reorg recovery, stale/offline truth, duplicate
@@ -110,11 +149,19 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
 - 所有实现必须保留键盘焦点、关闭/`Escape`、CJK/长文案和无横向溢出的可读性契约。
 
 ## 5. 设计演进计划
-1. 先冻结配对 PRD 的 shell、dock、console、HUD、receipt/feed 语义和稳定锚点。
-2. 再由 `viewer_engineer` 在不新增协议字段前提下收敛当前实现的可见性/响应式布局。
-3. 最后由 `qa_engineer` 以真实 headed 浏览器 `1440x1000` 与 `390x844` 截图、键盘、长文案和空/不可用状态验证；GPU-enabled
-   WebGL2 `ready` 与 GPU-disabled `Renderer Unavailable` fallback 已有证据，但本设计不构成
-   发行结论。
+按以下阶段演进；每一阶段都必须回到配对 PRD 的 source/freshness/permission/receipt 合同，
+不能把设计稿或静态截图当作实现完成：
+
+1. **P0 Shell Lite**：冻结稳定 slot、edge navigation、Objective/selected-agent context、
+   单一 Next Move、compact persistent Receipt 和 collapsed Feed；在不增加协议字段的前提下
+   收敛现有 shell 的默认可见性与响应式布局。
+2. **P1 Context + world semantics**：由 `viewer_engineer`/runtime 组合统一 Inspector/Console，
+   让已发布的实体状态、Intent/Activity、路线、关系和重大事件可在 World Stage 或 contextual
+   surface 中解释，并由 `qa_engineer` 用 headed desktop/mobile、键盘/CJK/空态验证。
+3. **Deferred / contract-gated**：全局资源框、完整 capability hotbar、未经来源/权限/时效
+   合同的经济/关系/健康字段，以及新的控制 verbs 延后；需 producer/gameplay/runtime/agent
+   owner 先冻结语义与权限。GPU-enabled WebGL2 `ready` 与 GPU-disabled `Renderer Unavailable`
+   fallback 的已有证据不代表任一阶段的发行结论。
 
 ## 6. 终端交互与实施边界
 - Fresh load/reload/new tab/session 一律进入 Player。Director 只能由 Player 的
