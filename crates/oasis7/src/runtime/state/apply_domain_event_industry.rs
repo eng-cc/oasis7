@@ -342,6 +342,60 @@ impl WorldState {
                         reason: format!("material transit completion preflight failed: {reason}"),
                     })?;
                 }
+                let reservation_routes = pending.route_ids.clone();
+                let completed_path_id = pending.path_id.clone().or_else(|| path_id.clone());
+                let settled_path_amount = (*received_amount).max(0);
+                let path_authority = match completed_path_id.as_ref() {
+                    None => None,
+                    Some(path_id) => {
+                        let mut authority = if let Some(existing) =
+                            self.completed_logistics_paths.get(path_id)
+                        {
+                            if existing.route_ids != reservation_routes
+                                || existing.from_ledger != pending.from_ledger
+                                || existing.to_ledger != pending.to_ledger
+                                || existing.kind != pending.kind
+                                || existing.settled_amount < 0
+                                || existing.remaining_recipe_amount < 0
+                                || existing.remaining_recipe_amount > existing.settled_amount
+                            {
+                                return Err(WorldError::ResourceBalanceInvalid {
+                                    reason: format!(
+                                        "material transit path authority does not match settlement: path_id={path_id}"
+                                    ),
+                                });
+                            }
+                            existing.clone()
+                        } else {
+                            LogisticsPathAuthorityV1 {
+                                path_id: path_id.clone(),
+                                route_ids: reservation_routes.clone(),
+                                from_ledger: pending.from_ledger.clone(),
+                                to_ledger: pending.to_ledger.clone(),
+                                kind: pending.kind.clone(),
+                                settled_amount: 0,
+                                remaining_recipe_amount: 0,
+                            }
+                        };
+                        authority.settled_amount = authority
+                            .settled_amount
+                            .checked_add(settled_path_amount)
+                            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                                reason: format!(
+                                    "material transit path settled quantity overflow: path_id={path_id}"
+                                ),
+                            })?;
+                        authority.remaining_recipe_amount = authority
+                            .remaining_recipe_amount
+                            .checked_add(settled_path_amount)
+                            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                                reason: format!(
+                                    "material transit path recipe quantity overflow: path_id={path_id}"
+                                ),
+                            })?;
+                        Some(authority)
+                    }
+                };
                 self.pending_material_transits.remove(job_id);
                 let pending = Some(pending);
                 if *received_amount > 0 {
@@ -355,42 +409,18 @@ impl WorldState {
                         reason: format!("material transit completion failed: {reason}"),
                     })?;
                 }
-                let reservation_routes = pending
-                    .as_ref()
-                    .map(|job| job.route_ids.as_slice())
-                    .unwrap_or(route_ids.as_slice());
-                if let Some(path_id) = pending
-                    .as_ref()
-                    .and_then(|job| job.path_id.as_ref())
-                    .or(path_id.as_ref())
-                {
+                if let Some(authority) = path_authority {
                     self.completed_logistics_paths
-                        .entry(path_id.clone())
-                        .or_insert_with(|| LogisticsPathAuthorityV1 {
-                            path_id: path_id.clone(),
-                            route_ids: reservation_routes.to_vec(),
-                            from_ledger: pending
-                                .as_ref()
-                                .map(|job| job.from_ledger.clone())
-                                .unwrap_or_else(|| from_ledger.clone()),
-                            to_ledger: pending
-                                .as_ref()
-                                .map(|job| job.to_ledger.clone())
-                                .unwrap_or_else(|| to_ledger.clone()),
-                            kind: pending
-                                .as_ref()
-                                .map(|job| job.kind.clone())
-                                .unwrap_or_else(|| kind.clone()),
-                        });
+                        .insert(authority.path_id.clone(), authority);
                 }
-                for route_id in reservation_routes {
+                for route_id in &reservation_routes {
                     self.completed_logistics_route_ids.insert(route_id.clone());
                 }
                 if let Some(route_id) = route_id {
                     self.completed_logistics_route_ids.insert(route_id.clone());
                 }
                 let reserved_amount = pending.as_ref().map(|job| job.amount).unwrap_or(0);
-                for route_id in reservation_routes {
+                for route_id in &reservation_routes {
                     if let Some(route) = self.logistics_routes.get_mut(route_id) {
                         route.reserved_capacity_units = route
                             .reserved_capacity_units
@@ -408,7 +438,7 @@ impl WorldState {
                         .as_ref()
                         .map(|job| job.amount)
                         .unwrap_or(*received_amount);
-                    for route_id in reservation_routes {
+                    for route_id in &reservation_routes {
                         if let Some(route) = self.logistics_routes.get(route_id) {
                             let edge_fee = route
                                 .tariff_electricity_per_unit
@@ -684,6 +714,16 @@ impl WorldState {
                             reason: format!("recipe consume aggregation failed: {reason}"),
                         }
                     })?;
+                let path_allocations = self
+                    .allocate_recipe_path_amounts(
+                        consume_ledger,
+                        logistics_route_ids,
+                        logistics_path_ids,
+                        consume,
+                    )
+                    .map_err(|reason| WorldError::ResourceBalanceInvalid {
+                        reason: format!("recipe logistics path authority failed: {reason}"),
+                    })?;
                 for (kind, amount) in required_inputs {
                     let available = self
                         .material_ledgers
@@ -740,6 +780,16 @@ impl WorldState {
                             "recipe power consume failed for payer {power_owner_agent_id}: {reason:?}"
                         ),
                     })?;
+                for (path_id, amount) in path_allocations {
+                    let path = self
+                        .completed_logistics_paths
+                        .get_mut(&path_id)
+                        .expect("recipe path authority existence prevalidated");
+                    path.remaining_recipe_amount = path
+                        .remaining_recipe_amount
+                        .checked_sub(amount)
+                        .expect("recipe path authority quantity prevalidated");
+                }
                 self.pending_recipe_jobs.insert(
                     *job_id,
                     RecipeJobState {

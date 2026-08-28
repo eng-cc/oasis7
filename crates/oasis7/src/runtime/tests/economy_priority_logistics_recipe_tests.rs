@@ -1095,8 +1095,3 @@ fn recipe_started_market_quote_uses_material_profile_transport_loss() {
     };
     assert_eq!(quote.transit_loss_bps, 20);
 }
-
-// The following tests are the RED contract for the explicit logistics-network
-// authority selected in issue #3272.  They intentionally exercise public
-// actions/events instead of implementation maps so the runtime can choose its
-// reservation/index representation without weakening the behavioral gate.

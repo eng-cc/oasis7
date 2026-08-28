@@ -49,11 +49,13 @@ mod apply_domain_event_industry;
 mod apply_domain_event_industry_helpers;
 mod apply_domain_event_intent;
 mod apply_domain_event_main_token;
+mod logistics_path_authority;
 #[path = "state_defaults.rs"]
 mod state_defaults;
 mod support;
 
 use self::support::*;
+pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
 
 fn default_world_material_ledger() -> MaterialLedgerId {
     state_defaults::default_world_material_ledger()
@@ -341,16 +343,6 @@ pub struct LogisticsRouteV1 {
     pub reserved_capacity_units: i64,
     #[serde(default)]
     pub tariff_electricity_per_unit: i64,
-}
-
-/// Completed path authority used by recipe bindings and replay.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LogisticsPathAuthorityV1 {
-    pub path_id: String,
-    pub route_ids: Vec<String>,
-    pub from_ledger: MaterialLedgerId,
-    pub to_ledger: MaterialLedgerId,
-    pub kind: String,
 }
 
 /// Persisted one-time settlement receipt for a material transit.

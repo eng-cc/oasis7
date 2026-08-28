@@ -774,55 +774,18 @@ impl World {
                         .collect();
                 }
                 if !resolved_logistics_path_ids.is_empty() {
-                    let consumed_kinds: BTreeSet<String> = effective_consume
-                        .iter()
-                        .filter_map(|stack| normalize_logistics_route_kind(stack.kind.as_str()))
-                        .collect();
-                    let mut bound_path_kinds = BTreeSet::new();
-                    for path_id in &resolved_logistics_path_ids {
-                        let Some(path) = self.state.completed_logistics_paths.get(path_id) else {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![format!(
-                                        "logistics path is not completed: path_id={path_id}"
-                                    )],
-                                },
-                            }));
-                        };
-                        if path.to_ledger != consume_ledger {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![format!(
-                                        "logistics path destination mismatch: path_id={path_id}"
-                                    )],
-                                },
-                            }));
-                        }
-                        let Some(path_kind) = normalize_logistics_route_kind(path.kind.as_str())
-                        else {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![format!(
-                                        "logistics path material kind is invalid: path_id={path_id}"
-                                    )],
-                                },
-                            }));
-                        };
-                        if !consumed_kinds.contains(&path_kind)
-                            || !bound_path_kinds.insert(path_kind)
-                        {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![format!(
-                                        "logistics path material mismatch: path_id={path_id}"
-                                    )],
-                                },
-                            }));
-                        }
+                    if let Err(reason) = self.state.allocate_recipe_path_amounts(
+                        &consume_ledger,
+                        &resolved_logistics_route_ids,
+                        &resolved_logistics_path_ids,
+                        &effective_consume,
+                    ) {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![reason],
+                            },
+                        }));
                     }
                 }
                 for stack in &effective_consume {
