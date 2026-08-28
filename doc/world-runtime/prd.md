@@ -68,6 +68,47 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 
 这样可以让 module 成为一等执行负载，同时保留现有 `WorldState`、legacy event 和 snapshot 的兼容读取；本节不要求立即把当前 struct 改造成传统 ECS。原子边界落地前，Alliance/EconomicContract 试点只能作为 target migration work，不得把现有逐事件实现包装为已完成的原子 receipt 合同。
 
+#### 能力状态口径与 Institution Migration Test
+
+为避免把“接口存在”误报为“端到端能力已证明”，本 PRD 对架构能力统一使用以下状态词：
+
+| 状态 | 含义 | 证据要求 |
+| --- | --- | --- |
+| `current` | 已存在于当前生产/兼容路径，并有对应代码或现行回归覆盖。 | 代码、现行测试或持久化格式可直接定位。 |
+| `partial` | 仅部分入口、部分生命周期或部分数据范围满足目标边界；其余路径仍是 legacy/compatibility。 | 必须明确缺口所在的入口、身份范围或消费者。 |
+| `target` | 本文要求的未来合同或迁移终点；不能作为当前可用能力或发布结论。 | 有明确不变量、迁移顺序与失败语义。 |
+| `proven` | `target` 已由同一输入的执行、拒绝、快照、恢复和回放证据共同证明。 | 必须有可重跑 fixture/测试及可定位的 receipt、state-root 或 migration evidence。 |
+
+当前边界按此口径归类如下：
+
+| 能力面 | `current` / `partial` | `target` | `proven` 判据 |
+| --- | --- | --- | --- |
+| Kernel / Institution | L0/L1 约束和 L2 module bridge 已存在；现有 Alliance、War、Governance、EconomicContract 仍是 compatibility surface，尚未完成真实制度迁移。 | 至少一个真实 Institution 通过 module-owned command/event/state 接入，不再新增 Kernel 专属 schema 或制度字段。 | Institution Migration Test 全部通过，且迁移 diff 没有新的 Kernel 制度枚举/顶层字段。 |
+| 统一 transaction | trusted capability command 已有 staged/预算/发布样板；`step()`、`step_with_modules()` 与部分 tick/direct command 仍可能逐步写入 legacy 状态。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
+| module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 全部按 `(world_id, module_id, instance_id, artifact_hash, schema_version)` 定位。 | 两个相同 module artifact 的 instance 可在同一 world 并行执行，重放/恢复/升级不串写、不覆盖，且错误在 first effect 前 fail closed。 |
+
+首个 Institution Migration Test 由 producer、runtime 与 WASM 专业角色共同选择 Alliance 或 EconomicContract；本测试验证迁移能力，不在 runtime 文档中定义制度规则。最低验收合同为：
+
+1. 模块具有受治理的 manifest、artifact hash、schema/version、稳定 `instance_id` 和 activation 状态；缺失或不匹配时不得执行。
+2. command 经过同一权限、预算、quote/resolution、最终 affordability 和 Kernel apply 管线；module 不得直接写 canonical `WorldState`、journal 或外部 effect。
+3. accepted outcome、事件、module state、receipt 与 checkpoint 使用同一 root/commitment；任一校验、预算、持久化或 artifact 失败都产生稳定 reject/fault，且不留下部分业务效果。
+4. snapshot restore、canonical journal replay、restart/recovery 和跨 adapter conformance 对同一 accepted input 产生相同 state root/receipt；旧 compatibility shape 仍可显式读取或通过 adapter 迁移。
+5. 至少建立两个同 artifact、不同 `instance_id` 的实例，证明 direct/trusted command、state update、event、receipt 和 catalog 不以全局 `module_id` 串写或覆盖。
+
+Migration Test 未通过前，native vertical slice 只能标为 `current`/`compatibility keep`，不能标为已完成 open-institution extensibility；测试通过也不改变产品规则或玩家承诺的权威归属。
+
+#### ExecutionTransaction 的优先级与范围
+
+统一 `ExecutionTransaction` 是 runtime 架构 **P0**：这里的 P0 表示必须先确立统一状态转换边界，不等同于已经发生线上事故或要求一次性重写所有状态结构。它的范围包括 `step()`、`step_with_modules()`、native compatibility action、WASM/module command、tick directive、direct/trusted command、module install/upgrade 以及任何会改变 canonical world 的恢复/迁移写入。只读 quote/resolve 可以在 transaction 之前运行，但必须绑定 parent、manifest、input root 和 freshness，且不得产生 world effect。
+
+Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt；失败路径丢弃暂存值，只发布稳定的 rejected/fault disposition。外部不可回滚副作用只能在 commit 后按 receipt 驱动，不能成为 commit 前的隐式写入。该边界优先统一语义与证据，不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
+
+#### Command-path module-instance completeness
+
+实例身份不是只供 persistence 使用的附加字段，而是每条 command path 的授权与寻址主键。当前安装、升级、tick、event routing 与恢复已能携带稳定实例；仍需补齐 direct/trusted command 的 instance target、state lookup、更新事件、receipt linkage 与 catalog target。任何以 `module_id` 选择“当前实例”的路径都必须被视为 `partial`，不得以 instance authorization 已存在推断 command execution 已 instance-complete。
+
+目标路径必须先验证 `world_id`、module/instance identity、artifact/schema/version、activation、owner/subject、capability 与预算，再把 instance target 固定进 staged command、event、receipt、snapshot 和 replay input。instance 缺失、冲突、未激活、权限不符或 target 与 state 不一致时，在 first effect 前结构化拒绝；禁止 fallback 到另一个同 `module_id` 实例。catalog/context 的 Agent 语义与工具策略由 Agent/WASM authority 定义，runtime 只提供可验证的 instance-bound descriptor 输入，不把机器 descriptor 宣称为 Agent 已能理解或使用。
+
 ### 单一内部 execution pipeline
 
 native、WASM、tick module 和 compatibility fallback 必须最终进入一条内部确定性 pipeline。外部 `step()`、`step_with_modules()` 或 dev/committed wrapper 可以继续存在，但只能表达输入适配、模块集合或持久化模式差异，不能产生不同的状态转换语义。以下是目标 pipeline 的阶段顺序；它把需要模块计算的动态成本与最终 Kernel affordability check 分开，避免把尚未知道的 module cost 假装成 preflight 已知事实：
@@ -309,6 +350,11 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
   - AC-37: `/v1/chain/status.traffic.libp2p_replication` 必须同时暴露 `totals`（应用 payload）、`wire_totals`（libp2p substream wire bytes）与 `control_plane.wire_bytes`（`wire_totals - totals.payload_bytes`）；`control_plane.wire_scope` 必须显式声明其只覆盖 substream 级非 payload bytes，且继续排除 transport handshake/framing 开销。
   - AC-38: `crates/oasis7_builtin_wasm_modules/m1_*` 中消费 `GeoPos`/`*_cm` 坐标的 builtin wasm 模块必须把模块内部主表示收口到整数厘米，并对动作/事件 JSON 边界拒绝 fractional cm；升级后仍需兼容读取旧的整值浮点 module state，并把新的 state / observability sample 统一序列化为整数厘米。
   - AC-41: runtime schema 与 apply paths 必须区分 legacy `ActionId/job_id/caused_by` trace 和 canonical operation protocol。每个 authoritative accepted industrial outcome 的测试必须证明：acceptance 只签发一个 root，atomic reject 且无 accepted intent 时不签发；两个 payload 相同的 accepted intents 获得不同 roots；stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/validation/settlement child 持久化同一 root、owning revision/segment 与直接 parent/child role；missing/conflicting/wrong-root/terminal-closed linkage 在 first sink、credit、progress 或 reward 前 fail closed；retry、reconnect、乱序、snapshot restore 与 canonical replay 重建相同 child identity 和 terminal disposition，且不复制效果；snapshot + journal replay 得到同一 operation graph/finality 与 world state root。
+  - AC-42: runtime 文档必须对关键能力明确标注 `current`、`partial`、`target` 或 `proven`；不得以已有接口、局部 staged path 或 compatibility record 代替端到端证明。
+  - AC-43: 至少一个 Alliance 或 EconomicContract Institution Migration Test 必须证明 module-owned command/event/state 可在不新增 Kernel 制度 schema/顶层字段的前提下，通过权限、预算、quote、Kernel apply、receipt、snapshot、replay 与 recovery 全链路；测试通过前只能保留 native compatibility surface 作为当前能力。
+  - AC-44: 所有有 world effect 的 command/tick/恢复写入入口必须收敛到统一 `ExecutionTransaction`（或等价 staged boundary）；commit 前不得修改 canonical state/journal/外部 effect，失败必须无半个业务效果并留下稳定 rejected/fault disposition。该项是架构 P0，不能解读为一次性 ECS/WorldState 重写承诺。
+  - AC-45: module instance 完整性必须覆盖 direct/trusted command 的授权、寻址、state lookup、更新事件、receipt、snapshot/replay 与 machine descriptor；同 module artifact 的不同 `instance_id` 必须可并行且不串写，任何 `module_id` 全局 fallback 都必须显式标为 partial。
+  - AC-46: subsystem state encapsulation 必须渐进落地并保留现有 replay/persistence identity；本 PRD 不承诺 big-bang ECS、独立 shard finality、跨 shard commit 或动态 World Database。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
