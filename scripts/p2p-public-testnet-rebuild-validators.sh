@@ -378,7 +378,7 @@ def node_contracts() -> dict[str, object]:
             },
             "stopped_quiescence_proof": {
                 "required": True,
-                "remote_activity": False if mode in {"plan", "quiesce"} else "direct-ssh-read-only",
+                "remote_activity": "executor-owned-direct-ssh-read-only" if mode in {"plan", "human_direct_ssh"} else False,
                 "proof": "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset",
             },
         }
@@ -437,7 +437,10 @@ if isinstance(governed, dict):
 if mode == "plan":
     # Plan output is deliberately timestamp-free and therefore byte-stable.
     contract["deterministic"] = True
-    contract["remote_activity"] = False
+    # ``plan`` performs the executor-owned live GitHub authority read and
+    # direct SSH quiescence observation before emitting the plan.  The plan
+    # remains non-mutating, but reporting no remote activity is false.
+    contract["remote_activity"] = "executor-owned-direct-ssh-read-only"
     contract["systemd_activity"] = False
     contract["destructive_activity"] = False
 elif mode in {"quiesce", "human_direct_ssh"}:

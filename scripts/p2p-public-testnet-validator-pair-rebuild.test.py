@@ -65,6 +65,27 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.external_fixture_paths: list[Path] = []
         self._hermetic_environment_restore: dict[str, str | None] = {}
+        self.executor_launcher = self.root / "executor-test-launcher.py"
+        self.executor_launcher.write_text(
+            f"""#!{sys.executable}
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+executor = Path({str(EXECUTOR)!r})
+spec = importlib.util.spec_from_file_location("pair_rebuild_test_executor", executor)
+if spec is None or spec.loader is None:
+    raise SystemExit("unable to load validator-pair executor")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.EXECUTOR_KNOWN_HOSTS_PATH = Path(os.environ["OASIS7_TEST_EXECUTOR_KNOWN_HOSTS_PATH"])
+sys.argv = [str(executor), *sys.argv[1:]]
+raise SystemExit(module.main())
+""",
+            encoding="utf-8",
+        )
+        self.executor_launcher.chmod(0o755)
         self.package = self.root / "package"
         self.package.mkdir()
         runtime = self.package / "oasis7_chain_runtime"
@@ -229,6 +250,7 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             "OASIS7_VALIDATOR_PAIR_NONCE_LEDGER": str(fixture["nonce_ledger"]),
             "HUMAN_DIRECT_SSH_GITHUB_RESPONSE": str(fixture["github_response"]),
             "HUMAN_DIRECT_SSH_GITHUB_LOG": str(fixture["github_calls"]),
+            "OASIS7_TEST_EXECUTOR_KNOWN_HOSTS_PATH": str(fixture["known_hosts"]),
         }
         for name, value in values.items():
             if name not in self._hermetic_environment_restore:
@@ -357,6 +379,19 @@ for role in transaction['mutation_order']:
     }
     if phase == 'quiesce':
         nodes[role].update({'active': False, 'running': False})
+    elif phase == 'preflight':
+        nodes[role].update({
+            'preflight_verified': True,
+            'runtime_executable': True,
+            'repair_rebuild_helper_executable': True,
+            'generated_world_dir_contract': True,
+            'governance_registry_importer_executable': True,
+            'python_available': True,
+            'tar_available': True,
+            'systemd_available': True,
+            'process_inspection_available': True,
+            'preflight_observer_mutation': False,
+        })
     elif phase == 'backup':
         nodes[role].update({'backup_verified': True})
     elif phase == 'rollback':
@@ -472,8 +507,7 @@ print(json.dumps({{
 
     def _base_args(self) -> list[str]:
         return [
-            sys.executable,
-            str(EXECUTOR),
+            str(WRAPPER),
             "plan",
             "--package-dir",
             str(self.package),
@@ -512,8 +546,7 @@ print(json.dumps({{
         """Build an apply command with explicit hermetic direct-observation routing."""
         direct_fixture = fixture or self.human_direct_fixture
         args = [
-            sys.executable,
-            str(EXECUTOR),
+            str(WRAPPER),
             "apply",
             "--transaction",
             str(transaction_path),
@@ -558,6 +591,23 @@ print(json.dumps({{
             "39.104.205.67 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILU4G7oGjBJ+tzaZh4nQJjGkPKM1gXQZYT3GWJLMDhZC\n",
             encoding="utf-8",
         )
+        known_hosts.chmod(0o600)
+        fake_python = bin_dir / "python3"
+        fake_python.write_text(
+            f"""#!{sys.executable}
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+if args and Path(args[0]).resolve() == Path({str(EXECUTOR)!r}).resolve():
+    launcher = Path({str(self.executor_launcher)!r})
+    os.execv({sys.executable!r}, [{sys.executable!r}, str(launcher), *args[1:]])
+os.execv({sys.executable!r}, [{sys.executable!r}, *args])
+""",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
         nonce_ledger = self.root.parent / f"oasis7-human-direct-nonce-{len(self.external_fixture_paths)}.jsonl"
         nonce_ledger.write_text("", encoding="utf-8")
         nonce_ledger.chmod(0o600)
@@ -874,6 +924,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         env["OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"] = str(fixture["nonce_ledger"])
         env["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"] = str(fixture["github_response"])
         env["HUMAN_DIRECT_SSH_GITHUB_LOG"] = str(fixture["github_calls"])
+        env["OASIS7_TEST_EXECUTOR_KNOWN_HOSTS_PATH"] = str(fixture["known_hosts"])
         return env
 
     def _human_direct_ssh_args(self, fixture: dict[str, Path | str], *extra: str) -> list[str]:
@@ -1139,8 +1190,42 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         for args in rows:
             self.assertIn("StrictHostKeyChecking=yes", args)
             self.assertIn(f"UserKnownHostsFile={Path(fixture['known_hosts']).resolve()}", args)
+            self.assertIn("GlobalKnownHostsFile=/dev/null", args)
             self.assertNotIn("StrictHostKeyChecking=no", args)
             self.assertNotIn("UserKnownHostsFile=/dev/null", args)
+
+    def test_human_direct_ssh_rejects_caller_selected_alternate_known_hosts_path(self) -> None:
+        fixture = self._write_live_github_fixture()
+        alternate = Path(fixture["fixture"]) / "caller-selected-known_hosts"
+        shutil.copyfile(fixture["known_hosts"], alternate)
+        alternate.chmod(0o600)
+        self._rewrite_request(fixture, lambda request: request.update({"known_hosts_path": str(alternate)}))
+        result = self._run_live_human_direct_ssh(fixture, extra=("--known-hosts", str(alternate)))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(canonical|executor|known.?hosts|production|path|binding)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rejects_conflicting_duplicate_host_key(self) -> None:
+        fixture = self._write_live_github_fixture()
+        known_hosts = Path(fixture["known_hosts"])
+        known_hosts.write_text(
+            known_hosts.read_text(encoding="utf-8")
+            + "39.104.204.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILU4G7oGjBJ+tzaZh4nQJjGkPKM1gXQZYT3GWJLMDhZC\n",
+            encoding="utf-8",
+        )
+        known_hosts.chmod(0o600)
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(duplicate|conflict|exactly one|known.?hosts|fingerprint|pin)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rejects_non_private_executor_known_hosts_mode(self) -> None:
+        fixture = self._write_live_github_fixture()
+        Path(fixture["known_hosts"]).chmod(0o644)
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(known.?hosts|mode|permission|600|private|owner)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
 
     def test_human_direct_ssh_binds_fixed_role_root_service_and_command_allowlist(self) -> None:
         fixture = self._write_human_direct_ssh_fixture()
@@ -1590,6 +1675,14 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(receipt["mutation_order"], ["storage-205", "sequencer-204"])
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
+
+    def test_plan_receipt_truthfully_reports_direct_remote_observation(self) -> None:
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["receipt_contract"]["remote_activity"], "executor-owned-direct-ssh-read-only")
+        self.assertFalse(receipt["receipt_contract"]["systemd_activity"])
+        self.assertFalse(receipt["receipt_contract"]["destructive_activity"])
 
     def test_active_consumer_impact_approval_is_stop_authority_without_stopped_claim(self) -> None:
         spec = importlib.util.spec_from_file_location("pair_rebuild_active_impact_test", EXECUTOR)
@@ -2606,8 +2699,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         plan_path.write_text(plan.stdout, encoding="utf-8")
         result = subprocess.run(
             [
-                sys.executable,
-                str(EXECUTOR),
+                str(self.executor_launcher),
                 "apply",
                 "--transaction",
                 str(plan_path),
@@ -2681,7 +2773,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         transaction_id = applied_receipt["transaction_id"]
         self.assertNotEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / transaction_id / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
         result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
+            [str(self.executor_launcher), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
             text=True,
             capture_output=True,
         )
@@ -2690,7 +2782,110 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(receipt["phase"], "rolled_back")
         self.assertEqual(sha256(self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime"), sha256(self.nodes["storage-205"] / "backups" / transaction_id / "snapshot" / "current" / "bin" / "oasis7_chain_runtime"))
 
-    def test_apply_failure_freshly_quiesces_before_automatic_rollback(self) -> None:
+    def test_transaction_journal_fsyncs_file_and_parent_directory(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_durable_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        journal = self.root / "journal" / "transaction.json"
+        fsync_calls: list[int] = []
+        original_fsync = module.os.fsync
+        module.os.fsync = lambda descriptor: fsync_calls.append(descriptor)
+        try:
+            module.write_json(journal, {"phase": "prepared"})
+        finally:
+            module.os.fsync = original_fsync
+        self.assertEqual(json.loads(journal.read_text(encoding="utf-8"))["phase"], "prepared")
+        self.assertGreaterEqual(len(fsync_calls), 2)
+
+    def test_backup_manifest_fsyncs_file_and_parent_directory(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_backup_durable_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        node_root = self.root / "durable-node"
+        node_root.mkdir()
+        (node_root / "payload").write_text("before\\n", encoding="utf-8")
+        fsync_calls: list[int] = []
+        original_fsync = module.os.fsync
+        module.os.fsync = lambda descriptor: fsync_calls.append(descriptor)
+        try:
+            backup = module.snapshot_node({"role": "storage-205", "root": str(node_root)}, "durable-tx")
+        finally:
+            module.os.fsync = original_fsync
+        self.assertTrue(Path(backup["manifest"]).is_file())
+        self.assertGreaterEqual(len(fsync_calls), 2)
+
+    def test_apply_failure_reauthorizes_direct_ssh_before_automatic_rollback(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "automatic-rollback-direct-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "apply")
+        result = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply", "rollback"])
+        github_calls = Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(github_calls), 4)
+
+    def test_manual_rollback_reauthorizes_direct_ssh_before_restore(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "manual-rollback-direct-phases.log"
+        adapter = self._write_failure_host_adapter(phases)
+        applied = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(applied.returncode, 0)
+        phases.write_text("", encoding="utf-8")
+        before_github_calls = len(Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines())
+        result = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "rollback",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["rollback"])
+        after_github_calls = len(Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines())
+        self.assertEqual(after_github_calls, before_github_calls + 1)
+
+    def test_apply_requires_explicit_preflight_receipt_for_both_validators(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "preflight-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "preflight")
+        result = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight"])
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(transaction["phase"], "preflight_failed")
+
+
+    def test_apply_failure_records_direct_reauthorization_before_automatic_rollback(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
@@ -2702,24 +2897,24 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             capture_output=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["backup", "apply", "quiesce", "rollback"])
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply", "rollback"])
         transaction = json.loads(plan_path.read_text(encoding="utf-8"))
-        self.assertIn("rollback_quiesce_receipt", transaction)
+        self.assertTrue(transaction["rollback_direct_quiescence_observation"]["reauthorized"])
         self.assertEqual(transaction["rollback"]["status"], "verified")
 
-    def test_apply_failure_does_not_restore_when_automatic_quiescence_fails(self) -> None:
+    def test_apply_failure_does_not_restore_when_automatic_rollback_callback_fails(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
-        phases = self.root / "automatic-rollback-quiescence-failure-phases.log"
-        adapter = self._write_failure_host_adapter(phases, "apply", "quiesce")
+        phases = self.root / "automatic-rollback-callback-failure-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "apply", "rollback")
         result = subprocess.run(
             self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["backup", "apply", "quiesce"])
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply", "rollback"])
         transaction = json.loads(plan_path.read_text(encoding="utf-8"))
         self.assertEqual(transaction["phase"], "rollback_failed")
         self.assertEqual(transaction["rollback"]["status"], "failed")
@@ -2742,7 +2937,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         manifest = Path(transaction["backup"]["storage-205"]["manifest"])
         manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
+            [str(self.executor_launcher), "rollback", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
             text=True,
             capture_output=True,
         )

@@ -84,6 +84,10 @@ DEPLOYMENT_INVENTORY = REPOSITORY_ROOT / DEPLOYMENT_INVENTORY_RELATIVE
 DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.public_testnet_validator_pair_inventory.v1"
 PRODUCTION_STACK_ROOT = "/opt/oasis7/p2p-testnet"
 PRODUCTION_KNOWN_HOSTS_PATH = "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts"
+# Kept separate from the inventory assertion so hermetic unit tests can
+# replace the executor module's canonical path without changing production
+# inventory truth.  No CLI or environment input can override this value.
+EXECUTOR_KNOWN_HOSTS_PATH = Path(PRODUCTION_KNOWN_HOSTS_PATH)
 NONCE_LEDGER_DEFAULT = "/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl"
 NONCE_LEDGER_ENV = "OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"
 
@@ -190,9 +194,9 @@ def validate_repository_executable_identity(value: Any, label: str) -> dict[str,
 def _load_deployment_inventory() -> dict[str, Any]:
     """Load the immutable production pair inventory from the repository.
 
-    The inventory is intentionally not a CLI input.  A caller may supply the
-    local known-hosts *file* used to perform an observation, but may not
-    replace the target, role, root, service, port, or expected public pin.
+    The inventory and its pinned known-hosts path are intentionally not CLI
+    inputs.  A caller may not replace the target, role, root, service, port,
+    known-hosts file, or expected public pin.
     """
     if DEPLOYMENT_INVENTORY.is_symlink() or not DEPLOYMENT_INVENTORY.is_file():
         fail("repository deployment inventory must be a regular file")
@@ -326,6 +330,7 @@ def _reserve_nonce(
             handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
+            _fsync_parent_directory(ledger.parent)
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     except OSError as error:
         fail(f"capability_blocked: cannot reserve external nonce ledger: {error.__class__.__name__}")
@@ -1096,6 +1101,23 @@ def _direct_regular_file(path_value: Any, label: str) -> Path:
     return raw_path.resolve()
 
 
+def _direct_canonical_known_hosts(path_value: Any, label: str = "human_direct_ssh known_hosts") -> Path:
+    """Require the executor-owned production pin file and its safe ownership."""
+    known_hosts = _direct_regular_file(path_value, label)
+    canonical = EXECUTOR_KNOWN_HOSTS_PATH.expanduser().resolve()
+    if known_hosts != canonical:
+        fail("human_direct_ssh known_hosts must use the executor-owned canonical production path")
+    try:
+        metadata = known_hosts.stat()
+    except OSError as error:
+        fail(f"human_direct_ssh known_hosts metadata cannot be read: {error.__class__.__name__}")
+    if metadata.st_uid != os.getuid():
+        fail("human_direct_ssh known_hosts must be owned by the executor")
+    if stat.S_IMODE(metadata.st_mode) != 0o600:
+        fail("human_direct_ssh known_hosts must have mode 0600")
+    return known_hosts
+
+
 def _direct_safe_identifier(value: Any, label: str, *, minimum: int = 8) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{%d,127}" % (minimum - 1), value):
         fail(f"{label} is malformed")
@@ -1125,10 +1147,9 @@ def _direct_known_host_pin(known_hosts: Path, target: str, declared: Any, role: 
         fail(f"human_direct_ssh host fingerprint is malformed for {role}")
     hostname = _direct_host_name(target)
     target_host = target.split("@", 1)[1]
-    host_tokens = {hostname, f"[{hostname}]"}
-    if ":" in target_host:
-        host_tokens.add(f"[{target_host}]")
-    matching: list[tuple[str, str]] = []
+    expected_host_token = f"[{target_host}]" if ":" in target_host else hostname
+    host_tokens = {expected_host_token}
+    matching: list[tuple[str, str, str]] = []
     try:
         lines = known_hosts.read_text(encoding="utf-8").splitlines()
     except OSError as error:
@@ -1143,11 +1164,15 @@ def _direct_known_host_pin(known_hosts: Path, target: str, declared: Any, role: 
         host_fields = fields[0].split(",")
         if not host_tokens.intersection(host_fields):
             continue
-        matching.append((fields[1], fields[2]))
+        if host_fields != [expected_host_token]:
+            fail(f"human_direct_ssh known_hosts entry must pin exactly {role}")
+        matching.append((host_fields[0], fields[1], fields[2]))
     if not matching:
         fail(f"human_direct_ssh known_hosts has no pinned key for {role}")
+    if len(matching) != 1:
+        fail(f"human_direct_ssh known_hosts must contain exactly one non-conflicting entry for {role}")
     selected: list[tuple[str, str, str]] = []
-    for key_type, key_blob in matching:
+    for _, key_type, key_blob in matching:
         if key_type not in {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}:
             fail(f"human_direct_ssh known_hosts key type is unsupported for {role}")
         try:
@@ -1186,9 +1211,10 @@ def _validate_direct_inventory_request(
     if (
         declared_known_hosts_path is None
         or declared_known_hosts_path.is_symlink()
-        or declared_known_hosts_path.resolve() != known_hosts.resolve()
+        or declared_known_hosts_path.resolve() != EXECUTOR_KNOWN_HOSTS_PATH.expanduser().resolve()
+        or known_hosts.resolve() != EXECUTOR_KNOWN_HOSTS_PATH.expanduser().resolve()
     ):
-        fail("human_direct_ssh known_hosts path binding mismatch")
+        fail("human_direct_ssh known_hosts path is not the executor-owned canonical production path")
     hosts = request.get("hosts")
     if not isinstance(hosts, dict) or set(hosts) != {"sequencer", "storage"}:
         fail("human_direct_ssh request must contain exactly sequencer and storage hosts")
@@ -1542,7 +1568,7 @@ def _direct_ssh_call(
     env: dict[str, str],
     use_credential: bool,
 ) -> str:
-    ssh_args = ["ssh", "-o", "StrictHostKeyChecking=yes"]
+    ssh_args = ["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "GlobalKnownHostsFile=/dev/null"]
     # Preserve the operator-supplied spelling for auditability while also
     # pinning the kernel-resolved path when the platform exposes a /private
     # or equivalent filesystem alias.
@@ -1664,8 +1690,8 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
     request = load_json(request_path, "human_direct_ssh request")
     authority = _direct_authority(request, request_path)
     inventory = _load_deployment_inventory()
-    known_hosts = _direct_regular_file(args.known_hosts, "human_direct_ssh known_hosts")
-    known_hosts_arg = Path(args.known_hosts).expanduser()
+    known_hosts = _direct_canonical_known_hosts(args.known_hosts)
+    known_hosts_arg = known_hosts
     inventory_binding = _validate_direct_inventory_request(request, inventory, known_hosts)
     quiescence_id = request.get("quiescence_id", authority["transaction_id"])
     if not isinstance(quiescence_id, str) or quiescence_id != authority["transaction_id"]:
@@ -1909,6 +1935,64 @@ def _direct_reobserve_from_args(args: argparse.Namespace) -> dict[str, Any]:
         return run_human_direct_ssh(direct_args, emit=False)
 
 
+def _direct_observation_record(receipt: dict[str, Any], *, reauthorized: bool = False) -> dict[str, Any]:
+    """Persist the minimum direct readback needed to prove a rollback gate."""
+    return {
+        "provider": "executor-owned-direct-ssh",
+        "audit_only": True,
+        "reauthorized": reauthorized,
+        "quiescence_id": receipt["quiescence_id"],
+        "request_digest": receipt["request_digest"],
+        "nonce": receipt["nonce"],
+        "captured_at": receipt["captured_at"],
+        "deployment_inventory_sha256": receipt["deployment_inventory_sha256"],
+        "nodes": receipt["nodes"],
+    }
+
+
+def _rollback_direct_reobserve(
+    transaction: dict[str, Any], direct_args: argparse.Namespace | None = None
+) -> dict[str, Any]:
+    """Re-authorize and re-observe the stopped boundary before rollback."""
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict) or proof.get("direct_reobserve_required") is not True:
+        fail("rollback requires live human_direct_ssh re-observation; persisted proof is audit-only")
+    request_value = getattr(direct_args, "human_direct_ssh_request", None) if direct_args is not None else None
+    known_hosts_value = getattr(direct_args, "known_hosts", None) if direct_args is not None else None
+    if not isinstance(request_value, str) or not request_value.strip():
+        request_value = proof.get("direct_request_path")
+    if not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        known_hosts_value = proof.get("known_hosts_path")
+    if not isinstance(request_value, str) or not request_value.strip() or not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        fail("rollback requires live human_direct_ssh re-observation before restore")
+    if direct_args is None:
+        direct_args = argparse.Namespace(
+            human_direct_ssh_request=request_value,
+            known_hosts=known_hosts_value,
+            credential_env=None,
+            credential_fd=None,
+        )
+    else:
+        direct_args.human_direct_ssh_request = request_value
+        direct_args.known_hosts = known_hosts_value
+    requested_path = _direct_regular_file(request_value, "rollback human_direct_ssh request")
+    expected_path = Path(proof.get("direct_request_path", "")).expanduser().resolve()
+    if requested_path != expected_path or sha256_file(requested_path) != proof.get("direct_request_sha256"):
+        fail("rollback direct request is not the request bound into the transaction")
+    direct_receipt = _direct_reobserve_from_args(direct_args)
+    stopped_quiescence = proof.get("stopped_quiescence")
+    expected_request_digest = stopped_quiescence.get("request_digest") if isinstance(stopped_quiescence, dict) else None
+    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id") or direct_receipt.get("request_digest") != expected_request_digest:
+        fail("rollback direct re-observation binding differs from the transaction request")
+    impact_path_value = proof.get("consumer_impact_record_path")
+    if not isinstance(impact_path_value, str) or not impact_path_value.strip():
+        fail("rollback consumer-impact binding is missing")
+    impact_path = Path(impact_path_value).resolve()
+    if direct_receipt.get("impact_record_sha256") != sha256_file(impact_path) or direct_receipt.get("impact") != transaction.get("consumer_impact", {}).get("impact"):
+        fail("rollback direct re-observation consumer-impact binding mismatch")
+    return direct_receipt
+
+
 def _direct_args_from_audit_proof(args: argparse.Namespace, proof_path: Path) -> argparse.Namespace:
     """Recover only routing metadata from an audit proof, never authority.
 
@@ -1927,7 +2011,7 @@ def _direct_args_from_audit_proof(args: argparse.Namespace, proof_path: Path) ->
     request = _direct_regular_file(request_value, "human_direct_ssh audit request")
     if audit.get("direct_request_sha256") != sha256_file(request):
         fail("human_direct_ssh audit request digest mismatch")
-    known_hosts = _direct_regular_file(known_hosts_value, "human_direct_ssh audit known_hosts")
+    known_hosts = _direct_canonical_known_hosts(known_hosts_value, "human_direct_ssh audit known_hosts")
     inherited_env = getattr(args, "credential_env", None)
     if inherited_env is None:
         binding = audit.get("credential_binding")
@@ -2846,11 +2930,32 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     return plan
 
 
+def _fsync_parent_directory(path: Path) -> None:
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    directory_fd = os.open(str(path), directory_flags)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
 def write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    payload = json.dumps(value, ensure_ascii=True, indent=2) + "\n"
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        _fsync_parent_directory(path.parent)
+    except OSError as error:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        fail(f"durable JSON write failed: {error.__class__.__name__}")
 
 
 def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
@@ -2872,7 +2977,14 @@ def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
         if manifest_tree(snapshot) != manifest:
             fail(f"backup snapshot manifest verification failed for {root}")
         manifest_path = backup_root / "manifest.json"
-        manifest_path.write_text(json.dumps({"schema_version": "oasis7.validator_pair_rebuild_backup.v1", "root": str(root), "entries": manifest}, indent=2) + "\n", encoding="utf-8")
+        write_json(
+            manifest_path,
+            {
+                "schema_version": "oasis7.validator_pair_rebuild_backup.v1",
+                "root": str(root),
+                "entries": manifest,
+            },
+        )
         digest = sha256_file(manifest_path)
         return {
             "root": str(root),
@@ -3085,6 +3197,35 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         if request != expected_request:
             fail("host adapter quiescence request binding mismatch")
         _validate_quiescence_adapter_receipt(receipt, expected_request)
+        return receipt
+    if phase == "preflight":
+        required_preflight_fields = (
+            "preflight_verified",
+            "runtime_executable",
+            "repair_rebuild_helper_executable",
+            "generated_world_dir_contract",
+            "governance_registry_importer_executable",
+            "python_available",
+            "tar_available",
+            "systemd_available",
+            "process_inspection_available",
+        )
+        for role in MUTATION_ORDER:
+            value = nodes[role]
+            expected_node = plan.get("nodes", {}).get(role)
+            if not isinstance(value, dict) or not isinstance(expected_node, dict):
+                fail(f"host adapter preflight receipt is malformed for {role}")
+            if value.get("role") != role or value.get("root") != expected_node.get("root"):
+                fail(f"host adapter preflight role/root binding mismatch for {role}")
+            if value.get("active") is not False or value.get("running") is not False or value.get("service_state") != "stopped":
+                fail(f"host adapter preflight requires both validators stopped for {role}")
+            if value.get("independently_observed") is not True:
+                fail(f"host adapter preflight independent observation is missing for {role}")
+            if value.get("preflight_observer_mutation") is not False:
+                fail(f"host adapter preflight must prove read-only observation for {role}")
+            for field in required_preflight_fields:
+                if value.get(field) is not True:
+                    fail(f"host adapter preflight gate failed for {role}: {field}")
         return receipt
     if phase == "backup":
         for role in MUTATION_ORDER:
@@ -3544,6 +3685,22 @@ def apply_transaction(
     }
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
+    transaction["phase"] = "preflight"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    try:
+        transaction["preflight_receipt"] = run_host_adapter(host_adapter, path, transaction, "preflight")
+    except BaseException as preflight_error:
+        transaction["phase"] = "preflight_failed"
+        transaction["failure"] = str(preflight_error)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        if isinstance(preflight_error, SystemExit):
+            raise
+        fail(str(preflight_error))
+    transaction["phase"] = "prepared"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
     backups: dict[str, Any] = {}
     staged: dict[str, Any] = {}
     try:
@@ -3579,13 +3736,16 @@ def apply_transaction(
         rollback_errors: list[str] = []
         try:
             # A gate failure can occur after one or both local roots have
-            # been mutated.  Re-establish the stopped-state boundary before
-            # asking the host adapter to roll back or restoring any snapshot.
-            transaction["rollback_quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
+            # been mutated.  Re-authorize the live human stop boundary and
+            # re-observe both fixed validators before rollback or restore.
+            rollback_direct_receipt = _rollback_direct_reobserve(transaction, direct_args)
+            transaction["rollback_direct_quiescence_observation"] = _direct_observation_record(
+                rollback_direct_receipt, reauthorized=True
+            )
             transaction["canonical_digest"] = canonical_digest(transaction)
             write_json(path, transaction)
-        except BaseException as rollback_quiesce_error:
-            rollback_errors.append(f"rollback quiescence: {rollback_quiesce_error}")
+        except BaseException as rollback_direct_error:
+            rollback_errors.append(f"rollback direct re-observation: {rollback_direct_error}")
         try:
             if not rollback_errors:
                 transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
@@ -3613,7 +3773,11 @@ def apply_transaction(
         fail(str(error))
 
 
-def rollback_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:
+def rollback_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
     transaction = load_json(path, "transaction")
     if transaction.get("schema_version") != SCHEMA:
         fail("unsupported transaction schema")
@@ -3623,20 +3787,23 @@ def rollback_transaction(path: Path, host_adapter: Path | None = None) -> dict[s
     if not isinstance(backups, dict):
         fail("transaction does not contain full backup receipts")
     if host_adapter is None:
-        fail("rollback requires a governed host adapter quiesce/rollback callback")
+        fail("rollback requires a governed host adapter rollback callback")
     transaction["phase"] = "rollback_required"
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
     try:
-        transaction["rollback_quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
+        rollback_direct_receipt = _rollback_direct_reobserve(transaction, direct_args)
+        transaction["rollback_direct_quiescence_observation"] = _direct_observation_record(
+            rollback_direct_receipt, reauthorized=True
+        )
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
+        transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
         results: dict[str, Any] = {}
         for role in reversed(MUTATION_ORDER):
             if role not in backups:
                 fail(f"backup missing for {role}")
             results[role] = restore_node(backups[role], transaction.get("transaction_id"))
-        transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
         transaction["phase"] = "rolled_back"
         transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "status": "verified", "results": results}
         transaction["rolled_back_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -3702,6 +3869,10 @@ def parser() -> argparse.ArgumentParser:
     rollback = sub.add_parser("rollback")
     rollback.add_argument("--transaction", required=True)
     rollback.add_argument("--host-adapter", required=True)
+    rollback.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
+    rollback.add_argument("--known-hosts")
+    rollback.add_argument("--credential-env")
+    rollback.add_argument("--credential-fd", type=int)
     return root
 
 
@@ -3720,7 +3891,7 @@ def main() -> int:
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
         print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
     else:
-        print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser()), ensure_ascii=True, sort_keys=True))
+        print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser(), args), ensure_ascii=True, sort_keys=True))
     return 0
 
 
