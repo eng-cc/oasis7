@@ -58,11 +58,21 @@ esac
 FAKE_CARGO
 chmod +x "$fake_bin/cargo"
 
+cat >"$fake_bin/rg" <<'FAKE_RG'
+#!/usr/bin/env bash
+echo "fake rg unavailable" >&2
+exit 127
+FAKE_RG
+chmod +x "$fake_bin/rg"
+
 fake_cargo_log="$tmp_dir/cargo-invocations.log"
 run_output="$tmp_dir/checker-output.log"
 if ! PATH="$fake_bin:$PATH" \
   FAKE_CARGO_LOG="$fake_cargo_log" \
   bash "$checker" >"$run_output" 2>&1; then
+  if grep -Fq -- "fake rg unavailable" "$run_output"; then
+    echo "dependency-surface checker depends on unavailable ripgrep" >&2
+  fi
   echo "dependency-surface checker did not preserve its four exclusion checks" >&2
   sed -n '1,120p' "$run_output" >&2
   exit 1
