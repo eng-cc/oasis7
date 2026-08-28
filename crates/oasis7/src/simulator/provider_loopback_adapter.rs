@@ -86,6 +86,7 @@ impl TrustedModuleCommandExecutor for RuntimeTrustedModuleExecutor<'_> {
         self.execute(response)
     }
 }
+
 const DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID: &str = "provider_loopback_http";
 const PHASE1_ALLOWED_ACTION_REFS: &[&str] = &[
     "wait",
