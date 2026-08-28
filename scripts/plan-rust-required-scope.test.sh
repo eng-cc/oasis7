@@ -123,6 +123,7 @@ governance_helper_output="$(plan_for_paths \
   scripts/pm/patch-equivalence-receipt.sh \
   scripts/pm/patch-equivalence-receipt.test.sh \
   scripts/pm/prepare-task-pr-review-risk.test.py \
+  scripts/prepare-task-pr.test.sh \
   scripts/plan-rust-required-scope.test.sh)"
 assert_key_equals "$governance_helper_output" scope minimal
 assert_key_equals "$governance_helper_output" run_rust_baseline false
@@ -131,6 +132,7 @@ assert_key_equals "$governance_helper_output" needs_node false
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/prepare-task-pr.sh"
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm/patch-equivalence-receipt.sh"
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm/patch-equivalence-receipt.test.sh"
+assert_reason_contains "$governance_helper_output" "governance_script:scripts/prepare-task-pr.test.sh"
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
