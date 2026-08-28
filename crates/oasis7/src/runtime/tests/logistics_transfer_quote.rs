@@ -914,8 +914,8 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
         "path-precedence-source",
         long_relay,
         "iron_ingot",
-        100,
         6_000,
+        100,
         0,
     );
     let long_second = register_route(
@@ -924,8 +924,8 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
         long_relay,
         "path-precedence-destination",
         "iron_ingot",
-        100,
         6_000,
+        100,
         0,
     );
     world.submit_action(Action::SetLogisticsRouteAvailability {
