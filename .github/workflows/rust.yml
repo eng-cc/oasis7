@@ -168,7 +168,7 @@ jobs:
       - name: Install pinned Rust toolchains
         if: ${{ steps.scope.outputs.needs_rust_toolchain == 'true' }}
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
           if [[ "${{ steps.scope.outputs.needs_wasm_target }}" == "true" ]]; then
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
