@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "doc/engineering/workflow/source-of-truth.md"
 AGENTS = ROOT / "AGENTS.md"
 FINISHING = ROOT / ".agents/skills/finishing-a-development-branch/SKILL.md"
+EXECUTING_PROJECT_TASKS = ROOT / ".agents/skills/executing-project-tasks/SKILL.md"
 TPM_ROLE = ROOT / ".agents/roles/tpm.md"
 PM_README = ROOT / ".pm/README.md"
 VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL.md"
@@ -147,6 +148,68 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("does not claim to control Codex host concurrency", dispatch)
         self.assertIn("bounded-command-output.py", budget)
         self.assertIn("does not claim control over Codex host logs", budget)
+
+    def test_plan_gap_evidence_has_a_structured_fail_closed_step_contract(self) -> None:
+        """Execution cannot start from a prose-only or partially mapped plan."""
+        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+        normalized = re.sub(r"\s+", " ", dispatch.lower())
+        self.assertIn("plan-gap evidence", normalized)
+        self.assertRegex(
+            normalized,
+            r"each (?:ordered )?(?:execution )?step.{0,220}must (?:record|include).{0,120}all",
+        )
+
+        required_fields = (
+            "step_id",
+            "acceptance_refs",
+            "dependencies",
+            "verification_command",
+            "verification_evidence",
+            "write_scope",
+            "out_of_scope",
+            "required_role_slices",
+        )
+        for field in required_fields:
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", dispatch)
+
+        self.assertRegex(
+            normalized,
+            r"missing.{0,180}(?:field|evidence|mapping).{0,180}fail(?:s|ure)?[- ]closed",
+        )
+        self.assertRegex(
+            normalized,
+            r"(?:before|prior to).{0,100}(?:editing|execution).{0,160}plan-gap evidence",
+        )
+
+    def test_execution_skill_enforces_the_same_plan_gap_schema(self) -> None:
+        """The operational entrypoint must consume, not weaken, the canonical schema."""
+        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+        skill = EXECUTING_PROJECT_TASKS.read_text(encoding="utf-8")
+        skill_normalized = re.sub(r"\s+", " ", skill.lower())
+        self.assertIn("plan-gap evidence", skill_normalized)
+        self.assertIn("github-backed task truth", skill_normalized)
+        for field in (
+            "step_id",
+            "acceptance_refs",
+            "dependencies",
+            "verification_command",
+            "verification_evidence",
+            "write_scope",
+            "out_of_scope",
+            "required_role_slices",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", dispatch)
+                self.assertIn(f"`{field}`", skill)
+        self.assertRegex(
+            skill_normalized,
+            r"missing.{0,180}(?:field|evidence|mapping).{0,180}fail(?:s|ure)?[- ]closed",
+        )
+        self.assertRegex(
+            skill_normalized,
+            r"(?:before|prior to).{0,100}(?:editing|execution).{0,160}plan-gap evidence",
+        )
 
     def test_terminal_helpers_are_current_while_supervisor_automation_is_blocked(self) -> None:
         table = self.section("Capability status")

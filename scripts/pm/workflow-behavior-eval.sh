@@ -509,7 +509,9 @@ checks = [
     (
         root / ".agents/skills/executing-project-tasks/SKILL.md",
         [
-            "plan-gap review",
+            "Before editing or execution, create a `Plan-Gap Evidence` entry for every ordered execution step.",
+            "Each entry must record all of: `step_id`, `acceptance_refs`, `dependencies`, `verification_command`, `verification_evidence`, `write_scope`, `out_of_scope`, and `required_role_slices`.",
+            "A missing field, evidence, or mapping fails closed before editing or execution.",
             "GitHub task issue evidence comments",
             "Keep mutable task planning only in GitHub-backed task truth",
         ],
@@ -776,7 +778,9 @@ scenarios = [
         "surface": ".agents/skills/executing-project-tasks/SKILL.md",
         "required_markers": [
             "the task already has written scope in a PRD/design, a handoff, or GitHub-backed task truth",
-            "Run a brief plan-gap review before editing",
+            "Before editing or execution, create a `Plan-Gap Evidence` entry for every ordered execution step.",
+            "Each entry must record all of: `step_id`, `acceptance_refs`, `dependencies`, `verification_command`, `verification_evidence`, `write_scope`, `out_of_scope`, and `required_role_slices`.",
+            "A missing field, evidence, or mapping fails closed before editing or execution.",
             "Keep mutable task planning only in GitHub-backed task truth",
         ],
     },
