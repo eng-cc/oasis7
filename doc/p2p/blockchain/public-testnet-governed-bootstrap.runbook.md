@@ -429,7 +429,6 @@ any additional signing requirements.
 ## 9. Phase C - Clean Rebuild Validators
 ### Goal
 从零重建 validator pair。
-
 本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight，且不得在只 reset 一台 validator 后向任一 host staging。
 
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
@@ -457,7 +456,20 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --transaction <transaction-dir>/transaction.json \
   --host-adapter <governed-host-adapter>
 ```
+对于 active/unknown consumer-impact，先运行只产证据的 bounded quiescence phase，再生成 pair plan：
 
+```bash
+scripts/p2p-public-testnet-rebuild-validators.sh quiesce --consumer-impact-record <active-or-unknown-record.json> \
+  --quiescence-transaction-id <unique-stop-evidence-id> --node storage-205=local:<validator-root-205> \
+  --node sequencer-204=local:<validator-root-204> --host-adapter <governed-host-adapter> --out-dir <quiescence-dir>
+scripts/p2p-public-testnet-rebuild-validators.sh plan ... --consumer-impact-record <same-record.json> \
+  --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json --quiescence-transaction-id <same-stop-evidence-id>
+```
+`quiesce` 只允许在已验证的 active/unknown record（含三项 communication approval）上运行，只调用
+`quiesce-only` adapter，不得 preflight/reset/stage/start/mutation。其 `oasis7.validator_pair_rebuild_quiescence_proof.v1`
+必须由独立 receipt 产生，精确覆盖两角色各一次，绑定 transaction/impact/request SHA-256、role/root、
+`active=false`、`running=false` 与 freshness；active service、遗漏/重复角色、伪造、stale receipt 或
+boolean-only proof 均拒绝。任一 plan（含 impact=none）无 proof 或 binding 不匹配，均不得进入 destructive phase。
 The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`); runtime
 transaction IDs and timestamps are assigned only after the plan is durably
 journaled. The transaction is fail-closed and records a complete stopped-state backup
@@ -525,10 +537,10 @@ destructive activity。
 
 这个 record 是 preflight/reset/redeploy continuation 的硬 gate：
 
-1. `impact` 只能是 `active`、`none` 或 `unknown`；`evidence_source` 必须非空；`timestamp` 必须是带 `Z` 或显式 UTC offset 的 RFC3339 时间；`validators_already_stopped` 必须是 JSON boolean；`decision` 必须严格等于 `proceed`。缺失、malformed JSON、字段类型/值无效或 `decision=hold` 都必须 fail closed。
+1. `impact` 只能是 `active`、`none` 或 `unknown`；`evidence_source` 必须非空；`timestamp` 必须是带 `Z` 或显式 UTC offset 的 RFC3339 时间；`validators_already_stopped` 必须是 JSON boolean，但不构成停机证据；`decision` 必须严格等于 `proceed`。缺失、malformed JSON、字段类型/值无效或 `decision=hold` 都必须 fail closed。
 2. `impact=none` 时，三个 communication 字段仍须存在且非空，但允许使用 `n/a`。
 3. `impact=active` 或 `unknown` 时，按存在外部 consumer 处理。TPM 与 LiveOps/community 共同负责 outage 和 recovery updates，`producer_system_designer` 批准对外 wording；`outage_update_channel`、`recovery_update_checkpoint` 和 `producer_wording_approval` 必须非空且不能是 `n/a`。
-4. 如果 validator 在 record 生成前已经停止，也不能跳过 determination：在任何 host preflight、目录删除、reset、staging、启动或其他 redeploy continuation 前补齐同一记录。已停止这一事实本身不能推断 `active`、`none` 或恢复完成。
+4. 如果 validator 在 record 生成前已经停止，也不能跳过 determination：在任何 host preflight、目录删除、reset、staging、启动或其他 redeploy continuation 前补齐同一记录，并为 plan 提供独立的两角色 stopped/quiescence proof。已停止这一事实本身不能推断 `active`、`none` 或恢复完成。
 5. 本 record 只授权继续执行受治理的 testnet reset/redeploy，不改变 `testnet`、`resettable`、`non-mainnet` 边界，也不授权承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ### C1. Preflight both validators

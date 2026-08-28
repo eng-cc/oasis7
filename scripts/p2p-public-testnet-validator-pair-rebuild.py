@@ -8,7 +8,10 @@ world and capacity evidence and can be reviewed without contacting a host.
 transaction-bound startup/health receipt.  An orchestration layer may map the
 same transaction to a remote host, but this tool never guesses credentials or
 silently falls back to SSH.  No observer is ever touched by this pair
-transaction.
+transaction.  ``quiesce`` is an evidence-only phase: it may invoke only a
+quiesce-only adapter callback and never preflights, resets, stages, starts, or
+mutates a node.  Its independently produced two-role proof is mandatory for
+plan admission; the impact record boolean is not a stopped-state proof.
 """
 
 from __future__ import annotations
@@ -32,6 +35,9 @@ from typing import Any, NoReturn
 
 PLAN_SCHEMA = "oasis7.validator_pair_rebuild_plan.v1"
 SCHEMA = "oasis7.validator_pair_rebuild_transaction.v1"
+QUIESCENCE_REQUEST_SCHEMA = "oasis7.validator_pair_rebuild_quiescence_request.v1"
+QUIESCENCE_PROOF_SCHEMA = "oasis7.validator_pair_rebuild_quiescence_proof.v1"
+QUIESCENCE_MAX_AGE_SECONDS = 300
 MUTATION_ORDER = ["storage-205", "sequencer-204"]
 STARTUP_ORDER = ["sequencer-204", "storage-205"]
 IDENTITY_METADATA_FIELDS = (
@@ -372,7 +378,7 @@ def package_size(package_dir: Path) -> int:
     return tree_size(package_dir)
 
 
-def validate_impact(path: Path) -> dict[str, Any]:
+def validate_impact(path: Path, *, require_stopped: bool = False) -> dict[str, Any]:
     impact = load_json(path, "consumer impact record")
     if impact.get("decision") != "proceed":
         fail("consumer impact decision must be proceed")
@@ -398,7 +404,7 @@ def validate_impact(path: Path) -> dict[str, Any]:
         fail("consumer impact timestamp must be RFC3339")
     if parsed_timestamp.tzinfo is None:
         fail("consumer impact timestamp must include a timezone")
-    if impact.get("validators_already_stopped") is not True:
+    if require_stopped and impact.get("validators_already_stopped") is not True:
         fail("validators must be stopped before a pair rebuild plan")
     for field in ("outage_update_channel", "recovery_update_checkpoint", "producer_wording_approval"):
         value = impact.get(field)
@@ -406,7 +412,305 @@ def validate_impact(path: Path) -> dict[str, Any]:
             fail(f"consumer impact {field} must be non-empty")
         if impact["impact"] in {"active", "unknown"} and value.strip().lower() == "n/a":
             fail(f"consumer impact {field} cannot be n/a for active/unknown impact")
-    return {"decision": "proceed", "evidence_source": impact["evidence_source"], "timestamp": impact["timestamp"]}
+    return {
+        "decision": "proceed",
+        "impact": impact["impact"],
+        "evidence_source": impact["evidence_source"],
+        "timestamp": impact["timestamp"],
+        "validators_already_stopped": impact["validators_already_stopped"],
+        "outage_update_channel": impact["outage_update_channel"],
+        "recovery_update_checkpoint": impact["recovery_update_checkpoint"],
+        "producer_wording_approval": impact["producer_wording_approval"],
+    }
+
+
+def _payload_digest(value: dict[str, Any], excluded: tuple[str, ...] = ()) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            {key: item for key, item in value.items() if key not in excluded},
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+
+
+def _fresh_quiescence_timestamp(value: Any, label: str) -> dt.datetime:
+    parsed = _parse_timestamp(value, label)
+    now = dt.datetime.now(dt.timezone.utc)
+    if parsed > now + dt.timedelta(seconds=5) or now - parsed > dt.timedelta(seconds=QUIESCENCE_MAX_AGE_SECONDS):
+        fail(f"{label} is stale or in the future")
+    return parsed
+
+
+def _validate_quiescence_adapter_receipt(
+    receipt: dict[str, Any], request: dict[str, Any]
+) -> dict[str, Any]:
+    if receipt.get("schema_version") not in {
+        "oasis7.validator_pair_rebuild_quiescence_receipt.v1",
+        "oasis7.validator_pair_rebuild_host_receipt.v2",
+    }:
+        fail("quiescence adapter returned an unsupported receipt schema")
+    if receipt.get("phase") != "quiesce":
+        fail("quiescence adapter receipt phase must be quiesce")
+    if receipt.get("operation") != "quiesce-only":
+        fail("quiescence adapter must declare a quiesce-only operation")
+    if receipt.get("request_digest") != request["request_digest"]:
+        fail("quiescence adapter request digest mismatch")
+    receipt_transaction_id = receipt.get("transaction_id", receipt.get("quiescence_id"))
+    if receipt.get("quiescence_id") != request["quiescence_id"] or receipt_transaction_id != request["quiescence_id"]:
+        fail("quiescence adapter quiescence identity mismatch")
+    if receipt.get("impact_record_sha256") != request["impact_record_sha256"]:
+        fail("quiescence adapter impact record mismatch")
+    for forbidden in ("preflight", "reset", "stage", "apply", "systemd", "destructive_activity"):
+        if receipt.get(forbidden) not in (None, False, "forbidden"):
+            fail(f"quiescence adapter receipt contains forbidden {forbidden} activity")
+    if receipt.get("mutation_order") != MUTATION_ORDER or receipt.get("startup_order") != STARTUP_ORDER:
+        fail("quiescence adapter receipt order mismatch")
+    _fresh_quiescence_timestamp(receipt.get("captured_at"), "quiescence adapter captured_at")
+    nodes = receipt.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("quiescence adapter receipt must cover both validator roles")
+    request_nodes = request["nodes"]
+    for role in MUTATION_ORDER:
+        value = nodes[role]
+        expected = request_nodes[role]
+        if not isinstance(value, dict):
+            fail(f"quiescence adapter receipt malformed for {role}")
+        if value.get("role") != role or value.get("root") != expected["root"]:
+            fail(f"quiescence adapter role/root binding mismatch for {role}")
+        if value.get("active") is not False or value.get("running") is not False:
+            fail(f"quiescence adapter stopped gate failed for {role}")
+        if value.get("service_state") != "stopped":
+            fail(f"quiescence adapter service state is not stopped for {role}")
+        if value.get("independently_observed") is not True:
+            fail(f"quiescence adapter independent observation is missing for {role}")
+    return receipt
+
+
+def _validate_stopped_quiescence_proof(
+    proof_path: Path,
+    impact_path: Path,
+    nodes: dict[str, dict[str, Any]],
+    expected_quiescence_id: str | None = None,
+) -> dict[str, Any]:
+    if proof_path.is_symlink():
+        fail("stopped/quiescence proof must be a regular file")
+    proof = load_json(proof_path, "stopped/quiescence proof")
+    if proof.get("schema_version") != QUIESCENCE_PROOF_SCHEMA or proof.get("phase") != "quiesce":
+        fail("stopped/quiescence proof schema or phase is unsupported")
+    quiescence_id = proof.get("quiescence_id")
+    if not isinstance(quiescence_id, str) or not quiescence_id.strip():
+        fail("stopped/quiescence proof quiescence_id is required")
+    if proof.get("transaction_id", quiescence_id) != quiescence_id:
+        fail("stopped/quiescence proof transaction identity mismatch")
+    if expected_quiescence_id is not None and quiescence_id != expected_quiescence_id:
+        fail("stopped/quiescence proof transaction identity mismatch")
+    impact = validate_impact(impact_path)
+    if impact["impact"] == "none" and impact["validators_already_stopped"] is not True:
+        fail("none-impact stopped/quiescence proof requires a stopped consumer-impact claim")
+    impact_sha256 = sha256_file(impact_path)
+    if proof.get("impact_record_sha256") != impact_sha256:
+        fail("independently verified stopped/quiescence proof impact record digest mismatch")
+    if proof.get("impact") != impact["impact"]:
+        fail("stopped/quiescence proof impact mismatch")
+    if proof.get("independent_producer") != "governed-host-adapter":
+        fail("stopped/quiescence proof independent producer is not governed")
+    request_digest = proof.get("request_digest")
+    if not isinstance(request_digest, str) or len(request_digest) != 64:
+        fail("stopped/quiescence proof request digest is required")
+    source_path_value = proof.get("source_receipt_path")
+    source_sha256 = proof.get("source_receipt_sha256")
+    if not isinstance(source_path_value, str) or not source_path_value.strip() or not isinstance(source_sha256, str):
+        fail("stopped/quiescence proof independent source receipt is required")
+    source_path = Path(source_path_value)
+    if source_path.is_symlink() or not source_path.is_file():
+        fail("stopped/quiescence source receipt must be a regular file")
+    if sha256_file(source_path) != source_sha256.lower():
+        fail("stopped/quiescence source receipt digest mismatch")
+    source = load_json(source_path, "stopped/quiescence source receipt")
+    expected_request = {
+        "schema_version": QUIESCENCE_REQUEST_SCHEMA,
+        "phase": "quiesce",
+        "quiescence_id": quiescence_id,
+        "transaction_id": quiescence_id,
+        "impact_record_sha256": impact_sha256,
+        "consumer_impact": impact,
+        "mutation_order": MUTATION_ORDER,
+        "startup_order": STARTUP_ORDER,
+        "nodes": {
+            role: {"role": role, "transport": nodes[role]["transport"], "root": nodes[role]["root"]}
+            for role in MUTATION_ORDER
+        },
+    }
+    if request_digest != _payload_digest(expected_request):
+        fail("stopped/quiescence proof request digest is fabricated")
+    request = {**expected_request, "request_digest": request_digest}
+    _validate_quiescence_adapter_receipt(source, request)
+    if proof.get("mutation_order") != MUTATION_ORDER or proof.get("startup_order") != STARTUP_ORDER:
+        fail("stopped/quiescence proof order binding mismatch")
+    if proof.get("captured_at") != source.get("captured_at"):
+        fail("stopped/quiescence proof capture timestamp mismatch")
+    _fresh_quiescence_timestamp(proof.get("captured_at"), "stopped/quiescence proof captured_at")
+    roles = proof.get("roles")
+    if not isinstance(roles, list) or len(roles) != len(MUTATION_ORDER):
+        fail("stopped/quiescence proof must contain both roles exactly once")
+    seen: set[str] = set()
+    source_nodes = source["nodes"]
+    if proof.get("nodes") != source_nodes:
+        fail("stopped/quiescence proof node evidence mismatch")
+    for role_proof in roles:
+        if not isinstance(role_proof, dict):
+            fail("stopped/quiescence role proof is malformed")
+        role = role_proof.get("role")
+        if role not in MUTATION_ORDER or role in seen:
+            fail("stopped/quiescence proof contains duplicate or unknown role")
+        seen.add(role)
+        observed = source_nodes[role]
+        if role_proof.get("root") != nodes[role]["root"]:
+            fail(f"stopped/quiescence role/root binding mismatch for {role}")
+        if role_proof.get("active") is not False or role_proof.get("running") is not False:
+            fail(f"stopped/quiescence proof stopped gate failed for {role}")
+        if role_proof.get("service_state") != "stopped" or role_proof.get("independently_observed") is not True:
+            fail(f"stopped/quiescence proof independent stopped evidence is missing for {role}")
+        if role_proof.get("evidence_sha256") != _payload_digest(observed):
+            fail(f"stopped/quiescence proof evidence digest mismatch for {role}")
+    if seen != set(MUTATION_ORDER):
+        fail("stopped/quiescence proof must contain both canonical roles")
+    return {
+        "path": str(proof_path.resolve()),
+        "sha256": sha256_file(proof_path),
+        "quiescence_id": quiescence_id,
+        "request_digest": request_digest,
+        "impact_record_sha256": impact_sha256,
+        "captured_at": proof["captured_at"],
+        "roles": roles,
+    }
+
+
+def _validate_plan_stopped_quiescence(plan: dict[str, Any]) -> dict[str, Any]:
+    proof = plan.get("proof")
+    if not isinstance(proof, dict):
+        fail("plan stopped/quiescence proof is missing")
+    proof_path_value = proof.get("stopped_quiescence_proof_path")
+    expected_sha256 = proof.get("stopped_quiescence_proof_sha256")
+    impact_path_value = proof.get("consumer_impact_record_path")
+    if not isinstance(proof_path_value, str) or not isinstance(expected_sha256, str) or not isinstance(impact_path_value, str):
+        fail("plan requires independently verified stopped/quiescence proof")
+    proof_path = Path(proof_path_value)
+    if not proof_path.is_file() or sha256_file(proof_path) != expected_sha256.lower():
+        fail("plan stopped/quiescence proof digest mismatch")
+    nodes = plan.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("plan node roles are incomplete for stopped/quiescence proof")
+    impact_path = Path(impact_path_value).resolve()
+    impact = validate_impact(impact_path)
+    if plan.get("consumer_impact") != impact:
+        fail("plan consumer-impact binding mismatch")
+    validated = _validate_stopped_quiescence_proof(proof_path, impact_path, nodes, proof.get("quiescence_id"))
+    if validated["sha256"] != expected_sha256.lower():
+        fail("plan stopped/quiescence proof binding mismatch")
+    return validated
+
+
+def _quiescence_request(
+    impact_path: Path,
+    impact: dict[str, Any],
+    nodes: dict[str, dict[str, Any]],
+    quiescence_id: str,
+) -> dict[str, Any]:
+    request: dict[str, Any] = {
+        "schema_version": QUIESCENCE_REQUEST_SCHEMA,
+        "phase": "quiesce",
+        "quiescence_id": quiescence_id,
+        "transaction_id": quiescence_id,
+        "impact_record_sha256": sha256_file(impact_path),
+        "consumer_impact": impact,
+        "mutation_order": MUTATION_ORDER,
+        "startup_order": STARTUP_ORDER,
+        "nodes": {
+            role: {"role": role, "transport": nodes[role]["transport"], "root": nodes[role]["root"]}
+            for role in MUTATION_ORDER
+        },
+    }
+    request["request_digest"] = _payload_digest(request)
+    return request
+
+
+def run_quiescence_phase(args: argparse.Namespace) -> dict[str, Any]:
+    impact_path = Path(args.consumer_impact_record).resolve()
+    impact = validate_impact(impact_path)
+    if impact["impact"] not in {"active", "unknown"}:
+        fail("quiescence phase requires active or unknown consumer impact")
+    quiescence_id = args.quiescence_id
+    if not isinstance(quiescence_id, str) or not quiescence_id.strip():
+        fail("quiescence phase requires a non-empty quiescence id")
+    nodes = parse_nodes(args.node)
+    adapter = Path(args.host_adapter).expanduser()
+    if adapter.is_symlink() or not adapter.is_file():
+        fail(f"quiescence host adapter must be a regular file: {adapter}")
+    out_dir = Path(args.out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    request = _quiescence_request(impact_path, impact, nodes, quiescence_id)
+    request_path = out_dir / "quiescence-request.json"
+    write_json(request_path, request)
+    try:
+        result = subprocess.run(
+            [str(adapter.resolve()), "--phase", "quiesce", "--transaction", str(request_path)],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"quiescence host adapter execution failed: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail(f"quiescence host adapter failed with exit {result.returncode}")
+    try:
+        source = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        fail("quiescence host adapter must return one JSON receipt on stdout")
+    if not isinstance(source, dict):
+        fail("quiescence host adapter receipt must be a JSON object")
+    _validate_quiescence_adapter_receipt(source, request)
+    source_path = out_dir / "quiescence-adapter-receipt.json"
+    write_json(source_path, source)
+    roles = []
+    for role in MUTATION_ORDER:
+        observed = source["nodes"][role]
+        roles.append(
+            {
+                "role": role,
+                "root": observed["root"],
+                "active": observed["active"],
+                "running": observed["running"],
+                "service_state": observed["service_state"],
+                "independently_observed": observed["independently_observed"],
+                "evidence_sha256": _payload_digest(observed),
+            }
+        )
+    proof: dict[str, Any] = {
+        "schema_version": QUIESCENCE_PROOF_SCHEMA,
+        "phase": "quiesce",
+        "quiescence_id": quiescence_id,
+        "transaction_id": quiescence_id,
+        "impact": impact["impact"],
+        "impact_record_sha256": request["impact_record_sha256"],
+        "request_digest": request["request_digest"],
+        "source_receipt_path": str(source_path),
+        "source_receipt_sha256": sha256_file(source_path),
+        "captured_at": source["captured_at"],
+        "mutation_order": MUTATION_ORDER,
+        "startup_order": STARTUP_ORDER,
+        "roles": roles,
+        "nodes": source["nodes"],
+        "independent_producer": "governed-host-adapter",
+    }
+    proof_path = out_dir / "quiescence-proof.json"
+    write_json(proof_path, proof)
+    proof["proof_path"] = str(proof_path)
+    print(json.dumps(proof, ensure_ascii=True, sort_keys=True))
+    return proof
 
 
 def capacity_for(
@@ -1090,8 +1394,19 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     except SystemExit as error:
         fail(str(error).removeprefix("error: validator-pair provenance: "))
     runtime_source = helper.find_runtime(package_dir)
-    impact = validate_impact(Path(args.consumer_impact_record).resolve())
+    impact_path = Path(args.consumer_impact_record).resolve()
+    impact = validate_impact(impact_path)
     nodes = parse_nodes(args.node)
+    stopped_proof_path_value = getattr(args, "stopped_quiescence_proof", None)
+    if not isinstance(stopped_proof_path_value, str) or not stopped_proof_path_value.strip():
+        fail("plan requires independently verified stopped/quiescence proof for both validator roles")
+    stopped_proof_path = Path(stopped_proof_path_value).resolve()
+    stopped_proof = _validate_stopped_quiescence_proof(
+        stopped_proof_path,
+        impact_path,
+        nodes,
+        getattr(args, "quiescence_id", None),
+    )
     capacity = load_json(Path(args.capacity_json).resolve(), "capacity evidence")
     package_bytes = package_size(package_dir)
     governed = provenance_summary["governed"]
@@ -1145,6 +1460,16 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "nodes": nodes,
         "capacity": capacities,
         "proof": {
+            "consumer_impact_record_path": str(impact_path),
+            "stopped_quiescence_proof_path": stopped_proof["path"],
+            "stopped_quiescence_proof_sha256": stopped_proof["sha256"],
+            "quiescence_id": stopped_proof["quiescence_id"],
+            "stopped_quiescence": {
+                "verified": True,
+                "quiescence_id": stopped_proof["quiescence_id"],
+                "request_digest": stopped_proof["request_digest"],
+                "impact_record_sha256": stopped_proof["impact_record_sha256"],
+            },
             "storage_health_url": args.storage_health_url,
             "sequencer_health_url": args.sequencer_health_url,
             "sequencer_proof_url": args.sequencer_proof_url,
@@ -1390,6 +1715,8 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
             value = nodes[role]
             if value.get("active") is not False or value.get("running") is not False:
                 fail(f"host adapter quiesce gate failed for {role}")
+            if "service_state" in value and value.get("service_state") != "stopped":
+                fail(f"host adapter service state gate failed for {role}")
         return receipt
     if phase == "backup":
         for role in MUTATION_ORDER:
@@ -1761,6 +2088,7 @@ def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str,
         fail("plan digest mismatch")
     if host_adapter is None:
         fail("apply requires a governed host adapter for startup and health gates")
+    _validate_plan_stopped_quiescence(plan)
     helper = load_provenance_helper()
     package = plan.get("package")
     try:
@@ -1891,6 +2219,8 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--provenance", required=True)
     plan.add_argument("--trust-root", required=True)
     plan.add_argument("--consumer-impact-record", required=True)
+    plan.add_argument("--stopped-quiescence-proof")
+    plan.add_argument("--quiescence-id", "--quiescence-transaction-id", dest="quiescence_id", required=True)
     plan.add_argument("--capacity-json", required=True)
     plan.add_argument("--node", action="append", required=True)
     plan.add_argument("--storage-health-url")
@@ -1902,6 +2232,12 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--sequencer-rebuild-proof-verification")
     plan.add_argument("--sequencer-proof-verifier")
     plan.add_argument("--out-dir")
+    quiesce = sub.add_parser("quiesce")
+    quiesce.add_argument("--consumer-impact-record", required=True)
+    quiesce.add_argument("--quiescence-id", "--quiescence-transaction-id", dest="quiescence_id", required=True)
+    quiesce.add_argument("--node", action="append", required=True)
+    quiesce.add_argument("--host-adapter", required=True)
+    quiesce.add_argument("--out-dir", required=True)
     apply = sub.add_parser("apply")
     apply.add_argument("--transaction", required=True)
     apply.add_argument("--host-adapter")
@@ -1913,7 +2249,9 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    if args.mode == "plan":
+    if args.mode == "quiesce":
+        run_quiescence_phase(args)
+    elif args.mode == "plan":
         plan = build_plan(args)
         if args.out_dir:
             write_json(Path(args.out_dir).resolve() / "transaction.json", plan)

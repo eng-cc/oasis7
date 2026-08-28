@@ -11,6 +11,8 @@ Governed transaction contract (current path):
     --identity-receipts <validator-identity-receipts.json> \
     --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
     --consumer-impact-record <record.json> \
+    --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json \
+    --quiescence-transaction-id <bounded-quiescence-id> \
     --capacity-json <per-node-capacity.json> \
     --node storage-205=local:<stopped-node-root> \
     --node sequencer-204=local:<stopped-node-root> \
@@ -19,6 +21,13 @@ Governed transaction contract (current path):
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
+  ./scripts/p2p-public-testnet-rebuild-validators.sh quiesce \
+    --consumer-impact-record <active-or-unknown-record.json> \
+    --quiescence-id <bounded-quiescence-id> \
+    --node storage-205=local:<validator-root> \
+    --node sequencer-204=local:<validator-root> \
+    --host-adapter <governed-host-adapter> \
+    --out-dir <quiescence-dir>
   ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
@@ -32,6 +41,11 @@ new-epoch provenance digests, reset/stage/start and same-window health gates,
 and a rollback boundary that forbids restoring deleted chain state.
 `--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
 for the subcommands.
+`quiesce` is a bounded stop-evidence phase only: it validates an active or
+unknown consumer-impact record and may invoke only the host adapter's
+quiesce-only callback. It never preflights, resets, stages, starts, or
+mutates observer state. The resulting two-role proof is required by `plan`;
+the `validators_already_stopped` boolean alone is never sufficient.
 
 Historical SSH audit path (not the current governed transaction contract):
   ./scripts/p2p-public-testnet-rebuild-validators.sh \
@@ -278,7 +292,7 @@ def node_contracts() -> dict[str, object]:
             "observer_equivalents_not_mutated_by_pair_transaction": True,
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
-        if mode != "plan":
+        if mode not in {"plan", "quiesce"}:
             staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
             observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
             if not isinstance(observed, dict):
@@ -288,7 +302,7 @@ def node_contracts() -> dict[str, object]:
             post_delete_proof["receipt"] = observed
         backup_receipt = None
         backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
-        if mode != "plan":
+        if mode not in {"plan", "quiesce"}:
             observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
             if not isinstance(observed_backup, dict):
                 raise SystemExit(f"missing forensic backup receipt for {role}")
@@ -350,8 +364,8 @@ def node_contracts() -> dict[str, object]:
             },
             "stopped_quiescence_proof": {
                 "required": True,
-                "remote_activity": False if mode == "plan" else "adapter_receipt_required",
-                "proof": "governed host-adapter quiesce receipt binds active=false,running=false before reset",
+                "remote_activity": False if mode in {"plan", "quiesce"} else "adapter_receipt_required",
+                "proof": "independent governed host-adapter quiesce receipt binds role, digest, active=false,running=false before reset",
             },
         }
         if backup_receipt is not None:
@@ -411,6 +425,17 @@ if mode == "plan":
     contract["remote_activity"] = False
     contract["systemd_activity"] = False
     contract["destructive_activity"] = False
+elif mode == "quiesce":
+    # Quiescence is an evidence-only transition.  It may not preflight,
+    # reset, stage, start, or mutate any observer or validator state.
+    contract["deterministic"] = False
+    contract["remote_activity"] = "governed-host-adapter-quiesce-only"
+    contract["systemd_activity"] = False
+    contract["destructive_activity"] = False
+    contract["quiescence_only"] = True
+    contract["preflight"] = "forbidden"
+    contract["reset"] = "forbidden"
+    contract["stage"] = "forbidden"
 else:
     contract["captured_at"] = value.get("host_receipt", {}).get("captured_at")
     contract["deterministic"] = False
@@ -451,7 +476,7 @@ PY
 # historical SSH fixture contract and are intentionally not used for a current
 # destructive rebuild.
 case "${1:-}" in
-  plan|apply|rollback)
+  plan|apply|rollback|quiesce)
     receipt_contract_envelope "$@"
     exit $?
     ;;
@@ -463,6 +488,11 @@ case "${1:-}" in
   --apply)
     shift
     receipt_contract_envelope apply "$@"
+    exit $?
+    ;;
+  --quiesce)
+    shift
+    receipt_contract_envelope quiesce "$@"
     exit $?
     ;;
   --rollback)

@@ -9,6 +9,7 @@ target, or observer is used.
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import hashlib
 import importlib.util
 import json
@@ -23,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXECUTOR = ROOT / "scripts" / "p2p-public-testnet-validator-pair-rebuild.py"
+WRAPPER = ROOT / "scripts" / "p2p-public-testnet-rebuild-validators.sh"
 PROVENANCE = ROOT / "scripts" / "p2p-public-testnet-validator-pair-provenance.py"
 RELEASE_BUNDLE = ROOT / "scripts" / "release-candidate-bundle.sh"
 
@@ -178,6 +180,9 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        self.quiescence_id = "fixture-quiescence-3481"
+        self.quiescence_proof = self.root / "quiescence-proof.json"
+        self._write_quiescence_fixture()
         self.out = self.root / "out"
 
     def tearDown(self) -> None:
@@ -330,6 +335,125 @@ print(json.dumps({
         adapter.chmod(0o755)
         return adapter
 
+    def _write_quiescence_fixture(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact_sha256 = sha256(self.impact)
+        nodes = {
+            role: {
+                "role": role,
+                "transport": "local",
+                "root": str(self.nodes[role].resolve()),
+            }
+            for role in ("storage-205", "sequencer-204")
+        }
+        request = {
+            "schema_version": "oasis7.validator_pair_rebuild_quiescence_request.v1",
+            "phase": "quiesce",
+            "quiescence_id": self.quiescence_id,
+            "transaction_id": self.quiescence_id,
+            "impact_record_sha256": impact_sha256,
+            "consumer_impact": {
+                "decision": "proceed",
+                **impact,
+            },
+            "mutation_order": ["storage-205", "sequencer-204"],
+            "startup_order": ["sequencer-204", "storage-205"],
+            "nodes": nodes,
+        }
+        request_digest = canonical_digest(request)
+        source_nodes = {
+            role: {
+                **nodes[role],
+                "active": False,
+                "running": False,
+                "service_state": "stopped",
+                "independently_observed": True,
+            }
+            for role in nodes
+        }
+        source = {
+            "schema_version": "oasis7.validator_pair_rebuild_quiescence_receipt.v1",
+            "phase": "quiesce",
+            "operation": "quiesce-only",
+            "quiescence_id": self.quiescence_id,
+            "request_digest": request_digest,
+            "impact_record_sha256": impact_sha256,
+            "captured_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "mutation_order": request["mutation_order"],
+            "startup_order": request["startup_order"],
+            "nodes": source_nodes,
+        }
+        source_path = self.root / "quiescence-adapter-receipt.json"
+        source_path.write_text(json.dumps(source, indent=2) + "\n", encoding="utf-8")
+        proof = {
+            "schema_version": "oasis7.validator_pair_rebuild_quiescence_proof.v1",
+            "phase": "quiesce",
+            "quiescence_id": self.quiescence_id,
+            "transaction_id": self.quiescence_id,
+            "impact": impact["impact"],
+            "impact_record_sha256": impact_sha256,
+            "request_digest": request_digest,
+            "source_receipt_path": str(source_path),
+            "source_receipt_sha256": sha256(source_path),
+            "captured_at": source["captured_at"],
+            "mutation_order": request["mutation_order"],
+            "startup_order": request["startup_order"],
+            "roles": [
+                {
+                    "role": role,
+                    "root": source_nodes[role]["root"],
+                    "active": False,
+                    "running": False,
+                    "service_state": "stopped",
+                    "independently_observed": True,
+                    "evidence_sha256": canonical_digest(source_nodes[role]),
+                }
+                for role in request["mutation_order"]
+            ],
+            "nodes": source_nodes,
+            "independent_producer": "governed-host-adapter",
+        }
+        self.quiescence_proof.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+
+    def _write_quiescence_adapter(self, *, active: bool = False) -> Path:
+        adapter = self.root / "quiescence-host-adapter.py"
+        adapter.write_text(
+            f"""#!/usr/bin/env python3
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())
+nodes = {{}}
+for role in transaction['mutation_order']:
+    nodes[role] = {{
+        'role': role,
+        'root': transaction['nodes'][role]['root'],
+        'active': {str(active)},
+        'running': {str(active)},
+        'service_state': 'active' if {str(active)} else 'stopped',
+        'independently_observed': True,
+    }}
+print(json.dumps({{
+    'schema_version': 'oasis7.validator_pair_rebuild_quiescence_receipt.v1',
+    'phase': 'quiesce',
+    'operation': 'quiesce-only',
+    'quiescence_id': transaction['quiescence_id'],
+    'transaction_id': transaction['transaction_id'],
+    'request_digest': transaction['request_digest'],
+    'impact_record_sha256': transaction['impact_record_sha256'],
+    'captured_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+    'mutation_order': transaction['mutation_order'],
+    'startup_order': transaction['startup_order'],
+    'nodes': nodes,
+}}))
+""",
+            encoding="utf-8",
+        )
+        adapter.chmod(0o755)
+        return adapter
+
     def _base_args(self) -> list[str]:
         return [
             sys.executable,
@@ -349,6 +473,10 @@ print(json.dumps({
             "http://127.0.0.1:6631/v1/chain/rebuild-proof",
             "--consumer-impact-record",
             str(self.impact),
+            "--stopped-quiescence-proof",
+            str(self.quiescence_proof),
+            "--quiescence-id",
+            self.quiescence_id,
             "--capacity-json",
             str(self.capacity),
             "--node",
@@ -368,6 +496,149 @@ print(json.dumps({
         self.assertEqual(receipt["mutation_order"], ["storage-205", "sequencer-204"])
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
+
+    def test_active_consumer_impact_approval_is_stop_authority_without_stopped_claim(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_active_impact_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+
+        normalized = module.validate_impact(self.impact)
+
+        self.assertEqual(normalized["decision"], "proceed")
+        self.assertEqual(normalized["impact"], "active")
+        self.assertFalse(normalized["validators_already_stopped"])
+
+    def test_active_pair_plan_rejects_self_asserted_stopped_boolean_without_independent_proof(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": True,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(
+            result.stderr.lower(),
+            r"independently verified.*(?:stopped|quiescence).*proof|stopped-state receipt",
+        )
+        self.assertFalse(self.out.exists())
+
+    def test_quiesce_emits_bounded_two_role_stopped_proof_without_mutation(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        quiescence_dir = self.root / "quiescence"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "active-quiescence-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(self._write_quiescence_adapter()),
+                "--out-dir",
+                str(quiescence_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        proof = json.loads((quiescence_dir / "quiescence-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual(proof["phase"], "quiesce")
+        self.assertEqual({item["role"] for item in proof["roles"]}, {"storage-205", "sequencer-204"})
+        self.assertTrue(all(item["active"] is False and item["running"] is False for item in proof["roles"]))
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+        self.assertFalse((self.nodes["sequencer-204"] / "backups").exists())
+
+    def test_wrapper_quiesce_envelope_forbids_mutation_phases(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "unknown",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        out_dir = self.root / "wrapper-quiescence"
+        result = subprocess.run(
+            [
+                "bash",
+                str(WRAPPER),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "wrapper-quiescence-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(self._write_quiescence_adapter()),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        envelope = json.loads(result.stdout)
+        contract = envelope["receipt_contract"]
+        self.assertEqual(contract["mode"], "quiesce")
+        self.assertTrue(contract["quiescence_only"])
+        self.assertFalse(contract["destructive_activity"])
+        self.assertEqual(contract["reset"], "forbidden")
+        self.assertEqual(contract["stage"], "forbidden")
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
 
     def test_remote_identity_receipt_binds_metadata_without_local_key_access(self) -> None:
         spec = importlib.util.spec_from_file_location("pair_rebuild_remote_identity_test", EXECUTOR)
