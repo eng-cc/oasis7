@@ -26,6 +26,44 @@ describe("TransferMaterialQuote", () => {
     expect(card.queryByText("iron_ingot")).not.toBeInTheDocument();
   });
 
+  it("renders path identity, ordered routes, tariff electricity, reroute count, and restore-power guidance", () => {
+    const routeQuote = {
+      ...quote,
+      submission_feasible: false,
+      path_id: "path:source-relay-destination",
+      route_ids: ["route:source-relay", "route:relay-destination"],
+      tariff_electricity_total: 12,
+      reroute_count: 1,
+      recommendation: "restore_power_or_use_lower_tariff_route",
+    };
+    const view = render(() => <TransferMaterialQuoteCard quote={routeQuote} locale="en" tr={tr} />);
+    const cardElement = view.getByTestId("transfer-material-quote");
+    const card = within(cardElement);
+    expect(cardElement).toHaveTextContent(/Path identity.*path:source-relay-destination/i);
+    expect(cardElement).toHaveTextContent(/Routes.*route:source-relay.*route:relay-destination/i);
+    expect(cardElement).toHaveTextContent(/Tariff electricity.*12/i);
+    expect(cardElement).toHaveTextContent(/Reroute count.*1/i);
+    expect(card.getByTestId("transfer-material-quote-recommendation")).toHaveTextContent(/restore power|lower-tariff route/i);
+    expect(cardElement).not.toHaveTextContent("restore_power_or_use_lower_tariff_route");
+    expect(cardElement).toHaveClass("transfer-material-quote");
+  });
+
+  it("renders unavailable-path guidance without leaking the capacity recommendation enum", () => {
+    const unavailableQuote = {
+      ...quote,
+      submission_feasible: false,
+      path_id: null,
+      route_ids: ["route:blocked"],
+      recommendation: "wait_for_transit_capacity",
+    };
+    const view = render(() => <TransferMaterialQuoteCard quote={unavailableQuote} locale="en" tr={tr} />);
+    const cardElement = view.getByTestId("transfer-material-quote");
+    const card = within(cardElement);
+    expect(cardElement).toHaveTextContent(/Path unavailable/i);
+    expect(card.getByTestId("transfer-material-quote-recommendation")).toHaveTextContent(/Wait for transit capacity/i);
+    expect(cardElement).not.toHaveTextContent("wait_for_transit_capacity");
+  });
+
   it("submits the complete logistics form through the controlled request callback", async () => {
     const requestTransferMaterialQuote = vi.fn(() => Promise.resolve({ ok: true }));
     const view = render(() => <TransferMaterialQuotePanel requesterAgentId="agent-0" quote={null} requestState={{ status: "idle" }} requestTransferMaterialQuote={requestTransferMaterialQuote} locale="zh" tr={tr} />);

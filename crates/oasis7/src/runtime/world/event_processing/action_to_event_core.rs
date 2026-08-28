@@ -1,6 +1,5 @@
 use super::super::logistics::{
-    logistics_route_id, logistics_route_matches, normalize_logistics_route_kind,
-    select_logistics_path,
+    logistics_route_id, normalize_logistics_route_kind, resolve_logistics_transfer_path,
 };
 use super::*;
 
@@ -582,88 +581,30 @@ impl World {
                         },
                     }));
                 }
-                let normalized_kind = normalize_logistics_route_kind(kind.as_str());
-                let legacy_route = if let Some(route_id) = route_id {
-                    let Some(route) = self.state.logistics_routes.get(route_id) else {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "logistics route not found: route_id={route_id}"
-                                )],
-                            },
-                        }));
-                    };
-                    let Some(normalized_kind) = normalized_kind.as_deref() else {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec!["material kind cannot be empty".to_string()],
-                            },
-                        }));
-                    };
-                    if route_ids.is_empty()
-                        && !logistics_route_matches(
-                            route,
-                            from_ledger,
-                            to_ledger,
-                            normalized_kind,
-                            *distance_km,
-                            *priority,
-                        )
-                    {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "logistics route tuple mismatch: route_id={route_id}"
-                                )],
-                            },
-                        }));
-                    }
-                    Some(route)
-                } else {
-                    None
-                };
-                let mut requested_route_ids = route_ids.clone();
-                if requested_route_ids.is_empty() {
-                    if let Some(route_id) = route_id {
-                        requested_route_ids.push(route_id.clone());
-                    }
-                }
                 // Empty route bindings retain legacy direct semantics. The
-                // graph planner is opt-in via an explicit route/path binding
-                // or auto_reroute.
-                let graph_mode = !requested_route_ids.is_empty() || *auto_reroute;
-                let path_selection = if graph_mode {
-                    Some(select_logistics_path(
-                        self,
-                        from_ledger,
-                        to_ledger,
-                        kind.as_str(),
-                        *amount,
-                        requested_route_ids.as_slice(),
-                        *auto_reroute,
-                    ))
-                } else {
-                    None
-                };
-                let path_selection = match path_selection {
-                    Some(Ok(selection)) => Some(selection),
-                    Some(Err(reason)) => {
+                // graph planner is shared with transfer quotes and is opt-in
+                // via an explicit route/path binding or auto_reroute.
+                let path_plan = match resolve_logistics_transfer_path(
+                    self,
+                    from_ledger,
+                    to_ledger,
+                    kind.as_str(),
+                    *amount,
+                    *distance_km,
+                    *priority,
+                    route_id.as_deref(),
+                    route_ids.as_slice(),
+                    *auto_reroute,
+                ) {
+                    Ok(plan) => plan,
+                    Err(reason) => {
                         return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason,
                         }));
                     }
-                    None => None,
                 };
-                let selected_route = path_selection
-                    .as_ref()
-                    .and_then(|selection| selection.route_ids.first())
-                    .and_then(|route_id| self.state.logistics_routes.get(route_id));
-                let route = selected_route.or(legacy_route);
-                let material_kind = route.map_or(kind.as_str(), |route| route.kind.as_str());
+                let material_kind = path_plan.effective_kind.as_str();
                 let available = self.ledger_material_balance(from_ledger, material_kind);
                 if available < *amount {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -678,38 +619,15 @@ impl World {
                 let priority = priority
                     .as_ref()
                     .copied()
-                    .or_else(|| route.map(|route| route.priority))
+                    .or(path_plan.route_priority)
                     .unwrap_or_else(|| material_transit_priority_for_kind(self, material_kind));
-                let event_kind = route.map_or_else(|| kind.clone(), |route| route.kind.clone());
+                let event_kind = path_plan.effective_kind;
                 let loss_bps = material_transit_loss_bps_for_kind(self, event_kind.as_str());
-                let effective_distance_km = path_selection
-                    .as_ref()
-                    .map(|selection| selection.total_distance_km)
-                    .unwrap_or(*distance_km);
-                if effective_distance_km > MATERIAL_TRANSFER_MAX_DISTANCE_KM {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::MaterialTransferDistanceExceeded {
-                            distance_km: effective_distance_km,
-                            max_distance_km: MATERIAL_TRANSFER_MAX_DISTANCE_KM,
-                        },
-                    }));
-                }
-                let selected_route_ids = path_selection
-                    .as_ref()
-                    .map(|selection| selection.route_ids.clone())
-                    .unwrap_or_default();
-                let path_id = path_selection
-                    .as_ref()
-                    .and_then(|selection| selection.path_id.clone());
-                let tariff_electricity_total = path_selection
-                    .as_ref()
-                    .map(|selection| selection.total_tariff_electricity)
-                    .unwrap_or(0);
-                let reroute_count = path_selection
-                    .as_ref()
-                    .map(|selection| selection.reroute_count)
-                    .unwrap_or(0);
+                let effective_distance_km = path_plan.effective_distance_km;
+                let selected_route_ids = path_plan.route_ids;
+                let path_id = path_plan.path_id;
+                let tariff_electricity_total = path_plan.tariff_electricity_total;
+                let reroute_count = path_plan.reroute_count;
                 let event_route_id = if route_ids.is_empty() {
                     route_id.clone()
                 } else {
@@ -735,7 +653,7 @@ impl World {
                     }
                 }
 
-                if effective_distance_km == 0 && path_selection.is_none() {
+                if effective_distance_km == 0 && path_id.is_none() {
                     return Ok(WorldEventBody::Domain(DomainEvent::MaterialTransferred {
                         transfer_id: Some(action_id),
                         requester_agent_id: requester_agent_id.clone(),
@@ -759,8 +677,8 @@ impl World {
                     }));
                 }
 
-                let transit_ticks = material_transit_ticks(effective_distance_km)
-                    .max(u64::from(path_selection.is_some()));
+                let transit_ticks =
+                    material_transit_ticks(effective_distance_km).max(u64::from(path_id.is_some()));
                 let ready_at = self.state.time.saturating_add(transit_ticks);
                 Ok(WorldEventBody::Domain(
                     DomainEvent::MaterialTransitStarted {

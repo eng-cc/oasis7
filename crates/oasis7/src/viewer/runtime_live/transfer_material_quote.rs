@@ -79,7 +79,7 @@ impl ViewerRuntimeLiveServer {
         });
         let quote = self
             .world
-            .logistics_transfer_quote(
+            .logistics_transfer_quote_with_route_id(
                 request.requester_agent_id.as_str(),
                 &from_ledger,
                 &to_ledger,
@@ -87,6 +87,9 @@ impl ViewerRuntimeLiveServer {
                 request.amount,
                 request.distance_km,
                 requested_priority,
+                request.route_id.as_deref(),
+                request.route_ids.as_slice(),
+                request.auto_reroute,
             )
             .map_err(|reason| GameplayActionError {
                 code: "transfer_material_quote_rejected".to_string(),
@@ -121,6 +124,10 @@ impl ViewerRuntimeLiveServer {
             priority_reason: quote.priority_reason,
             inflight_before: quote.inflight_before,
             inflight_capacity: quote.inflight_capacity,
+            path_id: quote.path_id,
+            route_ids: quote.route_ids,
+            tariff_electricity_total: quote.tariff_electricity_total,
+            reroute_count: quote.reroute_count,
             recommendation: quote.recommendation,
             conditional: quote.conditional,
         })

@@ -3694,8 +3694,12 @@ function createScheduleRecipeQuoteIntegration(getDependencies) {
   const dependencies = getDependencies();
   return { ...createScheduleRecipeQuoteStateModule(dependencies), ...createScheduleRecipeQuoteRequestModule(dependencies) };
 }
+function normalizeRouteIds(value2) {
+  const values = Array.isArray(value2) ? value2 : String(value2 || "").split(/[\n,]/);
+  return values.map((routeId) => String(routeId || "").trim()).filter(Boolean);
+}
 function createTransferMaterialQuoteRequestModule({ buildAuthEnvelope: buildAuthEnvelope2, clone: clone2, ensureHostedPlayerAuthAvailable: ensureHostedPlayerAuthAvailable2, ensureRegisteredPlayerSession: ensureRegisteredPlayerSession2, getSocket, nextAuthNonce: nextAuthNonce2, sendJson: sendJson2, signAuthPayload: signAuthPayload2, state: state2 }) {
-  async function requestTransferMaterialQuote2(requesterAgentId, fromLedger, toLedger, kind, amount, distanceKm, requestedPriority = null) {
+  async function requestTransferMaterialQuote2(requesterAgentId, fromLedger, toLedger, kind, amount, distanceKm, requestedPriority = null, routeIds = [], autoReroute = false) {
     if (state2.transferMaterialQuoteRequest?.status === "pending") return { ok: false, reason: "transfer material quote request already pending" };
     const agent = String(requesterAgentId || "").trim();
     const from = String(fromLedger || "").trim();
@@ -3704,6 +3708,8 @@ function createTransferMaterialQuoteRequestModule({ buildAuthEnvelope: buildAuth
     const quantity = Number(amount);
     const distance = Number(distanceKm);
     const priority = requestedPriority == null || requestedPriority === "" ? null : String(requestedPriority).trim().toLowerCase();
+    const normalizedRouteIds = normalizeRouteIds(routeIds);
+    const reroute = autoReroute === true;
     if (!agent || !from || !to || !material || !Number.isSafeInteger(quantity) || quantity <= 0 || !Number.isSafeInteger(distance) || distance < 0 || priority !== null && !["urgent", "standard"].includes(priority)) {
       const reason = "transfer material quote requires source, destination, material, positive amount, non-negative distance, and a known priority";
       state2.transferMaterialQuoteRequest = { status: "error", error: reason };
@@ -3729,9 +3735,10 @@ function createTransferMaterialQuoteRequestModule({ buildAuthEnvelope: buildAuth
         return { ok: false, reason };
       }
       await ensureRegisteredPlayerSession2(boundAgentId);
-      const request = { requester_agent_id: agent, from_ledger: from, to_ledger: to, kind: material, amount: quantity, distance_km: distance, requested_priority: priority, player_id: state2.auth.playerId, public_key: state2.auth.publicKey };
+      const request = { requester_agent_id: agent, from_ledger: from, to_ledger: to, kind: material, amount: quantity, distance_km: distance, requested_priority: priority, ...normalizedRouteIds.length ? { route_ids: normalizedRouteIds } : {}, ...reroute ? { auto_reroute: true } : {}, player_id: state2.auth.playerId, public_key: state2.auth.publicKey };
       const nonce = nextAuthNonce2();
-      const payload = buildAuthEnvelope2({ operation: "gameplay_action", action_id: "quote_transfer_material", target_agent_id: JSON.stringify({ amount: quantity, distance_km: distance, from_ledger: from, kind: material, requested_priority: priority, requester_agent_id: agent, to_ledger: to }), player_id: state2.auth.playerId, public_key: state2.auth.publicKey, nonce });
+      const signingTarget = { amount: quantity, ...reroute ? { auto_reroute: true } : {}, distance_km: distance, from_ledger: from, kind: material, requested_priority: priority, requester_agent_id: agent, ...normalizedRouteIds.length ? { route_ids: normalizedRouteIds } : {}, to_ledger: to };
+      const payload = buildAuthEnvelope2({ operation: "gameplay_action", action_id: "quote_transfer_material", target_agent_id: JSON.stringify(signingTarget), player_id: state2.auth.playerId, public_key: state2.auth.publicKey, nonce });
       request.auth = { scheme: "ed25519", player_id: state2.auth.playerId, public_key: state2.auth.publicKey, nonce, signature: await signAuthPayload2(payload, state2.auth) };
       state2.transferMaterialQuote = null;
       state2.transferMaterialQuoteRequest = { status: "pending", error: null };
@@ -3769,6 +3776,10 @@ const visualFixtureQuote = Object.freeze({
   priority_reason: "material_default_priority",
   inflight_before: 0,
   inflight_capacity: 2,
+  path_id: "path:source-relay-destination",
+  route_ids: ["route:source-relay", "route:relay-destination"],
+  tariff_electricity_total: 12,
+  reroute_count: 0,
   recommendation: "submit_transfer",
   conditional: true
 });
@@ -14750,7 +14761,7 @@ function ScheduleRecipeQuotePanel(props) {
   })();
 }
 delegateEvents(["input"]);
-var _tmpl$$6 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$6 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=transfer-material-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div data-testid=transfer-material-quote-recommendation></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary>`), _tmpl$3$5 = /* @__PURE__ */ template(`<section id=viewer-transfer-material-quote-panel class="panel panel--nested"data-testid=transfer-material-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=transfer-material-quote-request-form><label><span></span><input></label><label><span></span><input></label><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><label><span></span><input type=number min=0 step=1 inputmode=numeric></label><label><span></span><select><option value></option><option value=standard></option><option value=urgent></option></select></label><button type=submit class="button button--secondary">`), _tmpl$4$4 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$5$4 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
+var _tmpl$$6 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$6 = /* @__PURE__ */ template(`<section class="panel panel--nested transfer-material-quote"data-testid=transfer-material-quote data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div data-testid=transfer-material-quote-recommendation></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary>`), _tmpl$3$5 = /* @__PURE__ */ template(`<section id=viewer-transfer-material-quote-panel class="panel panel--nested"data-testid=transfer-material-quote-panel data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div></div></div><div class="panel__body stack"><form class="stack stack--compact"data-testid=transfer-material-quote-request-form><label><span></span><input></label><label><span></span><input></label><label><span></span><input></label><label><span></span><input type=number min=1 step=1 inputmode=numeric></label><label><span></span><input type=number min=0 step=1 inputmode=numeric></label><label><span></span><select><option value></option><option value=standard></option><option value=urgent></option></select></label><label><span></span><textarea></textarea></label><label><input type=checkbox> <span></span></label><button type=submit class="button button--secondary">`), _tmpl$4$4 = /* @__PURE__ */ template(`<div class="feedback-summary feedback-summary--error"role=alert>`), _tmpl$5$4 = /* @__PURE__ */ template(`<div class=feedback-summary role=status>`);
 function display(value2) {
   return value2 == null || value2 === "" ? "—" : String(value2);
 }
@@ -14787,8 +14798,19 @@ function recommendationCopy(value2, locale, tr2) {
     submit_transfer: tr2(locale, "可以提交转运", "Submit the transfer"),
     submit_immediate_transfer: tr2(locale, "可以立即转运", "Submit the immediate transfer"),
     wait_for_transit_capacity: tr2(locale, "等待在途容量释放", "Wait for transit capacity"),
-    reduce_amount_or_source_materials: tr2(locale, "减少数量或补足来源库存", "Reduce amount or add source material")
+    reduce_amount_or_source_materials: tr2(locale, "减少数量或补足来源库存", "Reduce amount or add source material"),
+    restore_power_or_use_lower_tariff_route: tr2(locale, "恢复电力或改走低资费路线", "Restore power or use a lower-tariff route"),
+    route_unavailable: tr2(locale, "当前路线不可用，请选择其他可用路线", "Requested route unavailable; choose another available route"),
+    path_unavailable: tr2(locale, "当前路径不可用，请选择其他可用路线", "Requested path unavailable; choose another available route"),
+    choose_another_route: tr2(locale, "选择其他可用路线", "Choose another available route")
   }[String(value2 || "")] || tr2(locale, "重新请求预估后再决定", "Request a fresh quote before deciding");
+}
+function pathIdentity(value2, locale, tr2) {
+  return value2 == null || String(value2).trim() === "" ? tr2(locale, "路径不可用", "Path unavailable") : String(value2);
+}
+function routeIdsCopy(value2, locale, tr2) {
+  const routeIds = Array.isArray(value2) ? value2.map((routeId) => String(routeId || "").trim()).filter(Boolean) : [];
+  return routeIds.length ? routeIds.join(" → ") : tr2(locale, "未选择路线", "No route selected");
 }
 function Metric(props) {
   return (() => {
@@ -14812,6 +14834,38 @@ function TransferMaterialQuoteCard(props) {
     insert(_el$11, () => `${tr2(locale(), "物料", "Material")}: ${materialLabel(quote2().kind, locale(), tr2)}`);
     insert(_el$12, () => `${tr2(locale(), "距离", "Distance")}: ${display(quote2().distance_km)} km`);
     insert(_el$13, () => `${tr2(locale(), "建议", "Recommended")}: ${recommendationCopy(quote2().recommendation, locale(), tr2)}`);
+    insert(_el$14, createComponent(Metric, {
+      get label() {
+        return tr2(locale(), "路径标识", "Path identity");
+      },
+      get value() {
+        return pathIdentity(quote2().path_id, locale(), tr2);
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric, {
+      get label() {
+        return tr2(locale(), "路线", "Routes");
+      },
+      get value() {
+        return routeIdsCopy(quote2().route_ids, locale(), tr2);
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric, {
+      get label() {
+        return tr2(locale(), "资费电力", "Tariff electricity");
+      },
+      get value() {
+        return display(quote2().tariff_electricity_total);
+      }
+    }), null);
+    insert(_el$14, createComponent(Metric, {
+      get label() {
+        return tr2(locale(), "改道次数", "Reroute count");
+      },
+      get value() {
+        return display(quote2().reroute_count);
+      }
+    }), null);
     insert(_el$14, createComponent(Metric, {
       get label() {
         return tr2(locale(), "预计收到", "Expected received");
@@ -14893,6 +14947,8 @@ function TransferMaterialQuotePanel(props) {
   const [amount, setAmount] = createSignal("20");
   const [distance, setDistance] = createSignal("200");
   const [priority, setPriority] = createSignal("");
+  const [routeIdsInput, setRouteIdsInput] = createSignal("");
+  const [autoReroute, setAutoReroute] = createSignal(false);
   const [requesting, setRequesting] = createSignal(false);
   const [localError, setLocalError] = createSignal("");
   const locale = () => props.locale;
@@ -14908,7 +14964,9 @@ function TransferMaterialQuotePanel(props) {
     setLocalError("");
     setRequesting(true);
     try {
-      const result = await props.requestTransferMaterialQuote(props.requesterAgentId || "", fromLedger(), toLedger(), kind(), amount(), distance(), priority());
+      const args = [props.requesterAgentId || "", fromLedger(), toLedger(), kind(), amount(), distance(), priority()];
+      if (routeIdsInput().trim() || autoReroute()) args.push(routeIdsInput(), autoReroute());
+      const result = await props.requestTransferMaterialQuote(...args);
       if (!result?.ok) setLocalError(result?.reason || "quote failed");
     } catch (error) {
       setLocalError(String(error));
@@ -14917,7 +14975,7 @@ function TransferMaterialQuotePanel(props) {
     }
   }
   return (() => {
-    var _el$17 = _tmpl$3$5(), _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$18.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$27.nextSibling, _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$33 = _el$30.nextSibling, _el$34 = _el$33.firstChild, _el$35 = _el$34.nextSibling, _el$36 = _el$33.nextSibling, _el$37 = _el$36.firstChild, _el$38 = _el$37.nextSibling, _el$39 = _el$36.nextSibling, _el$40 = _el$39.firstChild, _el$41 = _el$40.nextSibling, _el$42 = _el$41.firstChild, _el$43 = _el$42.nextSibling, _el$44 = _el$43.nextSibling, _el$45 = _el$39.nextSibling;
+    var _el$17 = _tmpl$3$5(), _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$18.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$27.nextSibling, _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$33 = _el$30.nextSibling, _el$34 = _el$33.firstChild, _el$35 = _el$34.nextSibling, _el$36 = _el$33.nextSibling, _el$37 = _el$36.firstChild, _el$38 = _el$37.nextSibling, _el$39 = _el$36.nextSibling, _el$40 = _el$39.firstChild, _el$41 = _el$40.nextSibling, _el$42 = _el$41.firstChild, _el$43 = _el$42.nextSibling, _el$44 = _el$43.nextSibling, _el$45 = _el$39.nextSibling, _el$46 = _el$45.firstChild, _el$47 = _el$46.nextSibling, _el$48 = _el$45.nextSibling, _el$49 = _el$48.firstChild, _el$50 = _el$49.nextSibling, _el$51 = _el$50.nextSibling, _el$52 = _el$48.nextSibling;
     insert(_el$20, () => tr2(locale(), "提交前估价", "Before You Commit"));
     insert(_el$21, () => tr2(locale(), "物料转运预估", "Transfer Material Quote"));
     _el$23.addEventListener("submit", requestQuote);
@@ -14936,32 +14994,36 @@ function TransferMaterialQuotePanel(props) {
     insert(_el$42, () => tr2(locale(), "使用物料默认", "Use material default"));
     insert(_el$43, () => tr2(locale(), "标准", "Standard"));
     insert(_el$44, () => tr2(locale(), "紧急", "Urgent"));
-    insert(_el$45, (() => {
+    insert(_el$46, () => tr2(locale(), "路线 ID（可选，按顺序填写）", "Route IDs (optional, ordered)"));
+    _el$47.$$input = (event) => setRouteIdsInput(event.currentTarget.value);
+    _el$49.addEventListener("change", (event) => setAutoReroute(event.currentTarget.checked));
+    insert(_el$51, () => tr2(locale(), "路线不可用时自动改道", "Auto-reroute when route is unavailable"));
+    insert(_el$52, (() => {
       var _c$2 = memo(() => !!(requesting() || remote().status === "pending"));
       return () => _c$2() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求转运预估", "Request transfer quote");
     })());
     insert(_el$22, (() => {
       var _c$3 = memo(() => !!(localError() || remote().status === "error"));
       return () => _c$3() ? (() => {
-        var _el$46 = _tmpl$4$4();
-        insert(_el$46, () => tr2(locale(), "无法获取转运预估。请检查连接、玩家会话和输入后重试。", "Could not get the transfer quote. Check the connection, player session, and inputs, then retry."));
-        return _el$46;
+        var _el$53 = _tmpl$4$4();
+        insert(_el$53, () => tr2(locale(), "无法获取转运预估。请检查连接、玩家会话和输入后重试。", "Could not get the transfer quote. Check the connection, player session, and inputs, then retry."));
+        return _el$53;
       })() : null;
     })(), null);
     insert(_el$22, (() => {
       var _c$4 = memo(() => remote().status === "pending");
       return () => _c$4() ? (() => {
-        var _el$47 = _tmpl$5$4();
-        insert(_el$47, () => tr2(locale(), "正在刷新预估…", "Requesting quote…"));
-        return _el$47;
+        var _el$54 = _tmpl$5$4();
+        insert(_el$54, () => tr2(locale(), "正在刷新预估…", "Requesting quote…"));
+        return _el$54;
       })() : null;
     })(), null);
     insert(_el$22, (() => {
       var _c$5 = memo(() => remote().status === "received");
       return () => _c$5() ? (() => {
-        var _el$48 = _tmpl$5$4();
-        insert(_el$48, () => tr2(locale(), "预估已返回；提交时仍会重新校验。", "Quote received; submission will re-check the current state."));
-        return _el$48;
+        var _el$55 = _tmpl$5$4();
+        insert(_el$55, () => tr2(locale(), "预估已返回；提交时仍会重新校验。", "Quote received; submission will re-check the current state."));
+        return _el$55;
       })() : null;
     })(), null);
     insert(_el$22, (() => {
@@ -14977,14 +15039,16 @@ function TransferMaterialQuotePanel(props) {
       }) : null;
     })(), null);
     createRenderEffect((_p$) => {
-      var _v$ = tr2(locale(), "来源账本", "Source ledger"), _v$2 = tr2(locale(), "目的地账本", "Destination ledger"), _v$3 = tr2(locale(), "物料", "Material"), _v$4 = tr2(locale(), "数量", "Amount"), _v$5 = tr2(locale(), "距离（公里）", "Distance (km)"), _v$6 = tr2(locale(), "优先级（可选）", "Priority (optional)"), _v$7 = requesting() || remote().status === "pending";
+      var _v$ = tr2(locale(), "来源账本", "Source ledger"), _v$2 = tr2(locale(), "目的地账本", "Destination ledger"), _v$3 = tr2(locale(), "物料", "Material"), _v$4 = tr2(locale(), "数量", "Amount"), _v$5 = tr2(locale(), "距离（公里）", "Distance (km)"), _v$6 = tr2(locale(), "优先级（可选）", "Priority (optional)"), _v$7 = tr2(locale(), "路线 ID（可选，按顺序填写）", "Route IDs (optional, ordered"), _v$8 = tr2(locale(), "路线不可用时自动改道", "Auto-reroute when route is unavailable"), _v$9 = requesting() || remote().status === "pending";
       _v$ !== _p$.e && setAttribute(_el$26, "aria-label", _p$.e = _v$);
       _v$2 !== _p$.t && setAttribute(_el$29, "aria-label", _p$.t = _v$2);
       _v$3 !== _p$.a && setAttribute(_el$32, "aria-label", _p$.a = _v$3);
       _v$4 !== _p$.o && setAttribute(_el$35, "aria-label", _p$.o = _v$4);
       _v$5 !== _p$.i && setAttribute(_el$38, "aria-label", _p$.i = _v$5);
       _v$6 !== _p$.n && setAttribute(_el$41, "aria-label", _p$.n = _v$6);
-      _v$7 !== _p$.s && (_el$45.disabled = _p$.s = _v$7);
+      _v$7 !== _p$.s && setAttribute(_el$47, "aria-label", _p$.s = _v$7);
+      _v$8 !== _p$.h && setAttribute(_el$49, "aria-label", _p$.h = _v$8);
+      _v$9 !== _p$.r && (_el$52.disabled = _p$.r = _v$9);
       return _p$;
     }, {
       e: void 0,
@@ -14993,7 +15057,9 @@ function TransferMaterialQuotePanel(props) {
       o: void 0,
       i: void 0,
       n: void 0,
-      s: void 0
+      s: void 0,
+      h: void 0,
+      r: void 0
     });
     createRenderEffect(() => _el$26.value = fromLedger());
     createRenderEffect(() => _el$29.value = toLedger());
@@ -15001,6 +15067,8 @@ function TransferMaterialQuotePanel(props) {
     createRenderEffect(() => _el$35.value = amount());
     createRenderEffect(() => _el$38.value = distance());
     createRenderEffect(() => _el$41.value = priority());
+    createRenderEffect(() => _el$47.value = routeIdsInput());
+    createRenderEffect(() => _el$49.checked = autoReroute());
     return _el$17;
   })();
 }
@@ -15354,6 +15422,10 @@ const normalQuote = Object.freeze({
   priority_reason: "material_default_priority",
   inflight_before: 0,
   inflight_capacity: 2,
+  path_id: "path:source-relay-destination",
+  route_ids: ["route:source-relay", "route:relay-destination"],
+  tariff_electricity_total: 12,
+  reroute_count: 0,
   recommendation: "submit_transfer",
   conditional: true
 });
@@ -15366,6 +15438,8 @@ function installTransferMaterialQuoteVisualFixture(fixtures, { core: core2, setF
   }
   fixtures.transfer_material_quote = () => install(normalQuote);
   fixtures.transfer_material_quote_capacity = () => install({ ...normalQuote, submission_feasible: false, sent_amount: 0, expected_loss_amount: 0, expected_received_amount: 0, recommendation: "wait_for_transit_capacity", inflight_before: 2 });
+  fixtures.transfer_material_quote_power_blocked = () => install({ ...normalQuote, submission_feasible: false, sent_amount: 0, expected_loss_amount: 0, expected_received_amount: 0, recommendation: "restore_power_or_use_lower_tariff_route" });
+  fixtures.transfer_material_quote_unavailable = () => install({ ...normalQuote, submission_feasible: false, path_id: null, route_ids: ["route:blocked"], recommendation: "path_unavailable" });
 }
 const waitResolutionQuoteFixture = Object.freeze({
   safe_to_wait: false,

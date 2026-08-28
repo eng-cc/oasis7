@@ -21,4 +21,17 @@ describe("requestTransferMaterialQuote", () => {
     const expectedSigningPayload = buildAuthEnvelope({ operation: "gameplay_action", action_id: "quote_transfer_material", target_agent_id: JSON.stringify({ amount: 20, distance_km: 200, from_ledger: "site:source", kind: "iron_ingot", requested_priority: "standard", requester_agent_id: "agent-0", to_ledger: "site:destination" }), player_id: message.request.auth.player_id, public_key: message.request.auth.public_key, nonce: message.request.auth.nonce });
     expect(Array.from(actualSigningPayload)).toEqual(Array.from(expectedSigningPayload));
   });
+
+  it("binds optional ordered route IDs and auto-reroute in the signed request and payload", async () => {
+    const signSpy = vi.spyOn(window.crypto.subtle, "sign"); const { sentMessages, sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js"); core.initializeSoftwareSafeCore(); sockets[0].open();
+    core.state.auth = { ...core.state.auth, available: true, playerId: "player-transfer-route-quote", publicKey: "09".repeat(32), privateKey: "07".repeat(32), registrationStatus: "registered", runtimeStatus: "registered", boundAgentId: "agent-0" };
+    expect(await window.__AW_TEST__.requestTransferMaterialQuote("agent-0", "site:source", "site:destination", "iron_ingot", 20, 200, "standard", ["route:source-relay", "route:relay-destination"], true)).toEqual(expect.objectContaining({ ok: true }));
+    const message = sentMessages.find((entry) => entry.type === "quote_transfer_material");
+    expect(message.request.route_ids).toEqual(["route:source-relay", "route:relay-destination"]);
+    expect(message.request.auto_reroute).toBe(true);
+    const actualSigningPayload = new Uint8Array(signSpy.mock.calls.at(-1)[2]);
+    const expectedSigningPayload = buildAuthEnvelope({ operation: "gameplay_action", action_id: "quote_transfer_material", target_agent_id: JSON.stringify({ amount: 20, auto_reroute: true, distance_km: 200, from_ledger: "site:source", kind: "iron_ingot", requested_priority: "standard", requester_agent_id: "agent-0", route_ids: ["route:source-relay", "route:relay-destination"], to_ledger: "site:destination" }), player_id: message.request.auth.player_id, public_key: message.request.auth.public_key, nonce: message.request.auth.nonce });
+    expect(Array.from(actualSigningPayload)).toEqual(Array.from(expectedSigningPayload));
+  });
 });
