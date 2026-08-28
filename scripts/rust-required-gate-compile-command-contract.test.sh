@@ -13,6 +13,25 @@ import sys
 workflow = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 ci_tests = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 
+toolchain_match = re.search(
+    r"- name: Install pinned Rust toolchains(?P<body>.*?)\n\s*- name:",
+    workflow,
+    re.S,
+)
+if toolchain_match is None:
+    raise SystemExit("required-gate Rust toolchain install step is missing")
+toolchain_body = toolchain_match.group("body")
+if "--profile minimal" not in toolchain_body:
+    raise SystemExit("required-gate Rust toolchain install must use the minimal profile")
+if "--profile default" in toolchain_body:
+    raise SystemExit("required-gate Rust toolchain install must not use the default profile")
+for component in ("rustfmt", "clippy"):
+    if f"--component {component}" not in toolchain_body:
+        raise SystemExit(
+            "required-gate minimal Rust toolchain install must explicitly include "
+            f"{component}"
+        )
+
 required_match = re.search(
     r"run_oasis7_required_tier_tests\(\) \{(?P<body>.*?)\n\}",
     ci_tests,
