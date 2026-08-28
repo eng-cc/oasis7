@@ -194,6 +194,15 @@ def main() -> int:
         if percent is None:
             failures.append(f"cannot evaluate {metric} regression percentage")
             continue
+        if (
+            not isinstance(percent, (int, float))
+            or isinstance(percent, bool)
+            or not math.isfinite(percent)
+        ):
+            failures.append(
+                f"comparison row {metric} percent must be a finite number"
+            )
+            continue
         if percent > threshold:
             failures.append(
                 f"{metric_labels[metric]} regressed by {percent:+.2f}% (threshold {threshold:+.2f}%)"

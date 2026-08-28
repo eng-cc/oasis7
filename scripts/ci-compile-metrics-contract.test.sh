@@ -716,9 +716,27 @@ for case_name, updates, expected_error in invalid_identity_cases:
             f"used wrong error: {result.stdout}{result.stderr}"
         )
 
+non_finite_percent = deepcopy(matching_comparison)
+non_finite_percent["metric_rows"][0]["percent"] = float("nan")
+non_finite = run_gate(non_finite_percent)
+expected_non_finite_output = (
+    "gate: FAIL: comparison row package_count percent must be a finite number\n"
+)
+if (
+    non_finite.returncode == 0
+    or non_finite.stdout != expected_non_finite_output
+    or non_finite.stderr
+):
+    raise SystemExit(
+        "non-finite comparison percentage did not fail closed with the "
+        "deterministic diagnostic: "
+        f"{non_finite.stdout}{non_finite.stderr}"
+    )
+
 print("ci-compile-metrics-gate threshold contract: OK")
 print("measurement identity missing/mismatch contract: OK")
 print("measurement identity semantic validation contract: OK")
+print("non-finite metric payload contract: OK")
 PY
 
 echo "ci-compile-metrics-contract.test: OK"
