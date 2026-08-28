@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use crate::simulator::ResourceKind;
+
 use super::super::state::LogisticsRouteV1;
 use super::super::util::sha256_hex;
 use super::super::{
@@ -316,9 +318,33 @@ pub struct LogisticsTransferQuote {
     pub priority_reason: String,
     pub inflight_before: usize,
     pub inflight_capacity: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default)]
+    pub route_ids: Vec<String>,
+    #[serde(default)]
+    pub tariff_electricity_total: i64,
+    #[serde(default)]
+    pub reroute_count: u32,
     pub recommendation: String,
     /// Quotes do not reserve balance or transit capacity; submission revalidates both.
     pub conditional: bool,
+}
+
+/// The pure, route-aware portion of a material transfer action.
+///
+/// This is shared by quote and action evaluation so path identity, effective distance,
+/// tariff, and priority cannot drift between pre-submit projection and authoritative
+/// submission. It deliberately does not inspect or mutate any reservations or ledgers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct LogisticsTransferPathPlan {
+    pub effective_kind: String,
+    pub route_priority: Option<MaterialTransitPriority>,
+    pub effective_distance_km: i64,
+    pub path_id: Option<String>,
+    pub route_ids: Vec<String>,
+    pub tariff_electricity_total: i64,
+    pub reroute_count: u32,
 }
 
 pub(super) fn material_transit_priority_for_kind(
@@ -374,6 +400,142 @@ pub(super) fn material_transit_loss_amount(amount: i64, distance_km: i64, loss_b
         .clamp(0, amount as i128) as i64
 }
 
+/// Resolves the immutable route/path inputs for a material transfer.
+///
+/// Route availability and capacity are intentionally evaluated here but not reserved. The
+/// action evaluator and the quote both consume this same pure result; the action still performs
+/// the authoritative reservation and ledger checks while applying the resulting event.
+pub(super) fn resolve_logistics_transfer_path(
+    world: &World,
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+    amount: i64,
+    distance_km: i64,
+    priority: Option<MaterialTransitPriority>,
+    route_id: Option<&str>,
+    route_ids: &[String],
+    auto_reroute: bool,
+) -> Result<LogisticsTransferPathPlan, RejectReason> {
+    let normalized_kind =
+        normalize_logistics_route_kind(kind).ok_or_else(|| RejectReason::RuleDenied {
+            notes: vec!["material kind cannot be empty".to_string()],
+        })?;
+
+    let legacy_route = if let Some(route_id) = route_id {
+        let Some(route) = world.state.logistics_routes.get(route_id) else {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![format!("logistics route not found: route_id={route_id}")],
+            });
+        };
+        if route_ids.is_empty()
+            && !logistics_route_matches(
+                route,
+                from_ledger,
+                to_ledger,
+                normalized_kind.as_str(),
+                distance_km,
+                priority,
+            )
+        {
+            return Err(RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "logistics route tuple mismatch: route_id={route_id}"
+                )],
+            });
+        }
+        Some(route)
+    } else {
+        None
+    };
+
+    let mut requested_route_ids = route_ids.to_vec();
+    if requested_route_ids.is_empty() {
+        if let Some(route_id) = route_id {
+            requested_route_ids.push(route_id.to_string());
+        }
+    }
+    let graph_mode = !requested_route_ids.is_empty() || auto_reroute;
+    let path_selection = if graph_mode {
+        Some(select_logistics_path(
+            world,
+            from_ledger,
+            to_ledger,
+            kind,
+            amount,
+            requested_route_ids.as_slice(),
+            auto_reroute,
+        )?)
+    } else {
+        None
+    };
+    let selected_route = path_selection
+        .as_ref()
+        .and_then(|selection| selection.route_ids.first())
+        .and_then(|route_id| world.state.logistics_routes.get(route_id))
+        .or(legacy_route);
+    let effective_kind = selected_route
+        .map(|route| route.kind.clone())
+        .unwrap_or_else(|| kind.to_string());
+    let effective_distance_km = path_selection
+        .as_ref()
+        .map(|selection| selection.total_distance_km)
+        .unwrap_or(distance_km);
+    if effective_distance_km > MATERIAL_TRANSFER_MAX_DISTANCE_KM {
+        return Err(RejectReason::MaterialTransferDistanceExceeded {
+            distance_km: effective_distance_km,
+            max_distance_km: MATERIAL_TRANSFER_MAX_DISTANCE_KM,
+        });
+    }
+
+    Ok(LogisticsTransferPathPlan {
+        effective_kind,
+        route_priority: selected_route.map(|route| route.priority),
+        effective_distance_km,
+        path_id: path_selection
+            .as_ref()
+            .and_then(|selection| selection.path_id.clone()),
+        route_ids: path_selection
+            .as_ref()
+            .map(|selection| selection.route_ids.clone())
+            .unwrap_or_default(),
+        tariff_electricity_total: path_selection
+            .as_ref()
+            .map(|selection| selection.total_tariff_electricity)
+            .unwrap_or(0),
+        reroute_count: path_selection
+            .as_ref()
+            .map(|selection| selection.reroute_count)
+            .unwrap_or(0),
+    })
+}
+
+fn route_capacity_available_amount(world: &World, route_ids: &[String]) -> Option<i64> {
+    route_ids
+        .iter()
+        .map(|route_id| {
+            world.state.logistics_routes.get(route_id).map(|route| {
+                route
+                    .capacity_units
+                    .saturating_sub(route.reserved_capacity_units)
+                    .max(0)
+            })
+        })
+        .collect::<Option<Vec<_>>>()
+        .and_then(|capacities| capacities.into_iter().min())
+}
+
+fn route_path_has_capacity_conflict(world: &World, route_ids: &[String], amount: i64) -> bool {
+    !route_ids.is_empty()
+        && route_ids.iter().any(|route_id| {
+            world
+                .state
+                .logistics_routes
+                .get(route_id)
+                .is_some_and(|route| !route_available_for_amount(route, amount))
+        })
+}
+
 impl World {
     pub fn pending_material_transits_len(&self) -> usize {
         self.state.pending_material_transits.len()
@@ -390,6 +552,33 @@ impl World {
         amount: i64,
         distance_km: i64,
         requested_priority: Option<MaterialTransitPriority>,
+    ) -> Result<LogisticsTransferQuote, RejectReason> {
+        self.logistics_transfer_quote_with_path(
+            requester_agent_id,
+            from_ledger,
+            to_ledger,
+            kind,
+            amount,
+            distance_km,
+            requested_priority,
+            &[],
+            false,
+        )
+    }
+
+    /// Derives a route-aware transfer quote without reserving materials, capacity, or a
+    /// journal entry. Empty route bindings retain the legacy direct-transfer semantics.
+    pub fn logistics_transfer_quote_with_path(
+        &self,
+        requester_agent_id: &str,
+        from_ledger: &MaterialLedgerId,
+        to_ledger: &MaterialLedgerId,
+        kind: &str,
+        amount: i64,
+        distance_km: i64,
+        requested_priority: Option<MaterialTransitPriority>,
+        route_ids: &[String],
+        auto_reroute: bool,
     ) -> Result<LogisticsTransferQuote, RejectReason> {
         if !self.state.agents.contains_key(requester_agent_id) {
             return Err(RejectReason::AgentNotFound {
@@ -421,27 +610,104 @@ impl World {
             });
         }
 
+        let path_plan = match resolve_logistics_transfer_path(
+            self,
+            from_ledger,
+            to_ledger,
+            kind,
+            amount,
+            distance_km,
+            requested_priority,
+            None,
+            route_ids,
+            auto_reroute,
+        ) {
+            Ok(plan) => Some(plan),
+            Err(_reason) if route_path_has_capacity_conflict(self, route_ids, amount) => {
+                // A quote reports a conditional, non-mutating capacity blocker while the
+                // action returns the same rejection reason from the shared resolver.
+                None
+            }
+            Err(reason) => return Err(reason),
+        };
+
         let source_amount_before = self.ledger_material_balance(from_ledger, kind);
         let destination_amount_before = self.ledger_material_balance(to_ledger, kind);
-        let max_transferable_amount = source_amount_before.max(0);
+        let route_capacity = path_plan
+            .as_ref()
+            .and_then(|plan| route_capacity_available_amount(self, plan.route_ids.as_slice()))
+            .or_else(|| route_capacity_available_amount(self, route_ids));
+        let max_transferable_amount = source_amount_before
+            .max(0)
+            .min(route_capacity.unwrap_or(i64::MAX));
+        let effective_kind = path_plan
+            .as_ref()
+            .map(|plan| plan.effective_kind.as_str())
+            .unwrap_or(kind);
         let (effective_priority, priority_reason) = match requested_priority {
             Some(priority) => (priority, "explicit_priority".to_string()),
             None => (
-                material_transit_priority_for_kind(self, kind),
-                "material_default_priority".to_string(),
+                path_plan
+                    .as_ref()
+                    .and_then(|plan| plan.route_priority)
+                    .unwrap_or_else(|| material_transit_priority_for_kind(self, effective_kind)),
+                if path_plan
+                    .as_ref()
+                    .and_then(|plan| plan.route_priority)
+                    .is_some()
+                {
+                    "route_priority".to_string()
+                } else {
+                    "material_default_priority".to_string()
+                },
             ),
         };
-        let loss_bps = if distance_km == 0 {
+        let effective_distance_km = path_plan
+            .as_ref()
+            .map(|plan| plan.effective_distance_km)
+            .unwrap_or(distance_km);
+        let loss_bps = if effective_distance_km == 0 {
             0
         } else {
-            material_transit_loss_bps_for_kind(self, kind)
+            material_transit_loss_bps_for_kind(self, effective_kind)
         };
-        let expected_loss_amount = material_transit_loss_amount(amount, distance_km, loss_bps);
+        let expected_loss_amount =
+            material_transit_loss_amount(amount, effective_distance_km, loss_bps);
         let expected_received_amount = amount.saturating_sub(expected_loss_amount);
-        let ticks_until_arrival = material_transit_ticks(distance_km);
+        let path_bound = path_plan
+            .as_ref()
+            .is_some_and(|plan| plan.path_id.is_some());
+        let ticks_until_arrival =
+            material_transit_ticks(effective_distance_km).max(u64::from(path_bound));
         let inflight_before = self.state.pending_material_transits.len();
-        let submission_feasible = source_amount_before >= amount
-            && (distance_km == 0 || inflight_before < MATERIAL_TRANSFER_MAX_INFLIGHT);
+        let tariff_electricity_total = path_plan
+            .as_ref()
+            .map(|plan| plan.tariff_electricity_total)
+            .unwrap_or(0);
+        let electricity_available = self
+            .state
+            .agents
+            .get(requester_agent_id)
+            .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+            .unwrap_or_default();
+        let capacity_available = if path_bound || effective_distance_km > 0 {
+            inflight_before < MATERIAL_TRANSFER_MAX_INFLIGHT
+        } else {
+            true
+        };
+        let path_capacity_available = path_plan
+            .as_ref()
+            .map(|plan| {
+                route_capacity_available_amount(self, plan.route_ids.as_slice())
+                    .is_none_or(|capacity| capacity >= amount)
+            })
+            .unwrap_or(false);
+        let route_resolution_available = path_plan.is_some();
+        let submission_feasible = route_resolution_available
+            && source_amount_before >= amount
+            && capacity_available
+            && path_capacity_available
+            && electricity_available >= tariff_electricity_total;
         let (sent_amount, expected_loss_amount, expected_received_amount) = if submission_feasible {
             (amount, expected_loss_amount, expected_received_amount)
         } else {
@@ -449,9 +715,13 @@ impl World {
         };
         let recommendation = if source_amount_before < amount {
             "reduce_amount_or_source_materials"
-        } else if distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {
+        } else if !path_capacity_available {
             "wait_for_transit_capacity"
-        } else if distance_km == 0 {
+        } else if effective_distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {
+            "wait_for_transit_capacity"
+        } else if electricity_available < tariff_electricity_total {
+            "restore_power_or_use_lower_tariff_route"
+        } else if effective_distance_km == 0 {
             "submit_immediate_transfer"
         } else {
             "submit_transfer"
@@ -466,7 +736,7 @@ impl World {
             submission_feasible,
             max_transferable_amount,
             sent_amount,
-            distance_km,
+            distance_km: effective_distance_km,
             loss_bps,
             expected_loss_amount,
             expected_received_amount,
@@ -485,6 +755,16 @@ impl World {
             priority_reason,
             inflight_before,
             inflight_capacity: MATERIAL_TRANSFER_MAX_INFLIGHT,
+            path_id: path_plan.as_ref().and_then(|plan| plan.path_id.clone()),
+            route_ids: path_plan
+                .as_ref()
+                .map(|plan| plan.route_ids.clone())
+                .unwrap_or_default(),
+            tariff_electricity_total,
+            reroute_count: path_plan
+                .as_ref()
+                .map(|plan| plan.reroute_count)
+                .unwrap_or(0),
             recommendation: recommendation.to_string(),
             conditional: true,
         })

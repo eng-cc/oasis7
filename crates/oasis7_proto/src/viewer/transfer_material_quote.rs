@@ -2,6 +2,18 @@ use serde::{Deserialize, Serialize};
 
 use super::PlayerAuthProof;
 
+fn is_zero_i64(value: &i64) -> bool {
+    *value == 0
+}
+
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// Player-facing priority override for a material transfer quote.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -21,6 +33,13 @@ pub struct TransferMaterialQuoteRequest {
     pub distance_km: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_priority: Option<TransferMaterialPriority>,
+    /// Optional explicit legacy route or ordered multi-hop path binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub route_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auto_reroute: bool,
     pub player_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_key: Option<String>,
@@ -53,6 +72,14 @@ pub struct TransferMaterialQuotePreflight {
     pub priority_reason: String,
     pub inflight_before: usize,
     pub inflight_capacity: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub route_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    pub tariff_electricity_total: i64,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub reroute_count: u32,
     pub recommendation: String,
     pub conditional: bool,
 }
