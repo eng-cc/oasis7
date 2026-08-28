@@ -31,6 +31,7 @@ impl WorldState {
     pub(crate) fn allocate_recipe_path_amounts(
         &self,
         consume_ledger: &MaterialLedgerId,
+        route_ids: &[String],
         path_ids: &[String],
         consume: &[MaterialStack],
     ) -> Result<BTreeMap<String, i64>, String> {
@@ -56,6 +57,7 @@ impl WorldState {
         let mut sorted_path_ids = path_ids.to_vec();
         sorted_path_ids.sort();
         let mut seen_path_ids = BTreeSet::new();
+        let mut path_route_ids = BTreeSet::new();
         let mut paths_by_kind = BTreeMap::<String, Vec<(String, i64)>>::new();
         for path_id in sorted_path_ids {
             if !seen_path_ids.insert(path_id.clone()) {
@@ -92,10 +94,20 @@ impl WorldState {
                     "logistics path recipe authority is exhausted: path_id={path_id}"
                 ));
             }
+            path_route_ids.extend(path.route_ids.iter().cloned());
             paths_by_kind
                 .entry(kind)
                 .or_default()
                 .push((path_id, path.remaining_recipe_amount));
+        }
+
+        if !route_ids.is_empty() {
+            let submitted_route_ids = route_ids.iter().cloned().collect::<BTreeSet<_>>();
+            if submitted_route_ids != path_route_ids {
+                return Err(
+                    "logistics route binding does not match completed path authority".to_string(),
+                );
+            }
         }
 
         let mut allocations = BTreeMap::new();

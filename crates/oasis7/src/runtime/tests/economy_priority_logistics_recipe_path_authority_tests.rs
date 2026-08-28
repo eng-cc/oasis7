@@ -305,6 +305,7 @@ fn completed_recipe_path_authority_roundtrips_after_partial_consumption_and_lega
         legacy
             .allocate_recipe_path_amounts(
                 &MaterialLedgerId::site("site-1"),
+                &[],
                 std::slice::from_ref(&path_id),
                 &[MaterialStack::new("iron_ingot", 1)],
             )
@@ -461,5 +462,80 @@ fn reversed_multi_path_binding_allocates_deterministically_and_exhausts_remainde
             .agent_resource_balance("builder-a", ResourceKind::Electricity)
             .expect("electricity after exhausted path rejection"),
         electricity_before
+    );
+}
+
+#[test]
+fn recipe_binding_rejects_path_and_route_from_different_completed_authorities() {
+    let factory_id = "factory.recipe.path.route.mismatch";
+    let recipe_id = "recipe.recipe.path.route.mismatch";
+    let mut world = recipe_route_fixture(factory_id);
+    let route_a = register_recipe_route(
+        &mut world,
+        "source-path-route-a",
+        "site-1",
+        "iron_ingot",
+    );
+    let route_b = register_recipe_route(
+        &mut world,
+        "source-path-route-b",
+        "site-1",
+        "iron_ingot",
+    );
+    complete_recipe_route_transfer(
+        &mut world,
+        &route_a,
+        "source-path-route-a",
+        "site-1",
+        "iron_ingot",
+        1,
+    );
+    complete_recipe_route_transfer(
+        &mut world,
+        &route_b,
+        "source-path-route-b",
+        "site-1",
+        "iron_ingot",
+        1,
+    );
+    let path_a = completed_recipe_path_id(&world, &route_a);
+    let journal_before = world.journal().events.len();
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 1)],
+            vec![MaterialStack::new("gear", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+        logistics_route_ids: vec![route_b],
+        logistics_path_ids: vec![path_a],
+    });
+    world
+        .step()
+        .expect("reject recipe whose completed path does not belong to bound route");
+
+    assert!(
+        world.journal().events[journal_before..]
+            .iter()
+            .any(|event| matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
+            )),
+        "a completed path must not authorize a different completed route"
+    );
+    assert!(
+        !world.journal().events[journal_before..]
+            .iter()
+            .any(|event| matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::RecipeStarted { .. })
+            )),
+        "path/route authority mismatch must not start a recipe"
     );
 }

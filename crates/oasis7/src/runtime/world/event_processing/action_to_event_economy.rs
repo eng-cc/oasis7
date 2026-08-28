@@ -776,6 +776,7 @@ impl World {
                 if !resolved_logistics_path_ids.is_empty() {
                     if let Err(reason) = self.state.allocate_recipe_path_amounts(
                         &consume_ledger,
+                        &resolved_logistics_route_ids,
                         &resolved_logistics_path_ids,
                         &effective_consume,
                     ) {

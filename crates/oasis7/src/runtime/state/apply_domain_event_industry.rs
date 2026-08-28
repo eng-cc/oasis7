@@ -715,7 +715,12 @@ impl WorldState {
                         }
                     })?;
                 let path_allocations = self
-                    .allocate_recipe_path_amounts(consume_ledger, logistics_path_ids, consume)
+                    .allocate_recipe_path_amounts(
+                        consume_ledger,
+                        logistics_route_ids,
+                        logistics_path_ids,
+                        consume,
+                    )
                     .map_err(|reason| WorldError::ResourceBalanceInvalid {
                         reason: format!("recipe logistics path authority failed: {reason}"),
                     })?;
