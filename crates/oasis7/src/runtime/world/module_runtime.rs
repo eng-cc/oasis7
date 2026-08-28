@@ -732,6 +732,16 @@ impl World {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub(crate) fn apply_module_changes_for_test(
+        &mut self,
+        proposal_id: super::super::ProposalId,
+        changes: &super::super::ModuleChangeSet,
+        actor: &str,
+    ) -> Result<(), WorldError> {
+        self.apply_module_changes(proposal_id, changes, actor)
+    }
+
     pub(super) fn apply_module_event(
         &mut self,
         event: &ModuleEvent,

@@ -640,6 +640,18 @@ impl World {
         proposal_id: ProposalId,
         finality_certificate: &GovernanceFinalityCertificate,
     ) -> Result<String, WorldError> {
+        let mut staged = self.clone();
+        let applied_hash =
+            staged.apply_proposal_with_finality_inner(proposal_id, finality_certificate)?;
+        *self = staged;
+        Ok(applied_hash)
+    }
+
+    fn apply_proposal_with_finality_inner(
+        &mut self,
+        proposal_id: ProposalId,
+        finality_certificate: &GovernanceFinalityCertificate,
+    ) -> Result<String, WorldError> {
         let proposal = self
             .proposals
             .get(&proposal_id)
