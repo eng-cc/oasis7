@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -74,6 +75,18 @@ REPOSITORY_EXECUTABLE_RELATIVE = "scripts/p2p-public-testnet-validator-pair-rebu
 REPOSITORY_EXECUTABLE = REPOSITORY_ROOT / REPOSITORY_EXECUTABLE_RELATIVE
 REPOSITORY_EXECUTABLE_SCHEMA = "oasis7.validator_pair_rebuild_repository_executable.v1"
 
+# This is a repository-owned description of the only production validator
+# pair which this executor may observe.  It is deliberately separate from the
+# operator's SSH config and contains public host-key fingerprints only; no
+# private key, token, or credential path is stored here.
+DEPLOYMENT_INVENTORY_RELATIVE = "scripts/public-testnet-validator-pair-inventory.v1.json"
+DEPLOYMENT_INVENTORY = REPOSITORY_ROOT / DEPLOYMENT_INVENTORY_RELATIVE
+DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.public_testnet_validator_pair_inventory.v1"
+PRODUCTION_STACK_ROOT = "/opt/oasis7/p2p-testnet"
+PRODUCTION_KNOWN_HOSTS_PATH = "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts"
+NONCE_LEDGER_DEFAULT = "/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl"
+NONCE_LEDGER_ENV = "OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"
+
 # ``human_direct_ssh`` is intentionally a separate provider from the legacy
 # callback adapter.  These values are the complete remote contract; callers
 # may bind a host and a human stop receipt, but may not choose a service,
@@ -91,15 +104,21 @@ HUMAN_DIRECT_SSH_ROLE_ALIASES = {
 HUMAN_DIRECT_SSH_CANONICAL = {
     "sequencer-204": {
         "request_role": "sequencer",
-        "root": "/srv/oasis7/triad/sequencer",
+        "node_id": "triad-testnet-sequencer",
+        "host": "root@39.104.204.172",
+        "root": PRODUCTION_STACK_ROOT,
         "service": "oasis7-triad-sequencer.service",
         "ports": {"6631", "6831"},
+        "host_key_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
     },
     "storage-205": {
         "request_role": "storage",
-        "root": "/srv/oasis7/triad/storage",
+        "node_id": "triad-testnet-storage",
+        "host": "root@39.104.205.67",
+        "root": PRODUCTION_STACK_ROOT,
         "service": "oasis7-triad-storage.service",
         "ports": {"6632", "6832"},
+        "host_key_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
     },
 }
 
@@ -148,6 +167,151 @@ def validate_repository_executable_identity(value: Any, label: str) -> dict[str,
     if value != expected:
         fail(f"{label} provenance is not the repository-owned executor")
     return expected
+
+
+def _load_deployment_inventory() -> dict[str, Any]:
+    """Load the immutable production pair inventory from the repository.
+
+    The inventory is intentionally not a CLI input.  A caller may supply the
+    local known-hosts *file* used to perform an observation, but may not
+    replace the target, role, root, service, port, or expected public pin.
+    """
+    if DEPLOYMENT_INVENTORY.is_symlink() or not DEPLOYMENT_INVENTORY.is_file():
+        fail("repository deployment inventory must be a regular file")
+    inventory = load_json(DEPLOYMENT_INVENTORY, "repository deployment inventory")
+    if inventory.get("schema_version") != DEPLOYMENT_INVENTORY_SCHEMA:
+        fail("repository deployment inventory schema is unsupported")
+    if inventory.get("repository") != "eng-cc/oasis7" or inventory.get("network_tier") != "public_testnet":
+        fail("repository deployment inventory is not the governed public_testnet inventory")
+    if inventory.get("stack_root") != PRODUCTION_STACK_ROOT:
+        fail("repository deployment inventory stack root is not production")
+    if inventory.get("known_hosts_path") != PRODUCTION_KNOWN_HOSTS_PATH:
+        fail("repository deployment inventory known-hosts path is not canonical")
+    nodes = inventory.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("repository deployment inventory must contain both validator roles")
+    for role in MUTATION_ORDER:
+        item = nodes[role]
+        expected = HUMAN_DIRECT_SSH_CANONICAL[role]
+        if not isinstance(item, dict):
+            fail(f"repository deployment inventory entry is malformed for {role}")
+        for field in ("role", "node_id", "host", "root", "service", "host_key_fingerprint"):
+            if field not in item:
+                fail(f"repository deployment inventory is missing {role}/{field}")
+        if item.get("role") != expected["request_role"] or item.get("node_id") != expected["node_id"]:
+            fail(f"repository deployment inventory role identity mismatch for {role}")
+        if item.get("host") != expected["host"] or item.get("root") != expected["root"] or item.get("service") != expected["service"]:
+            fail(f"repository deployment inventory target binding mismatch for {role}")
+        if item.get("host_key_fingerprint") != expected["host_key_fingerprint"]:
+            fail(f"repository deployment inventory public pin mismatch for {role}")
+        ports = item.get("ports")
+        if not isinstance(ports, list) or {str(value) for value in ports} != expected["ports"]:
+            fail(f"repository deployment inventory listener binding mismatch for {role}")
+        if not isinstance(item.get("host_key_fingerprint"), str) or not re.fullmatch(
+            r"SHA256:[A-Za-z0-9+/]+", item["host_key_fingerprint"]
+        ):
+            fail(f"repository deployment inventory public pin is malformed for {role}")
+    return inventory
+
+
+def _nonce_ledger_path(requested_path: Any = None) -> Path:
+    """Resolve an externally provisioned, executor-owned nonce ledger.
+
+    The file is never created by this executor.  Provisioning it (and its
+    parent) is an operator/deployment responsibility, so absence or weak
+    permissions are capability blockers rather than reasons to fall back to
+    an output-directory marker.
+    """
+    configured = os.environ.get(NONCE_LEDGER_ENV)
+    if configured is None:
+        # A request must always name the ledger which the executor was
+        # provisioned to use.  The default is retained only as the production
+        # deployment value; it is not an implicit per-output fallback.
+        configured = NONCE_LEDGER_DEFAULT
+    if not isinstance(requested_path, str) or not requested_path.strip():
+        fail("capability_blocked: request is missing the executor-owned nonce ledger binding")
+    raw = requested_path
+    configured_path = Path(configured).expanduser()
+    if not configured_path.is_absolute() or configured_path.resolve() != Path(raw).expanduser().resolve():
+        fail("capability_blocked: request nonce ledger is not the executor-owned ledger")
+    path = Path(raw).expanduser()
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        fail("capability_blocked: external executor-owned nonce ledger is unavailable")
+    try:
+        resolved = path.resolve(strict=True)
+        metadata = resolved.stat()
+    except OSError:
+        fail("capability_blocked: external executor-owned nonce ledger is unavailable")
+    if resolved.is_symlink() or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+        fail("capability_blocked: external executor-owned nonce ledger ownership or mode is invalid")
+    # Never accept a ledger under the repository or an output directory.  A
+    # caller-created sibling file is not an external replay barrier.
+    try:
+        resolved.relative_to(REPOSITORY_ROOT)
+    except ValueError:
+        return resolved
+    fail("capability_blocked: nonce ledger must be external to the repository")
+
+
+def _reserve_nonce(
+    *,
+    nonce: str,
+    task_uid: str,
+    transaction_id: str,
+    request_digest: str,
+    authority_sha256: str,
+    requested_path: Any,
+    allow_existing: bool = False,
+) -> Path:
+    """Atomically reserve a stop nonce before any remote observation."""
+    ledger = _nonce_ledger_path(requested_path)
+    try:
+        with ledger.open("r+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            handle.seek(0)
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    fail(f"capability_blocked: nonce ledger line {line_number} is malformed")
+                if not isinstance(row, dict) or row.get("schema_version") != "oasis7.validator_pair_rebuild_nonce.v1":
+                    fail(f"capability_blocked: nonce ledger line {line_number} is unsupported")
+                if row.get("nonce") == nonce:
+                    # Plan/apply intentionally re-observe the same
+                    # transaction-bound request.  The standalone direct
+                    # command remains one-shot: only its explicitly marked
+                    # in-process re-observation may reuse an exact binding.
+                    if allow_existing and all(
+                        row.get(field) == value
+                        for field, value in (
+                            ("task_uid", task_uid),
+                            ("transaction_id", transaction_id),
+                            ("request_digest", request_digest),
+                            ("authority_sha256", authority_sha256),
+                        )
+                    ):
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                        return ledger
+                    fail("human_direct_ssh nonce has already been consumed")
+            record = {
+                "schema_version": "oasis7.validator_pair_rebuild_nonce.v1",
+                "nonce": nonce,
+                "task_uid": task_uid,
+                "transaction_id": transaction_id,
+                "request_digest": request_digest,
+                "authority_sha256": authority_sha256,
+                "reserved_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+            handle.seek(0, os.SEEK_END)
+            handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except OSError as error:
+        fail(f"capability_blocked: cannot reserve external nonce ledger: {error.__class__.__name__}")
+    return ledger
 
 
 def canonical_digest(value: dict[str, Any]) -> str:
@@ -559,7 +723,7 @@ def _validate_stopped_quiescence_proof(
     if proof.get("observer_mutation") is not False:
         fail("stopped/quiescence proof observer mutation is forbidden")
     if proof.get("authority") == "human_direct_ssh":
-        return _validate_human_direct_ssh_proof(proof_path, proof, impact_path, nodes, expected_quiescence_id)
+        fail("persisted human_direct_ssh proof is audit-only; live direct re-observation is required")
     quiescence_id = proof.get("quiescence_id")
     if not isinstance(quiescence_id, str) or not quiescence_id.strip():
         fail("stopped/quiescence proof quiescence_id is required")
@@ -676,6 +840,8 @@ def _validate_human_direct_ssh_proof(
         fail("human_direct_ssh proof schema or phase is unsupported")
     if proof.get("provider") != "executor-owned-direct-ssh" or proof.get("operation") != "quiesce-only":
         fail("human_direct_ssh proof producer is not executor-owned")
+    if proof.get("audit_only") is not True:
+        fail("human_direct_ssh persisted proof is audit-only and cannot establish admission authority")
     if proof.get("observer_mutation") is not False:
         fail("human_direct_ssh proof observer mutation is forbidden")
     if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
@@ -727,6 +893,12 @@ def _validate_human_direct_ssh_proof(
         fail("human_direct_ssh source receipt path is not executor-bound; trusted producer provenance/attestation is required")
     if source.get("provider") != "executor-owned-direct-ssh" or source.get("operation") != "quiesce-only":
         fail("human_direct_ssh source receipt producer is not executor-owned")
+    if source.get("audit_only") is not True:
+        fail("human_direct_ssh persisted source receipt is audit-only")
+    if not isinstance(source.get("github_live"), dict) or source.get("github_live") != proof.get("github_live"):
+        fail("human_direct_ssh proof live GitHub binding is missing or inconsistent")
+    if source.get("direct_request_path") != proof.get("direct_request_path") or source.get("direct_request_sha256") != proof.get("direct_request_sha256"):
+        fail("human_direct_ssh proof direct request binding is inconsistent")
     for field, expected in (
         ("task_uid", task_uid),
         ("transaction_id", transaction_id),
@@ -752,6 +924,7 @@ def _validate_human_direct_ssh_proof(
     source_hosts = source.get("hosts")
     source_fingerprints = source.get("host_fingerprints")
     source_commands = source.get("commands")
+    inventory = _load_deployment_inventory()
     if not isinstance(source_nodes, dict) or set(source_nodes) != set(MUTATION_ORDER):
         fail("human_direct_ssh source receipt must cover both validator roles")
     if not isinstance(source_hosts, dict) or set(source_hosts) != set(MUTATION_ORDER):
@@ -766,12 +939,15 @@ def _validate_human_direct_ssh_proof(
     seen: set[str] = set()
     for role in MUTATION_ORDER:
         expected = HUMAN_DIRECT_SSH_CANONICAL[role]
+        inventory_expected = inventory["nodes"][role]
         host = source_hosts[role]
         observed = source_nodes[role]
         if not isinstance(host, dict) or host.get("role") != role or host.get("request_role") != expected["request_role"]:
             fail(f"human_direct_ssh source role binding mismatch for {role}")
         if host.get("root") != expected["root"] or host.get("service") != expected["service"]:
             fail(f"human_direct_ssh source root/service binding mismatch for {role}")
+        if host.get("host") != inventory_expected["host"] or host.get("host_key_fingerprint") != inventory_expected["host_key_fingerprint"]:
+            fail(f"human_direct_ssh source caller inventory override for {role}")
         if source_fingerprints[role] != host.get("host_key_fingerprint"):
             fail(f"human_direct_ssh source fingerprint binding mismatch for {role}")
         if not isinstance(observed, dict) or observed.get("role") != role or observed.get("root") != expected["root"]:
@@ -802,6 +978,10 @@ def _validate_human_direct_ssh_proof(
         fail("human_direct_ssh proof must contain both canonical roles")
     if proof.get("canonical_digest") != canonical_digest(proof):
         fail("human_direct_ssh proof canonical digest is not executor-produced; trusted producer provenance/attestation is required")
+    if source.get("deployment_inventory_path") != str(DEPLOYMENT_INVENTORY) or source.get("deployment_inventory_sha256") != sha256_file(DEPLOYMENT_INVENTORY):
+        fail("human_direct_ssh source deployment inventory binding mismatch")
+    if not isinstance(source.get("nonce_ledger_path"), str) or not source["nonce_ledger_path"].strip():
+        fail("human_direct_ssh source nonce ledger binding is missing")
     return {
         "path": str(proof_path.resolve()),
         "sha256": sha256_file(proof_path),
@@ -923,7 +1103,7 @@ def _direct_host_name(target: str) -> str:
 
 
 def _direct_known_host_pin(known_hosts: Path, target: str, declared: Any, role: str) -> dict[str, str]:
-    if not isinstance(declared, str) or not re.fullmatch(r"SHA256:[A-Za-z0-9+/=_-]+", declared):
+    if not isinstance(declared, str) or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]+", declared):
         fail(f"human_direct_ssh host fingerprint is malformed for {role}")
     hostname = _direct_host_name(target)
     target_host = target.split("@", 1)[1]
@@ -946,29 +1126,295 @@ def _direct_known_host_pin(known_hosts: Path, target: str, declared: Any, role: 
         if not host_tokens.intersection(host_fields):
             continue
         matching.append((fields[1], fields[2]))
-    if len(matching) != 1:
-        fail(f"human_direct_ssh known_hosts must pin exactly one key for {role}")
-    key_type, key_blob = matching[0]
-    if key_type not in {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}:
-        fail(f"human_direct_ssh known_hosts key type is unsupported for {role}")
-    try:
-        key_bytes = base64.b64decode(key_blob.encode("ascii"), validate=True)
-    except (ValueError, UnicodeEncodeError):
-        # Isolated contract fixtures use symbolic key material.  Production
-        # keys must be valid base64 and use the actual OpenSSH SHA256 pin.
-        key_bytes = key_blob.encode("utf-8")
-    computed = "SHA256:" + base64.b64encode(hashlib.sha256(key_bytes).digest()).decode("ascii").rstrip("=")
-    # A symbolic fixture pin is accepted only when it is visibly bound to the
-    # hostname.  It cannot turn an arbitrary caller string into authority.
-    host_prefix = hostname.split(".", 1)[0]
-    if declared != computed and not declared.startswith(f"SHA256:{host_prefix}-"):
-        fail(f"human_direct_ssh host fingerprint binding mismatch for {role}")
+    if not matching:
+        fail(f"human_direct_ssh known_hosts has no pinned key for {role}")
+    selected: list[tuple[str, str, str]] = []
+    for key_type, key_blob in matching:
+        if key_type not in {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}:
+            fail(f"human_direct_ssh known_hosts key type is unsupported for {role}")
+        try:
+            # Only OpenSSH public key blobs are accepted.  A symbolic fixture
+            # string must never become an authority or fingerprint fallback.
+            key_bytes = base64.b64decode(key_blob.encode("ascii"), validate=True)
+        except (ValueError, UnicodeEncodeError):
+            fail(f"human_direct_ssh known_hosts public key is malformed for {role}")
+        computed = "SHA256:" + base64.b64encode(hashlib.sha256(key_bytes).digest()).decode("ascii").rstrip("=")
+        if computed == declared:
+            selected.append((key_type, key_blob, computed))
+    if len(selected) != 1:
+        fail(f"human_direct_ssh known_hosts must contain exactly one expected public pin for {role}")
+    key_type, key_blob, computed = selected[0]
+    key_bytes = base64.b64decode(key_blob.encode("ascii"), validate=True)
     return {
         "declared": declared,
         "computed": computed,
         "hostname": hostname,
         "key_type": key_type,
         "key_sha256": hashlib.sha256(key_bytes).hexdigest(),
+    }
+
+
+def _validate_direct_inventory_request(
+    request: dict[str, Any], inventory: dict[str, Any], known_hosts: Path
+) -> dict[str, Any]:
+    """Bind request transport fields to repository deployment truth."""
+    inventory_digest = sha256_file(DEPLOYMENT_INVENTORY)
+    if request.get("inventory_path") != str(DEPLOYMENT_INVENTORY):
+        fail("human_direct_ssh deployment inventory path is not repository-owned")
+    if request.get("inventory_sha256") != inventory_digest:
+        fail("human_direct_ssh deployment inventory digest mismatch")
+    declared_known_hosts = request.get("known_hosts_path")
+    declared_known_hosts_path = Path(declared_known_hosts).expanduser() if isinstance(declared_known_hosts, str) else None
+    if (
+        declared_known_hosts_path is None
+        or declared_known_hosts_path.is_symlink()
+        or declared_known_hosts_path.resolve() != known_hosts.resolve()
+    ):
+        fail("human_direct_ssh known_hosts path binding mismatch")
+    hosts = request.get("hosts")
+    if not isinstance(hosts, dict) or set(hosts) != {"sequencer", "storage"}:
+        fail("human_direct_ssh request must contain exactly sequencer and storage hosts")
+    inventory_nodes = inventory["nodes"]
+    for request_role, canonical_role in (("storage", "storage-205"), ("sequencer", "sequencer-204")):
+        value = hosts.get(request_role)
+        expected = inventory_nodes[canonical_role]
+        if not isinstance(value, dict):
+            fail(f"human_direct_ssh {request_role} inventory binding is malformed")
+        # These are descriptive copies in the request, never authority.  If a
+        # caller changes even one, reject instead of silently normalizing it.
+        for field in ("role", "host", "root", "service", "host_key_fingerprint"):
+            if value.get(field) != expected[field]:
+                fail(f"human_direct_ssh caller inventory override is forbidden for {canonical_role}/{field}")
+    readback = request.get("readback")
+    if not isinstance(readback, dict):
+        fail("human_direct_ssh fixed readback contract is missing")
+    if readback.get("process_command") != "ps -eo pid=,args=" or readback.get("listener_command") != "ss -ltn":
+        fail("human_direct_ssh process/listener command allowlist mismatch")
+    if readback.get("service_readback_command") not in {None, "service-readback --read-only"}:
+        fail("human_direct_ssh service command allowlist mismatch")
+    try:
+        quiet_window = float(readback.get("quiet_window_seconds", HUMAN_DIRECT_SSH_QUIET_WINDOW_SECONDS))
+    except (TypeError, ValueError):
+        fail("human_direct_ssh quiet window is malformed")
+    if not 0.1 <= quiet_window <= 30:
+        fail("human_direct_ssh quiet window is outside the fixed bound")
+    return {"inventory_sha256": inventory_digest, "known_hosts": str(known_hosts.resolve()), "quiet_window": quiet_window}
+
+
+def _github_response_items(value: Any) -> list[dict[str, Any]]:
+    """Normalize the bounded ``gh api --paginate --slurp`` response."""
+    if isinstance(value, dict):
+        return [value]
+    if not isinstance(value, list):
+        fail("human_direct_ssh live GitHub response is malformed")
+    items: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, list):
+            if not all(isinstance(nested, dict) for nested in item):
+                fail("human_direct_ssh live GitHub response is malformed")
+            items.extend(item)
+        elif isinstance(item, dict):
+            items.append(item)
+        else:
+            fail("human_direct_ssh live GitHub response is malformed")
+    return items
+
+
+def _read_live_github_authority(
+    request: dict[str, Any], task_uid: str, transaction_id: str, nonce: str
+) -> dict[str, Any]:
+    """Read and validate the authenticated control-plane comment in-process.
+
+    The request contains only the expected comment binding.  It is not a
+    signed authority and is never accepted by itself.  ``gh`` is the
+    repository's authenticated GitHub CLI seam; this executor neither reads
+    nor prints its credentials.  The command's output is deliberately kept
+    in memory and only the non-secret binding fields are returned.
+    """
+    expected = request.get("github_live")
+    if not isinstance(expected, dict):
+        fail("capability_blocked: live GitHub authority binding is required")
+    required = (
+        "provider",
+        "repository",
+        "issue_number",
+        "comment_id",
+        "actor",
+        "body_sha256",
+        "task_uid",
+        "action",
+        "transaction_id",
+        "nonce",
+        "inventory_sha256",
+        "head_oid",
+        "issued_at",
+        "expires_at",
+    )
+    if any(field not in expected for field in required):
+        fail("human_direct_ssh live GitHub authority binding is incomplete")
+    if (
+        expected.get("provider") != "github"
+        or expected.get("repository") != "eng-cc/oasis7"
+        or expected.get("issue_number") != 3481
+        or expected.get("task_uid") != task_uid
+        or expected.get("action") != "validator_pair_rebuild"
+        or expected.get("transaction_id") != transaction_id
+        or expected.get("nonce") != nonce
+    ):
+        fail("human_direct_ssh live GitHub authority task/action binding mismatch")
+    if not isinstance(expected.get("comment_id"), int) or expected["comment_id"] <= 0:
+        fail("human_direct_ssh live GitHub comment binding is malformed")
+    if not isinstance(expected.get("actor"), str) or not expected["actor"].strip():
+        fail("human_direct_ssh live GitHub actor binding is malformed")
+    if not isinstance(expected.get("body_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", expected["body_sha256"]):
+        fail("human_direct_ssh live GitHub body digest binding is malformed")
+    if not isinstance(expected.get("inventory_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", expected["inventory_sha256"]):
+        fail("human_direct_ssh live GitHub inventory binding is malformed")
+    if DEPLOYMENT_INVENTORY.is_symlink() or not DEPLOYMENT_INVENTORY.is_file():
+        fail("human_direct_ssh repository inventory must be a regular file")
+    repository_inventory_sha256 = sha256_file(DEPLOYMENT_INVENTORY)
+    if request.get("inventory_sha256") != repository_inventory_sha256:
+        fail("human_direct_ssh live GitHub request inventory is not repository-bound")
+    request_inventory = request.get("inventory")
+    if request_inventory is None:
+        if expected["inventory_sha256"] != repository_inventory_sha256 or request.get("inventory_sha256") != repository_inventory_sha256:
+            fail("human_direct_ssh live GitHub inventory digest is not the repository-owned inventory")
+    else:
+        # A live authority may carry the control-plane's canonical inventory
+        # projection.  Bind its digest to the approval, but never use its
+        # host-key fields as pins: host/root/service/port targets below still
+        # come exclusively from the repository-owned inventory and the
+        # verified OpenSSH public material.
+        descriptor_digest = hashlib.sha256(
+            json.dumps(request_inventory, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if expected["inventory_sha256"] != descriptor_digest:
+            fail("human_direct_ssh live GitHub inventory digest is not repository-bound")
+        if request_inventory.get("schema_version") != "oasis7.public_testnet_validator_inventory.v1":
+            fail("human_direct_ssh live GitHub inventory schema is unsupported")
+        descriptor_nodes = request_inventory.get("nodes")
+        if not isinstance(descriptor_nodes, list) or len(descriptor_nodes) != len(MUTATION_ORDER):
+            fail("human_direct_ssh live GitHub inventory must cover both validator roles")
+        by_node_id: dict[str, dict[str, Any]] = {}
+        for descriptor_node in descriptor_nodes:
+            if not isinstance(descriptor_node, dict) or not isinstance(descriptor_node.get("node_id"), str):
+                fail("human_direct_ssh live GitHub inventory node is malformed")
+            if descriptor_node["node_id"] in by_node_id:
+                fail("human_direct_ssh live GitHub inventory contains duplicate nodes")
+            by_node_id[descriptor_node["node_id"]] = descriptor_node
+        for role in MUTATION_ORDER:
+            expected_node = HUMAN_DIRECT_SSH_CANONICAL[role]
+            descriptor_node = by_node_id.get(expected_node["node_id"])
+            if descriptor_node is None:
+                fail(f"human_direct_ssh live GitHub inventory is missing {role}")
+            for field, expected_value in (
+                ("role", role),
+                ("host", expected_node["host"]),
+                ("root", expected_node["root"]),
+                ("service", expected_node["service"]),
+            ):
+                if descriptor_node.get(field) != expected_value:
+                    fail(f"human_direct_ssh live GitHub inventory {role}/{field} override is forbidden")
+            if {str(value) for value in descriptor_node.get("ports", [])} != expected_node["ports"]:
+                fail(f"human_direct_ssh live GitHub inventory {role}/ports override is forbidden")
+    if not isinstance(expected.get("head_oid"), str) or not re.fullmatch(r"[0-9a-f]{40}", expected["head_oid"].lower()):
+        fail("human_direct_ssh live GitHub head binding is malformed")
+
+    # ``--slurp`` gives a single JSON value for paginated responses.  The
+    # fake in the hermetic contract intentionally emits one object, which is
+    # also accepted to keep this seam small and deterministic.
+    command = [
+        "gh",
+        "api",
+        "repos/eng-cc/oasis7/issues/3481/comments",
+        "--paginate",
+        "--slurp",
+    ]
+    # Do not let the SSH credential seam become a GitHub or child-process
+    # credential seam.  Authentication is supplied by the operator's
+    # already-authenticated ``gh`` installation, not by this request.  Keep
+    # only process/configuration variables needed by the CLI and hermetic
+    # harness; this avoids reading or forwarding arbitrary ambient secrets.
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name
+        in {
+            "PATH",
+            "HOME",
+            "GH_CONFIG_DIR",
+            "GH_HOST",
+            "XDG_CONFIG_HOME",
+            "HUMAN_DIRECT_SSH_GITHUB_RESPONSE",
+            "HUMAN_DIRECT_SSH_GITHUB_LOG",
+            "HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE",
+        }
+    }
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"capability_blocked: live GitHub authority readback failed: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail("capability_blocked: live GitHub authority readback was unavailable")
+    try:
+        raw_value = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        fail("capability_blocked: live GitHub authority response is not JSON")
+    items = _github_response_items(raw_value)
+    matches = [item for item in items if item.get("id") == expected["comment_id"]]
+    if len(matches) != 1:
+        fail("human_direct_ssh live GitHub authority comment was not uniquely read back")
+    comment = matches[0]
+    if (
+        ("deleted" in comment and comment.get("deleted") is not False)
+        or ("revoked" in comment and comment.get("revoked") is not False)
+        or comment.get("updated_at") is not None
+    ):
+        fail("human_direct_ssh live GitHub authority comment is edited, deleted, or revoked")
+    user = comment.get("user")
+    if not isinstance(user, dict) or user.get("login") != expected["actor"]:
+        fail("human_direct_ssh live GitHub authority actor binding mismatch")
+    body = comment.get("body")
+    if not isinstance(body, str) or hashlib.sha256(body.encode()).hexdigest() != expected["body_sha256"]:
+        fail("human_direct_ssh live GitHub authority body digest mismatch")
+    try:
+        body_value = json.loads(body)
+    except json.JSONDecodeError:
+        fail("human_direct_ssh live GitHub authority body is not JSON")
+    if not isinstance(body_value, dict) or body_value.get("schema_version") != "oasis7.validator_pair_rebuild_live_authority.v1":
+        fail("human_direct_ssh live GitHub authority body schema is unsupported")
+    for field in ("task_uid", "action", "transaction_id", "nonce", "inventory_sha256", "head_oid", "issued_at", "expires_at"):
+        if body_value.get(field) != expected.get(field):
+            fail(f"human_direct_ssh live GitHub authority {field} binding mismatch")
+    issued_at = _direct_fresh_timestamp(body_value.get("issued_at"), "human_direct_ssh live GitHub issued_at")
+    expires_at = _parse_timestamp(body_value.get("expires_at"), "human_direct_ssh live GitHub expires_at")
+    if expires_at <= issued_at or expires_at < dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=5):
+        fail("human_direct_ssh live GitHub authority is expired")
+    # This is a live control-plane binding, not a caller-invented inventory
+    # authority.  Targets, roots, services and pins are still taken only from
+    # the repository-owned deployment inventory below.
+    return {
+        "provider": "github",
+        "repository": expected["repository"],
+        "issue_number": expected["issue_number"],
+        "comment_id": expected["comment_id"],
+        "actor": expected["actor"],
+        "body_sha256": expected["body_sha256"],
+        "task_uid": task_uid,
+        "action": expected["action"],
+        "transaction_id": transaction_id,
+        "nonce": nonce,
+        "inventory_sha256": expected["inventory_sha256"],
+        "head_oid": expected["head_oid"].lower(),
+        "issued_at": expected["issued_at"],
+        "expires_at": expected["expires_at"],
     }
 
 
@@ -1014,18 +1460,7 @@ def _direct_authority(request: dict[str, Any], request_path: Path) -> dict[str, 
         fail("human_direct_ssh request expiry is not after issuance")
     if expires_at < dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=5):
         fail("human_direct_ssh request is expired")
-    authority_path = _direct_regular_file(request.get("stop_authority_path"), "human_direct_ssh stop authority")
-    if str(authority_path) != str(Path(request["stop_authority_path"]).expanduser().resolve()):
-        fail("human_direct_ssh stop authority path is not canonical")
-    if request.get("stop_authority_sha256") != sha256_file(authority_path):
-        fail("human_direct_ssh stop authority digest mismatch")
-    authority = load_json(authority_path, "human_direct_ssh stop authority")
-    if authority.get("schema_version") != "oasis7.human_stop_authority.v1" or authority.get("authorized") is not True:
-        fail("human_direct_ssh stop authority is not an authorized human stop")
-    if authority.get("task_uid") != task_uid or authority.get("transaction_id") != transaction_id or authority.get("nonce") != nonce:
-        fail("human_direct_ssh stop authority transaction binding mismatch")
-    authority_timestamp = authority.get("stopped_at", authority.get("authorized_at"))
-    _direct_fresh_timestamp(authority_timestamp, "human_direct_ssh stop authority timestamp")
+    github_live = _read_live_github_authority(request, task_uid, transaction_id, nonce)
     if request_path.is_symlink():
         fail("human_direct_ssh request must be a regular file")
     return {
@@ -1035,9 +1470,10 @@ def _direct_authority(request: dict[str, Any], request_path: Path) -> dict[str, 
         "request_digest": request_digest,
         "issued_at": request["issued_at"],
         "expires_at": request["expires_at"],
-        "authority_path": str(authority_path),
-        "authority_sha256": sha256_file(authority_path),
-        "authority_timestamp": authority_timestamp,
+        "authority_path": None,
+        "authority_sha256": github_live["body_sha256"],
+        "authority_timestamp": github_live["issued_at"],
+        "github_live": github_live,
     }
 
 
@@ -1184,8 +1620,8 @@ def _direct_observe_node(
     }
 
 
-def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
-    if args.host_adapter:
+def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict[str, Any]:
+    if getattr(args, "host_adapter", None):
         fail("human_direct_ssh generic adapter input is forbidden")
     # Test/operations harnesses may provide a side-channel audit file to
     # prove that no systemctl helper was even opened.  It is never a command
@@ -1203,10 +1639,10 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
     request_path = _direct_regular_file(args.request, "human_direct_ssh request")
     request = load_json(request_path, "human_direct_ssh request")
     authority = _direct_authority(request, request_path)
+    inventory = _load_deployment_inventory()
     known_hosts = _direct_regular_file(args.known_hosts, "human_direct_ssh known_hosts")
     known_hosts_arg = Path(args.known_hosts).expanduser()
-    if not isinstance(request.get("known_hosts_path"), str) or Path(request["known_hosts_path"]).expanduser().resolve() != known_hosts:
-        fail("human_direct_ssh known_hosts path binding mismatch")
+    inventory_binding = _validate_direct_inventory_request(request, inventory, known_hosts)
     quiescence_id = request.get("quiescence_id", authority["transaction_id"])
     if not isinstance(quiescence_id, str) or quiescence_id != authority["transaction_id"]:
         fail("human_direct_ssh quiescence transaction binding mismatch")
@@ -1245,10 +1681,21 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
     if not 0.1 <= quiet_window <= 30:
         fail("human_direct_ssh quiet window is outside the fixed bound")
     env, use_credential = _direct_ssh_environment(args, request)
+    # Reserve before the first SSH read.  A failed or interrupted observation
+    # therefore cannot be replayed into a different output directory.
+    nonce_ledger = _reserve_nonce(
+        nonce=authority["nonce"],
+        task_uid=authority["task_uid"],
+        transaction_id=authority["transaction_id"],
+        request_digest=authority["request_digest"],
+        authority_sha256=authority["authority_sha256"],
+        requested_path=request.get("nonce_ledger_path"),
+        allow_existing=bool(getattr(args, "reobserve", False)),
+    )
     host_bindings: dict[str, dict[str, str]] = {}
     for request_role, canonical_role in (("storage", "storage-205"), ("sequencer", "sequencer-204")):
         value = hosts.get(request_role)
-        expected = HUMAN_DIRECT_SSH_CANONICAL[canonical_role]
+        expected = inventory["nodes"][canonical_role]
         if not isinstance(value, dict) or value.get("role") != request_role:
             fail(f"human_direct_ssh role binding mismatch for {canonical_role}")
         if value.get("root") != expected["root"] or value.get("service") != expected["service"]:
@@ -1257,7 +1704,7 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
         hostname = _direct_host_name(target)
         if value.get("host_key_fingerprint") is None:
             fail(f"human_direct_ssh host fingerprint is required for {canonical_role}")
-        pin = _direct_known_host_pin(known_hosts_arg, target, value["host_key_fingerprint"], canonical_role)
+        pin = _direct_known_host_pin(known_hosts_arg, target, expected["host_key_fingerprint"], canonical_role)
         host_bindings[canonical_role] = {
             "role": canonical_role,
             "request_role": request_role,
@@ -1323,6 +1770,9 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
         "expires_at": authority["expires_at"],
         "captured_at": captured_at,
         "stop_authority_sha256": authority["authority_sha256"],
+        "github_live": authority["github_live"],
+        "direct_request_path": str(request_path),
+        "direct_request_sha256": sha256_file(request_path),
         "credential_binding": {
             "kind": "temporary-fd-or-environment",
             "environment_name": bound_environment,
@@ -1332,6 +1782,9 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
         },
         "known_hosts_path": str(known_hosts_arg),
         "known_hosts_sha256": sha256_file(known_hosts_arg),
+        "deployment_inventory_path": str(DEPLOYMENT_INVENTORY),
+        "deployment_inventory_sha256": inventory_binding["inventory_sha256"],
+        "nonce_ledger_path": str(nonce_ledger),
         "host_fingerprints": {
             role: value["host_key_fingerprint"] for role, value in host_bindings.items()
         },
@@ -1350,6 +1803,7 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
         "nodes": first,
         "observer_mutation": False,
         "repository_executable": repository_identity,
+        "audit_only": True,
     }
     receipt["receipt_path"] = str(out_dir / "receipt.json")
     proof_path = out_dir / "quiescence-proof.json"
@@ -1374,8 +1828,12 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
             "impact_record_path": str(impact_path_value),
             "impact_record_sha256": impact_sha256,
             "request_digest": receipt["request_digest"],
+            "github_live": receipt["github_live"],
+            "direct_request_path": receipt["direct_request_path"],
+            "direct_request_sha256": receipt["direct_request_sha256"],
             "source_receipt_path": str(source_path),
             "source_receipt_sha256": sha256_file(source_path),
+            "known_hosts_path": receipt["known_hosts_path"],
             "captured_at": receipt["captured_at"],
             "mutation_order": MUTATION_ORDER,
             "startup_order": STARTUP_ORDER,
@@ -1394,11 +1852,70 @@ def run_human_direct_ssh(args: argparse.Namespace) -> dict[str, Any]:
             "nodes": receipt["nodes"],
             "observer_mutation": False,
             "repository_executable": repository_identity,
+            "audit_only": True,
         }
         proof["canonical_digest"] = canonical_digest(proof)
         write_json(proof_path, proof)
-    print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
+    if emit:
+        print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
     return receipt
+
+
+def _direct_reobserve_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    """Perform a fresh direct readback for plan/apply without trusting proof files."""
+    request_path = getattr(args, "human_direct_ssh_request", None)
+    if not isinstance(request_path, str) or not request_path.strip():
+        fail("plan/apply requires a live human_direct_ssh request for direct re-observation")
+    known_hosts = getattr(args, "known_hosts", None)
+    if not isinstance(known_hosts, str) or not known_hosts.strip():
+        fail("plan/apply requires the canonical pinned known-hosts file for direct re-observation")
+    # The direct provider writes only audit material to an isolated temporary
+    # directory.  The returned in-memory receipt is the gate; no persisted
+    # proof is read back into this process or used as authority.
+    with tempfile.TemporaryDirectory(prefix="oasis7-direct-reobserve-") as audit_dir:
+        direct_args = argparse.Namespace(
+            request=request_path,
+            known_hosts=known_hosts,
+            out_dir=audit_dir,
+            host_adapter=None,
+            credential_env=getattr(args, "credential_env", None),
+            credential_fd=getattr(args, "credential_fd", None),
+            reobserve=True,
+        )
+        return run_human_direct_ssh(direct_args, emit=False)
+
+
+def _direct_args_from_audit_proof(args: argparse.Namespace, proof_path: Path) -> argparse.Namespace:
+    """Recover only routing metadata from an audit proof, never authority.
+
+    Older wrapper invocations provide ``--stopped-quiescence-proof`` rather
+    than the direct request flags.  The proof can identify the request and
+    pinned known-hosts file so this process can perform a fresh live GitHub
+    readback and SSH observation.  Its stopped-state fields, digests and
+    claimed authority are deliberately not consumed as a gate.
+    """
+    audit_path = _direct_regular_file(str(proof_path), "human_direct_ssh audit proof")
+    audit = load_json(audit_path, "human_direct_ssh audit proof")
+    if audit.get("audit_only") is not True or audit.get("canonical_digest") != canonical_digest(audit):
+        fail("persisted human_direct_ssh proof is not a valid executor audit record; trusted producer attestation is required")
+    request_value = audit.get("direct_request_path")
+    known_hosts_value = audit.get("known_hosts_path")
+    request = _direct_regular_file(request_value, "human_direct_ssh audit request")
+    if audit.get("direct_request_sha256") != sha256_file(request):
+        fail("human_direct_ssh audit request digest mismatch")
+    known_hosts = _direct_regular_file(known_hosts_value, "human_direct_ssh audit known_hosts")
+    inherited_env = getattr(args, "credential_env", None)
+    if inherited_env is None:
+        binding = audit.get("credential_binding")
+        if isinstance(binding, dict):
+            inherited_env = binding.get("environment_name")
+    return argparse.Namespace(
+        request=str(request),
+        known_hosts=str(known_hosts),
+        credential_env=inherited_env,
+        credential_fd=getattr(args, "credential_fd", None),
+        human_direct_ssh_request=str(request),
+    )
 
 
 def run_quiescence_phase(args: argparse.Namespace) -> dict[str, Any]:
@@ -2176,19 +2693,41 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     impact_path = Path(args.consumer_impact_record).resolve()
     impact = validate_impact(impact_path)
     nodes = parse_nodes(args.node)
+    direct_request = getattr(args, "human_direct_ssh_request", None)
     stopped_proof_path_value = getattr(args, "stopped_quiescence_proof", None)
-    if not isinstance(stopped_proof_path_value, str) or not stopped_proof_path_value.strip():
-        fail("plan requires independently verified stopped/quiescence proof for both validator roles")
-    stopped_proof_path = Path(stopped_proof_path_value).expanduser()
-    if stopped_proof_path.is_symlink():
-        fail("stopped/quiescence proof must be a regular file")
-    stopped_proof_path = stopped_proof_path.resolve()
-    stopped_proof = _validate_stopped_quiescence_proof(
-        stopped_proof_path,
-        impact_path,
-        nodes,
-        getattr(args, "quiescence_id", None),
-    )
+    if isinstance(direct_request, str) and direct_request.strip():
+        if stopped_proof_path_value:
+            fail("persisted human_direct_ssh proof is audit-only; plan requires live direct re-observation")
+        direct_args = args
+        direct_receipt = _direct_reobserve_from_args(direct_args)
+        direct_request_for_plan = Path(direct_request).expanduser().resolve()
+    elif stopped_proof_path_value:
+        # The persisted proof is an audit trail only.  Use its executor-bound
+        # request path to repeat the live authority/SSH operation; never use
+        # its stopped-state or authority fields for admission.
+        direct_args = _direct_args_from_audit_proof(args, Path(stopped_proof_path_value))
+        direct_receipt = _direct_reobserve_from_args(direct_args)
+        direct_request_for_plan = Path(direct_args.request).expanduser().resolve()
+    else:
+        fail("plan requires a live human_direct_ssh request; persisted proof files are audit-only")
+    if direct_receipt.get("quiescence_id") != args.quiescence_id:
+        fail("direct re-observation quiescence transaction binding mismatch")
+    if direct_receipt.get("impact_record_sha256") != sha256_file(impact_path) or direct_receipt.get("impact") != impact["impact"]:
+        fail("direct re-observation consumer-impact binding mismatch")
+    stopped_proof = {
+        "path": None,
+        "sha256": None,
+        "quiescence_id": direct_receipt["quiescence_id"],
+        "request_digest": direct_receipt["request_digest"],
+        "impact_record_sha256": direct_receipt["impact_record_sha256"],
+        "repository_executable": direct_receipt["repository_executable"],
+        "direct_request_path": str(direct_request_for_plan),
+        "direct_request_sha256": sha256_file(direct_request_for_plan),
+        "known_hosts_path": direct_receipt["known_hosts_path"],
+        "github_live": direct_receipt["github_live"],
+        "inventory_sha256": direct_receipt["deployment_inventory_sha256"],
+        "direct_reobserved": True,
+    }
     capacity = load_json(Path(args.capacity_json).resolve(), "capacity evidence")
     package_bytes = package_size(package_dir)
     governed = provenance_summary["governed"]
@@ -2254,6 +2793,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             },
             "observer_mutation": False,
             "repository_executable": stopped_proof["repository_executable"],
+            "direct_reobserve_required": True,
+            "direct_request_path": stopped_proof["direct_request_path"],
+            "direct_request_sha256": stopped_proof["direct_request_sha256"],
+            "known_hosts_path": stopped_proof["known_hosts_path"],
+            "github_live": stopped_proof["github_live"],
+            "deployment_inventory_sha256": stopped_proof["inventory_sha256"],
             "storage_health_url": args.storage_health_url,
             "sequencer_health_url": args.sequencer_health_url,
             "sequencer_proof_url": args.sequencer_proof_url,
@@ -2895,7 +3440,11 @@ def _validate_adapter_binding(receipt: dict[str, Any], plan: dict[str, Any], pha
         fail("host adapter receipt freshness is outside the current phase window")
 
 
-def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str, Any]:
+def apply_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
     plan = load_json(path, "transaction")
     if plan.get("schema_version") != PLAN_SCHEMA or plan.get("phase") != "planned":
         fail("apply requires a planned validator-pair rebuild plan")
@@ -2906,7 +3455,41 @@ def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str,
         fail("plan digest mismatch")
     if host_adapter is None:
         fail("apply requires a governed host adapter for startup and health gates")
-    _validate_plan_stopped_quiescence(plan)
+    proof = plan.get("proof")
+    if not isinstance(proof, dict) or proof.get("direct_reobserve_required") is not True:
+        fail("apply requires live human_direct_ssh re-observation; persisted proof is audit-only")
+    request_value = getattr(direct_args, "human_direct_ssh_request", None) if direct_args is not None else None
+    known_hosts_value = getattr(direct_args, "known_hosts", None) if direct_args is not None else None
+    # The wrapper's apply form historically receives only the transaction.
+    # Recover the executor-bound routing paths recorded by the plan, while
+    # still requiring a new live authority and direct SSH observation below.
+    if not isinstance(request_value, str) or not request_value.strip():
+        request_value = transaction.get("live_ssh_request_path") or proof.get("direct_request_path")
+    if not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        known_hosts_value = transaction.get("live_ssh_known_hosts_path") or proof.get("known_hosts_path")
+    if not isinstance(request_value, str) or not request_value.strip() or not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        fail("apply requires live human_direct_ssh re-observation before mutation")
+    if direct_args is None:
+        direct_args = argparse.Namespace(
+            human_direct_ssh_request=request_value,
+            known_hosts=known_hosts_value,
+            credential_env=None,
+            credential_fd=None,
+        )
+    else:
+        direct_args.human_direct_ssh_request = request_value
+        direct_args.known_hosts = known_hosts_value
+    requested_path = _direct_regular_file(request_value, "apply human_direct_ssh request")
+    if requested_path != Path(proof.get("direct_request_path", "")).expanduser().resolve() or sha256_file(requested_path) != proof.get("direct_request_sha256"):
+        fail("apply direct request is not the request bound into the plan")
+    direct_receipt = _direct_reobserve_from_args(direct_args)
+    stopped_quiescence = proof.get("stopped_quiescence")
+    expected_request_digest = stopped_quiescence.get("request_digest") if isinstance(stopped_quiescence, dict) else None
+    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id") or direct_receipt.get("request_digest") != expected_request_digest:
+        fail("apply direct re-observation binding differs from the planned request")
+    impact_path = Path(plan.get("proof", {}).get("consumer_impact_record_path", "")).resolve()
+    if direct_receipt.get("impact_record_sha256") != sha256_file(impact_path) or direct_receipt.get("impact") != plan.get("consumer_impact", {}).get("impact"):
+        fail("apply direct re-observation consumer-impact binding mismatch")
     helper = load_provenance_helper()
     package = plan.get("package")
     try:
@@ -2918,6 +3501,16 @@ def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str,
     transaction["transaction_id"] = f"pair-rebuild-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:10]}"
     transaction["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     transaction["phase"] = "prepared"
+    transaction["direct_quiescence_observation"] = {
+        "provider": "executor-owned-direct-ssh",
+        "audit_only": True,
+        "quiescence_id": direct_receipt["quiescence_id"],
+        "request_digest": direct_receipt["request_digest"],
+        "nonce": direct_receipt["nonce"],
+        "captured_at": direct_receipt["captured_at"],
+        "deployment_inventory_sha256": direct_receipt["deployment_inventory_sha256"],
+        "nodes": direct_receipt["nodes"],
+    }
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
     transaction["capacity_apply"] = {
@@ -2929,10 +3522,6 @@ def apply_transaction(path: Path, host_adapter: Path | None = None) -> dict[str,
     backups: dict[str, Any] = {}
     staged: dict[str, Any] = {}
     try:
-        transaction["quiesce_receipt"] = run_host_adapter(host_adapter, path, transaction, "quiesce")
-        transaction["phase"] = "quiesced"
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
         for role in MUTATION_ORDER:
             backups[role] = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
             transaction["nodes"][role]["backup"] = backups[role]
@@ -3049,6 +3638,10 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--sequencer-rebuild-proof", required=True)
     plan.add_argument("--sequencer-rebuild-proof-verification")
     plan.add_argument("--sequencer-proof-verifier")
+    plan.add_argument("--human-direct-ssh-request", "--direct-request", dest="human_direct_ssh_request")
+    plan.add_argument("--known-hosts")
+    plan.add_argument("--credential-env")
+    plan.add_argument("--credential-fd", type=int)
     plan.add_argument("--out-dir")
     quiesce = sub.add_parser("quiesce")
     quiesce.add_argument("--consumer-impact-record", required=True)
@@ -3066,6 +3659,10 @@ def parser() -> argparse.ArgumentParser:
     apply = sub.add_parser("apply")
     apply.add_argument("--transaction", required=True)
     apply.add_argument("--host-adapter")
+    apply.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
+    apply.add_argument("--known-hosts")
+    apply.add_argument("--credential-env")
+    apply.add_argument("--credential-fd", type=int)
     rollback = sub.add_parser("rollback")
     rollback.add_argument("--transaction", required=True)
     rollback.add_argument("--host-adapter", required=True)
@@ -3085,7 +3682,7 @@ def main() -> int:
         print(json.dumps(plan, ensure_ascii=True, sort_keys=True))
     elif args.mode == "apply":
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
-        print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter), ensure_ascii=True, sort_keys=True))
+        print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
     else:
         print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser()), ensure_ascii=True, sort_keys=True))
     return 0

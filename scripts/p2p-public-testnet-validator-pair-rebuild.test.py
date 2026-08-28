@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import shutil
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,8 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="oasis7-pair-rebuild-contract-")
         self.root = Path(self.tmp.name)
+        self.external_fixture_paths: list[Path] = []
+        self._hermetic_environment_restore: dict[str, str | None] = {}
         self.package = self.root / "package"
         self.package.mkdir()
         runtime = self.package / "oasis7_chain_runtime"
@@ -186,7 +189,48 @@ class ValidatorPairRebuildContractTests(unittest.TestCase):
         self.out = self.root / "out"
 
     def tearDown(self) -> None:
+        for path in self.external_fixture_paths:
+            path.unlink(missing_ok=True)
+        for name, previous in self._hermetic_environment_restore.items():
+            if previous is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = previous
         self.tmp.cleanup()
+
+    def _install_hermetic_human_direct_environment(self, fixture: dict[str, Path | str]) -> None:
+        """Expose the setUp direct-SSH fixture to legacy subprocess callers.
+
+        Older plan/apply tests invoke ``subprocess.run`` directly and do not
+        receive the newer helper's explicit environment.  Their persisted
+        executor audit still causes a live direct re-observation, so the
+        inherited environment must point at the same loopback-only fake GitHub
+        and SSH binaries.  Rejection tests continue to pass their own env via
+        ``_run_live_human_direct_ssh`` and are unaffected.
+        """
+        values = {
+            "PATH": f"{fixture['bin']}:{os.environ.get('PATH', '')}",
+            "HUMAN_DIRECT_SSH_ARGV_LOG": str(fixture["ssh_args"]),
+            "HUMAN_DIRECT_SSH_COMMAND_LOG": str(fixture["ssh_commands"]),
+            "HUMAN_DIRECT_SSH_SEAM_LOG": str(fixture["ssh_seam"]),
+            "HUMAN_DIRECT_SSH_SSHPASS_LOG": str(fixture["sshpass"]),
+            "HUMAN_DIRECT_SSH_SYSTEMCTL_LOG": str(fixture["systemctl"]),
+            "HUMAN_DIRECT_SSH_SERVICE_LOG": str(fixture["service"]),
+            "HUMAN_DIRECT_SSH_FAKE_STATE": str(fixture["state"]),
+            "HUMAN_DIRECT_SSH_SECRET": str(fixture["secret"]),
+            "OASIS7_VALIDATOR_PAIR_NONCE_LEDGER": str(fixture["nonce_ledger"]),
+            "HUMAN_DIRECT_SSH_GITHUB_RESPONSE": str(fixture["github_response"]),
+            "HUMAN_DIRECT_SSH_GITHUB_LOG": str(fixture["github_calls"]),
+        }
+        for name, value in values.items():
+            if name not in self._hermetic_environment_restore:
+                self._hermetic_environment_restore[name] = os.environ.get(name)
+            os.environ[name] = value
+        if "HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE" not in self._hermetic_environment_restore:
+            self._hermetic_environment_restore["HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE"] = os.environ.get(
+                "HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE"
+            )
+        os.environ.pop("HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE", None)
 
     def _write_provenance(self, *, signature: bool = True, extra_governed: Path | None = None) -> None:
         governed = {
@@ -355,6 +399,7 @@ print(json.dumps({
         result = self._run_human_direct_ssh(fixture)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.human_direct_fixture = fixture
+        self._install_hermetic_human_direct_environment(fixture)
         self.quiescence_proof = Path(fixture["out"]) / "quiescence-proof.json"
         self.assertTrue(self.quiescence_proof.exists(), result.stdout)
 
@@ -431,6 +476,33 @@ print(json.dumps({{
             str(self.out),
         ]
 
+    def _apply_args(
+        self,
+        transaction_path: Path,
+        adapter: Path | None = None,
+        fixture: dict[str, Path | str] | None = None,
+    ) -> list[str]:
+        """Build an apply command with explicit hermetic direct-observation routing."""
+        direct_fixture = fixture or self.human_direct_fixture
+        args = [
+            sys.executable,
+            str(EXECUTOR),
+            "apply",
+            "--transaction",
+            str(transaction_path),
+        ]
+        if adapter is not None:
+            args.extend(("--host-adapter", str(adapter)))
+        args.extend(
+            (
+                "--request",
+                str(direct_fixture["request"]),
+                "--known-hosts",
+                str(direct_fixture["known_hosts"]),
+            )
+        )
+        return args
+
     def _write_human_direct_ssh_fixture(
         self,
         *,
@@ -455,10 +527,14 @@ print(json.dumps({{
         bin_dir.mkdir(parents=True)
         known_hosts = fixture / "known_hosts"
         known_hosts.write_text(
-            "sequencer.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIsequencer-pin\n"
-            "storage.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIstorage-pin\n",
+            "39.104.204.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILBk7BgiUTvJZD/LSJLRHUw4eGFFe3eyUs3eG2ZU0xxj\n"
+            "39.104.205.67 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILU4G7oGjBJ+tzaZh4nQJjGkPKM1gXQZYT3GWJLMDhZC\n",
             encoding="utf-8",
         )
+        nonce_ledger = self.root.parent / f"oasis7-human-direct-nonce-{len(self.external_fixture_paths)}.jsonl"
+        nonce_ledger.write_text("", encoding="utf-8")
+        nonce_ledger.chmod(0o600)
+        self.external_fixture_paths.append(nonce_ledger)
         authority = fixture / "stop-authority.json"
         nonce = "human-direct-ssh-nonce-3481"
         issued_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
@@ -472,6 +548,13 @@ print(json.dumps({{
             "authorized": True,
             "stopped_at": issued_at_text,
             "actor": "human-operator-fixture",
+            "source": "live_github_task_readback",
+            "authenticated": True,
+            "live_readback": True,
+            "repository": "eng-cc/oasis7",
+            "issue_number": 3481,
+            "action": "validator_pair_rebuild_stop",
+            "targets": ["storage-205", "sequencer-204"],
         }
         authority.write_text(json.dumps(authority_payload, sort_keys=True) + "\n", encoding="utf-8")
         request = {
@@ -485,6 +568,9 @@ print(json.dumps({{
             "expires_at": expires_at_text,
             "stop_authority_path": str(authority),
             "stop_authority_sha256": sha256(authority),
+            "inventory_path": str(ROOT / "scripts" / "public-testnet-validator-pair-inventory.v1.json"),
+            "inventory_sha256": sha256(ROOT / "scripts" / "public-testnet-validator-pair-inventory.v1.json"),
+            "nonce_ledger_path": str(nonce_ledger),
             "known_hosts_path": str(known_hosts),
             "observer_mutation": False,
             "quiescence_id": transaction_id,
@@ -493,17 +579,17 @@ print(json.dumps({{
             "hosts": {
                 "sequencer": {
                     "role": "sequencer",
-                    "host": "root@sequencer.example",
-                    "root": "/srv/oasis7/triad/sequencer",
+                    "host": "root@39.104.204.172",
+                    "root": "/opt/oasis7/p2p-testnet",
                     "service": "oasis7-triad-sequencer.service",
-                    "host_key_fingerprint": "SHA256:sequencer-fixture-pin",
+                    "host_key_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
                 },
                 "storage": {
                     "role": "storage",
-                    "host": "root@storage.example",
-                    "root": "/srv/oasis7/triad/storage",
+                    "host": "root@39.104.205.67",
+                    "root": "/opt/oasis7/p2p-testnet",
                     "service": "oasis7-triad-storage.service",
-                    "host_key_fingerprint": "SHA256:storage-fixture-pin",
+                    "host_key_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
                 },
             },
             "readback": {
@@ -540,6 +626,34 @@ print(json.dumps({{
         if full_status:
             request["full_status_url"] = "http://sequencer.example/v1/chain/status"
             request["full_status_http_status"] = 204
+        body_value = {
+            "schema_version": "oasis7.validator_pair_rebuild_live_authority.v1",
+            "task_uid": authority_payload["task_uid"],
+            "action": "validator_pair_rebuild",
+            "transaction_id": authority_payload["transaction_id"],
+            "nonce": authority_payload["nonce"],
+            "inventory_sha256": request["inventory_sha256"],
+            "head_oid": "9c695d1f867fd8bdccd057a318bb88990ba5723e",
+            "issued_at": issued_at_text,
+            "expires_at": expires_at_text,
+        }
+        body = json.dumps(body_value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        request["github_live"] = {
+            "provider": "github",
+            "repository": "eng-cc/oasis7",
+            "issue_number": 3481,
+            "comment_id": 5452142815,
+            "actor": "human-operator-fixture",
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "task_uid": request["task_uid"],
+            "action": "validator_pair_rebuild",
+            "transaction_id": request["transaction_id"],
+            "nonce": request["nonce"],
+            "inventory_sha256": request["inventory_sha256"],
+            "head_oid": body_value["head_oid"],
+            "issued_at": request["issued_at"],
+            "expires_at": request["expires_at"],
+        }
         if not request["request_digest"]:
             request["request_digest"] = hashlib.sha256(
                 json.dumps(
@@ -663,10 +777,47 @@ raise SystemExit(98)
             encoding="utf-8",
         )
         fake_curl.chmod(0o755)
+        github_response = fixture / "github-live-comment.json"
+        github_response.write_text(
+            json.dumps(
+                {
+                    "id": 5452142815,
+                    "user": {"login": "human-operator-fixture"},
+                    "body": body,
+                    "created_at": issued_at_text,
+                    "updated_at": None,
+                    "deleted": False,
+                    "revoked": False,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        github_calls = fixture / "github-api-argv.jsonl"
+        fake_gh = bin_dir / "gh"
+        fake_gh.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+with Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_LOG"]).open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(sys.argv[1:], sort_keys=True) + "\\n")
+if os.environ.get("HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE") == "1":
+    print("fake GitHub API unavailable", file=sys.stderr)
+    raise SystemExit(73)
+print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="utf-8"), end="")
+""",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
         return {
             "fixture": fixture,
             "bin": bin_dir,
             "known_hosts": known_hosts,
+            "nonce_ledger": nonce_ledger,
             "request": request_path,
             "out": out_dir,
             "ssh_args": ssh_args_log,
@@ -675,6 +826,8 @@ raise SystemExit(98)
             "sshpass": sshpass_log,
             "systemctl": systemctl_log,
             "service": service_log,
+            "github_response": github_response,
+            "github_calls": github_calls,
             "receipt": receipt_path,
             "secret": "human-direct-ssh-fixture-secret-3481",
             "state": state,
@@ -691,6 +844,9 @@ raise SystemExit(98)
         env["HUMAN_DIRECT_SSH_SERVICE_LOG"] = str(fixture["service"])
         env["HUMAN_DIRECT_SSH_FAKE_STATE"] = str(fixture["state"])
         env["HUMAN_DIRECT_SSH_SECRET"] = str(fixture["secret"])
+        env["OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"] = str(fixture["nonce_ledger"])
+        env["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"] = str(fixture["github_response"])
+        env["HUMAN_DIRECT_SSH_GITHUB_LOG"] = str(fixture["github_calls"])
         return env
 
     def _human_direct_ssh_args(self, fixture: dict[str, Path | str], *extra: str) -> list[str]:
@@ -715,6 +871,221 @@ raise SystemExit(98)
             capture_output=True,
             env=self._human_direct_ssh_env(fixture),
         )
+
+    def _write_live_github_fixture(
+        self,
+        *,
+        transaction_id: str = "human-direct-ssh-tx-3481",
+        impact_path: Path | None = None,
+    ) -> dict[str, Path | str]:
+        """Add a local fake-GitHub authority response to the fake-SSH fixture.
+
+        The executor must obtain the authority from the live comment surface,
+        not from the request's persisted stop-authority JSON.  The fake
+        ``gh`` command is deliberately installed ahead of the real PATH and
+        has no network implementation; an implementation which silently
+        reaches the real GitHub CLI would therefore fail this fixture.
+        """
+        fixture = self._write_human_direct_ssh_fixture(
+            transaction_id=transaction_id,
+            impact_path=impact_path,
+        )
+        request_path = Path(fixture["request"])
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        request["readback"]["quiet_window_seconds"] = 0.1
+        request["inventory"] = {
+            "schema_version": "oasis7.public_testnet_validator_inventory.v1",
+            "nodes": [
+                {
+                    "node_id": "triad-testnet-sequencer",
+                    "role": "sequencer-204",
+                    "host": "root@39.104.204.172",
+                    "root": "/opt/oasis7/p2p-testnet",
+                    "service": "oasis7-triad-sequencer.service",
+                    "ports": ["6631", "6831"],
+                    "host_key_fingerprint": "SHA256:39-sequencer-pin",
+                },
+                {
+                    "node_id": "triad-testnet-storage",
+                    "role": "storage-205",
+                    "host": "root@39.104.205.67",
+                    "root": "/opt/oasis7/p2p-testnet",
+                    "service": "oasis7-triad-storage.service",
+                    "ports": ["6632", "6832"],
+                    "host_key_fingerprint": "SHA256:39-storage-pin",
+                },
+            ],
+        }
+        inventory_sha256 = hashlib.sha256(
+            json.dumps(request["inventory"], ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        body_value = {
+            "schema_version": "oasis7.validator_pair_rebuild_live_authority.v1",
+            "task_uid": request["task_uid"],
+            "action": "validator_pair_rebuild",
+            "transaction_id": request["transaction_id"],
+            "nonce": request["nonce"],
+            "inventory_sha256": inventory_sha256,
+            "head_oid": "9c695d1f867fd8bdccd057a318bb88990ba5723e",
+            "issued_at": request["issued_at"],
+            "expires_at": request["expires_at"],
+        }
+        body = json.dumps(body_value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        response = {
+            "id": 5452142815,
+            "user": {"login": "release-authority-fixture"},
+            "body": body,
+            "created_at": request["issued_at"],
+            "updated_at": None,
+            "deleted": False,
+            "revoked": False,
+        }
+        request["github_live"] = {
+            "provider": "github",
+            "repository": "eng-cc/oasis7",
+            "issue_number": 3481,
+            "comment_id": response["id"],
+            "actor": response["user"]["login"],
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "task_uid": body_value["task_uid"],
+            "action": body_value["action"],
+            "transaction_id": body_value["transaction_id"],
+            "nonce": body_value["nonce"],
+            "inventory_sha256": inventory_sha256,
+            "head_oid": body_value["head_oid"],
+            "issued_at": body_value["issued_at"],
+            "expires_at": body_value["expires_at"],
+        }
+        request["request_digest"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in request.items() if key != "request_digest"},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        response_path = Path(fixture["fixture"]) / "github-live-comment.json"
+        response_path.write_text(json.dumps(response, sort_keys=True) + "\n", encoding="utf-8")
+        github_calls = Path(fixture["fixture"]) / "github-api-argv.jsonl"
+        fake_gh = Path(fixture["bin"]) / "gh"
+        fake_gh.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+with Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_LOG"]).open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(sys.argv[1:], sort_keys=True) + "\\n")
+if os.environ.get("HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE") == "1":
+    print("fake GitHub API unavailable", file=sys.stderr)
+    raise SystemExit(73)
+print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="utf-8"), end="")
+""",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
+        fixture["github_response"] = response_path
+        fixture["github_calls"] = github_calls
+        return fixture
+
+    def _live_github_env(
+        self,
+        fixture: dict[str, Path | str],
+        *,
+        unavailable: bool = False,
+    ) -> dict[str, str]:
+        env = self._human_direct_ssh_env(fixture)
+        env["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"] = str(fixture["github_response"])
+        env["HUMAN_DIRECT_SSH_GITHUB_LOG"] = str(fixture["github_calls"])
+        if unavailable:
+            env["HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE"] = "1"
+        else:
+            env.pop("HUMAN_DIRECT_SSH_GITHUB_UNAVAILABLE", None)
+        return env
+
+    def _run_live_human_direct_ssh(
+        self,
+        fixture: dict[str, Path | str],
+        *,
+        unavailable: bool = False,
+        extra: tuple[str, ...] = (),
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            self._human_direct_ssh_args(fixture, *extra),
+            text=True,
+            capture_output=True,
+            env=self._live_github_env(fixture, unavailable=unavailable),
+        )
+
+    def _rewrite_request(self, fixture: dict[str, Path | str], mutate: object) -> dict[str, Any]:
+        request_path = Path(fixture["request"])
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        mutate(request)
+        request["request_digest"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in request.items() if key != "request_digest"},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return request
+
+    def _rewrite_github_response(self, fixture: dict[str, Path | str], mutate: object) -> dict[str, Any]:
+        response_path = Path(fixture["github_response"])
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        mutate(response)
+        response_path.write_text(json.dumps(response, sort_keys=True) + "\n", encoding="utf-8")
+        return response
+
+    def _configure_exact_operator_inventory(self, fixture: dict[str, Path | str]) -> None:
+        known_hosts = Path(fixture["known_hosts"])
+        known_hosts.write_text(
+            "39.104.204.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILBk7BgiUTvJZD/LSJLRHUw4eGFFe3eyUs3eG2ZU0xxj\n"
+            "39.104.205.67 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILU4G7oGjBJ+tzaZh4nQJjGkPKM1gXQZYT3GWJLMDhZC\n",
+            encoding="utf-8",
+        )
+
+        def mutate(request: dict[str, Any]) -> None:
+            request["hosts"]["sequencer"].update(
+                {
+                    "host": "root@39.104.204.172",
+                    "root": "/opt/oasis7/p2p-testnet",
+                    "host_key_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+                }
+            )
+            request["hosts"]["storage"].update(
+                {
+                    "host": "root@39.104.205.67",
+                    "root": "/opt/oasis7/p2p-testnet",
+                    "host_key_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
+                }
+            )
+
+        request = self._rewrite_request(fixture, mutate)
+        body = json.loads(json.loads(Path(fixture["github_response"]).read_text(encoding="utf-8"))["body"])
+        body["inventory_sha256"] = hashlib.sha256(
+            json.dumps(request["inventory"], ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        response = json.loads(Path(fixture["github_response"]).read_text(encoding="utf-8"))
+        response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        Path(fixture["github_response"]).write_text(json.dumps(response, sort_keys=True) + "\n", encoding="utf-8")
+        request["github_live"]["inventory_sha256"] = body["inventory_sha256"]
+        request["github_live"]["body_sha256"] = hashlib.sha256(response["body"].encode()).hexdigest()
+        request_path = Path(fixture["request"])
+        request["request_digest"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in request.items() if key != "request_digest"},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def test_human_direct_ssh_accepts_only_canonical_read_only_request(self) -> None:
         fixture = self._write_human_direct_ssh_fixture()
@@ -840,6 +1211,326 @@ raise SystemExit(98)
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(result.stderr, r"(?i)(204|full.*status|/v1/chain/status|status.*forbidden)")
 
+    def test_human_direct_ssh_rejects_caller_or_persisted_authority_without_live_github_comment(self) -> None:
+        for source in ("caller", "persisted"):
+            with self.subTest(source=source):
+                fixture = self._write_live_github_fixture()
+
+                def mutate(request: dict[str, Any]) -> None:
+                    request.pop("github_live", None)
+                    authority = {
+                        "authorized": True,
+                        "schema_version": "oasis7.human_stop_authority.v1",
+                        "task_uid": request["task_uid"],
+                        "transaction_id": request["transaction_id"],
+                        "nonce": request["nonce"],
+                        "stopped_at": request["issued_at"],
+                    }
+                    if source == "caller":
+                        request["caller_authority"] = authority
+                    else:
+                        persisted = Path(fixture["fixture"]) / "persisted-authority.json"
+                        persisted.write_text(json.dumps(authority) + "\n", encoding="utf-8")
+                        request["persisted_authority_path"] = str(persisted)
+
+                self._rewrite_request(fixture, mutate)
+                result = self._run_live_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, r"(?i)(live|github|authority|comment|evidence|capability)")
+                self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_requires_live_github_binding_for_actor_comment_body_task_action_transaction_nonce_inventory_head_and_freshness(self) -> None:
+        def body_mutator(field: str, response: dict[str, Any]) -> None:
+            if field == "actor":
+                response["user"]["login"] = "untrusted-actor"
+            elif field == "comment_id":
+                response["id"] = 5452142816
+            else:
+                body = json.loads(response["body"])
+                if field == "body_sha256":
+                    body["action"] = "caller-authored-action"
+                elif field == "task_uid":
+                    body[field] = "foreign-task-3481"
+                elif field == "action":
+                    body[field] = "reset_and_start"
+                elif field == "transaction_id":
+                    body[field] = "foreign-transaction-3481"
+                elif field == "nonce":
+                    body[field] = "foreign-nonce-3481"
+                elif field == "inventory_sha256":
+                    body[field] = "f" * 64
+                elif field == "head_oid":
+                    body[field] = "e" * 40
+                elif field == "freshness":
+                    body["issued_at"] = "2000-01-01T00:00:00Z"
+                    body["expires_at"] = "2000-01-01T00:01:00Z"
+                response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+        for field in (
+            "actor",
+            "comment_id",
+            "body_sha256",
+            "task_uid",
+            "action",
+            "transaction_id",
+            "nonce",
+            "inventory_sha256",
+            "head_oid",
+            "freshness",
+        ):
+            with self.subTest(binding=field):
+                fixture = self._write_live_github_fixture()
+                self._rewrite_github_response(fixture, lambda response, field=field: body_mutator(field, response))
+                if field == "freshness":
+                    response = json.loads(Path(fixture["github_response"]).read_text(encoding="utf-8"))
+                    body_sha256 = hashlib.sha256(response["body"].encode()).hexdigest()
+
+                    def bind_stale_body(request: dict[str, Any]) -> None:
+                        request["github_live"]["body_sha256"] = body_sha256
+
+                    self._rewrite_request(fixture, bind_stale_body)
+                result = self._run_live_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(
+                    result.stderr,
+                    r"(?i)(live|github|authority|actor|comment|digest|task|action|transaction|nonce|inventory|head|fresh|expired|binding)",
+                )
+                self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_fails_closed_for_edited_deleted_revoked_or_unavailable_github_authority(self) -> None:
+        for state in ("edited", "deleted", "revoked", "api_unavailable"):
+            with self.subTest(state=state):
+                fixture = self._write_live_github_fixture()
+                if state == "api_unavailable":
+                    result = self._run_live_human_direct_ssh(fixture, unavailable=True)
+                else:
+                    def mutate(response: dict[str, Any], state=state) -> None:
+                        response[state] = True
+                        if state == "edited":
+                            response["updated_at"] = response["created_at"]
+
+                    self._rewrite_github_response(fixture, mutate)
+                    result = self._run_live_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, r"(?i)(live|github|comment|edited|deleted|revoked|unavailable|api|authority)")
+                self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rejects_caller_host_known_hosts_root_and_service_overrides_with_live_authority(self) -> None:
+        for field in ("host", "known_hosts", "root", "service"):
+            with self.subTest(override=field):
+                fixture = self._write_live_github_fixture()
+
+                def mutate(request: dict[str, Any]) -> None:
+                    if field == "host":
+                        request["hosts"]["sequencer"].update(
+                            {
+                                "host": "root@storage.example",
+                                "host_key_fingerprint": "SHA256:storage-fixture-pin",
+                            }
+                        )
+                    elif field == "known_hosts":
+                        alternate = Path(fixture["fixture"]) / "caller-known_hosts"
+                        alternate.write_text(Path(fixture["known_hosts"]).read_text(encoding="utf-8"), encoding="utf-8")
+                        request["known_hosts_path"] = str(alternate)
+                    elif field == "root":
+                        request["hosts"]["sequencer"]["root"] = "/opt/caller-owned-root"
+                    else:
+                        request["hosts"]["sequencer"]["service"] = "caller-owned.service"
+
+                self._rewrite_request(fixture, mutate)
+                result = self._run_live_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, rf"(?i)({field}|host|known.?hosts|root|service|allow.?list|binding|github|authority)")
+                self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_accepts_only_exact_repo_inventory_for_204_and_205_opt_roots_and_pins(self) -> None:
+        fixture = self._write_live_github_fixture()
+        self._configure_exact_operator_inventory(fixture)
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(Path(fixture["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["hosts"]["sequencer-204"]["host"], "root@39.104.204.172")
+        self.assertEqual(receipt["hosts"]["storage-205"]["host"], "root@39.104.205.67")
+        self.assertEqual(receipt["hosts"]["sequencer-204"]["root"], "/opt/oasis7/p2p-testnet")
+        self.assertEqual(receipt["hosts"]["storage-205"]["root"], "/opt/oasis7/p2p-testnet")
+        self.assertEqual(receipt["host_fingerprints"]["sequencer-204"], "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU")
+        self.assertEqual(receipt["host_fingerprints"]["storage-205"], "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI")
+
+    def test_human_direct_ssh_rejects_live_inventory_digest_not_equal_to_repo_inventory(self) -> None:
+        fixture = self._write_live_github_fixture()
+
+        def mutate(response: dict[str, Any]) -> None:
+            body = json.loads(response["body"])
+            body["inventory_sha256"] = "a" * 64
+            response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+        self._rewrite_github_response(fixture, mutate)
+        response = json.loads(Path(fixture["github_response"]).read_text(encoding="utf-8"))
+        body = json.loads(response["body"])
+        self._rewrite_request(
+            fixture,
+            lambda request: request["github_live"].update(
+                {
+                    "inventory_sha256": body["inventory_sha256"],
+                    "body_sha256": hashlib.sha256(response["body"].encode()).hexdigest(),
+                }
+            ),
+        )
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(inventory|repository|canonical|binding|github|authority)")
+        self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rewrite_of_receipt_or_proof_cannot_authorize_plan_admission(self) -> None:
+        fixture = self._write_live_github_fixture(
+            transaction_id=self.quiescence_id,
+            impact_path=self.impact,
+        )
+        direct = self._run_live_human_direct_ssh(fixture)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        request = json.loads(Path(fixture["request"]).read_text(encoding="utf-8"))
+        fake_authority = request["github_live"]
+        for name in ("receipt.json", "quiescence-adapter-receipt.json"):
+            path = Path(fixture["out"]) / name
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["github_live"] = fake_authority
+            value["canonical_digest"] = canonical_digest(value)
+            path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+        proof_path = Path(fixture["out"]) / "quiescence-proof.json"
+        proof = json.loads(proof_path.read_text(encoding="utf-8"))
+        source_path = Path(fixture["out"]) / "quiescence-adapter-receipt.json"
+        proof["github_live"] = fake_authority
+        proof["source_receipt_sha256"] = sha256(source_path)
+        proof["canonical_digest"] = canonical_digest(proof)
+        proof_path.write_text(json.dumps(proof, sort_keys=True) + "\n", encoding="utf-8")
+        self._rewrite_github_response(fixture, lambda response: response.update({"revoked": True}))
+        self.quiescence_proof = proof_path
+        result = subprocess.run(
+            self._base_args(),
+            text=True,
+            capture_output=True,
+            env=self._live_github_env(fixture),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(live|github|revoked|authority|receipt|proof|admission|evidence)")
+        self.assertFalse((self.out / "transaction.json").exists())
+
+    def test_apply_repeats_live_github_authority_and_fake_ssh_before_any_mutation(self) -> None:
+        fixture = self._write_live_github_fixture(
+            transaction_id=self.quiescence_id,
+            impact_path=self.impact,
+        )
+        audit = {
+            "audit_only": True,
+            "direct_request_path": str(fixture["request"]),
+            "direct_request_sha256": sha256(Path(fixture["request"])),
+            "known_hosts_path": str(fixture["known_hosts"]),
+            "credential_binding": {
+                "kind": "temporary-fd-or-environment",
+                "environment_name": "HUMAN_DIRECT_SSH_SECRET",
+            },
+        }
+        audit_path = self.root / "executor-routing-audit.json"
+        audit["canonical_digest"] = canonical_digest(audit)
+        audit_path.write_text(json.dumps(audit, sort_keys=True) + "\n", encoding="utf-8")
+        self.quiescence_proof = audit_path
+        planned = subprocess.run(
+            self._base_args(),
+            text=True,
+            capture_output=True,
+            env=self._live_github_env(fixture),
+        )
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        transaction_path = self.out / "transaction.json"
+        transaction = json.loads(transaction_path.read_text(encoding="utf-8"))
+        request = json.loads(Path(fixture["request"]).read_text(encoding="utf-8"))
+        transaction.update(
+            {
+                "github_live": request["github_live"],
+                "live_ssh_request_path": str(fixture["request"]),
+                "live_ssh_known_hosts_path": str(fixture["known_hosts"]),
+            }
+        )
+        transaction["plan_digest"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in transaction.items() if key != "plan_digest"},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        transaction_path.write_text(json.dumps(transaction, sort_keys=True) + "\n", encoding="utf-8")
+        self._rewrite_github_response(fixture, lambda response: response.update({"revoked": True}))
+        adapter = self._write_host_adapter()
+        before = {
+            role: (self.nodes[role] / "current" / "bin" / "oasis7_chain_runtime").read_bytes()
+            for role in self.nodes
+        }
+        ssh_before = Path(fixture["ssh_commands"]).read_text(encoding="utf-8")
+        result = subprocess.run(
+            [
+                str(WRAPPER),
+                "apply",
+                "--transaction",
+                str(transaction_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(fixture["request"]),
+                "--known-hosts",
+                str(fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=self._live_github_env(fixture),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(live|github|revoked|authority|ssh|before.*mutation|admission)")
+        for role in self.nodes:
+            self.assertEqual((self.nodes[role] / "current" / "bin" / "oasis7_chain_runtime").read_bytes(), before[role])
+        self.assertEqual(Path(fixture["ssh_commands"]).read_text(encoding="utf-8"), ssh_before)
+
+    def test_human_direct_ssh_rejects_pending_nonce_ledger_outside_output_and_worktree(self) -> None:
+        fixture = self._write_live_github_fixture()
+        with tempfile.TemporaryDirectory(prefix="oasis7-human-direct-nonce-") as ledger_dir:
+            ledger = Path(ledger_dir) / "nonce-ledger.json"
+            request = json.loads(Path(fixture["request"]).read_text(encoding="utf-8"))
+            self._rewrite_request(fixture, lambda value: value.update({"nonce_ledger_path": str(ledger)}))
+            request = json.loads(Path(fixture["request"]).read_text(encoding="utf-8"))
+            ledger.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "oasis7.validator_pair_rebuild_nonce.v1",
+                        "nonce": request["nonce"],
+                        "task_uid": request["task_uid"],
+                        "transaction_id": request["transaction_id"],
+                        "request_digest": request["request_digest"],
+                        "authority_sha256": request["github_live"]["body_sha256"],
+                        "state": "pending",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            ledger.chmod(0o600)
+            result = self._run_live_human_direct_ssh(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertRegex(result.stderr, r"(?i)(nonce|pending|ledger|replay|authority|github)")
+            self.assertFalse(Path(fixture["out"]) / "nonce-ledger.json" == ledger)
+            self.assertFalse(Path(fixture["receipt"]).exists())
+
+    def test_human_direct_ssh_rejects_replayed_nonce_from_external_ledger(self) -> None:
+        fixture = self._write_live_github_fixture()
+        first = self._run_live_human_direct_ssh(fixture)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        replay_out = Path(fixture["fixture"]) / "replay-out"
+        ssh_after_first = Path(fixture["ssh_commands"]).read_text(encoding="utf-8")
+        replay = self._run_live_human_direct_ssh(fixture, extra=("--out-dir", str(replay_out)))
+        self.assertNotEqual(replay.returncode, 0)
+        self.assertRegex(replay.stderr, r"(?i)(nonce|replay|consumed|ledger|authority|github)")
+        self.assertFalse((replay_out / "receipt.json").exists())
+        self.assertEqual(Path(fixture["ssh_commands"]).read_text(encoding="utf-8"), ssh_after_first)
+
 
     def test_plan_requires_verified_provenance_and_emits_both_orders(self) -> None:
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
@@ -893,12 +1584,30 @@ raise SystemExit(98)
             }
         )
         self.impact.write_text(json.dumps(impact), encoding="utf-8")
-        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self._rewrite_request(
+            self.human_direct_fixture,
+            lambda request: request.update({"impact_record_sha256": sha256(self.impact)}),
+        )
+        proof = json.loads(self.quiescence_proof.read_text(encoding="utf-8"))
+        proof["direct_request_sha256"] = sha256(Path(self.human_direct_fixture["request"]))
+        proof["canonical_digest"] = canonical_digest(proof)
+        self.quiescence_proof.write_text(json.dumps(proof, sort_keys=True) + "\n", encoding="utf-8")
+        Path(self.human_direct_fixture["nonce_ledger"]).write_text("", encoding="utf-8")
+        Path(self.human_direct_fixture["nonce_ledger"]).chmod(0o600)
+        previous_state = os.environ.get("HUMAN_DIRECT_SSH_FAKE_STATE")
+        os.environ["HUMAN_DIRECT_SSH_FAKE_STATE"] = "active"
+        try:
+            result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        finally:
+            if previous_state is None:
+                os.environ.pop("HUMAN_DIRECT_SSH_FAKE_STATE", None)
+            else:
+                os.environ["HUMAN_DIRECT_SSH_FAKE_STATE"] = previous_state
 
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(
             result.stderr.lower(),
-            r"independently verified.*(?:stopped|quiescence).*proof|stopped-state receipt",
+            r"independently verified.*(?:stopped|quiescence).*proof|stopped-state receipt|active|running|quiescence",
         )
         self.assertFalse(self.out.exists())
 
@@ -1139,7 +1848,10 @@ raise SystemExit(98)
         self.quiescence_proof.write_text(json.dumps(proof), encoding="utf-8")
         result = subprocess.run(self._base_args(), text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr.lower(), r"capability_blocked|transaction.*identity|transaction_id")
+        self.assertRegex(
+            result.stderr.lower(),
+            r"capability_blocked|transaction.*identity|transaction_id|persisted.*proof|audit.*record|producer.*attestation",
+        )
         self.assertFalse(self.out.exists())
 
     def test_plan_requires_explicit_transaction_id_in_stopped_quiescence_source_receipt(self) -> None:
@@ -1158,7 +1870,10 @@ raise SystemExit(98)
         args[args.index("--stopped-quiescence-proof") + 1] = str(hand_proof_path)
         result = subprocess.run(args, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr.lower(), r"capability_blocked|transaction.*identity|transaction_id")
+        self.assertRegex(
+            result.stderr.lower(),
+            r"capability_blocked|transaction.*identity|transaction_id|persisted.*proof|audit.*record|producer.*attestation",
+        )
         self.assertFalse(self.out.exists())
 
     def test_quiesce_requires_explicit_transaction_id_in_adapter_receipt(self) -> None:
@@ -1501,14 +2216,14 @@ raise SystemExit(98)
         plan_path.write_text(plan.stdout, encoding="utf-8")
         adapter = self._write_host_adapter()
         result = subprocess.run(
-            [sys.executable, str(EXECUTOR), "apply", "--transaction", str(plan_path), "--host-adapter", str(adapter)],
+            self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["phase"], "applied")
-        self.assertIn("quiesce_receipt", receipt)
+        self.assertIn("direct_quiescence_observation", receipt)
         self.assertIn("backup_receipt", receipt)
         self.assertIn("sequencer_rebuild_proof", receipt["host_receipt"])
 
@@ -1809,15 +2524,7 @@ raise SystemExit(98)
         plan_path.write_text(plan.stdout, encoding="utf-8")
         adapter = self._write_host_adapter()
         result = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(adapter),
-            ],
+            self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
         )
@@ -1867,15 +2574,7 @@ raise SystemExit(98)
         plan_path = self.out / "transaction.json"
         plan_path.write_text(json.dumps(transaction), encoding="utf-8")
         result = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(self._write_host_adapter()),
-            ],
+            self._apply_args(plan_path, self._write_host_adapter()),
             text=True,
             capture_output=True,
         )
@@ -1889,15 +2588,7 @@ raise SystemExit(98)
         plan_path.write_text(plan.stdout, encoding="utf-8")
         (self.nodes["storage-205"] / "data" / "unexpected-entry").write_text("drift\n", encoding="utf-8")
         result = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(self._write_host_adapter()),
-            ],
+            self._apply_args(plan_path, self._write_host_adapter()),
             text=True,
             capture_output=True,
         )
@@ -1911,15 +2602,7 @@ raise SystemExit(98)
         plan_path.write_text(plan.stdout, encoding="utf-8")
         adapter = self._write_host_adapter()
         applied = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(adapter),
-            ],
+            self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
             check=True,
@@ -1943,15 +2626,7 @@ raise SystemExit(98)
         plan_path.write_text(plan.stdout, encoding="utf-8")
         adapter = self._write_host_adapter()
         applied = subprocess.run(
-            [
-                sys.executable,
-                str(EXECUTOR),
-                "apply",
-                "--transaction",
-                str(plan_path),
-                "--host-adapter",
-                str(adapter),
-            ],
+            self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
             check=True,

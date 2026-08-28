@@ -11,13 +11,17 @@ Governed transaction contract (current path):
     --identity-receipts <validator-identity-receipts.json> \
     --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
     --consumer-impact-record <record.json> \
-    --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json \
+    --human-direct-ssh-request <executor-bound-human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
     --quiescence-transaction-id <bounded-quiescence-id> \
     --capacity-json <per-node-capacity.json> \
     --node storage-205=local:<stopped-node-root> \
     --node sequencer-204=local:<stopped-node-root> \
     --sequencer-proof-url <bounded-proof-endpoint> \
     --out-dir <transaction-dir>
+  (A persisted --stopped-quiescence-proof may be supplied only as an
+   audit-routing locator when the direct request flags are unavailable; it is
+   never an admission authority.)
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
@@ -109,8 +113,9 @@ cd "$repo_root"
 # this dispatch in the shell entrypoint so operators and automation have one
 # stable command surface while the executor owns the signed provenance and
 # direct-SSH read-only gate.  The envelope below is intentionally derived only from
-# the executor's JSON; plan mode never opens SSH, invokes systemd, or deletes a
-# path.
+# the executor's JSON; the plan path performs only the bounded, direct
+# read-only re-observation required by the human_direct_ssh contract and never
+# invokes systemd or deletes a path.
 receipt_contract_envelope() {
   local mode=$1
   shift

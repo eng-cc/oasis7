@@ -1,0 +1,27 @@
+{
+  "schema_version": "oasis7.public_testnet_validator_pair_inventory.v1",
+  "repository": "eng-cc/oasis7",
+  "network_tier": "public_testnet",
+  "stack_root": "/opt/oasis7/p2p-testnet",
+  "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
+  "nodes": {
+    "sequencer-204": {
+      "role": "sequencer",
+      "node_id": "triad-testnet-sequencer",
+      "host": "root@39.104.204.172",
+      "root": "/opt/oasis7/p2p-testnet",
+      "service": "oasis7-triad-sequencer.service",
+      "ports": ["6631", "6831"],
+      "host_key_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU"
+    },
+    "storage-205": {
+      "role": "storage",
+      "node_id": "triad-testnet-storage",
+      "host": "root@39.104.205.67",
+      "root": "/opt/oasis7/p2p-testnet",
+      "service": "oasis7-triad-storage.service",
+      "ports": ["6632", "6832"],
+      "host_key_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI"
+    }
+  }
+}

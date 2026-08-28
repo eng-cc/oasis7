@@ -447,8 +447,7 @@ scripts/p2p-public-testnet-rebuild-validators.sh plan \
   --sequencer-rebuild-proof-verification <signed-204-rebuild-proof-verification.json> \
   --sequencer-proof-verifier <verified-runtime>/oasis7_chain_runtime \
   --consumer-impact-record <record.json> \
-  --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json \
-  --quiescence-transaction-id <unique-stop-evidence-id> \
+  --quiescence-transaction-id <executor-bound-observation-id> \
   --capacity-json <per-node-capacity.json> \
   --node storage-205=local:<stopped-node-root-205> \
   --node sequencer-204=local:<stopped-node-root-204> \
@@ -458,13 +457,20 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --transaction <transaction-dir>/transaction.json \
   --host-adapter <governed-host-adapter>
 ```
-对于 active/unknown consumer-impact，先运行只产证据的 bounded quiescence phase，再使用上面的完整 plan/apply 参数：
+`human_direct_ssh` 是本流程唯一的人工作业停机后观察入口：独立的人类 stop 完成后，executor 必须从 live GitHub task/user authority 或 authenticated control-plane approval 重新授权，authority 绑定 repository、issue/task UID、actor、动作、两角色目标、nonce 与 expiry；调用者 stop JSON、历史 receipt、任意 adapter JSON 均不是 authority。
+executor 只允许读取固定 production inventory `/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-inventory.v1.json` 与 pinned host-key 文件 `/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts`；它们绑定两角色 host、`/opt/oasis7/p2p-testnet` root、service 与 key fingerprint，不接受 CLI 覆盖或任意 target。SSH 必须使用 `StrictHostKeyChecking=yes` 与该 pinned known-hosts；凭据只能经 temporary FD 或 temporary environment binding（`--credential-fd`/`--credential-env`）进入，绝不出现在 argv、日志、transaction 或 receipt。
+停机后只运行 executor-owned fixed read-only quiescence commands 和 bounded role-specific readbacks，不得 stop/start、preflight、reset、stage、restart 或修改 observer；结果必须在同一 executor 进程内供 plan/apply 使用。`--out-dir` 的 `oasis7.validator_pair_rebuild_quiescence_proof.v1` 仅为 audit trail，不能被后续进程或 caller 重写后作为 admission authority；authority、inventory/pin、strict SSH、readback、临时凭据审计或复观测缺失即 `capability_blocked`。
+这些 SSH/readback 只证明当时看到的主机输出，不证明主机未被攻陷；受攻陷主机仍可伪造服务状态、listener 或 health。本流程不宣称 compromised-host resistance，仍须依赖独立 identity、provenance、package 与 trust-root gates。
+对于 active/unknown consumer-impact，先取得 live authority 并由人类 separate stop，再调用 direct mode；旧的 quiesce adapter phase 不再是有效入口：
 ```bash
-scripts/p2p-public-testnet-rebuild-validators.sh quiesce \
-  --consumer-impact-record <active-or-unknown-record.json> --quiescence-transaction-id <unique-stop-evidence-id> \
-  --node storage-205=local:<stopped-node-root-205> --node sequencer-204=local:<stopped-node-root-204> --host-adapter <governed-host-adapter> --out-dir <quiescence-dir>
+scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
+  --request <executor-bound-human-stop-request> \
+  --known-hosts /opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts \
+  --out-dir <audit-dir> \
+  [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
 ```
-`quiesce` 允许已验证的 active、none 或 unknown record，只调用 `quiesce-only` adapter，不得 preflight/reset/stage/start/mutation；其 proof 必须是新鲜、独立产生的 `oasis7.validator_pair_rebuild_quiescence_proof.v1`，精确覆盖 `storage-205` 与 `sequencer-204`，绑定 transaction/impact/request SHA-256、role/root、`active=false`、`running=false` 与 freshness。对于 `impact=none`，record 必须有 JSON `"validators_already_stopped": true`（三个 communication 字段仍须存在且非空，可为 `n/a`），并使用同一 quiesce 命令的 none-record/ID/out-dir 替换：`scripts/p2p-public-testnet-rebuild-validators.sh quiesce --consumer-impact-record <none-record.json> --quiescence-transaction-id <unique-none-stop-evidence-id> --node storage-205=local:<stopped-node-root-205> --node sequencer-204=local:<stopped-node-root-204> --host-adapter <governed-host-adapter> --out-dir <none-quiescence-dir>`。随后将生成的 proof 与 `--consumer-impact-record <none-record.json> --stopped-quiescence-proof <none-quiescence-dir>/quiescence-proof.json --quiescence-transaction-id <unique-none-stop-evidence-id>` 代入上面的完整 plan/apply 命令；boolean-only、status snapshot、observer receipt、遗漏/重复/伪造/stale proof 或 binding 不匹配均拒绝并不得进入 destructive phase。
+`human_direct_ssh` 不把 request envelope 当 authority，不接受 arbitrary adapter JSON 或 caller assertion；它必须在同一调用中 live-read GitHub authority，以固定 inventory/pin 观察两角色 `active=false`、`running=false` 与 bounded health/listener。`impact=none` 仍须 direct read-only observation；`validators_already_stopped`、status snapshot、旧 receipt、遗漏/重复/伪造/stale/binding-mismatch 均不得进入 destructive phase。
+`apply` 在任何 mutation 前必须在同一 executor 进程内重新读取 live authority 并 re-observe；不能复观测时 fail closed。跨进程时新进程必须重新取得 authority、读取固定 inventory/pins、建立 strict SSH、重新观察；持久化 proof/receipt 只供审计、故障追溯和 rollback 关联，永远不作授权。
 The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`); runtime
 transaction IDs and timestamps are assigned only after the plan is durably
 journaled. The transaction is fail-closed and records a complete stopped-state backup
@@ -474,43 +480,17 @@ manifest before mutation. Mutation order is always `storage-205` then
 SHA-256 and size match the verified package runtime; the executor invokes that
 exact binary over the raw proof and compares its complete receipt before any
 host mutation.
-The host adapter is mandatory and phase-based: it must acknowledge `quiesce`,
-`backup`, `apply`, and `rollback` callbacks. Local restore is allowed only after
-the rollback callback proves services are quiesced; a failed callback or restore
-is durably recorded as `rollback_failed`. It must return one transaction-bound JSON receipt
-covering explicit active/running state, bounded healthz, role-specific listener identity
-(`6632/6832` for storage-205 and `6631/6831` for sequencer-204), `NRestarts=0`,
-no OOM/panic/segfault, exact package runtime hash/size, and the 204
-`full_chain_status_called=false` gate. The receipt must consume cryptographically
-verified identity receipts and the signed 204 rebuild proof under the governed
-trust-root allowlist; host self-report alone is not evidence. The observer gate
-remains `hold` until provider closure is independently verified. Without that receipt the local executor
-must not mark the transaction `applied`.
-The callback contract is strict across phases: every `quiesce`, `backup`, `apply`, and `rollback` host receipt must explicitly include `observer_mutation=false` (omission fails closed).
-Every callback must carry non-empty `transaction_id` exactly equal to the executor's persisted binding; for quiesce, `transaction_id == quiescence_id`, and the stopped proof/source receipt preserve that identity.
-`--quiescence-transaction-id` binds proof and never substitutes for a callback ID/file/field; `--quiescence-id` is only its CLI alias.
-The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling, and all later receipts must echo it exactly.
-Before each adapter callback the executor persists an
-`oasis7.validator_pair_rebuild_adapter_binding.v1` in the transaction. The
-binding fixes the immutable `plan_digest`, `transaction_id`, callback `phase`,
-and a complete canonical evidence set: both identity receipt paths and
-SHA-256 digests with their role/node/peer IDs, plus the raw 204 proof and (when
-used) verifier-receipt paths and digests. The adapter must echo
-`plan_digest`, `transaction_id`, `phase`, `evidence_bindings`, and a
-`captured_at` timestamp inside the current callback window. Any omitted or
-swapped role, alternate trusted proof, path/digest substitution, or stale
-timestamp fails closed before the transaction can advance.
-Any failed identity, capacity, health, restart, OOM, panic or segfault gate
-must invoke the recorded same-filesystem snapshot rollback and retain the
-receipt. The pair executor never mutates an observer. A sequencer/204 proof
-must use a bounded endpoint; calling full `/v1/chain/status` on 204 is
-forbidden in this contract.
+The host adapter remains mandatory only for mutation callbacks (`backup`, `apply`, and `rollback`); it cannot establish human stop authority or replace direct observation. Local restore requires a successful rollback callback proving quiescence; failed callback/restore is recorded as `rollback_failed`. Each transaction-bound receipt covers active/running, bounded healthz, role listener (`6632/6832` storage-205; `6631/6831` sequencer-204), `NRestarts=0`, no OOM/panic/segfault, exact runtime hash/size, and `full_chain_status_called=false` for 204.
+The receipt must consume cryptographically verified identity receipts and the signed 204 proof under the trust-root allowlist; host self-report alone is not evidence. The observer gate remains `hold` until provider closure is independently verified; without this receipt the executor cannot mark `applied`.
+Every mutation callback receipt (`backup`/`apply`/`rollback`) must explicitly include `observer_mutation=false`, a non-empty executor-bound `transaction_id`, and the strict current-window binding; human direct observations are not callbacks. `--quiescence-transaction-id` binds only the in-memory observation/audit reference and never substitutes for a callback ID/file/field (`--quiescence-id` is its CLI alias).
+The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling and later receipts echo it exactly. Before each mutation callback, persist `oasis7.validator_pair_rebuild_adapter_binding.v1` fixing immutable `plan_digest`, transaction, phase, identity paths/digests with role/node/peer IDs, raw 204 proof and optional verifier receipt; the adapter must echo these bindings plus `captured_at` in-window, or fail closed on omission, substitution, alternate proof, or staleness.
+Any failed identity, capacity, health, restart, OOM, panic or segfault gate invokes the recorded same-filesystem rollback and retains its receipt. The pair executor never mutates an observer. A sequencer/204 proof uses a bounded endpoint; full `/v1/chain/status` on 204 is forbidden.
 
 壳脚本的 `oasis7.validator_pair_rebuild_receipt_contract.v1` envelope 将
 plan/transaction digest 绑定到每台节点的 platform 与完整无跟随
 symlink 的 state-root inventory，并记录精确 destructive target 解析、
 indexed sidecar/archive/module store、execution/bridge/runtime/replication root
-及 observer 等价物、stopped/quiescence proof、带 metadata/capacity 的
+及 observer 等价物、direct read-only observation reference、带 metadata/capacity 的
 forensic backup manifest hash 与 machine-checkable `seed_eligible=false` proof。
 Apply receipt 必须包含 reset/stage/start 与 same-window fleet-health phase
 references。rollback boundary 明确禁止把已删除的 chain state 恢复为新
@@ -539,7 +519,7 @@ destructive activity。
 1. `impact` 只能是 `active`、`none` 或 `unknown`；`evidence_source` 必须非空；`timestamp` 必须是带 `Z` 或显式 UTC offset 的 RFC3339 时间；`validators_already_stopped` 必须是 JSON boolean，但不构成停机证据；`decision` 必须严格等于 `proceed`。缺失、malformed JSON、字段类型/值无效或 `decision=hold` 都必须 fail closed。
 2. `impact=none` 时，三个 communication 字段仍须存在且非空，但允许使用 `n/a`。
 3. `impact=active` 或 `unknown` 时，按存在外部 consumer 处理。TPM 与 LiveOps/community 共同负责 outage 和 recovery updates，`producer_system_designer` 批准对外 wording；`outage_update_channel`、`recovery_update_checkpoint` 和 `producer_wording_approval` 必须非空且不能是 `n/a`。
-4. 如果 validator 在 record 生成前已经停止，也不能跳过 determination：在任何 host preflight、目录删除、reset、staging、启动或其他 redeploy continuation 前补齐同一记录，并为 plan 提供独立的两角色 stopped/quiescence proof。已停止这一事实本身不能推断 `active`、`none` 或恢复完成。
+4. 如果 validator 在 record 生成前已经停止，也不能跳过 determination：在任何 host preflight、目录删除、reset、staging、启动或其他 redeploy continuation 前，先取得 live GitHub human authority，并以固定 production inventory/pins 完成两角色 direct read-only observation。已停止这一事实本身、boolean 或 persisted receipt 都不能推断 `active`、`none` 或恢复完成。
 5. 本 record 只授权继续执行受治理的 testnet reset/redeploy，不改变 `testnet`、`resettable`、`non-mainnet` 边界，也不授权承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ### C1. Preflight both validators
@@ -547,14 +527,16 @@ destructive activity。
 consumer-impact record 通过后，才在两台 validator 上执行非变更 preflight：确认当前 runtime、repair-rebuild helper、governance registry importer 均可执行，repair helper 提供 `--generated-world-dir` 合同，且远端 Python、tar、systemd 与 process inspection 工具可用。任一 host preflight 失败时，两台 host 都不得进入 reset。
 
 ### C2. Reset both validators
-停止服务并 destructive reset 旧链状态：
+以下 stop 是在 live authority 下由人类单独执行的 stop 动作；`human_direct_ssh`
+executor 不执行 stop，只在 stop 完成后 read-only 复观测，再允许受治理的
+destructive reset 继续：
 
 ```bash
 systemctl stop oasis7-triad-sequencer.service
 systemctl stop oasis7-triad-storage.service
 ```
 
-必须先 quiesce 并 reset 完两台 validator，之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
+必须先由人类按 live authority 分别停下两台 validator，并由同一 executor 在 reset 前、以及每次 mutation 前完成 direct read-only re-observation；之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
 
 从第一台 validator 停止开始，到 Phase G full-fleet health criteria 全部通过为止，必须按 testnet outage 窗口处理：validator 服务不可用，依赖 validator 的 public RPC、explorer 和 guarded faucet 可能不可用或返回 stale data。不得把缓存可读、单个 endpoint 恢复或 sequencer 单机存活当作网络恢复。
 
