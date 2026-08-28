@@ -38,7 +38,7 @@ function Metric(props) { return <div class="metric"><div class="metric__label">{
 export function TransferMaterialQuoteCard(props) {
   const quote = () => props.quote || {}; const locale = () => props.locale; const tr = props.tr;
   const feasible = () => quote().submission_feasible === true;
-  return <section class="panel panel--nested" data-testid="transfer-material-quote" data-quote-kind="preflight">
+  return <section class="panel panel--nested transfer-material-quote" data-testid="transfer-material-quote" data-quote-kind="preflight">
     <div class="panel__header"><div class="stack stack--compact"><div class="panel__eyebrow">{tr(locale(), "提交前估价", "Before You Commit")}</div><div class="panel__title">{tr(locale(), "物料转运预估", "Transfer Material Quote")}</div><div class="panel__meta-copy">{tr(locale(), "这是只读预估，不会扣除库存、占用在途容量、推进时间或生成回执。", "This is a read-only quote. It does not spend inventory, reserve transit capacity, advance time, or create a receipt.")}</div></div></div>
     <div class="panel__body stack"><div class="badge-row"><span class="badge badge--accent">{tr(locale(), "预估", "quote")}</span><span class="badge">{`${tr(locale(), "物料", "Material")}: ${materialLabel(quote().kind, locale(), tr)}`}</span><span class="badge">{`${tr(locale(), "距离", "Distance")}: ${display(quote().distance_km)} km`}</span></div>
       <div class={feasible() ? "feedback-summary" : "feedback-summary feedback-summary--warn"} data-testid="transfer-material-quote-recommendation">{`${tr(locale(), "建议", "Recommended")}: ${recommendationCopy(quote().recommendation, locale(), tr)}`}</div>

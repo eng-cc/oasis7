@@ -906,4 +906,55 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
         ));
         assert_eq!(world.snapshot(), state_before_invalid_quote);
     }
+
+    let long_relay = "path-precedence-long-relay";
+    let long_first = register_route(
+        &mut world,
+        requester,
+        "path-precedence-source",
+        long_relay,
+        "iron_ingot",
+        100,
+        6_000,
+        0,
+    );
+    let long_second = register_route(
+        &mut world,
+        requester,
+        long_relay,
+        "path-precedence-destination",
+        "iron_ingot",
+        100,
+        6_000,
+        0,
+    );
+    world.submit_action(Action::SetLogisticsRouteAvailability {
+        requester_agent_id: requester.to_string(),
+        route_id: long_first.clone(),
+        available: false,
+    });
+    world.step().expect("disable over-limit path route");
+
+    let state_before_over_limit_quote = world.snapshot();
+    let reason = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            1,
+            0,
+            None,
+            &[long_first, long_second],
+            false,
+        )
+        .expect_err("aggregate distance limit must precede blocked-path fallback");
+    assert!(matches!(
+        reason,
+        RejectReason::MaterialTransferDistanceExceeded {
+            distance_km: 12_000,
+            max_distance_km: 10_000
+        }
+    ));
+    assert_eq!(world.snapshot(), state_before_over_limit_quote);
 }

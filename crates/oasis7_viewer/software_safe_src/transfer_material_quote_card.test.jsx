@@ -45,6 +45,7 @@ describe("TransferMaterialQuote", () => {
     expect(cardElement).toHaveTextContent(/Reroute count.*1/i);
     expect(card.getByTestId("transfer-material-quote-recommendation")).toHaveTextContent(/restore power|lower-tariff route/i);
     expect(cardElement).not.toHaveTextContent("restore_power_or_use_lower_tariff_route");
+    expect(cardElement).toHaveClass("transfer-material-quote");
   });
 
   it("renders unavailable-path guidance without leaking the capacity recommendation enum", () => {

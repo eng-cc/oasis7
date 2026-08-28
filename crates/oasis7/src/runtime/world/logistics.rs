@@ -591,6 +591,9 @@ fn blocked_route_path_plan(
         .iter()
         .filter_map(|route_id| world.state.logistics_routes.get(route_id))
         .try_fold(0_i64, |total, route| total.checked_add(route.distance_km))?;
+    if effective_distance_km > MATERIAL_TRANSFER_MAX_DISTANCE_KM {
+        return None;
+    }
     let path_unavailable = requested_route_ids.iter().any(|route_id| {
         world
             .state
