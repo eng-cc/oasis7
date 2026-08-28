@@ -13,7 +13,7 @@ Use when the task already has written scope in a PRD/design, a handoff, or GitHu
 
 ## Procedure
 
-1. Run a brief plan-gap review before editing: confirm acceptance criteria, dependencies, verification, and out-of-scope items. Keep mutable task planning only in GitHub-backed task truth; repository PRD/design documents remain durable professional authority, not a second task ledger.
+1. Before editing or execution, create a `Plan-Gap Evidence` entry for every ordered execution step. Each entry must record all of: `step_id`, `acceptance_refs`, `dependencies`, `verification_command`, `verification_evidence`, `write_scope`, `out_of_scope`, and `required_role_slices`. Keep each field non-empty and map acceptance/dependencies/scope to current GitHub-backed task truth; state the verification command and expected evidence target before execution, capture the actual result afterward, and name required roles or an explicit reasoned exemption. A missing field, evidence, or mapping fails closed before editing or execution. Keep mutable task planning only in GitHub-backed task truth; repository PRD/design documents remain durable professional authority, not a second task ledger.
 2. Record ordered steps and required professional slices in GitHub task issue evidence comments.
 3. Implement one bounded step in its declared write scope.
 4. Run the step-level verification and inspect the output.
