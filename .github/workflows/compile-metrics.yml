@@ -31,7 +31,7 @@ on:
       max_cargo_build_release_regression_pct:
         description: "Allowed cold cargo build --release regression percentage"
         required: false
-        default: ""
+        default: "25"
         type: string
       max_release_binary_bytes_regression_pct:
         description: "Allowed release binary size regression percentage"
@@ -207,12 +207,12 @@ jobs:
               --max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}"
               --require-wasmtime-absent
             )
+            if [[ -n "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}" ]]; then
+              cmd+=(--max-cargo-build-release-regression-pct "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}")
+            fi
           fi
           if [[ -n "${MAX_CARGO_CHECK_REGRESSION_PCT}" ]]; then
             cmd+=(--max-cargo-check-regression-pct "${MAX_CARGO_CHECK_REGRESSION_PCT}")
-          fi
-          if [[ -n "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}" ]]; then
-            cmd+=(--max-cargo-build-release-regression-pct "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}")
           fi
           "${cmd[@]}"
 
