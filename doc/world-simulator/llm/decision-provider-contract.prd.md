@@ -158,8 +158,8 @@
 - `CapabilitySnapshot`: 本轮 catalog 的 identity/digest；每个动态 capability 绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime `cost_quote`。
 - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
 - `SemanticCommandSchema`（target）：content-addressed descriptor，至少包含 `schema_ref/schema_hash/schema_version`、command summary、typed input fields（type/required/bounds/enums）、result/error shape、declared side effects 和 bounded cost hint；它是 Agent 理解输入的语义来源，不授予调用权限。
-- `TypedCommandIntent`（target）：`catalog_snapshot_id + selected_entry + typed_args + response_nonce + trace_id`；其中 `selected_entry` 必须精确匹配 module/version/namespace/command/schema，`typed_args` 不包含 caller、grant、authority proof 或 host-only provenance。
-- `CapabilityInvocationContext`：由 trusted host 为单次 turn 生成的 `grant_id/subject/presenter/audience/catalog_snapshot_id/module_id/module_version/response_nonce`；provider 只能回显，不能自行构造为授权。
+- `TypedCommandIntent`（target）：`catalog_snapshot_id + selected_entry + typed_args + response_nonce + trace_id`；其中 `selected_entry` 必须精确匹配 module/version/instance-target/namespace/command/schema，`typed_args` 不包含 caller、grant、authority proof 或 host-only provenance。module-instance audience 的 target 必须是稳定 `(world_id,module_id,instance_id)`；world/institution scoped command 使用显式非实例 variant，缺失值不得回退为全局 module。
+- `CapabilityInvocationContext`：由 trusted host 为单次 turn 生成的 `grant_id/subject/presenter/audience/catalog_snapshot_id/module_id/module_version/instance_target/response_nonce`；provider 只能回显，不能自行构造为授权。
 - context 的 canonical binding tuple 还必须包含 `world_id/branch_id/finality_epoch/finality_block_hash/revocation_epoch/policy_epoch/catalog_snapshot_digest`，并与 `response_nonce` 一起进入不可变 context digest。若兼容 DTO 不展开这些字段，`catalog_snapshot_id` 必须内容寻址且认证全部维度；runtime 提交前仍逐项与 live state 比较。
 - 内置 Responses provider 的具体基线也由本专题承载，但不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority；provider-agnostic contract 仍是外部接入的唯一边界。
 - 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。

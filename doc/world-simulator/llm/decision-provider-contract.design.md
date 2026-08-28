@@ -54,9 +54,11 @@ The per-turn generator is a target host service (not a provider feature):
 
 1. Read the finalized live head, active module records, policy and the Agent subject's
    non-revoked grants for the requested audience.
-   The immutable context digest binds `world_id`, `branch_id`, finality epoch
-   and block hash, revocation and policy epochs, catalog snapshot digest, and
-   response nonce; omission from a compatibility DTO cannot omit the binding.
+   The immutable `AgentInvocationBinding` digest binds `world_id`, `branch_id`,
+   `finality_epoch`, `finality_block_hash`, `policy_epoch`, `revocation_epoch`,
+   catalog snapshot digest, exact audience/instance target and response nonce.
+   These fields are part of the target canonical hash domain; omission from a
+   compatibility DTO cannot silently omit the binding and instead rejects target execution.
 2. Intersect those records with declared commands, sort entries deterministically, compute
    the snapshot identity and choose a fresh response nonce. Store/bind the invocation context
    before making the provider request.
@@ -115,12 +117,17 @@ target provider response 是 `TypedCommandIntent`：
 {
   catalog_snapshot_id,
   response_nonce,
-  selected_entry: { module_id, module_version, namespace, command,
-                    schema_version, schema_hash },
+  selected_entry: { module_id, module_version, instance_target,
+                    namespace, command, schema_version, schema_hash },
   typed_args,
   trace_id
 }
 ```
+
+For a module-instance audience, `instance_target` is mandatory and carries the stable
+`(world_id, module_id, instance_id)` key through snapshot, response, invocation digest,
+nonce and execution receipt. A governed world/institution-scoped command uses an explicit
+non-instance target variant; missing target is never interpreted as global-module fallback.
 
 trusted host 依据已验证 descriptor 检查 typed args 的必填字段、类型、范围、枚举和大小，
 再以唯一 deterministic canonical-CBOR 规则编码为 `ModuleCommandEnvelope.payload`，并
@@ -181,7 +188,7 @@ retry/reconnect/restore/replay neither double-charge nor create replay credit.
 ## 6. 内置 provider 适配与诊断流
 
 - builtin Responses adapter 将感知、裁剪后的本地 memory、目标、有限工具 catalog 与 timeout budget 组装为 request；它只返回一个结构化候选。profile/provider 覆盖、endpoint 规范化、有限 retry 与错误分类属于 adapter 配置层，不能改变 world state 或 runtime 权威。
-- 安全流固定为 `perceive/context/goal -> request -> one structured decision -> catalog/schema guard -> runtime validate/execute -> committed ActionResult feedback`。无终态、超量 repair、非法动作、超时或 provider failure 收敛为可诊断的 `Wait`/`ActionRejected`；不执行多片段 completion，也不以 parser 成功伪造进展。
+- **Target closed-action safety flow** 固定为 `perceive/context/goal -> request -> one structured decision -> catalog/schema guard -> host adapter -> runtime validate/execute -> committed ActionResult feedback -> Agent memory`。当前 builtin `AgentRunner` 只产出 decision，`action_result=None`，没有内建 runtime executor callback；只有显式 loopback/host seam 能继续执行，因此 runner decision 或 parser 成功都不是 committed feedback 证据。无终态、超量 repair、非法动作、超时或 provider failure 收敛为可诊断的 `Wait`/`ActionRejected`；不执行多片段 completion。
 - Trace bridge 保存角色分离的 chat/tool trace、预算/latency/repair diagnostics、module-call intent/receipt 与 feedback。它裁剪和脱敏后供诊断使用；Viewer delivery、runtime event/replay 与玩家记忆纠正仍由各自专业 authority 负责。
 - receipt flow 是 `prompt module-call -> diagnostic intent/receipt -> journal/trace -> later reconciliation`。它保留上下文与兼容默认值，但并未证明 action-result 因果、重放不重调 provider 或恢复不重复外部副作用；这些 T4/T5 proof 必须由 runtime 设计与验证完成。
 

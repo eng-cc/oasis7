@@ -631,17 +631,15 @@ CapabilityCatalogSnapshot = {
   world_id,
   world_head,
   branch_id,
-  finality_epoch,
+  finality_epoch, finality_block_hash,
   logical_tick,
   module_registry_hash,
-  policy_hash,
+  policy_hash, policy_epoch,
   revocation_epoch,
-  subject,
-  presenter,
-  audience,
+  subject, presenter, audience,
   entries: [
     { module_id, module_version, namespace, command, schema_version,
-      schema_hash, max_payload_bytes, instance_id?, entity_selector?,
+      schema_hash, max_payload_bytes, instance_target,
       eligible_grant_ids }
   ],
   valid_until_tick,
@@ -649,17 +647,20 @@ CapabilityCatalogSnapshot = {
 
 AgentCommandResponse = {
   response_nonce,
-  subject,
-  presenter,
-  audience,
+  subject, presenter, audience,
   catalog_snapshot_id,
-  selected_entry,              // exact module/version/namespace/command/schema
+  selected_entry,              // exact module/version/instance/namespace/command/schema
   typed_args,                  // target: host validates against schema_hash
   envelope?,                   // current compatibility lane: raw envelope
   provider_id?,
   trace_id,
 }
 ```
+
+`instance_target` is mandatory for a module-instance audience and carries stable `(world_id,
+module_id, instance_id)`; a governed non-instance command uses an explicit variant, never global
+fallback. Snapshot hash and bound nonce/context/receipt cover world, branch, finality block/epoch,
+policy hash/epoch, revocation epoch, subject/audience, entries and validity.
 
 The host builds a catalog by intersecting active module declarations with the current
 subject's non-revoked grants and policy for the requested audience. Entries must be
@@ -950,8 +951,7 @@ ModuleStateMigrated { // target shape; not a current event type
 | `ModuleCommandEnvelope` | 外层 Canonical-CBOR、声明 identity 和 payload bound 有 proven 检查；payload 内容仍是 opaque，raw envelope 是兼容路径。 | descriptor registry、typed-args host encoder、semantic decode 与 schema hash 绑定必须有正反 fixture；未知 schema/version/encoding 一律拒绝。 |
 | module lifecycle / state | install、activate、upgrade、deactivate 基础事件与 instance/tick persistence 已有实现切片；完整 migration atomicity 与 receipt 仍 partial/target。 | 从 `base_manifest_hash` 到 from/to schema、migration `wasm_hash`、新 manifest hash 的单 journal 证明；失败注入后旧 registry/state/artifact 完整保留。 |
 
-下列身份不可互换：`wasm_hash` 是工件 bytes 内容地址，`manifest_hash` 是 manifest
-控制面 hash，`schema_hash` 是 command descriptor 内容地址，`artifact_identity` 绑定
+下列身份不可互换：`wasm_hash` 是工件 bytes 内容地址，`manifest_hash` 是 manifest 控制面 hash；当前 `schema_hash` 只是 declaration marker，target registry 落地后才是 descriptor bytes 内容地址；`artifact_identity` 绑定
 source/build manifest/signer/signature。任一 identity、ABI version、权限、limits 或
 metering schedule 变化都必须重新 admit；不能同名覆盖、只改版本字符串或依赖 provider
 声明维持兼容。

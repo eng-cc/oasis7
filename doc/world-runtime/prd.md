@@ -87,7 +87,7 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 | 统一 transaction | trusted capability command 已有 staged/预算/发布样板；`step()`、`step_with_modules()` 与部分 tick/direct command 仍可能逐步写入 legacy 状态。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
 | module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 以稳定逻辑主键 `(world_id, module_id, instance_id)` 定位，并单独绑定当前 `artifact_hash/schema_version/activation_epoch`。 | 双实例不串写；同一 instance 升级后逻辑主键不变，历史 binding 可回放且不被当前 artifact 覆盖。 |
 
-首个 Institution Migration Test 必须遵循本文档顶部所链接 product authority 的 SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report，并把 artifact digest 回写 GitHub task evidence sink。最低验收合同为：
+首个 Institution Migration Test 必须遵循本文档顶部所链接 product authority 的 SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report。runtime fixture 只负责生成 immutable artifacts 与 digest；TPM 负责把 digest 记录到 GitHub task evidence sink，测试或专业 reviewer 不得直接改写 task truth。最低验收合同为：
 
 1. 模块具有受治理的 manifest、artifact hash、schema/version、稳定 `instance_id` 和 activation 状态；缺失或不匹配时不得执行。
 2. command 经过同一权限、预算、quote/resolution、最终 affordability 和 Kernel apply 管线；module 不得直接写 canonical `WorldState`、journal 或外部 effect。
@@ -95,7 +95,7 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 4. snapshot restore、canonical journal replay、restart/recovery 和跨 adapter conformance 对同一 accepted input 产生相同 state root/receipt；旧 compatibility shape 仍可显式读取或通过 adapter 迁移。
 5. 至少建立两个同 artifact、不同 `instance_id` 的实例，证明 direct/trusted command、state update、event、receipt 和 catalog 不以全局 `module_id` 串写或覆盖。
 6. preview、stale provider response、deny 与 no-effect 失败不 debit；accepted effect、debit 与 receipt 同一次且仅一次结算；retry/reconnect/restore/replay 不重复扣费、不发放 replay credit，并保留 owner/payer 可读性和旧玩家结果。
-7. commit 后外部 effect 先写入 durable outbox/effect ledger；`(world_id, execution_receipt_id, effect_id)` 作为幂等键，绑定 roots、intent hash、dispatch/ack 状态与 external receipt。crash/restart 可重投未确认记录，canonical replay 不得重执行外部业务效果。
+7. commit 后外部 effect 先写入 durable outbox/effect ledger；`effect_id` 在 receipt domain 下由 effect kind、canonical target/payload 与 effect ordinal 确定性派生，`(world_id, execution_receipt_id, effect_id)` 作为幂等键，绑定 descriptor、roots、intent hash、dispatch/ack 状态与 external receipt。同键同 payload 重投必须去重；同键不同 descriptor/intent/payload 必须以 `effect_id_conflict` fail closed 且不得覆盖或投递。crash/restart 可重投未确认记录，canonical replay 不得重执行外部业务效果。
 
 Migration Test 未通过前，native vertical slice 只能标为 `current`/`compatibility keep`，不能标为已完成 open-institution extensibility；测试通过也不改变产品规则或玩家承诺的权威归属。
 
@@ -469,6 +469,7 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
 | PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
 | PRD-WORLD_RUNTIME-040 | task_313368c409c54cc2bcf8ef4f47919b65 | `test_tier_required` | 首个 claim auto-funding / claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` claim submit API 回归、viewer claim snapshot 自动资助字段回归、`software_safe` 正式摘要去审批化回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、专用池自动资助真值、slot-1 restricted funding 直连 claim 闭环 |
 | PRD-WORLD_RUNTIME-043 | task_bb59399112634bdb994530662adfdc4b | `test_tier_required` + `test_tier_full` | schema round-trip、相同 intent 不同 root、fan-in/fan-out parent linkage、wrong/missing-root fail-closed、terminal-late、retry/recovery/replay idempotency、snapshot+journal state-root equivalence | 工业 action/event schema、apply paths、persistence/replay 与 Viewer/API projection |
+| PRD-WORLD_RUNTIME-044 | task_35b6789c87be4eaca9d39182663728c9 | `test_tier_full`（target，AC-43/44/45） | canonical fixture `tests/fixtures/world_runtime/institution-migration-v1/`；目标入口 `cargo test -p oasis7 institution_migration_v1 -- --nocapture`；按 `tests/fixtures/world_runtime/institution-migration-v1/report.schema.json` 产出 manifest/input-root、execution receipt、snapshot/replay/recovery、legacy-conformance 与 outbox crash/conflict reports；验证同 root/receipt、双实例隔离、失败零扣费、accepted exactly-once debit/effect/receipt、same-key 去重、different-payload `effect_id_conflict`、restart/replay 不重复外部效果 | Kernel/Institution 边界、统一 transaction、module instance、economy 与 external-effect recovery |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

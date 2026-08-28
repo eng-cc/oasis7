@@ -34,7 +34,7 @@
 
 ## 5. Current implementation boundary and target gap
 
-Current code/doc contracts already bind ordered actions, roots, committed execution records, artifact hashes, atomic registry/module-lifecycle transitions, checkpoints, and canonical replay. They do **not** yet prove the target end state: signed per-validator re-execution results; a persisted/verifiable >2/3-stake BFT commit certificate; prevote/precommit rounds, locks, timeout/view-change; protocol-versioned in-process/IPC conformance; governed runtime-manifest activation readiness/rollback; light-companion proof verification; or the complete checkpoint/disaster-recovery trust chain. These are implementation and verification gaps, not claims of present network readiness.
+Current code/doc contracts already bind ordered actions, roots, committed execution records, artifact hashes, ordered registry/module-lifecycle events, checkpoints, and canonical replay. Registry/module-lifecycle application is only `partial`: current paths can append several state-mutating lifecycle events without one enclosing staged transaction, so all-or-nothing lifecycle atomicity remains a target with failure-injection proof. The current contracts also do **not** yet prove the broader target end state: signed per-validator re-execution results; a persisted/verifiable >2/3-stake BFT commit certificate; prevote/precommit rounds, locks, timeout/view-change; protocol-versioned in-process/IPC conformance; governed runtime-manifest activation readiness/rollback; light-companion proof verification; or the complete checkpoint/disaster-recovery trust chain. These are implementation and verification gaps, not claims of present network readiness.
 
 ## 6. Architecture status, migration proof, and execution boundary
 
@@ -84,9 +84,14 @@ approval. The test is `proven` only when all of the following hold:
    exactly one debit and receipt; retries and replay neither double-charge nor
    create replay credit.
 7. Post-commit external effects first enter a durable outbox/effect ledger.
-   `(world_id, execution_receipt_id, effect_id)` is the idempotency key; crash
-   recovery may redeliver an unacknowledged record, while canonical replay
-   never performs the external business effect again.
+   `effect_id` is deterministically derived in the receipt domain from effect kind,
+   canonical target/payload, and an effect ordinal; the ordinal only distinguishes
+   intentionally repeated equal effects in one receipt. `(world_id,
+   execution_receipt_id, effect_id)` is the idempotency key. Same-key/same-payload
+   redelivery is deduplicated; same-key/different descriptor, intent, or payload
+   fails closed as `effect_id_conflict` without overwrite or dispatch. Crash recovery
+   may redeliver an unacknowledged record, while canonical replay never performs the
+   external business effect again.
 
 Until this test is proven, Alliance/EconomicContract remain compatibility
 surfaces, War remains deferred, Governance remains a Kernel guardrail, and
@@ -113,10 +118,13 @@ commitment at one commit point. Any failed invariant, budget, artifact,
 serialization, or persistence check discards the staged view and publishes
 only a stable rejected/fault disposition. External non-rollbackable effects
 are receipt-driven after commit through a durable outbox/effect ledger. Each
-record binds the execution receipt, roots, intent hash, dispatch/ack state,
-idempotency key, and observed external receipt. Recovery may redeliver an
-unacknowledged record; canonical replay rebuilds ledger state without repeating
-the external business effect.
+record binds the canonical effect descriptor, execution receipt, roots, intent
+hash, dispatch/ack state, idempotency key, and observed external receipt. The
+fixture covers commit-before-dispatch crash, dispatch-before-ack crash,
+same-key/same-payload duplicate, same-key/different-payload conflict, duplicate
+ack, restart redelivery, and replay with no external adapter call. Recovery may
+redeliver an unacknowledged record; canonical replay rebuilds ledger state without
+repeating the external business effect.
 
 The migration is incremental: first route one existing command family and its
 tick/replay fixtures through the boundary, then widen coverage while keeping
