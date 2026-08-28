@@ -175,6 +175,7 @@ run_provider_remote_https_smoke() {
 
 run_operational_contract_tests() {
   run python3 ./scripts/pm/ci-ready-receipt.test.py
+  run ./scripts/ci-required-scope-audit-contract.test.sh
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
   run ./scripts/state-sync-closure-evidence-template.test.sh
   run ./scripts/s10-five-node-game-soak-summary.test.sh

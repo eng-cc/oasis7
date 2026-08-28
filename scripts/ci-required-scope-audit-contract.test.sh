@@ -51,6 +51,10 @@ if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$operat
   echo "workflow-governance receipt contract is not wired into run_operational_contract_tests" >&2
   exit 1
 fi
+if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$operational_contracts_source"; then
+  echo "required scope audit contract is not wired into run_operational_contract_tests" >&2
+  exit 1
+fi
 
 workflow="$repo_root/.github/workflows/rust.yml"
 for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
