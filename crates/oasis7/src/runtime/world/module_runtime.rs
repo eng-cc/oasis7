@@ -168,61 +168,7 @@ impl World {
         Ok(prepared)
     }
 
-    pub fn execute_module_call(
-        &mut self,
-        module_id: &str,
-        trace_id: impl Into<String>,
-        input: Vec<u8>,
-        sandbox: &mut dyn ModuleSandbox,
-    ) -> Result<ModuleOutput, WorldError> {
-        let manifest = self.active_module_manifest(module_id)?.clone();
-        self.execute_module_call_with_manifest_and_state_key(
-            module_id,
-            module_id,
-            &manifest,
-            trace_id.into(),
-            input,
-            sandbox,
-        )
-    }
-
-    /// Execute a declared module command through the existing metered call path.
-    ///
-    /// Command admission is intentionally completed before the sandbox is
-    /// touched: the active manifest and its declarations are checked, the
-    /// envelope is checked against those declarations, and the canonical CBOR
-    /// representation is produced while the world is still unchanged. The
-    /// existing `execute_module_call` remains authoritative for artifact
-    /// loading, sandbox invocation, metering, policy hooks, and output events.
-    pub fn execute_module_command(
-        &mut self,
-        module_id: &str,
-        trace_id: impl Into<String>,
-        envelope: ModuleCommandEnvelope,
-        sandbox: &mut dyn ModuleSandbox,
-    ) -> Result<ModuleOutput, WorldError> {
-        self.execute_module_command_with_provenance(
-            module_id,
-            trace_id,
-            envelope,
-            ModuleInvocationProvenance {
-                caller: ModuleCallCaller::LegacyUnspecified,
-                origin: ModuleCallOrigin {
-                    kind: "legacy_unspecified".to_string(),
-                    id: "legacy_unspecified".to_string(),
-                },
-            },
-            sandbox,
-        )
-    }
-
-    /// Execute a module command while keeping invocation provenance outside
-    /// the untrusted command envelope.  The host validates every manifest
-    /// capability at the current world time before any artifact cache or
-    /// sandbox operation can occur, then injects the trusted provenance into
-    /// the module call context and puts the canonical command bytes in the
-    /// action slot.
-    pub fn execute_module_command_with_provenance(
+    pub(super) fn execute_module_command_with_provenance_inner(
         &mut self,
         module_id: &str,
         trace_id: impl Into<String>,
