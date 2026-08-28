@@ -956,3 +956,79 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
     ));
     assert_eq!(world.snapshot(), state_before_over_limit_quote);
 }
+
+#[test]
+fn auto_reroute_preserves_over_limit_alternate_rejection() {
+    let mut world = World::new();
+    let requester = "over-limit-reroute-operator";
+    let source = MaterialLedgerId::site("over-limit-reroute-source");
+    let destination = MaterialLedgerId::site("over-limit-reroute-destination");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: requester.to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register reroute operator");
+    world
+        .set_ledger_material_balance(source.clone(), "iron_ingot", 10)
+        .expect("seed reroute source");
+
+    let blocked_route = register_route(
+        &mut world,
+        requester,
+        "over-limit-reroute-source",
+        "over-limit-reroute-destination",
+        "iron_ingot",
+        100,
+        100,
+        0,
+    );
+    register_route(
+        &mut world,
+        requester,
+        "over-limit-reroute-source",
+        "over-limit-reroute-relay",
+        "iron_ingot",
+        6_000,
+        100,
+        0,
+    );
+    register_route(
+        &mut world,
+        requester,
+        "over-limit-reroute-relay",
+        "over-limit-reroute-destination",
+        "iron_ingot",
+        6_000,
+        100,
+        0,
+    );
+    world.submit_action(Action::SetLogisticsRouteAvailability {
+        requester_agent_id: requester.to_string(),
+        route_id: blocked_route.clone(),
+        available: false,
+    });
+    world.step().expect("disable requested route");
+
+    let state_before_quote = world.snapshot();
+    let reason = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            1,
+            0,
+            None,
+            &[blocked_route],
+            true,
+        )
+        .expect_err("over-limit reroute error must not become a blocked-path quote");
+    assert!(matches!(
+        reason,
+        RejectReason::MaterialTransferDistanceExceeded {
+            distance_km: 12_000,
+            max_distance_km: 10_000
+        }
+    ));
+    assert_eq!(world.snapshot(), state_before_quote);
+}

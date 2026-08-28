@@ -615,6 +615,17 @@ fn blocked_route_path_plan(
     ))
 }
 
+fn resolver_error_allows_blocked_quote(reason: &RejectReason) -> bool {
+    matches!(
+        reason,
+        RejectReason::RuleDenied { notes }
+            if notes.iter().any(|note| {
+                note == "requested logistics path is unavailable or at capacity"
+                    || note == "no available logistics path to destination"
+            })
+    )
+}
+
 impl World {
     pub fn pending_material_transits_len(&self) -> usize {
         self.state.pending_material_transits.len()
@@ -732,7 +743,7 @@ impl World {
                 auto_reroute,
             ) {
                 Ok(plan) => (Some(plan), true, false),
-                Err(_reason) => {
+                Err(reason) if resolver_error_allows_blocked_quote(&reason) => {
                     if let Some((blocked_plan, path_unavailable)) = blocked_route_path_plan(
                         self,
                         from_ledger,
@@ -749,9 +760,10 @@ impl World {
                         // the validated path metadata so the player can identify and compare it.
                         (Some(blocked_plan), false, path_unavailable)
                     } else {
-                        return Err(_reason);
+                        return Err(reason);
                     }
                 }
+                Err(reason) => return Err(reason),
             };
 
         let requested_route_ids = if route_ids.is_empty() {
