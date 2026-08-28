@@ -22,7 +22,7 @@ Governed transaction contract (current path):
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
   ./scripts/p2p-public-testnet-rebuild-validators.sh quiesce \
-    --consumer-impact-record <active-or-unknown-record.json> \
+    --consumer-impact-record <impact-record.json> \
     --quiescence-id <bounded-quiescence-id> \
     --node storage-205=local:<validator-root> \
     --node sequencer-204=local:<validator-root> \
@@ -41,11 +41,12 @@ new-epoch provenance digests, reset/stage/start and same-window health gates,
 and a rollback boundary that forbids restoring deleted chain state.
 `--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
 for the subcommands.
-`quiesce` is a bounded stop-evidence phase only: it validates an active or
-unknown consumer-impact record and may invoke only the host adapter's
-quiesce-only callback. It never preflights, resets, stages, starts, or
-mutates observer state. The resulting two-role proof is required by `plan`;
-the `validators_already_stopped` boolean alone is never sufficient.
+`quiesce` is a bounded stop-evidence phase only: it validates an active, none,
+or unknown consumer-impact record and may invoke only the host adapter's
+quiesce-only callback. A none-impact record must assert that the validators
+are already stopped. It never preflights, resets, stages, starts, or mutates
+observer state. The resulting two-role proof is required by `plan`; the
+`validators_already_stopped` boolean alone is never sufficient.
 
 Historical SSH audit path (not the current governed transaction contract):
   ./scripts/p2p-public-testnet-rebuild-validators.sh \

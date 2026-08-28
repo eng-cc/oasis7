@@ -447,6 +447,8 @@ scripts/p2p-public-testnet-rebuild-validators.sh plan \
   --sequencer-rebuild-proof-verification <signed-204-rebuild-proof-verification.json> \
   --sequencer-proof-verifier <verified-runtime>/oasis7_chain_runtime \
   --consumer-impact-record <record.json> \
+  --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json \
+  --quiescence-transaction-id <unique-stop-evidence-id> \
   --capacity-json <per-node-capacity.json> \
   --node storage-205=local:<stopped-node-root-205> \
   --node sequencer-204=local:<stopped-node-root-204> \
@@ -456,20 +458,13 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --transaction <transaction-dir>/transaction.json \
   --host-adapter <governed-host-adapter>
 ```
-对于 active/unknown consumer-impact，先运行只产证据的 bounded quiescence phase，再生成 pair plan：
-
+对于 active/unknown consumer-impact，先运行只产证据的 bounded quiescence phase，再使用上面的完整 plan/apply 参数：
 ```bash
-scripts/p2p-public-testnet-rebuild-validators.sh quiesce --consumer-impact-record <active-or-unknown-record.json> \
-  --quiescence-transaction-id <unique-stop-evidence-id> --node storage-205=local:<validator-root-205> \
-  --node sequencer-204=local:<validator-root-204> --host-adapter <governed-host-adapter> --out-dir <quiescence-dir>
-scripts/p2p-public-testnet-rebuild-validators.sh plan ... --consumer-impact-record <same-record.json> \
-  --stopped-quiescence-proof <quiescence-dir>/quiescence-proof.json --quiescence-transaction-id <same-stop-evidence-id>
+scripts/p2p-public-testnet-rebuild-validators.sh quiesce \
+  --consumer-impact-record <active-or-unknown-record.json> --quiescence-transaction-id <unique-stop-evidence-id> \
+  --node storage-205=local:<stopped-node-root-205> --node sequencer-204=local:<stopped-node-root-204> --host-adapter <governed-host-adapter> --out-dir <quiescence-dir>
 ```
-`quiesce` 只允许在已验证的 active/unknown record（含三项 communication approval）上运行，只调用
-`quiesce-only` adapter，不得 preflight/reset/stage/start/mutation。其 `oasis7.validator_pair_rebuild_quiescence_proof.v1`
-必须由独立 receipt 产生，精确覆盖两角色各一次，绑定 transaction/impact/request SHA-256、role/root、
-`active=false`、`running=false` 与 freshness；active service、遗漏/重复角色、伪造、stale receipt 或
-boolean-only proof 均拒绝。任一 plan（含 impact=none）无 proof 或 binding 不匹配，均不得进入 destructive phase。
+`quiesce` 允许已验证的 active、none 或 unknown record，只调用 `quiesce-only` adapter，不得 preflight/reset/stage/start/mutation；其 proof 必须是新鲜、独立产生的 `oasis7.validator_pair_rebuild_quiescence_proof.v1`，精确覆盖 `storage-205` 与 `sequencer-204`，绑定 transaction/impact/request SHA-256、role/root、`active=false`、`running=false` 与 freshness。对于 `impact=none`，record 必须有 JSON `"validators_already_stopped": true`（三个 communication 字段仍须存在且非空，可为 `n/a`），并使用同一 quiesce 命令的 none-record/ID/out-dir 替换：`scripts/p2p-public-testnet-rebuild-validators.sh quiesce --consumer-impact-record <none-record.json> --quiescence-transaction-id <unique-none-stop-evidence-id> --node storage-205=local:<stopped-node-root-205> --node sequencer-204=local:<stopped-node-root-204> --host-adapter <governed-host-adapter> --out-dir <none-quiescence-dir>`。随后将生成的 proof 与 `--consumer-impact-record <none-record.json> --stopped-quiescence-proof <none-quiescence-dir>/quiescence-proof.json --quiescence-transaction-id <unique-none-stop-evidence-id>` 代入上面的完整 plan/apply 命令；boolean-only、status snapshot、observer receipt、遗漏/重复/伪造/stale proof 或 binding 不匹配均拒绝并不得进入 destructive phase。
 The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`); runtime
 transaction IDs and timestamps are assigned only after the plan is durably
 journaled. The transaction is fail-closed and records a complete stopped-state backup

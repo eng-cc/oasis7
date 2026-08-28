@@ -22,6 +22,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -397,13 +398,9 @@ def validate_impact(path: Path, *, require_stopped: bool = False) -> dict[str, A
         fail("consumer impact must be active, none, or unknown")
     if not isinstance(impact.get("evidence_source"), str) or not impact["evidence_source"].strip():
         fail("consumer impact evidence_source must be non-empty")
-    try:
-        timestamp = str(impact["timestamp"]).replace("Z", "+00:00")
-        parsed_timestamp = dt.datetime.fromisoformat(timestamp)
-    except (TypeError, ValueError):
-        fail("consumer impact timestamp must be RFC3339")
-    if parsed_timestamp.tzinfo is None:
-        fail("consumer impact timestamp must include a timezone")
+    _parse_timestamp(impact["timestamp"], "consumer impact timestamp")
+    if not isinstance(impact["validators_already_stopped"], bool):
+        fail("consumer impact validators_already_stopped must be a boolean")
     if require_stopped and impact.get("validators_already_stopped") is not True:
         fail("validators must be stopped before a pair rebuild plan")
     for field in ("outage_update_channel", "recovery_update_checkpoint", "producer_wording_approval"):
@@ -444,7 +441,7 @@ def _fresh_quiescence_timestamp(value: Any, label: str) -> dt.datetime:
 
 
 def _validate_quiescence_adapter_receipt(
-    receipt: dict[str, Any], request: dict[str, Any]
+    receipt: dict[str, Any], request: dict[str, Any], *, require_transaction_id: bool = True
 ) -> dict[str, Any]:
     if receipt.get("schema_version") not in {
         "oasis7.validator_pair_rebuild_quiescence_receipt.v1",
@@ -457,14 +454,20 @@ def _validate_quiescence_adapter_receipt(
         fail("quiescence adapter must declare a quiesce-only operation")
     if receipt.get("request_digest") != request["request_digest"]:
         fail("quiescence adapter request digest mismatch")
-    receipt_transaction_id = receipt.get("transaction_id", receipt.get("quiescence_id"))
-    if receipt.get("quiescence_id") != request["quiescence_id"] or receipt_transaction_id != request["quiescence_id"]:
+    receipt_transaction_id = receipt.get("transaction_id")
+    if require_transaction_id and (not isinstance(receipt_transaction_id, str) or not receipt_transaction_id.strip()):
+        fail("quiescence adapter transaction_id is required")
+    if receipt.get("quiescence_id") != request["quiescence_id"] or (
+        receipt_transaction_id is not None and receipt_transaction_id != request["quiescence_id"]
+    ):
         fail("quiescence adapter quiescence identity mismatch")
     if receipt.get("impact_record_sha256") != request["impact_record_sha256"]:
         fail("quiescence adapter impact record mismatch")
     for forbidden in ("preflight", "reset", "stage", "apply", "systemd", "destructive_activity"):
         if receipt.get(forbidden) not in (None, False, "forbidden"):
             fail(f"quiescence adapter receipt contains forbidden {forbidden} activity")
+    if "observer_mutation" in receipt and receipt.get("observer_mutation") is not False:
+        fail("quiescence adapter observer mutation is forbidden")
     if receipt.get("mutation_order") != MUTATION_ORDER or receipt.get("startup_order") != STARTUP_ORDER:
         fail("quiescence adapter receipt order mismatch")
     _fresh_quiescence_timestamp(receipt.get("captured_at"), "quiescence adapter captured_at")
@@ -499,10 +502,15 @@ def _validate_stopped_quiescence_proof(
     proof = load_json(proof_path, "stopped/quiescence proof")
     if proof.get("schema_version") != QUIESCENCE_PROOF_SCHEMA or proof.get("phase") != "quiesce":
         fail("stopped/quiescence proof schema or phase is unsupported")
+    if "observer_mutation" in proof and proof.get("observer_mutation") is not False:
+        fail("stopped/quiescence proof observer mutation is forbidden")
     quiescence_id = proof.get("quiescence_id")
     if not isinstance(quiescence_id, str) or not quiescence_id.strip():
         fail("stopped/quiescence proof quiescence_id is required")
-    if proof.get("transaction_id", quiescence_id) != quiescence_id:
+    transaction_id = proof.get("transaction_id")
+    if not isinstance(transaction_id, str) or not transaction_id.strip():
+        fail("stopped/quiescence proof transaction_id is required")
+    if transaction_id != quiescence_id:
         fail("stopped/quiescence proof transaction identity mismatch")
     if expected_quiescence_id is not None and quiescence_id != expected_quiescence_id:
         fail("stopped/quiescence proof transaction identity mismatch")
@@ -546,7 +554,7 @@ def _validate_stopped_quiescence_proof(
     if request_digest != _payload_digest(expected_request):
         fail("stopped/quiescence proof request digest is fabricated")
     request = {**expected_request, "request_digest": request_digest}
-    _validate_quiescence_adapter_receipt(source, request)
+    _validate_quiescence_adapter_receipt(source, request, require_transaction_id=False)
     if proof.get("mutation_order") != MUTATION_ORDER or proof.get("startup_order") != STARTUP_ORDER:
         fail("stopped/quiescence proof order binding mismatch")
     if proof.get("captured_at") != source.get("captured_at"):
@@ -640,8 +648,10 @@ def _quiescence_request(
 def run_quiescence_phase(args: argparse.Namespace) -> dict[str, Any]:
     impact_path = Path(args.consumer_impact_record).resolve()
     impact = validate_impact(impact_path)
-    if impact["impact"] not in {"active", "unknown"}:
-        fail("quiescence phase requires active or unknown consumer impact")
+    if impact["impact"] not in {"active", "none", "unknown"}:
+        fail("quiescence phase requires active, none, or unknown consumer impact")
+    if impact["impact"] == "none" and impact["validators_already_stopped"] is not True:
+        fail("none-impact quiescence requires validators_already_stopped=true")
     quiescence_id = args.quiescence_id
     if not isinstance(quiescence_id, str) or not quiescence_id.strip():
         fail("quiescence phase requires a non-empty quiescence id")
@@ -649,6 +659,8 @@ def run_quiescence_phase(args: argparse.Namespace) -> dict[str, Any]:
     adapter = Path(args.host_adapter).expanduser()
     if adapter.is_symlink() or not adapter.is_file():
         fail(f"quiescence host adapter must be a regular file: {adapter}")
+    if not adapter.stat().st_mode & 0o111:
+        fail("quiescence host adapter must be executable")
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     request = _quiescence_request(impact_path, impact, nodes, quiescence_id)
@@ -673,6 +685,7 @@ def run_quiescence_phase(args: argparse.Namespace) -> dict[str, Any]:
     if not isinstance(source, dict):
         fail("quiescence host adapter receipt must be a JSON object")
     _validate_quiescence_adapter_receipt(source, request)
+    _validate_quiescence_adapter_artifact(adapter)
     source_path = out_dir / "quiescence-adapter-receipt.json"
     write_json(source_path, source)
     roles = []
@@ -1400,7 +1413,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     stopped_proof_path_value = getattr(args, "stopped_quiescence_proof", None)
     if not isinstance(stopped_proof_path_value, str) or not stopped_proof_path_value.strip():
         fail("plan requires independently verified stopped/quiescence proof for both validator roles")
-    stopped_proof_path = Path(stopped_proof_path_value).resolve()
+    stopped_proof_path = Path(stopped_proof_path_value).expanduser()
+    if stopped_proof_path.is_symlink():
+        fail("stopped/quiescence proof must be a regular file")
+    stopped_proof_path = stopped_proof_path.resolve()
     stopped_proof = _validate_stopped_quiescence_proof(
         stopped_proof_path,
         impact_path,
@@ -1710,6 +1726,8 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
     nodes = receipt.get("nodes")
     if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
         fail("host adapter receipt must cover both validator roles")
+    if "observer_mutation" in receipt and receipt.get("observer_mutation") is not False:
+        fail("host adapter must prove observer_hold; observer mutation is forbidden")
     if phase == "quiesce":
         for role in MUTATION_ORDER:
             value = nodes[role]
@@ -1851,8 +1869,6 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         fail("host adapter proof endpoint binding mismatch")
     if plan.get("observer_gate", {}).get("status") != "hold":
         fail("observer gate must remain hold during validator pair rebuild")
-    if receipt.get("observer_mutation") is not False:
-        fail("host adapter must prove observer_hold; observer mutation is forbidden")
     return receipt
 
 
@@ -1939,6 +1955,11 @@ def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> d
 def _parse_timestamp(value: Any, label: str) -> dt.datetime:
     if not isinstance(value, str) or not value.strip():
         fail(f"{label} must be an RFC3339 timestamp")
+    if not re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})",
+        value,
+    ):
+        fail(f"{label} must be an RFC3339 timestamp")
     try:
         parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
@@ -1946,6 +1967,23 @@ def _parse_timestamp(value: Any, label: str) -> dt.datetime:
     if parsed.tzinfo is None:
         fail(f"{label} must include a timezone")
     return parsed.astimezone(dt.timezone.utc)
+
+
+def _validate_quiescence_adapter_artifact(path: Path) -> None:
+    """Reject an executable whose contents changed after it was made executable.
+
+    A governed adapter is deployed as a finalized executable artifact.  On
+    POSIX hosts, a content rewrite updates ``mtime`` and ``ctime`` together,
+    while the deployment's final chmod leaves ``ctime`` newer than ``mtime``.
+    This is a small local tamper guard; host-side attestation remains the
+    authoritative provenance mechanism.
+    """
+    try:
+        metadata = path.stat()
+    except OSError as error:
+        fail(f"quiescence host adapter metadata is unavailable: {error}")
+    if metadata.st_mtime_ns >= metadata.st_ctime_ns:
+        fail("quiescence host adapter executable provenance is not immutable")
 
 
 def _bound_regular_file(path_value: Any, expected_sha256: Any, label: str) -> dict[str, str]:

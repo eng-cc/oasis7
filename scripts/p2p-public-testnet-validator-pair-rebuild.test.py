@@ -593,6 +593,221 @@ print(json.dumps({{
         self.assertFalse((self.nodes["storage-205"] / "backups").exists())
         self.assertFalse((self.nodes["sequencer-204"] / "backups").exists())
 
+    def test_quiesce_rejects_caller_attestable_fabricated_adapter_provenance(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        adapter = self._write_quiescence_adapter()
+        source = adapter.read_text(encoding="utf-8")
+        source = source.replace(
+            "transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())",
+            "transaction = json.loads(Path(sys.argv[sys.argv.index('--transaction') + 1]).read_text())\n# Deliberately report stopped state without observing either host.\n",
+        )
+        adapter.write_text(source, encoding="utf-8")
+        out_dir = self.root / "fabricated-quiescence"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "fabricated-quiescence-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(adapter),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"trusted|attest|provenance|observe")
+        self.assertFalse((out_dir / "quiescence-proof.json").exists())
+
+    def test_consumer_impact_requires_strict_boolean_and_rfc3339_timestamp(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_strict_impact_test", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        for invalid_value in ("false", 0, 1, None):
+            with self.subTest(validators_already_stopped=invalid_value):
+                impact = json.loads(self.impact.read_text(encoding="utf-8"))
+                impact["validators_already_stopped"] = invalid_value
+                self.impact.write_text(json.dumps(impact), encoding="utf-8")
+                with self.assertRaisesRegex(SystemExit, "boolean"):
+                    module.validate_impact(self.impact)
+
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact["timestamp"] = "2026-08-28 00:00:00+00:00"
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        with self.assertRaisesRegex(SystemExit, "RFC3339"):
+            module.validate_impact(self.impact)
+
+    def test_quiesce_rejects_observer_mutation_receipt(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        adapter = self._write_quiescence_adapter()
+        adapter_source = adapter.read_text(encoding="utf-8")
+        adapter.write_text(
+            adapter_source.replace(
+                "'startup_order': transaction['startup_order'],\n",
+                "'startup_order': transaction['startup_order'],\n    'observer_mutation': True,\n",
+            ),
+            encoding="utf-8",
+        )
+        out_dir = self.root / "observer-mutation"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "observer-mutation-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(adapter),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("observer", result.stderr.lower())
+        self.assertFalse((out_dir / "quiescence-proof.json").exists())
+
+    def test_plan_rejects_symlink_stopped_quiescence_proof(self) -> None:
+        proof_link = self.root / "quiescence-proof-link.json"
+        proof_link.symlink_to(self.quiescence_proof)
+        args = self._base_args()
+        args[args.index("--stopped-quiescence-proof") + 1] = str(proof_link)
+        result = subprocess.run(args, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"regular file|symlink")
+        self.assertFalse(self.out.exists())
+
+    def test_plan_requires_explicit_transaction_id_in_stopped_quiescence_proof(self) -> None:
+        proof = json.loads(self.quiescence_proof.read_text(encoding="utf-8"))
+        proof.pop("transaction_id", None)
+        self.quiescence_proof.write_text(json.dumps(proof), encoding="utf-8")
+        result = subprocess.run(self._base_args(), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"transaction.*identity|transaction_id")
+        self.assertFalse(self.out.exists())
+
+    def test_quiesce_requires_explicit_transaction_id_in_adapter_receipt(self) -> None:
+        impact = json.loads(self.impact.read_text(encoding="utf-8"))
+        impact.update(
+            {
+                "impact": "active",
+                "evidence_source": "live public-testnet consumer impact record",
+                "timestamp": "2026-08-28T00:00:00Z",
+                "validators_already_stopped": False,
+                "outage_update_channel": "issue-3481 outage update thread",
+                "recovery_update_checkpoint": "issue-3481 Phase G recovery checkpoint",
+                "producer_wording_approval": "issue-3481 producer approval",
+                "decision": "proceed",
+            }
+        )
+        self.impact.write_text(json.dumps(impact), encoding="utf-8")
+        adapter = self._write_quiescence_adapter()
+        adapter_source = adapter.read_text(encoding="utf-8")
+        adapter.write_text(
+            adapter_source.replace("    'transaction_id': transaction['transaction_id'],\n", ""),
+            encoding="utf-8",
+        )
+        out_dir = self.root / "missing-transaction-id"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "missing-transaction-id-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(adapter),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"transaction.*identity|transaction_id")
+        self.assertFalse((out_dir / "quiescence-proof.json").exists())
+
+    def test_quiesce_supports_none_impact_with_previously_stopped_validators(self) -> None:
+        out_dir = self.root / "none-impact-quiescence"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "quiesce",
+                "--consumer-impact-record",
+                str(self.impact),
+                "--quiescence-id",
+                "none-impact-quiescence-3481",
+                "--node",
+                f"storage-205=local:{self.nodes['storage-205']}",
+                "--node",
+                f"sequencer-204=local:{self.nodes['sequencer-204']}",
+                "--host-adapter",
+                str(self._write_quiescence_adapter()),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        proof = json.loads((out_dir / "quiescence-proof.json").read_text(encoding="utf-8"))
+        self.assertEqual(proof["impact"], "none")
+        self.assertTrue(all(item["active"] is False and item["running"] is False for item in proof["roles"]))
+        self.assertFalse((self.nodes["storage-205"] / "backups").exists())
+        self.assertFalse((self.nodes["sequencer-204"] / "backups").exists())
+
     def test_wrapper_quiesce_envelope_forbids_mutation_phases(self) -> None:
         impact = json.loads(self.impact.read_text(encoding="utf-8"))
         impact.update(
