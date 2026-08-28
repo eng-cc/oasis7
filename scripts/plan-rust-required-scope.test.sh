@@ -156,6 +156,16 @@ assert_reason_contains "$pm_workflow_output" \
   "workflow_governance:scripts/pm/github-project-workflow.test.sh"
 assert_reason_absent "$pm_workflow_output" "unclassified_or_unresolvable:"
 
+receipt_governance_output="$(plan_for_path scripts/pm/ci-ready-receipt.py)"
+assert_key_equals "$receipt_governance_output" scope targeted
+assert_key_equals "$receipt_governance_output" selected_capabilities workflow_governance
+assert_key_equals "$receipt_governance_output" run_operational_contracts true
+assert_key_equals "$receipt_governance_output" run_rust_baseline false
+assert_key_equals "$receipt_governance_output" needs_rust_toolchain false
+assert_reason_contains "$receipt_governance_output" \
+  "workflow_governance:scripts/pm/ci-ready-receipt.py"
+assert_reason_absent "$receipt_governance_output" "unclassified_or_unresolvable:"
+
 # An explicit gameplay/high-risk verification rule must union with the broad
 # PM workflow rule.  The specific rule retains its Rust capabilities while the
 # generic rule adds governance coverage.
