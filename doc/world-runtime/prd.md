@@ -87,7 +87,7 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 | 统一 transaction | trusted capability command 已有 staged/预算/发布样板；`step()`、`step_with_modules()` 与部分 tick/direct command 仍可能逐步写入 legacy 状态。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
 | module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 以稳定逻辑主键 `(world_id, module_id, instance_id)` 定位，并单独绑定当前 `artifact_hash/schema_version/activation_epoch`。 | 双实例不串写；同一 instance 升级后逻辑主键不变，历史 binding 可回放且不被当前 artifact 覆盖。 |
 
-首个 Institution Migration Test 必须遵循 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report，并把 artifact digest 回写 GitHub task evidence sink。最低验收合同为：
+首个 Institution Migration Test 必须遵循本文档顶部所链接 product authority 的 SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report，并把 artifact digest 回写 GitHub task evidence sink。最低验收合同为：
 
 1. 模块具有受治理的 manifest、artifact hash、schema/version、稳定 `instance_id` 和 activation 状态；缺失或不匹配时不得执行。
 2. command 经过同一权限、预算、quote/resolution、最终 affordability 和 Kernel apply 管线；module 不得直接写 canonical `WorldState`、journal 或外部 effect。
