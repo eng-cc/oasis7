@@ -314,6 +314,13 @@ impl World {
     // ---------------------------------------------------------------------
 
     pub fn step(&mut self) -> Result<(), WorldError> {
+        let mut staged = self.clone();
+        staged.step_inner()?;
+        *self = staged;
+        Ok(())
+    }
+
+    fn step_inner(&mut self) -> Result<(), WorldError> {
         self.state.time = self.state.time.saturating_add(1);
         let _ = self.process_factory_depreciation()?;
         while let Some(envelope) = self.pending_actions.pop_front() {
@@ -343,6 +350,16 @@ impl World {
     }
 
     pub fn step_with_modules(&mut self, sandbox: &mut dyn ModuleSandbox) -> Result<(), WorldError> {
+        let mut staged = self.clone();
+        staged.step_with_modules_inner(sandbox)?;
+        *self = staged;
+        Ok(())
+    }
+
+    fn step_with_modules_inner(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<(), WorldError> {
         self.state.time = self.state.time.saturating_add(1);
         self.run_modules_for_current_tick(sandbox, None)
     }
@@ -365,6 +382,17 @@ impl World {
     }
 
     pub fn step_with_modules_for_committed_context(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        context: &RuntimeCommittedTickContext,
+    ) -> Result<(), WorldError> {
+        let mut staged = self.clone();
+        staged.step_with_modules_for_committed_context_inner(sandbox, context)?;
+        *self = staged;
+        Ok(())
+    }
+
+    fn step_with_modules_for_committed_context_inner(
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
         context: &RuntimeCommittedTickContext,

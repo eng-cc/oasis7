@@ -62,7 +62,7 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 
 目标扩展由 module-owned namespace 中的 versioned command、event 与 state 组成。runtime 只负责校验 module identity/manifest、确定性排序、权限与资源预算、调用结果的结构化收集、Kernel apply、持久化及 replay；namespace 的 wire shape、schema 编码、capability/export 名称与 ABI 迁移规则由 WASM 专题定义。module state 必须随 module instance identity、artifact hash、schema/version 和 activation 状态持久化，不能只依赖全局 `module_id` 或进程内 cache。
 
-扩展事件与 native compatibility event 必须进入同一 canonical journal；任何 module effect 都必须经过 Kernel apply，失败不得留下半个 debit、credit、event 或 schedule。这个原子性是本节的 **target contract**，不是当前实现事实：当前 `step()` / `step_with_modules()` 仍可能在逐个 append/apply 的路径中产生中间状态，不能据此宣称已经提供 ExecutionReceipt 级别的原子提交。
+扩展事件与 native compatibility event 必须进入同一 canonical journal；任何 module effect 都必须经过 Kernel apply，失败不得留下半个 debit、credit、event 或 schedule。当前公开 `step()`、`step_with_modules()` 与 committed-context wrapper 已在 cloned `World` 上执行并只在成功后发布，失败不会把内部逐个 append/apply 的中间状态提交到 live world；但内部阶段仍是 legacy pipeline，direct command、install/upgrade、恢复/迁移写入和 durable external effect 尚未统一，因此不能据此宣称已经提供完整 ExecutionReceipt 级别的原子提交。
 
 目标实现必须以一个显式的 staged transition boundary（可称 `ExecutionTransaction` / `TransitionBuffer`，具体类型由 runtime 实现决定）承载 parent state、logical time、资源 reservation、module state、pending effect、tick schedule、journal/event 与 sequence counters 的暂存值。module call、Kernel preflight 和 output/schema/capability 校验只能读写这个暂存视图；不得在 commit 前直接修改 canonical `WorldState`、canonical journal 或外部 effect 队列。所有成功 event/effect/state 变更与 execution commitment 在一个 commit 点原子发布；任一 invariant、预算、artifact、receipt 或持久化失败都丢弃暂存值，并只留下一个稳定的 rejected/fault disposition（若需要审计记录，也必须与该 disposition 同一原子提交，不能留下半个业务效果）。
 
@@ -84,7 +84,7 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 | 能力面 | `current` / `partial` | `target` | `proven` 判据 |
 | --- | --- | --- | --- |
 | Kernel / Institution | L0/L1 约束和 L2 module bridge 已存在；当前互斥分类为 `Alliance=Compatibility keep`、`War=Defer`、`Governance=Kernel keep`、`EconomicContract=Compatibility keep`，尚未选定唯一 pilot。 | 治理批准的 activation boundary 在 Alliance/EconomicContract 中择一转为唯一 `Module candidate`，不新增 Kernel 专属 schema 或制度字段。 | Institution Migration Test 全部通过，且未选项、War 与 Governance 不被隐式改类。 |
-| 统一 transaction | trusted capability command 已有 staged/预算/发布样板；`step()`、`step_with_modules()` 与部分 tick/direct command 仍可能逐步写入 legacy 状态。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
+| 统一 transaction | trusted capability command 与公开 `step()` / `step_with_modules()` / committed-context tick wrapper 已有 staged 发布边界和失败不发布回归；内部阶段、direct command、install/upgrade、恢复/迁移及外部 effect 仍未统一。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
 | module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 以稳定逻辑主键 `(world_id, module_id, instance_id)` 定位，并单独绑定当前 `artifact_hash/schema_version/activation_epoch`。 | 双实例不串写；同一 instance 升级后逻辑主键不变，历史 binding 可回放且不被当前 artifact 覆盖。 |
 
 首个 Institution Migration Test 必须遵循本文档顶部所链接 product authority 的 SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report。runtime fixture 只负责生成 immutable artifacts 与 digest；TPM 负责把 digest 记录到 GitHub task evidence sink，测试或专业 reviewer 不得直接改写 task truth。最低验收合同为：
@@ -125,7 +125,7 @@ native、WASM、tick module 和 compatibility fallback 必须最终进入一条�
 8. 按确定顺序运行已启用的系统/tick schedule，并把 schedule 变化纳入同一 staged transition。
 9. 计算 event/state/执行 commitment，原子写 canonical journal、receipt 与必要 checkpoint。
 
-`step_with_modules()` 不是绕过 native 规则的特殊真值；当前 gameplay module 激活时的整体 directive/fallback 语义继续兼容，但当前 wrapper 与 `step()` 的执行路径仍是 legacy/current compatibility behavior，不能宣称已经满足上述统一 pipeline。迁移完成后，quote/resolve、final affordability、atomic apply、receipt 与 replay conformance 必须证明两个入口的状态转换等价；在证据闭合前，ExecutionReceipt 只属于 target contract。后续拆分 `WorldExecutor`、`KernelSystem`、`PhysicsSystem`、`ResourceSystem`、`ModuleSystem`、`JobSystem`、`CommitSystem` 应按阶段逐步完成，保留固定顺序与既有 replay fixture；不进行一次性 ECS 或 WorldState 大迁移。
+`step_with_modules()` 不是绕过 native 规则的特殊真值；当前 gameplay module 激活时的整体 directive/fallback 语义继续兼容。wrapper 与 `step()` 现已共享“clone 后执行、成功才发布”的 coarse staged boundary，但内部执行顺序仍是 legacy/current compatibility behavior，不能宣称已经满足上述统一 pipeline。迁移完成后，quote/resolve、final affordability、atomic apply、receipt 与 replay conformance 必须证明两个入口的状态转换等价；在证据闭合前，ExecutionReceipt 只属于 target contract。后续拆分 `WorldExecutor`、`KernelSystem`、`PhysicsSystem`、`ResourceSystem`、`ModuleSystem`、`JobSystem`、`CommitSystem` 应按阶段逐步完成，保留固定顺序与既有 replay fixture；不进行一次性 ECS 或 WorldState 大迁移。
 
 ### ExecutionReceipt、tick compatibility 与 finality 边界
 
