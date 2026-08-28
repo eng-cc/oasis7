@@ -948,13 +948,11 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
             &[long_first, long_second],
             false,
         )
-        .expect_err("aggregate distance limit must precede blocked-path fallback");
+        .expect_err("blocked over-limit path must preserve the action resolver rejection");
     assert!(matches!(
-        reason,
-        RejectReason::MaterialTransferDistanceExceeded {
-            distance_km: 12_000,
-            max_distance_km: 10_000
-        }
+        &reason,
+        RejectReason::RuleDenied { notes }
+            if notes.iter().any(|note| note.contains("unavailable or at capacity"))
     ));
     assert_eq!(world.snapshot(), state_before_over_limit_quote);
 }
