@@ -619,3 +619,272 @@ fn route_capacity_quote_is_infeasible_and_never_mutates_or_allows_action() {
             ))
     );
 }
+
+#[test]
+fn legacy_route_id_tuple_mismatch_is_rejected_by_quote_and_action() {
+    let mut world = World::new();
+    let requester = "legacy-route-quote-operator";
+    let source = MaterialLedgerId::site("legacy-route-quote-source");
+    let destination = MaterialLedgerId::site("legacy-route-quote-destination");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: requester.to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register legacy route quote operator");
+    world
+        .set_ledger_material_balance(source.clone(), "iron_ingot", 10)
+        .expect("seed legacy route quote source");
+    let route_id = register_route(
+        &mut world,
+        requester,
+        "legacy-route-quote-source",
+        "legacy-route-quote-destination",
+        "iron_ingot",
+        100,
+        10,
+        0,
+    );
+
+    let state_before_quote = world.snapshot();
+    let quote_reason = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            1,
+            200,
+            None,
+            std::slice::from_ref(&route_id),
+            false,
+        )
+        .expect_err("legacy route_id tuple mismatch must reject the quote");
+    assert!(matches!(
+        &quote_reason,
+        RejectReason::RuleDenied { notes }
+            if notes.iter().any(|note| note.contains("tuple mismatch"))
+    ));
+    assert_eq!(world.snapshot(), state_before_quote);
+
+    let journal_before_action = world.journal().events.len();
+    let source_before_action = world.ledger_material_balance(&source, "iron_ingot");
+    world.submit_action(Action::TransferMaterial {
+        requester_agent_id: requester.to_string(),
+        from_ledger: source.clone(),
+        to_ledger: destination.clone(),
+        kind: "iron_ingot".to_string(),
+        amount: 1,
+        distance_km: 200,
+        priority: None,
+        route_id: Some(route_id),
+        route_ids: Vec::new(),
+        auto_reroute: false,
+    });
+    world
+        .step()
+        .expect("evaluate mismatched legacy route action");
+    let action_reason = world.journal().events[journal_before_action..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => {
+                Some(reason.clone())
+            }
+            _ => None,
+        })
+        .expect("legacy route_id tuple mismatch action rejection");
+    assert_eq!(quote_reason, action_reason);
+    assert_eq!(
+        world.ledger_material_balance(&source, "iron_ingot"),
+        source_before_action
+    );
+    assert_eq!(world.pending_material_transits_len(), 0);
+}
+
+#[test]
+fn case_and_whitespace_material_kind_keep_quote_and_action_in_parity() {
+    let mut world = World::new();
+    let requester = "normalized-route-quote-operator";
+    let source = MaterialLedgerId::site("normalized-route-quote-source");
+    let destination = MaterialLedgerId::site("normalized-route-quote-destination");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: requester.to_string(),
+        pos: pos(0, 0),
+    });
+    world
+        .step()
+        .expect("register normalized route quote operator");
+    world
+        .set_ledger_material_balance(source.clone(), "iron_ingot", 10)
+        .expect("seed normalized route quote source");
+    let route_id = register_route(
+        &mut world,
+        requester,
+        "normalized-route-quote-source",
+        "normalized-route-quote-destination",
+        "iron_ingot",
+        100,
+        10,
+        0,
+    );
+    let request_kind = "  IRON_INGOT  ";
+    let route_ids = vec![route_id];
+    let state_before_quote = world.snapshot();
+    let quote = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            request_kind,
+            2,
+            0,
+            None,
+            route_ids.as_slice(),
+            false,
+        )
+        .expect("case and whitespace variant route quote");
+    assert_eq!(world.snapshot(), state_before_quote);
+    assert_eq!(quote.kind, "iron_ingot");
+    assert!(quote.submission_feasible);
+    assert_eq!(quote.max_transferable_amount, 10);
+    assert_eq!(quote.sent_amount, 2);
+
+    world.submit_action(Action::TransferMaterial {
+        requester_agent_id: requester.to_string(),
+        from_ledger: source.clone(),
+        to_ledger: destination,
+        kind: request_kind.to_string(),
+        amount: 2,
+        distance_km: 0,
+        priority: None,
+        route_id: None,
+        route_ids,
+        auto_reroute: false,
+    });
+    world
+        .step()
+        .expect("start normalized route transfer action");
+    let started_kind = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::MaterialTransitStarted { kind, .. }) => {
+                Some(kind.clone())
+            }
+            _ => None,
+        })
+        .expect("normalized route transfer started");
+    assert_eq!(started_kind, quote.kind);
+    assert_eq!(world.ledger_material_balance(&source, "iron_ingot"), 8);
+}
+
+#[test]
+fn malformed_or_disconnected_paths_precede_capacity_fallback() {
+    let mut world = World::new();
+    let requester = "path-precedence-operator";
+    let source = MaterialLedgerId::site("path-precedence-source");
+    let relay = MaterialLedgerId::site("path-precedence-relay");
+    let destination = MaterialLedgerId::site("path-precedence-destination");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: requester.to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register path precedence operator");
+    world
+        .set_ledger_material_balance(source.clone(), "iron_ingot", 10)
+        .expect("seed path precedence source");
+    let unavailable_route = register_route(
+        &mut world,
+        requester,
+        "path-precedence-source",
+        "path-precedence-relay",
+        "iron_ingot",
+        100,
+        10,
+        0,
+    );
+    let next_route = register_route(
+        &mut world,
+        requester,
+        "path-precedence-relay",
+        "path-precedence-destination",
+        "iron_ingot",
+        100,
+        10,
+        0,
+    );
+    let disconnected_route = register_route(
+        &mut world,
+        requester,
+        "path-precedence-other-source",
+        "path-precedence-destination",
+        "iron_ingot",
+        100,
+        10,
+        0,
+    );
+    world.submit_action(Action::SetLogisticsRouteAvailability {
+        requester_agent_id: requester.to_string(),
+        route_id: unavailable_route.clone(),
+        available: false,
+    });
+    world.step().expect("disable path precedence route");
+
+    let valid_capacity_path = vec![unavailable_route.clone(), next_route];
+    let state_before_valid_capacity_quote = world.snapshot();
+    let valid_capacity_quote = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            1,
+            0,
+            None,
+            valid_capacity_path.as_slice(),
+            false,
+        )
+        .expect("valid unavailable path is a conditional capacity quote");
+    assert!(!valid_capacity_quote.submission_feasible);
+    assert_eq!(
+        valid_capacity_quote.recommendation,
+        "wait_for_transit_capacity"
+    );
+    assert_eq!(world.snapshot(), state_before_valid_capacity_quote);
+
+    for (label, route_ids) in [
+        (
+            "malformed path",
+            vec![
+                unavailable_route.clone(),
+                "missing-logistics-route".to_string(),
+            ],
+        ),
+        (
+            "disconnected path",
+            vec![unavailable_route, disconnected_route],
+        ),
+    ] {
+        let state_before_invalid_quote = world.snapshot();
+        let reason = world
+            .logistics_transfer_quote_with_path(
+                requester,
+                &source,
+                &destination,
+                "iron_ingot",
+                1,
+                0,
+                None,
+                route_ids.as_slice(),
+                false,
+            )
+            .expect_err(label);
+        assert!(matches!(
+            reason,
+            RejectReason::RuleDenied { ref notes }
+                if notes.iter().any(|note| note.contains("cyclic, disconnected, or incompatible"))
+        ));
+        assert_eq!(world.snapshot(), state_before_invalid_quote);
+    }
+}

@@ -525,15 +525,60 @@ fn route_capacity_available_amount(world: &World, route_ids: &[String]) -> Optio
         .and_then(|capacities| capacities.into_iter().min())
 }
 
-fn route_path_has_capacity_conflict(world: &World, route_ids: &[String], amount: i64) -> bool {
-    !route_ids.is_empty()
-        && route_ids.iter().any(|route_id| {
-            world
-                .state
-                .logistics_routes
-                .get(route_id)
-                .is_some_and(|route| !route_available_for_amount(route, amount))
-        })
+fn route_path_has_capacity_conflict(
+    world: &World,
+    from_ledger: &MaterialLedgerId,
+    to_ledger: &MaterialLedgerId,
+    kind: &str,
+    amount: i64,
+    distance_km: i64,
+    priority: Option<MaterialTransitPriority>,
+    route_id: Option<&str>,
+    route_ids: &[String],
+) -> bool {
+    let requested_route_ids = if route_ids.is_empty() {
+        route_id
+            .map(|route_id| vec![route_id.to_string()])
+            .unwrap_or_default()
+    } else {
+        route_ids.to_vec()
+    };
+    let Some(normalized_kind) = normalize_logistics_route_kind(kind) else {
+        return false;
+    };
+    if let Some(route_id) = route_id {
+        let Some(route) = world.state.logistics_routes.get(route_id) else {
+            return false;
+        };
+        if route_ids.is_empty()
+            && !logistics_route_matches(
+                route,
+                from_ledger,
+                to_ledger,
+                normalized_kind.as_str(),
+                distance_km,
+                priority,
+            )
+        {
+            return false;
+        }
+    }
+    // Only turn a resolver error into a conditional quote after proving that the
+    // requested path is structurally valid. Missing, disconnected, cyclic, and
+    // incompatible paths must retain their authoritative rejection reason.
+    path_matches_route_tuple(
+        world,
+        requested_route_ids.as_slice(),
+        from_ledger,
+        to_ledger,
+        normalized_kind.as_str(),
+    ) && requested_route_ids.iter().any(|route_id| {
+        world
+            .state
+            .logistics_routes
+            .get(route_id)
+            .is_some_and(|route| !route_available_for_amount(route, amount))
+    })
 }
 
 impl World {
@@ -580,6 +625,46 @@ impl World {
         route_ids: &[String],
         auto_reroute: bool,
     ) -> Result<LogisticsTransferQuote, RejectReason> {
+        // A non-zero distance on a single binding is the legacy route_id
+        // representation. Explicit path callers use zero as the route-derived
+        // distance sentinel; keep the legacy binding separate whenever it is
+        // present so tuple validation matches authoritative action evaluation.
+        let legacy_route_id =
+            (route_ids.len() == 1 && distance_km != 0).then(|| route_ids[0].as_str());
+        let path_route_ids = if legacy_route_id.is_some() {
+            &[]
+        } else {
+            route_ids
+        };
+        self.logistics_transfer_quote_with_route_id(
+            requester_agent_id,
+            from_ledger,
+            to_ledger,
+            kind,
+            amount,
+            distance_km,
+            requested_priority,
+            legacy_route_id,
+            path_route_ids,
+            auto_reroute,
+        )
+    }
+
+    /// Derives a route-aware transfer quote while preserving the legacy route
+    /// binding as a distinct input for exact action/quote tuple validation.
+    pub fn logistics_transfer_quote_with_route_id(
+        &self,
+        requester_agent_id: &str,
+        from_ledger: &MaterialLedgerId,
+        to_ledger: &MaterialLedgerId,
+        kind: &str,
+        amount: i64,
+        distance_km: i64,
+        requested_priority: Option<MaterialTransitPriority>,
+        route_id: Option<&str>,
+        route_ids: &[String],
+        auto_reroute: bool,
+    ) -> Result<LogisticsTransferQuote, RejectReason> {
         if !self.state.agents.contains_key(requester_agent_id) {
             return Err(RejectReason::AgentNotFound {
                 agent_id: requester_agent_id.to_string(),
@@ -618,12 +703,24 @@ impl World {
             amount,
             distance_km,
             requested_priority,
-            None,
+            route_id,
             route_ids,
             auto_reroute,
         ) {
             Ok(plan) => Some(plan),
-            Err(_reason) if route_path_has_capacity_conflict(self, route_ids, amount) => {
+            Err(_reason)
+                if route_path_has_capacity_conflict(
+                    self,
+                    from_ledger,
+                    to_ledger,
+                    kind,
+                    amount,
+                    distance_km,
+                    requested_priority,
+                    route_id,
+                    route_ids,
+                ) =>
+            {
                 // A quote reports a conditional, non-mutating capacity blocker while the
                 // action returns the same rejection reason from the shared resolver.
                 None
@@ -631,19 +728,32 @@ impl World {
             Err(reason) => return Err(reason),
         };
 
-        let source_amount_before = self.ledger_material_balance(from_ledger, kind);
-        let destination_amount_before = self.ledger_material_balance(to_ledger, kind);
-        let route_capacity = path_plan
-            .as_ref()
-            .and_then(|plan| route_capacity_available_amount(self, plan.route_ids.as_slice()))
-            .or_else(|| route_capacity_available_amount(self, route_ids));
-        let max_transferable_amount = source_amount_before
-            .max(0)
-            .min(route_capacity.unwrap_or(i64::MAX));
+        let requested_route_ids = if route_ids.is_empty() {
+            route_id
+                .map(|route_id| vec![route_id.to_string()])
+                .unwrap_or_default()
+        } else {
+            route_ids.to_vec()
+        };
         let effective_kind = path_plan
             .as_ref()
             .map(|plan| plan.effective_kind.as_str())
+            .or_else(|| {
+                requested_route_ids
+                    .first()
+                    .and_then(|route_id| self.state.logistics_routes.get(route_id))
+                    .map(|route| route.kind.as_str())
+            })
             .unwrap_or(kind);
+        let source_amount_before = self.ledger_material_balance(from_ledger, effective_kind);
+        let destination_amount_before = self.ledger_material_balance(to_ledger, effective_kind);
+        let route_capacity = path_plan
+            .as_ref()
+            .and_then(|plan| route_capacity_available_amount(self, plan.route_ids.as_slice()))
+            .or_else(|| route_capacity_available_amount(self, requested_route_ids.as_slice()));
+        let max_transferable_amount = source_amount_before
+            .max(0)
+            .min(route_capacity.unwrap_or(i64::MAX));
         let (effective_priority, priority_reason) = match requested_priority {
             Some(priority) => (priority, "explicit_priority".to_string()),
             None => (
@@ -731,7 +841,7 @@ impl World {
             requester_agent_id: requester_agent_id.to_string(),
             from_ledger: from_ledger.clone(),
             to_ledger: to_ledger.clone(),
-            kind: kind.to_string(),
+            kind: effective_kind.to_string(),
             requested_amount: amount,
             submission_feasible,
             max_transferable_amount,

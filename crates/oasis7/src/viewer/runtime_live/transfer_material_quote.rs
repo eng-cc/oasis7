@@ -77,15 +77,9 @@ impl ViewerRuntimeLiveServer {
             TransferMaterialPriority::Urgent => MaterialTransitPriority::Urgent,
             TransferMaterialPriority::Standard => MaterialTransitPriority::Standard,
         });
-        let mut route_ids = request.route_ids.clone();
-        if route_ids.is_empty() {
-            if let Some(route_id) = request.route_id.as_ref() {
-                route_ids.push(route_id.clone());
-            }
-        }
         let quote = self
             .world
-            .logistics_transfer_quote_with_path(
+            .logistics_transfer_quote_with_route_id(
                 request.requester_agent_id.as_str(),
                 &from_ledger,
                 &to_ledger,
@@ -93,7 +87,8 @@ impl ViewerRuntimeLiveServer {
                 request.amount,
                 request.distance_km,
                 requested_priority,
-                route_ids.as_slice(),
+                request.route_id.as_deref(),
+                request.route_ids.as_slice(),
                 request.auto_reroute,
             )
             .map_err(|reason| GameplayActionError {
