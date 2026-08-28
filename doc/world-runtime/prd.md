@@ -51,12 +51,12 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 
 | 分类 | 当前/示例 | 迁移规则 |
 | --- | --- | --- |
-| Kernel 保留 | time、space、identity、ownership、资源守恒、通用执行成本与模块边界 | 由 runtime 强制；只能做版本化参数或安全修复，不能由 module 关闭 |
-| Module candidate | market、tax、currency、bank、corporation、alliance、war、governance、reputation、contract、crisis 等制度语义 | 默认进入开放 module 试点候选；需 command/event/state、权限、预算、snapshot/replay 与 receipt conformance 证据 |
-| Compatibility keep | 当前已经支撑 vertical slice 的 native Alliance/War/Governance/EconomicContract 及其旧 snapshot/event/replay shape | 冻结新增语义扩张；保留兼容读写或显式 adapter，直到有版本化迁移和消费者切换证据 |
-| Defer | big-bang ECS、完整动态 World Database、independent region/shard finality | 本任务不实现、不作为当前产品或 runtime 承诺；先保留逻辑 namespace/region 的未来扩展位置 |
+| Kernel 保留 | time、space、identity、ownership、资源守恒、通用执行成本，以及 Governance 的授权/政策/最终性/反滥用护栏 | 由 runtime 强制，不能由 module 关闭；具体治理产品规则不因护栏保留而转入 runtime authority |
+| Module candidate | market、tax、currency、bank、corporation、reputation、crisis 等已经跨角色分类的制度语义 | 需 command/event/state、权限、预算、snapshot/replay 与 receipt conformance 证据；Alliance/EconomicContract 只能按产品 authority 择一转入 |
+| Compatibility keep | 当前 native Alliance 与 EconomicContract 及其旧 snapshot/event/replay shape | 两者在选定前均冻结新增语义；治理批准的 activation boundary 只能择一转为唯一 pilot `Module candidate` |
+| Defer | War、big-bang ECS、完整动态 World Database、independent region/shard finality | War 不进入本版本试点或新增 native action/state；其余项不作为当前产品或 runtime 承诺 |
 
-冻结规则是“先分类、后实现”：未通过上述矩阵的制度需求不得新增核心 enum、专属 `WorldState` 顶层字段或第二套执行路径。首个试点由 producer、runtime 与 WASM 角色共同选择 Alliance 或 EconomicContract；试点成功的最低信号是新增/迁移 module 不需要继续修改 Kernel 核心状态转换，并能通过同一 replay、snapshot、receipt 与权限验证。试点不改变现有 vertical slice 的产品承诺。
+冻结规则是“先分类、后实现”：未通过上述矩阵的制度需求不得新增核心 enum、专属 `WorldState` 顶层字段或第二套执行路径。首个试点必须在治理批准的 activation boundary 中按产品 authority 从 Alliance/EconomicContract 择一；producer、runtime 与 WASM 只提供分类与执行证据，不代替治理批准。War/Governance 不得被试点隐式改类。
 
 #### Open extension 的 runtime 合同（不展开 ABI）
 
@@ -83,17 +83,19 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 
 | 能力面 | `current` / `partial` | `target` | `proven` 判据 |
 | --- | --- | --- | --- |
-| Kernel / Institution | L0/L1 约束和 L2 module bridge 已存在；现有 Alliance、War、Governance、EconomicContract 仍是 compatibility surface，尚未完成真实制度迁移。 | 至少一个真实 Institution 通过 module-owned command/event/state 接入，不再新增 Kernel 专属 schema 或制度字段。 | Institution Migration Test 全部通过，且迁移 diff 没有新的 Kernel 制度枚举/顶层字段。 |
+| Kernel / Institution | L0/L1 约束和 L2 module bridge 已存在；当前互斥分类为 `Alliance=Compatibility keep`、`War=Defer`、`Governance=Kernel keep`、`EconomicContract=Compatibility keep`，尚未选定唯一 pilot。 | 治理批准的 activation boundary 在 Alliance/EconomicContract 中择一转为唯一 `Module candidate`，不新增 Kernel 专属 schema 或制度字段。 | Institution Migration Test 全部通过，且未选项、War 与 Governance 不被隐式改类。 |
 | 统一 transaction | trusted capability command 已有 staged/预算/发布样板；`step()`、`step_with_modules()` 与部分 tick/direct command 仍可能逐步写入 legacy 状态。 | 所有有 world effect 的 command/tick 入口共享 `ExecutionTransaction`（或等价 staged boundary），单点提交或稳定拒绝。 | native 与 module 入口在相同 parent/input 下产生等价 commitment、journal、snapshot 与 replay 结果，并覆盖 commit 前失败无半个效果。 |
-| module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 全部按 `(world_id, module_id, instance_id, artifact_hash, schema_version)` 定位。 | 两个相同 module artifact 的 instance 可在同一 world 并行执行，重放/恢复/升级不串写、不覆盖，且错误在 first effect 前 fail closed。 |
+| module instance | install、upgrade、tick、event 与持久化已保留稳定 instance identity；direct/trusted command、相关更新事件和 catalog 仍存在 `module_id` 全局寻址缺口。 | 授权、执行、state、事件、receipt 与 machine catalog 以稳定逻辑主键 `(world_id, module_id, instance_id)` 定位，并单独绑定当前 `artifact_hash/schema_version/activation_epoch`。 | 双实例不串写；同一 instance 升级后逻辑主键不变，历史 binding 可回放且不被当前 artifact 覆盖。 |
 
-首个 Institution Migration Test 由 producer、runtime 与 WASM 专业角色共同选择 Alliance 或 EconomicContract；本测试验证迁移能力，不在 runtime 文档中定义制度规则。最低验收合同为：
+首个 Institution Migration Test 必须遵循 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) SC-32：只有治理批准的 activation boundary 能在 Alliance/EconomicContract 中择一转为唯一 pilot。稳定 fixture contract ID 为 `institution-migration-v1`；每次证明产出 content-addressed manifest、input/root、execution receipts、snapshot/replay/recovery report 和 legacy-conformance report，并把 artifact digest 回写 GitHub task evidence sink。最低验收合同为：
 
 1. 模块具有受治理的 manifest、artifact hash、schema/version、稳定 `instance_id` 和 activation 状态；缺失或不匹配时不得执行。
 2. command 经过同一权限、预算、quote/resolution、最终 affordability 和 Kernel apply 管线；module 不得直接写 canonical `WorldState`、journal 或外部 effect。
 3. accepted outcome、事件、module state、receipt 与 checkpoint 使用同一 root/commitment；任一校验、预算、持久化或 artifact 失败都产生稳定 reject/fault，且不留下部分业务效果。
 4. snapshot restore、canonical journal replay、restart/recovery 和跨 adapter conformance 对同一 accepted input 产生相同 state root/receipt；旧 compatibility shape 仍可显式读取或通过 adapter 迁移。
 5. 至少建立两个同 artifact、不同 `instance_id` 的实例，证明 direct/trusted command、state update、event、receipt 和 catalog 不以全局 `module_id` 串写或覆盖。
+6. preview、stale provider response、deny 与 no-effect 失败不 debit；accepted effect、debit 与 receipt 同一次且仅一次结算；retry/reconnect/restore/replay 不重复扣费、不发放 replay credit，并保留 owner/payer 可读性和旧玩家结果。
+7. commit 后外部 effect 先写入 durable outbox/effect ledger；`(world_id, execution_receipt_id, effect_id)` 作为幂等键，绑定 roots、intent hash、dispatch/ack 状态与 external receipt。crash/restart 可重投未确认记录，canonical replay 不得重执行外部业务效果。
 
 Migration Test 未通过前，native vertical slice 只能标为 `current`/`compatibility keep`，不能标为已完成 open-institution extensibility；测试通过也不改变产品规则或玩家承诺的权威归属。
 
@@ -101,13 +103,13 @@ Migration Test 未通过前，native vertical slice 只能标为 `current`/`comp
 
 统一 `ExecutionTransaction` 是 runtime 架构 **P0**：这里的 P0 表示必须先确立统一状态转换边界，不等同于已经发生线上事故或要求一次性重写所有状态结构。它的范围包括 `step()`、`step_with_modules()`、native compatibility action、WASM/module command、tick directive、direct/trusted command、module install/upgrade 以及任何会改变 canonical world 的恢复/迁移写入。只读 quote/resolve 可以在 transaction 之前运行，但必须绑定 parent、manifest、input root 和 freshness，且不得产生 world effect。
 
-Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt；失败路径丢弃暂存值，只发布稳定的 rejected/fault disposition。外部不可回滚副作用只能在 commit 后按 receipt 驱动，不能成为 commit 前的隐式写入。该边界优先统一语义与证据，不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
+Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt 与 durable outbox records；失败路径丢弃暂存值，只发布稳定的 rejected/fault disposition。外部不可回滚副作用只能在 commit 后由 outbox 按 receipt 驱动；必须有持久幂等键、dispatch/ack 状态、crash-safe 重投和 replay 不重执行合同。该边界不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
 
 #### Command-path module-instance completeness
 
-实例身份不是只供 persistence 使用的附加字段，而是每条 command path 的授权与寻址主键。当前安装、升级、tick、event routing 与恢复已能携带稳定实例；仍需补齐 direct/trusted command 的 instance target、state lookup、更新事件、receipt linkage 与 catalog target。任何以 `module_id` 选择“当前实例”的路径都必须被视为 `partial`，不得以 instance authorization 已存在推断 command execution 已 instance-complete。
+实例的稳定逻辑主键是 `(world_id, module_id, instance_id)`；`artifact_hash/schema_version/activation_epoch` 是该主键在某一 execution height 的 active binding，不重定义逻辑实例。当前安装、升级、tick、event routing 与恢复已携带部分实例信息；仍需补齐 direct/trusted command 的 target、state lookup、更新事件、receipt linkage 与 catalog target。
 
-目标路径必须先验证 `world_id`、module/instance identity、artifact/schema/version、activation、owner/subject、capability 与预算，再把 instance target 固定进 staged command、event、receipt、snapshot 和 replay input。instance 缺失、冲突、未激活、权限不符或 target 与 state 不一致时，在 first effect 前结构化拒绝；禁止 fallback 到另一个同 `module_id` 实例。catalog/context 的 Agent 语义与工具策略由 Agent/WASM authority 定义，runtime 只提供可验证的 instance-bound descriptor 输入，不把机器 descriptor 宣称为 Agent 已能理解或使用。
+目标路径必须验证逻辑主键与当前 artifact/schema/activation binding，再把 target 与 binding digest 固定进 staged command、event、receipt、snapshot 和 replay input。升级必须产生按 execution height 可回放的 version-lineage record；restore/replay 使用历史 binding，不以当前 artifact 覆盖历史。任何不一致在 first effect 前拒绝，禁止 fallback 到另一个同 `module_id` 实例。
 
 ### 单一内部 execution pipeline
 
@@ -351,7 +353,7 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
   - AC-38: `crates/oasis7_builtin_wasm_modules/m1_*` 中消费 `GeoPos`/`*_cm` 坐标的 builtin wasm 模块必须把模块内部主表示收口到整数厘米，并对动作/事件 JSON 边界拒绝 fractional cm；升级后仍需兼容读取旧的整值浮点 module state，并把新的 state / observability sample 统一序列化为整数厘米。
   - AC-41: runtime schema 与 apply paths 必须区分 legacy `ActionId/job_id/caused_by` trace 和 canonical operation protocol。每个 authoritative accepted industrial outcome 的测试必须证明：acceptance 只签发一个 root，atomic reject 且无 accepted intent 时不签发；两个 payload 相同的 accepted intents 获得不同 roots；stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/validation/settlement child 持久化同一 root、owning revision/segment 与直接 parent/child role；missing/conflicting/wrong-root/terminal-closed linkage 在 first sink、credit、progress 或 reward 前 fail closed；retry、reconnect、乱序、snapshot restore 与 canonical replay 重建相同 child identity 和 terminal disposition，且不复制效果；snapshot + journal replay 得到同一 operation graph/finality 与 world state root。
   - AC-42: runtime 文档必须对关键能力明确标注 `current`、`partial`、`target` 或 `proven`；不得以已有接口、局部 staged path 或 compatibility record 代替端到端证明。
-  - AC-43: 至少一个 Alliance 或 EconomicContract Institution Migration Test 必须证明 module-owned command/event/state 可在不新增 Kernel 制度 schema/顶层字段的前提下，通过权限、预算、quote、Kernel apply、receipt、snapshot、replay 与 recovery 全链路；测试通过前只能保留 native compatibility surface 作为当前能力。
+  - AC-43: 治理批准的 activation boundary 必须按产品 SC-32 在 Alliance/EconomicContract 中择一转为唯一 pilot；`institution-migration-v1` 必须证明 module-owned command/event/state 不新增 Kernel 制度 schema/顶层字段，并覆盖权限、owner/payer 预算可读性、preview/stale/deny/no-effect 不扣费、accepted effect+debit+receipt exactly-once、retry/reconnect/restore/replay 不重复扣费或发放 replay credit、quote、Kernel apply、durable outbox、snapshot、replay 与 recovery；content-addressed report bundle digest 必须回写 task evidence sink。
   - AC-44: 所有有 world effect 的 command/tick/恢复写入入口必须收敛到统一 `ExecutionTransaction`（或等价 staged boundary）；commit 前不得修改 canonical state/journal/外部 effect，失败必须无半个业务效果并留下稳定 rejected/fault disposition。该项是架构 P0，不能解读为一次性 ECS/WorldState 重写承诺。
   - AC-45: module instance 完整性必须覆盖 direct/trusted command 的授权、寻址、state lookup、更新事件、receipt、snapshot/replay 与 machine descriptor；同 module artifact 的不同 `instance_id` 必须可并行且不串写，任何 `module_id` 全局 fallback 都必须显式标为 partial。
   - AC-46: subsystem state encapsulation 必须渐进落地并保留现有 replay/persistence identity；本 PRD 不承诺 big-bang ECS、独立 shard finality、跨 shard commit 或动态 World Database。

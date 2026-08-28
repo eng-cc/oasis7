@@ -54,6 +54,9 @@ The per-turn generator is a target host service (not a provider feature):
 
 1. Read the finalized live head, active module records, policy and the Agent subject's
    non-revoked grants for the requested audience.
+   The immutable context digest binds `world_id`, `branch_id`, finality epoch
+   and block hash, revocation and policy epochs, catalog snapshot digest, and
+   response nonce; omission from a compatibility DTO cannot omit the binding.
 2. Intersect those records with declared commands, sort entries deterministically, compute
    the snapshot identity and choose a fresh response nonce. Store/bind the invocation context
    before making the provider request.
@@ -168,6 +171,12 @@ context，也不把 provider 过程当作 world fact。至少覆盖下列拒绝�
 | stale snapshot、policy/branch/finality/cost quote 变化 | old intent 失效，要求重新 discovery |
 | typed args 缺字段、类型/范围/枚举错误或超 bound | host 不生成 envelope |
 | nonce replay 或同 nonce 不同 request hash | 返回历史 idempotent receipt 或 deterministic denial，不重复副作用 |
+| world/branch/finality、policy/revocation epoch 或 snapshot digest 漂移 | old context 失效并重新 discovery，不跨 authority boundary 重放 |
+
+The successful unknown-Institution fixture reuses runtime
+`institution-migration-v1` and product SC-32: preview/stale/deny/no-effect
+outcomes debit nothing, one accepted effect has one debit and receipt, and
+retry/reconnect/restore/replay neither double-charge nor create replay credit.
 
 ## 6. 内置 provider 适配与诊断流
 

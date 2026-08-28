@@ -111,10 +111,10 @@
   - AC-8: capability 未知、已撤销、未激活、权限不匹配、schema/identity hash 漂移或 cost quote 过期时，必须 fail closed，留下稳定 trace/error，并收敛为 `Wait` 或 `ActionRejected`；不得按名称猜测、静默改绑或执行 fallback。
   - AC-9: LLM/provider 输出只能是绑定上述 capability 的结构化 intent；intent 必须进入现有 runtime authoritative pipeline，由 runtime 重新校验并决定是否产生权威状态变化。
   - AC-10: 现有 closed `Action` adapter 保持可读写兼容并与动态 capability 共同进入同一执行管线；迁移按低风险 module 试点渐进进行，不以 capability discovery 取代现有 vertical slice。
-  - AC-11: live Agent turn 的 catalog/context 由 trusted runtime 自动生成并 subject-bound；文档、fixture 和实现不得把手工 `with_capability_context` 注入误报为 production auto-wiring。
+  - AC-11: live Agent turn 的 catalog/context 由 trusted runtime 自动生成并 subject-bound；context digest 必须认证 world/branch/finality、policy/revocation epoch、snapshot digest 与 nonce，fixture 覆盖每一维漂移后 fail closed；不得把手工 `with_capability_context` 注入误报为 production auto-wiring。
   - AC-12: 每个动态 command 都能从 `schema_ref` 取得 semantic descriptor，并证明 descriptor canonical bytes 的 `schema_hash`、module declaration、version 与 catalog entry 一致；只做 envelope canonical CBOR 检查不足以满足本条。
   - AC-13: provider 只能返回绑定 entry 的 typed args intent；trusted host 负责类型/范围/枚举/必填校验和 deterministic canonical CBOR 编码，runtime 再做完整 schema、权限、预算、live state 与 replay 校验。
-  - AC-14: unknown-institution E2E 使用未进入 Kernel closed `Action` 的 active governed module command，证明无需 native rule 编译即可完成 discovery -> schema -> typed args -> host encoding -> runtime commit -> committed feedback/memory；任何中间失败均无 sandbox/journal/state/charge 副作用。
+  - AC-14: unknown-institution E2E 复用 `institution-migration-v1` 与产品 SC-32，使用未进入 Kernel closed `Action` 的 active governed module command，证明 discovery -> schema -> typed args -> host encoding -> runtime commit -> committed feedback/memory；并验证 preview/stale/deny/no-effect 不扣费、accepted effect/debit/receipt exactly-once、retry/reconnect/restore/replay 不重复扣费或发放 replay credit。
   - AC-15: E2E 负例至少覆盖 unknown/inactive module、无 catalog/schema/hash 漂移、revoked grant、stale snapshot/policy、subject/presenter/audience mismatch、malformed typed args、oversize payload、expired cost quote 和 nonce replay；均产生稳定 trace/error 并收敛为 `Wait` 或 `ActionRejected`，不得名称 fallback 或静默重绑。
 - Non-Goals:
   - 不在本轮直接把 `Local Provider` 接入主线模拟代码。
@@ -160,6 +160,7 @@
 - `SemanticCommandSchema`（target）：content-addressed descriptor，至少包含 `schema_ref/schema_hash/schema_version`、command summary、typed input fields（type/required/bounds/enums）、result/error shape、declared side effects 和 bounded cost hint；它是 Agent 理解输入的语义来源，不授予调用权限。
 - `TypedCommandIntent`（target）：`catalog_snapshot_id + selected_entry + typed_args + response_nonce + trace_id`；其中 `selected_entry` 必须精确匹配 module/version/namespace/command/schema，`typed_args` 不包含 caller、grant、authority proof 或 host-only provenance。
 - `CapabilityInvocationContext`：由 trusted host 为单次 turn 生成的 `grant_id/subject/presenter/audience/catalog_snapshot_id/module_id/module_version/response_nonce`；provider 只能回显，不能自行构造为授权。
+- context 的 canonical binding tuple 还必须包含 `world_id/branch_id/finality_epoch/finality_block_hash/revocation_epoch/policy_epoch/catalog_snapshot_digest`，并与 `response_nonce` 一起进入不可变 context digest。若兼容 DTO 不展开这些字段，`catalog_snapshot_id` 必须内容寻址且认证全部维度；runtime 提交前仍逐项与 live state 比较。
 - 内置 Responses provider 的具体基线也由本专题承载，但不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority；provider-agnostic contract 仍是外部接入的唯一边界。
 - 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。
 - `--jobs` 只描述执行并行度，不是行为等价或性能比较的充分条件。外部 provider 的非确定性运行必须在相同输入下重复采样；任一场景的 timeout、invalid output、stuck-loop、trace-completeness 缺口或未解释的错误不能因聚合均值/总量而被掩盖。
@@ -216,6 +217,7 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 不得依赖把 command 加进 native Action、静态全局 grant、provider 自报 schema 或手工
 复制 context。它证明的是“未知制度可由受治理 module 接入”，不是该制度的玩法规则或
 产品承诺。
+该 fixture 复用 runtime `institution-migration-v1` 和产品 SC-32：preview、stale、deny 与 no-effect 不扣费，accepted effect/debit/receipt 仅结算一次，retry/reconnect/restore/replay 不重复扣费或发放 replay credit。provider feedback 只读取权威 receipt，不自行推断成本或结算。
 
 未知制度 proof 的阻断条件和预期收敛：
 
@@ -227,6 +229,7 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 | snapshot/policy/branch/cost quote 过期 | runtime live recheck | old intent invalid，要求重新 discovery |
 | typed args 缺字段、类型/范围/枚举错误或超 bound | trusted host encoding | 不生成可执行 envelope |
 | nonce replay 或同 nonce 不同 request hash | runtime replay guard | idempotent historical receipt 或 deterministic denial，不重复副作用 |
+| world/branch/finality、policy/revocation epoch 或 snapshot digest 漂移 | runtime context/live-state recheck | old context 失效并重新 discovery，不允许跨 authority boundary 重放 |
 
 - Local Provider Adapter Strategy:
   - 使用 adapter 把 `ObservationEnvelope` 转成 `Local Provider` 可消费的会话输入。

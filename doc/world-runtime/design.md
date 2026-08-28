@@ -56,10 +56,10 @@ upgrade those surfaces to `proven`.
 
 ### 6.1 Institution Migration Test
 
-The first migration proof is one real Institution chosen jointly by the
-producer, runtime, and WASM roles (for example Alliance or EconomicContract).
-This is a runtime migration test, not a definition of the Institution's
-product rules. The test is `proven` only when all of the following hold:
+The first migration proof follows product SC-32: a governed activation
+boundary selects exactly one Alliance/EconomicContract pilot. Producer,
+runtime, and WASM roles supply evidence; they do not replace governance
+approval. The test is `proven` only when all of the following hold:
 
 1. A governed manifest binds artifact hash, schema/version, stable
    `instance_id`, activation, owner/subject, and capability limits.
@@ -78,11 +78,19 @@ product rules. The test is `proven` only when all of the following hold:
    can execute concurrently without state, event, receipt, or descriptor
    cross-write. A command target may never fall back to another instance with
    the same `module_id`.
+6. The `institution-migration-v1` evidence bundle binds manifest, inputs,
+   roots, receipts, snapshot/replay/recovery, and legacy-conformance reports.
+   Preview/stale/deny/no-effect outcomes debit nothing; an accepted effect has
+   exactly one debit and receipt; retries and replay neither double-charge nor
+   create replay credit.
+7. Post-commit external effects first enter a durable outbox/effect ledger.
+   `(world_id, execution_receipt_id, effect_id)` is the idempotency key; crash
+   recovery may redeliver an unacknowledged record, while canonical replay
+   never performs the external business effect again.
 
-Until this test is proven, native Alliance/War/Governance/EconomicContract
-surfaces remain `current` compatibility behavior and open Institution
-extensibility remains `target`; an existing native vertical slice is not
-evidence that a new Institution can be added without Kernel changes.
+Until this test is proven, Alliance/EconomicContract remain compatibility
+surfaces, War remains deferred, Governance remains a Kernel guardrail, and
+open Institution extensibility remains `target`.
 
 ### 6.2 Unified ExecutionTransaction (architecture P0)
 
@@ -104,7 +112,11 @@ view. A successful transition publishes state, events, receipt, and execution
 commitment at one commit point. Any failed invariant, budget, artifact,
 serialization, or persistence check discards the staged view and publishes
 only a stable rejected/fault disposition. External non-rollbackable effects
-are receipt-driven after commit, never an implicit pre-commit write.
+are receipt-driven after commit through a durable outbox/effect ledger. Each
+record binds the execution receipt, roots, intent hash, dispatch/ack state,
+idempotency key, and observed external receipt. Recovery may redeliver an
+unacknowledged record; canonical replay rebuilds ledger state without repeating
+the external business effect.
 
 The migration is incremental: first route one existing command family and its
 tick/replay fixtures through the boundary, then widen coverage while keeping
@@ -115,15 +127,18 @@ dynamic World Database.
 ### 6.3 Command-path module-instance completeness
 
 Instance identity is an authorization and addressing key, not merely a
-persistence field. The identity tuple is `(world_id, module_id, instance_id,
-artifact_hash, schema_version)`. Install, upgrade, tick, event routing, and
-restore already preserve part of this identity; direct/trusted command lookup,
+persistence field. The stable logical key is `(world_id, module_id,
+instance_id)`; `artifact_hash/schema_version/activation_epoch` is a separately
+versioned binding at an execution height. Install, upgrade, tick, event routing,
+and restore already preserve part of this identity; direct/trusted command lookup,
 state updates, emitted events, receipt linkage, and machine descriptors remain
 `partial` until every path carries the same target.
 
-The target command path validates world and module identity, artifact/schema
-version, activation, owner/subject, capability, and budget before fixing the
-instance target into the staged command. State lookup, event, receipt,
+The target command path validates the logical key and active artifact/schema/
+activation binding, owner/subject, capability, and budget before fixing the
+instance target and binding digest into the staged command. Upgrades append a
+version-lineage record keyed by execution height; restore/replay uses the
+historical binding rather than today's artifact. State lookup, event, receipt,
 snapshot, replay, and descriptor projection then use that fixed target. Missing,
 conflicting, inactive, unauthorized, or state-mismatched targets fail closed
 before the first effect; there is no global `module_id` fallback. Agent-facing
