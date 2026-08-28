@@ -530,7 +530,7 @@ describe("pixel world host", () => {
 
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -548,7 +548,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -566,61 +566,44 @@ describe("pixel world host", () => {
     });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("keeps Objective and Player Leverage as supporting cells around one labelled dominant Next Move CTA", async () => {
+  it("flattens Shell Lite into one dominant Next Move and grouped supporting context", async () => {
     useTestRustRenderState();
-    await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
-    );
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
 
-    await waitFor(() => {
-      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
-    });
+    await waitFor(() => { expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument(); });
 
-    const strip = document.querySelector('[data-viewer-overlay="next-move"]');
-    expect(strip).toBeTruthy();
-    expect(strip.querySelectorAll(".pixel-world-command-cell")).toHaveLength(3);
-    const objective = strip.querySelector(".pixel-world-command-cell--objective");
-    const nextMove = strip.querySelector(".pixel-world-command-cell--next");
-    const leverage = strip.querySelector(".pixel-world-command-cell--leverage");
-    expect(objective).toHaveTextContent("Objective");
-    expect(leverage).toHaveTextContent("Player Leverage");
-    expect(objective.querySelectorAll("a,button")).toHaveLength(0);
-    expect(leverage.querySelectorAll("a,button")).toHaveLength(0);
-    const ctas = nextMove.querySelectorAll("a,button");
-    expect(ctas).toHaveLength(1);
-    expect(ctas[0]).toHaveAttribute("aria-label", expect.stringContaining("Next Move"));
+    const strip = document.querySelector('[data-viewer-overlay="next-move"]'); expect(strip).toBeTruthy();
+    const primary = strip.querySelector('[data-shell-region="next-move-primary"]');
+    const supporting = strip.querySelector('[data-shell-region="supporting-context"]');
+    expect(primary).toBeTruthy(); expect(supporting).toBeTruthy();
+    expect(primary.parentElement).toBe(strip); expect(supporting.parentElement).toBe(strip);
+    expect(strip.children).toHaveLength(2);
+
+    expect(primary).toHaveTextContent("Next Move"); expect(primary).toHaveTextContent("Build smelter mk1"); expect(primary).toHaveTextContent("Missing Material");
+    const ctas = primary.querySelectorAll("a,button");
+    expect(ctas).toHaveLength(1); expect(ctas[0]).toHaveAttribute("aria-label", expect.stringContaining("Next Move"));
+    expect(strip.querySelectorAll("a,button")).toHaveLength(1);
+
+    expect(supporting).toHaveTextContent("Objective"); expect(supporting).toHaveTextContent("Recover sustainable capability");
+    expect(supporting).toHaveTextContent("Player Leverage"); expect(supporting).toHaveTextContent("Agent 0");
+    expect(supporting.querySelectorAll("a,button")).toHaveLength(0);
+    expect(supporting).not.toHaveTextContent(/Power|Data|Consensus|Trust|Economy/i);
+    expect(strip).not.toHaveTextContent(/material_shortage|world_constraint|completed_no_progress/i);
+    expect(screen.getByText("Action Receipt")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("shows the explicit unavailable surface when renderer deferral is requested", async () => {
-    const { core } = await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
-    });
-
-    expect(runtimeMock.mountCalls).toBe(0);
-    expect(screen.getByText("World Command Board")).toBeInTheDocument();
-    expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    await waitFor(() => { expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument(); });
+    expect(runtimeMock.mountCalls).toBe(0); expect(screen.getByText("World Command Board")).toBeInTheDocument();
+    expect(screen.getAllByText(/pixel_world_renderer_deferred/i).length).toBeGreaterThan(0);
     expect(document.querySelector('[data-viewer-overlay="renderer-unavailable"]')).toHaveTextContent("Graphics unavailable in this browser");
-    expect(document.querySelector('.pixel-world-render-diagnostics[data-renderer-state="unavailable"]')).toHaveTextContent("pixel_world_render_state_unavailable");
-    expect(screen.queryByText("Recover sustainable capability")).not.toBeInTheDocument();
-    expect(screen.queryByText("Build smelter mk1")).not.toBeInTheDocument();
-    expect(screen.queryByText("Action Receipt")).not.toBeInTheDocument();
-    const diagnostics = screen.getByText("Renderer Diagnostics").closest("details");
-    expect(diagnostics.open).toBe(false);
-    expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
-
+    expect(document.querySelector('.pixel-world-render-diagnostics[data-renderer-state="unavailable"]')).toHaveTextContent("pixel_world_renderer_deferred");
+    expect(screen.queryByText("Recover sustainable capability")).not.toBeInTheDocument(); expect(screen.queryByText("Build smelter mk1")).not.toBeInTheDocument(); expect(screen.queryByText("Action Receipt")).not.toBeInTheDocument();
+    const diagnostics = screen.getByText("Renderer Diagnostics").closest("details"); expect(diagnostics.open).toBe(false); expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument();
     screen.getByRole("button", { name: "Reattach Embedded Renderer" }).click();
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0);
-    });
-    expect(runtimeMock.mountCalls).toBe(0);
-    expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
+    await waitFor(() => { expect(screen.getAllByText(/pixel_world_render_state_unavailable/i).length).toBeGreaterThan(0); });
+    expect(runtimeMock.mountCalls).toBe(0); expect(document.querySelectorAll(".pixel-world-fragment-terrain")).toHaveLength(0);
     expect(core.state.lastError).toContain("pixel world Rust render-state derivation is unavailable");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -730,6 +713,17 @@ describe("pixel world host", () => {
     expect(retryButton).toHaveTextContent(/Retry Renderer/i);
     expect(retryButton.closest("details")).toBeNull();
     expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("reattaches the deferred renderer only after explicit retry", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => buildTestRustRenderState(input));
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    await waitFor(() => { expect(screen.getByText("Graphics unavailable in this browser")).toBeInTheDocument(); });
+    expect(runtimeMock.mountCalls).toBe(0); expect(document.querySelector("#pixel-world-embedded-runtime-canvas")).toBeNull();
+    screen.getByRole("button", { name: "Retry Renderer" }).click();
+    await waitFor(() => { expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument(); });
+    expect(runtimeMock.mountCalls).toBe(1); expect(core.state.pixelWorldRuntimeStatus).toBe("ready");
+    expect(document.querySelector("#pixel-world-embedded-runtime-canvas")).toBeTruthy();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-attaches the embedded renderer for test_api pages unless deferral is explicit", async () => {
@@ -987,7 +981,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1010,7 +1004,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1029,7 +1023,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1064,7 +1058,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1099,7 +1093,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1132,7 +1126,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1160,7 +1154,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1203,7 +1197,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1350,7 +1344,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1368,7 +1362,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       emptyWorldSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer&pixel_world_visual_fixture=selected_blocker",
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
     );
 
     await waitFor(() => {
@@ -1441,7 +1435,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     const { core } = await renderPixelWorldHost(
       sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
     core.applySelection({ kind: "agent", id: "agent-0" });
     core.state.lastChatFeedback = {
@@ -1499,7 +1493,7 @@ describe("pixel world host", () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
       emptyWorldSnapshot(),
-      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+      "?test_api=1&connect=0&locale=en",
     );
 
     await waitFor(() => {
@@ -1529,7 +1523,7 @@ describe("pixel world host", () => {
     activeCleanup?.();
     activeCleanup = null;
     vi.resetModules();
-    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
     window.localStorage.clear();
     document.body.innerHTML = "";
 

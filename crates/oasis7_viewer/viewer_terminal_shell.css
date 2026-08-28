@@ -207,28 +207,71 @@ body {
 [data-viewer-overlay="next-move"] {
   position: absolute;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.85fr);
   z-index: 24;
   left: 16px;
   right: auto;
   bottom: 120px;
   width: min(760px, calc(100vw - 32px));
+  gap: 10px;
   pointer-events: auto;
 }
 
-[data-viewer-overlay="next-move"] .pixel-world-command-cell--objective,
-[data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage {
-  opacity: 0.78;
+[data-viewer-overlay="next-move"] [data-shell-region="next-move-primary"] {
+  min-width: 0;
+  min-height: 132px;
+  opacity: 1;
 }
 
-[data-viewer-overlay="next-move"] .pixel-world-command-cell--next {
-  position: relative;
-  z-index: 1;
+[data-viewer-overlay="next-move"] [data-shell-region="supporting-context"] {
+  min-width: 0;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  opacity: 0.86;
+  border-color: rgba(99, 179, 255, 0.26);
+  background:
+    linear-gradient(135deg, rgba(99, 179, 255, 0.08), rgba(255, 255, 255, 0.012) 56%),
+    rgba(8, 14, 12, 0.64);
+}
+
+[data-viewer-overlay="next-move"] [data-shell-region="next-move-primary"] {
   border-color: color-mix(in srgb, var(--accent, #f4c15d) 72%, transparent);
   box-shadow: 0 12px 32px rgb(0 0 0 / 34%);
 }
 
-[data-viewer-overlay="next-move"] .pixel-world-command-cell--next .pixel-world-command-cell__action {
+[data-viewer-overlay="next-move"] [data-shell-region="supporting-context"] .pixel-world-shell-context-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+[data-viewer-overlay="next-move"] [data-shell-region="supporting-context"] .pixel-world-shell-context-group--leverage {
+  padding-top: 8px;
+  border-top: 1px solid rgba(152, 177, 150, 0.15);
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-shell-context-group__agent {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  color: #d8e5dd;
+  font-size: 12px;
+}
+
+[data-viewer-overlay="next-move"] .pixel-world-shell-context-group__agent strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+[data-viewer-overlay="next-move"] [data-shell-region="next-move-primary"] .pixel-world-command-cell__action {
   display: flex;
   min-height: 44px;
   align-items: center;
@@ -598,7 +641,7 @@ body {
   }
 
   [data-viewer-overlay="next-move"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.45fr) minmax(180px, 0.8fr);
     left: 10px;
     right: auto;
     bottom: 124px;
@@ -744,11 +787,18 @@ body {
   [data-viewer-overlay="next-move"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: calc(100vw - 20px);
-    max-height: min(30dvh, 220px);
+    /* Reserve the compact receipt's 96px plus an explicit 8px clearance;
+     * long English context can overflow the capped grid by roughly 32px. */
+    bottom: calc(96px + 48px);
+    max-height: min(38dvh, 280px);
   }
 
-  [data-viewer-overlay="next-move"] .pixel-world-command-cell--objective {
-    grid-column: 1;
+  [data-viewer-overlay="next-move"] .pixel-world-command-cell--next {
+    grid-column: 1 / -1;
+  }
+
+  [data-viewer-overlay="next-move"] [data-shell-region="next-move-primary"] {
+    grid-column: 1 / -1;
     grid-row: 1;
   }
 
@@ -756,14 +806,20 @@ body {
     margin-right: 80px;
   }
 
-  [data-viewer-overlay="next-move"] .pixel-world-command-cell--leverage {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  [data-viewer-overlay="next-move"] .pixel-world-command-cell--next {
+  [data-viewer-overlay="next-move"] [data-shell-region="supporting-context"] {
     grid-column: 1 / -1;
     grid-row: 2;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+  }
+
+  [data-viewer-overlay="next-move"] [data-shell-region="supporting-context"] .pixel-world-shell-context-group--leverage {
+    padding-top: 0;
+    border-top: 0;
+    border-left: 1px solid rgba(152, 177, 150, 0.15);
+    padding-left: 12px;
   }
 
   .world-feed__event {

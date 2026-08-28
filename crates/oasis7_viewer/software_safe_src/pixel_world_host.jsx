@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, on
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge, probePixelWorldWebgl2Surface } from "./pixel_world_runtime_loader.js";
 import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js"; import { createPixelWorldFocusController } from "./pixel_world_focus_controller.js";
+import { applyPixelWorldRendererRoute, createPixelWorldRendererRouteSignals, resolvePixelWorldRendererRoute } from "./pixel_world_renderer_route.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 export { pixelWorldSelectedBlockerVisualFixture };
@@ -10,7 +11,6 @@ function tr(locale, zh, en) {
 }
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
 const PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID = "pixel-world-renderer-unavailable-message";
-const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const pixelWorldFocusUiSessionState = {
   focusMode: false,
   commandDrawerOpen: false,
@@ -49,6 +49,11 @@ function safeNumber(value, fallback = 0) {
 }
 function pixelWorldAgentIdentity(agent, fallbackId = "") {
   return String(agent?.name || agent?.label || agent?.id || fallbackId || "Agent").trim();
+}
+function pixelWorldReadableAgentLabel(agent, fallbackId = "") {
+  const id = String(agent?.id || fallbackId || "").trim(); const explicitLabel = String(agent?.name || agent?.label || "").trim();
+  if (explicitLabel && explicitLabel !== id) return explicitLabel; const numericAgentId = id.match(/^agent[-_](\d+)$/i);
+  return numericAgentId ? `Agent ${numericAgentId[1]}` : explicitLabel || id;
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -689,6 +694,7 @@ export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
 }
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface; const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
+  const activeAgentId = () => String(surface()?.active_agent_id || "").trim(); const activeAgent = () => props.renderState().agents.find((agent) => agent.id === activeAgentId()); const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId()) || tr(props.locale(), "未选择 Agent", "No Agent selected");
   const executableNextMoveKinds = new Set([
     "gameplay_action",
     "claim_first_agent",
@@ -740,18 +746,12 @@ function PixelWorldCommercialHud(props) {
     <Show when={surface()}>
       <div
         class="pixel-world-command-strip" data-viewer-overlay="next-move"
-        data-active-agent={surface().active_agent_id || ""}
+        data-active-agent={activeAgentId()}
         data-leverage-state={surface().player_leverage.state}
       >
-        <div class="pixel-world-command-cell pixel-world-command-cell--objective">
-          <div class="pixel-world-command-cell__label">
-            {tr(props.locale(), "目标", "Objective")}
-          </div>
-          <div class="pixel-world-command-cell__value">{surface().objective.title}</div>
-          <div class="pixel-world-command-cell__detail">{surface().objective.detail}</div>
-        </div>
         <div
-          class="pixel-world-command-cell pixel-world-command-cell--next"
+          class="pixel-world-command-cell pixel-world-command-cell--next pixel-world-shell-region pixel-world-shell-region--primary"
+          data-shell-region="next-move-primary"
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
           data-blocker-present={surface().blocker.label ? "true" : "false"}
@@ -783,18 +783,18 @@ function PixelWorldCommercialHud(props) {
               ? surface().next_action.label
               : nextMoveRoutesToGameplayDetails()
                 ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
-                : tr(props.locale(), "去指挥面板", "Go to Command")}
+              : tr(props.locale(), "去指挥面板", "Go to Command")}
           </a>
         </div>
-        <div class="pixel-world-command-cell pixel-world-command-cell--leverage">
-          <div class="pixel-world-command-cell__label">
-            {tr(props.locale(), "玩家杠杆", "Player Leverage")}
+        <div class="pixel-world-command-cell pixel-world-shell-region pixel-world-shell-region--supporting" data-shell-region="supporting-context">
+          <div class="pixel-world-shell-context-group pixel-world-shell-context-group--objective">
+            <div class="pixel-world-command-cell__label">{tr(props.locale(), "目标", "Objective")}</div>
+            <div class="pixel-world-command-cell__value">{surface().objective.title}</div><div class="pixel-world-command-cell__detail">{surface().objective.detail}</div>
           </div>
-          <div class="pixel-world-command-cell__value">{surface().player_leverage.summary}</div>
-          <div class="pixel-world-command-cell__detail">
-            {surface().active_agent_id
-              ? `${surface().player_leverage.label} · agent=${surface().active_agent_id}`
-              : surface().player_leverage.label}
+          <div class="pixel-world-shell-context-group pixel-world-shell-context-group--leverage">
+            <div class="pixel-world-command-cell__label">{tr(props.locale(), "玩家杠杆", "Player Leverage")}</div>
+            <div class="pixel-world-command-cell__value">{surface().player_leverage.summary}</div><div class="pixel-world-command-cell__detail">{surface().player_leverage.label}</div>
+            <div class="pixel-world-shell-context-group__agent" data-selected-agent-label={activeAgentLabel()}><span class="pixel-world-command-cell__label">{tr(props.locale(), "当前 Agent", "Selected Agent")}</span><strong>{activeAgentLabel()}</strong></div>
           </div>
         </div>
       </div>
@@ -1210,6 +1210,7 @@ function PixelWorldFocusCommandSurface(props) {
 export function PixelWorldHost(props) {
   const locale = () => props.locale ?? core.state.uiLocale;
   const visualFixtureName = installPixelWorldVisualFixtureHook();
+  const rendererRoute = resolvePixelWorldRendererRoute();
   const [coreRevision, setCoreRevision] = createSignal(0);
   const selectedEntity = () => {
     coreRevision();
@@ -1224,10 +1225,8 @@ export function PixelWorldHost(props) {
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState();
   const visualState = () => pixelWorldVisualState(renderState());
-  const [rendererStatus, setRendererStatus] = createSignal("booting");
-  const [rendererFatal, setRendererFatal] = createSignal(null);
+  const [rendererStatus, setRendererStatus, rendererFatal, setRendererFatal, runtimeSource, setRuntimeSource] = createPixelWorldRendererRouteSignals(rendererRoute, createSignal);
   const [hoverSelection, setHoverSelection] = createSignal(null);
-  const [runtimeSource, setRuntimeSource] = createSignal("loading");
   const [cameraState, setCameraState] = createSignal(null);
   const [renderDtoOpen, setRenderDtoOpen] = createSignal(false);
   const [focusMode, setFocusMode] = createSignal(pixelWorldFocusUiSessionState.focusMode);
@@ -1416,6 +1415,7 @@ export function PixelWorldHost(props) {
     adapter().simulateFatal("simulated embedded renderer fatal");
   }
   onMount(() => {
+    applyPixelWorldRendererRoute(rendererRoute, core.updatePixelWorldRuntimeMeta);
     function handleKeyDown(event) {
       focusController.handleKeyDown(event);
     }

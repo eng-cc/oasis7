@@ -235,7 +235,7 @@ afterEach(() => {
 describe("pixel world host remediation contracts", () => {
   it("renders exactly one visible receipt representation in Cinematic View", async () => {
     runtimeMock.deriveRenderState = vi.fn(renderStateFor);
-    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
     await waitFor(() => expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument());
     screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"));
@@ -262,7 +262,7 @@ describe("pixel world host remediation contracts", () => {
       state.selection = { kind: "agent", id: "agent-0" };
       return state;
     });
-    await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
     await waitFor(() => expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument());
     screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => expect(document.querySelector('[data-focus-minimap="true"]')).not.toBeNull());
@@ -289,7 +289,7 @@ describe("pixel world host remediation contracts", () => {
       disabled_reason: null,
     }];
     runtimeMock.deriveRenderState = vi.fn(renderStateFor);
-    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
     await waitFor(() => expect(screen.getAllByText("Claim starter OC")).toHaveLength(2));
     const dispatchSpy = vi.spyOn(core, "sendGameplayAction");
     const nextMove = screen.getByRole("link", { name: "Next Move: Claim starter OC" });
@@ -312,7 +312,7 @@ describe("pixel world host remediation contracts", () => {
       disabled_reason: null,
     }];
     runtimeMock.deriveRenderState = vi.fn(renderStateFor);
-    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
     await waitFor(() => expect(screen.getAllByText("Claim starter OC")).toHaveLength(2));
     const dispatchSpy = vi.spyOn(core, "sendGameplayAction");
     core.state.lastGameplayActionFeedback = { kind: "gameplay_action", action: "claim_starter_oc", agentId: "agent-1", stage: "registering", accepted: false };
@@ -326,7 +326,7 @@ describe("pixel world host remediation contracts", () => {
 
   it("shows connected world-feed unavailability separately from stale data", async () => {
     runtimeMock.deriveRenderState = vi.fn(renderStateFor);
-    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer");
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
     await waitFor(() => expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument());
     core.state.connectionStatus = "connected";
     core.state.worldFeed = { ...core.state.worldFeed, status: "unavailable", stale: true, unavailableReason: "source_unavailable" };

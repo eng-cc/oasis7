@@ -13,9 +13,14 @@ const screenshotPath = join(outDir, "fragment-rendered-visual.png");
 const actionReceiptScreenshotPath = join(outDir, "action-receipt-visual.png");
 const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-visual.png");
 const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visual.png");
+const shellLiteDesktopScreenshotPath = join(outDir, "shell-lite-desktop-visual.png");
+const shellLiteMobileScreenshotPath = join(outDir, "shell-lite-mobile-visual.png");
+const shellLiteCjkScreenshotPath = join(outDir, "shell-lite-cjk-mobile-visual.png");
+const rendererFallbackScreenshotPath = join(outDir, "renderer-fallback-visual.png");
 const summaryPath = join(outDir, "summary.json");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `pixel-world-fragment-visual-${process.pid}`;
+const shellLiteOnly = process.argv.includes("--shell-lite-only");
 const summary = {
   status: "running",
   startedAt: new Date().toISOString(),
@@ -166,7 +171,8 @@ function closeBrowser() {
   });
 }
 
-function visualProbeScript() {
+function visualProbeScript(options = {}) {
+  const shellLiteProbe = options.shellLiteOnly === true ? "true" : "false";
   return String.raw`
     (async () => {
       const snapshot = {
@@ -359,6 +365,54 @@ function visualProbeScript() {
         badges: badges(),
       };
 
+      if (${shellLiteProbe}) {
+        const commandStrip = await waitFor(() => document.querySelector('[data-viewer-overlay="next-move"]'));
+        const directRegions = Array.from(commandStrip.children)
+          .filter((element) => element.matches("[data-shell-region]"));
+        const primary = commandStrip.querySelector('[data-shell-region="next-move-primary"]');
+        const supporting = commandStrip.querySelector('[data-shell-region="supporting-context"]');
+        const primaryControls = primary ? Array.from(primary.querySelectorAll("a,button")) : [];
+        const supportingControls = supporting ? Array.from(supporting.querySelectorAll("a,button")) : [];
+        const allControls = Array.from(commandStrip.querySelectorAll("a,button"));
+        const selectedAgent = supporting?.querySelector("[data-selected-agent-label]");
+        const receiptElement = document.querySelector(".pixel-world-action-receipt");
+        const viewport = {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        };
+        const shellLite = {
+          directRegionCount: directRegions.length,
+          directRegionNames: directRegions.map((element) => element.dataset.shellRegion || null),
+          directChildCount: commandStrip.children.length,
+          primaryIndex: directRegions.indexOf(primary),
+          supportingIndex: directRegions.indexOf(supporting),
+          primaryCtaCount: primaryControls.length,
+          primaryCtaLabels: primaryControls.map((element) => element.textContent.trim()),
+          supportingControlCount: supportingControls.length,
+          allControlCount: allControls.length,
+          primaryRect: primary ? rectOf(primary) : null,
+          supportingRect: supporting ? rectOf(supporting) : null,
+          primaryOpacity: primary ? Number.parseFloat(getComputedStyle(primary).opacity) : null,
+          supportingOpacity: supporting ? Number.parseFloat(getComputedStyle(supporting).opacity) : null,
+          primaryDominates: Boolean(primary && supporting && rectOf(primary).width >= rectOf(supporting).width),
+          objectiveText: textOf(".pixel-world-shell-context-group--objective", supporting),
+          leverageText: textOf(".pixel-world-shell-context-group--leverage", supporting),
+          selectedAgentLabel: selectedAgent?.dataset.selectedAgentLabel || null,
+          selectedAgentText: selectedAgent?.textContent.trim() || null,
+          selectedAgentReadable: Boolean(selectedAgent?.dataset.selectedAgentLabel && !/^agent-[a-z0-9_-]+$/i.test(selectedAgent.dataset.selectedAgentLabel)),
+          receipt: receiptOf(),
+          supportingReceiptGapPx: supporting && receiptElement ? Math.round(receiptElement.getBoundingClientRect().top - supporting.getBoundingClientRect().bottom) : null,
+          receiptLabel: textOf(".pixel-world-action-receipt__label", receiptElement),
+          receiptDistinct: Boolean(receiptElement && receiptElement.parentElement !== commandStrip && !receiptElement.closest('[data-viewer-overlay="next-move"]')),
+          documentLocale: document.documentElement.lang || null,
+          viewport,
+          horizontalOverflowPx: Math.max(0, viewport.scrollWidth - viewport.clientWidth),
+        };
+        return JSON.stringify({ ready, shellLite });
+      }
+
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
       await waitFor(() => {
         const markers = document.querySelectorAll(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
@@ -435,6 +489,198 @@ function visualProbeScript() {
           nextMoveFocus,
           badges: badges(),
         },
+      });
+    })()
+  `;
+}
+
+function shellLiteViewportProbeScript() {
+  return String.raw`
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 12000) => {
+        const deadline = Date.now() + timeoutMs;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const value = predicate();
+            if (value) {
+              return value;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+          await sleep(100);
+        }
+        throw lastError || new Error("timed out waiting for Shell Lite viewport probe condition");
+      };
+      const state = () => window.__AW_TEST__?.getState?.() || {};
+      const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      };
+      const receiptOf = () => {
+        const receipt = document.querySelector(".pixel-world-action-receipt");
+        if (!receipt) {
+          return null;
+        }
+        return {
+          present: receipt.dataset.receiptPresent || null,
+          state: receipt.dataset.receiptState || null,
+          confidence: receipt.dataset.receiptConfidence || null,
+          label: textOf(".pixel-world-action-receipt__label", receipt),
+          title: textOf(".pixel-world-action-receipt__title", receipt),
+          rect: rectOf(receipt),
+        };
+      };
+
+      await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const commandStrip = await waitFor(() => document.querySelector('[data-viewer-overlay="next-move"]'));
+      const directChildren = Array.from(commandStrip.children);
+      const directRegions = directChildren.filter((element) => element.matches("[data-shell-region]"));
+      const primary = commandStrip.querySelector('[data-shell-region="next-move-primary"]');
+      const supporting = commandStrip.querySelector('[data-shell-region="supporting-context"]');
+      const primaryControls = primary ? Array.from(primary.querySelectorAll("a,button")) : [];
+      const supportingControls = supporting ? Array.from(supporting.querySelectorAll("a,button")) : [];
+      const allControls = Array.from(commandStrip.querySelectorAll("a,button"));
+      const selectedAgent = supporting?.querySelector("[data-selected-agent-label]");
+      const receiptElement = document.querySelector(".pixel-world-action-receipt");
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+      const primaryRect = primary ? rectOf(primary) : null;
+      const supportingRect = supporting ? rectOf(supporting) : null;
+      return JSON.stringify({
+        runtimeStatus: state().pixelWorldRuntimeStatus,
+        shellLite: {
+          directRegionCount: directRegions.length,
+          directRegionNames: directRegions.map((element) => element.dataset.shellRegion || null),
+          directChildCount: directChildren.length,
+          primaryIndex: directRegions.indexOf(primary),
+          supportingIndex: directRegions.indexOf(supporting),
+          primaryCtaCount: primaryControls.length,
+          primaryCtaLabels: primaryControls.map((element) => element.textContent.trim()),
+          supportingControlCount: supportingControls.length,
+          allControlCount: allControls.length,
+          primaryRect,
+          supportingRect,
+          primaryOpacity: primary ? Number.parseFloat(getComputedStyle(primary).opacity) : null,
+          supportingOpacity: supporting ? Number.parseFloat(getComputedStyle(supporting).opacity) : null,
+          primaryDominates: Boolean(primaryRect && supportingRect && primaryRect.width >= supportingRect.width),
+          objectiveText: textOf(".pixel-world-shell-context-group--objective", supporting),
+          leverageText: textOf(".pixel-world-shell-context-group--leverage", supporting),
+          selectedAgentLabel: selectedAgent?.dataset.selectedAgentLabel || null,
+          selectedAgentText: selectedAgent?.textContent.trim() || null,
+          selectedAgentReadable: Boolean(selectedAgent?.dataset.selectedAgentLabel && !/^agent-[a-z0-9_-]+$/i.test(selectedAgent.dataset.selectedAgentLabel)),
+          receipt: receiptOf(),
+          supportingReceiptGapPx: supporting && receiptElement ? Math.round(receiptElement.getBoundingClientRect().top - supporting.getBoundingClientRect().bottom) : null,
+          receiptDistinct: Boolean(receiptElement && receiptElement.parentElement !== commandStrip && !receiptElement.closest('[data-viewer-overlay="next-move"]')),
+          documentLocale: document.documentElement.lang || null,
+          viewport,
+          horizontalOverflowPx: Math.max(0, viewport.scrollWidth - viewport.clientWidth),
+        },
+      });
+    })()
+  `;
+}
+
+function rendererFallbackProbeScript() {
+  return String.raw`
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const waitFor = async (predicate, timeoutMs = 12000) => {
+        const deadline = Date.now() + timeoutMs;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const value = predicate();
+            if (value) {
+              return value;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+          await sleep(100);
+        }
+        throw lastError || new Error("timed out waiting for renderer-unavailable recovery surface");
+      };
+      const state = () => window.__AW_TEST__?.getState?.() || {};
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      };
+      let fallback;
+      try {
+        fallback = await waitFor(() => document.querySelector('[data-viewer-overlay="renderer-unavailable"][data-renderer-state="unavailable"]'));
+      } catch (error) {
+        const diagnostics = document.querySelector(".pixel-world-render-diagnostics");
+        throw new Error([
+          "renderer deferral route did not become unavailable",
+          error instanceof Error ? error.message : String(error),
+          JSON.stringify({
+            query: window.location.search,
+            runtimeStatus: state().pixelWorldRuntimeStatus ?? null,
+            runtimeSource: state().pixelWorldRuntimeSource ?? null,
+            fatal: state().pixelWorldFatal || null,
+            rendererOverlayState: document.querySelector('[data-viewer-overlay="renderer-unavailable"]')?.dataset.rendererState || null,
+            diagnosticsState: diagnostics?.dataset.rendererState || null,
+            diagnosticsOpen: diagnostics?.open ?? null,
+            shellLitePresent: Boolean(document.querySelector('[data-viewer-overlay="next-move"]')),
+            actionReceiptPresent: Boolean(document.querySelector(".pixel-world-action-receipt")),
+            canvasPresent: Boolean(document.querySelector("#pixel-world-embedded-runtime-canvas")),
+          }, null, 2),
+        ].join("\n"));
+      }
+      const diagnostics = document.querySelector(".pixel-world-render-diagnostics");
+      const diagnosticText = diagnostics?.textContent.trim() || null;
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+      return JSON.stringify({
+        runtimeStatus: state().pixelWorldRuntimeStatus,
+        runtimeSource: state().pixelWorldRuntimeSource,
+        fatal: state().pixelWorldFatal || null,
+        fallback: {
+          visible: getComputedStyle(fallback).display !== "none",
+          text: fallback.textContent.trim(),
+          rect: rectOf(fallback),
+          retryText: fallback.querySelector("button")?.textContent.trim() || null,
+          retryCount: fallback.querySelectorAll("button").length,
+          rawFatalPromoted: /pixel_world_|CONTEXT_LOST_WEBGL|fatal/i.test(fallback.textContent),
+        },
+        diagnostics: {
+          present: Boolean(diagnostics),
+          open: diagnostics?.open ?? null,
+          rendererState: diagnostics?.dataset.rendererState || null,
+          text: diagnosticText,
+          rawFatalFolded: Boolean(diagnostics && diagnostics.open === false && /pixel_world_|fatal/i.test(diagnosticText || "")),
+        },
+        shellLitePresent: Boolean(document.querySelector('[data-viewer-overlay="next-move"]')),
+        actionReceiptPresent: Boolean(document.querySelector(".pixel-world-action-receipt")),
+        canvasPresent: Boolean(document.querySelector("#pixel-world-embedded-runtime-canvas")),
+        viewport,
+        horizontalOverflowPx: Math.max(0, viewport.scrollWidth - viewport.clientWidth),
       });
     })()
   `;
@@ -731,6 +977,101 @@ function mobileFocusOverlayProbeScript() {
   `;
 }
 
+function assertShellLiteViewport(label, probe, expectedWidth) {
+  const runtimeStatus = probe.runtimeStatus || probe.ready?.runtimeStatus;
+  assert(runtimeStatus === "ready", `${label} runtime did not stay ready`, probe);
+  const shell = probe.shellLite;
+  assert(shell?.directChildCount === 2, `${label} command strip must have exactly two direct children`, probe);
+  assert(shell?.directRegionCount === 2, `${label} command strip must have exactly two semantic regions`, probe);
+  assert(
+    JSON.stringify(shell.directRegionNames) === JSON.stringify(["next-move-primary", "supporting-context"]),
+    `${label} semantic regions are not primary-then-supporting`,
+    probe,
+  );
+  assert(shell.primaryIndex === 0 && shell.supportingIndex === 1, `${label} primary region must precede supporting context`, probe);
+  assert(shell.primaryCtaCount === 1, `${label} primary region must expose one CTA`, probe);
+  assert(shell.allControlCount === 1, `${label} command strip must expose one total CTA`, probe);
+  assert(shell.supportingControlCount === 0, `${label} supporting context must remain noninteractive`, probe);
+  assert(shell.primaryDominates === true, `${label} primary region must not be narrower than supporting context`, probe);
+  assert(/Objective|目标/.test(shell.objectiveText || ""), `${label} objective context is missing`, probe);
+  assert(/Player Leverage|玩家杠杆/.test(shell.leverageText || ""), `${label} player leverage context is missing`, probe);
+  assert(shell.selectedAgentReadable === true, `${label} selected-agent label is not player-readable`, probe);
+  assert(shell.selectedAgentLabel && !/^agent-[a-z0-9_-]+$/i.test(shell.selectedAgentLabel), `${label} selected-agent label exposed a raw internal ID`, probe);
+  assert(shell.receiptDistinct === true, `${label} Action Receipt is not distinct from Shell Lite`, probe);
+  assert(/Action Receipt|行动回执/.test(shell.receiptLabel || shell.receipt?.label || ""), `${label} Action Receipt label is missing`, probe);
+  assert(shell.viewport?.width === expectedWidth, `${label} probe used the wrong viewport width`, probe);
+  assert(shell.horizontalOverflowPx <= 2, `${label} Shell Lite has horizontal overflow`, probe);
+  if (expectedWidth <= 640) {
+    assert(shell.supportingReceiptGapPx >= 8, `${label} supporting context must clear Action Receipt by at least 8px`, probe);
+  }
+}
+
+function assertCjkShellLiteViewport(probe) {
+  const shell = probe.shellLite;
+  assert(shell.documentLocale === "zh-CN", "CJK Shell Lite did not apply zh-CN document locale", probe);
+  assert(/目标/.test(shell.objectiveText || ""), "CJK Shell Lite objective label is not localized", probe);
+  assert(/玩家杠杆/.test(shell.leverageText || ""), "CJK Shell Lite leverage label is not localized", probe);
+  assert(/行动回执/.test(shell.receiptLabel || shell.receipt?.label || ""), "CJK Shell Lite receipt label is not localized", probe);
+}
+
+function assertRendererFallback(probe, expectedWidth) {
+  assert(probe.runtimeStatus === "unavailable", "renderer deferral did not expose unavailable runtime state", probe);
+  assert(probe.fallback?.visible === true, "renderer-unavailable recovery surface is not visible", probe);
+  assert(/Graphics unavailable in this browser|此浏览器中的图形不可用/.test(probe.fallback.text || ""), "renderer-unavailable copy is not player-readable", probe);
+  assert(probe.fallback.retryCount === 1, "renderer-unavailable recovery surface must expose one retry control", probe);
+  assert(probe.fallback.rawFatalPromoted === false, "raw renderer fatal details were promoted into recovery copy", probe);
+  assert(probe.diagnostics?.rendererState === "unavailable", "renderer diagnostics did not retain unavailable state", probe);
+  assert(probe.diagnostics?.open === false, "raw renderer diagnostics are not folded by default", probe);
+  assert(probe.diagnostics?.rawFatalFolded === true, "raw renderer fatal details were not retained behind folded diagnostics", probe);
+  assert(probe.shellLitePresent === false, "Shell Lite should not render without a derived world surface", probe);
+  assert(probe.actionReceiptPresent === false, "Action Receipt should not claim a surface without a derived world state", probe);
+  assert(probe.canvasPresent === false, "renderer-unavailable route must not expose a ready canvas", probe);
+  assert(probe.viewport?.width === expectedWidth, "renderer fallback probe used the wrong viewport width", probe);
+  assert(probe.horizontalOverflowPx <= 2, "renderer-unavailable surface has horizontal overflow", probe);
+  assert(probe.fallback.rect?.right <= probe.viewport.clientWidth + 2, "renderer-unavailable surface extends beyond the viewport", probe);
+}
+
+async function runShellLiteOnlyMode(url) {
+  summary.mode = "shell-lite-only";
+  await runAgentBrowserJson(["open", url], { timeout: 45_000 });
+  await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
+  console.log("probing Shell Lite desktop semantic surface");
+  summary.desktopShellLite = await evalJson(visualProbeScript({ shellLiteOnly: true }));
+  assertShellLiteViewport("desktop Shell Lite", summary.desktopShellLite, 1440);
+  await runAgentBrowser(["screenshot", shellLiteDesktopScreenshotPath], { timeout: 20_000 });
+  summary.shellLiteDesktopScreenshot = shellLiteDesktopScreenshotPath;
+
+  await runAgentBrowserJson(["set", "viewport", "390", "844"]);
+  console.log("probing Shell Lite mobile semantic surface");
+  summary.mobileShellLite = await evalJson(shellLiteViewportProbeScript());
+  assertShellLiteViewport("mobile Shell Lite", summary.mobileShellLite, 390);
+  await runAgentBrowser(["screenshot", shellLiteMobileScreenshotPath], { timeout: 20_000 });
+  summary.shellLiteMobileScreenshot = shellLiteMobileScreenshotPath;
+
+  const cjkUrl = new URL(url);
+  cjkUrl.searchParams.set("locale", "zh-CN");
+  await runAgentBrowserJson(["open", cjkUrl.toString()], { timeout: 45_000 });
+  await runAgentBrowserJson(["set", "viewport", "390", "844"]);
+  console.log("probing CJK Shell Lite mobile semantic surface");
+  summary.cjkShellLite = await evalJson(visualProbeScript({ shellLiteOnly: true }));
+  assertShellLiteViewport("CJK Shell Lite", summary.cjkShellLite, 390);
+  assertCjkShellLiteViewport(summary.cjkShellLite);
+  await runAgentBrowser(["screenshot", shellLiteCjkScreenshotPath], { timeout: 20_000 });
+  summary.shellLiteCjkScreenshot = shellLiteCjkScreenshotPath;
+
+  const fallbackUrl = new URL(url);
+  fallbackUrl.searchParams.set("pixel_world_renderer", "defer");
+  await runAgentBrowserJson(["open", fallbackUrl.toString()], { timeout: 45_000 });
+  await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
+  console.log("probing renderer-unavailable recovery surface");
+  summary.rendererFallback = await evalJson(rendererFallbackProbeScript());
+  assertRendererFallback(summary.rendererFallback, 1440);
+  await runAgentBrowser(["screenshot", rendererFallbackScreenshotPath], { timeout: 20_000 });
+  summary.rendererFallbackScreenshot = rendererFallbackScreenshotPath;
+  summary.cjkUrl = cjkUrl.toString();
+  summary.rendererFallbackUrl = fallbackUrl.toString();
+}
+
 ensureAgentBrowser();
 
 const server = createServer(serveFile);
@@ -741,9 +1082,19 @@ try {
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
-  console.log(`opening pixel-world viewer visual smoke: ${url}`);
-  await runAgentBrowserJson(["open", url], { timeout: 45_000 });
-  await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
+  if (shellLiteOnly) {
+    await runShellLiteOnlyMode(url);
+    summary.url = url;
+    summary.status = "passed";
+    summary.completedAt = new Date().toISOString();
+    writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    console.log(`Shell Lite visual smoke passed: ${summaryPath}`);
+    console.log(`desktop screenshot: ${shellLiteDesktopScreenshotPath}`);
+    console.log(`mobile screenshot: ${shellLiteMobileScreenshotPath}`);
+  } else {
+    console.log(`opening pixel-world viewer visual smoke: ${url}`);
+    await runAgentBrowserJson(["open", url], { timeout: 45_000 });
+    await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
 
   console.log("probing wasm bridge and rendered visual hierarchy");
   Object.assign(summary, await evalJson(visualProbeScript()));
@@ -845,6 +1196,7 @@ try {
   console.log(`action receipt screenshot: ${actionReceiptScreenshotPath}`);
   console.log(`mobile action receipt screenshot: ${mobileActionReceiptScreenshotPath}`);
   console.log(`mobile focus overlay screenshot: ${mobileFocusOverlayScreenshotPath}`);
+  }
 } catch (error) {
   summary.status = "failed";
   summary.completedAt = new Date().toISOString();
