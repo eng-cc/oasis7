@@ -273,6 +273,7 @@ run_required_gate_checks() {
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
+  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/rust-required-gate-compile-command-contract.test.sh
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh

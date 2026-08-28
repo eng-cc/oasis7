@@ -3,6 +3,23 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 checker="$repo_root/scripts/check-launcher-p2p-dependency-surface.sh"
+ci_tests="$repo_root/scripts/ci-tests.sh"
+
+required_gate_line='  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh'
+if [[ "$(grep -F -xc -- "$required_gate_line" "$ci_tests" || true)" -ne 1 ]]; then
+  echo "scripts/ci-tests.sh must contain exactly one required-gate invocation: $required_gate_line" >&2
+  exit 1
+fi
+if ! awk -v expected="$required_gate_line" '
+  $0 == "run_required_gate_checks() {" { in_required_gate=1; next }
+  in_required_gate && $0 == expected { found=1 }
+  in_required_gate && $0 == "}" { exit found ? 0 : 1 }
+  END { if (!found) exit 1 }
+' "$ci_tests"; then
+  echo "required-gate invocation must be unconditional inside run_required_gate_checks" >&2
+  exit 1
+fi
+
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
 
