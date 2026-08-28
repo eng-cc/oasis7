@@ -85,6 +85,7 @@ mod economy_factory_lifecycle;
 mod economy_module_requests;
 mod economy_priority_logistics;
 mod effects;
+mod execution_transaction_regressions;
 mod gameplay;
 mod gameplay_bootstrap;
 mod gameplay_protocol;

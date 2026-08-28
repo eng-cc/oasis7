@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前 world-simulator 的 Agent 能力已经具备 `Observation -> AgentBehavior::decide -> AgentDecision -> runtime 校验/执行 -> DecisionTrace` 的完整闭环，但“世界内 Agent 契约”与“具体 LLM / agent 框架实现”仍高度耦合。若未来要评估 `Local Provider` 这类外部 agent framework 参与游戏模拟，缺少一个稳定的中间标准层，会导致接入成本高、风险边界不清、验证口径分散。
-- Proposed Solution: 在 world-simulator 的 Agent 层与具体 provider 之间新增 `Decision Provider` 标准层，冻结 `ObservationEnvelope / DecisionRequest / DecisionResponse / FeedbackEnvelope / TraceEnvelope` 这组内部契约；`Local Provider` 通过 adapter 作为可插拔外部 provider 接入，仅负责“决策建议与工具编排”，不替代 runtime 权威规则执行。先完成可行性建模、接口冻结、风险边界与 PoC 路线设计，再决定是否进入实现阶段。
+- Proposed Solution: 在 world-simulator 的 Agent 层与具体 provider 之间维护 `Decision Provider` 标准层，冻结 `ObservationEnvelope / DecisionRequest / DecisionResponse / FeedbackEnvelope / TraceEnvelope` 这组内部契约；`Local Provider` 通过 adapter 作为可插拔外部 provider 接入，仅负责“决策建议与工具编排”，不替代 runtime 权威规则执行。当前已有 provider typed bridge 与显式 runtime seam；本轮设计升级把下一阶段重点放在 runtime 自动生成 subject-bound catalog/context、受信 semantic schema、typed args host encoding，以及未知制度 E2E 证明，不把这些目标误报为当前 production wiring。
 - Success Criteria:
   - SC-1: 明确 `runtime authoritative / provider advisory` 边界，任何外部 provider 都不得直接修改世界状态或绕过 kernel 校验。
   - SC-2: 形成一套 provider-agnostic 的决策标准层契约，能够同时兼容现有本地 `LlmAgentBehavior` 与未来 `Local ProviderAdapter`。
@@ -15,6 +15,55 @@
   - SC-4: 形成阶段化落地路线：`MockProvider -> Local Provider PoC -> 低频 NPC 试点 -> 扩面评估`。
   - SC-5: 外部 provider 的非法输出、超时、格式错或 schema 漂移均有统一失败策略，并可映射到 `Wait` 或 `ActionRejected`。
   - SC-6: provider 输出可回写为 `AgentDecisionTrace`，保持 viewer / QA / replay 诊断链路连续。
+
+### 1.1 能力状态与证明边界
+
+本专题同时记录当前实现事实和目标合同，不能因为 DTO、校验器或单元测试存在，
+就把完整的 Agent/runtime 生产闭环写成已交付。状态词的含义固定如下：
+
+| 状态 | 本专题口径 |
+| --- | --- |
+| `current` | 当前代码已经存在、可由源码/测试直接观察到的行为；不暗示已经自动接入所有 live Agent。 |
+| `partial` | 有可复用的类型、校验器、fixture 或显式 bridge seam，但缺少生产 wiring、语义 schema 或端到端证明。 |
+| `target` | 本文冻结的后续设计合同；实现前仍需 runtime/WASM/QA 联审，不能作为现行安全保证。 |
+| `proven` | 只有在同一 fixture 证明发现、typed args 编码、runtime 重验、提交反馈和失败无副作用后，才可标记。 |
+
+当前与部分实现证据：
+
+- `DecisionProvider`、`DecisionRequest/Response`、Mock fixture、内置/loopback adapter
+  和 `AgentDecisionTrace` 桥已经存在；provider 仍是 advisory，runtime 才是权威执行者。
+- active module manifest 可生成确定性、排序后的 `module_command_catalog`；v2
+  `CapabilityCatalogSnapshot`、`CapabilityInvocationContext`、`AgentCommandResponse`
+  的身份/快照/nonce 校验及显式 `RuntimeTrustedModuleExecutor` seam 已有代码与测试。
+- `ProviderBackedAgentBehavior` 当前通过显式 `with_capability_context` 接收一份由调用方
+  提供的 catalog/context；没有证据表明生产 live loop 会为每个 Agent turn 自动生成
+  subject-bound snapshot、schema context 和 nonce 后注入所有 provider。现有 catalog
+  entry 主要是 module/version/namespace/command/schema version/hash/payload bound，
+  不包含可供 Agent 理解的参数/返回语义；`ModuleCommandEnvelope.payload` 是 opaque bytes。
+- 因此，“typed provider bridge 已落地”只能描述校验和显式路由 seam；不能宣称未知制度
+  已能被 Agent 自动发现、理解、调用，也不能宣称生产 auto-wiring 或完整 schema validation。
+
+目标与证明要求：
+
+- `runtime` 每个决策 turn 根据 active manifest、主体的未撤销授权、policy、world/branch
+  和 audience 自动生成 subject-bound `CapabilityCatalogSnapshot` 与一次性
+  `CapabilityInvocationContext`，再把不可变副本注入 `DecisionRequest`。provider 只能
+  消费该副本，不能选择 subject、grant、audience、snapshot 或 nonce。
+- catalog entry 必须能解析到 content-addressed semantic schema descriptor。descriptor
+  至少包括命令说明、typed input 的字段/类型/必填性/范围或枚举、返回/错误结构、可见
+  副作用和 bounded cost hint；descriptor 的 canonical bytes hash 必须与 entry 的
+  `schema_hash` 一致。schema retrieval 失败或 hash 不一致时不得让 provider 猜测。
+- Agent/provider 返回的是绑定 entry 的 typed args intent；可信 host 按已取回且验过的
+  descriptor 将 args 编码成 deterministic/canonical CBOR，再形成 envelope。provider
+  不得把自带的 raw payload、schema 或自然语言名称升级为权威参数。
+- runtime 在 sandbox、计量、journal 或状态变更前重新校验 envelope canonical encoding、
+  payload 对 descriptor 的完整解码、schema/version/hash、active module、subject/grant、
+  live policy、cost quote、nonce/replay 和 payload bound。只有 committed result 才回写
+  feedback/memory。
+- “未知制度”验收必须使用一个不在 Kernel closed `Action` 枚举中的、仅由 active governed
+  module 声明的 command，证明无需为该制度添加 native action 或让 Agent 获得 runtime
+  写权限即可完成 discovery -> typed intent -> host encoding -> runtime commit -> feedback。
+  在该 E2E 与负例矩阵通过前，能力仍是 `partial`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -46,6 +95,9 @@
 | 可观测性桥接 | `TraceEnvelope -> AgentDecisionTrace` | provider trace 映射到现有 viewer/QA 诊断面 | `trace_pending -> trace_emitted` | trace 与 world time 对齐 | 不得泄露敏感凭据 |
 | 记忆同步策略 | `MemoryContextSnapshot/MemoryWriteIntent` | provider 只读注入上下文；写回需经本地策略裁决 | `memory_read -> decide -> optional_memory_write` | 本地 memory 为权威来源 | 外部 memory 为可选缓存 |
 | 受治理 capability discovery | `CapabilitySnapshot/CapabilityRef` | provider 看到安全 core/kernel 工具与当前 active module 的受限 projection | `snapshot_issued -> proposed -> binding_checked -> validated/rejected` | 每个 capability 绑定 namespace、version、schema ref、identity hash、caps 与 runtime cost quote | discovery 不授予写权；runtime 仍是唯一裁定者 |
+| subject-bound discovery | `CapabilityCatalogSnapshot + CapabilityInvocationContext` | runtime 按 Agent subject/presenter/audience/grant/policy 自动生成本轮 catalog/context 并注入 request | `live_turn -> snapshot_issued -> provider_consumed -> expired` | snapshot identity/hash、world/branch/finality、revocation epoch、nonce 必须绑定；不允许调用方静态复用 | provider 只能回显绑定身份；catalog 暴露不授予权限 |
+| semantic schema retrieval | `schema_ref + schema_hash + SemanticCommandSchema` | host 从受信 module manifest/schema store 取回 descriptor，校验 canonical bytes hash 后向 provider 暴露 | `schema_requested -> verified -> supplied/failed` | descriptor 版本、typed args、返回/错误结构、范围/枚举与 cost hint 可复现 | retrieval/hash/版本失败必须 fail closed，不接受 provider 自报 schema |
+| typed args 编码 | `TypedCommandIntent -> canonical ModuleCommandEnvelope` | Agent 返回绑定 command 的 typed args；trusted host 校验并以 descriptor 编码 payload | `typed_intent -> host_encoded -> runtime_revalidated` | 编码必须 deterministic；字段缺失、类型/范围/枚举错误不得产生 payload | provider 不得注入 raw payload 或伪造 caller/grant |
 | Provider 评估 | `valid_action_rate/timeout_rate/p95_latency/trace_completeness` | 使用固定 fixture 对比 provider 表现 | `bench_pending -> bench_done` | 按场景/agent 类型分层统计 | QA 可复核 |
 | runtime-live 决策桥 | `AgentRunner/AgentBehavior/DecisionProvider/AgentDecisionTrace` | provider 只提出候选；runtime 校验并执行 | `observed -> proposed/wait -> validated -> executed/rejected` | trace、action、result 与事件保持因果关联 | provider 失败或未知动作不得触发替代启发式动作 |
 - Acceptance Criteria:
@@ -59,6 +111,11 @@
   - AC-8: capability 未知、已撤销、未激活、权限不匹配、schema/identity hash 漂移或 cost quote 过期时，必须 fail closed，留下稳定 trace/error，并收敛为 `Wait` 或 `ActionRejected`；不得按名称猜测、静默改绑或执行 fallback。
   - AC-9: LLM/provider 输出只能是绑定上述 capability 的结构化 intent；intent 必须进入现有 runtime authoritative pipeline，由 runtime 重新校验并决定是否产生权威状态变化。
   - AC-10: 现有 closed `Action` adapter 保持可读写兼容并与动态 capability 共同进入同一执行管线；迁移按低风险 module 试点渐进进行，不以 capability discovery 取代现有 vertical slice。
+  - AC-11: live Agent turn 的 catalog/context 由 trusted runtime 自动生成并 subject-bound；context digest 必须认证 world/branch/finality、policy/revocation epoch、snapshot digest 与 nonce，fixture 覆盖每一维漂移后 fail closed；不得把手工 `with_capability_context` 注入误报为 production auto-wiring。
+  - AC-12: 每个动态 command 都能从 `schema_ref` 取得 semantic descriptor，并证明 descriptor canonical bytes 的 `schema_hash`、module declaration、version 与 catalog entry 一致；只做 envelope canonical CBOR 检查不足以满足本条。
+  - AC-13: provider 只能返回绑定 entry 的 typed args intent；trusted host 负责类型/范围/枚举/必填校验和 deterministic canonical CBOR 编码，runtime 再做完整 schema、权限、预算、live state 与 replay 校验。
+  - AC-14: unknown-institution E2E 复用 `institution-migration-v1` 与产品 SC-32，使用未进入 Kernel closed `Action` 的 active governed module command，证明 discovery -> schema -> typed args -> host encoding -> runtime commit -> committed feedback/memory；并验证 preview/stale/deny/no-effect 不扣费、accepted effect/debit/receipt exactly-once、retry/reconnect/restore/replay 不重复扣费或发放 replay credit。
+  - AC-15: E2E 负例至少覆盖 unknown/inactive module、无 catalog/schema/hash 漂移、revoked grant、stale snapshot/policy、subject/presenter/audience mismatch、malformed typed args、oversize payload、expired cost quote 和 nonce replay；均产生稳定 trace/error 并收敛为 `Wait` 或 `ActionRejected`，不得名称 fallback 或静默重绑。
 - Non-Goals:
   - 不在本轮直接把 `Local Provider` 接入主线模拟代码。
   - 不在本轮重写现有 `LlmAgentBehavior`、memory 系统或 runtime kernel。
@@ -100,6 +157,10 @@
   - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
 - `CapabilitySnapshot`: 本轮 catalog 的 identity/digest；每个动态 capability 绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime `cost_quote`。
 - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
+- `SemanticCommandSchema`（target）：content-addressed descriptor，至少包含 `schema_ref/schema_hash/schema_version`、command summary、typed input fields（type/required/bounds/enums）、result/error shape、declared side effects 和 bounded cost hint；它是 Agent 理解输入的语义来源，不授予调用权限。
+- `TypedCommandIntent`（target）：`catalog_snapshot_id + selected_entry + typed_args + response_nonce + trace_id`；其中 `selected_entry` 必须精确匹配 module/version/instance-target/namespace/command/schema，`typed_args` 不包含 caller、grant、authority proof 或 host-only provenance。module-instance audience 的 target 必须是稳定 `(world_id,module_id,instance_id)`；world/institution scoped command 使用显式非实例 variant，缺失值不得回退为全局 module。
+- `CapabilityInvocationContext`：由 trusted host 为单次 turn 生成的 `grant_id/subject/presenter/audience/catalog_snapshot_id/module_id/module_version/instance_target/response_nonce`；provider 只能回显，不能自行构造为授权。
+- context 的 canonical binding tuple 还必须包含 `world_id/branch_id/finality_epoch/finality_block_hash/revocation_epoch/policy_epoch/catalog_snapshot_digest`，并与 `response_nonce` 一起进入不可变 context digest。若兼容 DTO 不展开这些字段，`catalog_snapshot_id` 必须内容寻址且认证全部维度；runtime 提交前仍逐项与 live state 比较。
 - 内置 Responses provider 的具体基线也由本专题承载，但不把某个 SDK、历史 JSON 多段执行策略或 Viewer surface 当作唯一 authority；provider-agnostic contract 仍是外部接入的唯一边界。
 - 多场景评测必须固定并记录 scenario/fixture、agent profile、provider 与 adapter 版本、协议版本、timeout、tick budget 和 `--jobs` 等执行参数；同一评测 epoch 保留每场景 `report.json`、`run.log`、`summary.txt` 与聚合工件，避免总量掩盖单场景差异。
 - `--jobs` 只描述执行并行度，不是行为等价或性能比较的充分条件。外部 provider 的非确定性运行必须在相同输入下重复采样；任一场景的 timeout、invalid output、stuck-loop、trace-completeness 缺口或未解释的错误不能因聚合均值/总量而被掩盖。
@@ -113,6 +174,63 @@
 - provider/LLM 只返回绑定 capability 的结构化 intent；runtime 重新做权限、schema、预算和实际成本校验，并将 intent 送入既有 authoritative execution/replay/receipt pipeline。工具成功不是 world fact，实际结果只来自 committed runtime feedback。
 - 未知、revoked、未激活、版本/schema/hash/caps 漂移、snapshot 过期或 cost quote 缺失/过期/超预算时必须 fail closed，写稳定 trace/error 并收敛为 `Wait` 或 `ActionRejected`；不得 fallback、猜测重绑或生成替代动作。catalog 变化时旧 intent 失效，需重新 discovery。
 - closed Action 与动态 module capability 共享同一 guard、执行管线和 trace；先用 mock projection/fixture 验证，再在低频低破坏性 module 上渐进迁移，保留旧 action 的兼容读写与 replay 路径，直到证据闭合。
+
+### 受信 schema、typed args 与未知制度闭环（目标）
+
+该闭环把“Agent 能看到 command”与“command 能安全执行”分开。推荐的单 turn 顺序为：
+
+```text
+runtime live state
+  -> active manifest + subject grants/policy intersection
+  -> subject-bound catalog + invocation context/nonce
+  -> schema_ref retrieval + canonical schema_hash verification
+  -> provider receives observation/context/catalog/schema
+  -> typed command intent
+  -> trusted host validates typed args and canonical-CBOR encodes envelope
+  -> runtime revalidates identity/schema/authz/cost/nonce/live state
+  -> staged module execution and committed result
+  -> feedback + policy-governed memory write
+```
+
+`schema_ref` 是受信 descriptor 的内容寻址引用，而不是 provider URL 或自然语言别名。
+host 只从 active module declaration 绑定的 manifest/schema store 取回 descriptor；取回
+内容的 canonical bytes hash 不等于 entry 的 `schema_hash`、版本不支持、descriptor
+缺字段，或 retrieval 超时，都应在 provider 调用前返回稳定的
+`capability_schema_unavailable`/`capability_schema_mismatch`，不让 Agent 猜参数。
+当前 `ModuleCommandCatalogEntry` 只提供机器 identity、版本/hash 和 payload bound，
+`ModuleCommandEnvelope::decode_canonical` 只证明 envelope 的 canonical CBOR；它不证明
+opaque `payload` 已按制度 schema 解码。这是必须保留的 partial 状态。
+
+provider 的 target 响应是 `TypedCommandIntent`。host 根据已验证 descriptor 检查必填
+字段、类型、范围、枚举和大小，按唯一 deterministic canonical-CBOR 规则编码 payload，
+并填充 envelope 的 namespace/name/schema version/hash。provider 不能提交自带 raw bytes
+来绕过该步骤，也不能把 `schema_hash`、grant、caller、subject 或 cost quote 作为普通
+typed arg 覆盖。为兼容当前 `AgentCommandResponse.envelope`，raw envelope lane 可暂时
+保留为 transitional/experimental；只有 host 重新 decode 并按 semantic descriptor 验证
+后才允许进入 runtime，现有 envelope canonical 检查不应被描述为 semantic validation。
+
+未知制度 proof fixture 应选择一个不在 Kernel closed `Action` enum 中、但已通过治理并处于
+active 状态的 module command（例如 `economic_contract.open`）。在同一固定 world head
+中，runtime 以 Agent subject 的已验证 grant 生成 catalog/context，取得 schema，provider
+只返回 typed args，host 编码，runtime 完成 live recheck 和 staged commit；结果必须以
+权威 `ActionResult`/module receipt 进入反馈，之后才允许写回 Agent memory。该 proof
+不得依赖把 command 加进 native Action、静态全局 grant、provider 自报 schema 或手工
+复制 context。它证明的是“未知制度可由受治理 module 接入”，不是该制度的玩法规则或
+产品承诺。
+该 fixture 复用 runtime `institution-migration-v1` 和产品 SC-32：preview、stale、deny 与 no-effect 不扣费，accepted effect/debit/receipt 仅结算一次，retry/reconnect/restore/replay 不重复扣费或发放 replay credit。provider feedback 只读取权威 receipt，不自行推断成本或结算。
+
+未知制度 proof 的阻断条件和预期收敛：
+
+| 条件 | 拒绝点 | 预期结果 |
+| --- | --- | --- |
+| module 未知、未激活或不在 snapshot | discovery/runtime live recheck | stable error + `Wait`/`ActionRejected`，无 sandbox/journal/state/charge |
+| schema 缺失、hash/version 漂移或 descriptor 不可解码 | schema retrieval / host typed-args validation | fail closed，不调用 module |
+| grant revoked/expired、subject/presenter/audience 不匹配 | runtime authorization | fail closed，不按名称或旧 grant fallback |
+| snapshot/policy/branch/cost quote 过期 | runtime live recheck | old intent invalid，要求重新 discovery |
+| typed args 缺字段、类型/范围/枚举错误或超 bound | trusted host encoding | 不生成可执行 envelope |
+| nonce replay 或同 nonce 不同 request hash | runtime replay guard | idempotent historical receipt 或 deterministic denial，不重复副作用 |
+| world/branch/finality、policy/revocation epoch 或 snapshot digest 漂移 | runtime context/live-state recheck | old context 失效并重新 discovery，不允许跨 authority boundary 重放 |
+
 - Local Provider Adapter Strategy:
   - 使用 adapter 把 `ObservationEnvelope` 转成 `Local Provider` 可消费的会话输入。
   - 通过稳定 core/kernel tools 加上当前 active module 的受治理 capability projection 暴露 world 可执行候选，而不是开放任意外部命令。
@@ -145,6 +263,11 @@
   - M3: 实现 `MockProvider`，验证标准层不依赖外部网络即可跑通。
   - M4: 实现 `Local ProviderAdapter` PoC，并在单一低频 NPC 场景试点。
   - M5: 依据 QoS/成本/稳定性结果，决定是否进入多 agent 扩面。
+- Proof-first priority (architecture P0):
+  - P0-A: 先用一个未进入 Kernel closed `Action` 的 active governed module 完成未知制度 E2E；该用例必须从 runtime discovery 到 committed feedback/memory 闭环，并保留所有负例的无副作用证据。
+  - P0-B: 将手工注入的 `with_capability_context` seam 收敛为 runtime-owned per-turn catalog/context 生成和注入；在此之前只把 v2 typed bridge 视为 partial。
+  - P0-C: 定义并实现 semantic schema retrieval 与 typed args -> trusted host canonical encoding；与 runtime 的统一 transaction、instance-targeted command/state 按同一 Institution Migration Test 依赖顺序协同推进，不以本专题重排 runtime 的架构 P0。
+  - P0-D: 以固定 schema/catalog/subject/branch/预算上下文重复评测 provider；将 schema failure、context contamination、drift、stuck-loop、latency/token/cost 作为独立指标，不以聚合成功率掩盖单场景失败。
 - Technical Risks:
   - 风险-1: `Local Provider` 的会话/工具模型与 tick 驱动 world actor 语义不完全同构，可能导致抽象层过宽或过厚。
   - 风险-2: 外部 provider latency/cost 抬高后，模拟规模与回归频率会受限。

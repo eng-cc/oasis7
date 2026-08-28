@@ -1,12 +1,24 @@
 # oasis7 Runtime：WASM 扩展接口与 ABI（设计分册）
 
-审计轮次: 4
+审计轮次: 5
 
 本分册为 `doc/world-runtime/prd.md` 的详细展开。
 
 SDK 的默认 no_std、共享 Canonical-CBOR wire 类型、codec 错误与 builtin 兼容 evidence 由 `doc/world-runtime/wasm/wasm-sdk.prd.md` 承载；本文继续作为 runtime ABI/reference 入口，不承担 SDK 实现任务账本。
 
 `crates/oasis7_wasm_abi` 是 `ModuleManifest`、ABI contract、artifact identity 与 limits 类型的单一代码来源；net/proto/viewer 不得维护重复定义。历史 distributed Phase 7 移除 `oasis7_net` 重复 manifest 属于已完成 crate-boundary provenance，不构成第二套现行规范。
+
+## 状态与证据等级
+
+本文用 `current`（现行 wire/行为）、`partial`（已有受限路径但未闭环）、`target`
+（待冻结合同）和 `proven`（有实现与回归证据的边界）四个标签，避免把接口存在
+误读为端到端能力。`proven` 只能外推到同一 ABI/版本/路径，不能外推到相邻目标能力。
+
+- **Proven foundation：** 版本化 command 声明/admission、active-module 确定性 catalog、Canonical-CBOR envelope byte-exact 校验、sandbox 前的 active/module/schema/hash/大小检查和既有计量链。
+- **Partial bridge/schema：** `CapabilityCatalogSnapshot`、`AgentCommandResponse`、subject-bound context 和 provider/loopback 校验已存在；自动生产接线、真实 Agent E2E、caller capability、最终 receipt 及 payload 语义解码仍未闭合。当前 `schema_hash` 只绑定声明/envelope 标识，payload 仍是 opaque byte string。
+- **Partial instance：** lifecycle、tick schedule 和部分 state 已按 instance 工作；direct/trusted command state、catalog target 和 provenance 仍有 `module_id` 路径。
+- **Target closure：** per-command semantic descriptor、受信 host typed-args、完整 instance target、统一 staged transaction、execution receipt、schema migration 和生产 Agent E2E。
+因此，“WASM/provider 基础设施已进入代码”是当前准确结论；“新制度已能被 Agent 动态发现、理解、授权、执行并回放”仍是试点验收结论，不能由单项接口或局部测试代签。
 
 ## WASM 扩展接口（草案）
 
@@ -168,16 +180,19 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 现有 `wasm-1` ABI 的可选扩展，不是立即把 `WorldState` 改成 ECS、删除既有
 native action，或允许任意未治理工件进入生产执行路径。
 
-> **状态边界：command 子集已落地，其余仍是目标合同。** 当前
+> **状态边界：command 与 provider 各有基础切片，但尚未闭环。** 当前
 > `ModuleAbiContract.declarations.commands` 已提供版本化 command 声明；manifest
 > admission 会校验声明，active module 可投影为确定性的 command catalog，
 > `World::execute_module_command` 会在触碰 sandbox 前校验 active 状态、声明匹配、
-> schema/hash/payload 边界，并复用现有计量调用链。这是开放 command 的基础切片，
-> 不是完整协议：component、event、migration、execution receipt、完整 capability
-> scope、Agent/provider 接入和 staged atomic commit 仍是未来扩展。下面的完整结构和
-> 字段名仍是语义草图，不能直接当作现行 wire 定义；试点实现前还必须补齐 ABI 版本、
-> 编码规范、hash/receipt 绑定、迁移策略和失败路径测试。当前生产路径仍同时承诺
-> 本文件前文定义的现有 `wasm-1` 行为与上述已落地的 command 子集。
+> schema/hash/payload 边界，并复用现有计量调用链。`CapabilityCatalogSnapshot`、
+> subject-bound context、`AgentCommandResponse` 及 provider/loopback 校验也已进入
+> 代码。这些是可审计的基础切片，不是完整协议：payload 语义 schema、trusted host
+> typed-args 编码、instance target、component/event/migration、execution receipt、
+> 完整 capability scope、生产 context 自动接线、真实 Agent E2E 和 staged atomic
+> commit 仍是目标扩展。下面的完整结构和字段名仍是语义草图，不能直接当作现行 wire
+> 定义；试点实现前还必须补齐 ABI 版本、编码规范、hash/receipt 绑定、迁移策略和
+> 失败路径测试。当前生产路径仍同时承诺本文件前文定义的现有 `wasm-1` 行为与上述
+> 已落地的 command/provider 基础切片。
 
 试点只选择一个有界制度（例如 Alliance 或 EconomicContract，由跨角色治理
 确定），以现有 native vertical slice 作为兼容基线；试点成功前不得把所有
@@ -252,8 +267,8 @@ hash 影响规则，都必须在版本化 ABI 和 canonical hash 规范中先定
 当前已经落地一个受界限的 module-command 入口，不要求为每一种银行、联盟或合约
 操作新增闭合的 Rust `Action` 变体。`ModuleCommandEnvelope` 承载如下 command
 字段；runtime 会在进入 sandbox 前校验 active module 的声明、namespace/name、
-schema version/hash 和 payload 边界，再复用现有计量调用链。该入口仍只是基础切片，
-尚未接入 Agent/provider 的动态调用，也不等于完整的 caller capability、通用
+schema version/hash 和 payload 边界，再复用现有计量调用链。该入口仍只是基础切片；
+provider/loopback 已有 response 校验，但尚未证明生产自动接线，也不等于完整的 caller capability、通用
 action/router、component/event/migration wire、staged atomic commit 或 execution
 receipt 协议。
 
@@ -267,13 +282,56 @@ receipt 协议。
 }
 ```
 
-试点的目标宿主合同是从受信的调用边界注入 caller、origin、logical time、
-trace/journal 位置；模块不得在 payload 中伪造这些字段。当前 `ModuleContext`
-尚未携带完整的 caller/instance/entity provenance，当前 action 路由也没有这套
-动态 admission，因此这些字段是试点实现前必须补齐并回放绑定的 ABI 前置条件。
+这里的 **Canonical-CBOR 保证只覆盖 envelope**。`payload` 是 opaque CBOR byte string；
+`decode_canonical` 验证外层 map 的 byte-exact 编码，`schema_hash` 只与 active
+manifest declaration 相等并检查大小上限。runtime 不递归验证 payload 的字段类型、
+范围或内部 canonical 编码，不能把 canonical envelope 写成 canonical payload schema。
+目标上，每条 command 必须有可寻址的语义 descriptor，并由内容地址绑定：
+
+```text
+CommandSchemaDescriptor = {
+  namespace, command, schema_version,
+  encoding: "canonical-cbor", request_shape, response_shape?,
+  field_constraints, max_payload_bytes,
+}
+schema_hash = SHA-256(Canonical-CBOR(CommandSchemaDescriptor))
+```
+descriptor bytes 由受信 schema registry 按 `schema_hash` 提供；manifest declaration
+和 catalog 只接受该内容地址，不能由 provider 临时改写。`request_shape` 至少表达
+字段名、标量/容器类型、必选性、整数范围和嵌套 schema hash；response/error shape
+也必须版本化。排序和 hash 域需在试点前冻结；当前 `ModuleCommandDeclaration` 的
+`schema_hash` 仍只是声明级标识，不是 descriptor registry 或语义验证器。
+
+目标上 Agent/provider 只返回 typed args。受信 host 按精确 `schema_hash` 取得
+descriptor，校验字段/类型/范围/大小，以唯一 Canonical-CBOR encoder 生成 payload，
+再构造并重验 `ModuleCommandEnvelope`；provider 不得决定 caller、target、grant 或
+provenance。当前 response 仍携带 raw payload，typed-args encoder 和生产 registry
+尚未实现；raw envelope 仅是兼容/试验路径，不能作为语义安全证明。
+
+试点宿主从受信调用边界注入 caller、origin、logical time、trace/journal 位置；模块
+不得在 payload 中伪造。当前 `ModuleContext` 已承载 host-injected caller、manifest
+和 journal provenance，但没有完整 subject/instance/entity target；action 路由也
+没有这套 admission，须在试点前补齐并绑定回放。
 目标宿主还必须先确认模块处于 active 状态、完整命中 manifest 声明、`payload`
 哈希/大小和 schema 版本有效，再进入 WASM；未知 namespace、command 或版本均
 结构化拒绝。
+
+目标 command 请求必须把实例寻址放在受信 envelope/context 外层，而不是由 payload 自报：
+
+```text
+ModuleCommandTarget = {
+  module_id, module_version, instance_id, entity_id?,
+}
+ModuleInvocationProvenance = {
+  caller, origin, target: ModuleCommandTarget, manifest_hash, wasm_hash,
+  journal_position?,
+}
+```
+catalog entry、capability scope、nonce 和 execution receipt 必须绑定同一精确 target；
+singleton 也必须使用稳定 `instance_id`，不能退化为 module-global 状态。当前
+lifecycle/tick/state 更新路径已有 instance-scoped 证据，但 direct/trusted command
+的 state lookup、catalog target 和部分 provenance 仍按 `module_id`；在 target 字段
+进入 admission、snapshot/replay 和 receipt 前，不能宣称 instance-complete。
 
 未来扩展可采用逻辑 component 记录，但这不是当前 `WorldState` 已有的 component
 存储，也不是本期承诺的完整 ECS 或 `WorldState` 重写。稳定 instance/entity
@@ -560,8 +618,12 @@ use. It never preserves new writes or high-impact effects by default.
 
 #### 3.3 Dynamic Agent catalog and provider response binding
 
-The target Agent/provider surface is a two-step contract. Discovery is an observation;
-execution is a fresh authorization decision.
+The Agent/provider surface is a two-step contract. Discovery is an observation;
+execution is a fresh authorization decision. **Current/partial:** snapshot/response
+types, subject binding, provider/loopback validation and selected-entry mismatch
+rejection exist; automatic production context injection and real Agent E2E are not
+proven. **Target:** host catalog carries trusted descriptor and exact instance target,
+and provider returns typed args for host encoding. Discovery never becomes authority.
 
 ```text
 CapabilityCatalogSnapshot = {
@@ -569,33 +631,36 @@ CapabilityCatalogSnapshot = {
   world_id,
   world_head,
   branch_id,
-  finality_epoch,
+  finality_epoch, finality_block_hash,
   logical_tick,
   module_registry_hash,
-  policy_hash,
+  policy_hash, policy_epoch,
   revocation_epoch,
-  subject,
-  presenter,
-  audience,
+  subject, presenter, audience,
   entries: [
     { module_id, module_version, namespace, command, schema_version,
-      schema_hash, max_payload_bytes, eligible_grant_ids }
+      schema_hash, max_payload_bytes, instance_target,
+      eligible_grant_ids }
   ],
   valid_until_tick,
 }
 
 AgentCommandResponse = {
   response_nonce,
-  subject,
-  presenter,
-  audience,
+  subject, presenter, audience,
   catalog_snapshot_id,
-  selected_entry,              // exact module/version/namespace/command/schema
-  envelope,                    // ModuleCommandEnvelope payload only
+  selected_entry,              // exact module/version/instance/namespace/command/schema
+  typed_args,                  // target: host validates against schema_hash
+  envelope?,                   // current compatibility lane: raw envelope
   provider_id?,
   trace_id,
 }
 ```
+
+`instance_target` is mandatory for a module-instance audience and carries stable `(world_id,
+module_id, instance_id)`; a governed non-instance command uses an explicit variant, never global
+fallback. Snapshot hash and bound nonce/context/receipt cover world, branch, finality block/epoch,
+policy hash/epoch, revocation epoch, subject/audience, entries and validity.
 
 The host builds a catalog by intersecting active module declarations with the current
 subject's non-revoked grants and policy for the requested audience. Entries must be
@@ -607,6 +672,13 @@ cannot add a command, alter the subject, substitute a grant, alter the audience,
 issue a new scope. The response is invalid if its selected entry, envelope schema,
 subject, presenter binding, audience, snapshot id or response nonce does not match the
 request.
+
+The current response may carry a raw `ModuleCommandEnvelope`; the trusted host treats it
+as compatibility input and re-runs declaration/hash/size checks. Once `typed_args` exists,
+only the host encoder produces payload bytes. Provider cannot choose another descriptor,
+add undeclared fields, widen constraints, or use another instance. Missing descriptor,
+stale registry, ambiguous field or encoding error is a structured denial; no JSON/CBOR
+guessing fallback exists.
 
 At execution time the host must re-read live state and validate, in this order:
 
@@ -867,6 +939,28 @@ ModuleStateMigrated { // target shape; not a current event type
 这些规则和 manifest 自身的版本迁移（包括 `ManifestMigrated` 语义）都必须在
 试点前与现有 lifecycle authority 对齐并提供 from/to hash 证据，不能由本节
 单方面冻结。
+
+### 5.1 兼容性、fail-closed 与迁移证明
+
+兼容性按 wire surface 和证据等级记录；“有默认值”不能代替迁移证明：
+
+| Surface | 当前兼容行为 | 目标证明 |
+| --- | --- | --- |
+| `ModuleManifest` / `ModuleAbiContract` | 缺省 ABI contract、declarations 与可选 artifact identity 可读取历史 manifest；未知字段不能改变既有 hash/admission 语义。 | 用旧 manifest fixture 做 decode、canonical re-encode、admission 和 snapshot/replay，证明 `module_id`、version、`wasm_hash` 与 manifest hash 不漂移。 |
+| `ModuleContext` / `ModuleOutput` | 缺失 host caller 与可选 `tick_lifecycle` 的旧 wire 仍可解码；legacy caller 不能被当作新 subject 授权，tick 缺省按 suspend 处理。 | 旧模块 golden bytes 在新 host 上得到同一结果；新字段只在明确的 ABI version/manifest admission 下启用。 |
+| `ModuleCommandEnvelope` | 外层 Canonical-CBOR、声明 identity 和 payload bound 有 proven 检查；payload 内容仍是 opaque，raw envelope 是兼容路径。 | descriptor registry、typed-args host encoder、semantic decode 与 schema hash 绑定必须有正反 fixture；未知 schema/version/encoding 一律拒绝。 |
+| module lifecycle / state | install、activate、upgrade、deactivate 基础事件与 instance/tick persistence 已有实现切片；完整 migration atomicity 与 receipt 仍 partial/target。 | 从 `base_manifest_hash` 到 from/to schema、migration `wasm_hash`、新 manifest hash 的单 journal 证明；失败注入后旧 registry/state/artifact 完整保留。 |
+
+下列身份不可互换：`wasm_hash` 是工件 bytes 内容地址，`manifest_hash` 是 manifest 控制面 hash；当前 `schema_hash` 只是 declaration marker，target registry 落地后才是 descriptor bytes 内容地址；`artifact_identity` 绑定
+source/build manifest/signer/signature。任一 identity、ABI version、权限、limits 或
+metering schedule 变化都必须重新 admit；不能同名覆盖、只改版本字符串或依赖 provider
+声明维持兼容。
+
+迁移证明最小闭环是：保留旧 bytes；新 bytes 由显式 from/to schema 和受治理 migration
+artifact 产生；migration 输出、state/event 前后 hash、manifest hash、instance target
+和 journal position 可回放复算。任一 hash、descriptor、权限、artifact、实例或
+finality 不可证明时，在 sandbox、计量、journal/effect commit 前结构化拒绝；历史
+event/state 不原地改写，失败不得部分扣费、写 state、发 emit 或覆盖 active module。
 
 ### 6. 试点验收与非目标
 
