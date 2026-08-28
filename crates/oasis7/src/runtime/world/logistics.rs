@@ -868,10 +868,10 @@ impl World {
         } else {
             (0, 0, 0)
         };
-        let recommendation = if source_amount_before < amount {
-            "reduce_amount_or_source_materials"
-        } else if path_unavailable {
+        let recommendation = if path_unavailable {
             "route_unavailable"
+        } else if source_amount_before < amount {
+            "reduce_amount_or_source_materials"
         } else if !path_capacity_available {
             "wait_for_transit_capacity"
         } else if effective_distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {

@@ -872,6 +872,22 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
     assert_eq!(valid_capacity_quote.reroute_count, 0);
     assert_eq!(world.snapshot(), state_before_valid_capacity_quote);
 
+    let combined_blocker_quote = world
+        .logistics_transfer_quote_with_path(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            20,
+            0,
+            None,
+            valid_capacity_path.as_slice(),
+            false,
+        )
+        .expect("closed route plus source shortage remains a conditional quote");
+    assert_eq!(combined_blocker_quote.recommendation, "route_unavailable");
+    assert_eq!(combined_blocker_quote.max_transferable_amount, 0);
+
     for (label, route_ids) in [
         (
             "malformed path",
