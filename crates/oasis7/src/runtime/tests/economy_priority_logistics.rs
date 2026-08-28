@@ -123,4 +123,5 @@ fn seed_builder_electricity(world: &mut World, amount: i64) {
 
 include!("economy_priority_logistics_priority_tests.rs");
 include!("economy_priority_logistics_recipe_tests.rs");
+include!("economy_priority_logistics_recipe_path_authority_tests.rs");
 include!("economy_priority_logistics_network_tests.rs");
