@@ -134,6 +134,15 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
+scope_audit_contract_output="$(plan_for_path scripts/ci-required-scope-audit-contract.test.sh)"
+assert_key_equals "$scope_audit_contract_output" scope minimal
+assert_key_equals "$scope_audit_contract_output" selected_capabilities required_gate_baseline
+assert_key_equals "$scope_audit_contract_output" run_rust_baseline false
+assert_key_equals "$scope_audit_contract_output" needs_rust_toolchain false
+assert_reason_contains "$scope_audit_contract_output" \
+  "governance_script:scripts/ci-required-scope-audit-contract.test.sh"
+assert_reason_absent "$scope_audit_contract_output" "unclassified_or_unresolvable:"
+
 # Pure PM implementation and test helpers are workflow-governance checks, not
 # Rust workspace changes.  Keep representative Python and test/sh paths in a
 # single union so one unclassified path cannot silently widen the whole plan.
