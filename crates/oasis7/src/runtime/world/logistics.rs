@@ -81,18 +81,19 @@ fn path_candidate_key(
 ) -> Option<(u64, i64, i64, usize, Vec<String>)> {
     let mut total_distance = 0_i64;
     let mut total_tariff = 0_i64;
-    let mut total_loss = 0_i64;
+    let mut path_kind = None;
     for route_id in route_ids {
         let route = world.state.logistics_routes.get(route_id)?;
+        path_kind.get_or_insert(route.kind.as_str());
         total_distance = total_distance.checked_add(route.distance_km)?;
         total_tariff =
             total_tariff.checked_add(route.tariff_electricity_per_unit.checked_mul(amount)?)?;
-        total_loss = total_loss.checked_add(material_transit_loss_amount(
-            amount,
-            route.distance_km,
-            material_transit_loss_bps_for_kind(world, route.kind.as_str()),
-        ))?;
     }
+    let total_loss = material_transit_loss_amount(
+        amount,
+        total_distance,
+        material_transit_loss_bps_for_kind(world, path_kind?),
+    );
     Some((
         material_transit_ticks(total_distance),
         total_tariff,
@@ -525,7 +526,7 @@ fn route_capacity_available_amount(world: &World, route_ids: &[String]) -> Optio
         .and_then(|capacities| capacities.into_iter().min())
 }
 
-fn route_path_has_capacity_conflict(
+fn blocked_route_path_plan(
     world: &World,
     from_ledger: &MaterialLedgerId,
     to_ledger: &MaterialLedgerId,
@@ -535,7 +536,7 @@ fn route_path_has_capacity_conflict(
     priority: Option<MaterialTransitPriority>,
     route_id: Option<&str>,
     route_ids: &[String],
-) -> bool {
+) -> Option<(LogisticsTransferPathPlan, bool)> {
     let requested_route_ids = if route_ids.is_empty() {
         route_id
             .map(|route_id| vec![route_id.to_string()])
@@ -544,11 +545,11 @@ fn route_path_has_capacity_conflict(
         route_ids.to_vec()
     };
     let Some(normalized_kind) = normalize_logistics_route_kind(kind) else {
-        return false;
+        return None;
     };
     if let Some(route_id) = route_id {
         let Some(route) = world.state.logistics_routes.get(route_id) else {
-            return false;
+            return None;
         };
         if route_ids.is_empty()
             && !logistics_route_matches(
@@ -560,25 +561,55 @@ fn route_path_has_capacity_conflict(
                 priority,
             )
         {
-            return false;
+            return None;
         }
     }
     // Only turn a resolver error into a conditional quote after proving that the
     // requested path is structurally valid. Missing, disconnected, cyclic, and
     // incompatible paths must retain their authoritative rejection reason.
-    path_matches_route_tuple(
+    if !path_matches_route_tuple(
         world,
         requested_route_ids.as_slice(),
         from_ledger,
         to_ledger,
         normalized_kind.as_str(),
-    ) && requested_route_ids.iter().any(|route_id| {
+    ) || !requested_route_ids.iter().any(|route_id| {
         world
             .state
             .logistics_routes
             .get(route_id)
             .is_some_and(|route| !route_available_for_amount(route, amount))
-    })
+    }) {
+        return None;
+    }
+
+    let key = path_candidate_key(world, requested_route_ids.as_slice(), amount)?;
+    let selected_route = requested_route_ids
+        .first()
+        .and_then(|route_id| world.state.logistics_routes.get(route_id))?;
+    let effective_distance_km = requested_route_ids
+        .iter()
+        .filter_map(|route_id| world.state.logistics_routes.get(route_id))
+        .try_fold(0_i64, |total, route| total.checked_add(route.distance_km))?;
+    let path_unavailable = requested_route_ids.iter().any(|route_id| {
+        world
+            .state
+            .logistics_routes
+            .get(route_id)
+            .is_some_and(|route| !route.available)
+    });
+    Some((
+        LogisticsTransferPathPlan {
+            effective_kind: selected_route.kind.clone(),
+            route_priority: Some(selected_route.priority),
+            effective_distance_km,
+            path_id: logistics_path_id(requested_route_ids.as_slice()),
+            route_ids: requested_route_ids,
+            tariff_electricity_total: key.1,
+            reroute_count: 0,
+        },
+        path_unavailable,
+    ))
 }
 
 impl World {
@@ -625,17 +656,6 @@ impl World {
         route_ids: &[String],
         auto_reroute: bool,
     ) -> Result<LogisticsTransferQuote, RejectReason> {
-        // A non-zero distance on a single binding is the legacy route_id
-        // representation. Explicit path callers use zero as the route-derived
-        // distance sentinel; keep the legacy binding separate whenever it is
-        // present so tuple validation matches authoritative action evaluation.
-        let legacy_route_id =
-            (route_ids.len() == 1 && distance_km != 0).then(|| route_ids[0].as_str());
-        let path_route_ids = if legacy_route_id.is_some() {
-            &[]
-        } else {
-            route_ids
-        };
         self.logistics_transfer_quote_with_route_id(
             requester_agent_id,
             from_ledger,
@@ -644,8 +664,8 @@ impl World {
             amount,
             distance_km,
             requested_priority,
-            legacy_route_id,
-            path_route_ids,
+            None,
+            route_ids,
             auto_reroute,
         )
     }
@@ -695,38 +715,41 @@ impl World {
             });
         }
 
-        let path_plan = match resolve_logistics_transfer_path(
-            self,
-            from_ledger,
-            to_ledger,
-            kind,
-            amount,
-            distance_km,
-            requested_priority,
-            route_id,
-            route_ids,
-            auto_reroute,
-        ) {
-            Ok(plan) => Some(plan),
-            Err(_reason)
-                if route_path_has_capacity_conflict(
-                    self,
-                    from_ledger,
-                    to_ledger,
-                    kind,
-                    amount,
-                    distance_km,
-                    requested_priority,
-                    route_id,
-                    route_ids,
-                ) =>
-            {
-                // A quote reports a conditional, non-mutating capacity blocker while the
-                // action returns the same rejection reason from the shared resolver.
-                None
-            }
-            Err(reason) => return Err(reason),
-        };
+        let (path_plan, route_resolution_available, path_unavailable) =
+            match resolve_logistics_transfer_path(
+                self,
+                from_ledger,
+                to_ledger,
+                kind,
+                amount,
+                distance_km,
+                requested_priority,
+                route_id,
+                route_ids,
+                auto_reroute,
+            ) {
+                Ok(plan) => (Some(plan), true, false),
+                Err(_reason) => {
+                    if let Some((blocked_plan, path_unavailable)) = blocked_route_path_plan(
+                        self,
+                        from_ledger,
+                        to_ledger,
+                        kind,
+                        amount,
+                        distance_km,
+                        requested_priority,
+                        route_id,
+                        route_ids,
+                    ) {
+                        // A quote reports a conditional, non-mutating capacity blocker while the
+                        // action returns the same rejection reason from the shared resolver. Retain
+                        // the validated path metadata so the player can identify and compare it.
+                        (Some(blocked_plan), false, path_unavailable)
+                    } else {
+                        return Err(_reason);
+                    }
+                }
+            };
 
         let requested_route_ids = if route_ids.is_empty() {
             route_id
@@ -747,10 +770,14 @@ impl World {
             .unwrap_or(kind);
         let source_amount_before = self.ledger_material_balance(from_ledger, effective_kind);
         let destination_amount_before = self.ledger_material_balance(to_ledger, effective_kind);
-        let route_capacity = path_plan
-            .as_ref()
-            .and_then(|plan| route_capacity_available_amount(self, plan.route_ids.as_slice()))
-            .or_else(|| route_capacity_available_amount(self, requested_route_ids.as_slice()));
+        let route_capacity = if path_unavailable {
+            Some(0)
+        } else {
+            path_plan
+                .as_ref()
+                .and_then(|plan| route_capacity_available_amount(self, plan.route_ids.as_slice()))
+                .or_else(|| route_capacity_available_amount(self, requested_route_ids.as_slice()))
+        };
         let max_transferable_amount = source_amount_before
             .max(0)
             .min(route_capacity.unwrap_or(i64::MAX));
@@ -808,11 +835,14 @@ impl World {
         let path_capacity_available = path_plan
             .as_ref()
             .map(|plan| {
-                route_capacity_available_amount(self, plan.route_ids.as_slice())
-                    .is_none_or(|capacity| capacity >= amount)
+                plan.route_ids.iter().all(|route_id| {
+                    self.state
+                        .logistics_routes
+                        .get(route_id)
+                        .is_some_and(|route| route_available_for_amount(route, amount))
+                })
             })
             .unwrap_or(false);
-        let route_resolution_available = path_plan.is_some();
         let submission_feasible = route_resolution_available
             && source_amount_before >= amount
             && capacity_available
@@ -825,6 +855,8 @@ impl World {
         };
         let recommendation = if source_amount_before < amount {
             "reduce_amount_or_source_materials"
+        } else if path_unavailable {
+            "route_unavailable"
         } else if !path_capacity_available {
             "wait_for_transit_capacity"
         } else if effective_distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {

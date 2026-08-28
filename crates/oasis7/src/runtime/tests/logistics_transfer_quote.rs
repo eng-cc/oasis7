@@ -645,8 +645,7 @@ fn legacy_route_id_tuple_mismatch_is_rejected_by_quote_and_action() {
         0,
     );
 
-    let state_before_quote = world.snapshot();
-    let quote_reason = world
+    let explicit_path_quote = world
         .logistics_transfer_quote_with_path(
             requester,
             &source,
@@ -656,6 +655,24 @@ fn legacy_route_id_tuple_mismatch_is_rejected_by_quote_and_action() {
             200,
             None,
             std::slice::from_ref(&route_id),
+            false,
+        )
+        .expect("singleton explicit path uses route-derived distance");
+    assert_eq!(explicit_path_quote.distance_km, 100);
+    assert_eq!(explicit_path_quote.route_ids, [route_id.clone()]);
+
+    let state_before_quote = world.snapshot();
+    let quote_reason = world
+        .logistics_transfer_quote_with_route_id(
+            requester,
+            &source,
+            &destination,
+            "iron_ingot",
+            1,
+            200,
+            None,
+            Some(route_id.as_str()),
+            &[],
             false,
         )
         .expect_err("legacy route_id tuple mismatch must reject the quote");
@@ -847,10 +864,12 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
         )
         .expect("valid unavailable path is a conditional capacity quote");
     assert!(!valid_capacity_quote.submission_feasible);
-    assert_eq!(
-        valid_capacity_quote.recommendation,
-        "wait_for_transit_capacity"
-    );
+    assert_eq!(valid_capacity_quote.recommendation, "route_unavailable");
+    assert_eq!(valid_capacity_quote.max_transferable_amount, 0);
+    assert_eq!(valid_capacity_quote.route_ids, valid_capacity_path);
+    assert!(valid_capacity_quote.path_id.is_some());
+    assert_eq!(valid_capacity_quote.tariff_electricity_total, 0);
+    assert_eq!(valid_capacity_quote.reroute_count, 0);
     assert_eq!(world.snapshot(), state_before_valid_capacity_quote);
 
     for (label, route_ids) in [
