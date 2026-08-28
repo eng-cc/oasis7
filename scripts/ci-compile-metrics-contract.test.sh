@@ -57,6 +57,29 @@ if [[ "$workflow_cargo_check_threshold" != '"25"' ]]; then
   echo "compile metrics workflow must default to a cold cargo check regression threshold of 25%" >&2
   exit 1
 fi
+workflow_cargo_build_release_threshold=$(awk '
+/^[[:space:]]*max_cargo_build_release_regression_pct:[[:space:]]*$/ { in_block=1; next }
+in_block && /^      [a-zA-Z0-9_]+:/ { exit }
+in_block && /^[[:space:]]*default:/ { print $2; exit }
+' .github/workflows/compile-metrics.yml)
+if [[ "$workflow_cargo_build_release_threshold" != '"25"' ]]; then
+  echo "compile metrics workflow must default to a cold cargo build --release regression threshold of 25%" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path(".github/workflows/compile-metrics.yml").read_text(encoding="utf-8")
+enforce = source[source.index("      - name: Enforce compile metrics gate"):source.index("\n  summarize:")]
+launcher_start = enforce.index('          if [[ "${{ inputs.metric_target }}" == "launcher" ]]; then')
+launcher_end = enforce.index("\n          fi", launcher_start) + len("\n          fi")
+launcher_block = enforce[launcher_start:launcher_end]
+release_flag = "--max-cargo-build-release-regression-pct"
+if release_flag not in launcher_block:
+    raise SystemExit("release-build regression threshold must be gated to the launcher target")
+if enforce.count(release_flag) != 1:
+    raise SystemExit("release-build regression threshold must not be passed outside the launcher target")
+PY
 if ! grep -Eq '^[[:space:]]*- oasis7_default_features[[:space:]]*$' .github/workflows/compile-metrics.yml; then
   echo "compile metrics workflow must expose the oasis7 default-feature target" >&2
   exit 1
