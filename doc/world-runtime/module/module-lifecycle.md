@@ -150,11 +150,12 @@ struct ModuleUpgrade { module_id: String, from_version: String, to_version: Stri
 4. `DeactivateModule`（若有 deactivate）
 > 顺序固定以保证回放确定性；同类事件按 `module_id` 字典序处理。
 
-**ModuleChangeSet 应用算法（草案）**
+**ModuleChangeSet 应用算法（当前 governed proposal 路径）**
 ```
-fn apply_module_changes(changes: ModuleChangeSet) -> Result<()> {
-  validate_changes(changes)?;
-  shadow_check(changes)?;
+fn apply_governed_proposal(changes: ModuleChangeSet) -> Result<()> {
+  let mut staged = world.clone();
+  staged.validate_changes(changes)?;
+  staged.shadow_check(changes)?;
 
   // 1) register
   for m in sort_by_module_id(changes.register) {
@@ -180,9 +181,12 @@ fn apply_module_changes(changes: ModuleChangeSet) -> Result<()> {
     registry.deactivate(d);
   }
 
+  world = staged; // only after all lifecycle and manifest events succeed
   Ok(())
 }
 ```
+
+当前粗粒度边界覆盖 governed proposal apply：任一 lifecycle event、后续 manifest event 或 consensus publication 失败都会丢弃 cloned `World`，register/upgrade/activate/deactivate 的 authority-drift 回归验证 registry、journal 与 snapshot 不发布中间态。它不等同于完整 lifecycle transaction；非 proposal 入口、persisted instance state 对齐、恢复/回放、durable external effect 与 receipt/outbox 仍是 `partial` / `target`。
 
 **ModuleChangeSet 校验规则（示意）**
 - `module_id` 在 `register/activate/deactivate/upgrade` 内不得重复冲突。
