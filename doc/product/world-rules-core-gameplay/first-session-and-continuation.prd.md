@@ -86,6 +86,20 @@
 
 首局验收使用 `test_tier_required`：至少覆盖一条正向 walkthrough、每类节点一个可恢复阻塞、输入到达顺序变化下的多输入齐套、生产完成但交付未完成，以及重连/重复提交不复制 receipt。`test_tier_full` 再覆盖跨阶段窗口、容量争用、在途损耗、终端失败、恢复/换线与 Viewer/pure API 的事实一致性；这些验证由对应专业域执行，本分册只冻结玩家可理解的因果边界。
 
+### 2.2.2 Starter Industrial Feasibility Gate
+
+在系统把预设工业目标作为首局引导脊柱或当前主推荐交给玩家前，必须先运行产品根 PRD 定义的 `Starter Industrial Feasibility Gate`。本分册把它收敛为一张玩家可读的 feasibility card：闸门顶层结果只有 `candidate_available` 或 `no_safe_starter_chain`，不把内部 job、ledger、target contract 或旧缓存当成可行性证明；闸门本身不创建目标、不锁定库存/容量、不扣资源、不排程，也不保证产量、价格、ETA 或长期稳定。
+
+`candidate_available` 只表示同一份 fresh authority snapshot 已证明一条代表性 starter chain 能到达其 profile 声明的完成边界。卡片至少说明稳定的 starter-chain/candidate identity（或等价的不可变上下文摘要）、绑定的 authority snapshot/version、当前工厂/地点、可用 recipe candidate、原料来源或精炼结果、有效物流路径、电力与输出/终端前置、主要风险、completion boundary、首个可验证成果、即时收益、`progression_effect`、`next_action`、`next_recheck` 与完成后打开的下一 beat；identity 必须覆盖改变产出因果的工厂、配方、输入来源、物流与完成边界。如果有多个候选，不得静默选定，推荐必须能说明来自当前事实的理由。只有已被专业 evidence 证明的 current path 才能通过；多输入 join、多阶段 root/window、output bundle、terminal settlement 或 maintenance 等 target-only 能力不能借 walkthrough 文本直接当作当前前置。首个可验证成果只能证明该链真实产生了声明的第一个世界结果，不能提前发放稳定/交付成长；即时收益必须是本次选择保住的能力、用途或下一选择，而不是后台完成或免费资源。
+
+`no_safe_starter_chain` 不是永久失败。卡片必须指出最早且可行动的 blocker、证据分类（`current-evidence-backed`、`target-contract` 或 `unknown/not_tracked`）、已保留/已消费的价值、真实可用的补料、补证、等待、修复、改道、改候选或重新定目标路径，以及下一次复查边界；该结果不产生工业成长奖励、`progression_effect` 或下一 beat，只有恢复后从 fresh authority snapshot 重新通过闸门，才能再次进入目标。没有安全恢复时，系统应安全停止并交回其他当前可达目标；不得无限等待、自动补料、后台改道、发放免费输入，或把 target/unknown 填成“可达”。
+
+闸门只负责接受前的可行性判断。玩家确认后仍须经过既有配方、排程、生产、交付与 receipt 边界；提交前工厂、配方、输入、路径、容量、电力或终端事实发生变化，或 starter-chain/candidate identity 绑定的 authority snapshot/version 失效时，必须重新判断或无副作用拒绝，不能保留旧 identity、静默切换候选或沿旧 identity 发放 `progression_effect`。`production-only` 的 starter 目标只能在匹配 production receipt 与稳定条件成立后完成生产目标，仍标记 `undelivered`；声明 terminal-admission/delivery 的目标必须等匹配 delivery/terminal settlement receipt，不能把生产、buffer 或准入当成交付。
+
+闸门的 current/target 切线是玩家承诺的证据边界，不是新的 runtime 状态：`current-evidence-backed` 可以进入候选但提交仍须 fresh revalidation；`target-contract` 只能作为未来能力或复查方向；`unknown/not_tracked` 必须进入 `no_safe_starter_chain`，并保留未知原因。相同 authority snapshot/version 应得到相同结果；重连、重复请求、Agent retry、snapshot restore 与 replay 只能重读同一 feasibility/receipt 结果，不复制资源效果、目标完成或奖励。在 fresh composite runtime + QA evidence 证明 Gate 与 starter chain 之前，`test_tier_required` 与 `test_tier_full` 只是验收目标，不是当前 pass；任何 surface 不得宣称 Gate/current starter chain 已实现或默认可用，缺证据必须返回 `no_safe_starter_chain`。
+
+本闸门的 `test_tier_required` 至少覆盖一条正向 starter chain、稳定 identity 与 authority snapshot/version 绑定、首个可验证成果/即时收益/`progression_effect`/下一 beat、工厂/配方/原料/物流/电力/输出各类 blocker、target-only/unknown fail-closed、报价后事实漂移、production-only 与 terminal-admission 的不同完成边界，以及重复/重连/replay 无副作用；`test_tier_full` 再覆盖多候选争用、跨窗口/多阶段链、持久化恢复和 Viewer/pure API 对结果、blocker、下一步与复查点的同义表达。该卡片不新增配方、数值、runtime schema、任务树、自动补给/改道或 UI 布局。
+
 ### 2.3 早期 quote/preview 的信息仲裁
 
 首局与早期持续游玩中的既有 quote、preview 与推荐，应优先帮助玩家完成一个当前主要决策，并突出一个会改变该决策的主导 blocker 或成本。可以延后与当前选择无关、且可恢复的补充细节，但延后必须保留可回看的路径和时机；它不能把复杂性伪装成没有代价。
@@ -166,7 +180,7 @@
 - FS-12：首局至首次持续能力的样例以预设引导脊柱建立一个当前主目标和可执行“继续”路径；达成阶段成果后只在 2 至 3 个实质不同方向或玩家主动换向时请求选择，后台作用域/转译/校验/治理/审计只在实质影响当前选择时提供原因和替代路径。
 - FS-13：代表性主动换向样例区分预览、已接受但尚未生效的请求与已提交的世界结果；换向、重连、并发或重试不会追溯取消已提交结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
 - FS-14：空、陈旧或冲突状态，以及同时存在多个 blocker 的代表性样例，证明 Viewer 与 pure API 采用相同的状态置信度闸门和主要 blocker 优先级：状态未确认时不提供会改变世界的猜测动作，至少保留真实的复核、恢复、安全停止或重新定目标路径；状态一致时先呈现安全/权利/授权与不可逆后果，再处理可恢复前置和可选信息；同级安全路径可比较且不会被静默合并。状态在展示后变化时，旧动作必须按当前状态重新判断，不得沿用旧资格/成本、静默改道或产生第二次世界效果。
-- FS-15：代表性首局工业 walkthrough 能沿 `工厂就绪 -> 配方比较 -> 原料获取/精炼 -> 物流抵达 -> 多输入齐套 -> 排程 -> 生产 receipt -> 交付 receipt` 逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；至少区分 accepted-unstarted、active/in-transit、produced-but-not-delivered 与 delivered/terminal-settled，证明生产完成不解锁交付用途、交付完成才产生目的地后果，且重连/重复提交/回放不复制任一 receipt。正向、可恢复阻塞、arrival reorder、生产成功而交付失败/未确认均需有 `test_tier_required` 证据，跨窗口/争用/损耗/终端故障与两入口一致性进入 `test_tier_full`。
+- FS-15：代表性首局工业 walkthrough 在展示为当前主推荐前，必须先通过 `Starter Industrial Feasibility Gate`，并沿 `工厂就绪 -> 配方比较 -> 原料获取/精炼 -> 物流抵达 -> 多输入齐套 -> 排程 -> 生产 receipt -> 交付 receipt` 逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；闸门只返回 `candidate_available` 或 `no_safe_starter_chain`，后者必须保留 current/target/unknown 证据分类、可行动 blocker、下一动作和复查边界，不得发放免费输入或静默改道。walkthrough 至少区分 accepted-unstarted、active/in-transit、produced-but-not-delivered 与 delivered/terminal-settled，证明生产完成不解锁交付用途、交付完成才产生目的地后果，且重连/重复提交/回放不复制任一 receipt。正向、可恢复阻塞、arrival reorder、生产成功而交付失败/未确认均需有 `test_tier_required` 证据，跨窗口/争用/损耗/终端故障与两入口一致性进入 `test_tier_full`。
 
 ### 6.1 验收追踪
 

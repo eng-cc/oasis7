@@ -304,6 +304,28 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 同一批次跨阶段的 lineage 必须在持久化、恢复和 replay 后仍能关联各阶段承诺、边、中间品数量/预留、父级 receipt、规格/品质适用结论及其来源、实际损耗与 blocker。重复提交、Agent 重试、重连或事件重放对每个阶段至多产生一次 sink、产出与里程碑效果，也不能把未知/不适用批次重试成适用；已完成阶段可以按专业合同从已结算结果继续，但不得重新发奖、复制中间品或跳过尚未满足的下游前置。`game` 拥有阶段节奏、容量取舍、规格/品质带来的用途选择、返工收益和 anti-grind 平衡；`world-runtime` 与工业模块拥有图、账本、批次属性、适用性校验、预留、状态、守恒、去重与 replay 合同；Viewer 与 pure API 必须表达同一根因、适用结论、背压和下一步。产品层不冻结品质数值/公式、buffer 数值、配方、并行度、队列/图算法、runtime 枚举或 UI 布局。
 
+#### Starter 工业可行性闸门与 current/target 证据切线
+
+首局或首次持续能力的工业目标在成为可执行推荐前，必须先通过一次 `Starter Industrial Feasibility Gate`。闸门只从同一份 fresh authority snapshot 判断当前是否存在一条到 profile 声明完成边界的安全 starter chain；它是玩家可读的产品决策结果，不是 runtime 状态、字段或新任务系统，不创建目标、不锁定资源/容量、不改动账本、不自动排程，也不保证产量、价格、ETA 或长期稳定。闸门顶层结果只有 `candidate_available` 与 `no_safe_starter_chain`，不能把 target contract 或未知事实包装成可行。
+
+这里的闸门结果是“整条 starter chain 是否可进入首局推荐”的产品层结果，与后文 recipe candidate discovery 的 `candidate_available`、`candidate_blocked`、`candidate_unknown` 三类候选结果不是同一层级；后者仍负责解释单个配方候选，不能单独证明整条 starter chain 可达。
+
+闸门必须同时核对当前工厂/地点能力、当前可用且适用的 recipe candidate、原料来源或精炼结果、有效物流路径与容量、电力前置、产物接收/终端用途及 profile 声明的 completion boundary。只有这些事实均有当前证据，且每个所需阶段/边可执行时，才可返回 `candidate_available`；链路不存在、任一不可逆前置无安全恢复，或必要事实仍是 target-only/unknown 时，返回 `no_safe_starter_chain`。多输入 join、多阶段 root/window、output bundle、terminal settlement 或 maintenance 只在对应专业合同已有 current evidence 时才能成为 starter 前置，不能因为 walkthrough 或 target PRD 提到它们就默认可用。
+
+证据切线只表达产品承诺范围，不改变专业 authority 的实现状态：
+
+| 证据分类 | 产品含义 | Starter 闸门行为 |
+| --- | --- | --- |
+| `current-evidence-backed` | 当前专业合同与 fresh evidence 已共同证明该事实及其完成边界 | 可以进入候选链，但仍须在提交时重新校验 |
+| `target-contract` | 已定义规则/目标，但尚无当前实现或组合证据 | 不能作为当前 starter 前置；只能说明未来能力或后续复查方向 |
+| `unknown/not_tracked` | authority、状态或适用范围不足以判断 | 按 `no_safe_starter_chain` 处理，保留未知根因，不以零成本、无限容量或安全可达填充 |
+
+`candidate_available` 必须让玩家看到稳定的 starter-chain/candidate identity（或等价的不可变上下文摘要）、所绑定的 authority snapshot/version、工厂/配方/输入/物流/电力/输出边界、主要风险、completion boundary、首个可验证成果、即时收益、`progression_effect`、`next_action`、`next_recheck` 与完成后打开的下一 beat；identity 必须同时绑定该链的产出因果前置，多个候选不得被静默选定，推荐理由必须来自同一快照。首个可验证成果只表示该链真实完成了声明的第一个世界结果，不能提前发放稳定/交付成长；即时收益必须是玩家因这次选择保住的能力、用途或下一选择，不能是后台完成或免费资源。`no_safe_starter_chain` 必须指出最早且可行动的 blocker、它属于 current/target/unknown 哪一类、已保留或已消费的价值、真实可用的补料/补证/等待/修复/改道/换候选/重新定目标路径，以及下一次复查边界；该结果不产生工业成长奖励、progression_effect 或下一 beat，只有恢复后以 fresh snapshot 重新通过闸门，才能再次进入目标。没有安全恢复时必须安全停止，而不是无限等待、自动补料、后台改道或发放免费输入。
+
+闸门只负责接受前的可行性判断；玩家确认后仍须按既有工业 lifecycle、quote、receipt 与 fresh revalidation 合同执行。提交前任何工厂、配方、输入、路线、容量、电力或终端事实漂移，或该链的 authority snapshot/version 失效，都必须重新运行闸门或原子拒绝，不能保留旧 starter-chain/candidate identity、静默切换到另一条链或沿旧 identity 发放 progression_effect。`production-only` profile 可在匹配的 production receipt 与其稳定条件成立时完成生产目标，但仍保持 `undelivered`；声明 terminal-admission/delivery 的 profile 必须等待匹配的 delivery/terminal settlement receipt。重复请求、重连、Agent retry、snapshot restore 与 replay 只能重读同一闸门/receipt 结果，不产生第二次资源效果或目标完成。
+
+该闸门保持 **world-first** 的真实工厂、材料、物流、电力与终端约束，保持 **emergence-first** 的来源/配方/路线取舍，保持 **persistent/auditable** 的 candidate、目标与 receipt lineage，并为未来专业 profile 保留 **extensible** 的能力切换边界。`test_tier_required` 与 `test_tier_full` 是验收目标，不是当前 pass 或当前可用性声明；在 fresh composite runtime + QA evidence 证明 Gate 与 starter chain 之前，任何 surface、产品结论或 release 说明都不得宣称 Gate/current starter chain 已实现或默认可用，缺少该证据必须按 `no_safe_starter_chain` 处理。验收目标至少覆盖一条 current-evidence-backed 正向链、首个可验证成果/即时收益/`progression_effect`/下一 beat、稳定 identity 与 authority snapshot/version 绑定、工厂/配方/原料/物流/电力/输出各类 blocker、target-only 与 unknown fail-closed、报价后事实漂移、生产与交付边界，以及重复/重连/replay 无副作用；`test_tier_full` 再覆盖多候选容量争用、跨窗口/多阶段链、production-only 与 terminal-admission profile、持久化恢复和 Viewer/pure API 同义结果。该补充不新增配方、数值、runtime schema、队列、自动补给/改道、UI 布局或当前实现声明。
+
 #### 工业流水线生命周期到玩家决策的收口
 
 现有工业合同分别定义了阶段、批次、物流边、配方版本、工厂能力和终端结算，但这些事实必须在产品层收束为一个可执行的玩家读法；玩家不能从 job、ledger 或 receipt 名称自行推断“现在能做什么”。对每个当前工业目标，正式玩家 surface 与 pure API 必须从同一权威快照提供以下四类产品结果（这是读面分类，不是新的 runtime 状态或字段）：
