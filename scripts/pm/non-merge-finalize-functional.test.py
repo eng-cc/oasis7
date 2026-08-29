@@ -145,6 +145,9 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     print(json.dumps([read("GH_COMMENTS", [])]))
 elif args[:2] == ["api", "graphql"]:
+    if os.environ.get("GH_PROJECT_ITEM_MISSING") == "1":
+        print(json.dumps({"data": {"nodes": []}}))
+        raise SystemExit(0)
     if os.environ.get("GH_MUTATE_PROJECT_MAPPING_ON_PROJECT_READBACK") == "1":
         mapping_path = path("GH_MAPPING")
         mapping = json.loads(mapping_path.read_text())
@@ -437,6 +440,35 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
         self.assertEqual(self.read_json(self.root / ".pm/github-project-sync/tasks.json"), before)
+
+    def test_missing_project_binding_fails_before_intent_or_receipt_and_repaired_retry_succeeds(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        mapping = self.read_json(mapping_path)
+        mapping["tasks"][UID]["project_item_id"] = "MISSING_ITEM"
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_PROJECT_ITEM_MISSING": "1",
+        })
+
+        failed = self.invoke("duplicate")
+        self.assertNotEqual(failed.returncode, 0)
+        failed_mapping = self.read_json(mapping_path)
+        self.assertNotIn("closed_without_merge_intent", failed_mapping["tasks"][UID])
+        receipt = self.root / ".git/oasis7-workflow-receipts" / UID / "closed-without-merge-receipt.json"
+        self.assertFalse(receipt.exists())
+        self.assertIn("- status: `committed`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+
+        repaired = self.read_json(mapping_path)
+        repaired["tasks"][UID]["project_item_id"] = "ITEM1"
+        mapping_path.write_text(json.dumps(repaired, sort_keys=True) + "\n")
+        self.env.pop("GH_PROJECT_ITEM_MISSING")
+        retry = self.invoke("duplicate")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
 
     def test_retry_rejects_receipt_pr_identity_drift(self) -> None:
         self.mapping(pr=True)

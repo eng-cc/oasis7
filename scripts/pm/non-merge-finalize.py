@@ -329,6 +329,15 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
     durable_store.transact_json(path, check)
 
 
+def _verify_project_identity(path: pathlib.Path,
+                             project_identity: dict[str, str]) -> None:
+    def check(mapping: dict) -> None:
+        if _project_identity(mapping.get("project") or {}) != project_identity:
+            fail("Project identity drifted before terminal effects")
+
+    durable_store.transact_json(path, check)
+
+
 def _evidence_comment_body(record: dict, task_uid: str, operation_id: str,
                            reason: str, evidence_digest: str,
                            evidence_file: str, public_evidence: str) -> str:
@@ -619,16 +628,20 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             # terminal authority.
             receipt["project_identity"] = project_identity
             receipt_needs_write = True
-    if not recovery_candidate:
+    # Complete the live Project binding readback before persisting either
+    # terminal intent or receipt authority.  This keeps a missing item or
+    # malformed binding from leaving a resumable-looking local closeout.
+    _project_readback(record, task_uid)
+    if recovery_candidate:
+        _verify_project_identity(mapping_path, project_identity)
+    else:
         _reserve_closeout(mapping_path, task_uid, record, reason,
                           evidence_digest, project_identity)
     if existing_receipt is None or receipt_needs_write:
         durable_store.replace_json(receipt_path, receipt)
     receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
-    # Project identity is re-read before the first remote terminal mutation;
-    # the lock-held check catches a mapping writer that drifted during this
-    # readback and leaves all Issue/Project/comment effects untouched.
-    _project_readback(record, task_uid)
+    # The reservation (or already-terminal receipt) is checked again before
+    # the first remote terminal mutation.
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
     issue = _update_issue_body(record, task_uid, issue, ledger_path)

@@ -31,9 +31,20 @@ assert _store_spec and _store_spec.loader
 durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
 
 
+class _CommandExit(SystemExit):
+    """Keep the CLI's numeric failure status while exposing the diagnostic to callers."""
+
+    def __init__(self, message: str) -> None:
+        self.message = f"github-project-task: {message}"
+        super().__init__(1)
+
+    def __str__(self) -> str:
+        return self.message
+
+
 def die(message: str) -> None:
     print(f"github-project-task: {message}", file=sys.stderr)
-    raise SystemExit(1)
+    raise _CommandExit(message)
 
 
 def now() -> str:
@@ -1052,6 +1063,8 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 canonical_number,
                 canonical_project_id,
             )
+        if selected_node is None:
+            die("refresh-task: bound Project item is unavailable; refusing to refresh without Project binding")
     else:
         query = """
         query($q: String!) {
@@ -1139,7 +1152,18 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     if project_status in lifecycle_rank and lifecycle_rank[project_status] >= lifecycle_rank.get(issue_status, -1):
         record["status"] = project_status
         record["project_status"] = project_fields.get("Status", "")
-        record["workflow_phase"] = project_fields.get("Workflow Phase", "")
+        project_phase = project_fields.get("Workflow Phase", "")
+        existing_phase = str(existing.get("workflow_phase") or "")
+        fine_terminal_phases = {
+            "closed_without_" + "merge",
+            "post_" + "merge_done",
+        }
+        if project_status == "done" and existing_phase in fine_terminal_phases:
+            # Project exposes both terminal receipt phases as coarse `done`;
+            # refreshing its fields must not erase the finer local phase.
+            record["workflow_phase"] = existing_phase
+        else:
+            record["workflow_phase"] = project_phase
         record["reconciled_from_project"] = project_status != issue_status
     record["cache_refreshed_at"] = now()
     # Local cache identity is never accepted from stale issue/project/cache

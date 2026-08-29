@@ -105,6 +105,124 @@ class AuthoritativeMappingContract(unittest.TestCase):
         mapping = MODULE.load_mapping(mapping_path)
         self.assert_complete_identity(mapping["tasks"][self.uid])
 
+    def test_selected_refresh_preserves_closed_without_merge_workflow_phase(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        MODULE.save_mapping(mapping_path, {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid,
+                "status": "done",
+                "workflow_phase": "closed_without_merge",
+                "project_item_id": "ITEM_ID",
+                **self.expected,
+            }},
+        })
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "done",
+            "priority": "P2",
+            "worktree_hint": str(self.worktree),
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {
+                "id": "PROJECT_ID",
+                "number": 1,
+                "owner": {"login": "eng-cc"},
+            },
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [
+                    {"name": "Done", "field": {"name": "Status"}},
+                    {"name": "done", "field": {"name": "PM Status"}},
+                    {"name": "done", "field": {"name": "Workflow Phase"}},
+                ],
+            },
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual("done", refreshed["status"])
+        self.assertEqual("closed_without_merge", refreshed["workflow_phase"])
+
+    def test_refresh_rejects_missing_project_binding_without_mutation_and_allows_repaired_retry(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        original = {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid,
+                "status": "done",
+                "workflow_phase": "closed_without_merge",
+                "project_item_id": "STALE_ITEM",
+                **self.expected,
+            }},
+        }
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "done",
+            "priority": "P2",
+            "worktree_hint": str(self.worktree),
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {
+                "id": "PROJECT_ID",
+                "number": 1,
+                "owner": {"login": "eng-cc"},
+            },
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [],
+            },
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": []}}),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaisesRegex(SystemExit, r"Project item|Project identity|binding"):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(original, MODULE.load_mapping(mapping_path))
+
+        repaired = json.loads(json.dumps(original))
+        repaired["tasks"][self.uid]["project_item_id"] = "ITEM_ID"
+        MODULE.save_mapping(mapping_path, repaired)
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual("ITEM_ID", refreshed["project_item_id"])
+
     def test_default_root_refresh_preserves_registered_task_worktree_identity(self) -> None:
         args = self.args()
         args.root = self.repo
