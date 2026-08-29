@@ -24,6 +24,10 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AuthoritativeMappingContract(unittest.TestCase):
+    def test_issue_lookup_includes_closed_tasks(self) -> None:
+        source = pathlib.Path(MODULE.__file__).read_text(encoding="utf-8")
+        lookup = source[source.index("def github_issue_record"):source.index("def", source.index("def github_issue_record") + 4)]
+        self.assertIn('"--state",\n            "all"', lookup)
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = pathlib.Path(self.tmp.name) / "repo"

@@ -944,7 +944,8 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
         current.setdefault("evidence_comments", [])
         if comment and comment not in current["evidence_comments"]:
             current["evidence_comments"].append(comment)
-        current["last_closed_at"] = now()
+        current.setdefault("last_closed_at", now())
+        current["non_merge_finalized_at"] = now()
         current["last_evidence_at"] = now()
         mapping.setdefault("tasks", {})[task_uid] = current
 

@@ -790,6 +790,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         crashed = self.invoke("non_pr_completed")
         self.assertNotEqual(crashed.returncode, 0)
         record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        original_closed_at = record["last_closed_at"]
         self.assertEqual(record["status"], "done")
         self.assertEqual(record["workflow_phase"], "closed_without_merge")
         self.assertEqual(len(self.read_json(self.comments)), 1)
@@ -801,6 +802,9 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(payload["status"], "already_finalized")
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["completed"])
+        finalized = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        self.assertEqual(finalized["last_closed_at"], original_closed_at)
+        self.assertIn("non_merge_finalized_at", finalized)
 
     def test_retry_recovers_after_project_done_then_selected_refresh_without_manual_edits(self) -> None:
         canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"

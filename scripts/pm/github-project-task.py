@@ -361,6 +361,8 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "list",
             "-R",
             repo,
+            "--state",
+            "all",
             "--search",
             f"{task_uid} in:body",
             "--json",
@@ -1288,6 +1290,13 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         else:
             record["workflow_phase"] = project_phase
         record["reconciled_from_project"] = project_status != issue_status
+    if pending_phase is not None:
+        # Pending intent authority wins independently of Project/Issue rank:
+        # either remote sink may have advanced first when a run crashed.
+        pending_intent = existing.get("closed_without_merge_intent") or {}
+        record["workflow_phase"] = pending_phase
+        if isinstance(pending_intent, dict) and pending_intent.get("previous_status"):
+            record["status"] = pending_intent["previous_status"]
     record["cache_refreshed_at"] = now()
     # Local cache identity is never accepted from stale issue/project/cache
     # values.  Every refresh overwrites it from current registered git facts.
