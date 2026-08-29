@@ -789,6 +789,12 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
                 fail("task terminal reason authority drifted")
             if current.get("closed_without_merge_evidence_sha256") != evidence_digest:
                 fail("task terminal evidence authority drifted")
+            expected_digest = ((record.get("phase_receipt_sha256") or {})
+                               .get("closed_without_merge"))
+            current_digest = ((current.get("phase_receipt_sha256") or {})
+                              .get("closed_without_merge"))
+            if expected_digest and current_digest != expected_digest:
+                fail("task terminal migrated receipt digest authority drifted")
             return
         for key in TERMINAL_CAS_FIELDS:
             if (key in current, current.get(key)) != (key in record, record.get(key)):
@@ -1010,6 +1016,13 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
         }
         if current_phase not in eligible_phases:
             fail(f"workflow phase is not eligible for non-merge closeout: {current_phase}")
+        if current_phase == "closed_without_merge":
+            expected_digest = ((record.get("phase_receipt_sha256") or {})
+                               .get("closed_without_merge"))
+            current_digest = ((current.get("phase_receipt_sha256") or {})
+                              .get("closed_without_merge"))
+            if expected_digest and current_digest != expected_digest:
+                fail("task terminal migrated receipt digest authority drifted")
         if (current_phase != "closed_without_merge"
                 and not _intent_matches(current.get(NON_MERGE_INTENT_FIELD), intent)):
             fail("non-merge closeout intent authority drifted")
@@ -1204,6 +1217,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             _bind_terminal_migrated_receipt_digest(
                 mapping_path, task_uid, receipt_digest,
             )
+            record.setdefault("phase_receipt_sha256", {})[
+                "closed_without_merge"
+            ] = receipt_digest
         else:
             _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
             record.setdefault(NON_MERGE_INTENT_FIELD, {})[
@@ -1221,6 +1237,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             _bind_terminal_migrated_receipt_digest(
                 mapping_path, task_uid, receipt_digest,
             )
+            record.setdefault("phase_receipt_sha256", {})[
+                "closed_without_merge"
+            ] = receipt_digest
         elif bound is None:
             _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
             record.setdefault(NON_MERGE_INTENT_FIELD, {})[
