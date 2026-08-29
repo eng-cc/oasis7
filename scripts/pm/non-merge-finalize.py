@@ -35,16 +35,20 @@ MERGE_AUTHORITY_FIELDS = (
     "cleanup_authority",
 )
 STATUS_LINE_RE = re.compile(r"(?m)^- status: `([^`]+)`$")
+PR_HEAD_REQUIRED_FIELDS = ("headRefOid", "headRefName")
+PR_HEAD_OPTIONAL_FIELDS = ("headRepositoryOwner", "headRepositoryName")
+PR_HEAD_FIELDS = PR_HEAD_REQUIRED_FIELDS + PR_HEAD_OPTIONAL_FIELDS
 TERMINAL_CAS_FIELDS = (
     "task_uid", "repository", "issue_number", "issue_url", "project_item_id",
     "canonical_worktree", "task_branch", "default_branch", "status",
     "workflow_phase", "pr_number", "pr_url", "completion_mode",
-    "non_pr_completion_evidence", *MERGE_AUTHORITY_FIELDS,
+    "non_pr_completion_evidence", *MERGE_AUTHORITY_FIELDS, *PR_HEAD_FIELDS,
 )
 PROJECT_IDENTITY_FIELDS = ("owner", "number", "id")
 NON_MERGE_INTENT_FIELD = "closed_without_merge_intent"
 RECEIPT_NAME = "closed-without-merge-receipt.json"
 LEDGER_NAME = "non-merge-finalizer-ledger.json"
+NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
 
 
 def _load_module(name: str, path: pathlib.Path):
@@ -176,7 +180,8 @@ def _identity_pr(record: dict) -> dict | None:
     if not pr_number or not pr_url:
         fail("recorded PR identity is incomplete")
     pr = run_json(["gh", "pr", "view", pr_number, "-R", str(record["repository"]),
-                   "--json", "number,url,state,mergedAt,headRefOid,headRefName"])
+                   "--json", "number,url,state,mergedAt,headRefOid,headRefName,"
+                   "headRepositoryOwner,headRepository"])
     merged_at = pr.get("mergedAt")
     if merged_at not in (None, ""):
         fail("recorded PR is MERGED; use post-merge-finalize with its merge receipt")
@@ -188,6 +193,44 @@ def _identity_pr(record: dict) -> dict | None:
     return pr
 
 
+def _pr_head_authority(pr: dict) -> dict[str, str]:
+    """Extract the immutable PR head identity required by non-merge closeout."""
+    authority: dict[str, str] = {}
+    for key in PR_HEAD_REQUIRED_FIELDS:
+        value = str(pr.get(key) or "")
+        if not value:
+            fail(f"recorded PR is missing required {key} head authority")
+        authority[key] = value
+    raw_owner = pr.get("headRepositoryOwner")
+    raw_owner = raw_owner if isinstance(raw_owner, dict) else {}
+    raw_repository = pr.get("headRepository")
+    raw_repository = raw_repository if isinstance(raw_repository, dict) else {}
+    owner = str(raw_owner.get("login") or "")
+    repository = str(raw_repository.get("name") or "")
+    if owner and repository:
+        authority.update({
+            "headRepositoryOwner": owner,
+            "headRepositoryName": repository,
+        })
+    return authority
+
+
+def _bind_pr_head(record: dict, pr: dict | None,
+                  existing_receipt: dict | None = None) -> dict[str, str]:
+    """Bind the live PR head and fail closed on any stored-head mismatch."""
+    if pr is None:
+        return {}
+    authority = _pr_head_authority(pr)
+    for key in PR_HEAD_FIELDS:
+        if key in record and str(record.get(key) or "") != authority.get(key, ""):
+            fail(f"recorded PR {key} drifted from live head authority")
+        if existing_receipt is not None and key in existing_receipt:
+            if str(existing_receipt.get(key) or "") != authority.get(key, ""):
+                fail(f"existing non-merge receipt {key} drifted from live PR head")
+    record.update(authority)
+    return authority
+
+
 def _project_identity(project: dict) -> dict[str, str]:
     """Return the canonical mapping-level Project identity for CAS/receipts."""
     return {key: str(project.get(key) or "") for key in PROJECT_IDENTITY_FIELDS}
@@ -196,7 +239,7 @@ def _project_identity(project: dict) -> dict[str, str]:
 def _closeout_intent(task_uid: str, record: dict, reason: str,
                      evidence_digest: str,
                      project_identity: dict[str, str]) -> dict:
-    return {
+    intent = {
         "schema": "oasis7_non_merge_closeout_intent_v1",
         "task_uid": task_uid,
         "repository": record.get("repository"),
@@ -208,6 +251,10 @@ def _closeout_intent(task_uid: str, record: dict, reason: str,
         "pr_number": record.get("pr_number"),
         "pr_url": record.get("pr_url"),
     }
+    for key in PR_HEAD_FIELDS:
+        if key in record:
+            intent[key] = record[key]
+    return intent
 
 
 def _receipt_recovery_candidate(record: dict, task_uid: str, reason: str,
@@ -217,14 +264,25 @@ def _receipt_recovery_candidate(record: dict, task_uid: str, reason: str,
         return False
     if not isinstance(existing_receipt, dict):
         return False
-    return (
+    if not (
         existing_receipt.get("receipt_type") == "oasis7_closed_without_merge"
         and str(existing_receipt.get("task_uid") or "") == task_uid
         and str(existing_receipt.get("reason") or "") == reason
         and str(existing_receipt.get("evidence_sha256") or "") == evidence_digest
         and str(existing_receipt.get("project_item_id") or "")
         == str(record.get("project_item_id") or "")
-    )
+    ):
+        return False
+    if record.get("pr_number") or record.get("pr_url"):
+        return all(
+            key in existing_receipt
+            and str(existing_receipt.get(key) or "") == str(record.get(key) or "")
+            for key in PR_HEAD_REQUIRED_FIELDS
+        ) and all(
+            key not in record or str(existing_receipt.get(key) or "") == str(record.get(key) or "")
+            for key in PR_HEAD_OPTIONAL_FIELDS
+        )
+    return True
 
 
 def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
@@ -255,9 +313,19 @@ def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
 
 
 def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str,
-                       state: str, result: object = None) -> None:
+                       state: str, result: object = None,
+                       pr_head: dict[str, str] | None = None) -> None:
+    bound_head = {
+        key: pr_head[key] for key in PR_HEAD_FIELDS
+        if pr_head is not None and key in pr_head
+    }
     operation_id = hashlib.sha256(
-        f"{task_uid}:closed_without_merge:{effect}".encode()
+        json.dumps({
+            "task_uid": task_uid,
+            "phase": "closed_without_merge",
+            "effect": effect,
+            "pr_head": bound_head,
+        }, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
 
     def update(ledger: dict) -> None:
@@ -266,7 +334,14 @@ def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str,
         entry = (ledger.setdefault("operations", {})
                  .setdefault(effect, {"operation_id": operation_id, "effect": effect}))
         if entry.get("operation_id") != operation_id:
-            fail("non-merge ledger operation identity conflict")
+            legacy_operation_id = hashlib.sha256(
+                f"{task_uid}:closed_without_merge:{effect}".encode()
+            ).hexdigest()
+            if (pr_head and entry.get("operation_id") == legacy_operation_id
+                    and not entry.get("committed")):
+                entry["operation_id"] = operation_id
+            else:
+                fail("non-merge ledger operation identity conflict")
         entry[state] = True
         if result is not None:
             entry["result"] = result
@@ -294,11 +369,20 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
         if str(current.get("workflow_phase") or "") == "closed_without_merge":
             return dict(current)
         for key in TERMINAL_CAS_FIELDS:
+            # PR head fields are first learned from the live PR read and are
+            # therefore absent from a pre-head mapping snapshot.  Reservation
+            # binds those fields atomically; any already-recorded value must
+            # still match exactly.
+            if key in PR_HEAD_FIELDS and key not in current and key in record:
+                continue
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted before terminal effects: {key}")
         existing = current.get(NON_MERGE_INTENT_FIELD)
         if existing not in (None, intent):
             fail("non-merge closeout intent authority drifted")
+        for key in PR_HEAD_FIELDS:
+            if key in record:
+                current[key] = record[key]
         current[NON_MERGE_INTENT_FIELD] = intent
         mapping.setdefault("tasks", {})[task_uid] = current
         return dict(current)
@@ -403,7 +487,8 @@ def _reconcile_comment(record: dict, operation_id: str, reason: str,
 
 
 def _update_issue_body(record: dict, task_uid: str, issue: dict,
-                       ledger_path: pathlib.Path) -> dict:
+                       ledger_path: pathlib.Path,
+                       pr_head: dict[str, str] | None = None) -> dict:
     body = str(issue.get("body") or "")
     statuses = STATUS_LINE_RE.findall(body)
     if len(statuses) != 1:
@@ -413,9 +498,9 @@ def _update_issue_body(record: dict, task_uid: str, issue: dict,
     )
     if count != 1:
         fail("Issue body is missing exactly one canonical status field")
-    _ledger_transition(ledger_path, task_uid, "issue_body_update", "intent")
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "intent", pr_head=pr_head)
     if updated_body != body:
-        _ledger_transition(ledger_path, task_uid, "issue_body_update", "action")
+        _ledger_transition(ledger_path, task_uid, "issue_body_update", "action", pr_head=pr_head)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
             handle.write(updated_body)
             body_path = pathlib.Path(handle.name)
@@ -431,15 +516,16 @@ def _update_issue_body(record: dict, task_uid: str, issue: dict,
     readback_statuses = STATUS_LINE_RE.findall(str(readback.get("body") or ""))
     if readback_statuses != ["done"]:
         fail("Issue body status readback mismatch")
-    _ledger_transition(ledger_path, task_uid, "issue_body_update", "readback", readback)
-    _ledger_transition(ledger_path, task_uid, "issue_body_update", "committed")
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "readback", readback, pr_head)
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "committed", pr_head=pr_head)
     return readback
 
 
 def _project_update(root: pathlib.Path, record: dict, task_uid: str,
                     ledger_path: pathlib.Path, mapping_path: pathlib.Path,
                     reason: str, evidence_digest: str,
-                    project_identity: dict[str, str]) -> None:
+                    project_identity: dict[str, str],
+                    pr_head: dict[str, str] | None = None) -> None:
     item_id, project_meta, live = _project_readback(record, task_uid)
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
@@ -456,12 +542,12 @@ def _project_update(root: pathlib.Path, record: dict, task_uid: str,
             fail(f"Project terminal field unavailable: {name}={value}")
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
-    _ledger_transition(ledger_path, task_uid, "project_update", "intent")
+    _ledger_transition(ledger_path, task_uid, "project_update", "intent", pr_head=pr_head)
     missing = {name for name, value in terminal_fields.items() if str(live.get(name) or "") != value}
     if missing:
         _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                    evidence_digest, project_identity)
-        _ledger_transition(ledger_path, task_uid, "project_update", "action", {"fields": sorted(missing)})
+        _ledger_transition(ledger_path, task_uid, "project_update", "action", {"fields": sorted(missing)}, pr_head)
         updated, skipped = project_sync.update_fields(fields_project_id, item_id, task, fields, only_fields=missing)
         if skipped or int(updated) != len(missing):
             fail("Project terminal fields were not fully persisted")
@@ -470,8 +556,8 @@ def _project_update(root: pathlib.Path, record: dict, task_uid: str,
             fail("Project terminal readback pagination is incomplete")
     if any(str(live.get(name) or "") != value for name, value in terminal_fields.items()):
         fail("Project terminal fields readback mismatch")
-    _ledger_transition(ledger_path, task_uid, "project_update", "readback", live)
-    _ledger_transition(ledger_path, task_uid, "project_update", "committed")
+    _ledger_transition(ledger_path, task_uid, "project_update", "readback", live, pr_head)
+    _ledger_transition(ledger_path, task_uid, "project_update", "committed", pr_head=pr_head)
 
 
 def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
@@ -560,6 +646,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             fail(f"existing non-merge receipt is unreadable: {exc}")
         if not isinstance(existing_receipt, dict):
             fail("existing non-merge receipt is not an object")
+    pr = _identity_pr(record)
+    pr_head = _bind_pr_head(record, pr, existing_receipt)
     recovery_candidate = _receipt_recovery_candidate(
         record, task_uid, reason, evidence_digest, existing_receipt,
     )
@@ -573,13 +661,12 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             and _has_verified_task_complete(record)
             and _has_non_pr_task_classification(record)):
         fail("non_pr_completed requires task_done, verified task_complete closeout evidence, and non_pr_task classification/evidence")
-    pr = _identity_pr(record)
     if reason in {"superseded", "duplicate"} and pr is None:
         fail(f"{reason} requires an exact bound CLOSED unmerged PR")
     issue = _identity_issue(record, task_uid, allow_closed=existing_receipt is not None)
     receipt = {
         "receipt_type": "oasis7_closed_without_merge",
-        "schema_version": 1,
+        "schema_version": NON_MERGE_RECEIPT_SCHEMA_VERSION,
         "issuer": "non-merge-finalize",
         "task_uid": task_uid,
         "repository": record.get("repository"),
@@ -597,6 +684,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "mergedAt": (pr or {}).get("mergedAt") if pr else None,
         "observed_at": now(),
     }
+    receipt.update(pr_head)
     if existing_receipt is not None:
         expected_existing = {
             "receipt_type": receipt["receipt_type"], "schema_version": receipt["schema_version"],
@@ -607,6 +695,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             "pr_number": receipt.get("pr_number"), "pr_url": receipt.get("pr_url"),
             "pr_state": receipt.get("pr_state"), "mergedAt": receipt.get("mergedAt"),
         }
+        expected_existing.update({
+            key: receipt[key] for key in pr_head if key in existing_receipt
+        })
         if any(existing_receipt.get(key) != value for key, value in expected_existing.items()):
             fail("existing non-merge receipt disagrees with current task/reason/evidence authority")
         stored_evidence = existing_receipt.get("evidence")
@@ -628,6 +719,12 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             # terminal authority.
             receipt["project_identity"] = project_identity
             receipt_needs_write = True
+        for key in pr_head:
+            if key not in receipt:
+                # A pre-head receipt can only be upgraded from a live PR read;
+                # the resulting receipt carries the new required authority.
+                receipt[key] = pr_head[key]
+                receipt_needs_write = True
     # Complete the live Project binding readback before persisting either
     # terminal intent or receipt authority.  This keeps a missing item or
     # malformed binding from leaving a resumable-looking local closeout.
@@ -644,15 +741,20 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     # the first remote terminal mutation.
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
-    issue = _update_issue_body(record, task_uid, issue, ledger_path)
+    issue = _update_issue_body(record, task_uid, issue, ledger_path, pr_head)
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
     _project_update(root, record, task_uid, ledger_path, mapping_path,
-                    reason, evidence_digest, project_identity)
+                    reason, evidence_digest, project_identity, pr_head)
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
     comment_operation_id = hashlib.sha256(
-        f"{task_uid}:closed_without_merge:evidence_comment".encode()
+        json.dumps({
+            "task_uid": task_uid,
+            "phase": "closed_without_merge",
+            "effect": "evidence_comment",
+            "pr_head": pr_head,
+        }, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     comment_entry = _ledger_entry(ledger_path, "evidence_comment")
     comment = ""
@@ -669,8 +771,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             evidence_path.name, public_evidence,
         )
     if not comment:
-        _ledger_transition(ledger_path, task_uid, "evidence_comment", "intent")
-        _ledger_transition(ledger_path, task_uid, "evidence_comment", "action")
+        _ledger_transition(ledger_path, task_uid, "evidence_comment", "intent", pr_head=pr_head)
+        _ledger_transition(ledger_path, task_uid, "evidence_comment", "action", pr_head=pr_head)
         body = _evidence_comment_body(
             record, task_uid, comment_operation_id, reason, evidence_digest,
             evidence_path.name, public_evidence,
@@ -693,17 +795,17 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         )
         if not comment:
             fail("evidence comment live readback has no unique matching operation")
-    _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment)
-    _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed")
+    _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment, pr_head)
+    _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed", pr_head=pr_head)
     _commit_mapping(mapping_path, task_uid, record, receipt, receipt_digest, comment,
                     reason, evidence_digest, project_identity)
-    _ledger_transition(ledger_path, task_uid, "issue_close", "intent")
+    _ledger_transition(ledger_path, task_uid, "issue_close", "intent", pr_head=pr_head)
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                       str(record["repository"]), "--json", "state,body,number,url"])
     if str(issue.get("state") or "").upper() != "CLOSED":
         _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                    evidence_digest, project_identity)
-        _ledger_transition(ledger_path, task_uid, "issue_close", "action")
+        _ledger_transition(ledger_path, task_uid, "issue_close", "action", pr_head=pr_head)
         close_reason = "completed" if reason == "non_pr_completed" else "not planned"
         subprocess.run(["gh", "issue", "close", str(record["issue_number"]),
                         "-R", str(record["repository"]), "--reason", close_reason],
@@ -711,10 +813,10 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                        stderr=subprocess.PIPE)
         issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                           str(record["repository"]), "--json", "state,body,number,url"])
-    _ledger_transition(ledger_path, task_uid, "issue_close", "readback", issue)
+    _ledger_transition(ledger_path, task_uid, "issue_close", "readback", issue, pr_head)
     if str(issue.get("state") or "").upper() != "CLOSED":
         fail("Issue close live readback mismatch")
-    _ledger_transition(ledger_path, task_uid, "issue_close", "committed")
+    _ledger_transition(ledger_path, task_uid, "issue_close", "committed", pr_head=pr_head)
     _write_tombstone(receipt_path, record, receipt_digest)
     return {"status": "already_finalized" if str(record.get("workflow_phase") or "") == "closed_without_merge" else "finalized",
             "task_uid": task_uid, "reason": reason, "receipt": str(receipt_path),

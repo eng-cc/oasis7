@@ -25,6 +25,10 @@ ALLOWED_PHASE_TRANSITIONS = {"task_done": {"main_sync"}, "main_sync": {"main_syn
 RECEIPT_SCHEMAS = {"main_sync": ("oasis7_main_sync", "post-merge-main-sync")}
 NON_MERGE_INTENT_FIELD = "closed_without_merge_intent"
 NON_MERGE_RECEIPT_NAME = "closed-without-merge-receipt.json"
+PR_HEAD_REQUIRED_FIELDS = ("headRefOid", "headRefName")
+PR_HEAD_OPTIONAL_FIELDS = ("headRepositoryOwner", "headRepositoryName")
+PR_HEAD_FIELDS = PR_HEAD_REQUIRED_FIELDS + PR_HEAD_OPTIONAL_FIELDS
+NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
 if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
@@ -175,14 +179,17 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
         die("refresh-task: pending non-merge receipt is malformed")
     if receipt.get("receipt_type") != "oasis7_closed_without_merge":
         die("refresh-task: pending non-merge receipt type mismatch")
-    if receipt.get("schema_version") != 1 or receipt.get("issuer") != "non-merge-finalize":
+    if receipt.get("schema_version") != NON_MERGE_RECEIPT_SCHEMA_VERSION or receipt.get("issuer") != "non-merge-finalize":
         die("refresh-task: pending non-merge receipt authority mismatch")
     authority_fields = (
         "task_uid", "repository", "issue_number", "project_item_id",
         "project_identity", "reason", "evidence_sha256", "pr_number", "pr_url",
-    )
+    ) + PR_HEAD_FIELDS
     if any(receipt.get(key) != intent.get(key) for key in authority_fields):
         die("refresh-task: pending non-merge intent and receipt disagree")
+    if intent.get("pr_number") or intent.get("pr_url"):
+        if any(not intent.get(key) or not receipt.get(key) for key in PR_HEAD_REQUIRED_FIELDS):
+            die("refresh-task: pending PR-bound non-merge authority lacks PR head identity")
     if receipt.get("previous_status") != existing.get("status"):
         die("refresh-task: pending non-merge receipt status snapshot disagrees")
     if receipt.get("previous_workflow_phase") != existing.get("workflow_phase"):

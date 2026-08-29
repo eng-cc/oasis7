@@ -104,7 +104,8 @@ elif args[:2] == ["pr", "view"]:
     merged_at = os.environ.get("GH_PR_MERGED_AT", "") or None
     print(json.dumps({"number": number, "url": os.environ.get("GH_PR_URL", ""),
                       "state": state, "mergedAt": merged_at,
-                      "headRefOid": "head-oid", "headRefName": "task/fixture"}))
+                      "headRefOid": os.environ.get("GH_PR_HEAD_OID", "head-oid"),
+                      "headRefName": os.environ.get("GH_PR_HEAD_NAME", "task/fixture")}))
 elif args[:2] == ["project", "view"]:
     print(json.dumps({"id": "P1", "number": 1, "title": "fixture"}))
 elif args[:2] == ["project", "field-list"]:
@@ -344,6 +345,70 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertIn("owner decision: terminal non-merge closure", comments[0]["body"])
         for field in ("Action", "Validation Command", "Expected Result", "Actual Result"):
             self.assertRegex(comments[0]["body"], rf"(?m)^{re.escape(field)}:\s+\S")
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_closed_unmerged_receipt_binds_pr_head_and_same_head_retry_succeeds(self) -> None:
+        self.mapping(pr=True)
+        self.env.update({
+            "GH_PR_HEAD_OID": "head-oid-initial",
+            "GH_PR_HEAD_NAME": "task/fixture",
+        })
+
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout[first.stdout.find("{"):])
+        receipt = self.read_json(Path(payload["receipt"]))
+        self.assertEqual(receipt["pr_number"], 22)
+        self.assertEqual(receipt["pr_url"], PR_URL)
+        self.assertEqual(receipt.get("headRefOid"), "head-oid-initial")
+        self.assertEqual(receipt.get("headRefName"), "task/fixture")
+
+        retry = self.invoke("duplicate")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        retry_payload = json.loads(retry.stdout[retry.stdout.find("{"):])
+        self.assertEqual(retry_payload["status"], "already_finalized")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_reopened_force_pushed_reclosed_pr_same_url_head_drift_fails_closed(self) -> None:
+        self.mapping(pr=True)
+        self.env.update({
+            "GH_PR_HEAD_OID": "head-oid-initial",
+            "GH_PR_HEAD_NAME": "task/fixture",
+        })
+
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout[first.stdout.find("{"):])
+        receipt_path = Path(payload["receipt"])
+        baseline_mapping = self.read_json(self.root / ".pm/github-project-sync/tasks.json")
+        baseline_receipt = receipt_path.read_bytes()
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+        # The same PR number/URL is reopened, force-pushed, and re-closed.  The
+        # final remote snapshot remains CLOSED and unmerged, but its head is no
+        # longer the head that the original receipt authorized.
+        self.env["GH_PR_STATE"] = "OPEN"
+        reopened = self.invoke("duplicate")
+        self.assertNotEqual(reopened.returncode, 0)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+        self.env.update({
+            "GH_PR_STATE": "CLOSED",
+            "GH_PR_HEAD_OID": "head-oid-force-pushed",
+            "GH_PR_HEAD_NAME": "task/fixture-renamed",
+        })
+        drifted = self.invoke("duplicate")
+        self.assertNotEqual(drifted.returncode, 0)
+        self.assertRegex(drifted.stderr.lower(), r"head|identity|receipt|authority")
+        self.assertEqual(
+            self.read_json(self.root / ".pm/github-project-sync/tasks.json"),
+            baseline_mapping,
+        )
+        self.assertEqual(receipt_path.read_bytes(), baseline_receipt)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
     def test_closed_draft_verification_phase_is_eligible(self) -> None:
