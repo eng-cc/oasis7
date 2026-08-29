@@ -193,8 +193,11 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
     if receipt is None or not receipt_path.is_file():
         die("refresh-task: pending non-merge intent has no receipt")
     migrated = receipt_path != canonical_path
-    canonical_digest = intent.get("canonical_receipt_sha256")
-    if canonical_digest:
+    if "canonical_receipt_sha256" in intent:
+        canonical_digest = intent.get("canonical_receipt_sha256")
+        if (not isinstance(canonical_digest, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", canonical_digest)):
+            die("refresh-task: canonical non-merge receipt digest authority is malformed")
         actual_digest = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
         if canonical_digest != actual_digest:
             die("refresh-task: canonical non-merge receipt digest authority mismatch")
