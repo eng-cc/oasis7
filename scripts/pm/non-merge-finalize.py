@@ -41,6 +41,7 @@ TERMINAL_CAS_FIELDS = (
     "workflow_phase", "pr_number", "pr_url", "completion_mode",
     "non_pr_completion_evidence", *MERGE_AUTHORITY_FIELDS,
 )
+PROJECT_IDENTITY_FIELDS = ("owner", "number", "id")
 RECEIPT_NAME = "closed-without-merge-receipt.json"
 LEDGER_NAME = "non-merge-finalizer-ledger.json"
 
@@ -184,6 +185,11 @@ def _identity_pr(record: dict) -> dict | None:
             or str(pr.get("url") or "") != pr_url):
         fail("recorded PR identity mismatch")
     return pr
+
+
+def _project_identity(project: dict) -> dict[str, str]:
+    """Return the canonical mapping-level Project identity for CAS/receipts."""
+    return {key: str(project.get(key) or "") for key in PROJECT_IDENTITY_FIELDS}
 
 
 def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
@@ -362,8 +368,11 @@ def _project_update(root: pathlib.Path, record: dict, task_uid: str,
 
 def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
                     receipt: dict, receipt_digest: str, comment: str,
-                    reason: str, evidence_digest: str) -> None:
+                    reason: str, evidence_digest: str,
+                    project_identity: dict[str, str]) -> None:
     def update(mapping: dict) -> None:
+        if _project_identity(mapping.get("project") or {}) != project_identity:
+            fail("Project identity drifted during terminal effects")
         current = (mapping.get("tasks") or {}).get(task_uid) or {}
         for key in TERMINAL_CAS_FIELDS:
             if (key in current, current.get(key)) != (key in record, record.get(key)):
@@ -416,6 +425,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     # persisted task record while making it available to the bound readback.
     record = dict(record)
     record["_project"] = mapping.get("project") or {}
+    project_identity = _project_identity(record["_project"])
     if str(record.get("task_uid") or task_uid) != task_uid:
         fail("task UID mapping identity mismatch")
     if str(record.get("workflow_phase") or "") == "post_merge_done":
@@ -454,6 +464,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "repository": record.get("repository"),
         "issue_number": record.get("issue_number"),
         "project_item_id": record.get("project_item_id"),
+        "project_identity": project_identity,
         "reason": reason,
         "evidence_sha256": evidence_digest,
         "evidence": evidence_data,
@@ -477,7 +488,16 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         }
         if any(existing_receipt.get(key) != value for key, value in expected_existing.items()):
             fail("existing non-merge receipt disagrees with current task/reason/evidence authority")
+        stored_project_identity = existing_receipt.get("project_identity")
+        if stored_project_identity is not None and stored_project_identity != project_identity:
+            fail("existing non-merge receipt disagrees with current Project identity authority")
         receipt = existing_receipt
+        if stored_project_identity is None:
+            # Receipts written before Project identity was bound remain
+            # retryable, but are upgraded before their digest is used as
+            # terminal authority.
+            receipt["project_identity"] = project_identity
+            durable_store.replace_json(receipt_path, receipt)
     else:
         durable_store.replace_json(receipt_path, receipt)
     receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
@@ -526,7 +546,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment)
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed")
     _commit_mapping(mapping_path, task_uid, record, receipt, receipt_digest, comment,
-                    reason, evidence_digest)
+                    reason, evidence_digest, project_identity)
     _ledger_transition(ledger_path, task_uid, "issue_close", "intent")
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                       str(record["repository"]), "--json", "state,body,number,url"])

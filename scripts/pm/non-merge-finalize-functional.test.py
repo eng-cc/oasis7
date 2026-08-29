@@ -129,6 +129,11 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
             "pr_url": f"https://github.com/{repo}/pulls/23",
         })
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+    if os.environ.get("GH_MUTATE_PROJECT_MAPPING_ON_COMMENT_READBACK") == "1":
+        mapping_path = path("GH_MAPPING")
+        mapping = json.loads(mapping_path.read_text())
+        mapping["project"].update({"owner": "other", "number": 2, "id": "P2"})
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     print(json.dumps([read("GH_COMMENTS", [])]))
 elif args[:2] == ["api", "graphql"]:
     values = read("GH_PROJECT_FIELDS", {"Status": "In Progress",
@@ -453,6 +458,24 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
         record = self.read_json(mapping_path)["tasks"][UID]
         self.assertEqual(record["pr_number"], 23)
+        self.assertEqual(record["workflow_phase"], "execution")
+        self.assertEqual(record["status"], "committed")
+        self.assertNotIn("closed_without_merge_receipt", record)
+        self.assertEqual(self.read_json(self.closes), [])
+
+    def test_mapping_project_authority_drift_during_remote_readback_fails_closed(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_MUTATE_PROJECT_MAPPING_ON_COMMENT_READBACK": "1",
+        })
+        result = self.invoke("duplicate")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"drift|identity|authority|project")
+
+        mapping = self.read_json(mapping_path)
+        self.assertEqual(mapping["project"], {"owner": "other", "number": 2, "id": "P2"})
+        record = mapping["tasks"][UID]
         self.assertEqual(record["workflow_phase"], "execution")
         self.assertEqual(record["status"], "committed")
         self.assertNotIn("closed_without_merge_receipt", record)
