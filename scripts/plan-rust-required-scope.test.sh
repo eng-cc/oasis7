@@ -104,6 +104,81 @@ assert_key_equals "$config_output" run_rust_baseline true
 assert_key_equals "$config_output" needs_rust_toolchain true
 assert_key_equals "$config_output" needs_node true
 
+static_governance_output="$(plan_for_paths \
+  scripts/check-script-executable-bits.sh \
+  scripts/check-windows-paths.sh \
+  scripts/doc-governance-check.sh \
+  scripts/doc-governance-check.test.sh \
+  scripts/lint-skills.sh \
+  scripts/product-doc-governance-check.py \
+  scripts/product-doc-governance-check.test.py \
+  scripts/testing-manual-active-contract.test.sh \
+  scripts/unified-world-code-terminology-scan.test.sh)"
+assert_key_equals "$static_governance_output" scope minimal
+assert_key_equals "$static_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$static_governance_output" run_rust_baseline false
+assert_key_equals "$static_governance_output" needs_rust_toolchain false
+assert_key_equals "$static_governance_output" needs_node false
+for static_governance_path in \
+  scripts/check-script-executable-bits.sh \
+  scripts/check-windows-paths.sh \
+  scripts/doc-governance-check.sh \
+  scripts/doc-governance-check.test.sh \
+  scripts/lint-skills.sh \
+  scripts/product-doc-governance-check.py \
+  scripts/product-doc-governance-check.test.py \
+  scripts/testing-manual-active-contract.test.sh \
+  scripts/unified-world-code-terminology-scan.test.sh; do
+  assert_reason_contains "$static_governance_output" "governance_script:$static_governance_path"
+done
+assert_reason_absent "$static_governance_output" "unclassified_or_unresolvable:"
+
+rust_gate_helper_output="$(plan_for_paths \
+  scripts/cargo-dev.sh \
+  scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-windows-toolchain.test.sh \
+  scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-rust-file-size.sh \
+  scripts/check-rust-file-size.test.sh \
+  scripts/check-rustsec-ignore-baseline.sh \
+  scripts/ensure-cargo-deny.sh)"
+assert_key_equals "$rust_gate_helper_output" scope full
+assert_key_equals "$rust_gate_helper_output" run_rust_baseline true
+assert_key_equals "$rust_gate_helper_output" needs_rust_toolchain true
+for rust_gate_helper_path in \
+  scripts/cargo-dev.sh \
+  scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-windows-toolchain.test.sh \
+  scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-rust-file-size.sh \
+  scripts/check-rust-file-size.test.sh \
+  scripts/check-rustsec-ignore-baseline.sh \
+  scripts/ensure-cargo-deny.sh; do
+  assert_reason_contains "$rust_gate_helper_output" "shared_required_gate:$rust_gate_helper_path"
+done
+assert_reason_absent "$rust_gate_helper_output" "unclassified_or_unresolvable:"
+
+launcher_dependency_output="$(plan_for_paths \
+  scripts/check-launcher-p2p-dependency-surface.sh \
+  scripts/check-launcher-p2p-dependency-surface.test.sh)"
+assert_key_equals "$launcher_dependency_output" scope full
+assert_key_equals "$launcher_dependency_output" run_rust_baseline true
+assert_key_equals "$launcher_dependency_output" needs_rust_toolchain true
+assert_reason_contains "$launcher_dependency_output" \
+  "shared_required_gate:scripts/check-launcher-p2p-dependency-surface.sh"
+assert_reason_contains "$launcher_dependency_output" \
+  "shared_required_gate:scripts/check-launcher-p2p-dependency-surface.test.sh"
+assert_reason_absent "$launcher_dependency_output" "unclassified_or_unresolvable:"
+
+release_contract_output="$(plan_for_path scripts/release-packages-trunk-cache-contract.test.sh)"
+assert_key_equals "$release_contract_output" scope minimal
+assert_key_equals "$release_contract_output" selected_capabilities required_gate_baseline
+assert_key_equals "$release_contract_output" run_rust_baseline false
+assert_key_equals "$release_contract_output" needs_rust_toolchain false
+assert_reason_contains "$release_contract_output" \
+  "governance_script:scripts/release-packages-trunk-cache-contract.test.sh"
+assert_reason_absent "$release_contract_output" "unclassified_or_unresolvable:"
+
 bundle_portability_output="$(plan_for_paths \
   scripts/build-game-launcher-bundle.sh \
   scripts/build-game-launcher-bundle-macos-bash3.test.sh)"
@@ -269,7 +344,14 @@ viewer_web_wrapper_output="$(plan_for_paths \
   scripts/build-viewer-software-safe.sh \
   scripts/viewer-dependency-preflight.sh \
   scripts/viewer-dependency-preflight.test.sh \
-  scripts/viewer-pixel-world-fragment-visual-smoke.sh)"
+  scripts/viewer-pixel-world-fragment-visual-smoke.sh \
+  scripts/agent-browser-lib.sh \
+  scripts/agent-browser-viewer-dist-freshness-test.sh \
+  scripts/bundle-freshness-lib.sh \
+  scripts/bundle-freshness-lib.test.sh \
+  scripts/copy-viewer-web-dist.sh \
+  scripts/copy-viewer-web-dist.test.sh \
+  scripts/viewer-web-dist-contract.sh)"
 assert_key_equals "$viewer_web_wrapper_output" scope targeted
 assert_key_equals "$viewer_web_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_web_wrapper_output" run_viewer_wasm_check true
@@ -279,6 +361,13 @@ assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-pixel-world-fragment-visual-smoke.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/agent-browser-lib.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/agent-browser-viewer-dist-freshness-test.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/bundle-freshness-lib.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/bundle-freshness-lib.test.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/copy-viewer-web-dist.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/copy-viewer-web-dist.test.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-web-dist-contract.sh"
 assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:"
 
 viewer_launcher_wrapper_output="$(plan_for_paths \
