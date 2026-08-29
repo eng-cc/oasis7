@@ -1032,6 +1032,14 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
+    def test_terminalization_fills_explicit_null_close_timestamp(self) -> None:
+        mapping_path = self.mapping(pr=True, extra={"last_closed_at": None})
+        result = self.invoke("duplicate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertTrue(record["last_closed_at"])
+        self.assertTrue(record["non_merge_finalized_at"])
+
     def test_pr_bound_reasons_reject_stale_merge_authority(self) -> None:
         for reason in ("superseded", "duplicate"):
             with self.subTest(reason=reason):
