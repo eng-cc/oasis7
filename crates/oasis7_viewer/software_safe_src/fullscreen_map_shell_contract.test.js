@@ -253,6 +253,14 @@ describe("fullscreen map shell contract", () => {
     ).toBe(true);
   });
 
+  it("moves the selected mobile marker into the ordinary Shell safe area", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*?\[data-viewer-overlay=["']next-move["']\]\s*\{[^}]*overflow-y\s*:\s*auto/i);
+    const safeAreaSource = await readFile("software_safe_src/pixel_world_mobile_safe_area.js", "utf8");
+    expect(safeAreaSource).toContain("commandTop - SAFE_AREA_GAP_PX - markerBottom");
+    expect(safeAreaSource).toContain("feedBottom + SAFE_AREA_GAP_PX - markerTop");
+  });
+
   it("keeps the narrow Command context row sticky while the route panel scrolls independently", async () => {
     const { terminalShellCss } = await readViewerHtml();
     const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";

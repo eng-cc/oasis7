@@ -15,6 +15,7 @@ const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-vi
 const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visual.png");
 const shellLiteDesktopScreenshotPath = join(outDir, "shell-lite-desktop-visual.png");
 const shellLiteMobileScreenshotPath = join(outDir, "shell-lite-mobile-visual.png");
+const shellLiteCompactScreenshotPath = join(outDir, "shell-lite-compact-mobile-visual.png");
 const shellLiteCjkScreenshotPath = join(outDir, "shell-lite-cjk-mobile-visual.png");
 const rendererFallbackScreenshotPath = join(outDir, "renderer-fallback-visual.png");
 const summaryPath = join(outDir, "summary.json");
@@ -523,6 +524,7 @@ function shellLiteViewportProbeScript() {
       const receiptElement = document.querySelector(".pixel-world-action-receipt");
       const feedElement = document.querySelector('[data-viewer-overlay="feed"]');
       const readoutElement = document.querySelector(".pixel-world-readout");
+      const selectedMarkerElement = document.querySelector(".pixel-world-entity--canvas-hit-target[data-selected='true']");
       const viewport = {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -559,6 +561,8 @@ function shellLiteViewportProbeScript() {
           feedRect: feedElement ? rectOf(feedElement) : null,
           readoutRect: readoutElement ? rectOf(readoutElement) : null,
           readoutDisplay: readoutElement ? getComputedStyle(readoutElement).display : null,
+          selectedMarkerRect: selectedMarkerElement ? rectOf(selectedMarkerElement) : null,
+          commandStripRect: rectOf(commandStrip),
           documentLocale: document.documentElement.lang || null,
           viewport,
           horizontalOverflowPx: Math.max(0, viewport.scrollWidth - viewport.clientWidth),
@@ -991,10 +995,15 @@ function assertShellLiteViewport(label, probe, expectedWidth) {
   assert(shell.viewport?.width === expectedWidth, `${label} probe used the wrong viewport width`, probe);
   assert(shell.horizontalOverflowPx <= 2, `${label} Shell Lite has horizontal overflow`, probe);
   if (expectedWidth <= 640) {
-    assert(shell.supportingReceiptGapPx >= 8, `${label} supporting context must clear Action Receipt by at least 8px`, probe);
+    const receiptGapPx = shell.viewport.height <= 650
+      ? shell.receipt.rect.y - shell.commandStripRect.bottom
+      : shell.supportingReceiptGapPx;
+    assert(receiptGapPx >= 8, `${label} command content must clear Action Receipt by at least 8px`, probe);
     const feedReadoutSeparated = shell.readoutDisplay === "none" || !shell.feedRect || !shell.readoutRect
       || shell.feedRect.bottom + 8 <= shell.readoutRect.y || shell.readoutRect.bottom + 8 <= shell.feedRect.y;
     assert(feedReadoutSeparated, `${label} Feed and world readout overlap`, probe);
+    assert(shell.selectedMarkerRect?.width >= 44 && shell.selectedMarkerRect?.height >= 44, `${label} selected marker lost its mobile hit area`, probe);
+    assert(shell.selectedMarkerRect.bottom + 8 <= shell.commandStripRect.y, `${label} selected marker does not clear Next Move by 8px`, probe);
   }
 }
 
@@ -1040,12 +1049,19 @@ async function runShellLiteOnlyMode(url) {
   await runAgentBrowser(["screenshot", shellLiteMobileScreenshotPath], { timeout: 20_000 });
   summary.shellLiteMobileScreenshot = shellLiteMobileScreenshotPath;
 
+  await runAgentBrowserJson(["set", "viewport", "320", "568"]);
+  console.log("probing compact Shell Lite mobile safe area");
+  summary.compactShellLite = await evalJson(shellLiteViewportProbeScript());
+  assertShellLiteViewport("compact Shell Lite", summary.compactShellLite, 320);
+  await runAgentBrowser(["screenshot", shellLiteCompactScreenshotPath], { timeout: 20_000 });
+  summary.shellLiteCompactScreenshot = shellLiteCompactScreenshotPath;
+
   const cjkUrl = new URL(url);
   cjkUrl.searchParams.set("locale", "zh-CN");
   await runAgentBrowserJson(["open", cjkUrl.toString()], { timeout: 45_000 });
   await runAgentBrowserJson(["set", "viewport", "390", "844"]);
   console.log("probing CJK Shell Lite mobile semantic surface");
-  summary.cjkShellLite = await evalJson(visualProbeScript({ shellLiteOnly: true }));
+  summary.cjkShellLite = await evalJson(shellLiteViewportProbeScript());
   assertShellLiteViewport("CJK Shell Lite", summary.cjkShellLite, 390);
   assertCjkShellLiteViewport(summary.cjkShellLite);
   await runAgentBrowser(["screenshot", shellLiteCjkScreenshotPath], { timeout: 20_000 });
