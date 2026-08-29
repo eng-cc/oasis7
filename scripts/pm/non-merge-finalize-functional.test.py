@@ -1013,6 +1013,21 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
+    def test_terminal_retry_rejects_status_drift(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        mapping = self.read_json(mapping_path)
+        mapping["tasks"][UID]["status"] = "blocked"
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+
+        retry = self.invoke("duplicate")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertRegex(retry.stderr.lower(), r"receipt|terminal|status|authority")
+        self.assertEqual(self.read_json(mapping_path)["tasks"][UID]["status"], "blocked")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
     def test_pr_bound_reasons_reject_stale_merge_authority(self) -> None:
         for reason in ("superseded", "duplicate"):
             with self.subTest(reason=reason):

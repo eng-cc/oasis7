@@ -17,14 +17,15 @@ Use after bootstrap has bound canonical task truth and the next workflow phase i
 
 Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.
 
-1. Clear execution truth -> `executing-project-tasks`.
-2. Ambiguous, option-heavy, or materially visual scope -> optional `bounded-brainstorming`; do not route there when implementation-ready.
-3. Behavior change with a stable narrow harness -> `tdd-test-writer` before execution.
-4. Observed failure -> `systematic-debugging` before speculative fixes.
-5. Review feedback -> `receiving-code-review`.
-6. A classified non-merge outcome, including `not_planned` during bootstrap,
+1. A classified non-merge outcome, including `not_planned` during bootstrap,
    planning, or execution -> `finishing-a-development-branch` and its canonical
-   non-merge terminal route; implementation verification is not a prerequisite.
+   non-merge terminal route; this special terminal route takes priority over
+   generic execution routing and implementation verification is not a prerequisite.
+2. Clear execution truth -> `executing-project-tasks`.
+3. Ambiguous, option-heavy, or materially visual scope -> optional `bounded-brainstorming`; do not route there when implementation-ready.
+4. Behavior change with a stable narrow harness -> `tdd-test-writer` before execution.
+5. Observed failure -> `systematic-debugging` before speculative fixes.
+6. Review feedback -> `receiving-code-review`.
 7. Implementation verified -> `finishing-a-development-branch`.
 8. Already-bound read-only professional/domain judgment -> matching bounded role slice. Pure fact lookup needs no professional slice.
 

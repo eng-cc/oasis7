@@ -344,6 +344,8 @@ def _receipt_recovery_candidate(record: dict, task_uid: str, reason: str,
                                 pr_head: dict[str, str] | None = None) -> bool:
     if str(record.get("workflow_phase") or "") != "closed_without_merge":
         return False
+    if str(record.get("status") or "") != "done":
+        return False
     if not isinstance(existing_receipt, dict):
         return False
     expected = {

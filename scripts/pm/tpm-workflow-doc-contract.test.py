@@ -106,6 +106,11 @@ class WorkflowDocumentationContract(unittest.TestCase):
             self.assertIn(phase, router)
         self.assertIn("not_planned", router)
         self.assertIn("finishing-a-development-branch", router)
+        self.assertLess(
+            router.index("A classified non-merge outcome"),
+            router.index("Clear execution truth"),
+        )
+        self.assertIn("takes priority over", router)
         self.assertIn("not_planned", finishing)
         self.assertIn("without implementation\nverification", finishing)
 
