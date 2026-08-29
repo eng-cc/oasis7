@@ -1613,7 +1613,11 @@ def _direct_ssh_call(
     # or equivalent filesystem alias.
     for known_hosts_value in dict.fromkeys((str(known_hosts), str(known_hosts.resolve()))):
         ssh_args.extend(("-o", f"UserKnownHostsFile={known_hosts_value}"))
-    ssh_args.extend(("-o", "BatchMode=yes", "-o", "LogLevel=ERROR", target, command))
+    if use_credential:
+        ssh_args.extend(("-o", "LogLevel=ERROR"))
+    else:
+        ssh_args.extend(("-o", "BatchMode=yes", "-o", "LogLevel=ERROR"))
+    ssh_args.extend((target, command))
     invocation = ["sshpass", "-e", *ssh_args] if use_credential else ssh_args
     try:
         result = subprocess.run(
@@ -3902,8 +3906,57 @@ def _record_transaction_direct_reobserve(
     direct_receipt = _direct_reobserve_from_args(direct_args)
     stopped_quiescence = proof.get("stopped_quiescence")
     expected_request_digest = stopped_quiescence.get("request_digest") if isinstance(stopped_quiescence, dict) else None
-    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id") or direct_receipt.get("request_digest") != expected_request_digest:
-        fail("transaction recovery direct re-observation binding differs from the transaction request")
+    expected_live = proof.get("github_live")
+    observed_live = direct_receipt.get("github_live")
+    if not isinstance(expected_live, dict) or not isinstance(observed_live, dict):
+        fail("transaction recovery direct re-observation live authority binding is missing")
+    for field in (
+        "provider",
+        "repository",
+        "issue_number",
+        "task_uid",
+        "action",
+        "head_oid",
+    ):
+        if observed_live.get(field) != expected_live.get(field):
+            fail(f"transaction recovery direct re-observation {field} binding mismatch")
+    if direct_receipt.get("task_uid") != expected_live.get("task_uid"):
+        fail("transaction recovery direct re-observation task binding mismatch")
+    if direct_receipt.get("deployment_inventory_sha256") != proof.get("deployment_inventory_sha256"):
+        fail("transaction recovery direct re-observation inventory binding mismatch")
+
+    # A recovery request may replace the expired stop authority, but it must
+    # remain bound to this durable transaction.  The original request keeps
+    # the stopped-boundary quiescence identity; a replacement authority uses
+    # the runtime transaction identity and must carry a new nonce/digest.
+    observed_request_digest = direct_receipt.get("request_digest")
+    if observed_request_digest == expected_request_digest:
+        if direct_receipt.get("quiescence_id") != proof.get("quiescence_id"):
+            fail("transaction recovery direct re-observation stopped-boundary binding mismatch")
+    else:
+        if direct_receipt.get("quiescence_id") != transaction.get("transaction_id"):
+            fail("transaction recovery replacement authority transaction binding mismatch")
+        if direct_receipt.get("nonce") == expected_live.get("nonce"):
+            fail("transaction recovery replacement authority must use a new nonce")
+
+    observed_issued_at = _parse_timestamp(
+        direct_receipt.get("issued_at"), "transaction recovery direct authority issued_at"
+    )
+    observed_expires_at = _parse_timestamp(
+        direct_receipt.get("expires_at"), "transaction recovery direct authority expires_at"
+    )
+    observed_captured_at = _parse_timestamp(
+        direct_receipt.get("captured_at"), "transaction recovery direct observation captured_at"
+    )
+    now = dt.datetime.now(dt.timezone.utc)
+    if (
+        observed_expires_at <= observed_issued_at
+        or observed_issued_at > now + dt.timedelta(seconds=5)
+        or observed_expires_at < now - dt.timedelta(seconds=5)
+        or observed_captured_at < observed_issued_at
+        or observed_captured_at > observed_expires_at + dt.timedelta(seconds=5)
+    ):
+        fail("transaction recovery direct authority freshness or expiry is invalid")
     impact_path_value = proof.get("consumer_impact_record_path")
     if not isinstance(impact_path_value, str) or not impact_path_value.strip():
         fail("transaction recovery consumer-impact binding is missing")

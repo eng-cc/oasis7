@@ -1274,6 +1274,36 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             r"(?i)(--password|--secret|secret=|password=)",
         )
 
+    def test_human_direct_ssh_password_mode_omits_batch_mode_and_key_mode_keeps_it(self) -> None:
+        password_fixture = self._write_human_direct_ssh_fixture()
+        password_result = self._run_human_direct_ssh(password_fixture)
+        self.assertEqual(password_result.returncode, 0, password_result.stderr)
+        password_rows = [
+            json.loads(line)
+            for line in Path(password_fixture["sshpass"]).read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(password_rows)
+        for row in password_rows:
+            self.assertTrue(row["secret_env"])
+            self.assertNotIn("BatchMode=yes", row["argv"])
+
+        key_fixture = self._write_human_direct_ssh_fixture()
+        key_args = self._human_direct_ssh_args(key_fixture)
+        credential_index = key_args.index("--credential-env")
+        del key_args[credential_index : credential_index + 2]
+        key_env = self._human_direct_ssh_env(key_fixture)
+        key_env.pop("HUMAN_DIRECT_SSH_SECRET", None)
+        key_result = subprocess.run(key_args, text=True, capture_output=True, env=key_env)
+        self.assertEqual(key_result.returncode, 0, key_result.stderr)
+        key_rows = [
+            json.loads(line)
+            for line in Path(key_fixture["ssh_args"]).read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(key_rows)
+        for row in key_rows:
+            self.assertIn("BatchMode=yes", row)
+        self.assertFalse(Path(key_fixture["sshpass"]).exists())
+
     def test_human_direct_ssh_rejects_stale_or_replayed_transaction_request_fingerprint_nonce(self) -> None:
         cases = (
             ({"stale": True}, r"(?i)(stale|expired|timestamp|nonce)"),
@@ -3256,6 +3286,142 @@ raise SystemExit(module.main())
             Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines()
         )
         self.assertGreater(after_resume_github_calls, before_resume_github_calls)
+
+    def test_resume_accepts_fresh_replacement_authority_for_existing_transaction(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "replacement-authority-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "replacement-authority-phases.log"
+        adapter = self._write_failure_host_adapter(phases)
+        crash_launcher = self.root / "replacement-authority-crash-launcher.py"
+        crash_launcher.write_text(
+            f"""#!{sys.executable}
+import importlib.util
+import os
+import signal
+import sys
+from pathlib import Path
+
+executor = Path({str(EXECUTOR)!r})
+spec = importlib.util.spec_from_file_location("pair_rebuild_replacement_authority", executor)
+if spec is None or spec.loader is None:
+    raise SystemExit("unable to load validator-pair executor")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.EXECUTOR_KNOWN_HOSTS_PATH = Path(os.environ["OASIS7_TEST_EXECUTOR_KNOWN_HOSTS_PATH"])
+original_run_host_adapter = module.run_host_adapter
+
+def crash_after_apply_callback(adapter, transaction_path, plan, phase):
+    receipt = original_run_host_adapter(adapter, transaction_path, plan, phase)
+    if phase == "apply":
+        os.kill(os.getpid(), signal.SIGKILL)
+    return receipt
+
+module.run_host_adapter = crash_after_apply_callback
+sys.argv = [str(executor), *sys.argv[1:]]
+raise SystemExit(module.main())
+""",
+            encoding="utf-8",
+        )
+        crash_launcher.chmod(0o755)
+        crashed = subprocess.run(
+            [
+                str(crash_launcher),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=self._human_direct_ssh_env(self.human_direct_fixture),
+        )
+        self.assertNotEqual(crashed.returncode, 0)
+        interrupted = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(interrupted["phase"], "staged")
+        self.assertEqual(interrupted.get("adapter_callback", {}).get("status"), "completed")
+        self.assertEqual(interrupted.get("adapter_callback", {}).get("phase"), "apply")
+
+        old_request = json.loads(Path(self.human_direct_fixture["request"]).read_text(encoding="utf-8"))
+        replacement = self._write_live_github_fixture(
+            transaction_id=interrupted["transaction_id"],
+            impact_path=self.impact,
+        )
+        replacement_nonce = "replacement-direct-ssh-nonce-3492"
+        replacement_issued = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=1)).replace(microsecond=0)
+        replacement_issued_text = replacement_issued.isoformat().replace("+00:00", "Z")
+        replacement_expires_text = (replacement_issued + dt.timedelta(minutes=15)).isoformat().replace("+00:00", "Z")
+
+        def rewrite_replacement_response(response: dict[str, Any]) -> None:
+            body = json.loads(response["body"])
+            body.update(
+                {
+                    "nonce": replacement_nonce,
+                    "issued_at": replacement_issued_text,
+                    "expires_at": replacement_expires_text,
+                }
+            )
+            response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+            response["created_at"] = replacement_issued_text
+            response["updated_at"] = replacement_issued_text
+
+        replacement_response = self._rewrite_github_response(replacement, rewrite_replacement_response)
+        replacement_body = json.loads(replacement_response["body"])
+
+        def rewrite_replacement_request(request: dict[str, Any]) -> None:
+            request.update(
+                {
+                    "nonce": replacement_nonce,
+                    "issued_at": replacement_issued_text,
+                    "expires_at": replacement_expires_text,
+                }
+            )
+            request["github_live"].update(
+                {
+                    "nonce": replacement_nonce,
+                    "issued_at": replacement_issued_text,
+                    "expires_at": replacement_expires_text,
+                    "body_sha256": hashlib.sha256(replacement_response["body"].encode()).hexdigest(),
+                    "transaction_id": replacement_body["transaction_id"],
+                }
+            )
+
+        replacement_request = self._rewrite_request(replacement, rewrite_replacement_request)
+        for field in ("nonce", "issued_at", "expires_at", "request_digest", "quiescence_id"):
+            self.assertNotEqual(replacement_request[field], old_request[field], field)
+        self.assertEqual(replacement_request["task_uid"], old_request["task_uid"])
+        self.assertEqual(replacement_request["transaction_id"], interrupted["transaction_id"])
+        self.assertEqual(replacement_request["impact_record_sha256"], old_request["impact_record_sha256"])
+
+        resumed = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(replacement["request"]),
+                "--known-hosts",
+                str(replacement["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=self._live_github_env(replacement),
+        )
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        recovered = json.loads(resumed.stdout)
+        self.assertEqual(recovered["phase"], "applied")
+        self.assertIn("host_receipt", recovered)
+        self.assertNotIn("adapter_callback", recovered)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply"])
+        self.assertTrue(Path(replacement["github_calls"]).read_text(encoding="utf-8").splitlines())
 
     def test_resume_fails_closed_on_durable_failed_callback_without_replay(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
