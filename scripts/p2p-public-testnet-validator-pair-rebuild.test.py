@@ -3116,11 +3116,12 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         for role in nodes:
             self.assertFalse((Path(nodes[role]["root"]) / "backups" / transaction_id).exists())
 
-    def test_sigkill_after_backup_publication_is_resumable_and_idempotent(self) -> None:
+    def test_sigkill_during_host_callback_fails_closed_without_replay(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "sigkill-transaction.json"
         plan_path.write_text(plan.stdout, encoding="utf-8")
-        adapter = self._write_host_adapter()
+        phases = self.root / "sigkill-phases.log"
+        adapter = self._write_failure_host_adapter(phases)
         source = adapter.read_text(encoding="utf-8")
         source = source.replace(
             "import sys\n",
@@ -3138,26 +3139,161 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             capture_output=True,
         )
         self.assertNotEqual(crashed.returncode, 0)
-        self.assertRegex(crashed.stderr, rf"(?i)(killed|sigkill|{signal.SIGKILL})")
         interrupted = json.loads(plan_path.read_text(encoding="utf-8"))
         self.assertEqual(interrupted["phase"], "backup_in_progress")
+        self.assertEqual(interrupted.get("adapter_callback", {}).get("status"), "in_flight")
+        before_resume = plan_path.read_bytes()
         resumed = subprocess.run(
-            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(plan_path)],
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
             text=True,
             capture_output=True,
-            check=True,
+            env=os.environ.copy(),
         )
+        self.assertNotEqual(resumed.returncode, 0)
+        self.assertRegex(resumed.stderr, r"(?i)(in.?flight|ambiguous|reconcil)")
+        self.assertEqual(plan_path.read_bytes(), before_resume)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup"])
+
+    def test_successful_callback_completion_is_adopted_after_sigkill_without_replay(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "callback-completion-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "callback-completion-phases.log"
+        adapter = self._write_failure_host_adapter(phases)
+        crash_launcher = self.root / "crash-after-callback-launcher.py"
+        crash_launcher.write_text(
+            f"""#!{sys.executable}
+import importlib.util
+import os
+import signal
+import sys
+from pathlib import Path
+
+executor = Path({str(EXECUTOR)!r})
+spec = importlib.util.spec_from_file_location("pair_rebuild_crash_after_callback", executor)
+if spec is None or spec.loader is None:
+    raise SystemExit("unable to load validator-pair executor")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.EXECUTOR_KNOWN_HOSTS_PATH = Path(os.environ["OASIS7_TEST_EXECUTOR_KNOWN_HOSTS_PATH"])
+original_run_host_adapter = module.run_host_adapter
+
+def crash_after_apply_callback(adapter, transaction_path, plan, phase):
+    receipt = original_run_host_adapter(adapter, transaction_path, plan, phase)
+    if phase == "apply":
+        os.kill(os.getpid(), signal.SIGKILL)
+    return receipt
+
+module.run_host_adapter = crash_after_apply_callback
+sys.argv = [str(executor), *sys.argv[1:]]
+raise SystemExit(module.main())
+""",
+            encoding="utf-8",
+        )
+        crash_launcher.chmod(0o755)
+        crashed = subprocess.run(
+            [
+                str(crash_launcher),
+                "apply",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertNotEqual(crashed.returncode, 0)
+        interrupted = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(interrupted["phase"], "staged")
+        self.assertNotIn("host_receipt", interrupted)
+        self.assertEqual(interrupted.get("adapter_callback", {}).get("status"), "completed")
+        self.assertEqual(interrupted.get("adapter_callback", {}).get("phase"), "apply")
+        before_resume_phases = phases.read_text(encoding="utf-8").splitlines()
+        resumed = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
         recovered = json.loads(resumed.stdout)
-        self.assertEqual(recovered["recovery"]["status"], "adopted")
-        self.assertEqual(recovered["phase"], "backed_up")
-        digest = recovered["canonical_digest"]
-        resumed_again = subprocess.run(
-            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(plan_path)],
+        self.assertEqual(recovered["phase"], "applied")
+        self.assertIn("host_receipt", recovered)
+        self.assertNotIn("adapter_callback", recovered)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), before_resume_phases)
+
+    def test_resume_rejects_disappeared_persisted_backups_without_rewrite(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "disappeared-backup-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
+        applied = subprocess.run(
+            self._apply_args(plan_path, adapter),
             text=True,
             capture_output=True,
             check=True,
         )
-        self.assertEqual(json.loads(resumed_again.stdout)["canonical_digest"], digest)
+        self.assertEqual(applied.returncode, 0)
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        backup_roots = [
+            Path(transaction["backup"][role]["backup_root"])
+            for role in ("storage-205", "sequencer-204")
+        ]
+        transaction["phase"] = "staged"
+        transaction.pop("host_receipt", None)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        plan_path.write_text(json.dumps(transaction, sort_keys=True), encoding="utf-8")
+        for backup_root in backup_roots:
+            shutil.rmtree(backup_root)
+        before_resume = plan_path.read_bytes()
+        resumed = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertNotEqual(resumed.returncode, 0)
+        self.assertRegex(resumed.stderr, r"(?i)(backup|snapshot|missing|incomplete)")
+        self.assertEqual(plan_path.read_bytes(), before_resume)
 
     def test_apply_failure_reauthorizes_direct_ssh_before_automatic_rollback(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)

@@ -130,6 +130,14 @@ HUMAN_DIRECT_SSH_CANONICAL = {
     },
 }
 
+ADAPTER_CALLBACK_SCHEMA = "oasis7.validator_pair_rebuild_adapter_callback.v1"
+ADAPTER_CALLBACK_TARGETS = {
+    "preflight": "preflight_receipt",
+    "backup": "backup_receipt",
+    "apply": "host_receipt",
+    "rollback": "rollback_receipt",
+}
+
 
 def reset_surface_digest() -> str:
     """Return the digest of the one canonical destructive target set."""
@@ -3480,14 +3488,230 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
     return receipt
 
 
+def _json_payload_digest(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _adapter_callback_operation_id(
+    transaction_id: str, plan_digest: str, phase: str, binding_digest: str
+) -> str:
+    return _json_payload_digest(
+        {
+            "transaction_id": transaction_id,
+            "plan_digest": plan_digest,
+            "phase": phase,
+            "adapter_binding_digest": binding_digest,
+        }
+    )
+
+
+def _validate_adapter_callback_state(transaction: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate the durable callback journal without invoking a host adapter."""
+    state = transaction.get("adapter_callback")
+    if state is None:
+        return None
+    if not isinstance(state, dict) or state.get("schema_version") != ADAPTER_CALLBACK_SCHEMA:
+        fail("durable host adapter callback journal is malformed")
+    phase = state.get("phase")
+    if phase not in ADAPTER_CALLBACK_TARGETS:
+        fail("durable host adapter callback journal has an unsupported phase")
+    transaction_id = transaction.get("transaction_id")
+    plan_digest = transaction.get("plan_digest")
+    binding = transaction.get("adapter_binding")
+    if not isinstance(transaction_id, str) or not transaction_id.strip() or not isinstance(plan_digest, str):
+        fail("durable host adapter callback journal has no transaction binding")
+    if not isinstance(binding, dict):
+        fail("durable host adapter callback journal has no adapter binding")
+    binding_digest = _json_payload_digest(binding)
+    if (
+        state.get("transaction_id") != transaction_id
+        or state.get("plan_digest") != plan_digest
+        or state.get("adapter_binding_digest") != binding_digest
+        or state.get("operation_id")
+        != _adapter_callback_operation_id(transaction_id, plan_digest, phase, binding_digest)
+    ):
+        fail("durable host adapter callback journal identity mismatch")
+    if state.get("started_at") != binding.get("phase_window_started_at"):
+        fail("durable host adapter callback journal start binding mismatch")
+    _parse_timestamp(state.get("started_at"), "adapter callback start")
+    status = state.get("status")
+    if status not in {"in_flight", "completed", "failed"}:
+        fail("durable host adapter callback journal status is unsupported")
+    if status == "completed":
+        receipt = state.get("receipt")
+        receipt_digest = state.get("receipt_digest")
+        if not isinstance(receipt, dict) or not isinstance(receipt_digest, str):
+            fail("completed host adapter callback journal has no receipt")
+        if _json_payload_digest(receipt) != receipt_digest:
+            fail("completed host adapter callback receipt digest mismatch")
+        validate_host_receipt(receipt, transaction, phase)
+        _parse_timestamp(state.get("completed_at"), "adapter callback completion")
+    elif status == "failed" and not isinstance(state.get("error"), str):
+        fail("failed host adapter callback journal has no error")
+    return state
+
+
+def _record_adapter_callback_failure(
+    transaction_path: Path, plan: dict[str, Any], phase: str, error: str
+) -> None:
+    state = plan.get("adapter_callback")
+    if not isinstance(state, dict) or state.get("phase") != phase:
+        return
+    failed = dict(state)
+    failed.update(
+        {
+            "status": "failed",
+            "error": error,
+            "failed_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+    )
+    plan["adapter_callback"] = failed
+    plan["canonical_digest"] = canonical_digest(plan)
+    try:
+        write_json(transaction_path, plan)
+    except BaseException:
+        # Preserve the original callback failure.  If the failure journal was
+        # not durable, resume still sees the in-flight intent and fails closed.
+        pass
+
+
+def _validate_persisted_backup_refs(transaction: dict[str, Any]) -> None:
+    """Verify every persisted backup reference before resume mutates state."""
+    raw_backups = transaction.get("backup")
+    if raw_backups is None:
+        if "backup_receipt" in transaction:
+            fail("transaction backup receipt exists without persisted backup refs")
+        return
+    if not isinstance(raw_backups, dict):
+        fail("transaction persisted backup refs are malformed")
+    transaction_id = _direct_safe_identifier(transaction.get("transaction_id"), "transaction recovery id")
+    if any(role not in MUTATION_ORDER for role in raw_backups):
+        fail("transaction persisted backup refs contain an unknown role")
+    nodes = transaction.get("nodes")
+    if not isinstance(nodes, dict):
+        fail("transaction recovery nodes are missing")
+
+    path_fields = {"root", "backup_root", "snapshot", "manifest"}
+    for role, backup in raw_backups.items():
+        if not isinstance(backup, dict):
+            fail(f"transaction persisted backup ref is malformed for {role}")
+        node = nodes.get(role)
+        if not isinstance(node, dict) or not isinstance(node.get("root"), str):
+            fail(f"transaction recovery node root is missing for {role}")
+        if not isinstance(backup.get("root"), str) or Path(backup["root"]).expanduser().resolve() != Path(node["root"]).expanduser().resolve():
+            fail(f"transaction persisted backup root binding mismatch for {role}")
+        try:
+            verified = _verified_backup_receipt(backup, transaction_id)
+        except (KeyError, TypeError, OSError):
+            fail(f"transaction persisted backup ref is incomplete for {role}")
+        for key in ("root", "backup_root", "snapshot", "manifest", "manifest_sha256", "manifest_entries", "verified"):
+            if key not in backup:
+                fail(f"transaction persisted backup ref is incomplete for {role}: {key}")
+            if key in path_fields:
+                if Path(backup[key]).expanduser().resolve() != Path(verified[key]).expanduser().resolve():
+                    fail(f"transaction persisted backup ref identity mismatch for {role}: {key}")
+            elif backup[key] != verified[key]:
+                fail(f"transaction persisted backup ref mismatch for {role}: {key}")
+        if isinstance(node, dict) and "backup" in node:
+            nested = node.get("backup")
+            if not isinstance(nested, dict):
+                fail(f"transaction node backup ref is malformed for {role}")
+            for key in ("root", "backup_root", "snapshot", "manifest", "manifest_sha256", "manifest_entries", "verified"):
+                if key not in nested:
+                    fail(f"transaction node backup ref is incomplete for {role}: {key}")
+                if key in path_fields:
+                    if Path(nested[key]).expanduser().resolve() != Path(verified[key]).expanduser().resolve():
+                        fail(f"transaction node backup ref identity mismatch for {role}: {key}")
+                elif nested[key] != verified[key]:
+                    fail(f"transaction node backup ref mismatch for {role}: {key}")
+    if "backup_receipt" in transaction:
+        if not isinstance(transaction.get("backup_receipt"), dict):
+            fail("transaction persisted backup receipt is malformed")
+        if set(raw_backups) != set(MUTATION_ORDER):
+            fail("transaction backup receipt is present before all backup refs are persisted")
+        receipt = transaction["backup_receipt"]
+        receipt_nodes = receipt.get("nodes")
+        if receipt.get("phase") != "backup" or receipt.get("transaction_id") != transaction_id:
+            fail("transaction persisted backup receipt binding is stale")
+        if not isinstance(receipt_nodes, dict) or set(receipt_nodes) != set(MUTATION_ORDER):
+            fail("transaction persisted backup receipt does not cover both roles")
+        for role in MUTATION_ORDER:
+            observed = receipt_nodes.get(role)
+            if not isinstance(observed, dict):
+                fail(f"transaction persisted backup receipt is malformed for {role}")
+            expected = _expected_backup_binding(transaction, role)
+            for key, expected_value in expected.items():
+                observed_value = observed.get(key)
+                if key == "backup_non_seed":
+                    if not isinstance(observed_value, dict) or any(
+                        observed_value.get(field) != field_value
+                        for field, field_value in expected_value.items()
+                    ):
+                        fail(f"transaction persisted backup receipt binding mismatch for {role}: {key}")
+                elif observed_value != expected_value:
+                    fail(f"transaction persisted backup receipt binding mismatch for {role}: {key}")
+
+
+def _adopt_completed_adapter_callback(
+    transaction_path: Path, transaction: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
+    phase = state["phase"]
+    if phase == "rollback":
+        fail("rollback callback completion must be reconciled by rollback recovery")
+    target = ADAPTER_CALLBACK_TARGETS[phase]
+    receipt = state["receipt"]
+    existing = transaction.get(target)
+    if existing is not None and existing != receipt:
+        fail(f"completed host adapter callback conflicts with persisted {target}")
+    transaction[target] = receipt
+    transaction.pop("adapter_callback", None)
+    if phase == "preflight":
+        transaction["phase"] = "prepared"
+    elif phase == "backup":
+        transaction["phase"] = "backed_up"
+    elif phase == "apply":
+        transaction["phase"] = "applied"
+        transaction["applied_at"] = state["completed_at"]
+        transaction["rollback"] = {
+            "strategy": "same-filesystem-full-snapshot",
+            "required_on_gate_failure": True,
+            "status": "available",
+        }
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(transaction_path, transaction)
+    return transaction
+
+
 def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any], phase: str) -> dict[str, Any]:
     if adapter.is_symlink() or not adapter.is_file():
         fail(f"host adapter must be a regular file: {adapter}")
+    existing_callback = plan.get("adapter_callback")
+    if isinstance(existing_callback, dict):
+        status = existing_callback.get("status")
+        if status == "in_flight":
+            fail("host adapter callback is already in flight; explicit governed reconciliation is required")
+        if status == "completed" and existing_callback.get("phase") == phase:
+            fail("completed host adapter callback must be adopted before invoking another callback")
     adapter = adapter.resolve()
     phase_window_started_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
     if phase == "quiesce":
         plan["quiescence_request"] = _quiescence_request_for_plan(plan)
     plan["adapter_binding"] = _build_adapter_binding(plan, phase, phase_window_started_at)
+    binding_digest = _json_payload_digest(plan["adapter_binding"])
+    plan["adapter_callback"] = {
+        "schema_version": ADAPTER_CALLBACK_SCHEMA,
+        "status": "in_flight",
+        "phase": phase,
+        "transaction_id": plan["transaction_id"],
+        "plan_digest": plan["plan_digest"],
+        "adapter_binding_digest": binding_digest,
+        "operation_id": _adapter_callback_operation_id(
+            plan["transaction_id"], plan["plan_digest"], phase, binding_digest
+        ),
+        "started_at": phase_window_started_at,
+    }
     plan["canonical_digest"] = canonical_digest(plan)
     write_json(transaction_path, plan)
     try:
@@ -3499,25 +3723,58 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
             timeout=300,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
+        _record_adapter_callback_failure(transaction_path, plan, phase, f"{error.__class__.__name__}")
         fail(f"host adapter execution failed: {error.__class__.__name__}")
     if result.returncode != 0:
+        _record_adapter_callback_failure(transaction_path, plan, phase, f"exit {result.returncode}")
         fail(f"host adapter failed with exit {result.returncode}")
     try:
         receipt = json.loads(result.stdout)
     except json.JSONDecodeError:
+        _record_adapter_callback_failure(transaction_path, plan, phase, "invalid JSON receipt")
         fail("host adapter must return one JSON receipt on stdout")
     if not isinstance(receipt, dict):
+        _record_adapter_callback_failure(transaction_path, plan, phase, "receipt is not an object")
         fail("host adapter receipt must be a JSON object")
-    receipt = _bind_transaction_receipt(receipt, plan, phase)
-    # Small read-only binding fixtures intentionally invoke this helper before
-    # the apply transaction has captured local backup/reset evidence.  The
-    # actual mutation path always carries the corresponding transaction field
-    # and therefore takes the strict validator path below.
-    if phase == "backup" and not isinstance(plan.get("backup"), dict):
-        return receipt
-    if phase == "apply" and not isinstance(plan.get("staged"), dict):
-        return receipt
-    return validate_host_receipt(receipt, plan, phase)
+    try:
+        receipt = _bind_transaction_receipt(receipt, plan, phase)
+        # Small read-only binding fixtures intentionally invoke this helper before
+        # the apply transaction has captured local backup/reset evidence.  The
+        # actual mutation path always carries the corresponding transaction field
+        # and therefore takes the strict validator path below.
+        if phase == "backup" and not isinstance(plan.get("backup"), dict):
+            validated_receipt = receipt
+        elif phase == "apply" and not isinstance(plan.get("staged"), dict):
+            validated_receipt = receipt
+        else:
+            validated_receipt = validate_host_receipt(receipt, plan, phase)
+    except BaseException as error:
+        _record_adapter_callback_failure(transaction_path, plan, phase, str(error))
+        raise
+    completed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    plan["adapter_callback"] = {
+        **plan["adapter_callback"],
+        "status": "completed",
+        "completed_at": completed_at,
+        "receipt": validated_receipt,
+        "receipt_digest": _json_payload_digest(validated_receipt),
+    }
+    plan["canonical_digest"] = canonical_digest(plan)
+    try:
+        write_json(transaction_path, plan)
+    except BaseException:
+        # Do not let an unwritten completion look like a completed callback to
+        # an in-process rollback path.  The durable file still contains the
+        # in-flight intent, which forces governed reconciliation on resume.
+        plan["adapter_callback"] = {
+            key: value
+            for key, value in plan["adapter_callback"].items()
+            if key not in {"status", "completed_at", "receipt", "receipt_digest"}
+        }
+        plan["adapter_callback"]["status"] = "in_flight"
+        plan["canonical_digest"] = canonical_digest(plan)
+        raise
+    return validated_receipt
 
 
 def _verified_backup_receipt(backup: dict[str, Any], transaction_id: str) -> dict[str, Any]:
@@ -3689,6 +3946,7 @@ def _continue_transaction(
         write_json(path, transaction)
         try:
             transaction["preflight_receipt"] = run_host_adapter(host_adapter, path, transaction, "preflight")
+            transaction.pop("adapter_callback", None)
         except BaseException as preflight_error:
             transaction["phase"] = "preflight_failed"
             transaction["failure"] = str(preflight_error)
@@ -3715,6 +3973,7 @@ def _continue_transaction(
     transaction["backup"] = backups
     if not isinstance(transaction.get("backup_receipt"), dict):
         transaction["backup_receipt"] = run_host_adapter(host_adapter, path, transaction, "backup")
+        transaction.pop("adapter_callback", None)
     transaction["phase"] = "backed_up"
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
@@ -3736,6 +3995,7 @@ def _continue_transaction(
     write_json(path, transaction)
     if not isinstance(transaction.get("host_receipt"), dict):
         transaction["host_receipt"] = run_host_adapter(host_adapter, path, transaction, "apply")
+        transaction.pop("adapter_callback", None)
         transaction["phase"] = "applied"
         transaction["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
@@ -3760,6 +4020,30 @@ def resume_transaction(
         return transaction
     if phase not in {"prepared", "preflight", "preflight_failed", "backup_in_progress", "backed_up", "staging", "staged", "rollback_required"}:
         fail(f"transaction phase is not resumable: {phase}")
+    # Validate persisted physical snapshots and callback state before any
+    # recovery observation, adoption, cleanup, or phase rewrite.  A stale
+    # reference or an interrupted callback is an operator-reconciliation
+    # condition, not permission to manufacture a new transaction history.
+    _validate_persisted_backup_refs(transaction)
+    callback_state = _validate_adapter_callback_state(transaction)
+    if callback_state is not None:
+        callback_phase = callback_state["phase"]
+        if callback_state["status"] == "in_flight":
+            fail("host adapter callback is ambiguous in-flight; explicit governed reconciliation is required")
+        if callback_state["status"] == "completed":
+            allowed_transaction_phases = {
+                "preflight": {"preflight", "preflight_failed"},
+                "backup": {"backup_in_progress", "backed_up"},
+                "apply": {"staged", "rollback_required"},
+                "rollback": {"rollback_required"},
+            }
+            if phase not in allowed_transaction_phases[callback_phase]:
+                fail("completed host adapter callback phase does not match transaction phase")
+            if callback_phase != "rollback" and phase != "rollback_required":
+                transaction = _adopt_completed_adapter_callback(path, transaction, callback_state)
+                if callback_phase == "apply":
+                    return transaction
+                phase = transaction["phase"]
     if phase == "rollback_required":
         if host_adapter is None:
             fail("rollback_required transaction requires explicit governed rollback resume with a fresh host adapter")
@@ -4136,6 +4420,7 @@ def apply_transaction(
         try:
             if not rollback_errors:
                 transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+                transaction.pop("adapter_callback", None)
         except BaseException as rollback_callback_error:
             rollback_errors.append(f"host-adapter: {rollback_callback_error}")
         if not rollback_errors:
@@ -4185,17 +4470,35 @@ def rollback_transaction(
         fail("transaction does not contain full backup receipts")
     if host_adapter is None:
         fail("rollback requires a governed host adapter rollback callback")
+    _validate_persisted_backup_refs(transaction)
+    callback_state = _validate_adapter_callback_state(transaction)
+    if callback_state is not None and callback_state["status"] == "in_flight":
+        fail("host adapter callback is ambiguous in-flight; explicit governed reconciliation is required")
+    completed_rollback_callback = (
+        callback_state is not None
+        and callback_state["status"] == "completed"
+        and callback_state["phase"] == "rollback"
+    )
     transaction["phase"] = "rollback_required"
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
     try:
-        rollback_direct_receipt = _rollback_direct_reobserve(transaction, direct_args)
-        transaction["rollback_direct_quiescence_observation"] = _direct_observation_record(
-            rollback_direct_receipt, reauthorized=True
-        )
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
-        transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+        if completed_rollback_callback:
+            transaction["rollback_receipt"] = callback_state["receipt"]
+            transaction.pop("adapter_callback", None)
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+        elif isinstance(transaction.get("rollback_receipt"), dict):
+            validate_host_receipt(transaction["rollback_receipt"], transaction, "rollback")
+        else:
+            rollback_direct_receipt = _rollback_direct_reobserve(transaction, direct_args)
+            transaction["rollback_direct_quiescence_observation"] = _direct_observation_record(
+                rollback_direct_receipt, reauthorized=True
+            )
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+            transaction.pop("adapter_callback", None)
         rollback_post_callback_receipt = _rollback_direct_reobserve(transaction, direct_args)
         transaction["rollback_post_callback_direct_quiescence_observation"] = _direct_observation_record(
             rollback_post_callback_receipt, reauthorized=True
