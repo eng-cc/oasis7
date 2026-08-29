@@ -6,7 +6,7 @@ import { applyPixelWorldRendererRoute, createPixelWorldRendererRouteSignals, res
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 import { pixelWorldReadableAgentLabel, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
-import { applyPixelWorldMobileSelectionSafeArea } from "./pixel_world_mobile_safe_area.js";
+import { applyPixelWorldMobileSelectionSafeArea, installPixelWorldMobileSelectionSafeArea } from "./pixel_world_mobile_safe_area.js";
 export { pixelWorldSelectedBlockerVisualFixture };
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
@@ -542,16 +542,7 @@ function PixelWorldCanvasRenderer(props) {
   let canvasRef;
   const visualState = () => pixelWorldVisualState(props.renderState());
   const selectedEntityLabel = () => pixelWorldSelectedEntityLabel(visualState(), visualState().selection, core.isLocaleZh(props.locale()));
-  const syncMobileSelectionSafeArea = () => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest(".pixel-world-canvas"));
-  onMount(() => {
-    window.addEventListener("resize", syncMobileSelectionSafeArea);
-    const focusStateObserver = new MutationObserver(() => requestAnimationFrame(syncMobileSelectionSafeArea));
-    focusStateObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    onCleanup(() => {
-      window.removeEventListener("resize", syncMobileSelectionSafeArea);
-      focusStateObserver.disconnect();
-    });
-  });
+  onMount(() => onCleanup(installPixelWorldMobileSelectionSafeArea(() => canvasRef?.closest(".pixel-world-canvas"))));
   createEffect(() => {
     if (!canvasRef) {
       return;
@@ -564,7 +555,7 @@ function PixelWorldCanvasRenderer(props) {
       return;
     }
     props.onCanvasUpdate?.();
-    requestAnimationFrame(syncMobileSelectionSafeArea);
+    requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest(".pixel-world-canvas")));
   });
   return (
     <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready={props.rendererStatus?.() === "ready" ? "true" : undefined}>

@@ -40,3 +40,15 @@ export function applyPixelWorldMobileSelectionSafeArea(canvasRoot) {
   });
   marker.style.translate = `0 ${Math.floor(offset)}px`;
 }
+
+export function installPixelWorldMobileSelectionSafeArea(canvasRoot) {
+  const sync = () => applyPixelWorldMobileSelectionSafeArea(canvasRoot());
+  window.addEventListener("resize", sync);
+  const focusStateObserver = new MutationObserver(() => requestAnimationFrame(sync));
+  focusStateObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  requestAnimationFrame(sync);
+  return () => {
+    window.removeEventListener("resize", sync);
+    focusStateObserver.disconnect();
+  };
+}
