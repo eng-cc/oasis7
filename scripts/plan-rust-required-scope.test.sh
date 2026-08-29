@@ -136,15 +136,29 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pr
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
-scope_audit_contract_output="$(plan_for_path scripts/ci-required-scope-audit-contract.test.sh)"
-assert_key_equals "$scope_audit_contract_output" scope targeted
-assert_key_equals "$scope_audit_contract_output" selected_capabilities workflow_governance
-assert_key_equals "$scope_audit_contract_output" run_operational_contracts true
-assert_key_equals "$scope_audit_contract_output" run_rust_baseline false
-assert_key_equals "$scope_audit_contract_output" needs_rust_toolchain false
-assert_reason_contains "$scope_audit_contract_output" \
-  "workflow_governance:scripts/ci-required-scope-audit-contract.test.sh"
-assert_reason_absent "$scope_audit_contract_output" "unclassified_or_unresolvable:"
+# These seven shell fixtures validate required-gate workflow wiring.  Keep
+# every path exact so a missing mapping cannot silently widen this plan to the
+# full Rust baseline/toolchain.
+workflow_contract_paths=(
+  scripts/ci-tests-argument-contract.test.sh
+  scripts/ci-tests-full-superset-contract.test.sh
+  scripts/ci-tests-pixel-world-required-contract.test.sh
+  scripts/rust-required-gate-apt-contract.test.sh
+  scripts/rust-required-gate-compile-command-contract.test.sh
+  scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
+  scripts/ci-required-scope-audit-contract.test.sh
+)
+for workflow_contract_path in "${workflow_contract_paths[@]}"; do
+  workflow_contract_output="$(plan_for_path "$workflow_contract_path")"
+  assert_key_equals "$workflow_contract_output" scope targeted
+  assert_key_equals "$workflow_contract_output" selected_capabilities workflow_governance
+  assert_key_equals "$workflow_contract_output" run_operational_contracts true
+  assert_key_equals "$workflow_contract_output" run_rust_baseline false
+  assert_key_equals "$workflow_contract_output" needs_rust_toolchain false
+  assert_reason_contains "$workflow_contract_output" \
+    "workflow_governance:$workflow_contract_path"
+  assert_reason_absent "$workflow_contract_output" "unclassified_or_unresolvable:"
+done
 
 # Pure PM implementation and test helpers are workflow-governance checks, not
 # Rust workspace changes.  Keep representative Python and test/sh paths in a

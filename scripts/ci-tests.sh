@@ -265,6 +265,7 @@ run_required_gate_checks() {
   run bash ./scripts/doc-governance-check.test.sh
   run bash ./scripts/testing-manual-active-contract.test.sh
   run bash ./scripts/ci-tests-argument-contract.test.sh
+  run bash ./scripts/ci-tests-full-superset-contract.test.sh
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
   run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
   run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
