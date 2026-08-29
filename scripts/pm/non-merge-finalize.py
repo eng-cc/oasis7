@@ -447,6 +447,13 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
             required_modern.update(PR_HEAD_REQUIRED_FIELDS)
         if any(key not in existing_receipt for key in required_modern):
             fail("migrated non-merge receipt is missing modern authority")
+        allowed_modern = {
+            *expected, "evidence", "project_identity", *PR_HEAD_FIELDS,
+            "migrated_from", "migrated_from_sha256", "observed_at",
+        }
+        unknown = set(existing_receipt) - allowed_modern
+        if unknown:
+            fail("migrated non-merge receipt has unrecognized immutable fields")
         # Repository identity is optional in the PR head authority.  The
         # required ref OID/name are enforced above only for PR-bound tasks.
         legacy_optional = set(PR_HEAD_OPTIONAL_FIELDS)
@@ -499,6 +506,24 @@ def _bind_migrated_receipt_digest(path: pathlib.Path, task_uid: str,
             fail("migrated non-merge receipt digest authority drifted")
         intent["migrated_receipt_sha256"] = digest
         current[NON_MERGE_INTENT_FIELD] = intent
+        mapping.setdefault("tasks", {})[task_uid] = current
+
+    durable_store.transact_json(path, update)
+
+
+def _bind_terminal_migrated_receipt_digest(path: pathlib.Path, task_uid: str,
+                                           digest: str) -> None:
+    """Bind an adopted sidecar on an already-terminal legacy mapping."""
+    def update(mapping: dict) -> None:
+        current = (mapping.get("tasks") or {}).get(task_uid) or {}
+        if (current.get("status"), current.get("workflow_phase")) != (
+                "done", "closed_without_merge"):
+            fail("terminal migrated receipt digest lacks terminal mapping authority")
+        digests = current.setdefault("phase_receipt_sha256", {})
+        bound = digests.get("closed_without_merge")
+        if bound not in (None, digest):
+            fail("terminal migrated receipt digest authority drifted")
+        digests["closed_without_merge"] = digest
         mapping.setdefault("tasks", {})[task_uid] = current
 
     durable_store.transact_json(path, update)
@@ -699,6 +724,7 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted before terminal effects: {key}")
         existing = current.get(NON_MERGE_INTENT_FIELD)
+        bound_migrated_digest = None
         if existing is not None and existing != intent:
             if not isinstance(existing, dict):
                 fail("non-merge closeout intent authority drifted")
@@ -710,14 +736,20 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
                     continue
                 if (key == "migrated_receipt_sha256"
                         and isinstance(value, str)
-                        and re.fullmatch(r"[0-9a-f]{64}", value)):
+                        and re.fullmatch(r"[0-9a-f]{64}", value)
+                        and value == ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                                      .get("migrated_receipt_sha256"))):
+                    bound_migrated_digest = value
                     continue
                 if key not in intent or intent[key] != value:
                     fail("non-merge closeout intent authority drifted")
         for key in PR_HEAD_FIELDS:
             if key in record:
                 current[key] = record[key]
-        current[NON_MERGE_INTENT_FIELD] = intent
+        reserved_intent = dict(intent)
+        if bound_migrated_digest:
+            reserved_intent["migrated_receipt_sha256"] = bound_migrated_digest
+        current[NON_MERGE_INTENT_FIELD] = reserved_intent
         mapping.setdefault("tasks", {})[task_uid] = current
         return dict(current)
 
@@ -1126,6 +1158,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             "migrated_from": RECEIPT_NAME,
             "migrated_from_sha256": hashlib.sha256(canonical_receipt_bytes).hexdigest(),
         })
+        if "observed_at" not in existing_receipt:
+            receipt.pop("observed_at", None)
     # Complete the live Project binding readback before persisting either
     # terminal intent or receipt authority.  This keeps a missing item or
     # malformed binding from leaving a resumable-looking local closeout.
@@ -1145,7 +1179,11 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     if legacy_receipt_migration:
         _write_immutable_json(receipt_path, receipt, "migrated non-merge receipt")
         receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
-        if not was_terminal:
+        if was_terminal:
+            _bind_terminal_migrated_receipt_digest(
+                mapping_path, task_uid, receipt_digest,
+            )
+        else:
             _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
     elif receipt_path == migrated_receipt_path:
         receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
@@ -1155,7 +1193,13 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         else:
             intent = record.get(NON_MERGE_INTENT_FIELD) or {}
             bound = intent.get("migrated_receipt_sha256")
-        if bound != receipt_digest:
+        if bound is None and was_terminal:
+            _bind_terminal_migrated_receipt_digest(
+                mapping_path, task_uid, receipt_digest,
+            )
+        elif bound is None:
+            _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
+        elif bound != receipt_digest:
             fail("migrated non-merge receipt lacks matching immutable digest authority")
     if receipt_path == migrated_receipt_path:
         required = (

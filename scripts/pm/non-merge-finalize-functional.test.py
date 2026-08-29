@@ -951,6 +951,20 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         intent = self.read_json(mapping_path)["tasks"][UID]["closed_without_merge_intent"]
         self.assertRegex(intent["migrated_receipt_sha256"], r"^[0-9a-f]{64}$")
 
+        Path(self.env["GH_PROJECT_FAILURE_MARKER"]).unlink()
+        Path(self.env["GH_PROJECT_UPDATE_EDIT_COUNT"]).write_text("0")
+        self.write_state(self.project_fields, {
+            "Status": "In Progress", "PM Status": "committed",
+            "Workflow Phase": "execution",
+        })
+        retry_crashed = self.invoke("duplicate", evidence)
+        self.assertNotEqual(retry_crashed.returncode, 0)
+        retry_intent = self.read_json(mapping_path)["tasks"][UID]["closed_without_merge_intent"]
+        self.assertEqual(
+            retry_intent["migrated_receipt_sha256"],
+            intent["migrated_receipt_sha256"],
+        )
+
         self.env.pop("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT")
         retry = self.invoke("duplicate", evidence)
         self.assertEqual(retry.returncode, 0, retry.stderr)
