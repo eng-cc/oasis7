@@ -1,12 +1,12 @@
 use super::*;
 
-fn agent_owner(agent_id: &str) -> ResourceOwner {
+pub(super) fn agent_owner(agent_id: &str) -> ResourceOwner {
     ResourceOwner::Agent {
         agent_id: agent_id.to_string(),
     }
 }
 
-fn first_evidence_event_id(kernel: &WorldKernel) -> WorldEventId {
+pub(super) fn first_evidence_event_id(kernel: &WorldKernel) -> WorldEventId {
     kernel
         .journal()
         .first()
@@ -14,7 +14,7 @@ fn first_evidence_event_id(kernel: &WorldKernel) -> WorldEventId {
         .expect("seed event id")
 }
 
-fn electricity_of(kernel: &WorldKernel, agent_id: &str) -> i64 {
+pub(super) fn electricity_of(kernel: &WorldKernel, agent_id: &str) -> i64 {
     kernel
         .model()
         .agents
@@ -24,7 +24,7 @@ fn electricity_of(kernel: &WorldKernel, agent_id: &str) -> i64 {
         .get(ResourceKind::Electricity)
 }
 
-fn setup_social_kernel() -> WorldKernel {
+pub(super) fn setup_social_kernel() -> WorldKernel {
     let mut kernel = WorldKernel::new();
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-social".to_string(),

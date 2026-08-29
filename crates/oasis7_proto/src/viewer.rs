@@ -139,6 +139,9 @@ pub enum ViewerRequest {
     QuoteAdjudicateSocialFact {
         request: AdjudicateSocialFactQuoteRequest,
     },
+    QuoteRevokeSocialFact {
+        request: RevokeSocialFactQuoteRequest,
+    },
     QuoteSocialContact {
         request: SocialContactQuoteRequest,
     },
@@ -598,6 +601,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     AdjudicateSocialFactQuotePreflight {
         quote: AdjudicateSocialFactQuotePreflight,
+    },
+    RevokeSocialFactQuotePreflight {
+        quote: RevokeSocialFactQuotePreflight,
     },
     SocialContactQuotePreflight {
         quote: SocialContactQuotePreflight,

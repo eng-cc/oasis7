@@ -752,6 +752,7 @@ impl ViewerRuntimeLiveServer {
             request @ (ViewerRequest::QuoteDeclareSocialEdge { .. }
             | ViewerRequest::QuotePublishSocialFact { .. }
             | ViewerRequest::QuoteAdjudicateSocialFact { .. }
+            | ViewerRequest::QuoteRevokeSocialFact { .. }
             | ViewerRequest::QuoteSocialContact { .. }
             | ViewerRequest::QuoteGovernanceVote { .. }
             | ViewerRequest::QuoteDeclareWar { .. }) => {
