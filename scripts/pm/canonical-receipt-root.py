@@ -5,7 +5,7 @@ import argparse, json, os, pathlib, re, subprocess, sys, tempfile
 from portable_file_lock import ensure_lock_byte, fcntl
 
 UID = re.compile(r"^task_[0-9a-f]{32}$")
-ALLOWED={"merge-receipt.json","main-sync-receipt.json","terminal-cleanup-receipt.json","finalizer-ledger.json","cleanup-intent.json","patch-equivalence-receipt.json"}
+ALLOWED={"merge-receipt.json","main-sync-receipt.json","terminal-cleanup-receipt.json","finalizer-ledger.json","cleanup-intent.json","patch-equivalence-receipt.json","closed-without-merge-receipt.json","non-merge-finalizer-ledger.json"}
 
 def fail(message: str) -> None: raise SystemExit(f"canonical-receipt-root: {message}")
 

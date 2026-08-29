@@ -31,6 +31,7 @@ HUMAN_REVIEW_ENTRYPOINTS = (
 )
 BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
+WORKFLOW_ROUTER_SKILL = ROOT / ".agents/skills/repo-owned-workflow-router/SKILL.md"
 PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
 
 
@@ -79,6 +80,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(term=term):
                 self.assertIn(term, normalized)
+
         self.assertNotIn("back off to 300", normalized)
 
         finishing = FINISHING.read_text(encoding="utf-8").lower()
@@ -96,6 +98,21 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(duplicated_policy=duplicated_policy):
                 self.assertNotIn(duplicated_policy, finishing)
+
+    def test_early_not_planned_outcome_routes_to_non_merge_terminal_entry(self) -> None:
+        router = WORKFLOW_ROUTER_SKILL.read_text(encoding="utf-8")
+        finishing = FINISHING.read_text(encoding="utf-8")
+        for phase in ("bootstrap", "planning", "execution"):
+            self.assertIn(phase, router)
+        self.assertIn("not_planned", router)
+        self.assertIn("finishing-a-development-branch", router)
+        self.assertLess(
+            router.index("A classified non-merge outcome"),
+            router.index("Clear execution truth"),
+        )
+        self.assertIn("takes priority over", router)
+        self.assertIn("not_planned", finishing)
+        self.assertIn("without implementation\nverification", finishing)
 
     def test_bounded_slices_default_to_head_bound_task_packets(self) -> None:
         dispatch = self.section("5.2 TPM planning and subagent dispatch")
@@ -764,6 +781,36 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"post-merge-finalize\.py)", runbook)
         self.assertEqual(6, len(invocations), invocations)
         self.assertRegex(runbook, r"(?i)all six (?:commands|transitions|steps)")
+
+    def test_non_merge_terminal_route_is_copyable_and_synchronized(self) -> None:
+        route = re.compile(
+            r"(?:\./)?scripts/pm/non-merge-finalize\.py\s+"
+            r"--repo-root\s+<canonical-default-worktree>\s+"
+            r"--task-uid\s+<TASK-UID>\s+"
+            r"--reason\s+<reason>\s+"
+            r"--evidence-file\s+<path>\s+--json"
+        )
+
+        def normalized(text: str) -> str:
+            return re.sub(r"\\\s*\n\s*", " ", text)
+
+        surfaces = {
+            "canonical source": self.text,
+            "finishing skill": FINISHING.read_text(encoding="utf-8"),
+        }
+        matches = {}
+        for name, text in surfaces.items():
+            match = route.search(normalized(text))
+            self.assertIsNotNone(
+                match,
+                f"{name} must publish a complete copyable non-merge-finalize route",
+            )
+            matches[name] = re.sub(r"\s+", " ", match.group(0)).strip()
+        self.assertEqual(
+            matches["canonical source"],
+            matches["finishing skill"],
+            "non-merge terminal route drifted between canonical source and finishing skill",
+        )
 
     def test_terminal_runbook_enters_default_worktree_before_any_helper(self) -> None:
         match = re.search(r"(?ms)^###?\s+Terminal runbook\s*$\n(.*?)(?=^#{2,3}\s+|\Z)", self.text)

@@ -11,7 +11,11 @@ TPM is the coordinator/integrator for this sequence. Gate meanings, retry/dispos
 
 ## When to Use
 
-Use after implementation and its required verification are complete.
+Use after implementation and its required verification are complete, or when a
+bound task has a classified non-merge outcome. In particular, `not_planned`
+may enter from bootstrap, planning, or execution without implementation
+verification and must proceed directly to the canonical non-merge terminal
+route below.
 
 ## Freeze-Commit Gates
 
@@ -85,6 +89,14 @@ operator entry:
 The linked canonical terminal runbook remains authoritative for order,
 receipts, recovery, and fail-closed behavior; this skill does not maintain a
 second copy.
+
+For a classified non-merge outcome, follow the [canonical terminal runbook](../../../doc/engineering/workflow/source-of-truth.md#terminal-runbook):
+
+```bash
+python3 ./scripts/pm/non-merge-finalize.py \
+  --repo-root <canonical-default-worktree> --task-uid <TASK-UID> \
+  --reason <reason> --evidence-file <path> --json
+```
 
 ## Return Contract
 

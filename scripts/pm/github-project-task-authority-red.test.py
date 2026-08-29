@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -23,6 +24,10 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AuthoritativeMappingContract(unittest.TestCase):
+    def test_issue_lookup_includes_closed_tasks(self) -> None:
+        source = pathlib.Path(MODULE.__file__).read_text(encoding="utf-8")
+        lookup = source[source.index("def github_issue_record"):source.index("def", source.index("def github_issue_record") + 4)]
+        self.assertIn('"--state",\n            "all"', lookup)
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = pathlib.Path(self.tmp.name) / "repo"
@@ -104,6 +109,284 @@ class AuthoritativeMappingContract(unittest.TestCase):
             self.assertEqual(0, MODULE.command_refresh_task(args))
         mapping = MODULE.load_mapping(mapping_path)
         self.assert_complete_identity(mapping["tasks"][self.uid])
+
+    def test_selected_refresh_preserves_closed_without_merge_workflow_phase(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        MODULE.save_mapping(mapping_path, {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid,
+                "status": "done",
+                "workflow_phase": "closed_without_merge",
+                "project_item_id": "ITEM_ID",
+                **self.expected,
+            }},
+        })
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "done",
+            "priority": "P2",
+            "worktree_hint": str(self.worktree),
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {
+                "id": "PROJECT_ID",
+                "number": 1,
+                "owner": {"login": "eng-cc"},
+            },
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [
+                    {"name": "Done", "field": {"name": "Status"}},
+                    {"name": "done", "field": {"name": "PM Status"}},
+                    {"name": "done", "field": {"name": "Workflow Phase"}},
+                ],
+            },
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual("done", refreshed["status"])
+        self.assertEqual("closed_without_merge", refreshed["workflow_phase"])
+
+    def test_refresh_resumes_after_intent_before_legacy_receipt_sidecar(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        digest = "e" * 64
+        project_identity = {"owner": "eng-cc", "number": "1", "id": "PROJECT_ID"}
+        intent = {
+            "schema": "oasis7_non_merge_closeout_intent_v1",
+            "task_uid": self.uid,
+            "repository": "eng-cc/oasis7",
+            "issue_number": 1,
+            "project_item_id": "ITEM_ID",
+            "project_identity": project_identity,
+            "reason": "superseded",
+            "evidence_sha256": digest,
+            "pr_number": 22,
+            "pr_url": "https://github.com/eng-cc/oasis7/pulls/22",
+            "headRefOid": "legacy-head",
+            "headRefName": "task/authority-contract",
+        }
+        existing = {
+            "task_uid": self.uid,
+            "status": "committed",
+            "workflow_phase": "execution",
+            "repository": "eng-cc/oasis7",
+            "issue_number": 1,
+            "project_item_id": "ITEM_ID",
+            "closed_without_merge_intent": intent,
+            **self.expected,
+        }
+        MODULE.save_mapping(mapping_path, {
+            "version": 1, "project": project_identity,
+            "tasks": {self.uid: existing},
+        })
+        receipt_root = self.repo / ".git/oasis7-workflow-receipts" / self.uid
+        receipt_root.mkdir(parents=True)
+        (receipt_root / "closed-without-merge-receipt.json").write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge",
+            "schema_version": 1,
+            "issuer": "non-merge-finalize",
+            "task_uid": self.uid,
+            "repository": "eng-cc/oasis7",
+            "issue_number": 1,
+            "project_item_id": "ITEM_ID",
+            "reason": "superseded",
+            "evidence_sha256": digest,
+            "pr_number": 22,
+            "pr_url": "https://github.com/eng-cc/oasis7/pulls/22",
+            "pr_state": "CLOSED",
+            "mergedAt": None,
+        }) + "\n")
+
+        self.assertEqual(
+            "execution",
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            ),
+        )
+
+    def test_refresh_accepts_no_pr_migrated_receipt_without_head_fields(self) -> None:
+        project_identity = {"owner": "eng-cc", "number": "1", "id": "PROJECT_ID"}
+        digest = "f" * 64
+        intent = {
+            "schema": "oasis7_non_merge_closeout_intent_v1",
+            "task_uid": self.uid, "repository": "eng-cc/oasis7",
+            "issue_number": 1, "project_item_id": "ITEM_ID",
+            "project_identity": project_identity, "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "previous_status": "committed", "previous_workflow_phase": "execution",
+        }
+        existing = {
+            "task_uid": self.uid, "status": "committed", "workflow_phase": "execution",
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "closed_without_merge_intent": intent,
+            **self.expected,
+        }
+        mapping_path = self.repo / ".pm/github-project-sync/tasks.json"
+        MODULE.save_mapping(mapping_path, {
+            "version": 1, "project": project_identity,
+            "tasks": {self.uid: existing},
+        })
+        receipt_root = self.repo / ".git/oasis7-workflow-receipts" / self.uid
+        receipt_root.mkdir(parents=True)
+        canonical_path = receipt_root / "closed-without-merge-receipt.json"
+        canonical_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": self.uid,
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "pr_state": None, "mergedAt": None,
+        }, sort_keys=True) + "\n")
+        source_digest = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
+        migrated_path = receipt_root / "closed-without-merge-receipt-migrated.json"
+        migrated_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": self.uid,
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "project_identity": project_identity,
+            "reason": "non_pr_completed", "evidence_sha256": digest,
+            "evidence": {"text": "completed"},
+            "pr_number": None, "pr_url": None, "pr_state": None, "mergedAt": None,
+            "previous_status": "committed", "previous_workflow_phase": "execution",
+            "migrated_from": "closed-without-merge-receipt.json",
+            "migrated_from_sha256": source_digest,
+        }, sort_keys=True) + "\n")
+        intent["migrated_receipt_sha256"] = hashlib.sha256(
+            migrated_path.read_bytes()
+        ).hexdigest()
+
+        self.assertEqual(
+            "execution",
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            ),
+        )
+
+    def test_refresh_rejects_intent_receipt_predecessor_disagreement(self) -> None:
+        project_identity = {"owner": "eng-cc", "number": "1", "id": "PROJECT_ID"}
+        digest = "d" * 64
+        intent = {
+            "schema": "oasis7_non_merge_closeout_intent_v1",
+            "task_uid": self.uid, "repository": "eng-cc/oasis7",
+            "issue_number": 1, "project_item_id": "ITEM_ID",
+            "project_identity": project_identity, "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "previous_status": "blocked", "previous_workflow_phase": "blocked",
+        }
+        existing = {
+            "task_uid": self.uid, "status": "committed", "workflow_phase": "execution",
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "closed_without_merge_intent": intent,
+            **self.expected,
+        }
+        receipt_root = self.repo / ".git/oasis7-workflow-receipts" / self.uid
+        receipt_root.mkdir(parents=True)
+        canonical_path = receipt_root / "closed-without-merge-receipt.json"
+        canonical_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": self.uid,
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "pr_state": None, "mergedAt": None,
+            "previous_status": "committed", "previous_workflow_phase": "execution",
+        }, sort_keys=True) + "\n")
+        with self.assertRaises(SystemExit):
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            )
+        legacy = json.loads(canonical_path.read_text())
+        legacy.pop("previous_status")
+        legacy.pop("previous_workflow_phase")
+        canonical_path.write_text(json.dumps(legacy, sort_keys=True) + "\n")
+        with self.assertRaises(SystemExit):
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            )
+
+    def test_refresh_rejects_missing_project_binding_without_mutation_and_allows_repaired_retry(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        original = {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid,
+                "status": "done",
+                "workflow_phase": "closed_without_merge",
+                "project_item_id": "STALE_ITEM",
+                **self.expected,
+            }},
+        }
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid,
+            "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "done",
+            "priority": "P2",
+            "worktree_hint": str(self.worktree),
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {
+                "id": "PROJECT_ID",
+                "number": 1,
+                "owner": {"login": "eng-cc"},
+            },
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [],
+            },
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": []}}),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaisesRegex(SystemExit, r"Project item|Project identity|binding"):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(original, MODULE.load_mapping(mapping_path))
+
+        repaired = json.loads(json.dumps(original))
+        repaired["tasks"][self.uid]["project_item_id"] = "ITEM_ID"
+        MODULE.save_mapping(mapping_path, repaired)
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual("ITEM_ID", refreshed["project_item_id"])
 
     def test_default_root_refresh_preserves_registered_task_worktree_identity(self) -> None:
         args = self.args()

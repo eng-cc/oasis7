@@ -56,7 +56,8 @@ except ModuleNotFoundError:  # Support isolated fixture copies of this module.
 PHASE_ORDER = {
     "": 0, "blocked": 0, "intake": 1, "bootstrap": 2, "route": 3,
     "execution": 4, "pre_pr_review": 5, "pre_pr_ready": 6, "pr_watch": 7,
-    "task_done": 8, "main_sync": 9, "post_merge_done": 10,
+    "task_done": 8, "main_sync": 9, "closed_without_merge": 10,
+    "post_merge_done": 11,
 }
 IMMUTABLE_TASK_FIELDS = {
     "task_uid", "repository", "issue_number", "canonical_worktree",
