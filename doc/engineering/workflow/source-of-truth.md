@@ -371,6 +371,10 @@ Deterministic script contract:
   persists the trusted receipt and advances only to PM `done` / `task_done`;
   the issue stays open and follows the [terminal runbook](#terminal-runbook); use
   `non-merge-finalize.py --reason <reason> --evidence-file <path>` for classified non-merge outcomes.
+  `non_pr_completed` additionally requires the existing verified `task_complete`
+  closeout and `task_done` phase; cancellation reasons do not manufacture
+  completion evidence. The bounded evidence file is persisted in the terminal
+  receipt and copied into the task Issue evidence comment with its digest.
   It is the lifecycle writer for `last_closed_at`; workflow-report close is not
   a terminal closeout.
 

@@ -90,13 +90,15 @@ def _receipt_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     return pathlib.Path(result.stdout.strip()).resolve()
 
 
-def _read_evidence(path: pathlib.Path) -> tuple[str, dict]:
+def _read_evidence(path: pathlib.Path) -> tuple[str, dict, str]:
     try:
         raw = path.read_bytes()
     except OSError as exc:
         fail(f"evidence file cannot be read: {exc}")
     if not raw.strip():
         fail("evidence file must not be empty")
+    if len(raw) > 8192:
+        fail("evidence file exceeds the 8192-byte Issue evidence limit")
     digest = hashlib.sha256(raw).hexdigest()
     try:
         parsed = json.loads(raw.decode("utf-8"))
@@ -104,7 +106,20 @@ def _read_evidence(path: pathlib.Path) -> tuple[str, dict]:
         parsed = {"text": raw.decode("utf-8", errors="replace")}
     if not isinstance(parsed, dict):
         parsed = {"value": parsed}
-    return digest, parsed
+    public_evidence = raw.decode("utf-8", errors="replace").strip()
+    return digest, parsed, public_evidence
+
+
+def _has_verified_task_complete(record: dict) -> bool:
+    for claim in record.get("claim_verifications") or []:
+        if not isinstance(claim, dict):
+            continue
+        if (str(claim.get("claim_type") or "") == "task_complete"
+                and str(claim.get("status") or "") == "verified"
+                and claim.get("allowed_to_claim") is True
+                and str(claim.get("verification_exit_code") or "") in {"", "0"}):
+            return True
+    return False
 
 
 def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) -> dict:
@@ -207,10 +222,45 @@ def _reconcile_comment(record: dict, operation_id: str) -> str:
     for page in payload if isinstance(payload, list) else [payload]:
         comments.extend(page if isinstance(page, list) else [page])
     marker = f"Operation-ID: {operation_id}"
+    issue_marker = f"https://github.com/{record['repository']}/issues/{record['issue_number']}#issuecomment-"
     matches = [comment for comment in comments
                if marker in str(comment.get("body") or "")
                and f"Task UID: {record['task_uid']}" in str(comment.get("body") or "")]
+    matches = [comment for comment in matches
+               if "<!-- oasis7-pm-evidence -->" in str(comment.get("body") or "")
+               and "Evidence Phase: closed_without_merge" in str(comment.get("body") or "")
+               and issue_marker in str(comment.get("html_url") or comment.get("url") or "")]
     return str(matches[0].get("html_url") or matches[0].get("url") or "") if len(matches) == 1 else ""
+
+
+def _update_issue_body(record: dict, task_uid: str, issue: dict,
+                       ledger_path: pathlib.Path) -> dict:
+    body = str(issue.get("body") or "")
+    updated_body, count = re.subn(
+        r"(?m)^- status: `[^`]+`$", "- status: `done`", body, count=1,
+    )
+    if count != 1:
+        fail("Issue body is missing exactly one canonical status field")
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "intent")
+    if updated_body != body:
+        _ledger_transition(ledger_path, task_uid, "issue_body_update", "action")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            handle.write(updated_body)
+            body_path = pathlib.Path(handle.name)
+        try:
+            subprocess.run(
+                ["gh", "issue", "edit", str(record["issue_number"]), "-R",
+                 str(record["repository"]), "--body-file", str(body_path)],
+                check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+        finally:
+            body_path.unlink(missing_ok=True)
+    readback = _identity_issue(record, task_uid, allow_closed=True)
+    if "- status: `done`" not in str(readback.get("body") or ""):
+        fail("Issue body status readback mismatch")
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "readback", readback)
+    _ledger_transition(ledger_path, task_uid, "issue_body_update", "committed")
+    return readback
 
 
 def _project_update(root: pathlib.Path, record: dict, task_uid: str,
@@ -305,7 +355,13 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         fail("post_merge_done requires merged-PR finalization")
     if reason == "non_pr_completed" and any(record.get(key) for key in NON_PR_FORBIDDEN_AUTHORITY):
         fail("non_pr_completed cannot carry PR or merge receipt authority")
-    evidence_digest, evidence_data = _read_evidence(evidence_path)
+    if reason == "non_pr_completed" and not (
+            record.get("status") == "done"
+            and record.get("workflow_phase") == "task_done"
+            and record.get("last_closed_at")
+            and _has_verified_task_complete(record)):
+        fail("non_pr_completed requires task_done and verified task_complete closeout evidence")
+    evidence_digest, evidence_data, public_evidence = _read_evidence(evidence_path)
     pr = _identity_pr(record)
     if reason in {"superseded", "duplicate"} and pr is None:
         fail(f"{reason} requires an exact bound CLOSED unmerged PR")
@@ -346,6 +402,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             "repository": record.get("repository"), "issue_number": record.get("issue_number"),
             "project_item_id": record.get("project_item_id"), "reason": reason,
             "evidence_sha256": evidence_digest,
+            "pr_number": receipt.get("pr_number"), "pr_url": receipt.get("pr_url"),
+            "pr_state": receipt.get("pr_state"), "mergedAt": receipt.get("mergedAt"),
         }
         if any(existing_receipt.get(key) != value for key, value in expected_existing.items()):
             fail("existing non-merge receipt disagrees with current task/reason/evidence authority")
@@ -353,6 +411,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     else:
         durable_store.replace_json(receipt_path, receipt)
     receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    issue = _update_issue_body(record, task_uid, issue, ledger_path)
     _project_update(root, record, task_uid, ledger_path)
     comment_operation_id = hashlib.sha256(
         f"{task_uid}:closed_without_merge:evidence_comment".encode()
@@ -368,7 +427,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                 f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\n"
                 "Evidence Phase: closed_without_merge\nRole: tpm\n"
                 f"Reason: {reason}\nEvidence SHA256: {evidence_digest}\n"
-                f"Evidence File: {evidence_path.name}\n")
+                f"Evidence File: {evidence_path.name}\n"
+                "Evidence Payload:\n```text\n"
+                f"{public_evidence}\n```\n")
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
             handle.write(body)
             body_path = pathlib.Path(handle.name)
@@ -418,7 +479,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = pathlib.Path(args.repo_root).resolve()
     mapping_path = root / ".pm/github-project-sync/tasks.json"
-    lock_path = mapping_path.with_name(f"{mapping_path.name}.{args.task_uid}.non-merge-finalizer-lock")
+    lock_path = mapping_path.with_name(f"{mapping_path.name}.{args.task_uid}.finalizer-lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+b") as lock:
         ensure_lock_byte(lock)
