@@ -251,7 +251,7 @@ def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) 
     if not repository or not issue_number:
         fail("task truth is missing repository or issue_number identity")
     issue = run_json(["gh", "issue", "view", issue_number, "-R", repository,
-                      "--json", "state,body,number,url"])
+                      "--json", "state,stateReason,body,number,url"])
     body = str(issue.get("body") or "")
     expected_url = f"https://github.com/{repository}/issues/{issue_number}"
     if (str(issue.get("number") or "") != issue_number
@@ -325,6 +325,15 @@ def _bind_pr_head(record: dict, pr: dict | None,
 def _project_identity(project: dict) -> dict[str, str]:
     """Return the canonical mapping-level Project identity for CAS/receipts."""
     return {key: str(project.get(key) or "") for key in PROJECT_IDENTITY_FIELDS}
+
+
+def _expected_issue_state_reason(reason: str) -> str:
+    return "COMPLETED" if reason == "non_pr_completed" else "NOT_PLANNED"
+
+
+def _verify_receipt_bytes(path: pathlib.Path, expected_digest: str) -> None:
+    if hashlib.sha256(path.read_bytes()).hexdigest() != expected_digest:
+        fail("non-merge receipt bytes drifted during terminal effects")
 
 
 def _closeout_intent(task_uid: str, record: dict, reason: str,
@@ -1116,6 +1125,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     if str(record.get("workflow_phase") or "") not in ELIGIBLE_NON_MERGE_PHASES:
         fail(f"workflow phase is not eligible for non-merge closeout: {record.get('workflow_phase')}")
     project_identity = _project_identity(record["_project"])
+    if not all(project_identity.values()):
+        fail("task truth is missing complete canonical Project identity")
     if str(record.get("task_uid") or task_uid) != task_uid:
         fail("task UID mapping identity mismatch")
     if str(record.get("workflow_phase") or "") == "post_merge_done":
@@ -1182,6 +1193,10 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         receipt_path = migrated_receipt_path
         ledger_path = _migrated_ledger_path(canonical_ledger_path)
     issue = _identity_issue(record, task_uid, allow_closed=existing_receipt is not None)
+    if (str(issue.get("state") or "").upper() == "CLOSED"
+            and str(issue.get("stateReason") or "").upper()
+            != _expected_issue_state_reason(reason)):
+        fail("Issue close stateReason disagrees before terminal effects")
     receipt = {
         "receipt_type": "oasis7_closed_without_merge",
         "schema_version": NON_MERGE_RECEIPT_SCHEMA_VERSION,
@@ -1392,6 +1407,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             fail("evidence comment live readback has no unique matching operation")
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment, pr_head)
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed", pr_head=pr_head)
+    _verify_receipt_bytes(receipt_path, receipt_digest)
     _commit_mapping(mapping_path, task_uid, record, receipt, receipt_digest, comment,
                     reason, evidence_digest, project_identity)
     # The mapping CAS has now published the terminal record; subsequent
@@ -1406,6 +1422,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "closed_without_merge"
     ] = receipt_digest
     _ledger_transition(ledger_path, task_uid, "issue_close", "intent", pr_head=pr_head)
+    _verify_receipt_bytes(receipt_path, receipt_digest)
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                       str(record["repository"]), "--json", "state,stateReason,body,number,url"])
     if str(issue.get("state") or "").upper() != "CLOSED":
@@ -1422,10 +1439,11 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     _ledger_transition(ledger_path, task_uid, "issue_close", "readback", issue, pr_head)
     if str(issue.get("state") or "").upper() != "CLOSED":
         fail("Issue close live readback mismatch")
-    expected_state_reason = "COMPLETED" if reason == "non_pr_completed" else "NOT_PLANNED"
+    expected_state_reason = _expected_issue_state_reason(reason)
     if str(issue.get("stateReason") or "").upper() != expected_state_reason:
         fail("Issue close stateReason readback mismatch")
     _ledger_transition(ledger_path, task_uid, "issue_close", "committed", pr_head=pr_head)
+    _verify_receipt_bytes(receipt_path, receipt_digest)
     _write_tombstone(receipt_path, record, receipt_digest)
     return {"status": "already_finalized" if was_terminal else "finalized",
             "task_uid": task_uid, "reason": reason, "receipt": str(receipt_path),
