@@ -888,7 +888,16 @@ impl World {
             state,
         };
         let input_bytes = to_canonical_cbor(&input)?;
-        self.execute_module_call(module_id, trace_id.to_string(), input_bytes, sandbox)
+        // Economy evaluation runs inside the outer staged action world; avoid
+        // re-entering the public clone-and-publish boundary here.
+        self.execute_module_call_with_manifest_and_state_key(
+            module_id,
+            module_id,
+            &manifest,
+            trace_id.to_string(),
+            input_bytes,
+            sandbox,
+        )
     }
 
     fn extract_economy_emit<T: DeserializeOwned>(
