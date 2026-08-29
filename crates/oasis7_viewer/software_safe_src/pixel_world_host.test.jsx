@@ -1285,13 +1285,13 @@ describe("pixel world host", () => {
     expect(commandDrawer).toHaveProperty("open", true);
     expect(focusDiagnosticsDrawer).toHaveProperty("open", false);
     expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "true");
-    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("agent=agent-0");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("Agent 0");
+    expect(commandDrawer).not.toHaveTextContent("agent=agent-0");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--receipt")).toHaveTextContent("Blocked");
     expect(commandDrawer).toHaveTextContent("Agent Chat");
     expect(commandDrawer).toHaveTextContent("Command Surface");
     expect(commandDrawer).toHaveTextContent("Current Target");
-    expect(commandDrawer).toHaveTextContent("agent=agent-0");
     expect(commandDrawer).toHaveTextContent("Message");
     expect(commandDrawer).toHaveTextContent("Send Chat");
     expect(commandDrawer).toHaveTextContent("No chat feedback yet.");
@@ -1398,7 +1398,8 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=4");
-    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("agent=agent-0");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).not.toHaveTextContent("agent=agent-0");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("projects the shared non-color beacon for selected agents and locations only", async () => {

@@ -10,7 +10,7 @@ export function pixelWorldReadableLocationLabel(location, fallbackId = "", isLoc
   const id = String(location?.id || fallbackId || "").trim();
   const explicitLabel = String(location?.name || location?.label || "").trim();
   if (explicitLabel && explicitLabel !== id) return explicitLabel;
-  const numericLocationId = id.match(/^location[-_](\d+)$/i);
+  const numericLocationId = id.match(/^(?:location|loc)[-_](\d+)$/i);
   if (numericLocationId) return isLocaleZh ? `地点 ${numericLocationId[1]}` : `Location ${numericLocationId[1]}`;
   return explicitLabel || id;
 }

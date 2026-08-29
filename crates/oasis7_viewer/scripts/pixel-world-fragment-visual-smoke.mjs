@@ -793,6 +793,7 @@ function actionReceiptProbeScript() {
         return current?.present === "true" && current?.confidence === "world_delta" ? current : null;
       });
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
       const agentRect = await waitFor(() => {
         const current = document.querySelector(".pixel-world-entity--agent");
         const rect = current ? rectOf(current) : null;
@@ -810,6 +811,11 @@ function actionReceiptProbeScript() {
         blockerBadge,
         fragmentCount: badgeCount("fragments"),
         agentRect,
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+        },
       });
     })()
   `;
@@ -872,6 +878,7 @@ function mobileActionReceiptProbeScript() {
       };
 
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
       const receiptElement = await waitFor(() => document.querySelector(".pixel-world-action-receipt"));
       receiptElement.scrollIntoView({ block: "start", inline: "nearest" });
       window.scrollBy(0, -8);
@@ -900,6 +907,11 @@ function mobileActionReceiptProbeScript() {
         receipt,
         fragmentCount: badgeCount("fragments"),
         agentRect,
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+        },
         commandStripRect: rectOf(document.querySelector(".pixel-world-command-strip")),
       });
     })()
@@ -1184,6 +1196,7 @@ try {
   assert(!/agent-0/.test(summary.actionReceipt.playerLeverageText || ""), "Player Leverage leaked the raw agent id", summary.actionReceipt);
   assert(summary.actionReceipt.receipt?.rect?.height > 40, "action receipt did not render with a measurable visual footprint", summary.actionReceipt);
   assert(summary.actionReceipt.fragmentCount === 3, "action receipt scenario should preserve fragment background markers", summary.actionReceipt);
+  assert(summary.actionReceipt.renderDto?.fragments === 3 && summary.actionReceipt.renderDto?.agents === 2, "action receipt probe did not preserve the current Rust render DTO", summary.actionReceipt);
   assert(summary.actionReceipt.agentRect?.width > 0, "action receipt scenario lost the readable agent marker", summary.actionReceipt);
   await runAgentBrowser(["screenshot", actionReceiptScreenshotPath], { timeout: 20_000 });
 
@@ -1204,6 +1217,7 @@ try {
   );
   assert(summary.mobileActionReceipt.receipt?.rect?.bottom <= summary.mobileActionReceipt.viewport.height, "mobile receipt is not fully visible in the screenshot viewport", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.fragmentCount === 3, "mobile action receipt scenario lost fragment background markers", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.renderDto?.fragments === 3 && summary.mobileActionReceipt.renderDto?.agents === 2, "mobile receipt probe did not preserve the current Rust render DTO", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.agentRect?.width > 0, "mobile action receipt scenario lost the readable agent marker", summary.mobileActionReceipt);
   await runAgentBrowser(["screenshot", mobileActionReceiptScreenshotPath], { timeout: 20_000 });
 

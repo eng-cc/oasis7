@@ -14,5 +14,6 @@ describe("pixel world player-facing identity", () => {
   it("normalizes a location fallback instead of exposing its raw id", () => {
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" })).toBe("Location 0");
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" }, true)).toBe("地点 0");
+    expect(pixelWorldSelectedEntityLabel({ ...visualState, locations: [] }, { kind: "location", id: "loc-42" })).toBe("Location 42");
   });
 });

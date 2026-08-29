@@ -1086,7 +1086,7 @@ function PixelWorldFocusCommandSurface(props) {
       >
         <div class="badge-row">
           <span class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</span>
-          <span class="badge">{`agent=${agentId()}`}</span>
+          <span class="badge">{agentName()}</span>
           <Show when={binding()?.playerId}>
             <span class="badge">{`boundPlayer=${binding().playerId}`}</span>
           </Show>
@@ -1098,7 +1098,7 @@ function PixelWorldFocusCommandSurface(props) {
           <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target">
             <span>{tr(locale(), "目标", "Target")}</span>
             <strong>{agentName()}</strong>
-            <em>{`agent=${agentId()}`}</em>
+            <em>{tr(locale(), "可交互行动体", "Interactive agent")}</em>
           </div>
           <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker" data-blocker-present={blockerLabel() !== tr(locale(), "无阻塞", "No blocker") ? "true" : "false"}>
             <span>{tr(locale(), "阻塞", "Blocker")}</span>

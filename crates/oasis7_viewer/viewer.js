@@ -9858,7 +9858,7 @@ function pixelWorldReadableLocationLabel(location, fallbackId = "", isLocaleZh2 
   const id = String(location?.id || fallbackId || "").trim();
   const explicitLabel = String(location?.name || location?.label || "").trim();
   if (explicitLabel && explicitLabel !== id) return explicitLabel;
-  const numericLocationId = id.match(/^location[-_](\d+)$/i);
+  const numericLocationId = id.match(/^(?:location|loc)[-_](\d+)$/i);
   if (numericLocationId) return isLocaleZh2 ? `地点 ${numericLocationId[1]}` : `Location ${numericLocationId[1]}`;
   return explicitLabel || id;
 }
@@ -11250,7 +11250,7 @@ function PixelWorldFocusCommandSurface(props) {
         return [(() => {
           var _el$129 = _tmpl$37$1(), _el$130 = _el$129.firstChild, _el$131 = _el$130.nextSibling, _el$133 = _el$131.nextSibling;
           insert(_el$130, () => tr$1(locale(), "当前交互目标", "Current Target"));
-          insert(_el$131, () => `agent=${agentId()}`);
+          insert(_el$131, agentName);
           insert(_el$129, createComponent(Show, {
             get when() {
               return binding()?.playerId;
@@ -11271,7 +11271,7 @@ function PixelWorldFocusCommandSurface(props) {
           var _el$134 = _tmpl$38$1(), _el$135 = _el$134.firstChild, _el$136 = _el$135.firstChild, _el$137 = _el$136.nextSibling, _el$138 = _el$137.nextSibling, _el$139 = _el$135.nextSibling, _el$140 = _el$139.firstChild, _el$141 = _el$140.nextSibling, _el$142 = _el$139.nextSibling, _el$143 = _el$142.firstChild, _el$144 = _el$143.nextSibling, _el$145 = _el$142.nextSibling;
           insert(_el$136, () => tr$1(locale(), "目标", "Target"));
           insert(_el$137, agentName);
-          insert(_el$138, () => `agent=${agentId()}`);
+          insert(_el$138, () => tr$1(locale(), "可交互行动体", "Interactive agent"));
           insert(_el$140, () => tr$1(locale(), "阻塞", "Blocker"));
           insert(_el$141, blockerLabel);
           insert(_el$143, () => tr$1(locale(), "回执", "Receipt"));
