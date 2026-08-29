@@ -2,16 +2,19 @@
 """Governed, fail-closed validator-pair rebuild transaction executor.
 
 The executor is deliberately local-first.  A plan contains immutable package,
-world and capacity evidence and can be reviewed without contacting a host.
-``apply`` and ``rollback`` operate on explicitly supplied local node roots;
-``apply`` additionally requires a governed host adapter that returns a
-transaction-bound startup/health receipt.  An orchestration layer may map the
-same transaction to a remote host, but this tool never guesses credentials or
-silently falls back to SSH.  No observer is ever touched by this pair
-transaction.  ``quiesce`` is an evidence-only phase: it may invoke only a
-quiesce-only adapter callback and never preflights, resets, stages, starts, or
-mutates a node.  The separate ``human_direct_ssh`` mode is also evidence-only:
-it invokes executor-owned fixed readbacks through pinned SSH after separately
+world and capacity evidence; when configured with executor-bound
+``human_direct_ssh`` inputs, it also performs bounded live GitHub authority and
+SSH state observations before admission.  ``apply`` and ``rollback`` operate
+on explicitly supplied local node roots and perform the corresponding bounded
+live GitHub/SSH authority and state re-observations when configured; ``apply``
+additionally requires a governed host adapter that returns a transaction-bound
+startup/health receipt.  An orchestration layer may map the same transaction
+to a remote host, but this tool never guesses credentials or silently falls
+back to SSH.  No observer is ever touched by this pair transaction.
+``quiesce`` is an evidence-only phase: it may invoke only a quiesce-only
+adapter callback and never preflights, resets, stages, starts, or mutates a
+node.  The separate ``human_direct_ssh`` mode is also evidence-only: it
+invokes executor-owned fixed readbacks through pinned SSH after separately
 authorized human stop evidence, with no generic adapter fallback.  Its
 executor-bound two-role proof is mandatory for plan admission; the impact
 record boolean is not a stopped-state proof.
@@ -99,6 +102,7 @@ HUMAN_DIRECT_SSH_SCHEMA = "oasis7.human_direct_ssh_receipt.v1"
 HUMAN_DIRECT_SSH_REQUEST_SCHEMA = "oasis7.human_direct_ssh_request.v1"
 HUMAN_DIRECT_SSH_MAX_AGE_SECONDS = 24 * 60 * 60
 HUMAN_DIRECT_SSH_QUIET_WINDOW_SECONDS = 2.0
+AUTHORIZED_GITHUB_AUTHOR_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 HUMAN_DIRECT_SSH_ROLE_ALIASES = {
     "sequencer": "sequencer-204",
     "sequencer-204": "sequencer-204",
@@ -518,15 +522,22 @@ def manifest_tree(root: Path) -> list[dict[str, Any]]:
 
 def copy_entry(source: Path, destination: Path) -> None:
     if source.is_symlink():
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        _mkdir_durable(destination.parent)
         destination.symlink_to(os.readlink(source))
+        _fsync_parent_directory(destination.parent)
     elif source.is_dir():
-        shutil.copytree(source, destination, symlinks=True)
+        _mkdir_durable(destination)
+        for child in sorted(source.iterdir(), key=lambda item: item.name):
+            copy_entry(child, destination / child.name)
+        shutil.copystat(source, destination, follow_symlinks=False)
+        _fsync_directory(destination)
+        _fsync_parent_directory(destination.parent)
     elif source.is_file():
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        _mkdir_durable(destination.parent)
         shutil.copy2(source, destination, follow_symlinks=False)
+        _fsync_regular_file(destination)
     else:
-        fail(f"cannot copy unsupported path: {source}")
+        raise shutil.Error(f"cannot copy unsupported path: {source}")
 
 
 def without_backup_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -551,13 +562,16 @@ def apply_manifest_metadata(root: Path, entries: list[dict[str, Any]]) -> None:
                 os.chmod(path, int(entry["mode"]), follow_symlinks=False)
         except OSError as error:
             fail(f"cannot restore backup metadata for {path}: {error}")
+        _fsync_entry(path)
 
 
 def remove_entry(path: Path) -> None:
     if path.is_symlink() or path.is_file():
         path.unlink()
+        _fsync_parent_directory(path.parent)
     elif path.is_dir():
         shutil.rmtree(path)
+        _fsync_parent_directory(path.parent)
 
 
 def parse_node(raw: str) -> tuple[str, str, Path]:
@@ -1431,6 +1445,9 @@ def _read_live_github_authority(
     user = comment.get("user")
     if not isinstance(user, dict) or user.get("login") != expected["actor"]:
         fail("human_direct_ssh live GitHub authority actor binding mismatch")
+    author_association = comment.get("author_association")
+    if not isinstance(author_association, str) or author_association.upper() not in AUTHORIZED_GITHUB_AUTHOR_ASSOCIATIONS:
+        fail("human_direct_ssh live GitHub authority actor association is not authorized")
     body = comment.get("body")
     if not isinstance(body, str) or hashlib.sha256(body.encode()).hexdigest() != expected["body_sha256"]:
         fail("human_direct_ssh live GitHub authority body digest mismatch")
@@ -1440,6 +1457,8 @@ def _read_live_github_authority(
         fail("human_direct_ssh live GitHub authority body is not JSON")
     if not isinstance(body_value, dict) or body_value.get("schema_version") != "oasis7.validator_pair_rebuild_live_authority.v1":
         fail("human_direct_ssh live GitHub authority body schema is unsupported")
+    if body_value.get("authorized") is not True:
+        fail("human_direct_ssh live GitHub authority action is not explicitly authorized")
     for field in ("task_uid", "action", "transaction_id", "nonce", "inventory_sha256", "head_oid", "issued_at", "expires_at"):
         if body_value.get(field) != expected.get(field):
             fail(f"human_direct_ssh live GitHub authority {field} binding mismatch")
@@ -1456,6 +1475,8 @@ def _read_live_github_authority(
         "issue_number": expected["issue_number"],
         "comment_id": expected["comment_id"],
         "actor": expected["actor"],
+        "author_association": author_association.upper(),
+        "authorized": True,
         "body_sha256": expected["body_sha256"],
         "task_uid": task_uid,
         "action": expected["action"],
@@ -1537,10 +1558,18 @@ def _direct_ssh_environment(args: argparse.Namespace, request: dict[str, Any]) -
     credential_fd = args.credential_fd
     if credential_env and credential_fd is not None:
         fail("human_direct_ssh accepts one credential seam, not both")
+    cached_secret = getattr(args, "_credential_secret", None)
+    if cached_secret is not None:
+        if not isinstance(cached_secret, str) or not cached_secret.strip():
+            fail("human_direct_ssh cached credential is empty or malformed")
+        env["SSHPASS"] = cached_secret
+        return env, True
     if credential_env:
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", credential_env) or not env.get(credential_env):
             fail("human_direct_ssh credential environment binding is unavailable")
-        env["SSHPASS"] = env[credential_env]
+        secret = env[credential_env]
+        args._credential_secret = secret
+        env["SSHPASS"] = secret
         return env, True
     if credential_fd is not None:
         if credential_fd < 0:
@@ -1554,9 +1583,11 @@ def _direct_ssh_environment(args: argparse.Namespace, request: dict[str, Any]) -
         if len(secret) > 4096 or not secret.strip():
             fail("human_direct_ssh credential fd is empty or oversized")
         try:
-            env["SSHPASS"] = secret.decode("utf-8", errors="strict").strip()
+            decoded = secret.decode("utf-8", errors="strict").strip()
         except UnicodeDecodeError:
             fail("human_direct_ssh credential fd is not UTF-8")
+        args._credential_secret = decoded
+        env["SSHPASS"] = decoded
         return env, True
     return env, False
 
@@ -1932,7 +1963,13 @@ def _direct_reobserve_from_args(args: argparse.Namespace) -> dict[str, Any]:
             credential_fd=getattr(args, "credential_fd", None),
             reobserve=True,
         )
-        return run_human_direct_ssh(direct_args, emit=False)
+        cached_secret = getattr(args, "_credential_secret", None)
+        if cached_secret is not None:
+            direct_args._credential_secret = cached_secret
+        receipt = run_human_direct_ssh(direct_args, emit=False)
+        if hasattr(direct_args, "_credential_secret"):
+            args._credential_secret = direct_args._credential_secret
+        return receipt
 
 
 def _direct_observation_record(receipt: dict[str, Any], *, reauthorized: bool = False) -> dict[str, Any]:
@@ -2939,8 +2976,63 @@ def _fsync_parent_directory(path: Path) -> None:
         os.close(directory_fd)
 
 
+def _fsync_directory(path: Path) -> None:
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    directory_fd = os.open(str(path), directory_flags)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _fsync_regular_file(path: Path) -> None:
+    with path.open("rb") as handle:
+        os.fsync(handle.fileno())
+    _fsync_parent_directory(path.parent)
+
+
+def _fsync_entry(path: Path) -> None:
+    if path.is_symlink():
+        _fsync_parent_directory(path.parent)
+    elif path.is_dir():
+        _fsync_directory(path)
+        _fsync_parent_directory(path.parent)
+    elif path.is_file():
+        _fsync_regular_file(path)
+    else:
+        fail(f"cannot fsync unsupported path: {path}")
+
+
+def _fsync_tree(root: Path) -> None:
+    if root.is_symlink() or root.is_file():
+        _fsync_entry(root)
+        return
+    if not root.is_dir():
+        fail(f"cannot fsync missing tree: {root}")
+    for child in sorted(root.iterdir(), key=lambda item: item.name):
+        _fsync_tree(child)
+    _fsync_entry(root)
+
+
+def _mkdir_durable(path: Path) -> None:
+    """Create a directory chain and persist each new directory entry."""
+    if path.is_symlink() or path.is_file():
+        fail(f"directory path is not a directory: {path}")
+    missing: list[Path] = []
+    current = path
+    while not current.exists() and not current.is_symlink():
+        missing.append(current)
+        parent = current.parent
+        if parent == current:
+            fail(f"cannot create directory path: {path}")
+        current = parent
+    for directory in reversed(missing):
+        directory.mkdir()
+        _fsync_parent_directory(directory.parent)
+
+
 def write_json(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir_durable(path.parent)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     payload = json.dumps(value, ensure_ascii=True, indent=2) + "\n"
     try:
@@ -2963,10 +3055,10 @@ def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
     backup_root = root / "backups" / transaction_id
     if backup_root.exists():
         fail(f"backup already exists for {node['role']}: {backup_root}")
-    backup_root.mkdir(parents=True, exist_ok=False)
+    _mkdir_durable(backup_root)
     try:
         snapshot = backup_root / "snapshot"
-        snapshot.mkdir()
+        _mkdir_durable(snapshot)
         source_manifest = without_backup_entries(manifest_tree(root))
         for child in sorted(root.iterdir(), key=lambda item: item.name):
             if child.name == "backups":
@@ -2976,6 +3068,7 @@ def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
         manifest = source_manifest
         if manifest_tree(snapshot) != manifest:
             fail(f"backup snapshot manifest verification failed for {root}")
+        _fsync_tree(snapshot)
         manifest_path = backup_root / "manifest.json"
         write_json(
             manifest_path,
@@ -2985,6 +3078,7 @@ def snapshot_node(node: dict[str, Any], transaction_id: str) -> dict[str, Any]:
                 "entries": manifest,
             },
         )
+        _fsync_directory(backup_root)
         digest = sha256_file(manifest_path)
         return {
             "root": str(root),
@@ -3021,7 +3115,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
         path = root / surface
         if path.exists() or path.is_symlink():
             remove_entry(path)
-        path.mkdir(parents=True, exist_ok=True)
+        _mkdir_durable(path)
     post_delete_absence = {
         "schema_version": "oasis7.validator_pair_rebuild_post_delete_absence.v1",
         "absent": True,
@@ -3040,7 +3134,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
         ):
             fail(f"post-delete absence proof is not clean for {node['role']}/{surface}")
     release = root / "releases" / package_version / "bin"
-    release.mkdir(parents=True, exist_ok=True)
+    _mkdir_durable(release)
     runtime = package_dir / plan["package"]["runtime_relpath"]
     if not runtime.is_file() or runtime.is_symlink():
         fail(f"package runtime disappeared before apply: {package_dir}")
@@ -3053,7 +3147,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
         remove_entry(current)
     current.symlink_to(release.parent, target_is_directory=True)
     governed_root = root / "staged-governed"
-    governed_root.mkdir(parents=True, exist_ok=True)
+    _mkdir_durable(governed_root)
     staged: dict[str, str] = {}
     governed_inventory: dict[str, dict[str, int]] = {}
     for key, value in plan["network"]["governed"].items():
@@ -3074,6 +3168,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
             fail(f"governed {key} inventory mismatch after staging {node['role']}")
         staged[key] = str(governed_destination)
         governed_inventory[key] = actual_inventory
+    _fsync_tree(root)
     return {
         "staged_release": str(release.parent),
         "runtime": str(runtime_destination),
@@ -3247,7 +3342,20 @@ def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: 
         return receipt
     if phase == "rollback":
         for role in MUTATION_ORDER:
-            if nodes[role].get("rollback_verified") is not True:
+            value = nodes[role]
+            expected_node = plan.get("nodes", {}).get(role)
+            if not isinstance(value, dict) or not isinstance(expected_node, dict):
+                fail(f"host adapter rollback receipt is malformed for {role}")
+            if value.get("role") != role or value.get("root") != expected_node.get("root"):
+                fail(f"host adapter rollback role/root binding mismatch for {role}")
+            if (
+                value.get("active") is not False
+                or value.get("running") is not False
+                or value.get("service_state") != "stopped"
+                or value.get("independently_observed") is not True
+            ):
+                fail(f"host adapter rollback requires both validators stopped for {role}")
+            if value.get("rollback_verified") is not True:
                 fail(f"host adapter rollback gate failed for {role}")
         return receipt
     for role in MUTATION_ORDER:
@@ -3412,6 +3520,319 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
     return validate_host_receipt(receipt, plan, phase)
 
 
+def _verified_backup_receipt(backup: dict[str, Any], transaction_id: str) -> dict[str, Any]:
+    """Read-only validation for a transaction-bound backup already on disk."""
+    root = Path(backup["root"]).expanduser()
+    resolved_root = root.resolve()
+    backup_root = Path(backup["backup_root"]).expanduser()
+    snapshot = Path(backup["snapshot"]).expanduser()
+    manifest_path = Path(backup["manifest"]).expanduser()
+    expected_backup_root = resolved_root / "backups" / transaction_id
+    if backup_root.is_symlink() or backup_root.resolve() != expected_backup_root:
+        fail(f"recovery backup identity mismatch for {root}")
+    if not snapshot.is_dir() or snapshot.is_symlink() or not manifest_path.is_file() or manifest_path.is_symlink():
+        fail(f"recovery backup snapshot is incomplete: {backup_root}")
+    if manifest_path.resolve().parent != backup_root.resolve() or snapshot.resolve().parent != backup_root.resolve():
+        fail(f"recovery backup paths escape backup root: {backup_root}")
+    manifest_sha256 = sha256_file(manifest_path)
+    try:
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"recovery backup manifest is unreadable: {error}")
+    if manifest_payload.get("schema_version") != "oasis7.validator_pair_rebuild_backup.v1":
+        fail(f"recovery backup manifest schema mismatch: {manifest_path}")
+    if manifest_payload.get("root") != str(root):
+        fail(f"recovery backup manifest root mismatch: {manifest_path}")
+    entries = manifest_payload.get("entries")
+    if not isinstance(entries, list) or not entries:
+        fail(f"recovery backup manifest entries are missing: {manifest_path}")
+    if without_backup_entries(manifest_tree(snapshot)) != entries:
+        fail(f"recovery backup snapshot manifest verification failed for {root}")
+    return {
+        "root": str(root),
+        "backup_root": str(backup_root.resolve()),
+        "snapshot": str(snapshot.resolve()),
+        "manifest": str(manifest_path.resolve()),
+        "manifest_sha256": manifest_sha256,
+        "manifest_entries": len(entries),
+        "verified": True,
+    }
+
+
+def _discover_transaction_backups(transaction: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    transaction_id = _direct_safe_identifier(transaction.get("transaction_id"), "transaction recovery id")
+    discovered: dict[str, Any] = {}
+    partial: list[str] = []
+    nodes = transaction.get("nodes")
+    if not isinstance(nodes, dict):
+        fail("transaction recovery nodes are missing")
+    for role in MUTATION_ORDER:
+        node = nodes.get(role)
+        if not isinstance(node, dict) or not isinstance(node.get("root"), str):
+            fail(f"transaction recovery node root is missing for {role}")
+        root = Path(node["root"]).expanduser()
+        resolved_root = root.resolve()
+        backup_root = resolved_root / "backups" / transaction_id
+        if not backup_root.exists() and not backup_root.is_symlink():
+            continue
+        if backup_root.is_symlink():
+            fail(f"transaction recovery backup is a symlink for {role}")
+        manifest_path = backup_root / "manifest.json"
+        if not manifest_path.exists():
+            partial.append(role)
+            continue
+        discovered[role] = _verified_backup_receipt(
+            {
+                "root": str(root),
+                "backup_root": str(backup_root),
+                "snapshot": str(backup_root / "snapshot"),
+                "manifest": str(manifest_path),
+            },
+            transaction_id,
+        )
+    return discovered, partial
+
+
+def _cleanup_transaction_backups(transaction: dict[str, Any], roles: list[str]) -> None:
+    transaction_id = _direct_safe_identifier(transaction.get("transaction_id"), "transaction recovery id")
+    nodes = transaction.get("nodes")
+    if not isinstance(nodes, dict):
+        fail("transaction recovery nodes are missing")
+    for role in roles:
+        node = nodes.get(role)
+        if not isinstance(node, dict) or not isinstance(node.get("root"), str):
+            fail(f"transaction recovery node root is missing for {role}")
+        root = Path(node["root"]).expanduser()
+        resolved_root = root.resolve()
+        backup_root = resolved_root / "backups" / transaction_id
+        if backup_root.exists() or backup_root.is_symlink():
+            if backup_root.is_symlink() or backup_root.resolve() != resolved_root / "backups" / transaction_id:
+                fail(f"transaction recovery backup identity mismatch for {role}")
+            remove_entry(backup_root)
+
+
+def _resume_direct_args(
+    transaction: dict[str, Any], direct_args: argparse.Namespace | None
+) -> argparse.Namespace:
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict):
+        fail("transaction recovery direct-observation proof is missing")
+    request_value = getattr(direct_args, "human_direct_ssh_request", None) if direct_args is not None else None
+    known_hosts_value = getattr(direct_args, "known_hosts", None) if direct_args is not None else None
+    if not isinstance(request_value, str) or not request_value.strip():
+        request_value = transaction.get("live_ssh_request_path") or proof.get("direct_request_path")
+    if not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        known_hosts_value = transaction.get("live_ssh_known_hosts_path") or proof.get("known_hosts_path")
+    if not isinstance(request_value, str) or not request_value.strip() or not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        fail("transaction recovery requires live human_direct_ssh re-observation")
+    result = argparse.Namespace(
+        human_direct_ssh_request=request_value,
+        known_hosts=known_hosts_value,
+        credential_env=getattr(direct_args, "credential_env", None) if direct_args is not None else None,
+        credential_fd=getattr(direct_args, "credential_fd", None) if direct_args is not None else None,
+    )
+    if direct_args is not None and hasattr(direct_args, "_credential_secret"):
+        result._credential_secret = direct_args._credential_secret
+    return result
+
+
+def _record_transaction_direct_reobserve(
+    transaction: dict[str, Any], direct_args: argparse.Namespace
+) -> dict[str, Any]:
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict):
+        fail("transaction recovery direct-observation proof is missing")
+    direct_receipt = _direct_reobserve_from_args(direct_args)
+    stopped_quiescence = proof.get("stopped_quiescence")
+    expected_request_digest = stopped_quiescence.get("request_digest") if isinstance(stopped_quiescence, dict) else None
+    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id") or direct_receipt.get("request_digest") != expected_request_digest:
+        fail("transaction recovery direct re-observation binding differs from the transaction request")
+    impact_path_value = proof.get("consumer_impact_record_path")
+    if not isinstance(impact_path_value, str) or not impact_path_value.strip():
+        fail("transaction recovery consumer-impact binding is missing")
+    impact_path = Path(impact_path_value).resolve()
+    if direct_receipt.get("impact_record_sha256") != sha256_file(impact_path) or direct_receipt.get("impact") != transaction.get("consumer_impact", {}).get("impact"):
+        fail("transaction recovery direct re-observation consumer-impact binding mismatch")
+    transaction["resume_direct_quiescence_observation"] = _direct_observation_record(
+        direct_receipt, reauthorized=True
+    )
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    return direct_receipt
+
+
+def _continue_transaction(
+    transaction: dict[str, Any],
+    path: Path,
+    host_adapter: Path,
+    direct_args: argparse.Namespace | None,
+    *,
+    fresh_direct_observation: bool,
+) -> dict[str, Any]:
+    if fresh_direct_observation:
+        effective_direct_args = _resume_direct_args(transaction, direct_args)
+        _record_transaction_direct_reobserve(transaction, effective_direct_args)
+        if direct_args is not None and hasattr(effective_direct_args, "_credential_secret"):
+            direct_args._credential_secret = effective_direct_args._credential_secret
+        write_json(path, transaction)
+
+    if not isinstance(transaction.get("capacity_apply"), dict):
+        transaction["capacity_apply"] = {
+            role: refresh_capacity(Path(transaction["nodes"][role]["root"]), transaction["capacity"][role], role)
+            for role in MUTATION_ORDER
+        }
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+
+    if not isinstance(transaction.get("preflight_receipt"), dict):
+        transaction["phase"] = "preflight"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        try:
+            transaction["preflight_receipt"] = run_host_adapter(host_adapter, path, transaction, "preflight")
+        except BaseException as preflight_error:
+            transaction["phase"] = "preflight_failed"
+            transaction["failure"] = str(preflight_error)
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            raise
+        transaction["phase"] = "prepared"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+
+    backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+    for role in MUTATION_ORDER:
+        if role in backups:
+            continue
+        transaction["phase"] = "backup_in_progress"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        backup = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
+        backups[role] = backup
+        transaction["backup"] = backups
+        transaction["nodes"][role]["backup"] = backup
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+    transaction["backup"] = backups
+    if not isinstance(transaction.get("backup_receipt"), dict):
+        transaction["backup_receipt"] = run_host_adapter(host_adapter, path, transaction, "backup")
+    transaction["phase"] = "backed_up"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+
+    staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+    for role in MUTATION_ORDER:
+        if role in staged:
+            continue
+        transaction["phase"] = "staging"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        staged[role] = install_local(transaction["nodes"][role], transaction, backups[role])
+        transaction["staged"] = staged
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+    transaction["staged"] = staged
+    transaction["phase"] = "staged"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    if not isinstance(transaction.get("host_receipt"), dict):
+        transaction["host_receipt"] = run_host_adapter(host_adapter, path, transaction, "apply")
+        transaction["phase"] = "applied"
+        transaction["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+    return transaction
+
+
+def resume_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
+    """Idempotently recover a promoted transaction without inventing authority."""
+    transaction = load_json(path, "transaction")
+    if transaction.get("schema_version") != SCHEMA:
+        fail("unsupported transaction schema")
+    if transaction.get("canonical_digest") != canonical_digest(transaction):
+        fail("transaction canonical digest mismatch")
+    phase = transaction.get("phase")
+    if phase == "rolled_back":
+        return transaction
+    if phase not in {"prepared", "preflight", "preflight_failed", "backup_in_progress", "backed_up", "staging", "staged", "rollback_required"}:
+        fail(f"transaction phase is not resumable: {phase}")
+    discovered, partial = _discover_transaction_backups(transaction)
+    if partial:
+        _cleanup_transaction_backups(transaction, partial)
+    if discovered:
+        existing_backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+        existing_backups.update(discovered)
+        transaction["backup"] = existing_backups
+        for role, backup in discovered.items():
+            if isinstance(transaction.get("nodes", {}).get(role), dict):
+                transaction["nodes"][role]["backup"] = backup
+    if set(discovered) == set(MUTATION_ORDER):
+        transaction["phase"] = "backed_up"
+        transaction["recovery"] = {
+            "status": "adopted",
+            "adopted_roles": list(MUTATION_ORDER),
+            "cleaned_partial_roles": partial,
+            "idempotent": True,
+        }
+    elif partial:
+        transaction["recovery"] = {
+            "status": "cleaned_partial",
+            "adopted_roles": [],
+            "cleaned_partial_roles": partial,
+            "idempotent": True,
+        }
+    elif discovered:
+        transaction["phase"] = "backup_in_progress"
+        transaction["recovery"] = {
+            "status": "partial_adopted",
+            "adopted_roles": list(discovered),
+            "cleaned_partial_roles": [],
+            "idempotent": True,
+        }
+    else:
+        transaction["recovery"] = {
+            "status": "no_backup",
+            "adopted_roles": [],
+            "cleaned_partial_roles": [],
+            "idempotent": True,
+        }
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    if host_adapter is not None:
+        if phase == "rollback_required":
+            return rollback_transaction(path, host_adapter, direct_args)
+        try:
+            return _continue_transaction(transaction, path, host_adapter, direct_args, fresh_direct_observation=True)
+        except BaseException as error:
+            backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+            staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+            if not backups and not staged:
+                transaction["phase"] = "preflight_failed"
+                transaction["failure"] = str(error)
+                transaction["canonical_digest"] = canonical_digest(transaction)
+                write_json(path, transaction)
+                if isinstance(error, SystemExit):
+                    raise
+                fail(str(error))
+            transaction["backup"] = backups
+            transaction["staged"] = staged
+            transaction["phase"] = "rollback_required"
+            transaction["failure"] = str(error)
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            try:
+                return rollback_transaction(path, host_adapter, direct_args)
+            except BaseException as rollback_error:
+                if isinstance(rollback_error, SystemExit):
+                    raise
+                fail(f"resume rollback failed: {rollback_error}")
+    return transaction
+
+
 def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> dict[str, Any]:
     root = Path(backup["root"])
     backup_root = Path(backup["backup_root"])
@@ -3451,6 +3872,7 @@ def restore_node(backup: dict[str, Any], transaction_id: str | None = None) -> d
     restored_manifest = without_backup_entries(manifest_tree(root))
     if restored_manifest != expected:
         fail(f"rollback manifest verification failed for {root}")
+    _fsync_tree(root)
     return {"verified": True, "restored_manifest_entries": len(restored_manifest)}
 
 
@@ -3679,54 +4101,17 @@ def apply_transaction(
     }
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
-    transaction["capacity_apply"] = {
-        role: refresh_capacity(Path(plan["nodes"][role]["root"]), plan["capacity"][role], role)
-        for role in MUTATION_ORDER
-    }
-    transaction["canonical_digest"] = canonical_digest(transaction)
-    write_json(path, transaction)
-    transaction["phase"] = "preflight"
-    transaction["canonical_digest"] = canonical_digest(transaction)
-    write_json(path, transaction)
+    backups: dict[str, Any] = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+    staged: dict[str, Any] = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
     try:
-        transaction["preflight_receipt"] = run_host_adapter(host_adapter, path, transaction, "preflight")
-    except BaseException as preflight_error:
-        transaction["phase"] = "preflight_failed"
-        transaction["failure"] = str(preflight_error)
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
-        if isinstance(preflight_error, SystemExit):
-            raise
-        fail(str(preflight_error))
-    transaction["phase"] = "prepared"
-    transaction["canonical_digest"] = canonical_digest(transaction)
-    write_json(path, transaction)
-    backups: dict[str, Any] = {}
-    staged: dict[str, Any] = {}
-    try:
-        for role in MUTATION_ORDER:
-            backups[role] = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
-            transaction["nodes"][role]["backup"] = backups[role]
-        transaction["backup"] = backups
-        transaction["backup_receipt"] = run_host_adapter(host_adapter, path, transaction, "backup")
-        transaction["phase"] = "backed_up"
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
-        # Mutation is deliberately storage-205 then sequencer-204.
-        for role in MUTATION_ORDER:
-            staged[role] = install_local(transaction["nodes"][role], transaction, backups[role])
-        transaction["staged"] = staged
-        transaction["phase"] = "staged"
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
-        transaction["host_receipt"] = run_host_adapter(host_adapter, path, transaction, "apply")
-        transaction["phase"] = "applied"
-        transaction["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        transaction["rollback"] = {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True, "status": "available"}
-        transaction["canonical_digest"] = canonical_digest(transaction)
-        write_json(path, transaction)
-        return transaction
+        return _continue_transaction(transaction, path, host_adapter, direct_args, fresh_direct_observation=False)
     except BaseException as error:
+        backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+        staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+        if not backups and not staged and not isinstance(transaction.get("preflight_receipt"), dict):
+            if isinstance(error, SystemExit):
+                raise
+            fail(str(error))
         transaction["backup"] = backups
         transaction["staged"] = staged
         transaction["phase"] = "rollback_required"
@@ -3751,6 +4136,16 @@ def apply_transaction(
                 transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
         except BaseException as rollback_callback_error:
             rollback_errors.append(f"host-adapter: {rollback_callback_error}")
+        if not rollback_errors:
+            try:
+                rollback_post_callback_receipt = _rollback_direct_reobserve(transaction, direct_args)
+                transaction["rollback_post_callback_direct_quiescence_observation"] = _direct_observation_record(
+                    rollback_post_callback_receipt, reauthorized=True
+                )
+                transaction["canonical_digest"] = canonical_digest(transaction)
+                write_json(path, transaction)
+            except BaseException as rollback_post_callback_error:
+                rollback_errors.append(f"rollback post-callback direct re-observation: {rollback_post_callback_error}")
         if not rollback_errors:
             for role in reversed(MUTATION_ORDER):
                 if role in backups:
@@ -3799,6 +4194,12 @@ def rollback_transaction(
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
         transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+        rollback_post_callback_receipt = _rollback_direct_reobserve(transaction, direct_args)
+        transaction["rollback_post_callback_direct_quiescence_observation"] = _direct_observation_record(
+            rollback_post_callback_receipt, reauthorized=True
+        )
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
         results: dict[str, Any] = {}
         for role in reversed(MUTATION_ORDER):
             if role not in backups:
@@ -3873,6 +4274,13 @@ def parser() -> argparse.ArgumentParser:
     rollback.add_argument("--known-hosts")
     rollback.add_argument("--credential-env")
     rollback.add_argument("--credential-fd", type=int)
+    resume = sub.add_parser("resume")
+    resume.add_argument("--transaction", required=True)
+    resume.add_argument("--host-adapter")
+    resume.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
+    resume.add_argument("--known-hosts")
+    resume.add_argument("--credential-env")
+    resume.add_argument("--credential-fd", type=int)
     return root
 
 
@@ -3890,6 +4298,9 @@ def main() -> int:
     elif args.mode == "apply":
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
         print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
+    elif args.mode == "resume":
+        host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
+        print(json.dumps(resume_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
     else:
         print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser(), args), ensure_ascii=True, sort_keys=True))
     return 0

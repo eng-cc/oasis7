@@ -461,6 +461,15 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --known-hosts <same-pinned-known-hosts> \
   --host-adapter <governed-host-adapter>
 ```
+
+#### External nonce-ledger deployment prerequisite
+
+Before any `human_direct_ssh`, `plan`, `apply`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.
+It must already be a regular non-symlink file owned by the executor identity with mode `0600`; its parent must be deployment-owned and not writable by unrelated users, and the executor fails closed rather than creating it.
+Every request must bind the exact absolute `nonce_ledger_path`; `OASIS7_VALIDATOR_PAIR_NONCE_LEDGER` must resolve to that same path, never to repository or output state.
+Deployment preflight must create/check the parent and file with equivalents of `install -d -m 0700` and `install -m 0600`, then verify UID, regular-file type, mode, and path before an outage window.
+Retain the append-only ledger across process restarts, output cleanup, rebuilds, rollback drills, backups, and rotation; preserve all rows and never truncate or reuse a consumed nonce. Failed checks are `capability_blocked`.
+
 `human_direct_ssh` 是本流程唯一的人工作业停机后观察入口：独立的人类 stop 完成后，executor 必须从 live GitHub task/user authority 或 authenticated control-plane approval 重新授权，authority 绑定 repository、issue/task UID、actor、动作、两角色目标、nonce 与 expiry；调用者 stop JSON、历史 receipt、任意 adapter JSON 均不是 authority。
 executor 只允许读取固定 production inventory `/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-inventory.v1.json` 与 pinned host-key 文件 `/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts`；它们绑定两角色 host、`/opt/oasis7/p2p-testnet` root、service 与 key fingerprint，不接受 CLI 覆盖或任意 target。SSH 必须使用 `StrictHostKeyChecking=yes`、`UserKnownHostsFile=<canonical-pinned-file>` 与 `GlobalKnownHostsFile=/dev/null`，并校验 canonical 文件 owner/mode 与每个 role 唯一且无冲突的 key；凭据只能经 temporary FD 或 temporary environment binding（`--credential-fd`/`--credential-env`）进入，绝不出现在 argv、日志、transaction 或 receipt。
 停机后只运行 executor-owned fixed read-only quiescence commands 和 bounded role-specific readbacks，不得 stop/start、preflight、reset、stage、restart 或修改 observer；结果必须在同一 executor 进程内供 plan/apply 使用。`--out-dir` 的 `oasis7.validator_pair_rebuild_quiescence_proof.v1` 仅为 audit trail，不能被后续进程或 caller 重写后作为 admission authority；authority、inventory/pin、strict SSH、readback、临时凭据审计或复观测缺失即 `capability_blocked`。

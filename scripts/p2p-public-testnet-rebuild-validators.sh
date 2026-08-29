@@ -35,13 +35,15 @@ Governed transaction contract (current path):
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
 
-Plan is local-only and emits a stable
-oasis7.validator_pair_rebuild_plan.v1 digest. Apply/rollback require the
-governed host adapter and emit transaction-bound phase receipts. The plan
-contract binds per-node/platform inventories, exact destructive targets,
-quiescence, forensic non-seed backup metadata, post-delete absence targets,
-new-epoch provenance digests, reset/stage/start and same-window health gates,
-and a rollback boundary that forbids restoring deleted chain state.
+Plan is non-mutating but performs bounded live GitHub/SSH read-only
+re-observation and emits a stable oasis7.validator_pair_rebuild_plan.v1
+digest. It does not call systemd or modify validator state. Apply/rollback
+require the governed host adapter and emit transaction-bound phase receipts.
+The plan contract binds per-node/platform inventories, exact destructive
+targets, quiescence, forensic non-seed backup metadata, post-delete absence
+targets, new-epoch provenance digests, reset/stage/start and same-window
+health gates, and a rollback boundary that forbids restoring deleted chain
+state.
 `--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
 for the subcommands.
 `quiesce --host-adapter` is retired and fails closed because caller-supplied
@@ -139,6 +141,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -160,6 +163,42 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def durable_write(path: Path, payload: str) -> None:
+    """Publish a receipt atomically, with file and parent-directory barriers."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_fd = -1
+    temporary: Path | None = None
+    try:
+        temporary_fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", dir=str(path.parent)
+        )
+        temporary = Path(temporary_name)
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
+            temporary_fd = -1
+            handle.write(payload + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(str(path.parent), directory_flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        if temporary_fd >= 0:
+            try:
+                os.close(temporary_fd)
+            except OSError:
+                pass
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise SystemExit(f"durable receipt write failed: {error.__class__.__name__}")
 
 
 REPOSITORY_EXECUTABLE_RELATIVE = "scripts/p2p-public-testnet-validator-pair-rebuild.py"
@@ -490,8 +529,7 @@ if target is None:
     target = str(Path(out_dir).resolve() / "transaction.json") if out_dir else None
 if target:
     destination = Path(target)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(output + "\n", encoding="utf-8")
+    durable_write(destination, output)
 print(output)
 PY
 }

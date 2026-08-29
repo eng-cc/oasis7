@@ -22,6 +22,32 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 test_path = root / "scripts" / "p2p-public-testnet-validator-pair-rebuild.test.py"
+wrapper_path = root / "scripts" / "p2p-public-testnet-rebuild-validators.sh"
+runbook_path = root / "doc" / "p2p" / "blockchain" / "public-testnet-governed-bootstrap.runbook.md"
+wrapper_source = wrapper_path.read_text(encoding="utf-8")
+runbook_source = runbook_path.read_text(encoding="utf-8")
+help_output = subprocess.run(
+    [str(wrapper_path), "--help"], text=True, capture_output=True, check=True
+).stdout
+if (
+    "Plan is local-only" in help_output
+    or "Plan is non-mutating but performs bounded live GitHub/SSH read-only" not in help_output
+    or "re-observation" not in help_output
+):
+    raise SystemExit("wrapper help must disclose bounded live GitHub/SSH read-only plan observation")
+for required in ("tempfile.mkstemp", "os.fsync", "os.replace"):
+    if required not in wrapper_source:
+        raise SystemExit(f"shell envelope is missing durable publication primitive: {required}")
+if "destination.write_text(output + \"\\n\"" in wrapper_source:
+    raise SystemExit("shell envelope must not publish receipts with plain write_text")
+for required in (
+    "/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl",
+    "OASIS7_VALIDATOR_PAIR_NONCE_LEDGER",
+    "mode `0600`",
+    "nonce_ledger_path",
+):
+    if required not in runbook_source:
+        raise SystemExit(f"runbook is missing nonce-ledger prerequisite: {required}")
 spec = importlib.util.spec_from_file_location("pair_rebuild_contract_fixture", test_path)
 if spec is None or spec.loader is None:
     raise SystemExit("cannot load canonical local fixture")
@@ -32,14 +58,16 @@ fixture = module.ValidatorPairRebuildContractTests(methodName="runTest")
 fixture.setUp()
 try:
     base = fixture._base_args()
-    # _base_args is [python, executor, plan, ...].  Replace only the
-    # executable/subcommand with the owned shell dispatcher.
+    # _base_args is [wrapper, plan, ...].  Replace only the owned dispatcher
+    # while retaining the complete current plan argument set.
     shell = root / "scripts" / "p2p-public-testnet-rebuild-validators.sh"
-    command = [str(shell), "plan", *base[3:]]
+    command = [str(shell), "plan", *base[2:]]
     env = dict(os.environ)
     with tempfile.TemporaryDirectory(prefix="oasis7-rebuild-receipt-contract-bin-") as fake_bin:
         fake = Path(fake_bin)
-        for command_name in ("ssh", "sshpass", "systemctl"):
+        # Plan now performs bounded live SSH/GitHub reads. Keep the fixture's
+        # loopback-only fake SSH/GitHub tools and forbid only systemd activity.
+        for command_name in ("systemctl",):
             path = fake / command_name
             path.write_text("#!/usr/bin/env bash\nprintf '%s\n' \"$0\" >>\"${O7_RECEIPT_FORBIDDEN_LOG:?}\"\nexit 91\n", encoding="utf-8")
             path.chmod(0o755)
@@ -56,7 +84,7 @@ try:
     if first.stdout != second.stdout:
         raise SystemExit("plan output is not byte-stable")
     if forbidden.exists() and forbidden.read_text(encoding="utf-8").strip():
-        raise SystemExit("plan mode reached SSH/systemd")
+        raise SystemExit("plan mode reached systemd")
 
     receipt = json.loads(first.stdout)
     contract = receipt.get("receipt_contract")
@@ -64,8 +92,8 @@ try:
         raise SystemExit("plan schema is not validator_pair_rebuild_plan.v1")
     if not isinstance(contract, dict):
         raise SystemExit("receipt contract envelope is missing")
-    if contract.get("remote_activity") is not False or contract.get("systemd_activity") is not False or contract.get("destructive_activity") is not False:
-        raise SystemExit("plan activity gates are not zero")
+    if contract.get("remote_activity") != "executor-owned-direct-ssh-read-only" or contract.get("systemd_activity") is not False or contract.get("destructive_activity") is not False:
+        raise SystemExit("plan activity gates do not describe bounded read-only observation")
     if contract.get("mutation_order") != ["storage-205", "sequencer-204"]:
         raise SystemExit("mutation order is not explicit")
     if contract.get("startup_order") != ["sequencer-204", "storage-205"]:
@@ -130,5 +158,5 @@ try:
 finally:
     fixture.tearDown()
 
-print("ok: governed shell plan receipt is deterministic and local-only")
+print("ok: governed shell plan receipt is deterministic and bounded live observation is disclosed")
 PY

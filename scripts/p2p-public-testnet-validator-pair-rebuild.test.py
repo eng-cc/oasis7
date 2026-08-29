@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -705,6 +706,7 @@ os.execv({sys.executable!r}, [{sys.executable!r}, *args])
             request["full_status_http_status"] = 204
         body_value = {
             "schema_version": "oasis7.validator_pair_rebuild_live_authority.v1",
+            "authorized": True,
             "task_uid": authority_payload["task_uid"],
             "action": "validator_pair_rebuild",
             "transaction_id": authority_payload["transaction_id"],
@@ -865,6 +867,7 @@ raise SystemExit(98)
                     "updated_at": issued_at_text,
                     "deleted": False,
                     "revoked": False,
+                    "author_association": "MEMBER",
                 },
                 sort_keys=True,
             )
@@ -999,6 +1002,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         ).hexdigest()
         body_value = {
             "schema_version": "oasis7.validator_pair_rebuild_live_authority.v1",
+            "authorized": True,
             "task_uid": request["task_uid"],
             "action": "validator_pair_rebuild",
             "transaction_id": request["transaction_id"],
@@ -1017,6 +1021,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
             "updated_at": request["issued_at"],
             "deleted": False,
             "revoked": False,
+            "author_association": "MEMBER",
         }
         request["github_live"] = {
             "provider": "github",
@@ -2818,6 +2823,253 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertTrue(Path(backup["manifest"]).is_file())
         self.assertGreaterEqual(len(fsync_calls), 2)
 
+    def test_copy_entry_fsyncs_nested_files_and_directories(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_tree_durable_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        source = self.root / "tree-source"
+        (source / "nested").mkdir(parents=True)
+        (source / "nested" / "payload").write_bytes(b"durable-payload\n")
+        destination = self.root / "tree-destination"
+        fsync_calls: list[int] = []
+        original_fsync = module.os.fsync
+        module.os.fsync = lambda descriptor: fsync_calls.append(descriptor)
+        try:
+            module.copy_entry(source, destination)
+        finally:
+            module.os.fsync = original_fsync
+        self.assertEqual((destination / "nested" / "payload").read_bytes(), b"durable-payload\n")
+        self.assertGreaterEqual(len(fsync_calls), 4)
+
+    def test_restore_node_fsyncs_restored_files_and_directories(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_restore_durable_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        node_root = self.root / "restore-node"
+        (node_root / "nested").mkdir(parents=True)
+        (node_root / "nested" / "payload").write_bytes(b"before\n")
+        backup = module.snapshot_node({"role": "storage-205", "root": str(node_root)}, "restore-durable-tx")
+        (node_root / "nested" / "payload").write_bytes(b"changed\n")
+        fsync_calls: list[int] = []
+        original_fsync = module.os.fsync
+        module.os.fsync = lambda descriptor: fsync_calls.append(descriptor)
+        try:
+            module.restore_node(backup, "restore-durable-tx")
+        finally:
+            module.os.fsync = original_fsync
+        self.assertEqual((node_root / "nested" / "payload").read_bytes(), b"before\n")
+        self.assertGreaterEqual(len(fsync_calls), 4)
+
+    def test_credential_fd_is_consumed_once_and_reused_from_memory(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_credential_cache_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        secret_path = self.root / "credential"
+        secret_path.write_bytes(b"fd-secret-for-reobserve\n")
+        credential_fd = os.open(secret_path, os.O_RDONLY)
+        args = module.argparse.Namespace(credential_env=None, credential_fd=credential_fd)
+        try:
+            first_env, first_use = module._direct_ssh_environment(args, {})
+            try:
+                second_env, second_use = module._direct_ssh_environment(args, {})
+            except SystemExit as error:
+                self.fail(f"credential fd was read again instead of reusing the in-memory secret: {error}")
+        finally:
+            os.close(credential_fd)
+        self.assertTrue(first_use and second_use)
+        self.assertEqual(first_env["SSHPASS"], "fd-secret-for-reobserve")
+        self.assertEqual(second_env["SSHPASS"], first_env["SSHPASS"])
+
+    def test_human_direct_ssh_requires_authorized_live_action_and_actor_association(self) -> None:
+        fixture = self._write_live_github_fixture()
+
+        def unauthorize(response: dict[str, Any]) -> None:
+            response["author_association"] = "CONTRIBUTOR"
+            body = json.loads(response["body"])
+            body["authorized"] = False
+            response["body"] = json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+        response = self._rewrite_github_response(fixture, unauthorize)
+        self._rewrite_request(
+            fixture,
+            lambda request: request["github_live"].update(
+                {"body_sha256": hashlib.sha256(response["body"].encode()).hexdigest()}
+            ),
+        )
+        result = self._run_live_human_direct_ssh(fixture)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(authorized|association|actor|permission|authority)")
+
+    def test_rollback_receipt_requires_stopped_state_after_callback(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_rollback_gate_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module._validate_adapter_binding = lambda receipt, plan, phase: None
+        module.validate_repository_executable_identity = lambda value, label: value
+        receipt = {
+            "schema_version": "oasis7.validator_pair_rebuild_host_receipt.v2",
+            "phase": "rollback",
+            "transaction_id": "rollback-gate-tx",
+            "mutation_order": ["storage-205", "sequencer-204"],
+            "startup_order": ["sequencer-204", "storage-205"],
+            "nodes": {
+                role: {
+                    "rollback_verified": True,
+                    "active": True,
+                    "running": True,
+                    "service_state": "running",
+                    "independently_observed": True,
+                }
+                for role in ("storage-205", "sequencer-204")
+            },
+            "repository_executable": {},
+            "observer_mutation": False,
+            "captured_at": "2026-08-29T00:00:00Z",
+        }
+        with self.assertRaises(SystemExit):
+            module.validate_host_receipt(receipt, {"transaction_id": "rollback-gate-tx", "nodes": {}}, "rollback")
+
+    def test_resume_is_idempotent_for_a_terminal_transaction(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_resume_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        transaction = {
+            "schema_version": module.SCHEMA,
+            "phase": "rolled_back",
+            "transaction_id": "resume-terminal-tx",
+            "rollback": {"strategy": "same-filesystem-full-snapshot", "status": "verified"},
+        }
+        transaction["canonical_digest"] = module.canonical_digest(transaction)
+        path = self.root / "resume-terminal.json"
+        path.write_text(json.dumps(transaction), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["phase"], "rolled_back")
+
+    def test_resume_adopts_complete_orphan_backups_after_transaction_promotion(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_resume_adopt_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        transaction_id = "resume-adopt-tx"
+        nodes = {}
+        for role in ("storage-205", "sequencer-204"):
+            root = self.nodes[role]
+            (root / "data" / "payload").write_bytes(role.encode())
+            module.snapshot_node({"role": role, "root": str(root)}, transaction_id)
+            nodes[role] = {"root": str(root)}
+        transaction = {
+            "schema_version": module.SCHEMA,
+            "phase": "prepared",
+            "transaction_id": transaction_id,
+            "nodes": nodes,
+        }
+        transaction["canonical_digest"] = module.canonical_digest(transaction)
+        path = self.root / "resume-adopt.json"
+        path.write_text(json.dumps(transaction), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recovered = json.loads(result.stdout)
+        self.assertEqual(recovered["recovery"]["status"], "adopted")
+        self.assertEqual(set(recovered["backup"]), {"storage-205", "sequencer-204"})
+        self.assertEqual(recovered["phase"], "backed_up")
+
+    def test_resume_cleans_only_transaction_bound_partial_orphan_backup(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_resume_cleanup_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        transaction_id = "resume-cleanup-tx"
+        nodes = {}
+        for role in ("storage-205", "sequencer-204"):
+            root = self.nodes[role]
+            partial = root / "backups" / transaction_id / "snapshot"
+            partial.mkdir(parents=True)
+            (partial / "partial").write_bytes(b"interrupted-copy")
+            nodes[role] = {"root": str(root)}
+        transaction = {
+            "schema_version": module.SCHEMA,
+            "phase": "prepared",
+            "transaction_id": transaction_id,
+            "nodes": nodes,
+        }
+        transaction["canonical_digest"] = module.canonical_digest(transaction)
+        path = self.root / "resume-cleanup.json"
+        path.write_text(json.dumps(transaction), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recovered = json.loads(result.stdout)
+        self.assertEqual(recovered["recovery"]["status"], "cleaned_partial")
+        for role in nodes:
+            self.assertFalse((Path(nodes[role]["root"]) / "backups" / transaction_id).exists())
+
+    def test_sigkill_after_backup_publication_is_resumable_and_idempotent(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "sigkill-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        adapter = self._write_host_adapter()
+        source = adapter.read_text(encoding="utf-8")
+        source = source.replace(
+            "import sys\n",
+            "import sys\nimport os\nimport signal\n",
+        ).replace(
+            "phase = sys.argv[sys.argv.index('--phase') + 1]\n",
+            "phase = sys.argv[sys.argv.index('--phase') + 1]\n"
+            "if phase == 'backup':\n"
+            "    os.kill(os.getppid(), signal.SIGKILL)\n",
+        )
+        adapter.write_text(source, encoding="utf-8")
+        crashed = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(crashed.returncode, 0)
+        self.assertRegex(crashed.stderr, rf"(?i)(killed|sigkill|{signal.SIGKILL})")
+        interrupted = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(interrupted["phase"], "backup_in_progress")
+        resumed = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(plan_path)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        recovered = json.loads(resumed.stdout)
+        self.assertEqual(recovered["recovery"]["status"], "adopted")
+        self.assertEqual(recovered["phase"], "backed_up")
+        digest = recovered["canonical_digest"]
+        resumed_again = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(plan_path)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(json.loads(resumed_again.stdout)["canonical_digest"], digest)
+
     def test_apply_failure_reauthorizes_direct_ssh_before_automatic_rollback(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
         plan_path = self.out / "transaction.json"
@@ -2832,7 +3084,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply", "rollback"])
         github_calls = Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(github_calls), 4)
+        self.assertEqual(len(github_calls), 5)
 
     def test_manual_rollback_reauthorizes_direct_ssh_before_restore(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
@@ -2865,7 +3117,7 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["rollback"])
         after_github_calls = len(Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines())
-        self.assertEqual(after_github_calls, before_github_calls + 1)
+        self.assertEqual(after_github_calls, before_github_calls + 2)
 
     def test_apply_requires_explicit_preflight_receipt_for_both_validators(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
