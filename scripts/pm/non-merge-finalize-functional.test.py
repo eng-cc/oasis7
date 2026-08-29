@@ -58,6 +58,15 @@ issue_url = f"https://github.com/{repo}/issues/{issue}"
 if args[:2] == ["issue", "view"]:
     state = read("GH_ISSUE_STATE", {"state": "OPEN"})["state"]
     body = path("GH_ISSUE_BODY").read_text()
+    if (os.environ.get("GH_FAIL_AFTER_MAPPING_COMMIT_ON_ISSUE_VIEW") == "1"
+            and os.environ.get("GH_FAILURE_MARKER")
+            and not path("GH_FAILURE_MARKER").exists()):
+        mapping = json.loads(path("GH_MAPPING").read_text())
+        record = (mapping.get("tasks") or {}).get(uid) or {}
+        if record.get("workflow_phase") == "closed_without_merge":
+            path("GH_FAILURE_MARKER").write_text("failed once")
+            print("injected crash after mapping commit", file=sys.stderr)
+            raise SystemExit(93)
     if (state == "CLOSED" and os.environ.get("GH_REQUIRE_ISSUE_DONE") == "1"
             and "- status: `done`" not in body):
         print("closed issue body was not updated to done", file=sys.stderr)
@@ -136,6 +145,12 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     print(json.dumps([read("GH_COMMENTS", [])]))
 elif args[:2] == ["api", "graphql"]:
+    if os.environ.get("GH_MUTATE_PROJECT_MAPPING_ON_PROJECT_READBACK") == "1":
+        mapping_path = path("GH_MAPPING")
+        mapping = json.loads(mapping_path.read_text())
+        if mapping.get("project", {}).get("id") != "P2":
+            mapping["project"].update({"owner": "other", "number": 2, "id": "P2"})
+            mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     values = read("GH_PROJECT_FIELDS", {"Status": "In Progress",
                                          "PM Status": "committed",
                                          "Workflow Phase": "execution"})
@@ -176,6 +191,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.issue_state = Path(self.tmp.name) / "issue-state.json"
         self.issue_body = Path(self.tmp.name) / "issue-body.md"
         self.project_fields = Path(self.tmp.name) / "project-fields.json"
+        self.failure_marker = Path(self.tmp.name) / "failure-marker"
         self.write_state(self.comments, [])
         self.write_state(self.closes, [])
         self.write_state(self.issue_state, {"state": "OPEN"})
@@ -316,6 +332,96 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         retry = self.invoke("superseded")
         self.assertEqual(retry.returncode, 0, retry.stderr)
         self.assertEqual(json.loads(retry.stdout[retry.stdout.find("{"):])["status"], "already_finalized")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_non_pr_completed_retry_recovers_after_mapping_commit_crash(self) -> None:
+        self.mapping(extra={
+            "status": "done", "workflow_phase": "task_done",
+            "last_closed_at": "2026-08-29T00:00:00+08:00",
+            "claim_verifications": [{
+                "claim_type": "task_complete", "status": "verified",
+                "allowed_to_claim": True, "verification_exit_code": 0,
+            }],
+            "completion_mode": "non_pr_task",
+            "non_pr_completion_evidence": "persisted fixture truth",
+        })
+        self.env.update({
+            "GH_MAPPING": str(self.root / ".pm/github-project-sync/tasks.json"),
+            "GH_FAILURE_MARKER": str(self.failure_marker),
+            "GH_FAIL_AFTER_MAPPING_COMMIT_ON_ISSUE_VIEW": "1",
+        })
+
+        crashed = self.invoke("non_pr_completed")
+        self.assertNotEqual(crashed.returncode, 0)
+        record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        self.assertEqual(record["status"], "done")
+        self.assertEqual(record["workflow_phase"], "closed_without_merge")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), [])
+
+        retry = self.invoke("non_pr_completed")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        payload = json.loads(retry.stdout[retry.stdout.find("{"):])
+        self.assertEqual(payload["status"], "already_finalized")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_authority_drift_fails_before_issue_project_or_comment_terminal_effects(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_MUTATE_PROJECT_MAPPING_ON_PROJECT_READBACK": "1",
+        })
+        result = self.invoke("duplicate")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"drift|identity|authority|project")
+
+        mapping = self.read_json(mapping_path)
+        self.assertEqual(mapping["project"], {"owner": "other", "number": 2, "id": "P2"})
+        record = mapping["tasks"][UID]
+        self.assertEqual(record["workflow_phase"], "execution")
+        self.assertEqual(record["status"], "committed")
+        self.assertNotIn("closed_without_merge_receipt", record)
+        self.assertIn("- status: `committed`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution"
+        })
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+
+    def test_retry_rejects_receipt_embedded_evidence_drift_with_matching_digest(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env["GH_MAPPING"] = str(mapping_path)
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout[first.stdout.find("{"):])
+        receipt_path = Path(payload["receipt"])
+        receipt = self.read_json(receipt_path)
+        original_digest = receipt["evidence_sha256"]
+        receipt["evidence"] = {"text": "tampered receipt payload"}
+        self.assertEqual(receipt["evidence_sha256"], original_digest)
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+
+        retry = self.invoke("duplicate")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertRegex(retry.stderr.lower(), r"receipt|evidence|authority|disagree")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_retry_with_renamed_same_evidence_is_idempotent(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env["GH_MAPPING"] = str(mapping_path)
+        original = self.evidence("original-evidence.md")
+        first = self.invoke("duplicate", original)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        renamed = Path(self.tmp.name) / "renamed-evidence.md"
+        renamed.write_bytes(original.read_bytes())
+
+        retry = self.invoke("duplicate", renamed)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        payload = json.loads(retry.stdout[retry.stdout.find("{"):])
+        self.assertEqual(payload["status"], "already_finalized")
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
