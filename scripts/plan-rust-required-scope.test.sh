@@ -370,6 +370,24 @@ assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-web-dist-contract.sh"
 assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:"
 
+for viewer_shared_helper in \
+  scripts/bundle-freshness-lib.sh \
+  scripts/copy-viewer-web-dist.sh \
+  scripts/viewer-web-dist-contract.sh; do
+  viewer_shared_helper_output="$(plan_for_path "$viewer_shared_helper")"
+  assert_key_equals "$viewer_shared_helper_output" scope targeted
+  assert_key_equals "$viewer_shared_helper_output" \
+    selected_capabilities 'operational_contracts;viewer_js_required'
+  assert_key_equals "$viewer_shared_helper_output" run_viewer_contract_tests true
+  assert_key_equals "$viewer_shared_helper_output" run_operational_contracts true
+  assert_key_equals "$viewer_shared_helper_output" run_rust_baseline true
+  assert_reason_contains "$viewer_shared_helper_output" \
+    "operational_contracts:$viewer_shared_helper"
+  assert_reason_contains "$viewer_shared_helper_output" \
+    "viewer_web_wrapper:$viewer_shared_helper"
+  assert_reason_absent "$viewer_shared_helper_output" "unclassified_or_unresolvable:"
+done
+
 viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
