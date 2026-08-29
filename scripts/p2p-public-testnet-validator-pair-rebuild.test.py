@@ -2993,6 +2993,95 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(set(recovered["backup"]), {"storage-205", "sequencer-204"})
         self.assertEqual(recovered["phase"], "backed_up")
 
+    def test_resume_rejects_adapterless_rollback_required_without_rewriting_transaction(self) -> None:
+        spec = importlib.util.spec_from_file_location("pair_rebuild_resume_rollback_required_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        transaction_id = "resume-rollback-required-tx"
+        nodes = {}
+        backup_roots = {}
+        for role in ("storage-205", "sequencer-204"):
+            root = self.nodes[role]
+            (root / "data" / "payload").write_bytes(role.encode())
+            backup = module.snapshot_node({"role": role, "root": str(root)}, transaction_id)
+            nodes[role] = {"root": str(root)}
+            backup_roots[role] = Path(backup["backup_root"])
+        transaction = {
+            "schema_version": module.SCHEMA,
+            "phase": "rollback_required",
+            "transaction_id": transaction_id,
+            "nodes": nodes,
+        }
+        transaction["canonical_digest"] = module.canonical_digest(transaction)
+        path = self.root / "resume-rollback-required.json"
+        path.write_text(json.dumps(transaction), encoding="utf-8")
+        before = path.read_bytes()
+        result = subprocess.run(
+            [sys.executable, str(EXECUTOR), "resume", "--transaction", str(path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("rollback_required", result.stderr)
+        self.assertEqual(path.read_bytes(), before)
+        for backup_root in backup_roots.values():
+            self.assertTrue(backup_root.is_dir())
+
+    def test_resume_rollback_required_with_adapter_reauthorizes_and_restores(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "resume-rollback-required-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "resume-rollback-required-phases.log"
+        adapter = self._write_failure_host_adapter(phases)
+        original_runtime = (self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime").read_bytes()
+        applied = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight", "backup", "apply"])
+
+        spec = importlib.util.spec_from_file_location("pair_rebuild_resume_governed_test_executor", EXECUTOR)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        transaction["phase"] = "rollback_required"
+        transaction["canonical_digest"] = module.canonical_digest(transaction)
+        plan_path.write_text(json.dumps(transaction), encoding="utf-8")
+        phases.write_text("", encoding="utf-8")
+        resumed = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=self._human_direct_ssh_env(self.human_direct_fixture),
+        )
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        recovered = json.loads(resumed.stdout)
+        self.assertEqual(recovered["phase"], "rolled_back")
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["rollback"])
+        self.assertTrue(recovered["rollback_direct_quiescence_observation"]["reauthorized"])
+        self.assertTrue(recovered["rollback_post_callback_direct_quiescence_observation"]["reauthorized"])
+        self.assertEqual(
+            (self.nodes["storage-205"] / "current" / "bin" / "oasis7_chain_runtime").read_bytes(),
+            original_runtime,
+        )
+
     def test_resume_cleans_only_transaction_bound_partial_orphan_backup(self) -> None:
         spec = importlib.util.spec_from_file_location("pair_rebuild_resume_cleanup_test_executor", EXECUTOR)
         self.assertIsNotNone(spec)

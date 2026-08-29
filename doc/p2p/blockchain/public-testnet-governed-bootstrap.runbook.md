@@ -433,7 +433,7 @@ any additional signing requirements.
 
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
-新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
+新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
 
 每个 governed tree 在进入容量预算前都必须先完成无跟随 symlink 的完整 inventory：`entry_count` 必须等于 `link_count + dir_count + file_count`，并同时绑定 `total_bytes`。world tree 的任何嵌套 symlink（包括目录或 broken link）都直接拒绝；inode 预算覆盖备份、package、governed entries 以及允许复制的目录、文件和 symlink。apply 阶段重新采集并比对同一 inventory，staged governed receipt 也必须逐项一致。
 
@@ -464,7 +464,7 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
 
 #### External nonce-ledger deployment prerequisite
 
-Before any `human_direct_ssh`, `plan`, `apply`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.
+Before any `human_direct_ssh`, `plan`, `apply`, `resume`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.
 It must already be a regular non-symlink file owned by the executor identity with mode `0600`; its parent must be deployment-owned and not writable by unrelated users, and the executor fails closed rather than creating it.
 Every request must bind the exact absolute `nonce_ledger_path`; `OASIS7_VALIDATOR_PAIR_NONCE_LEDGER` must resolve to that same path, never to repository or output state.
 Deployment preflight must create/check the parent and file with equivalents of `install -d -m 0700` and `install -m 0600`, then verify UID, regular-file type, mode, and path before an outage window.
@@ -484,33 +484,32 @@ scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
 ```
 `human_direct_ssh` 不把 request envelope 当 authority，不接受 arbitrary adapter JSON 或 caller assertion；它必须在同一调用中 live-read GitHub authority，以固定 inventory/pin 观察两角色 `active=false`、`running=false` 与 bounded health/listener。供 `plan`/`apply` 使用的 executor-bound request 必须同时绑定同一个 `--consumer-impact-record` 文件的路径与 SHA-256（`impact_record_path` 与 `impact_record_sha256`）；executor 返回的 direct receipt digest 必须与该 CLI 文件逐字节一致，不能由 `validators_already_stopped`、status snapshot 或 persisted proof 推断。`impact=none` 仍须 direct read-only observation；旧 receipt、遗漏/重复/伪造/stale/binding-mismatch 均不得进入 destructive phase。
 `apply` 在任何 mutation 前必须在同一 executor 进程内重新读取 live authority 并 re-observe；不能复观测时 fail closed。跨进程时新进程必须重新取得 authority、读取固定 inventory/pins、建立 strict SSH、重新观察；持久化 proof/receipt 只供审计、故障追溯和 rollback 关联，永远不作授权。
-The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`) but performs the
-bounded live read-only GitHub/SSH re-observation required above; it is not local-only,
-does not call systemd, and does not perform destructive activity. Runtime transaction
-IDs and timestamps are assigned only after the plan is durably journaled (each JSON
-write flushes the file and its parent directory). The transaction is fail-closed and records a complete stopped-state backup
-manifest before mutation. Mutation order is always `storage-205` then
-`sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
-`--sequencer-proof-verifier` must point to an executable regular file whose
-SHA-256 and size match the verified package runtime; the executor invokes that
-exact binary over the raw proof and compares its complete receipt before any
-host mutation.
+
+#### Crash recovery / resume
+
+如果 executor 在 transaction promotion、backup 或 staging 中途退出，使用下面的 copyable recovery operation；所有输入都必须显式提供，wrapper 不从 transaction、旧 proof 或输出目录猜测或回退：
+
+```bash
+export OASIS7_VALIDATOR_PAIR_NONCE_LEDGER=/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl
+scripts/p2p-public-testnet-rebuild-validators.sh resume \
+  --transaction <transaction-dir>/transaction.json --host-adapter <governed-host-adapter> \
+  --human-direct-ssh-request <fresh-live-human-stop-request.json> --known-hosts /opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts \
+  [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
+```
+
+The request must carry the exact absolute `nonce_ledger_path`, and the exported environment path must be the same already-provisioned `0600` external ledger. `--transaction`, `--host-adapter`, fresh live GitHub-bound request, canonical known-hosts pin, and exactly one temporary credential seam are mandatory. Missing authority, adapter, pin, credential, or nonce binding is a `capability_blocked` input error; persisted quiescence proofs are never resume authority. The wrapper forwards these values unchanged to the executor and publishes the returned transaction through the same durable receipt envelope.
+
+Resume is permitted only for phases `prepared`, `preflight`, `preflight_failed`, `backup_in_progress`, `backed_up`, `staging`, `staged`, and `rollback_required`. In the first seven phases it reauthorizes live GitHub/direct SSH, adopts or cleans only transaction-bound backups, and continues missing callbacks idempotently. `rollback_required` enters governed rollback and must re-observe the stopped boundary before callback or restore. `rolled_back` is terminal with no recovery mutation; `planned`, `applied`, `rollback_failed`, and unknown phases are not resumable.
+The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`) but performs bounded live read-only GitHub/SSH re-observation; it is not local-only, does not call systemd, and does not perform destructive activity. Runtime transaction IDs and timestamps are assigned only after the plan is durably journaled (each JSON write flushes the file and its parent directory). The transaction is fail-closed and records a complete stopped-state backup manifest before mutation. Mutation order is always `storage-205` then `sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
+`--sequencer-proof-verifier` must point to an executable regular file whose SHA-256 and size match the verified package runtime; the executor invokes that exact binary over the raw proof and compares its complete receipt before any host mutation.
 The host adapter remains mandatory for the `preflight`, `backup`, `apply`, and `rollback` callbacks; it cannot establish human stop authority or replace direct observation. On automatic or manual rollback, the executor must first reauthorize live human authority and perform a fresh `human_direct_ssh` read-only observation of both fixed validators; only then may the rollback callback and local restore run. Missing/failed re-observation, callback, or restore is recorded as `rollback_failed`; generic adapter `quiesce` can never authorize restore. Each transaction-bound receipt covers active/running, bounded healthz, role listener (`6632/6832` storage-205; `6631/6831` sequencer-204), `NRestarts=0`, no OOM/panic/segfault, exact runtime hash/size, and `full_chain_status_called=false` for 204.
 The receipt must consume cryptographically verified identity receipts and the signed 204 proof under the trust-root allowlist; host self-report alone is not evidence. The observer gate remains `hold` until provider closure is independently verified; without this receipt the executor cannot mark `applied`.
 Every mutation callback receipt (`backup`/`apply`/`rollback`) must explicitly include `observer_mutation=false`, a non-empty executor-bound `transaction_id`, and the strict current-window binding; human direct observations are not callbacks. `--quiescence-transaction-id` binds only the in-memory observation/audit reference and never substitutes for a callback ID/file/field (`--quiescence-id` is its CLI alias).
 The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling and later receipts echo it exactly. Before each mutation callback, persist `oasis7.validator_pair_rebuild_adapter_binding.v1` fixing immutable `plan_digest`, transaction, phase, identity paths/digests with role/node/peer IDs, raw 204 proof and optional verifier receipt; the adapter must echo these bindings plus `captured_at` in-window, or fail closed on omission, substitution, alternate proof, or staleness.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate invokes the recorded same-filesystem rollback and retains its receipt. The pair executor never mutates an observer. A sequencer/204 proof uses a bounded endpoint; full `/v1/chain/status` on 204 is forbidden.
 
-壳脚本的 `oasis7.validator_pair_rebuild_receipt_contract.v1` envelope 将
-plan/transaction digest 绑定到每台节点的 platform 与完整无跟随
-symlink 的 state-root inventory，并记录精确 destructive target 解析、
-indexed sidecar/archive/module store、execution/bridge/runtime/replication root
-及 observer 等价物、direct read-only observation reference、带 metadata/capacity 的
-forensic backup manifest hash 与 machine-checkable `seed_eligible=false` proof。
-Apply receipt 必须包含 reset/stage/start 与 same-window fleet-health phase
-references。rollback boundary 明确禁止把已删除的 chain state 恢复为新
-chain seed；plan 输出不包含 runtime timestamp，但会执行上述 bounded live
-read-only re-observation，并且不执行 systemd 或 destructive activity。
+壳脚本的 `oasis7.validator_pair_rebuild_receipt_contract.v1` envelope 将 plan/transaction digest 绑定到每台节点的 platform 与完整无跟随 symlink 的 state-root inventory，并记录精确 destructive target 解析、indexed sidecar/archive/module store、execution/bridge/runtime/replication root 及 observer 等价物、direct read-only observation reference、带 metadata/capacity 的 forensic backup manifest hash 与 machine-checkable `seed_eligible=false` proof。
+Apply receipt 必须包含 reset/stage/start 与 same-window fleet-health phase references。rollback boundary 明确禁止把已删除的 chain state 恢复为新 chain seed；plan 输出不包含 runtime timestamp，但会执行上述 bounded live read-only re-observation，并且不执行 systemd 或 destructive activity。
 
 ### C0. Consumer-impact record (hard gate)
 

@@ -3760,6 +3760,10 @@ def resume_transaction(
         return transaction
     if phase not in {"prepared", "preflight", "preflight_failed", "backup_in_progress", "backed_up", "staging", "staged", "rollback_required"}:
         fail(f"transaction phase is not resumable: {phase}")
+    if phase == "rollback_required":
+        if host_adapter is None:
+            fail("rollback_required transaction requires explicit governed rollback resume with a fresh host adapter")
+        return rollback_transaction(path, host_adapter, direct_args)
     discovered, partial = _discover_transaction_backups(transaction)
     if partial:
         _cleanup_transaction_backups(transaction, partial)
@@ -3803,8 +3807,6 @@ def resume_transaction(
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
     if host_adapter is not None:
-        if phase == "rollback_required":
-            return rollback_transaction(path, host_adapter, direct_args)
         try:
             return _continue_transaction(transaction, path, host_adapter, direct_args, fresh_direct_observation=True)
         except BaseException as error:

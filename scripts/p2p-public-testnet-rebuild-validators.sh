@@ -25,6 +25,13 @@ Governed transaction contract (current path):
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
+  OASIS7_VALIDATOR_PAIR_NONCE_LEDGER=/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl \
+  ./scripts/p2p-public-testnet-rebuild-validators.sh resume \
+    --transaction <transaction-dir>/transaction.json \
+    --host-adapter <governed-host-adapter> \
+    --human-direct-ssh-request <fresh-live-human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
+    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
   quiesce --host-adapter is retired and fails closed; use the direct mode:
   ./scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
     --request <human-stop-request.json> \
@@ -39,6 +46,13 @@ Plan is non-mutating but performs bounded live GitHub/SSH read-only
 re-observation and emits a stable oasis7.validator_pair_rebuild_plan.v1
 digest. It does not call systemd or modify validator state. Apply/rollback
 require the governed host adapter and emit transaction-bound phase receipts.
+Resume is a governed recovery operation: it requires an explicit transaction,
+host adapter, fresh live human-direct-SSH request, canonical pinned known-hosts,
+one temporary credential seam, and an already provisioned absolute
+`OASIS7_VALIDATOR_PAIR_NONCE_LEDGER` environment binding. The nonce environment
+path must match the request's exact `nonce_ledger_path`; the wrapper never
+infers, creates, or falls back to a transaction/output ledger. Persisted proofs
+are audit routing only and cannot authorize resume.
 The plan contract binds per-node/platform inventories, exact destructive
 targets, quiescence, forensic non-seed backup metadata, post-delete absence
 targets, new-epoch provenance digests, reset/stage/start and same-window
@@ -105,6 +119,67 @@ require_dir() {
 require_file() {
   local path=$1
   [[ -f "$path" ]] || die "missing file: $path"
+}
+
+require_resume_inputs() {
+  local transaction=""
+  local host_adapter=""
+  local direct_request=""
+  local known_hosts=""
+  local credential_env=""
+  local credential_fd=""
+  while (($#)); do
+    case "$1" in
+      --transaction)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --transaction"
+        [[ -z "$transaction" ]] || die "resume received duplicate --transaction"
+        transaction=$2
+        shift 2
+        ;;
+      --host-adapter)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --host-adapter"
+        [[ -z "$host_adapter" ]] || die "resume received duplicate --host-adapter"
+        host_adapter=$2
+        shift 2
+        ;;
+      --human-direct-ssh-request|--direct-request|--request)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for $1"
+        [[ -z "$direct_request" ]] || die "resume received duplicate live authority request"
+        direct_request=$2
+        shift 2
+        ;;
+      --known-hosts)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --known-hosts"
+        [[ -z "$known_hosts" ]] || die "resume received duplicate --known-hosts"
+        known_hosts=$2
+        shift 2
+        ;;
+      --credential-env)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --credential-env"
+        [[ -z "$credential_env" && -z "$credential_fd" ]] || die "resume accepts exactly one credential seam"
+        credential_env=$2
+        shift 2
+        ;;
+      --credential-fd)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --credential-fd"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "resume --credential-fd must be numeric"
+        [[ -z "$credential_env" && -z "$credential_fd" ]] || die "resume accepts exactly one credential seam"
+        credential_fd=$2
+        shift 2
+        ;;
+      *)
+        die "resume rejects unsupported or positional input: $1"
+        ;;
+    esac
+  done
+  [[ -n "$transaction" ]] || die "resume requires --transaction"
+  [[ -n "$host_adapter" ]] || die "resume requires --host-adapter"
+  [[ -n "$direct_request" ]] || die "resume requires --request for fresh live GitHub authority"
+  [[ -n "$known_hosts" ]] || die "resume requires --known-hosts for the canonical SSH pin"
+  [[ -n "$credential_env" || -n "$credential_fd" ]] || die "resume requires exactly one temporary credential seam"
+  local nonce_ledger=${OASIS7_VALIDATOR_PAIR_NONCE_LEDGER:-}
+  [[ -n "$nonce_ledger" ]] || die "resume requires OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"
+  [[ "$nonce_ledger" = /* ]] || die "resume requires an absolute OASIS7_VALIDATOR_PAIR_NONCE_LEDGER path"
 }
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -539,6 +614,11 @@ PY
 # destructive rebuild.
 case "${1:-}" in
   plan|apply|rollback|quiesce|human_direct_ssh)
+    receipt_contract_envelope "$@"
+    exit $?
+    ;;
+  resume)
+    require_resume_inputs "${@:2}"
     receipt_contract_envelope "$@"
     exit $?
     ;;
