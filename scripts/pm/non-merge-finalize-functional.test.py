@@ -934,6 +934,28 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(self.read_json(self.comments), [])
         self.assertEqual(self.read_json(self.closes), [])
 
+    def test_migrated_receipt_digest_binding_survives_remote_effect_retry(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        mapping_path = self.mapping(pr=True)
+        self.legacy_receipt(evidence_digest)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_PROJECT_FAILURE_MARKER": str(Path(self.tmp.name) / "migration-retry-marker"),
+            "GH_PROJECT_UPDATE_EDIT_COUNT": str(Path(self.tmp.name) / "migration-retry-count"),
+            "GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT": "1",
+        })
+
+        crashed = self.invoke("duplicate", evidence)
+        self.assertNotEqual(crashed.returncode, 0)
+        intent = self.read_json(mapping_path)["tasks"][UID]["closed_without_merge_intent"]
+        self.assertRegex(intent["migrated_receipt_sha256"], r"^[0-9a-f]{64}$")
+
+        self.env.pop("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT")
+        retry = self.invoke("duplicate", evidence)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(json.loads(retry.stdout[retry.stdout.find("{"):])["status"], "finalized")
+
     def test_retry_with_renamed_same_evidence_is_idempotent(self) -> None:
         mapping_path = self.mapping(pr=True)
         self.env["GH_MAPPING"] = str(mapping_path)

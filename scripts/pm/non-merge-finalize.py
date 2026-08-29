@@ -708,6 +708,10 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             for key, value in existing.items():
                 if key == "schema":
                     continue
+                if (key == "migrated_receipt_sha256"
+                        and isinstance(value, str)
+                        and re.fullmatch(r"[0-9a-f]{64}", value)):
+                    continue
                 if key not in intent or intent[key] != value:
                     fail("non-merge closeout intent authority drifted")
         for key in PR_HEAD_FIELDS:
