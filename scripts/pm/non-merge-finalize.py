@@ -126,6 +126,22 @@ def _mapping(root: pathlib.Path, task_uid: str) -> tuple[pathlib.Path, dict, dic
     return path, mapping, record
 
 
+def _validate_default_worktree(root: pathlib.Path) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+        text=True, capture_output=True,
+    )
+    if result.returncode:
+        fail("repo root is not a registered git worktree")
+    first = next(
+        (line.removeprefix("worktree ") for line in result.stdout.splitlines()
+         if line.startswith("worktree ")),
+        "",
+    )
+    if not first or pathlib.Path(first).resolve() != root.resolve():
+        fail("repo root must be the registered default worktree")
+
+
 def _receipt_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     result = subprocess.run(
         [sys.executable, str(CANONICAL_ROOT_HELPER), "--default-worktree", str(root),
@@ -1090,6 +1106,7 @@ def _write_tombstone(receipt_path: pathlib.Path, record: dict, digest: str) -> N
 
 def _finalize(root: pathlib.Path, task_uid: str, reason: str,
               evidence_path: pathlib.Path) -> dict:
+    _validate_default_worktree(root)
     mapping_path, mapping, record = _mapping(root, task_uid)
     # Project metadata is canonical mapping-level truth; keep it out of the
     # persisted task record while making it available to the bound readback.
