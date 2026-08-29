@@ -49,6 +49,8 @@ This file is an operator command index, not a second workflow specification.
 
 The canonical links define all lifecycle gates, review attestation, and merge authority. These helpers enforce those definitions; this README does not restate them.
 
+For classified non-merge outcomes, follow the [canonical terminal runbook](../doc/engineering/workflow/source-of-truth.md#terminal-runbook).
+
 If a remote update is partial:
 
 ```bash

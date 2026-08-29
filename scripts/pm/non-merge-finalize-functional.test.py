@@ -23,6 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "scripts/pm/non-merge-finalize.py"
+PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
 UID = "task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 REPO = "fixture/repo"
 ISSUE = 11
@@ -128,7 +129,28 @@ elif args[:2] == ["project", "item-edit"]:
                    "PM_DONE": {"PM Status": "done"},
                    "PHASE_DONE": {"Workflow Phase": "done"}}.get(option_id, {}))
     write("GH_PROJECT_FIELDS", values)
+    if (os.environ.get("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT") == "1"
+            and os.environ.get("GH_PROJECT_FAILURE_MARKER")
+            and os.environ.get("GH_PROJECT_UPDATE_EDIT_COUNT")
+            and not path("GH_PROJECT_FAILURE_MARKER").exists()):
+        count_path = path("GH_PROJECT_UPDATE_EDIT_COUNT")
+        count = int(count_path.read_text()) if count_path.exists() else 0
+        count_path.write_text(str(count + 1))
+        if count + 1 < 3:
+            print("{}")
+            raise SystemExit(0)
+        path("GH_PROJECT_FAILURE_MARKER").write_text("failed after Project publication")
+        print("injected crash after Project publication", file=sys.stderr)
+        raise SystemExit(93)
+    if (os.environ.get("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT") == "1"
+            and os.environ.get("GH_PROJECT_FAILURE_MARKER")
+            and path("GH_PROJECT_FAILURE_MARKER").exists()):
+        print("injected crash after Project publication", file=sys.stderr)
+        raise SystemExit(93)
     print("{}")
+elif args[:2] == ["issue", "list"] and os.environ.get("GH_REFRESH_TASK") == "1":
+    print(json.dumps([{"number": issue, "state": read("GH_ISSUE_STATE", {"state": "OPEN"})["state"],
+                      "title": "[PM] fixture", "url": issue_url}]))
 elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"):
     if os.environ.get("GH_MUTATE_MAPPING_ON_COMMENT_READBACK") == "1":
         mapping_path = path("GH_MAPPING")
@@ -369,6 +391,72 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(payload["status"], "already_finalized")
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_retry_recovers_after_project_done_then_selected_refresh_without_manual_edits(self) -> None:
+        canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        (self.root / "tracked").write_text("base\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "tracked"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "base"], check=True)
+        subprocess.run([
+            "git", "-C", str(self.root), "worktree", "add", "-qb",
+            "task/fixture", str(canonical_worktree),
+        ], check=True, stdout=subprocess.DEVNULL)
+        mapping_path = self.mapping(pr=True, extra={
+            "canonical_worktree": str(canonical_worktree),
+            "task_branch": "task/fixture",
+            "default_branch": "main",
+        })
+        self.issue_body.write_text(
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\nTask metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n- status: `committed`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{canonical_worktree}`\n"
+        )
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_PROJECT_FAILURE_MARKER": str(Path(self.tmp.name) / "project-failure-marker"),
+            "GH_PROJECT_UPDATE_EDIT_COUNT": str(Path(self.tmp.name) / "project-update-count"),
+            "GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT": "1",
+            "GH_REFRESH_TASK": "1",
+        })
+
+        crashed = self.invoke("duplicate")
+        edit_count = Path(self.tmp.name) / "project-update-count"
+        self.assertNotEqual(
+            crashed.returncode,
+            0,
+            crashed.stdout + crashed.stderr + repr(self.calls()) + repr(edit_count.read_text() if edit_count.exists() else None),
+        )
+        after_crash = self.read_json(mapping_path)["tasks"][UID]
+        self.assertIn("closed_without_merge_intent", after_crash)
+        self.assertEqual(after_crash["workflow_phase"], "execution")
+        receipt = self.root / ".git/oasis7-workflow-receipts" / UID / "closed-without-merge-receipt.json"
+        self.assertTrue(receipt.exists())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "Done", "PM Status": "done", "Workflow Phase": "done"
+        })
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+        after_refresh = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(after_refresh["workflow_phase"], "execution")
+
+        self.env.pop("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT")
+        retry = self.invoke("duplicate")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(
+            self.read_json(mapping_path)["tasks"][UID]["workflow_phase"],
+            "closed_without_merge",
+        )
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
 
     def test_authority_drift_fails_before_issue_project_or_comment_terminal_effects(self) -> None:
         mapping_path = self.mapping(pr=True)

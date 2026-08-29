@@ -765,6 +765,36 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual(6, len(invocations), invocations)
         self.assertRegex(runbook, r"(?i)all six (?:commands|transitions|steps)")
 
+    def test_non_merge_terminal_route_is_copyable_and_synchronized(self) -> None:
+        route = re.compile(
+            r"(?:\./)?scripts/pm/non-merge-finalize\.py\s+"
+            r"--repo-root\s+<canonical-default-worktree>\s+"
+            r"--task-uid\s+<TASK-UID>\s+"
+            r"--reason\s+<reason>\s+"
+            r"--evidence-file\s+<path>\s+--json"
+        )
+
+        def normalized(text: str) -> str:
+            return re.sub(r"\\\s*\n\s*", " ", text)
+
+        surfaces = {
+            "canonical source": self.text,
+            "finishing skill": FINISHING.read_text(encoding="utf-8"),
+        }
+        matches = {}
+        for name, text in surfaces.items():
+            match = route.search(normalized(text))
+            self.assertIsNotNone(
+                match,
+                f"{name} must publish a complete copyable non-merge-finalize route",
+            )
+            matches[name] = re.sub(r"\s+", " ", match.group(0)).strip()
+        self.assertEqual(
+            matches["canonical source"],
+            matches["finishing skill"],
+            "non-merge terminal route drifted between canonical source and finishing skill",
+        )
+
     def test_terminal_runbook_enters_default_worktree_before_any_helper(self) -> None:
         match = re.search(r"(?ms)^###?\s+Terminal runbook\s*$\n(.*?)(?=^#{2,3}\s+|\Z)", self.text)
         self.assertIsNotNone(match)

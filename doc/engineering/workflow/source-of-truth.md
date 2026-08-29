@@ -650,7 +650,7 @@ RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --task-uid <TASK-UID> --create)"
 ```
 
-Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`.
+Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; a pending intent is refreshable only when its receipt matches exactly, and mismatches fail closed.
 It derives identity and squash proof while preserving the six fail-closed
 authorities below as the recovery/debug contract:
 

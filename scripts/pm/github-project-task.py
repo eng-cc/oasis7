@@ -23,6 +23,8 @@ DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
 ALLOWED_PHASE_TRANSITIONS = {"task_done": {"main_sync"}, "main_sync": {"main_sync"}}
 RECEIPT_SCHEMAS = {"main_sync": ("oasis7_main_sync", "post-merge-main-sync")}
+NON_MERGE_INTENT_FIELD = "closed_without_merge_intent"
+NON_MERGE_RECEIPT_NAME = "closed-without-merge-receipt.json"
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
 if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
@@ -125,6 +127,70 @@ def merge_project_mapping(path: pathlib.Path, project: dict[str, Any]) -> None:
 def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
     path = pathlib.Path(value)
     return path if path.is_absolute() else root / path
+
+
+def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
+                            existing: dict[str, Any], repository: str,
+                            project: dict[str, Any]) -> str | None:
+    """Validate a pre-terminal intent/receipt pair before Project refresh.
+
+    A Project `done` value is a coarse projection and cannot replace a
+    receipt-bound pre-terminal phase while remote terminal effects are still
+    resumable.  The pair is deliberately strict: a partial or mismatched
+    authority must stop refresh rather than rewrite task truth.
+    """
+    intent = existing.get(NON_MERGE_INTENT_FIELD)
+    if intent is None:
+        return None
+    if not isinstance(intent, dict):
+        die("refresh-task: pending non-merge intent is malformed")
+    if intent.get("schema") != "oasis7_non_merge_closeout_intent_v1":
+        die("refresh-task: pending non-merge intent schema is unsupported")
+    if str(intent.get("task_uid") or "") != task_uid:
+        die("refresh-task: pending non-merge intent Task UID mismatch")
+    if str(intent.get("repository") or "") != str(repository or ""):
+        die("refresh-task: pending non-merge intent repository mismatch")
+    project_identity = {
+        key: str(project.get(key) or "") for key in ("owner", "number", "id")
+    }
+    if intent.get("project_identity") != project_identity:
+        die("refresh-task: pending non-merge intent Project identity mismatch")
+    receipt_helper = pathlib.Path(__file__).with_name("canonical-receipt-root.py")
+    result = subprocess.run(
+        [sys.executable, str(receipt_helper), "--default-worktree", str(root),
+         "--task-uid", task_uid, "--name", NON_MERGE_RECEIPT_NAME],
+        text=True, encoding="utf-8", stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, timeout=180,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        die(result.stderr.strip() or "refresh-task: canonical non-merge receipt path is unavailable")
+    receipt_path = pathlib.Path(result.stdout.strip()).resolve()
+    if not receipt_path.is_file():
+        die("refresh-task: pending non-merge intent has no receipt")
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        die(f"refresh-task: pending non-merge receipt is unreadable: {exc}")
+    if not isinstance(receipt, dict):
+        die("refresh-task: pending non-merge receipt is malformed")
+    if receipt.get("receipt_type") != "oasis7_closed_without_merge":
+        die("refresh-task: pending non-merge receipt type mismatch")
+    if receipt.get("schema_version") != 1 or receipt.get("issuer") != "non-merge-finalize":
+        die("refresh-task: pending non-merge receipt authority mismatch")
+    authority_fields = (
+        "task_uid", "repository", "issue_number", "project_item_id",
+        "project_identity", "reason", "evidence_sha256", "pr_number", "pr_url",
+    )
+    if any(receipt.get(key) != intent.get(key) for key in authority_fields):
+        die("refresh-task: pending non-merge intent and receipt disagree")
+    if receipt.get("previous_status") != existing.get("status"):
+        die("refresh-task: pending non-merge receipt status snapshot disagrees")
+    if receipt.get("previous_workflow_phase") != existing.get("workflow_phase"):
+        die("refresh-task: pending non-merge receipt phase snapshot disagrees")
+    phase = str(existing.get("workflow_phase") or "")
+    if phase in {"done", "closed_without_merge", "post_" + "merge_done"}:
+        die("refresh-task: pending non-merge intent is not pre-terminal")
+    return phase
 
 
 def run_text(cmd: list[str]) -> str:
@@ -983,6 +1049,20 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
     existing = dict((latest.get("tasks") or {}).get(args.task_uid) or {})
+    root = args.root.resolve()
+    project = latest.get("project") or {}
+    project = project if isinstance(project, dict) else {}
+    canonical_owner = str(project.get("owner") or args.project_owner or "")
+    try:
+        canonical_number = int(project.get("number") or args.project_number)
+    except (TypeError, ValueError):
+        die("refresh-task: canonical Project number is invalid")
+    canonical_project_id = str(project.get("id") or "")
+    if canonical_owner != str(args.project_owner or "") or canonical_number != int(args.project_number):
+        die("refresh-task: configured Project identity does not match canonical mapping")
+    pending_phase = pending_non_merge_phase(
+        root, args.task_uid, existing, args.repo, project,
+    )
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
@@ -991,7 +1071,6 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     # task to that root would destroy the canonical task-worktree/branch pair.
     # Resolve registered identity from task truth instead and fail closed when
     # live and cached task identities disagree.
-    root = args.root.resolve()
     identity_candidates: list[dict[str, str]] = []
     for hint in (
         str(existing.get("canonical_worktree") or ""),
@@ -1011,16 +1090,6 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         die("refresh-task: no registered canonical task worktree identity is available")
     repository_identity = identity_candidates[0]
     live["worktree_hint"] = repository_identity["canonical_worktree"]
-    project = latest.get("project") or {}
-    project = project if isinstance(project, dict) else {}
-    canonical_owner = str(project.get("owner") or args.project_owner or "")
-    try:
-        canonical_number = int(project.get("number") or args.project_number)
-    except (TypeError, ValueError):
-        die("refresh-task: canonical Project number is invalid")
-    canonical_project_id = str(project.get("id") or "")
-    if canonical_owner != str(args.project_owner or "") or canonical_number != int(args.project_number):
-        die("refresh-task: configured Project identity does not match canonical mapping")
     recovered: dict[str, Any] = {}
     item_id = str(existing.get("project_item_id") or "")
     project_fields: dict[str, str] = {}
@@ -1158,7 +1227,9 @@ def command_refresh_task(args: argparse.Namespace) -> int:
             "closed_without_" + "merge",
             "post_" + "merge_done",
         }
-        if project_status == "done" and existing_phase in fine_terminal_phases:
+        if pending_phase is not None:
+            record["workflow_phase"] = pending_phase
+        elif project_status == "done" and existing_phase in fine_terminal_phases:
             # Project exposes both terminal receipt phases as coarse `done`;
             # refreshing its fields must not erase the finer local phase.
             record["workflow_phase"] = existing_phase
