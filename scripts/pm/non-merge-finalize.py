@@ -61,6 +61,8 @@ def _intent_matches(stored: object, expected: dict) -> bool:
     normalized = dict(stored)
     if "migrated_receipt_sha256" not in expected:
         normalized.pop("migrated_receipt_sha256", None)
+    if "canonical_receipt_sha256" not in expected:
+        normalized.pop("canonical_receipt_sha256", None)
     return normalized == expected
 
 
@@ -451,7 +453,7 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
             fail("migrated non-merge receipt is missing modern authority")
         allowed_modern = {
             *expected, "evidence", "project_identity", *PR_HEAD_FIELDS,
-            "migrated_from", "migrated_from_sha256", "observed_at",
+            "migrated_from", "migrated_from_sha256",
         }
         unknown = set(existing_receipt) - allowed_modern
         source_bound = {
@@ -517,6 +519,22 @@ def _bind_migrated_receipt_digest(path: pathlib.Path, task_uid: str,
         current[NON_MERGE_INTENT_FIELD] = intent
         mapping.setdefault("tasks", {})[task_uid] = current
 
+    durable_store.transact_json(path, update)
+
+
+def _bind_canonical_receipt_digest(path: pathlib.Path, task_uid: str,
+                                   digest: str) -> None:
+    def update(mapping: dict) -> None:
+        current = (mapping.get("tasks") or {}).get(task_uid) or {}
+        intent = current.get(NON_MERGE_INTENT_FIELD)
+        if not isinstance(intent, dict):
+            fail("canonical non-merge receipt has no pending intent authority")
+        bound = intent.get("canonical_receipt_sha256")
+        if bound not in (None, digest):
+            fail("canonical non-merge receipt digest authority drifted")
+        intent["canonical_receipt_sha256"] = digest
+        current[NON_MERGE_INTENT_FIELD] = intent
+        mapping.setdefault("tasks", {})[task_uid] = current
     durable_store.transact_json(path, update)
 
 
@@ -733,7 +751,7 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted before terminal effects: {key}")
         existing = current.get(NON_MERGE_INTENT_FIELD)
-        bound_migrated_digest = None
+        bound_receipt_digests: dict[str, str] = {}
         if existing is not None and existing != intent:
             if not isinstance(existing, dict):
                 fail("non-merge closeout intent authority drifted")
@@ -743,12 +761,12 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             for key, value in existing.items():
                 if key == "schema":
                     continue
-                if (key == "migrated_receipt_sha256"
+                if (key in {"migrated_receipt_sha256", "canonical_receipt_sha256"}
                         and isinstance(value, str)
                         and re.fullmatch(r"[0-9a-f]{64}", value)
                         and value == ((record.get(NON_MERGE_INTENT_FIELD) or {})
-                                      .get("migrated_receipt_sha256"))):
-                    bound_migrated_digest = value
+                                      .get(key))):
+                    bound_receipt_digests[key] = value
                     continue
                 if key not in intent or intent[key] != value:
                     fail("non-merge closeout intent authority drifted")
@@ -756,8 +774,7 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             if key in record:
                 current[key] = record[key]
         reserved_intent = dict(intent)
-        if bound_migrated_digest:
-            reserved_intent["migrated_receipt_sha256"] = bound_migrated_digest
+        reserved_intent.update(bound_receipt_digests)
         current[NON_MERGE_INTENT_FIELD] = reserved_intent
         mapping.setdefault("tasks", {})[task_uid] = current
         return dict(current)
@@ -774,6 +791,10 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
                     .get("migrated_receipt_sha256"))
     if bound_digest:
         intent["migrated_receipt_sha256"] = bound_digest
+    canonical_digest = ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                        .get("canonical_receipt_sha256"))
+    if canonical_digest:
+        intent["canonical_receipt_sha256"] = canonical_digest
 
     def check(mapping: dict) -> None:
         if _project_identity(mapping.get("project") or {}) != project_identity:
@@ -1000,6 +1021,10 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
                     .get("migrated_receipt_sha256"))
     if bound_digest:
         intent["migrated_receipt_sha256"] = bound_digest
+    canonical_digest = ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                        .get("canonical_receipt_sha256"))
+    if canonical_digest:
+        intent["canonical_receipt_sha256"] = canonical_digest
 
     def update(mapping: dict) -> None:
         if _project_identity(mapping.get("project") or {}) != project_identity:
@@ -1164,7 +1189,6 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "pr_url": record.get("pr_url"),
         "pr_state": (pr or {}).get("state") if pr else None,
         "mergedAt": (pr or {}).get("mergedAt") if pr else None,
-        "observed_at": now(),
     }
     receipt.update(pr_head)
     if existing_receipt is not None:
@@ -1175,7 +1199,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         _validate_existing_receipt(
             existing_receipt, receipt, evidence_data, project_identity, pr_head,
             require_modern_authority=(
-                not legacy_receipt_migration and receipt_path == migrated_receipt_path
+                not legacy_receipt_migration
+                and (receipt_path == migrated_receipt_path
+                     or not _receipt_needs_migration(existing_receipt, pr_head))
             ),
             legacy_source=legacy_source,
         )
@@ -1258,6 +1284,26 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         )
     elif existing_receipt is None or receipt_needs_write:
         durable_store.replace_json(receipt_path, receipt)
+    if receipt_path == canonical_receipt_path:
+        receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        bound = (((record.get("phase_receipt_sha256") or {})
+                  .get("closed_without_merge")) if was_terminal else
+                 ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                  .get("canonical_receipt_sha256")))
+        if bound is None and was_terminal:
+            _bind_terminal_migrated_receipt_digest(
+                mapping_path, task_uid, receipt_digest,
+            )
+            record.setdefault("phase_receipt_sha256", {})[
+                "closed_without_merge"
+            ] = receipt_digest
+        elif bound is None:
+            _bind_canonical_receipt_digest(mapping_path, task_uid, receipt_digest)
+            record.setdefault(NON_MERGE_INTENT_FIELD, {})[
+                "canonical_receipt_sha256"
+            ] = receipt_digest
+        elif bound != receipt_digest:
+            fail("canonical non-merge receipt lacks matching immutable digest authority")
     receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
     # Read the bound comment stream while the task is still pre-terminal.  A
     # deterministic mapping drift exposed by this readback is rejected before
@@ -1342,7 +1388,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     ] = receipt_digest
     _ledger_transition(ledger_path, task_uid, "issue_close", "intent", pr_head=pr_head)
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
-                      str(record["repository"]), "--json", "state,body,number,url"])
+                      str(record["repository"]), "--json", "state,stateReason,body,number,url"])
     if str(issue.get("state") or "").upper() != "CLOSED":
         _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                    evidence_digest, project_identity)
@@ -1353,10 +1399,13 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                        check=True, text=True, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
         issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
-                          str(record["repository"]), "--json", "state,body,number,url"])
+                          str(record["repository"]), "--json", "state,stateReason,body,number,url"])
     _ledger_transition(ledger_path, task_uid, "issue_close", "readback", issue, pr_head)
     if str(issue.get("state") or "").upper() != "CLOSED":
         fail("Issue close live readback mismatch")
+    expected_state_reason = "COMPLETED" if reason == "non_pr_completed" else "NOT_PLANNED"
+    if str(issue.get("stateReason") or "").upper() != expected_state_reason:
+        fail("Issue close stateReason readback mismatch")
     _ledger_transition(ledger_path, task_uid, "issue_close", "committed", pr_head=pr_head)
     _write_tombstone(receipt_path, record, receipt_digest)
     return {"status": "already_finalized" if was_terminal else "finalized",

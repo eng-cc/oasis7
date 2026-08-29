@@ -57,7 +57,8 @@ issue = int(os.environ["GH_ISSUE"])
 issue_url = f"https://github.com/{repo}/issues/{issue}"
 
 if args[:2] == ["issue", "view"]:
-    state = read("GH_ISSUE_STATE", {"state": "OPEN"})["state"]
+    issue_state = read("GH_ISSUE_STATE", {"state": "OPEN", "stateReason": None})
+    state = issue_state["state"]
     body = path("GH_ISSUE_BODY").read_text()
     if (os.environ.get("GH_MUTATE_MAPPING_ON_ISSUE_VIEW") == "1"
             and os.environ.get("GH_MUTATION_MARKER")
@@ -85,7 +86,7 @@ if args[:2] == ["issue", "view"]:
             and "- status: `done`" not in body):
         print("closed issue body was not updated to done", file=sys.stderr)
         raise SystemExit(91)
-    print(json.dumps({"state": state, "body": body,
+    print(json.dumps({"state": state, "stateReason": issue_state.get("stateReason"), "body": body,
                       "number": issue, "url": issue_url}))
 elif args[:2] == ["issue", "edit"]:
     body = Path(args[args.index("--body-file") + 1]).read_text()
@@ -109,7 +110,8 @@ elif args[:2] == ["issue", "close"]:
     closes = read("GH_CLOSES", [])
     closes.append(reason)
     write("GH_CLOSES", closes)
-    write("GH_ISSUE_STATE", {"state": "CLOSED"})
+    write("GH_ISSUE_STATE", {"state": "CLOSED", "stateReason":
+          "COMPLETED" if reason == "completed" else "NOT_PLANNED"})
     print("closed")
 elif args[:2] == ["pr", "view"]:
     number = int(os.environ.get("GH_PR_NUMBER", "22"))
