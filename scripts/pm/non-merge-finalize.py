@@ -1337,6 +1337,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "closed_without_merge_reason": reason,
         "closed_without_merge_evidence_sha256": evidence_digest,
     })
+    record.setdefault("phase_receipt_sha256", {})[
+        "closed_without_merge"
+    ] = receipt_digest
     _ledger_transition(ledger_path, task_uid, "issue_close", "intent", pr_head=pr_head)
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                       str(record["repository"]), "--json", "state,body,number,url"])
