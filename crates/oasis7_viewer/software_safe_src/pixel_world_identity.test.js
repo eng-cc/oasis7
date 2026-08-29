@@ -21,6 +21,12 @@ describe("pixel world player-facing identity", () => {
     expect(pixelWorldReadableEntityText("Queue smelter for agent-builder", slugState, true)).toBe("Queue smelter for 行动体 Builder");
   });
 
+  it("does not rewrite natural-language agent compounds that are not entity ids", () => {
+    expect(pixelWorldReadableEntityText("Use agent-based planning for agent-to-agent handoffs", visualState)).toBe(
+      "Use agent-based planning for agent-to-agent handoffs",
+    );
+  });
+
   it("normalizes a location fallback instead of exposing its raw id", () => {
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" })).toBe("Location 0");
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" }, true)).toBe("地点 0");

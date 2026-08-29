@@ -9885,6 +9885,7 @@ function pixelWorldReadableLocationLabel(location, fallbackId = "", isLocaleZh2 
 function pixelWorldReadableEntityText(text2, visualState, isLocaleZh2 = false) {
   return String(text2 || "").replace(/\bagent[-_][a-z0-9]+(?:[-_][a-z0-9]+)*\b/gi, (id) => {
     const agent = visualState?.agents?.find((candidate) => candidate.id === id);
+    if (!agent) return id;
     return pixelWorldReadableAgentLabel(agent, id, isLocaleZh2);
   });
 }

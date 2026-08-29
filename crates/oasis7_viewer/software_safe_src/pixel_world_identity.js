@@ -49,6 +49,7 @@ export function pixelWorldReadableLocationLabel(location, fallbackId = "", isLoc
 export function pixelWorldReadableEntityText(text, visualState, isLocaleZh = false) {
   return String(text || "").replace(/\bagent[-_][a-z0-9]+(?:[-_][a-z0-9]+)*\b/gi, (id) => {
     const agent = visualState?.agents?.find((candidate) => candidate.id === id);
+    if (!agent) return id;
     return pixelWorldReadableAgentLabel(agent, id, isLocaleZh);
   });
 }
