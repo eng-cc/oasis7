@@ -1234,7 +1234,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Missing Material");
     expect(document.querySelectorAll(".pixel-world-focus-rail__item")[0]).toHaveClass("pixel-world-focus-rail__item--blocker");
@@ -1258,7 +1259,8 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"] .sr-only')).toHaveTextContent("Reference: Factory Anchor");
     expect(document.querySelector(".pixel-world-focus-minimap__node--target")).not.toHaveTextContent("Anchor");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
-    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agent-0");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Agent 0");
+    expect(document.querySelector('[data-focus-minimap="true"]')).not.toHaveTextContent("agent-0");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("targets=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=1");
@@ -1388,8 +1390,8 @@ describe("pixel world host", () => {
     });
     expect(host).toHaveAttribute("data-focus-comparable", "true");
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent/agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");

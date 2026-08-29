@@ -50,6 +50,24 @@ function ensureAgentBrowser() {
   }
 }
 
+function ensurePixelWorldBridgeDist() {
+  const required = [
+    resolve(viewerRoot, "dist/pixel-world-bridge/pixel_world_bridge.js"),
+    resolve(viewerRoot, "dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"),
+    resolve(viewerRoot, "dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"),
+  ];
+  const missing = required.filter((path) => {
+    try {
+      return !statSync(path).isFile();
+    } catch {
+      return true;
+    }
+  });
+  if (missing.length > 0) {
+    throw new Error(`pixel-world visual smoke requires built bridge dist; run ./scripts/build-viewer-software-safe.sh\nmissing:\n${missing.join("\n")}`);
+  }
+}
+
 function contentType(pathname) {
   switch (extname(pathname)) {
     case ".html":
@@ -343,6 +361,7 @@ function visualProbeScript(options = {}) {
       await waitFor(() => state().authBoundAgentId === "agent-0");
       await waitFor(() => document.querySelector("#pixel-world-embedded-runtime-canvas"));
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
 
       const canvas = document.querySelector("#pixel-world-embedded-runtime-canvas");
       const canvasRect = canvas.getBoundingClientRect();
@@ -364,6 +383,12 @@ function visualProbeScript(options = {}) {
         wheelCanceled,
         cursor: getComputedStyle(canvas).cursor,
         badges: badges(),
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+          selection: renderDto.selection || null,
+        },
       };
 
       if (${shellLiteProbe}) {
@@ -781,6 +806,7 @@ function actionReceiptProbeScript() {
       return JSON.stringify({
         runtimeStatus: state().pixelWorldRuntimeStatus,
         receipt,
+        playerLeverageText: textOf(".pixel-world-shell-context-group--leverage"),
         blockerBadge,
         fragmentCount: badgeCount("fragments"),
         agentRect,
@@ -1081,13 +1107,14 @@ async function runShellLiteOnlyMode(url) {
 }
 
 ensureAgentBrowser();
+ensurePixelWorldBridgeDist();
 
 const server = createServer(serveFile);
 
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&pixel_world_visual_fixture=selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
   if (shellLiteOnly) {
@@ -1112,6 +1139,10 @@ try {
   assert(summary.ready.fatal === null, "pixel-world runtime reported a fatal error", summary.ready);
   assert(summary.ready.camera?.zoom > 1, "wheel interaction did not produce camera zoom telemetry", summary.ready);
   assert(summary.ready.wheelCanceled === true, "canvas did not capture wheel interaction", summary.ready);
+  assert(summary.ready.renderDto?.fragments === 3, "current Rust render DTO lost its three fragment projections", summary.ready);
+  assert(summary.ready.renderDto?.agents === 2, "current Rust render DTO lost its two agent projections", summary.ready);
+  assert(summary.ready.renderDto?.locations >= 2, "current Rust render DTO lost its location projections", summary.ready);
+  assert(summary.ready.renderDto?.selection?.kind === "agent", "current Rust render DTO lost agent selection", summary.ready);
   assert(summary.rendered.runtimeStatus === "ready", "rendered bridge surface was not ready for canvas assertions", summary.rendered);
   assert(summary.rendered.fragmentCount === 3, "Rust render projection did not report exactly three fragments", summary.rendered);
   assert(summary.rendered.agentCount === 2, "expected exactly two accessible canvas agent hit targets", summary.rendered);
@@ -1149,6 +1180,8 @@ try {
   );
   assert(/Agent 0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt did not use a readable target-agent label", summary.actionReceipt);
   assert(!/agent=agent-0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt leaked the raw target-agent id", summary.actionReceipt);
+  assert(/Survey Agent/.test(summary.actionReceipt.playerLeverageText || ""), "Player Leverage did not use the readable agent name", summary.actionReceipt);
+  assert(!/agent-0/.test(summary.actionReceipt.playerLeverageText || ""), "Player Leverage leaked the raw agent id", summary.actionReceipt);
   assert(summary.actionReceipt.receipt?.rect?.height > 40, "action receipt did not render with a measurable visual footprint", summary.actionReceipt);
   assert(summary.actionReceipt.fragmentCount === 3, "action receipt scenario should preserve fragment background markers", summary.actionReceipt);
   assert(summary.actionReceipt.agentRect?.width > 0, "action receipt scenario lost the readable agent marker", summary.actionReceipt);

@@ -18,7 +18,7 @@ export function applyPixelWorldMobileSelectionSafeArea(canvasRoot) {
   if (window.innerWidth > MOBILE_SHELL_MAX_WIDTH) return;
   const focusHost = canvasRoot.closest(".pixel-world-host--focus");
   if (focusHost) {
-    const focusHud = focusHost.querySelector(".pixel-world-hud");
+    const focusHud = focusHost.querySelector("[data-focus-hud='true']");
     if (!focusHud) return;
     const markerRect = marker.getBoundingClientRect();
     const focusHudRect = focusHud.getBoundingClientRect();
@@ -46,9 +46,12 @@ export function installPixelWorldMobileSelectionSafeArea(canvasRoot) {
   window.addEventListener("resize", sync);
   const focusStateObserver = new MutationObserver(() => requestAnimationFrame(sync));
   focusStateObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  const feed = document.querySelector('[data-viewer-overlay="feed"]');
+  feed?.addEventListener("toggle", sync, true);
   requestAnimationFrame(sync);
   return () => {
     window.removeEventListener("resize", sync);
     focusStateObserver.disconnect();
+    feed?.removeEventListener("toggle", sync, true);
   };
 }

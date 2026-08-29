@@ -5,7 +5,7 @@ import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_prob
 import { applyPixelWorldRendererRoute, createPixelWorldRendererRouteSignals, resolvePixelWorldRendererRoute } from "./pixel_world_renderer_route.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
-import { pixelWorldReadableAgentLabel, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
+import { pixelWorldReadableAgentLabel, pixelWorldReadableEntityText, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
 import { applyPixelWorldMobileSelectionSafeArea, installPixelWorldMobileSelectionSafeArea } from "./pixel_world_mobile_safe_area.js";
 export { pixelWorldSelectedBlockerVisualFixture };
 function tr(locale, zh, en) {
@@ -50,7 +50,7 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 function pixelWorldAgentIdentity(agent, fallbackId = "") {
-  return String(agent?.name || agent?.label || agent?.id || fallbackId || "Agent").trim();
+  return pixelWorldReadableAgentLabel(agent, fallbackId) || "Agent";
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -793,7 +793,7 @@ function PixelWorldCommercialHud(props) {
           </div>
           <div class="pixel-world-shell-context-group pixel-world-shell-context-group--leverage">
             <div class="pixel-world-command-cell__label">{tr(props.locale(), "玩家杠杆", "Player Leverage")}</div>
-            <div class="pixel-world-command-cell__value">{surface().player_leverage.summary}</div><div class="pixel-world-command-cell__detail">{surface().player_leverage.label}</div>
+            <div class="pixel-world-command-cell__value">{pixelWorldReadableEntityText(surface().player_leverage.summary, props.renderState(), core.isLocaleZh(props.locale()))}</div><div class="pixel-world-command-cell__detail">{surface().player_leverage.label}</div>
             <div class="pixel-world-shell-context-group__agent" data-selected-agent-label={activeAgentLabel()}><span class="pixel-world-command-cell__label">{tr(props.locale(), "当前 Agent", "Selected Agent")}</span><strong>{activeAgentLabel()}</strong></div>
           </div>
         </div>
@@ -929,7 +929,7 @@ function PixelWorldFocusRail(props) {
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
   const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
-  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id); const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
+  const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), core.isLocaleZh(props.locale()));
   const routeCount = () => props.renderState().links.length;
   const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
   return (
@@ -948,14 +948,12 @@ function PixelWorldFocusRail(props) {
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "Agent", "Agent")}</span>
             <strong>{activeAgentName()}</strong>
-            <em>{`id=${activeAgent()}`}</em>
           </div>
         </Show>
         <Show when={selected()}>
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "选中", "Selected")}</span>
             <strong>{selectedName()}</strong>
-            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <Show when={routeCount() > 0}>
@@ -974,8 +972,7 @@ function PixelWorldFocusMinimapCard(props) {
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
   const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
-  const selectedEntity = () => selected()?.kind === "agent" ? props.renderState().agents.find((agent) => agent.id === selected()?.id) : props.renderState().locations.find((location) => location.id === selected()?.id);
-  const selectedName = () => pixelWorldAgentIdentity(selectedEntity(), selected()?.id);
+  const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), core.isLocaleZh(props.locale()));
   const primaryLocation = () => props.renderState().locations[0] || null;
   return (
     <Show when={surface()}>
@@ -1000,7 +997,6 @@ function PixelWorldFocusMinimapCard(props) {
         <div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent">
           <span>{tr(props.locale(), "Agent", "Agent")}</span>
           <strong>{activeAgent() ? activeAgentName() : tr(props.locale(), "待分配", "Unassigned")}</strong>
-          <Show when={activeAgent()}><em>{`id=${activeAgent()}`}</em></Show>
         </div>
         <Show when={selected()}>
           <div
@@ -1009,7 +1005,6 @@ function PixelWorldFocusMinimapCard(props) {
           >
             <span>{tr(props.locale(), "选中", "Selected")}</span>
             <strong>{selectedName()}</strong>
-            <em>{`${selected().kind}/${selected().id}`}</em>
           </div>
         </Show>
         <div class="pixel-world-focus-minimap__meta" aria-label={tr(props.locale(), "世界摘要", "World summary")}>
