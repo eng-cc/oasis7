@@ -83,6 +83,7 @@ mod direct_module_output_transaction;
 mod economy;
 mod economy_bootstrap;
 mod economy_factory_lifecycle;
+mod economy_module_call_uses_outer_transaction;
 mod economy_module_requests;
 mod economy_priority_logistics;
 mod effects;
