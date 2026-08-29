@@ -46,7 +46,7 @@ def main():
  vals={f:"false" for f in FIELDS.values()}
  vals.update({FIELDS[x]:"true" for x in capabilities})
  vals["run_required_gate_baseline"]="true"
- requires_rust=full or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics"})
+ requires_rust=full or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report"})
  vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)

@@ -322,7 +322,9 @@ assert_reason_contains "$unknown_output" "unclassified_or_unresolvable:unknown-u
 
 codex_agent_config_output="$(plan_for_paths \
   scripts/pm/validate-codex-agent-config.py \
-  scripts/pm/validate-codex-agent-config.test.sh)"
+  scripts/pm/validate-codex-agent-config.test.sh \
+  scripts/pm/verify-codex-subagent-role-fit.sh \
+  scripts/pm/codex-role-fit-task-binding.test.sh)"
 assert_key_equals "$codex_agent_config_output" scope targeted
 assert_key_equals "$codex_agent_config_output" run_codex_agent_config_validation true
 assert_key_equals "$codex_agent_config_output" run_oasis7_required_tests false
@@ -334,6 +336,8 @@ assert_key_equals "$codex_agent_config_output" needs_rust_toolchain false
 assert_key_equals "$codex_agent_config_output" needs_node false
 assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/validate-codex-agent-config.py"
 assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/validate-codex-agent-config.test.sh"
+assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/verify-codex-subagent-role-fit.sh"
+assert_reason_contains "$codex_agent_config_output" "codex_agent_config_validation:scripts/pm/codex-role-fit-task-binding.test.sh"
 
 codex_config_output="$(plan_for_paths \
   .codex/config.toml \
@@ -498,6 +502,8 @@ viewer_perf_output="$(plan_for_path crates/oasis7_viewer/software_safe_src/perfo
 assert_key_equals "$viewer_perf_output" scope targeted
 assert_key_equals "$viewer_perf_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_perf_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_perf_output" run_rust_baseline true
+assert_key_equals "$viewer_perf_output" needs_rust_toolchain true
 assert_key_equals "$viewer_perf_output" selected_capabilities 'viewer_js_required;viewer_performance_report'
 assert_reason_contains "$viewer_perf_output" "viewer_js_required:crates/oasis7_viewer/software_safe_src/performance_metrics.js"
 assert_reason_contains "$viewer_perf_output" "viewer_performance_report:crates/oasis7_viewer/software_safe_src/performance_metrics.js"
@@ -509,6 +515,20 @@ assert_key_equals "$viewer_perf_probe_output" run_viewer_perf_smoke true
 assert_key_equals "$viewer_perf_probe_output" needs_node true
 assert_key_equals "$viewer_perf_probe_output" selected_capabilities viewer_performance_report
 assert_reason_contains "$viewer_perf_probe_output" "viewer_performance_report:scripts/viewer-performance-probe.sh"
+
+viewer_perf_report_output="$(plan_for_paths \
+  scripts/viewer-performance-report-only.sh \
+  scripts/viewer-performance-report-only-contract.test.sh)"
+assert_key_equals "$viewer_perf_report_output" scope targeted
+assert_key_equals "$viewer_perf_report_output" run_viewer_perf_smoke true
+assert_key_equals "$viewer_perf_report_output" selected_capabilities viewer_performance_report
+assert_key_equals "$viewer_perf_report_output" run_rust_baseline false
+assert_key_equals "$viewer_perf_report_output" needs_rust_toolchain false
+assert_key_equals "$viewer_perf_report_output" needs_node true
+assert_reason_contains "$viewer_perf_report_output" \
+  "viewer_performance_report:scripts/viewer-performance-report-only.sh"
+assert_reason_contains "$viewer_perf_report_output" \
+  "viewer_performance_report:scripts/viewer-performance-report-only-contract.test.sh"
 
 pixel_world_bridge_output="$(plan_for_path crates/pixel_world_bridge/src/render.rs)"
 assert_key_equals "$pixel_world_bridge_output" scope targeted
