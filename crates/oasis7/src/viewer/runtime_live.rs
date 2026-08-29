@@ -9,9 +9,10 @@ use super::protocol::{
     AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    GameplayActionError, RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION,
-    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
-    ViewerStream, viewer_event_kind_matches,
+    GameplayActionError, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY, RollbackAuthorizationEnvelope,
+    RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind,
+    ViewerRequest, ViewerResponse, ViewerStream, viewer_event_kind_matches,
+    viewer_protocol_supports_revoke_social_fact_quote,
 };
 use crate::geometry::GeoPos;
 use crate::observability::emit_stderr_or_event;
@@ -521,6 +522,25 @@ impl ViewerRuntimeLiveServer {
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.resolve_authoritative_recovery_write_fence()?;
+        if matches!(&request, ViewerRequest::QuoteRevokeSocialFact { .. })
+            && !viewer_protocol_supports_revoke_social_fact_quote(&session.negotiated_protocol)
+        {
+            send_response(
+                writer,
+                &ViewerResponse::GameplayActionError {
+                    error: GameplayActionError {
+                        code: "protocol_upgrade_required".to_string(),
+                        message: format!(
+                            "quote_revoke_social_fact requires Viewer capability {}",
+                            REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY
+                        ),
+                        action_id: Some("quote_revoke_social_fact".to_string()),
+                        target_agent_id: None,
+                    },
+                },
+            )?;
+            return Ok(());
+        }
         if self.authoritative_recovery_write_fence.is_some()
             && !matches!(
                 &request,
@@ -559,15 +579,26 @@ impl ViewerRuntimeLiveServer {
                 capabilities: offered,
                 ..
             } => {
-                let selected = if version >= 2
-                    && self.authoritative_recovery_dir().is_some()
-                    && offered.iter().any(|capability| {
-                        capability == crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
-                    }) {
-                    vec![crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY.to_string()]
-                } else {
-                    Vec::new()
-                };
+                let mut selected = Vec::new();
+                if version >= 2 {
+                    if self.authoritative_recovery_dir().is_some()
+                        && offered.iter().any(|capability| {
+                            capability
+                                == crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
+                        })
+                    {
+                        selected.push(
+                            crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
+                                .to_string(),
+                        );
+                    }
+                    if offered
+                        .iter()
+                        .any(|capability| capability == REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY)
+                    {
+                        selected.push(REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string());
+                    }
+                }
                 session.negotiated_protocol = crate::viewer::protocol::NegotiatedViewerProtocol {
                     version,
                     capabilities: selected.clone(),

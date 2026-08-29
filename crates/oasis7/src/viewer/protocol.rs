@@ -8,6 +8,30 @@ use crate::simulator::{
 mod event_kind_match;
 pub use event_kind_match::viewer_event_kind_matches;
 
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_v2_ack_without_revoke_capability_suppresses_revoke_request() {
+        let legacy_v2 = NegotiatedViewerProtocol {
+            version: 2,
+            capabilities: Vec::new(),
+        };
+        let current_v2 = NegotiatedViewerProtocol {
+            version: 2,
+            capabilities: vec![REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string()],
+        };
+
+        assert!(!viewer_protocol_supports_revoke_social_fact_quote(
+            &legacy_v2
+        ));
+        assert!(viewer_protocol_supports_revoke_social_fact_quote(
+            &current_v2
+        ));
+    }
+}
+
 pub use proto::{
     AdjudicateSocialFactQuotePreflight, AdjudicateSocialFactQuoteRequest, AgentChatError,
     AgentChatRequest, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
@@ -36,18 +60,19 @@ pub use proto::{
     ProductValidationQuotePreflight, ProductValidationQuoteRequest, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
     PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest, PublishSocialFactQuoteStake,
-    RefineQuotePreflight, RefineQuoteRequest, RevokeSocialFactQuotePreflight,
-    RevokeSocialFactQuoteRequest, RollbackApprovalSignature, RollbackAttributionResolution,
-    RollbackAttributionResolutionRequest, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackCheckpointRef, RollbackCompensationTransitionRequest, RollbackIntent,
-    RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
-    RollbackSourceEventRef, RollbackStrictAuditEvidence, ScheduleRecipeQuotePreflight,
-    ScheduleRecipeQuoteRequest, SocialAdjudicationDecision, SocialContactQuotePreflight,
-    SocialContactQuoteRequest, TransferMaterialPriority, TransferMaterialQuotePreflight,
-    TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
-    ViewerEventKind, ViewerRequest, ViewerStream, WORLD_FEED_SCHEMA_VERSION,
-    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest, WorldFeedEnvelope, WorldFeedEvent,
-    WorldFeedGapReason, WorldFeedStatus, WorldFeedUnavailableReason,
+    REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY, RefineQuotePreflight, RefineQuoteRequest,
+    RevokeSocialFactQuotePreflight, RevokeSocialFactQuoteRequest, RollbackApprovalSignature,
+    RollbackAttributionResolution, RollbackAttributionResolutionRequest, RollbackAuthorityRole,
+    RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackCompensationTransitionRequest,
+    RollbackIntent, RollbackOperatorAuthorization, RollbackReceiptAccessRequest,
+    RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
+    ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest, SocialAdjudicationDecision,
+    SocialContactQuotePreflight, SocialContactQuoteRequest, TransferMaterialPriority,
+    TransferMaterialQuotePreflight, TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION,
+    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    WORLD_FEED_SCHEMA_VERSION, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
+    WorldFeedEnvelope, WorldFeedEvent, WorldFeedGapReason, WorldFeedStatus,
+    WorldFeedUnavailableReason,
 };
 
 pub type ViewerResponse =
@@ -56,6 +81,21 @@ pub type PromptControlAck = proto::PromptControlAck<WorldTime>;
 pub type AgentChatAck = proto::AgentChatAck<WorldTime>;
 pub type GameplayActionAck = proto::GameplayActionAck<WorldTime>;
 pub type ControlCompletionAck = proto::ControlCompletionAck<WorldTime>;
+
+/// Whether a negotiated Viewer session may issue the social-fact revocation quote.
+///
+/// The capability is intentionally checked independently of authentication: this
+/// only protects mixed-version protocol readers from an unsupported request; the
+/// quote handler still validates the signed request itself.
+pub fn viewer_protocol_supports_revoke_social_fact_quote(
+    protocol: &NegotiatedViewerProtocol,
+) -> bool {
+    protocol.version >= 2
+        && protocol
+            .capabilities
+            .iter()
+            .any(|value| value == REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY)
+}
 
 /// A signed, read-only request for the current chunk's fragment-replenishment forecast.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

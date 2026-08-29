@@ -43,6 +43,20 @@ fn declare_revoke_fixture_edge(
     }
 }
 
+fn set_agent_resource(kernel: &mut WorldKernel, agent_id: &str, kind: ResourceKind, amount: i64) {
+    let mut snapshot = kernel.snapshot();
+    snapshot
+        .model
+        .agents
+        .get_mut(agent_id)
+        .expect("agent exists in snapshot")
+        .resources
+        .set(kind, amount)
+        .expect("set agent resource");
+    let journal = kernel.journal_snapshot();
+    *kernel = WorldKernel::from_snapshot(snapshot, journal).expect("rebuild seeded snapshot");
+}
+
 fn assert_revoke_quote_matches_apply_rejection(
     kernel: &mut WorldKernel,
     actor: ResourceOwner,
@@ -266,6 +280,196 @@ fn social_fact_impact_quote_previews_revoke_returns_both_stakes_with_zero_risk()
             .expect("challenge remains tracked")
             .stake
             .is_none()
+    );
+}
+
+#[test]
+fn social_fact_impact_quote_rejects_publisher_stake_return_overflow_atomically() {
+    let mut kernel = setup_social_kernel();
+    let fact_id = publish_revoke_fixture_fact(
+        &mut kernel,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        }),
+    );
+    set_agent_resource(&mut kernel, "agent-a", ResourceKind::Electricity, i64::MAX);
+
+    let model_before_quote = kernel.model().clone();
+    let quoted = kernel
+        .quote_revoke_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            "withdraw obsolete delivery evidence",
+        )
+        .expect_err("publisher stake return overflow must reject quote");
+    assert_eq!(quoted, RejectReason::InvalidAmount { amount: 30 });
+    assert_eq!(kernel.model(), &model_before_quote);
+
+    kernel.submit_action(Action::RevokeSocialFact {
+        actor: agent_owner("agent-a"),
+        fact_id,
+        reason: "withdraw obsolete delivery evidence".to_string(),
+    });
+    let applied_reason = match kernel.step().expect("revoke rejection event").kind {
+        WorldEventKind::ActionRejected { reason } => reason,
+        other => panic!("unexpected revoke event: {other:?}"),
+    };
+    assert_eq!(applied_reason, quoted);
+    assert_eq!(electricity_of(&kernel, "agent-a"), i64::MAX);
+    assert_eq!(
+        kernel
+            .model()
+            .social_facts
+            .get(&fact_id)
+            .expect("fact remains tracked")
+            .stake,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        })
+    );
+}
+
+#[test]
+fn social_fact_impact_quote_rejects_challenger_stake_return_overflow_atomically() {
+    let mut kernel = setup_social_kernel();
+    let fact_id = publish_revoke_fixture_fact(
+        &mut kernel,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        }),
+    );
+    kernel.submit_action(Action::ChallengeSocialFact {
+        challenger: agent_owner("agent-c"),
+        fact_id,
+        reason: "delivery evidence no longer supports the relationship".to_string(),
+        stake: Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 20,
+        }),
+    });
+    assert!(matches!(
+        kernel.step().expect("challenge revoke fixture fact").kind,
+        WorldEventKind::SocialFactChallenged { .. }
+    ));
+    set_agent_resource(&mut kernel, "agent-c", ResourceKind::Electricity, i64::MAX);
+
+    let model_before_quote = kernel.model().clone();
+    let quoted = kernel
+        .quote_revoke_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            "withdraw obsolete delivery evidence",
+        )
+        .expect_err("challenger stake return overflow must reject quote");
+    assert_eq!(quoted, RejectReason::InvalidAmount { amount: 20 });
+    assert_eq!(kernel.model(), &model_before_quote);
+
+    kernel.submit_action(Action::RevokeSocialFact {
+        actor: agent_owner("agent-a"),
+        fact_id,
+        reason: "withdraw obsolete delivery evidence".to_string(),
+    });
+    let applied_reason = match kernel.step().expect("revoke rejection event").kind {
+        WorldEventKind::ActionRejected { reason } => reason,
+        other => panic!("unexpected revoke event: {other:?}"),
+    };
+    assert_eq!(applied_reason, quoted);
+    assert_eq!(electricity_of(&kernel, "agent-a"), 970);
+    assert_eq!(electricity_of(&kernel, "agent-c"), i64::MAX);
+    let fact = kernel
+        .model()
+        .social_facts
+        .get(&fact_id)
+        .expect("fact remains tracked");
+    assert_eq!(
+        fact.stake,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        })
+    );
+    assert_eq!(
+        fact.challenge
+            .as_ref()
+            .expect("challenge remains tracked")
+            .stake,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 20,
+        })
+    );
+}
+
+#[test]
+fn social_fact_impact_quote_rejects_aggregate_same_owner_stake_return_overflow() {
+    let mut kernel = setup_social_kernel();
+    let fact_id = publish_revoke_fixture_fact(
+        &mut kernel,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 30,
+        }),
+    );
+    kernel.submit_action(Action::ChallengeSocialFact {
+        challenger: agent_owner("agent-a"),
+        fact_id,
+        reason: "publisher challenges its own claim for recovery testing".to_string(),
+        stake: Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 20,
+        }),
+    });
+    assert!(matches!(
+        kernel.step().expect("same-owner challenge").kind,
+        WorldEventKind::SocialFactChallenged { .. }
+    ));
+    set_agent_resource(
+        &mut kernel,
+        "agent-a",
+        ResourceKind::Electricity,
+        i64::MAX - 49,
+    );
+
+    let model_before_quote = kernel.model().clone();
+    let quoted = kernel
+        .quote_revoke_social_fact(
+            &agent_owner("agent-a"),
+            fact_id,
+            "withdraw obsolete delivery evidence",
+        )
+        .expect_err("aggregate same-owner stake return overflow must reject quote");
+    assert_eq!(quoted, RejectReason::InvalidAmount { amount: 20 });
+    assert_eq!(kernel.model(), &model_before_quote);
+
+    kernel.submit_action(Action::RevokeSocialFact {
+        actor: agent_owner("agent-a"),
+        fact_id,
+        reason: "withdraw obsolete delivery evidence".to_string(),
+    });
+    let applied_reason = match kernel.step().expect("revoke rejection event").kind {
+        WorldEventKind::ActionRejected { reason } => reason,
+        other => panic!("unexpected revoke event: {other:?}"),
+    };
+    assert_eq!(applied_reason, quoted);
+    assert_eq!(electricity_of(&kernel, "agent-a"), i64::MAX - 49);
+    let fact = kernel
+        .model()
+        .social_facts
+        .get(&fact_id)
+        .expect("fact remains tracked");
+    assert!(fact.stake.is_some());
+    assert_eq!(
+        fact.challenge
+            .as_ref()
+            .expect("challenge remains tracked")
+            .stake,
+        Some(SocialStake {
+            kind: ResourceKind::Electricity,
+            amount: 20,
+        })
     );
 }
 

@@ -7,6 +7,8 @@ use super::super::types::{PPM_BASE, ResourceOwner, WorldEventId, WorldTime};
 use super::WorldKernel;
 use super::types::{RejectReason, WorldEventKind};
 
+mod stake_returns;
+
 const EDGE_EXPIRE_REASON_TTL: &str = "ttl_expired";
 const EDGE_EXPIRE_REASON_BACKING_FACT_INACTIVE: &str = "backing_fact_inactive";
 
@@ -249,6 +251,7 @@ impl WorldKernel {
                 fact.lifecycle
             ));
         }
+        self.ensure_social_fact_stake_returns_fit(fact)?;
 
         let publisher_stake_return = fact.stake.as_ref().map(|stake| stake.amount).unwrap_or(0);
         let challenger_stake_return = fact
@@ -621,6 +624,10 @@ impl WorldKernel {
             ));
         }
 
+        if let Err(reason) = self.ensure_social_fact_stake_returns_fit(&fact) {
+            self.model.social_facts.insert(fact_id, fact);
+            return WorldEventKind::ActionRejected { reason };
+        }
         if let Err(reason) = self.release_social_fact_stakes(&mut fact) {
             self.model.social_facts.insert(fact_id, fact);
             return WorldEventKind::ActionRejected { reason };
