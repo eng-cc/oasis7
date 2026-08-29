@@ -258,6 +258,15 @@ def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) 
             or str(issue.get("url") or "") != str(record.get("issue_url") or expected_url)
             or not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE)):
         fail("Issue identity mismatch")
+    body_pr_url = re.search(r"(?m)^- pr_url: `([^`]*)`$", body)
+    body_pr_number = re.search(r"(?m)^- pr_number: `([^`]*)`$", body)
+    issue_pr_url = body_pr_url.group(1) if body_pr_url else ""
+    issue_pr_number = body_pr_number.group(1) if body_pr_number else ""
+    mapped_pr_url = str(record.get("pr_url") or "")
+    mapped_pr_number = str(record.get("pr_number") or "")
+    if ((body_pr_url or body_pr_number)
+            and (issue_pr_url, issue_pr_number) != (mapped_pr_url, mapped_pr_number)):
+        fail("Issue PR identity disagrees with task mapping")
     if str(issue.get("state") or "").upper() == "CLOSED" and not allow_closed:
         fail("Issue is already CLOSED without a matching non-merge receipt")
     return issue
@@ -1408,6 +1417,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment, pr_head)
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed", pr_head=pr_head)
     _verify_receipt_bytes(receipt_path, receipt_digest)
+    if pr is not None:
+        _bind_pr_head(record, _identity_pr(record), receipt)
     _commit_mapping(mapping_path, task_uid, record, receipt, receipt_digest, comment,
                     reason, evidence_digest, project_identity)
     # The mapping CAS has now published the terminal record; subsequent
