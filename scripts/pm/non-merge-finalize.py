@@ -453,7 +453,7 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
             fail("migrated non-merge receipt is missing modern authority")
         allowed_modern = {
             *expected, "evidence", "project_identity", *PR_HEAD_FIELDS,
-            "migrated_from", "migrated_from_sha256",
+            "migrated_from", "migrated_from_sha256", "observed_at",
         }
         unknown = set(existing_receipt) - allowed_modern
         source_bound = {
