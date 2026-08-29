@@ -75,7 +75,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     comparison = load_comparison(Path(args.comparison))
-    current = comparison["current"]
+    if not isinstance(comparison, dict):
+        print("gate: FAIL: comparison must be a JSON object")
+        return 1
+
+    current = comparison.get("current")
     baseline = comparison.get("baseline")
     failures: list[str] = []
 
@@ -157,7 +161,63 @@ def main() -> int:
             + ", ".join(mismatches)
         )
 
-    if args.require_wasmtime_absent and current.get("wasmtime_present"):
+    # The harness records commit OIDs in both the per-checkout metrics and the
+    # comparison envelope.  Require those duplicated fields to agree before
+    # evaluating a regression row, so a stale or cross-checkout artifact cannot
+    # be presented as evidence for the requested baseline.
+    def commit_oid_for(metrics: object, label: str) -> str | None:
+        if not isinstance(metrics, dict):
+            return None
+        commit_oid = metrics.get("commit_oid")
+        if type(commit_oid) is not str or not commit_oid:
+            failures.append(f"{label} metrics commit_oid must be a non-empty string")
+            return None
+        return commit_oid
+
+    current_commit_oid = commit_oid_for(current, "current")
+    reported_current_commit_oid = comparison.get("current_commit_oid")
+    if type(reported_current_commit_oid) is not str or not reported_current_commit_oid:
+        failures.append(
+            "comparison current_commit_oid must be a non-empty string"
+        )
+    elif (
+        current_commit_oid is not None
+        and reported_current_commit_oid != current_commit_oid
+    ):
+        failures.append(
+            "comparison current_commit_oid does not match current metrics commit_oid"
+        )
+
+    if baseline is None:
+        if "baseline_commit_oid" not in comparison:
+            failures.append("comparison is missing baseline_commit_oid")
+        elif comparison["baseline_commit_oid"] is not None:
+            failures.append(
+                "comparison baseline_commit_oid must be null without baseline metrics"
+            )
+    else:
+        baseline_commit_oid = commit_oid_for(baseline, "baseline")
+        reported_baseline_commit_oid = comparison.get("baseline_commit_oid")
+        if (
+            type(reported_baseline_commit_oid) is not str
+            or not reported_baseline_commit_oid
+        ):
+            failures.append(
+                "comparison baseline_commit_oid must be a non-empty string with baseline metrics"
+            )
+        elif (
+            baseline_commit_oid is not None
+            and reported_baseline_commit_oid != baseline_commit_oid
+        ):
+            failures.append(
+                "comparison baseline_commit_oid does not match baseline metrics commit_oid"
+            )
+
+    if (
+        args.require_wasmtime_absent
+        and isinstance(current, dict)
+        and current.get("wasmtime_present")
+    ):
         failures.append("current package closure still includes wasmtime")
 
     if baseline is None:

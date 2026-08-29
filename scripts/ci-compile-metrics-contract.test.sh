@@ -606,18 +606,22 @@ matching_comparison = {
         "check_only": True,
         "no_default_features": False,
     },
+    "current_commit_oid": "current-commit",
     "current": {
         "package": "fake_library",
         "binary": None,
         "check_only": True,
         "no_default_features": False,
+        "commit_oid": "current-commit",
         "wasmtime_present": False,
     },
+    "baseline_commit_oid": "baseline-commit",
     "baseline": {
         "package": "fake_library",
         "binary": None,
         "check_only": True,
         "no_default_features": False,
+        "commit_oid": "baseline-commit",
         "package_count": 10,
     },
     "metric_rows": [
@@ -698,6 +702,69 @@ if (
 ):
     raise SystemExit(
         "mismatched measurement identity unexpectedly passed or used wrong error: "
+        f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+missing_current_commit = deepcopy(matching_comparison)
+missing_current_commit.pop("current_commit_oid")
+missing = run_gate(missing_current_commit)
+if (
+    missing.returncode == 0
+    or "comparison current_commit_oid must be a non-empty string" not in missing.stdout
+):
+    raise SystemExit(
+        "missing current commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+missing_current_metrics_commit = deepcopy(matching_comparison)
+missing_current_metrics_commit["current"].pop("commit_oid")
+missing = run_gate(missing_current_metrics_commit)
+if (
+    missing.returncode == 0
+    or "current metrics commit_oid must be a non-empty string" not in missing.stdout
+):
+    raise SystemExit(
+        "missing current metrics commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+mismatched_current_commit = deepcopy(matching_comparison)
+mismatched_current_commit["current_commit_oid"] = "other-current-commit"
+mismatched = run_gate(mismatched_current_commit)
+if (
+    mismatched.returncode == 0
+    or "comparison current_commit_oid does not match current metrics commit_oid"
+    not in mismatched.stdout
+):
+    raise SystemExit(
+        "mismatched current commit provenance unexpectedly passed or used wrong error: "
+        f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+missing_baseline_commit = deepcopy(matching_comparison)
+missing_baseline_commit.pop("baseline_commit_oid")
+missing = run_gate(missing_baseline_commit)
+if (
+    missing.returncode == 0
+    or "comparison baseline_commit_oid must be a non-empty string with baseline metrics"
+    not in missing.stdout
+):
+    raise SystemExit(
+        "missing baseline commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+mismatched_baseline_commit = deepcopy(matching_comparison)
+mismatched_baseline_commit["baseline"]["commit_oid"] = "other-baseline-commit"
+mismatched = run_gate(mismatched_baseline_commit)
+if (
+    mismatched.returncode == 0
+    or "comparison baseline_commit_oid does not match baseline metrics commit_oid"
+    not in mismatched.stdout
+):
+    raise SystemExit(
+        "mismatched baseline commit provenance unexpectedly passed or used wrong error: "
         f"{mismatched.stdout}{mismatched.stderr}"
     )
 
