@@ -107,6 +107,30 @@ def resolves_to_commit(commit_oid: str) -> bool:
     return result.returncode == 0
 
 
+def repository_head_oid(oid_length: int) -> str:
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(REPOSITORY_ROOT),
+            "rev-parse",
+            "--verify",
+            "HEAD^{commit}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    head_oid = result.stdout.strip()
+    if (
+        result.returncode != 0
+        or re.fullmatch(rf"[0-9a-f]{{{oid_length}}}", head_oid) is None
+        or not resolves_to_commit(head_oid)
+    ):
+        raise RuntimeError("unable to resolve repository HEAD commit OID")
+    return head_oid
+
+
 def main() -> int:
     args = parse_args()
     comparison = load_comparison(Path(args.comparison))
@@ -119,6 +143,7 @@ def main() -> int:
     failures: list[str] = []
     try:
         oid_length = repository_oid_length()
+        repository_head = repository_head_oid(oid_length)
     except RuntimeError as exc:
         print(f"gate: FAIL: {exc}")
         return 1
@@ -245,6 +270,16 @@ def main() -> int:
         failures.append(
             "comparison current_commit_oid does not match current metrics commit_oid"
         )
+    if current_commit_oid is not None and current_commit_oid != repository_head:
+        failures.append("current metrics commit_oid does not match repository HEAD")
+    if (
+        type(reported_current_commit_oid) is str
+        and reported_current_commit_oid != repository_head
+        and re.fullmatch(rf"[0-9a-f]{{{oid_length}}}", reported_current_commit_oid)
+        is not None
+        and resolves_to_commit(reported_current_commit_oid)
+    ):
+        failures.append("comparison current_commit_oid does not match repository HEAD")
 
     if baseline is None:
         if "baseline_ref" not in comparison:

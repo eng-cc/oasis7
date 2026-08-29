@@ -284,6 +284,10 @@ cat >"$fake_bin/git" <<'FAKE_GIT'
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "rev-parse" && "${2:-}" == "--verify" ]]; then
+  printf '%s\n' "${FAKE_BASELINE_COMMIT_OID:-${FAKE_COMMIT_OID:?}}"
+  exit 0
+fi
 if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" ]]; then
   if [[ "${2:-}" == */baseline-worktree && -n "${FAKE_BASELINE_COMMIT_OID:-}" ]]; then
     printf '%s\n' "$FAKE_BASELINE_COMMIT_OID"
@@ -293,6 +297,9 @@ if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "worktree" && "${2:-}" == "add" ]]; then
+  if [[ -n "${FAKE_GIT_WORKTREE_ADD_LOG:-}" ]]; then
+    printf '%s\n' "$*" >>"$FAKE_GIT_WORKTREE_ADD_LOG"
+  fi
   mkdir -p "${4:?}"
   exit 0
 fi
@@ -481,7 +488,8 @@ FAKE_RUSTC_WRAPPER_LOG="$tmp_dir/baseline-cargo-rustc-wrapper.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
 FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
-FAKE_BASELINE_COMMIT_OID="$expected_baseline_oid" \
+FAKE_BASELINE_COMMIT_OID="$expected_commit_oid" \
+FAKE_GIT_WORKTREE_ADD_LOG="$tmp_dir/baseline-git-worktree-add.log" \
 FAKE_CARGO_TREE_FIXTURE=none \
 CARGO_INCREMENTAL=1 \
 CARGO_PROFILE_DEV_DEBUG=2 \
@@ -492,7 +500,7 @@ CARGO_HOME="$baseline_cargo_home" PATH="$fake_bin:$PATH" \
     --package fake_library \
     --out-dir "$baseline_out_dir" \
     --check-only \
-    --baseline-ref "$expected_baseline_oid"
+    --baseline-ref HEAD
 
 python3 - \
   "$tmp_dir/baseline-cargo-incremental.log" \
@@ -518,10 +526,24 @@ for path_arg, variable in zip(
 print("compile environment (current+baseline): all Cargo calls normalized")
 PY
 
+python3 - "$tmp_dir/baseline-git-worktree-add.log" "$expected_commit_oid" <<'PY'
+from pathlib import Path
+import sys
+
+worktree_adds = [line for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if line]
+expected_baseline_ref = sys.argv[2]
+if not worktree_adds or worktree_adds[-1].split()[-1] != expected_baseline_ref:
+    raise SystemExit(
+        "symbolic baseline ref was not normalized before worktree creation: "
+        f"{worktree_adds}"
+    )
+print("symbolic baseline ref normalization: OK")
+PY
+
 python3 - \
   "$baseline_out_dir/baseline.metrics.json" \
   "$baseline_out_dir/comparison.json" \
-  "$expected_baseline_oid" <<'PY'
+  "$expected_commit_oid" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -531,7 +553,7 @@ assert metrics["wasmtime_present"] is False
 assert metrics["wasm_executor_present"] is False
 
 comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-expected_baseline_oid = sys.argv[3]
+expected_baseline_ref = sys.argv[3]
 expected_identity = {
     "package": "fake_library",
     "binary": None,
@@ -545,8 +567,9 @@ assert {
 assert {
     field: comparison["baseline"][field] for field in expected_identity
 } == expected_identity
-assert comparison["baseline_ref"] == expected_baseline_oid
-assert comparison["baseline_commit_oid"] == expected_baseline_oid
+assert comparison["current_commit_oid"] == expected_baseline_ref
+assert comparison["baseline_ref"] == expected_baseline_ref
+assert comparison["baseline_commit_oid"] == expected_baseline_ref
 print("measurement identity matching contract: OK")
 PY
 
@@ -696,6 +719,20 @@ for invalid in ("NaN", "inf", "-1"):
 passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
+
+stale_current = deepcopy(matching_comparison)
+stale_current["current_commit_oid"] = baseline_commit_oid
+stale_current["current"]["commit_oid"] = baseline_commit_oid
+stale = run_gate(stale_current)
+if (
+    stale.returncode == 0
+    or "current metrics commit_oid does not match repository HEAD" not in stale.stdout
+    or "comparison current_commit_oid does not match repository HEAD" not in stale.stdout
+):
+    raise SystemExit(
+        "stale current commit provenance unexpectedly passed or used wrong error: "
+        f"{stale.stdout}{stale.stderr}"
+    )
 
 missing_identity = dict(matching_comparison)
 missing_identity.pop("measurement_identity")

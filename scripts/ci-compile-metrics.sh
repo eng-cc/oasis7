@@ -375,6 +375,13 @@ baseline_metrics_json="$out_dir/baseline.metrics.json"
 comparison_json="$out_dir/comparison.json"
 summary_md="$out_dir/summary.md"
 
+if [[ -n "$baseline_ref" ]]; then
+  if ! baseline_ref=$(git rev-parse --verify "${baseline_ref}^{commit}"); then
+    echo "error: unable to resolve baseline ref: ${baseline_ref}" >&2
+    exit 2
+  fi
+fi
+
 measure_checkout "current" "$repo_root" "$current_metrics_json"
 
 baseline_checkout_path=""
