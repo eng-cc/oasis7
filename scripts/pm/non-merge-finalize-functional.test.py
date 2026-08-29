@@ -8,8 +8,10 @@ reached by this test.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -119,6 +121,14 @@ elif args[:2] == ["project", "item-edit"]:
     write("GH_PROJECT_FIELDS", values)
     print("{}")
 elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"):
+    if os.environ.get("GH_MUTATE_MAPPING_ON_COMMENT_READBACK") == "1":
+        mapping_path = path("GH_MAPPING")
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][uid].update({
+            "pr_number": 23,
+            "pr_url": f"https://github.com/{repo}/pulls/23",
+        })
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     print(json.dumps([read("GH_COMMENTS", [])]))
 elif args[:2] == ["api", "graphql"]:
     values = read("GH_PROJECT_FIELDS", {"Status": "In Progress",
@@ -286,6 +296,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertIn("Evidence Phase: closed_without_merge", comments[0]["body"])
         self.assertIn("Evidence SHA256:", comments[0]["body"])
         self.assertIn("owner decision: terminal non-merge closure", comments[0]["body"])
+        for field in ("Action", "Validation Command", "Expected Result", "Actual Result"):
+            self.assertRegex(comments[0]["body"], rf"(?m)^{re.escape(field)}:\s+\S")
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
     def test_closed_draft_verification_phase_is_eligible(self) -> None:
@@ -336,6 +348,116 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
+    def test_pr_bound_reasons_reject_stale_merge_authority(self) -> None:
+        for reason in ("superseded", "duplicate"):
+            with self.subTest(reason=reason):
+                self.reset_runtime()
+                self.mapping(
+                    pr=True,
+                    merge=True,
+                    extra={"merge_receipt_sha256": "stale-merge-receipt"},
+                )
+                result = self.invoke(reason)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr.lower(), r"merge|receipt|authority")
+                record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+                self.assertEqual(record["workflow_phase"], "execution")
+                self.assertEqual(record["status"], "committed")
+                self.assertEqual(record["merge_receipt"], {"state": "MERGED"})
+                self.assertEqual(record["merge_receipt_sha256"], "stale-merge-receipt")
+                self.assertEqual(self.read_json(self.comments), [])
+                self.assertEqual(self.read_json(self.closes), [])
+
+    def test_duplicate_issue_status_fields_fail_closed(self) -> None:
+        self.mapping(pr=True)
+        self.issue_body.write_text(
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "- status: `committed`\n- status: `pr_watch`\n"
+        )
+        result = self.invoke("superseded")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"status|canonical|exactly one")
+        record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        self.assertEqual(record["workflow_phase"], "execution")
+        self.assertEqual(record["status"], "committed")
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+
+    def test_mismatched_preexisting_comment_is_not_reconciled(self) -> None:
+        self.mapping(pr=True)
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        (receipt_root / "closed-without-merge-receipt.json").write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge",
+            "schema_version": 1,
+            "issuer": "non-merge-finalize",
+            "task_uid": UID,
+            "repository": REPO,
+            "issue_number": ISSUE,
+            "project_item_id": "ITEM1",
+            "reason": "superseded",
+            "evidence_sha256": evidence_digest,
+            "pr_number": 22,
+            "pr_url": PR_URL,
+            "pr_state": "CLOSED",
+            "mergedAt": None,
+        }) + "\n")
+        operation_id = hashlib.sha256(
+            f"{UID}:closed_without_merge:evidence_comment".encode()
+        ).hexdigest()
+        self.write_state(self.comments, [{
+            "id": 1,
+            "html_url": f"{ISSUE_URL}#issuecomment-1",
+            "body": (
+                "<!-- oasis7-pm-evidence -->\n"
+                f"Operation-ID: {operation_id}\nTask UID: {UID}\n"
+                "Evidence Phase: closed_without_merge\nRole: tpm\n"
+                "Reason: duplicate\nEvidence SHA256: " + "0" * 64 + "\n"
+                "Evidence File: stale.md\n"
+            ),
+        }])
+        (receipt_root / "non-merge-finalizer-ledger.json").write_text(json.dumps({
+            "schema": "oasis7_non_merge_finalizer_ledger_v1",
+            "task_uid": UID,
+            "operations": {
+                "evidence_comment": {
+                    "operation_id": operation_id,
+                    "effect": "evidence_comment",
+                    "action": True,
+                },
+            },
+        }) + "\n")
+
+        result = self.invoke("superseded", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        comments = self.read_json(self.comments)
+        self.assertEqual(len(comments), 2)
+        self.assertIn("Reason: superseded", comments[1]["body"])
+        self.assertIn(f"Evidence SHA256: {evidence_digest}", comments[1]["body"])
+        record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        self.assertEqual(record["evidence_comments"], [f"{ISSUE_URL}#issuecomment-2"])
+
+    def test_mapping_pr_authority_drift_during_remote_readback_fails_closed(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_MUTATE_MAPPING_ON_COMMENT_READBACK": "1",
+        })
+        result = self.invoke("duplicate")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"drift|identity|authority|pr")
+
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["pr_number"], 23)
+        self.assertEqual(record["workflow_phase"], "execution")
+        self.assertEqual(record["status"], "committed")
+        self.assertNotIn("closed_without_merge_receipt", record)
+        self.assertEqual(self.read_json(self.closes), [])
+
     def test_non_pr_completed_requires_done_task_complete_closeout(self) -> None:
         cases = (
             {"status": "committed", "workflow_phase": "execution"},
@@ -361,6 +483,14 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                     "allowed_to_claim": False, "verification_exit_code": 0,
                 }],
             },
+            {
+                "status": "done", "workflow_phase": "task_done",
+                "last_closed_at": "2026-08-29T00:00:00+08:00",
+                "claim_verifications": [{
+                    "claim_type": "task_complete", "status": "verified",
+                    "allowed_to_claim": True, "verification_exit_code": 0,
+                }],
+            },
         )
         for index, extra in enumerate(cases):
             with self.subTest(case=index):
@@ -380,6 +510,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                 "claim_type": "task_complete", "status": "verified",
                 "allowed_to_claim": True, "verification_exit_code": 0,
             }],
+            "completion_mode": "non_pr_task",
+            "non_pr_completion_evidence": "persisted fixture truth",
         })
         result = self.invoke("non_pr_completed")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -450,6 +582,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                             "claim_type": "task_complete", "status": "verified",
                             "allowed_to_claim": True, "verification_exit_code": 0,
                         }],
+                        "completion_mode": "non_pr_task",
+                        "non_pr_completion_evidence": "persisted fixture truth",
                     }
                 self.mapping(pr=reason == "duplicate", extra=extra)
                 result = self.invoke(reason)

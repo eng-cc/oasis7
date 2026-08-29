@@ -29,6 +29,18 @@ REASONS = ("superseded", "duplicate", "not_planned", "non_pr_completed")
 # merge_receipt, merge_receipt_sha256, pr_number, or pr_url authority.
 NON_PR_FORBIDDEN_AUTHORITY = ("merge_receipt", "merge_receipt_sha256", "pr_number", "pr_url")
 NON_PR_AUTHORITY_NOTE = "non_pr_completed rejects merge_receipt and pr_number authority"
+MERGE_AUTHORITY_FIELDS = (
+    "merge_receipt", "merge_receipt_sha256", "main_sync_receipt",
+    "main_sync_receipt_sha256", "main_sync_authority", "cleanup_receipt",
+    "cleanup_authority",
+)
+STATUS_LINE_RE = re.compile(r"(?m)^- status: `([^`]+)`$")
+TERMINAL_CAS_FIELDS = (
+    "task_uid", "repository", "issue_number", "issue_url", "project_item_id",
+    "canonical_worktree", "task_branch", "default_branch", "status",
+    "workflow_phase", "pr_number", "pr_url", "completion_mode",
+    "non_pr_completion_evidence", *MERGE_AUTHORITY_FIELDS,
+)
 RECEIPT_NAME = "closed-without-merge-receipt.json"
 LEDGER_NAME = "non-merge-finalizer-ledger.json"
 
@@ -53,6 +65,20 @@ def fail(message: str) -> None:
 
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def _has_authority(record: dict, fields: tuple[str, ...]) -> bool:
+    return any(
+        field in record and record.get(field) not in (None, "", {}, [], False)
+        for field in fields
+    )
+
+
+def _has_non_pr_task_classification(record: dict) -> bool:
+    return (
+        str(record.get("completion_mode") or "") == "non_pr_task"
+        and record.get("non_pr_completion_evidence") not in (None, "", {}, [], False)
+    )
 
 
 def run_json(command: list[str]) -> dict:
@@ -212,7 +238,27 @@ def _ledger_entry(path: pathlib.Path, effect: str) -> dict:
     return ((durable_store.recover_atomic_journal(path).get("operations") or {}).get(effect) or {})
 
 
-def _reconcile_comment(record: dict, operation_id: str) -> str:
+def _evidence_comment_body(record: dict, task_uid: str, operation_id: str,
+                           reason: str, evidence_digest: str,
+                           evidence_file: str, public_evidence: str) -> str:
+    return (
+        "<!-- oasis7-pm-evidence -->\n"
+        f"Operation-ID: {operation_id}\nTask UID: {task_uid}\n"
+        "Evidence Phase: closed_without_merge\nRole: tpm\n"
+        f"Reason: {reason}\nEvidence SHA256: {evidence_digest}\n"
+        f"Evidence File: {evidence_file}\n"
+        f"Action: non-merge-finalize --task-uid {task_uid} --reason {reason}\n"
+        f"Validation Command: gh issue view {record['issue_number']} -R {record['repository']} --json state,body,number,url\n"
+        "Expected Result: receipt, Project terminal fields, Issue body, evidence comment, and Issue close read back.\n"
+        "Actual Result: bound identity, evidence digest, and terminal Project fields read back before Issue close.\n"
+        "Evidence Payload:\n```text\n"
+        f"{public_evidence}\n```\n"
+    )
+
+
+def _reconcile_comment(record: dict, operation_id: str, reason: str,
+                       evidence_digest: str, evidence_file: str,
+                       public_evidence: str) -> str:
     raw = subprocess.check_output(
         ["gh", "api", f"repos/{record['repository']}/issues/{record['issue_number']}/comments",
          "--paginate", "--slurp"], text=True,
@@ -223,21 +269,41 @@ def _reconcile_comment(record: dict, operation_id: str) -> str:
         comments.extend(page if isinstance(page, list) else [page])
     marker = f"Operation-ID: {operation_id}"
     issue_marker = f"https://github.com/{record['repository']}/issues/{record['issue_number']}#issuecomment-"
-    matches = [comment for comment in comments
-               if marker in str(comment.get("body") or "")
-               and f"Task UID: {record['task_uid']}" in str(comment.get("body") or "")]
-    matches = [comment for comment in matches
-               if "<!-- oasis7-pm-evidence -->" in str(comment.get("body") or "")
-               and "Evidence Phase: closed_without_merge" in str(comment.get("body") or "")
-               and issue_marker in str(comment.get("html_url") or comment.get("url") or "")]
-    return str(matches[0].get("html_url") or matches[0].get("url") or "") if len(matches) == 1 else ""
+    identity_matches = [
+        comment for comment in comments
+        if marker in str(comment.get("body") or "")
+        and f"Task UID: {record['task_uid']}" in str(comment.get("body") or "")
+    ]
+    if not identity_matches:
+        return ""
+    canonical_matches = [
+        comment for comment in identity_matches
+        if "<!-- oasis7-pm-evidence -->" in str(comment.get("body") or "")
+        and "Evidence Phase: closed_without_merge" in str(comment.get("body") or "")
+        and issue_marker in str(comment.get("html_url") or comment.get("url") or "")
+    ]
+    expected_body = _evidence_comment_body(
+        record, record["task_uid"], operation_id, reason, evidence_digest,
+        evidence_file, public_evidence,
+    )
+    exact_matches = [
+        comment for comment in canonical_matches
+        if str(comment.get("body") or "") == expected_body
+    ]
+    if len(exact_matches) != 1:
+        return ""
+    comment = exact_matches[0]
+    return str(comment.get("html_url") or comment.get("url") or "")
 
 
 def _update_issue_body(record: dict, task_uid: str, issue: dict,
                        ledger_path: pathlib.Path) -> dict:
     body = str(issue.get("body") or "")
+    statuses = STATUS_LINE_RE.findall(body)
+    if len(statuses) != 1:
+        fail("Issue body is missing exactly one canonical status field")
     updated_body, count = re.subn(
-        r"(?m)^- status: `[^`]+`$", "- status: `done`", body, count=1,
+        STATUS_LINE_RE, "- status: `done`", body, count=1,
     )
     if count != 1:
         fail("Issue body is missing exactly one canonical status field")
@@ -256,7 +322,8 @@ def _update_issue_body(record: dict, task_uid: str, issue: dict,
         finally:
             body_path.unlink(missing_ok=True)
     readback = _identity_issue(record, task_uid, allow_closed=True)
-    if "- status: `done`" not in str(readback.get("body") or ""):
+    readback_statuses = STATUS_LINE_RE.findall(str(readback.get("body") or ""))
+    if readback_statuses != ["done"]:
         fail("Issue body status readback mismatch")
     _ledger_transition(ledger_path, task_uid, "issue_body_update", "readback", readback)
     _ledger_transition(ledger_path, task_uid, "issue_body_update", "committed")
@@ -298,9 +365,9 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
                     reason: str, evidence_digest: str) -> None:
     def update(mapping: dict) -> None:
         current = (mapping.get("tasks") or {}).get(task_uid) or {}
-        for key in ("repository", "issue_number", "project_item_id"):
-            if str(current.get(key) or "") != str(record.get(key) or ""):
-                fail(f"task identity drifted during terminal effects: {key}")
+        for key in TERMINAL_CAS_FIELDS:
+            if (key in current, current.get(key)) != (key in record, record.get(key)):
+                fail(f"task authority drifted during terminal effects: {key}")
         current_phase = str(current.get("workflow_phase") or "")
         eligible_phases = {
             "", "bootstrap", "planning", "execution", "verification",
@@ -353,14 +420,17 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         fail("task UID mapping identity mismatch")
     if str(record.get("workflow_phase") or "") == "post_merge_done":
         fail("post_merge_done requires merged-PR finalization")
-    if reason == "non_pr_completed" and any(record.get(key) for key in NON_PR_FORBIDDEN_AUTHORITY):
+    if _has_authority(record, MERGE_AUTHORITY_FIELDS):
+        fail("non-merge closeout cannot carry merge receipt authority")
+    if reason == "non_pr_completed" and _has_authority(record, NON_PR_FORBIDDEN_AUTHORITY):
         fail("non_pr_completed cannot carry PR or merge receipt authority")
     if reason == "non_pr_completed" and not (
             record.get("status") == "done"
             and record.get("workflow_phase") == "task_done"
             and record.get("last_closed_at")
-            and _has_verified_task_complete(record)):
-        fail("non_pr_completed requires task_done and verified task_complete closeout evidence")
+            and _has_verified_task_complete(record)
+            and _has_non_pr_task_classification(record)):
+        fail("non_pr_completed requires task_done, verified task_complete closeout evidence, and non_pr_task classification/evidence")
     evidence_digest, evidence_data, public_evidence = _read_evidence(evidence_path)
     pr = _identity_pr(record)
     if reason in {"superseded", "duplicate"} and pr is None:
@@ -417,19 +487,26 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         f"{task_uid}:closed_without_merge:evidence_comment".encode()
     ).hexdigest()
     comment_entry = _ledger_entry(ledger_path, "evidence_comment")
-    comment = str(comment_entry.get("result") or "") if comment_entry.get("committed") else ""
-    if not comment and comment_entry.get("action"):
-        comment = _reconcile_comment(record, comment_operation_id)
+    comment = ""
+    if comment_entry.get("committed"):
+        comment = _reconcile_comment(
+            record, comment_operation_id, reason, evidence_digest,
+            evidence_path.name, public_evidence,
+        )
+        if not comment:
+            fail("committed evidence comment live readback disagrees with current reason/evidence")
+    elif comment_entry.get("action"):
+        comment = _reconcile_comment(
+            record, comment_operation_id, reason, evidence_digest,
+            evidence_path.name, public_evidence,
+        )
     if not comment:
         _ledger_transition(ledger_path, task_uid, "evidence_comment", "intent")
         _ledger_transition(ledger_path, task_uid, "evidence_comment", "action")
-        body = ("<!-- oasis7-pm-evidence -->\n"
-                f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\n"
-                "Evidence Phase: closed_without_merge\nRole: tpm\n"
-                f"Reason: {reason}\nEvidence SHA256: {evidence_digest}\n"
-                f"Evidence File: {evidence_path.name}\n"
-                "Evidence Payload:\n```text\n"
-                f"{public_evidence}\n```\n")
+        body = _evidence_comment_body(
+            record, task_uid, comment_operation_id, reason, evidence_digest,
+            evidence_path.name, public_evidence,
+        )
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
             handle.write(body)
             body_path = pathlib.Path(handle.name)
@@ -440,7 +517,10 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                            stderr=subprocess.PIPE)
         finally:
             body_path.unlink(missing_ok=True)
-        comment = _reconcile_comment(record, comment_operation_id)
+        comment = _reconcile_comment(
+            record, comment_operation_id, reason, evidence_digest,
+            evidence_path.name, public_evidence,
+        )
         if not comment:
             fail("evidence comment live readback has no unique matching operation")
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "readback", comment)
