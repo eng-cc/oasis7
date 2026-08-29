@@ -89,4 +89,5 @@ mod runner;
 mod runner_query_trace;
 mod social;
 mod social_persist;
+mod social_revoke_quote;
 mod submitter_access;

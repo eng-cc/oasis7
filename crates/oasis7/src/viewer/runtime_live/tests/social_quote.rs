@@ -1,6 +1,7 @@
 use super::*;
 use crate::simulator::{
-    ResourceOwner, SocialChallengeState, SocialFactLifecycleState, SocialFactState,
+    ResourceKind, ResourceOwner, SocialChallengeState, SocialFactLifecycleState, SocialFactState,
+    SocialStake,
 };
 
 fn seed_active_social_backing_fact(server: &mut ViewerRuntimeLiveServer, agent_id: &str) -> u64 {
@@ -103,6 +104,76 @@ fn signed_adjudicate_social_fact_quote_request(
             private_key_hex,
         )
         .expect("sign adjudicate social fact quote auth"),
+    );
+    request
+}
+
+fn seed_revoke_social_fact(
+    server: &mut ViewerRuntimeLiveServer,
+    fact_id: u64,
+    publisher_agent_id: &str,
+    subject_agent_id: &str,
+    object_agent_id: &str,
+) -> u64 {
+    server
+        .seed_model
+        .get_or_insert_default()
+        .social_facts
+        .insert(
+            fact_id,
+            SocialFactState {
+                fact_id,
+                actor: ResourceOwner::Agent {
+                    agent_id: publisher_agent_id.to_string(),
+                },
+                schema_id: "social.reputation.relationship.v1".to_string(),
+                subject: ResourceOwner::Agent {
+                    agent_id: subject_agent_id.to_string(),
+                },
+                object: Some(ResourceOwner::Agent {
+                    agent_id: object_agent_id.to_string(),
+                }),
+                claim: "agent-b fulfilled delivery contract for agent-c".to_string(),
+                confidence_ppm: 875_000,
+                evidence_event_ids: Vec::new(),
+                ttl_ticks: Some(12),
+                expires_at_tick: None,
+                stake: Some(SocialStake {
+                    kind: ResourceKind::Electricity,
+                    amount: 30,
+                }),
+                challenge: None,
+                lifecycle: SocialFactLifecycleState::Active,
+                created_at_tick: 0,
+                updated_at_tick: 0,
+            },
+        );
+    fact_id
+}
+
+fn signed_revoke_social_fact_quote_request(
+    fact_id: u64,
+    reason: &str,
+    player_id: &str,
+    nonce: u64,
+    public_key_hex: &str,
+    private_key_hex: &str,
+) -> crate::viewer::RevokeSocialFactQuoteRequest {
+    let mut request = crate::viewer::RevokeSocialFactQuoteRequest {
+        fact_id,
+        reason: reason.to_string(),
+        player_id: player_id.to_string(),
+        public_key: Some(public_key_hex.to_string()),
+        auth: None,
+    };
+    request.auth = Some(
+        crate::viewer::sign_revoke_social_fact_quote_auth_proof(
+            &request,
+            nonce,
+            public_key_hex,
+            private_key_hex,
+        )
+        .expect("sign revoke social fact quote auth"),
     );
     request
 }
@@ -513,6 +584,185 @@ fn runtime_publish_social_fact_quote_rejects_missing_runtime_evidence_without_mu
         err.message
             .contains("social evidence event missing: 999999")
     );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_revoke_social_fact_quote_requires_auth_proof() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let err = server
+        .handle_revoke_social_fact_quote(crate::viewer::RevokeSocialFactQuoteRequest {
+            fact_id: 88,
+            reason: "withdraw obsolete delivery evidence".to_string(),
+            player_id: "player-revoke-social-fact-quote".to_string(),
+            public_key: None,
+            auth: None,
+        })
+        .expect_err("unsigned revoke social fact quote must fail");
+
+    assert_eq!(err.code, "auth_proof_required");
+    assert_eq!(err.action_id.as_deref(), Some("quote_revoke_social_fact"));
+}
+
+#[test]
+fn runtime_revoke_social_fact_quote_is_signed_deterministic_non_mutating_and_authoritative() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let mut agent_ids = server.world.state().agents.keys().cloned();
+    let publisher_agent_id = agent_ids.next().expect("publisher Agent");
+    let subject_agent_id = agent_ids.next().expect("subject Agent");
+    let fact_id = seed_revoke_social_fact(
+        &mut server,
+        88,
+        publisher_agent_id.as_str(),
+        subject_agent_id.as_str(),
+        publisher_agent_id.as_str(),
+    );
+    let (public_key, private_key) = test_signer(103);
+    register_runtime_session(
+        &mut server,
+        "player-revoke-social-fact-quote",
+        Some(publisher_agent_id.as_str()),
+        3498,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let request = signed_revoke_social_fact_quote_request(
+        fact_id,
+        "withdraw obsolete delivery evidence",
+        "player-revoke-social-fact-quote",
+        3499,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let mut tampered_reason = request.clone();
+    tampered_reason.reason = "withdraw a different reason".to_string();
+    let tampered_error = server
+        .handle_revoke_social_fact_quote(tampered_reason)
+        .expect_err("reason tampering must reject revoke social fact quote");
+    assert_eq!(tampered_error.code, "auth_signature_invalid");
+    assert_eq!(
+        tampered_error.action_id.as_deref(),
+        Some("quote_revoke_social_fact")
+    );
+    assert_eq!(server.world.state(), &state_before);
+
+    let quote = server
+        .handle_revoke_social_fact_quote(request.clone())
+        .expect("signed revoke social fact quote");
+    assert_eq!(quote.actor_id, publisher_agent_id);
+    assert_eq!(quote.action_kind, "revoke_fact");
+    assert_eq!(quote.schema_id, "social.reputation.relationship.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some(subject_agent_id.as_str()));
+    assert_eq!(
+        quote.object_id.as_deref(),
+        Some(publisher_agent_id.as_str())
+    );
+    assert!(quote.claim_summary.contains("fulfilled delivery contract"));
+    assert_eq!(quote.confidence_ppm, Some(875_000));
+    assert_eq!(quote.stake_at_risk, 0);
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert!(
+        quote
+            .affected_relationships
+            .iter()
+            .any(|relationship| relationship == "schema:social.reputation.relationship.v1")
+    );
+    assert!(
+        quote
+            .affected_relationships
+            .iter()
+            .any(|relationship| relationship.contains(subject_agent_id.as_str()))
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"social_fact_ledger".to_string())
+    );
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"relationship".to_string())
+    );
+    assert!(quote.cooperation_opportunity_delta.contains("withdraw"));
+    assert!(quote.blacklist_or_dispute_risk.contains("withdraw"));
+    assert!(quote.governance_or_claim_relevance.contains("withdraw"));
+    assert_eq!(quote.recommended_social_action, "revoke_fact");
+    assert!(
+        quote
+            .why_this_action_matters
+            .contains("withdraw obsolete delivery evidence")
+    );
+    assert!(
+        quote
+            .why_this_action_matters
+            .contains("Publisher stake return")
+    );
+    assert_eq!(
+        server
+            .handle_revoke_social_fact_quote(request)
+            .expect("repeat signed revoke social fact quote"),
+        quote
+    );
+    assert_eq!(server.world.state(), &state_before);
+}
+
+#[test]
+fn runtime_revoke_social_fact_quote_rejects_actor_session_mismatch_structured_error() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let mut agent_ids = server.world.state().agents.keys().cloned();
+    let session_agent_id = agent_ids.next().expect("session Agent");
+    let publisher_agent_id = agent_ids.next().expect("publisher Agent");
+    let fact_id = seed_revoke_social_fact(
+        &mut server,
+        89,
+        publisher_agent_id.as_str(),
+        session_agent_id.as_str(),
+        publisher_agent_id.as_str(),
+    );
+    let (public_key, private_key) = test_signer(104);
+    register_runtime_session(
+        &mut server,
+        "player-revoke-social-fact-mismatch",
+        Some(session_agent_id.as_str()),
+        3598,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let state_before = server.world.state().clone();
+    let err = server
+        .handle_revoke_social_fact_quote(signed_revoke_social_fact_quote_request(
+            fact_id,
+            "withdraw with the wrong publisher session",
+            "player-revoke-social-fact-mismatch",
+            3599,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect_err("session actor mismatch must reject revoke social fact quote");
+
+    assert_eq!(err.code, "revoke_social_fact_quote_rejected");
+    assert_eq!(err.action_id.as_deref(), Some("quote_revoke_social_fact"));
+    assert_eq!(
+        err.target_agent_id.as_deref(),
+        Some(session_agent_id.as_str())
+    );
+    assert!(err.message.contains("can only be revoked by publisher"));
     assert_eq!(server.world.state(), &state_before);
 }
 

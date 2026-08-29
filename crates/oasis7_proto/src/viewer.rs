@@ -41,6 +41,11 @@ pub use governance_vote_quote::*;
 mod war_declaration_quote;
 pub use war_declaration_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
+/// Feature gate for the signed, read-only social-fact revocation quote.
+///
+/// This remains a Viewer protocol v2 capability so clients can avoid sending
+/// the request to older v2 readers that silently drop unknown enum variants.
+pub const REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY: &str = "revoke_social_fact_quote_v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAuthProof {
     #[serde(default)]
@@ -138,6 +143,9 @@ pub enum ViewerRequest {
     },
     QuoteAdjudicateSocialFact {
         request: AdjudicateSocialFactQuoteRequest,
+    },
+    QuoteRevokeSocialFact {
+        request: RevokeSocialFactQuoteRequest,
     },
     QuoteSocialContact {
         request: SocialContactQuoteRequest,
@@ -598,6 +606,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     AdjudicateSocialFactQuotePreflight {
         quote: AdjudicateSocialFactQuotePreflight,
+    },
+    RevokeSocialFactQuotePreflight {
+        quote: RevokeSocialFactQuotePreflight,
     },
     SocialContactQuotePreflight {
         quote: SocialContactQuotePreflight,
