@@ -67,6 +67,24 @@ def load_sync_module() -> Any:
     return module
 
 
+def load_non_merge_finalizer_module() -> Any:
+    path = pathlib.Path(__file__).with_name("non-merge-finalize.py")
+    spec = importlib.util.spec_from_file_location("non_merge_finalizer_impl", path)
+    if spec is None or spec.loader is None:
+        die(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    script_dir = str(path.parent)
+    added = script_dir not in sys.path
+    if added:
+        sys.path.insert(0, script_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if added:
+            sys.path.remove(script_dir)
+    return module
+
+
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
     if not path.exists():
         return {"version": 1, "tasks": {}}
@@ -159,24 +177,16 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
     }
     if intent.get("project_identity") != project_identity:
         die("refresh-task: pending non-merge intent Project identity mismatch")
-    receipt_helper = pathlib.Path(__file__).with_name("canonical-receipt-root.py")
-    result = subprocess.run(
-        [sys.executable, str(receipt_helper), "--default-worktree", str(root),
-         "--task-uid", task_uid, "--name", NON_MERGE_RECEIPT_NAME],
-        text=True, encoding="utf-8", stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, timeout=180,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        die(result.stderr.strip() or "refresh-task: canonical non-merge receipt path is unavailable")
-    receipt_path = pathlib.Path(result.stdout.strip()).resolve()
-    if not receipt_path.is_file():
-        die("refresh-task: pending non-merge intent has no receipt")
     try:
-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        die(f"refresh-task: pending non-merge receipt is unreadable: {exc}")
-    if not isinstance(receipt, dict):
-        die("refresh-task: pending non-merge receipt is malformed")
+        finalizer = load_non_merge_finalizer_module()
+        canonical_path, receipt_path, receipt, _ = finalizer.resolve_non_merge_receipt(
+            root, task_uid,
+        )
+    except (OSError, ValueError, SystemExit) as exc:
+        die(f"refresh-task: non-merge receipt resolution failed: {exc}")
+    if receipt is None or not receipt_path.is_file():
+        die("refresh-task: pending non-merge intent has no receipt")
+    migrated = receipt_path != canonical_path
     if receipt.get("receipt_type") != "oasis7_closed_without_merge":
         die("refresh-task: pending non-merge receipt type mismatch")
     if receipt.get("schema_version") != NON_MERGE_RECEIPT_SCHEMA_VERSION or receipt.get("issuer") != "non-merge-finalize":
@@ -185,14 +195,34 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
         "task_uid", "repository", "issue_number", "project_item_id",
         "project_identity", "reason", "evidence_sha256", "pr_number", "pr_url",
     ) + PR_HEAD_FIELDS
-    if any(receipt.get(key) != intent.get(key) for key in authority_fields):
-        die("refresh-task: pending non-merge intent and receipt disagree")
-    if intent.get("pr_number") or intent.get("pr_url"):
-        if any(not intent.get(key) or not receipt.get(key) for key in PR_HEAD_REQUIRED_FIELDS):
+    pr_bound = bool(intent.get("pr_number") or intent.get("pr_url"))
+    if migrated:
+        # A migrated sidecar is the modern authority.  Project identity and,
+        # for PR-bound tasks, the required ref identity must be present.  The
+        # optional head repository fields remain optional, while a no-PR task
+        # must not acquire a fabricated PR head requirement.
+        legacy_optional = set(PR_HEAD_OPTIONAL_FIELDS)
+        if not pr_bound:
+            legacy_optional.update(PR_HEAD_REQUIRED_FIELDS)
+        if "evidence" not in receipt:
+            die("refresh-task: migrated non-merge receipt lacks evidence authority")
+    else:
+        # The canonical receipt may still be a legacy pre-migration payload.
+        legacy_optional = {"project_identity", *PR_HEAD_FIELDS}
+    for key in authority_fields:
+        if key not in receipt:
+            if key not in legacy_optional:
+                die("refresh-task: pending non-merge intent and receipt disagree")
+            continue
+        if receipt.get(key) != intent.get(key):
+            die("refresh-task: pending non-merge intent and receipt disagree")
+    if pr_bound:
+        if migrated and any(not intent.get(key) or not receipt.get(key)
+                            for key in PR_HEAD_REQUIRED_FIELDS):
             die("refresh-task: pending PR-bound non-merge authority lacks PR head identity")
-    if receipt.get("previous_status") != existing.get("status"):
+    if (migrated or "previous_status" in receipt) and receipt.get("previous_status") != existing.get("status"):
         die("refresh-task: pending non-merge receipt status snapshot disagrees")
-    if receipt.get("previous_workflow_phase") != existing.get("workflow_phase"):
+    if (migrated or "previous_workflow_phase" in receipt) and receipt.get("previous_workflow_phase") != existing.get("workflow_phase"):
         die("refresh-task: pending non-merge receipt phase snapshot disagrees")
     phase = str(existing.get("workflow_phase") or "")
     if phase in {"done", "closed_without_merge", "post_" + "merge_done"}:

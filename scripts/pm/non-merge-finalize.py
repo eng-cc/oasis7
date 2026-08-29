@@ -42,12 +42,16 @@ TERMINAL_CAS_FIELDS = (
     "task_uid", "repository", "issue_number", "issue_url", "project_item_id",
     "canonical_worktree", "task_branch", "default_branch", "status",
     "workflow_phase", "pr_number", "pr_url", "completion_mode",
-    "non_pr_completion_evidence", *MERGE_AUTHORITY_FIELDS, *PR_HEAD_FIELDS,
+    "non_pr_completion_evidence", "closed_without_merge_reason",
+    "closed_without_merge_evidence_sha256", *MERGE_AUTHORITY_FIELDS,
+    *PR_HEAD_FIELDS,
 )
 PROJECT_IDENTITY_FIELDS = ("owner", "number", "id")
 NON_MERGE_INTENT_FIELD = "closed_without_merge_intent"
 RECEIPT_NAME = "closed-without-merge-receipt.json"
+MIGRATED_RECEIPT_NAME = "closed-without-merge-receipt-migrated.json"
 LEDGER_NAME = "non-merge-finalizer-ledger.json"
+MIGRATED_LEDGER_NAME = "non-merge-finalizer-ledger-migrated.json"
 NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
 
 
@@ -122,6 +126,61 @@ def _receipt_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     return pathlib.Path(result.stdout.strip()).resolve()
 
 
+def _migrated_receipt_path(path: pathlib.Path) -> pathlib.Path:
+    return path.with_name(MIGRATED_RECEIPT_NAME)
+
+
+def _migrated_ledger_path(path: pathlib.Path) -> pathlib.Path:
+    return path.with_name(MIGRATED_LEDGER_NAME)
+
+
+def _read_json_object(path: pathlib.Path, label: str) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"{label} is unreadable: {exc}")
+    if not isinstance(value, dict):
+        fail(f"{label} is not an object")
+    return value
+
+
+def _write_immutable_json(path: pathlib.Path, value: dict, label: str) -> None:
+    encoded = (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+    if path.exists():
+        try:
+            existing = path.read_bytes()
+        except OSError as exc:
+            fail(f"{label} is unreadable: {exc}")
+        if existing != encoded:
+            fail(f"{label} immutable content conflict")
+        return
+    durable_store.atomic_replace_json(path, value)
+
+
+def resolve_non_merge_receipt(
+    root: pathlib.Path, task_uid: str,
+) -> tuple[pathlib.Path, pathlib.Path, dict | None, bytes]:
+    """Resolve the immutable canonical receipt or its source-bound sidecar."""
+    canonical_path = _receipt_path(root, task_uid)
+    try:
+        canonical_bytes = canonical_path.read_bytes() if canonical_path.exists() else b""
+    except OSError as exc:
+        raise ValueError(f"existing non-merge receipt is unreadable: {exc}") from exc
+    canonical = (_read_json_object(canonical_path, "existing non-merge receipt")
+                 if canonical_path.exists() else None)
+    migrated_path = _migrated_receipt_path(canonical_path)
+    if not migrated_path.exists():
+        return canonical_path, canonical_path, canonical, canonical_bytes
+    if not canonical_bytes:
+        raise ValueError("migrated non-merge receipt is missing its immutable source")
+    migrated = _read_json_object(migrated_path, "migrated non-merge receipt")
+    source_digest = hashlib.sha256(canonical_bytes).hexdigest()
+    if (migrated.get("migrated_from") != RECEIPT_NAME
+            or migrated.get("migrated_from_sha256") != source_digest):
+        raise ValueError("migrated non-merge receipt source drifted")
+    return canonical_path, migrated_path, migrated, canonical_bytes
+
+
 def _read_evidence(path: pathlib.Path) -> tuple[str, dict, str]:
     try:
         raw = path.read_bytes()
@@ -135,7 +194,7 @@ def _read_evidence(path: pathlib.Path) -> tuple[str, dict, str]:
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        parsed = {"text": raw.decode("utf-8", errors="replace")}
+        parsed = {"text": raw.decode("utf-8", errors="replace").strip()}
     if not isinstance(parsed, dict):
         parsed = {"value": parsed}
     public_evidence = raw.decode("utf-8", errors="replace").strip()
@@ -257,32 +316,151 @@ def _closeout_intent(task_uid: str, record: dict, reason: str,
     return intent
 
 
+def _evidence_payload_matches(stored: object, current: dict) -> bool:
+    """Accept legacy text receipts without erasing their newline spelling."""
+    if stored == current:
+        return True
+    if (not isinstance(stored, dict) or set(stored) != {"text"}
+            or set(current) != {"text"}
+            or not isinstance(stored.get("text"), str)
+            or not isinstance(current.get("text"), str)):
+        return False
+    stored_text = stored["text"]
+    current_text = current["text"]
+    # Older readers sometimes retained leading/trailing whitespace around a
+    # plain-text payload.  The receipt digest still binds the exact raw bytes,
+    # so this normalization cannot authorize a different evidence file.
+    return stored_text.strip() == current_text.strip()
+
+
 def _receipt_recovery_candidate(record: dict, task_uid: str, reason: str,
                                 evidence_digest: str,
-                                existing_receipt: dict | None) -> bool:
+                                existing_receipt: dict | None,
+                                *, evidence_data: dict | None = None,
+                                pr: dict | None = None,
+                                project_identity: dict[str, str] | None = None,
+                                pr_head: dict[str, str] | None = None) -> bool:
     if str(record.get("workflow_phase") or "") != "closed_without_merge":
         return False
     if not isinstance(existing_receipt, dict):
         return False
-    if not (
-        existing_receipt.get("receipt_type") == "oasis7_closed_without_merge"
-        and str(existing_receipt.get("task_uid") or "") == task_uid
-        and str(existing_receipt.get("reason") or "") == reason
-        and str(existing_receipt.get("evidence_sha256") or "") == evidence_digest
-        and str(existing_receipt.get("project_item_id") or "")
-        == str(record.get("project_item_id") or "")
-    ):
+    expected = {
+        "receipt_type": "oasis7_closed_without_merge",
+        "schema_version": NON_MERGE_RECEIPT_SCHEMA_VERSION,
+        "issuer": "non-merge-finalize",
+        "task_uid": task_uid,
+        "repository": record.get("repository"),
+        "issue_number": record.get("issue_number"),
+        "project_item_id": record.get("project_item_id"),
+        "reason": reason,
+        "evidence_sha256": evidence_digest,
+        "pr_number": record.get("pr_number"),
+        "pr_url": record.get("pr_url"),
+    }
+    if pr is not None:
+        expected.update({"pr_state": pr.get("state"), "mergedAt": pr.get("mergedAt")})
+    required = tuple(expected)
+    if any(key not in existing_receipt or existing_receipt.get(key) != value
+           for key, value in expected.items() if key in required):
         return False
-    if record.get("pr_number") or record.get("pr_url"):
-        return all(
-            key in existing_receipt
-            and str(existing_receipt.get(key) or "") == str(record.get(key) or "")
-            for key in PR_HEAD_REQUIRED_FIELDS
-        ) and all(
-            key not in record or str(existing_receipt.get(key) or "") == str(record.get(key) or "")
-            for key in PR_HEAD_OPTIONAL_FIELDS
-        )
+    # The terminal mapping may retain a durable reason/evidence snapshot or
+    # intent from the older writer.  If present, it is immutable authority;
+    # a missing field is legacy-compatible, but a disagreement is not.
+    for key, value in {
+        "closed_without_merge_reason": reason,
+        "closed_without_merge_evidence_sha256": evidence_digest,
+    }.items():
+        if key in record and record.get(key) != value:
+            return False
+    intent = record.get(NON_MERGE_INTENT_FIELD)
+    if intent is not None:
+        if not isinstance(intent, dict):
+            return False
+        for key, value in expected.items():
+            if key in intent and intent.get(key) != value:
+                return False
+        if pr_head:
+            for key, value in pr_head.items():
+                if key in intent and intent.get(key) != value:
+                    return False
+    embedded = record.get("closed_without_merge_receipt")
+    if embedded is not None:
+        if not isinstance(embedded, dict):
+            return False
+        for key, value in existing_receipt.items():
+            if key in embedded and embedded.get(key) != value:
+                return False
+    if evidence_data is not None and "evidence" in existing_receipt:
+        if not _evidence_payload_matches(existing_receipt.get("evidence"), evidence_data):
+            return False
+    if project_identity is not None and "project_identity" in existing_receipt:
+        if existing_receipt.get("project_identity") != project_identity:
+            return False
+    if pr_head:
+        for key, value in pr_head.items():
+            if key in existing_receipt and existing_receipt.get(key) != value:
+                return False
     return True
+
+
+def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
+                               evidence_data: dict,
+                               project_identity: dict[str, str],
+                               pr_head: dict[str, str],
+                               *, require_modern_authority: bool = False) -> None:
+    expected = {
+        "receipt_type": receipt["receipt_type"],
+        "schema_version": receipt["schema_version"],
+        "issuer": receipt["issuer"],
+        "task_uid": receipt["task_uid"],
+        "repository": receipt["repository"],
+        "issue_number": receipt["issue_number"],
+        "project_item_id": receipt["project_item_id"],
+        "reason": receipt["reason"],
+        "evidence_sha256": receipt["evidence_sha256"],
+        "pr_number": receipt.get("pr_number"),
+        "pr_url": receipt.get("pr_url"),
+        "pr_state": receipt.get("pr_state"),
+        "mergedAt": receipt.get("mergedAt"),
+    }
+    expected.update({key: receipt[key] for key in pr_head if key in existing_receipt})
+    if require_modern_authority:
+        required_modern = {"evidence", "project_identity"}
+        if pr_head:
+            required_modern.update(PR_HEAD_REQUIRED_FIELDS)
+        if any(key not in existing_receipt for key in required_modern):
+            fail("migrated non-merge receipt is missing modern authority")
+        # Repository identity is optional in the PR head authority.  The
+        # required ref OID/name are enforced above only for PR-bound tasks.
+        legacy_optional = set(PR_HEAD_OPTIONAL_FIELDS)
+    else:
+        # A canonical receipt may be a pre-migration legacy record.  Keep its
+        # historical omissions compatible while validating every value that
+        # is present; migration writes a new immutable sidecar.
+        legacy_optional = {"evidence", "project_identity", *PR_HEAD_FIELDS}
+    for key, value in expected.items():
+        if key not in existing_receipt:
+            if key not in legacy_optional:
+                fail("existing non-merge receipt is missing immutable identity authority")
+            continue
+        if existing_receipt.get(key) != value:
+            fail("existing non-merge receipt disagrees with current task/reason/evidence authority")
+    if "evidence" in existing_receipt and not _evidence_payload_matches(
+            existing_receipt.get("evidence"), evidence_data):
+        fail("existing non-merge receipt disagrees with current embedded evidence")
+    if ("project_identity" in existing_receipt
+            and existing_receipt.get("project_identity") != project_identity):
+        fail("existing non-merge receipt disagrees with current Project identity authority")
+    for key, value in pr_head.items():
+        if key in existing_receipt and existing_receipt.get(key) != value:
+            fail(f"existing non-merge receipt {key} drifted from live PR head authority")
+
+
+def _receipt_needs_migration(existing_receipt: dict, pr_head: dict[str, str]) -> bool:
+    required = {"evidence", "project_identity", *PR_HEAD_REQUIRED_FIELDS}
+    if not pr_head:
+        required.difference_update(PR_HEAD_REQUIRED_FIELDS)
+    return any(key not in existing_receipt for key in required)
 
 
 def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
@@ -315,18 +493,7 @@ def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
 def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str,
                        state: str, result: object = None,
                        pr_head: dict[str, str] | None = None) -> None:
-    bound_head = {
-        key: pr_head[key] for key in PR_HEAD_FIELDS
-        if pr_head is not None and key in pr_head
-    }
-    operation_id = hashlib.sha256(
-        json.dumps({
-            "task_uid": task_uid,
-            "phase": "closed_without_merge",
-            "effect": effect,
-            "pr_head": bound_head,
-        }, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    operation_id = _operation_id(task_uid, effect, pr_head)
 
     def update(ledger: dict) -> None:
         if ledger and ledger.get("task_uid") not in (None, task_uid):
@@ -350,8 +517,121 @@ def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str,
     durable_store.transact_json(path, update, {})
 
 
+def _operation_id(task_uid: str, effect: str,
+                  pr_head: dict[str, str] | None = None) -> str:
+    bound_head = {
+        key: pr_head[key] for key in PR_HEAD_FIELDS
+        if pr_head is not None and key in pr_head
+    }
+    return hashlib.sha256(
+        json.dumps({
+            "task_uid": task_uid,
+            "phase": "closed_without_merge",
+            "effect": effect,
+            "pr_head": bound_head,
+        }, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
 def _ledger_entry(path: pathlib.Path, effect: str) -> dict:
     return ((durable_store.recover_atomic_journal(path).get("operations") or {}).get(effect) or {})
+
+
+def _validate_migrated_ledger(source: pathlib.Path, destination: pathlib.Path,
+                              task_uid: str, pr_head: dict[str, str],
+                              required_committed_effects: tuple[str, ...] = ()) -> None:
+    source_bytes = source.read_bytes() if source.exists() else b""
+    source_digest = hashlib.sha256(source_bytes).hexdigest()
+    migrated = _read_json_object(destination, "migrated non-merge ledger")
+    if migrated.get("schema") != "oasis7_non_merge_finalizer_ledger_v1":
+        fail("migrated non-merge ledger schema is invalid")
+    if migrated.get("task_uid") != task_uid:
+        fail("migrated non-merge ledger task identity conflict")
+    if migrated.get("migrated_from") != source.name:
+        fail("migrated non-merge ledger source identity is invalid")
+    if migrated.get("migrated_from_sha256") != source_digest:
+        fail("migrated non-merge ledger source drifted")
+    operations = migrated.get("operations")
+    if not isinstance(operations, dict):
+        fail("migrated non-merge ledger operations are missing or malformed")
+
+    legacy_operations: dict = {}
+    if source.exists():
+        legacy = _read_json_object(source, "legacy non-merge ledger")
+        if legacy and legacy.get("task_uid") not in (None, task_uid):
+            fail("legacy non-merge ledger task identity conflict")
+        legacy_operations = legacy.get("operations")
+        if not isinstance(legacy_operations, dict):
+            fail("legacy non-merge ledger operations are missing or malformed")
+        if not set(legacy_operations).issubset(operations):
+            fail("migrated non-merge ledger dropped legacy operations")
+
+    for effect, entry in operations.items():
+        if not isinstance(entry, dict):
+            fail("migrated non-merge ledger operation is malformed")
+        if entry.get("effect") not in (None, effect):
+            fail("migrated non-merge ledger operation effect is invalid")
+        if entry.get("operation_id") != _operation_id(task_uid, effect, pr_head):
+            fail("migrated non-merge ledger operation identity conflict")
+        for state in ("intent", "action", "committed"):
+            if state in entry and entry[state] is not True:
+                fail("migrated non-merge ledger state bit is invalid")
+        aliases = entry.get("operation_id_aliases")
+        if aliases is not None and (
+                not isinstance(aliases, list)
+                or any(not isinstance(alias, str) or not alias for alias in aliases)):
+            fail("migrated non-merge ledger operation aliases are malformed")
+        legacy_entry = legacy_operations.get(effect)
+        old_operation_id = (legacy_entry.get("operation_id")
+                             if isinstance(legacy_entry, dict) else None)
+        migrated_alias = entry.get("migrated_from_operation_id")
+        if isinstance(legacy_entry, dict):
+            for state in ("intent", "action", "readback", "committed"):
+                if state in legacy_entry and (
+                        state not in entry or entry[state] != legacy_entry[state]):
+                    fail("migrated non-merge ledger state drifted from source")
+        if legacy_entry is not None and (
+                not isinstance(legacy_entry, dict) or not isinstance(old_operation_id, str)
+                or migrated_alias != old_operation_id):
+            fail("migrated non-merge ledger operation alias is not source-bound")
+        if legacy_entry is None and migrated_alias is not None:
+            fail("migrated non-merge ledger operation alias has no source")
+        if effect in required_committed_effects and entry.get("committed") is not True:
+            fail("migrated non-merge ledger committed state is incomplete")
+
+
+def _migrate_legacy_ledger(source: pathlib.Path, destination: pathlib.Path,
+                            task_uid: str, pr_head: dict[str, str],
+                            required_committed_effects: tuple[str, ...] = ()) -> None:
+    source_bytes = source.read_bytes() if source.exists() else b""
+    source_digest = hashlib.sha256(source_bytes).hexdigest()
+    if destination.exists():
+        _validate_migrated_ledger(
+            source, destination, task_uid, pr_head, required_committed_effects,
+        )
+        return
+    legacy = _read_json_object(source, "legacy non-merge ledger") if source.exists() else {}
+    if legacy and legacy.get("task_uid") not in (None, task_uid):
+        fail("legacy non-merge ledger task identity conflict")
+    migrated = json.loads(json.dumps(legacy))
+    operations = migrated.get("operations") or {}
+    if not isinstance(operations, dict):
+        fail("legacy non-merge ledger operations are malformed")
+    for effect, entry in operations.items():
+        if not isinstance(entry, dict):
+            fail("legacy non-merge ledger operation is malformed")
+        old_operation_id = entry.get("operation_id")
+        if old_operation_id:
+            entry["migrated_from_operation_id"] = old_operation_id
+        entry["operation_id"] = _operation_id(task_uid, effect, pr_head)
+    migrated.update({
+        "schema": "oasis7_non_merge_finalizer_ledger_v1",
+        "task_uid": task_uid,
+        "operations": operations,
+        "migrated_from": source.name,
+        "migrated_from_sha256": source_digest,
+    })
+    _write_immutable_json(destination, migrated, "migrated non-merge ledger")
+    _validate_migrated_ledger(source, destination, task_uid, pr_head)
 
 
 def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
@@ -378,8 +658,17 @@ def _reserve_closeout(path: pathlib.Path, task_uid: str, record: dict,
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted before terminal effects: {key}")
         existing = current.get(NON_MERGE_INTENT_FIELD)
-        if existing not in (None, intent):
-            fail("non-merge closeout intent authority drifted")
+        if existing is not None and existing != intent:
+            if not isinstance(existing, dict):
+                fail("non-merge closeout intent authority drifted")
+            # A pre-head writer may have persisted a strict subset of the
+            # current intent.  Validate every legacy field before upgrading;
+            # unknown or disagreeing fields remain fail-closed.
+            for key, value in existing.items():
+                if key == "schema":
+                    continue
+                if key not in intent or intent[key] != value:
+                    fail("non-merge closeout intent authority drifted")
         for key in PR_HEAD_FIELDS:
             if key in record:
                 current[key] = record[key]
@@ -403,6 +692,13 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
         if not current:
             fail(f"unknown task UID: {task_uid}")
         if str(current.get("workflow_phase") or "") == "closed_without_merge":
+            for key in TERMINAL_CAS_FIELDS:
+                if (key in current, current.get(key)) != (key in record, record.get(key)):
+                    fail(f"task authority drifted before terminal effects: {key}")
+            if current.get("closed_without_merge_reason") != reason:
+                fail("task terminal reason authority drifted")
+            if current.get("closed_without_merge_evidence_sha256") != evidence_digest:
+                fail("task terminal evidence authority drifted")
             return
         for key in TERMINAL_CAS_FIELDS:
             if (key in current, current.get(key)) != (key in record, record.get(key)):
@@ -411,6 +707,41 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
             fail("non-merge closeout intent authority drifted")
 
     durable_store.transact_json(path, check)
+
+
+def _bind_terminal_pr_head(path: pathlib.Path, task_uid: str,
+                           project_identity: dict[str, str],
+                           pr_head: dict[str, str], reason: str,
+                           evidence_digest: str) -> None:
+    """Bind a live PR head into an already-terminal legacy mapping.
+
+    Legacy terminal mappings predate head authority.  This is the only
+    additive mutation permitted for a migrated receipt; an existing value
+    must match the live snapshot exactly.
+    """
+    if not pr_head:
+        return
+
+    def update(mapping: dict) -> None:
+        if _project_identity(mapping.get("project") or {}) != project_identity:
+            fail("Project identity drifted before terminal effects")
+        current = (mapping.get("tasks") or {}).get(task_uid) or {}
+        if not current:
+            fail(f"unknown task UID: {task_uid}")
+        if str(current.get("workflow_phase") or "") != "closed_without_merge":
+            fail("legacy terminal mapping is no longer closed_without_merge")
+        bindings = {
+            "closed_without_merge_reason": reason,
+            "closed_without_merge_evidence_sha256": evidence_digest,
+            **pr_head,
+        }
+        for key, value in bindings.items():
+            if key in current and str(current.get(key) or "") != value:
+                fail(f"task PR {key} drifted from live head authority")
+            current[key] = value
+        mapping.setdefault("tasks", {})[task_uid] = current
+
+    durable_store.transact_json(path, update)
 
 
 def _verify_project_identity(path: pathlib.Path,
@@ -441,13 +772,15 @@ def _evidence_comment_body(record: dict, task_uid: str, operation_id: str,
 
 
 def _comment_identity_body(body: str) -> str:
-    """Ignore only the source filename; digest and payload remain identity."""
-    return re.sub(r"(?m)^Evidence File:[^\n]*(?:\n)(?=Action:)", "", body, count=1)
+    """Ignore only filename and operation-id spelling; payload remains identity."""
+    normalized = re.sub(r"(?m)^Evidence File:[^\n]*(?:\n)(?=Action:)", "", body, count=1)
+    return re.sub(r"(?m)^Operation-ID:[^\n]*$", "Operation-ID: <bound>", normalized, count=1)
 
 
 def _reconcile_comment(record: dict, operation_id: str, reason: str,
                        evidence_digest: str, evidence_file: str,
-                       public_evidence: str) -> str:
+                       public_evidence: str,
+                       operation_id_aliases: tuple[str, ...] = ()) -> str:
     raw = subprocess.check_output(
         ["gh", "api", f"repos/{record['repository']}/issues/{record['issue_number']}/comments",
          "--paginate", "--slurp"], text=True,
@@ -456,11 +789,12 @@ def _reconcile_comment(record: dict, operation_id: str, reason: str,
     comments = []
     for page in payload if isinstance(payload, list) else [payload]:
         comments.extend(page if isinstance(page, list) else [page])
-    marker = f"Operation-ID: {operation_id}"
+    operation_ids = (operation_id, *operation_id_aliases)
     issue_marker = f"https://github.com/{record['repository']}/issues/{record['issue_number']}#issuecomment-"
     identity_matches = [
         comment for comment in comments
-        if marker in str(comment.get("body") or "")
+        if any(f"Operation-ID: {candidate}" in str(comment.get("body") or "")
+               for candidate in operation_ids)
         and f"Task UID: {record['task_uid']}" in str(comment.get("body") or "")
     ]
     if not identity_matches:
@@ -625,6 +959,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     # persisted task record while making it available to the bound readback.
     record = dict(record)
     record["_project"] = mapping.get("project") or {}
+    was_terminal = str(record.get("workflow_phase") or "") == "closed_without_merge"
     project_identity = _project_identity(record["_project"])
     if str(record.get("task_uid") or task_uid) != task_uid:
         fail("task UID mapping identity mismatch")
@@ -635,21 +970,24 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     if reason == "non_pr_completed" and _has_authority(record, NON_PR_FORBIDDEN_AUTHORITY):
         fail("non_pr_completed cannot carry PR or merge receipt authority")
     evidence_digest, evidence_data, public_evidence = _read_evidence(evidence_path)
-    receipt_path = _receipt_path(root, task_uid)
-    ledger_path = receipt_path.with_name(LEDGER_NAME)
+    try:
+        (canonical_receipt_path, receipt_path, existing_receipt,
+         canonical_receipt_bytes) = resolve_non_merge_receipt(root, task_uid)
+    except ValueError as exc:
+        fail(str(exc))
+    canonical_ledger_path = canonical_receipt_path.with_name(LEDGER_NAME)
+    ledger_path = canonical_ledger_path
     receipt_needs_write = False
-    existing_receipt = None
-    if receipt_path.exists():
-        try:
-            existing_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            fail(f"existing non-merge receipt is unreadable: {exc}")
-        if not isinstance(existing_receipt, dict):
-            fail("existing non-merge receipt is not an object")
+    migrated_receipt_path = _migrated_receipt_path(canonical_receipt_path)
+    if receipt_path == migrated_receipt_path:
+        ledger_path = _migrated_ledger_path(canonical_ledger_path)
+    migrated_ledger_preexisting = receipt_path != canonical_receipt_path and ledger_path.exists()
     pr = _identity_pr(record)
     pr_head = _bind_pr_head(record, pr, existing_receipt)
     recovery_candidate = _receipt_recovery_candidate(
         record, task_uid, reason, evidence_digest, existing_receipt,
+        evidence_data=evidence_data, pr=pr, project_identity=project_identity,
+        pr_head=pr_head,
     )
     if (str(record.get("workflow_phase") or "") == "closed_without_merge"
             and not recovery_candidate):
@@ -663,6 +1001,18 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         fail("non_pr_completed requires task_done, verified task_complete closeout evidence, and non_pr_task classification/evidence")
     if reason in {"superseded", "duplicate"} and pr is None:
         fail(f"{reason} requires an exact bound CLOSED unmerged PR")
+    # Any legacy receipt missing a modern authority field is upgraded into an
+    # immutable sidecar, regardless of whether the mapping has reached its
+    # terminal phase yet.  The validator below still checks every immutable
+    # identity field before this path is allowed to proceed.
+    legacy_receipt_migration = (
+        existing_receipt is not None
+        and receipt_path == canonical_receipt_path
+        and _receipt_needs_migration(existing_receipt, pr_head)
+    )
+    if legacy_receipt_migration:
+        receipt_path = migrated_receipt_path
+        ledger_path = _migrated_ledger_path(canonical_ledger_path)
     issue = _identity_issue(record, task_uid, allow_closed=existing_receipt is not None)
     receipt = {
         "receipt_type": "oasis7_closed_without_merge",
@@ -686,57 +1036,65 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     }
     receipt.update(pr_head)
     if existing_receipt is not None:
-        expected_existing = {
-            "receipt_type": receipt["receipt_type"], "schema_version": receipt["schema_version"],
-            "issuer": receipt["issuer"], "task_uid": task_uid,
-            "repository": record.get("repository"), "issue_number": record.get("issue_number"),
-            "project_item_id": record.get("project_item_id"), "reason": reason,
-            "evidence_sha256": evidence_digest,
-            "pr_number": receipt.get("pr_number"), "pr_url": receipt.get("pr_url"),
-            "pr_state": receipt.get("pr_state"), "mergedAt": receipt.get("mergedAt"),
-        }
-        expected_existing.update({
-            key: receipt[key] for key in pr_head if key in existing_receipt
+        _validate_existing_receipt(
+            existing_receipt, receipt, evidence_data, project_identity, pr_head,
+            require_modern_authority=(
+                not legacy_receipt_migration and receipt_path == migrated_receipt_path
+            ),
+        )
+        if not legacy_receipt_migration:
+            receipt = existing_receipt
+    if legacy_receipt_migration:
+        # Preserve every legacy lifecycle/history field and only fill fields
+        # absent from the legacy payload with current authority.  In
+        # particular, retain the original text evidence representation.
+        migrated_receipt = dict(receipt)
+        migrated_receipt.update(existing_receipt)
+        receipt = migrated_receipt
+        receipt.update({
+            "migrated_from": RECEIPT_NAME,
+            "migrated_from_sha256": hashlib.sha256(canonical_receipt_bytes).hexdigest(),
         })
-        if any(existing_receipt.get(key) != value for key, value in expected_existing.items()):
-            fail("existing non-merge receipt disagrees with current task/reason/evidence authority")
-        stored_evidence = existing_receipt.get("evidence")
-        if stored_evidence is not None and stored_evidence != evidence_data:
-            fail("existing non-merge receipt disagrees with current embedded evidence")
-        stored_project_identity = existing_receipt.get("project_identity")
-        if stored_project_identity is not None and stored_project_identity != project_identity:
-            fail("existing non-merge receipt disagrees with current Project identity authority")
-        receipt = existing_receipt
-        if stored_evidence is None:
-            # Receipts written before embedded evidence was persisted remain
-            # retryable, but are upgraded before their digest is used as
-            # terminal authority.
-            receipt["evidence"] = evidence_data
-            receipt_needs_write = True
-        if stored_project_identity is None:
-            # Receipts written before Project identity was bound remain
-            # retryable, but are upgraded before their digest is used as
-            # terminal authority.
-            receipt["project_identity"] = project_identity
-            receipt_needs_write = True
-        for key in pr_head:
-            if key not in receipt:
-                # A pre-head receipt can only be upgraded from a live PR read;
-                # the resulting receipt carries the new required authority.
-                receipt[key] = pr_head[key]
-                receipt_needs_write = True
     # Complete the live Project binding readback before persisting either
     # terminal intent or receipt authority.  This keeps a missing item or
     # malformed binding from leaving a resumable-looking local closeout.
     _project_readback(record, task_uid)
     if recovery_candidate:
+        _bind_terminal_pr_head(
+            mapping_path, task_uid, project_identity, pr_head, reason, evidence_digest,
+        )
+        record.update({
+            "closed_without_merge_reason": reason,
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
         _verify_project_identity(mapping_path, project_identity)
     else:
         _reserve_closeout(mapping_path, task_uid, record, reason,
                           evidence_digest, project_identity)
-    if existing_receipt is None or receipt_needs_write:
+    if legacy_receipt_migration:
+        _write_immutable_json(receipt_path, receipt, "migrated non-merge receipt")
+    if receipt_path == migrated_receipt_path:
+        required = (
+            ("issue_body_update", "project_update", "evidence_comment")
+            if migrated_ledger_preexisting
+            and str(record.get("workflow_phase") or "") == "closed_without_merge"
+            else ()
+        )
+        _migrate_legacy_ledger(
+            canonical_ledger_path, ledger_path, task_uid, pr_head,
+            required_committed_effects=required,
+        )
+    elif existing_receipt is None or receipt_needs_write:
         durable_store.replace_json(receipt_path, receipt)
     receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    # Read the bound comment stream while the task is still pre-terminal.  A
+    # deterministic mapping drift exposed by this readback is rejected before
+    # publishing Issue, Project, or comment terminal effects.
+    comment_operation_id = _operation_id(task_uid, "evidence_comment", pr_head)
+    _reconcile_comment(
+        record, comment_operation_id, reason, evidence_digest,
+        evidence_path.name, public_evidence,
+    )
     # The reservation (or already-terminal receipt) is checked again before
     # the first remote terminal mutation.
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
@@ -748,27 +1106,27 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                     reason, evidence_digest, project_identity, pr_head)
     _verify_closeout_authority(mapping_path, task_uid, record, reason,
                                evidence_digest, project_identity)
-    comment_operation_id = hashlib.sha256(
-        json.dumps({
-            "task_uid": task_uid,
-            "phase": "closed_without_merge",
-            "effect": "evidence_comment",
-            "pr_head": pr_head,
-        }, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
     comment_entry = _ledger_entry(ledger_path, "evidence_comment")
+    comment_operation_aliases = tuple(
+        alias for alias in (
+            comment_entry.get("migrated_from_operation_id"),
+            *(comment_entry.get("operation_id_aliases") or []
+              if isinstance(comment_entry.get("operation_id_aliases"), list) else ()),
+        )
+        if isinstance(alias, str) and alias and alias != comment_operation_id
+    )
     comment = ""
     if comment_entry.get("committed"):
         comment = _reconcile_comment(
             record, comment_operation_id, reason, evidence_digest,
-            evidence_path.name, public_evidence,
+            evidence_path.name, public_evidence, comment_operation_aliases,
         )
         if not comment:
             fail("committed evidence comment live readback disagrees with current reason/evidence")
     elif comment_entry.get("action"):
         comment = _reconcile_comment(
             record, comment_operation_id, reason, evidence_digest,
-            evidence_path.name, public_evidence,
+            evidence_path.name, public_evidence, comment_operation_aliases,
         )
     if not comment:
         _ledger_transition(ledger_path, task_uid, "evidence_comment", "intent", pr_head=pr_head)
@@ -791,7 +1149,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             body_path.unlink(missing_ok=True)
         comment = _reconcile_comment(
             record, comment_operation_id, reason, evidence_digest,
-            evidence_path.name, public_evidence,
+            evidence_path.name, public_evidence, comment_operation_aliases,
         )
         if not comment:
             fail("evidence comment live readback has no unique matching operation")
@@ -799,6 +1157,14 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     _ledger_transition(ledger_path, task_uid, "evidence_comment", "committed", pr_head=pr_head)
     _commit_mapping(mapping_path, task_uid, record, receipt, receipt_digest, comment,
                     reason, evidence_digest, project_identity)
+    # The mapping CAS has now published the terminal record; subsequent
+    # pre-close checks must compare against that committed snapshot.
+    record.update({
+        "status": "done",
+        "workflow_phase": "closed_without_merge",
+        "closed_without_merge_reason": reason,
+        "closed_without_merge_evidence_sha256": evidence_digest,
+    })
     _ledger_transition(ledger_path, task_uid, "issue_close", "intent", pr_head=pr_head)
     issue = run_json(["gh", "issue", "view", str(record["issue_number"]), "-R",
                       str(record["repository"]), "--json", "state,body,number,url"])
@@ -818,7 +1184,7 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         fail("Issue close live readback mismatch")
     _ledger_transition(ledger_path, task_uid, "issue_close", "committed", pr_head=pr_head)
     _write_tombstone(receipt_path, record, receipt_digest)
-    return {"status": "already_finalized" if str(record.get("workflow_phase") or "") == "closed_without_merge" else "finalized",
+    return {"status": "already_finalized" if was_terminal else "finalized",
             "task_uid": task_uid, "reason": reason, "receipt": str(receipt_path),
             "ledger": str(ledger_path)}
 

@@ -59,6 +59,19 @@ issue_url = f"https://github.com/{repo}/issues/{issue}"
 if args[:2] == ["issue", "view"]:
     state = read("GH_ISSUE_STATE", {"state": "OPEN"})["state"]
     body = path("GH_ISSUE_BODY").read_text()
+    if (os.environ.get("GH_MUTATE_MAPPING_ON_ISSUE_VIEW") == "1"
+            and os.environ.get("GH_MUTATION_MARKER")
+            and not path("GH_MUTATION_MARKER").exists()):
+        mapping_path = path("GH_MAPPING")
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][uid].update({
+            "pr_number": 23,
+            "pr_url": f"https://github.com/{repo}/pulls/23",
+            "closed_without_merge_reason": "not_planned",
+            "closed_without_merge_evidence_sha256": "0" * 64,
+        })
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+        path("GH_MUTATION_MARKER").write_text("mutated")
     if (os.environ.get("GH_FAIL_AFTER_MAPPING_COMMIT_ON_ISSUE_VIEW") == "1"
             and os.environ.get("GH_FAILURE_MARKER")
             and not path("GH_FAILURE_MARKER").exists()):
@@ -292,6 +305,24 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "--evidence-file", str(evidence), "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
 
+    def legacy_receipt(self, evidence_digest: str, *, reason: str = "duplicate",
+                       **extra: object) -> Path:
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        payload = {
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": UID, "repository": REPO,
+            "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": reason,
+            "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
+            "pr_state": "CLOSED", "mergedAt": None,
+        }
+        payload.update(extra)
+        path = receipt_root / "closed-without-merge-receipt.json"
+        path.write_text(json.dumps(payload, sort_keys=True) + "\n")
+        return path
+
     def read_json(self, path: Path) -> object:
         return json.loads(path.read_text())
 
@@ -410,6 +441,320 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(receipt_path.read_bytes(), baseline_receipt)
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_legacy_prehead_terminal_receipt_migrates_without_mutating_history(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        legacy_path = receipt_root / "closed-without-merge-receipt.json"
+        legacy = {
+            "receipt_type": "oasis7_closed_without_merge",
+            "schema_version": 1,
+            "issuer": "non-merge-finalize",
+            "task_uid": UID,
+            "repository": REPO,
+            "issue_number": ISSUE,
+            "project_item_id": "ITEM1",
+            "reason": "duplicate",
+            "evidence_sha256": evidence_digest,
+            "pr_number": 22,
+            "pr_url": PR_URL,
+            "pr_state": "CLOSED",
+            "mergedAt": None,
+        }
+        legacy_path.write_text(json.dumps(legacy, sort_keys=True) + "\n")
+        legacy_bytes = legacy_path.read_bytes()
+
+        result = self.invoke("duplicate", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout[result.stdout.find("{"):])
+        migrated_path = Path(payload["receipt"])
+        self.assertNotEqual(migrated_path, legacy_path)
+        self.assertTrue(migrated_path.name.startswith("closed-without-merge-receipt-migrated"))
+        self.assertEqual(legacy_path.read_bytes(), legacy_bytes)
+        migrated = self.read_json(migrated_path)
+        self.assertEqual(migrated["headRefOid"], "head-oid")
+        self.assertEqual(migrated["headRefName"], "task/fixture")
+        self.assertEqual(migrated["evidence"], {"text": "owner decision: terminal non-merge closure"})
+        self.assertEqual(self.read_json(self.closes), ["not planned"])
+
+    def test_legacy_committed_comment_alias_reconciles_without_duplicate(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        (receipt_root / "closed-without-merge-receipt.json").write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": UID, "repository": REPO,
+            "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": "duplicate",
+            "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
+            "pr_state": "CLOSED", "mergedAt": None,
+        }) + "\n")
+        legacy_operation_id = hashlib.sha256(
+            f"{UID}:closed_without_merge:evidence_comment".encode()
+        ).hexdigest()
+        legacy_body = (
+            "<!-- oasis7-pm-evidence -->\n"
+            f"Operation-ID: {legacy_operation_id}\nTask UID: {UID}\n"
+            "Evidence Phase: closed_without_merge\nRole: tpm\n"
+            "Reason: duplicate\n"
+            f"Evidence SHA256: {evidence_digest}\nEvidence File: legacy.md\n"
+            f"Action: non-merge-finalize --task-uid {UID} --reason duplicate\n"
+            f"Validation Command: gh issue view {ISSUE} -R {REPO} --json state,body,number,url\n"
+            "Expected Result: receipt, Project terminal fields, Issue body, evidence comment, and Issue close read back.\n"
+            "Actual Result: bound identity, evidence digest, and terminal Project fields read back before Issue close.\n"
+            "Evidence Payload:\n```text\n"
+            "owner decision: terminal non-merge closure\n```\n"
+        )
+        self.write_state(self.comments, [{
+            "id": 1, "html_url": f"{ISSUE_URL}#issuecomment-1", "body": legacy_body,
+        }])
+        (receipt_root / "non-merge-finalizer-ledger.json").write_text(json.dumps({
+            "schema": "oasis7_non_merge_finalizer_ledger_v1", "task_uid": UID,
+            "operations": {"evidence_comment": {
+                "operation_id": legacy_operation_id, "effect": "evidence_comment",
+                "committed": True,
+            }},
+        }) + "\n")
+
+        result = self.invoke("duplicate", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+        record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        self.assertEqual(record["evidence_comments"], [f"{ISSUE_URL}#issuecomment-1"])
+
+    def test_preterminal_legacy_receipt_migrates_without_rewriting_canonical(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, phase="execution")
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        legacy_path = receipt_root / "closed-without-merge-receipt.json"
+        legacy_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": UID, "repository": REPO,
+            "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": "superseded",
+            "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
+            "pr_state": "CLOSED", "mergedAt": None,
+        }) + "\n")
+        baseline = legacy_path.read_bytes()
+
+        result = self.invoke("superseded", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout[result.stdout.find("{"):])
+        self.assertNotEqual(Path(payload["receipt"]), legacy_path)
+        self.assertEqual(legacy_path.read_bytes(), baseline)
+
+    def test_terminal_mapping_repairs_missing_pr_head_before_retry_effects(self) -> None:
+        self.mapping(pr=True)
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        mapping_path = self.root / ".pm/github-project-sync/tasks.json"
+        mapping = self.read_json(mapping_path)
+        mapping["tasks"][UID].pop("headRefOid", None)
+        mapping["tasks"][UID].pop("headRefName", None)
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+
+        retry = self.invoke("duplicate")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["headRefOid"], "head-oid")
+        self.assertEqual(record["headRefName"], "task/fixture")
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+
+    def test_legacy_text_evidence_keeps_trailing_newline_representation(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        receipt_root = Path(subprocess.check_output([
+            sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+            "--default-worktree", str(self.root), "--task-uid", UID, "--create",
+        ], cwd=ROOT, env=self.env, text=True).strip())
+        legacy_path = receipt_root / "closed-without-merge-receipt.json"
+        legacy_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": UID, "repository": REPO,
+            "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": "duplicate",
+            "evidence_sha256": evidence_digest,
+            "evidence": {"text": "owner decision: terminal non-merge closure\n"},
+            "pr_number": 22, "pr_url": PR_URL, "pr_state": "CLOSED", "mergedAt": None,
+        }) + "\n")
+
+        result = self.invoke("duplicate", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout[result.stdout.find("{"):])
+        migrated = self.read_json(Path(payload["receipt"]))
+        self.assertEqual(migrated["evidence"]["text"], "owner decision: terminal non-merge closure\n")
+
+    def test_prehead_legacy_intent_is_validated_as_subset_before_upgrade(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        legacy_intent = {
+            "schema": "oasis7_non_merge_closeout_intent_legacy_v1",
+            "task_uid": UID, "repository": REPO, "issue_number": ISSUE,
+            "project_item_id": "ITEM1", "reason": "superseded",
+            "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
+        }
+        mapping_path = self.mapping(pr=True, phase="execution", extra={
+            "closed_without_merge_intent": legacy_intent,
+        })
+        legacy_path = self.legacy_receipt(evidence_digest, reason="superseded")
+        baseline = legacy_path.read_bytes()
+
+        result = self.invoke("superseded", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(legacy_path.read_bytes(), baseline)
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["workflow_phase"], "closed_without_merge")
+        self.assertEqual(record["headRefOid"], "head-oid")
+        self.assertNotIn("closed_without_merge_intent", record)
+
+    def test_terminal_recovery_cas_covers_identity_reason_and_evidence(self) -> None:
+        self.mapping(pr=True)
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.write_state(self.project_fields, {
+            "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution",
+        })
+        marker = Path(self.tmp.name) / "terminal-authority-drift"
+        self.env.update({
+            "GH_MUTATE_MAPPING_ON_ISSUE_VIEW": "1",
+            "GH_MUTATION_MARKER": str(marker),
+        })
+        before_comments = self.read_json(self.comments)
+        before_calls = len(self.calls())
+        retry = self.invoke("duplicate")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual(self.read_json(self.comments), before_comments)
+        self.assertEqual(self.read_json(self.project_fields)["Workflow Phase"], "execution")
+        retry_calls = [call[:2] for call in self.calls()[before_calls:]]
+        self.assertNotIn(["issue", "comment"], retry_calls)
+        self.assertNotIn(["project", "item-edit"], retry_calls)
+
+    def test_migrated_receipt_preserves_legacy_lifecycle_metadata(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        legacy_path = self.legacy_receipt(
+            evidence_digest, legacy_lifecycle={"attempt": 3, "phase": "review"},
+            previous_status="committed", previous_workflow_phase="verification",
+        )
+
+        result = self.invoke("duplicate", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout[result.stdout.find("{"):])
+        migrated = self.read_json(Path(payload["receipt"]))
+        self.assertEqual(migrated["legacy_lifecycle"], {"attempt": 3, "phase": "review"})
+        self.assertEqual(migrated["previous_status"], "committed")
+        self.assertEqual(migrated["previous_workflow_phase"], "verification")
+
+    def test_legacy_text_evidence_whitespace_compatibility_remains_digest_bound(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        legacy_path = self.legacy_receipt(
+            evidence_digest, evidence={"text": "\t owner decision: terminal non-merge closure  \n\n"},
+        )
+        result = self.invoke("duplicate", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout[result.stdout.find("{"):])
+        migrated = self.read_json(Path(payload["receipt"]))
+        self.assertEqual(
+            migrated["evidence"],
+            {"text": "\t owner decision: terminal non-merge closure  \n\n"},
+        )
+
+    def test_corrupt_existing_migrated_ledger_fails_before_duplicate_comment(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        self.legacy_receipt(evidence_digest)
+        first = self.invoke("duplicate", evidence)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout[first.stdout.find("{"):])
+        ledger_path = Path(payload["ledger"])
+        ledger = self.read_json(ledger_path)
+        ledger.pop("operations", None)
+        ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+        retry = self.invoke("duplicate", evidence)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+
+    def test_migrated_ledger_state_bits_are_source_bound_before_retry(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+            "closed_without_merge_reason": "duplicate",
+            "closed_without_merge_evidence_sha256": evidence_digest,
+        })
+        self.legacy_receipt(evidence_digest)
+        first = self.invoke("duplicate", evidence)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout[first.stdout.find("{"):])
+        ledger_path = Path(payload["ledger"])
+        ledger = self.read_json(ledger_path)
+        comment_entry = ledger["operations"]["evidence_comment"]
+        comment_entry.pop("action", None)
+        comment_entry.pop("committed", None)
+        ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+        retry = self.invoke("duplicate", evidence)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+
+    def test_migrated_pr_receipt_requires_all_modern_authority_fields(self) -> None:
+        evidence = self.evidence()
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        for missing in ("evidence", "project_identity", "headRefOid"):
+            with self.subTest(missing=missing):
+                self.reset_runtime()
+                self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
+                    "closed_without_merge_reason": "duplicate",
+                    "closed_without_merge_evidence_sha256": evidence_digest,
+                })
+                self.legacy_receipt(evidence_digest)
+                first = self.invoke("duplicate", evidence)
+                self.assertEqual(first.returncode, 0, first.stderr)
+                payload = json.loads(first.stdout[first.stdout.find("{"):])
+                receipt_path = Path(payload["receipt"])
+                receipt = self.read_json(receipt_path)
+                receipt.pop(missing, None)
+                receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+                before_comments = self.read_json(self.comments)
+                before_closes = self.read_json(self.closes)
+
+                retry = self.invoke("duplicate", evidence)
+                self.assertNotEqual(retry.returncode, 0)
+                self.assertEqual(self.read_json(self.comments), before_comments)
+                self.assertEqual(self.read_json(self.closes), before_closes)
 
     def test_closed_draft_verification_phase_is_eligible(self) -> None:
         self.mapping(pr=True, phase="verification")
@@ -753,6 +1098,11 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(record["status"], "committed")
         self.assertNotIn("closed_without_merge_receipt", record)
         self.assertEqual(self.read_json(self.closes), [])
+        self.assertIn("- status: `committed`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution"
+        })
+        self.assertEqual(self.read_json(self.comments), [])
 
     def test_mapping_project_authority_drift_during_remote_readback_fails_closed(self) -> None:
         mapping_path = self.mapping(pr=True)
@@ -771,6 +1121,11 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(record["status"], "committed")
         self.assertNotIn("closed_without_merge_receipt", record)
         self.assertEqual(self.read_json(self.closes), [])
+        self.assertIn("- status: `committed`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution"
+        })
+        self.assertEqual(self.read_json(self.comments), [])
 
     def test_non_pr_completed_requires_done_task_complete_closeout(self) -> None:
         cases = (
