@@ -1688,6 +1688,45 @@ PY
 
 reset_smoke_branch_to_base
 write_changed_path_fixture "scripts/ci-compile-metrics.sh"
+source_planner_config="$SMOKE_WORKTREE/scripts/ci-required-scope.v2.json"
+caller_planner_config="$ROOT_DIR/scripts/ci-required-scope.v2.json"
+python3 - "$caller_planner_config" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+config = json.loads(path.read_text(encoding="utf-8"))
+config["rules"].append(
+    {
+        "match": ["scripts/ci-compile-metrics.sh"],
+        "capabilities": ["codex_agent_config_validation"],
+        "reason": "caller_only_override",
+    }
+)
+path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+python3 - "$source_planner_config" "$caller_planner_config" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+source_digest = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+caller_digest = hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest()
+if source_digest == caller_digest:
+    raise SystemExit("source and caller planner configs must differ for this regression")
+PY
+source_bound_json="$TMPDIR/source-bound-planner.json"
+run_prepare "$TMPDIR/gh-source-bound.log" "$TMPDIR/git-source-bound.log" --json >"$source_bound_json"
+assert_planner_selector_evidence "$source_bound_json" "compile_metrics" "$SMOKE_WORKTREE" "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS"
+cp "$source_planner_config" "$caller_planner_config"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/ci-compile-metrics.sh"
 compile_metrics_required_json="$TMPDIR/compile-metrics-required.json"
 run_prepare "$TMPDIR/gh-compile-metrics-required.log" "$TMPDIR/git-compile-metrics-required.log" --json >"$compile_metrics_required_json"
 python3 - "$compile_metrics_required_json" <<'PY'

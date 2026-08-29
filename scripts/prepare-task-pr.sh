@@ -1094,8 +1094,9 @@ LOCAL_REQUIRED_COMMAND=""
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
-if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
-  if RUST_SCOPE_OUTPUT="$(./scripts/plan-rust-required-scope.sh --event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_BRANCH" 2>/dev/null)"; then
+PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
+if [[ -x "$PLANNER_SCRIPT" ]]; then
+  if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" --event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_BRANCH" 2>/dev/null)"; then
     LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
     LOCAL_REQUIRED_SCOPE="${LOCAL_REQUIRED_SCOPE:-unavailable}"
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_path_count")"
