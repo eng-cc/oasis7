@@ -9847,12 +9847,32 @@ function installPixelWorldRenderDtoProbe(fixtureName, getRenderState, onCleanup2
     delete window.__OASIS7_PIXEL_WORLD_RENDER_DTO__;
   });
 }
-function pixelWorldReadableAgentLabel(agent, fallbackId = "") {
+function agentIdentityParts(agent, fallbackId = "") {
   const id = String(agent?.id || fallbackId || "").trim();
   const explicitLabel = String(agent?.name || agent?.label || "").trim();
-  if (explicitLabel && explicitLabel !== id) return explicitLabel;
+  return {
+    id,
+    explicitLabel,
+    hasExplicitLabel: Boolean(explicitLabel && explicitLabel !== id)
+  };
+}
+function humanizeAgentId(id) {
+  const slug = id.match(/^agent[-_](.+)$/i)?.[1] || "";
+  if (!slug) return "";
+  const words = slug.replace(/[-_]+/g, " ").trim().split(/\s+/).filter(Boolean).map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`);
+  return words.length > 0 ? `Agent ${words.join(" ")}` : "";
+}
+function pixelWorldReadableAgentLabel(agent, fallbackId = "", isLocaleZh2 = false) {
+  const { id, explicitLabel, hasExplicitLabel } = agentIdentityParts(agent, fallbackId);
   const numericAgentId = id.match(/^agent[-_](\d+)$/i);
-  return numericAgentId ? `Agent ${numericAgentId[1]}` : explicitLabel || id;
+  const label = hasExplicitLabel ? explicitLabel : numericAgentId ? `Agent ${numericAgentId[1]}` : humanizeAgentId(id) || explicitLabel || id;
+  if (!isLocaleZh2) return label;
+  if (hasExplicitLabel) {
+    const explicitNumericAgent = label.match(/^Agent (\d+)$/i);
+    return explicitNumericAgent ? `行动体 ${explicitNumericAgent[1]}` : label;
+  }
+  const generatedAgent = label.match(/^Agent (.+)$/i);
+  return generatedAgent ? `行动体 ${generatedAgent[1]}` : label;
 }
 function pixelWorldReadableLocationLabel(location, fallbackId = "", isLocaleZh2 = false) {
   const id = String(location?.id || fallbackId || "").trim();
@@ -9863,20 +9883,17 @@ function pixelWorldReadableLocationLabel(location, fallbackId = "", isLocaleZh2 
   return explicitLabel || id;
 }
 function pixelWorldReadableEntityText(text2, visualState, isLocaleZh2 = false) {
-  return String(text2 || "").replace(/\bagent[-_]\d+\b/gi, (id) => {
+  return String(text2 || "").replace(/\bagent[-_][a-z0-9]+(?:[-_][a-z0-9]+)*\b/gi, (id) => {
     const agent = visualState?.agents?.find((candidate) => candidate.id === id);
-    const label = pixelWorldReadableAgentLabel(agent, id);
-    const numericAgent = label.match(/^Agent (\d+)$/i);
-    return numericAgent && isLocaleZh2 ? `行动体 ${numericAgent[1]}` : label;
+    if (!agent) return id;
+    return pixelWorldReadableAgentLabel(agent, id, isLocaleZh2);
   });
 }
 function pixelWorldSelectedEntityLabel(visualState, selection, isLocaleZh2 = false) {
   if (!selection) return "";
   if (selection.kind === "agent") {
     const agent = visualState.agents.find((candidate) => candidate.id === selection.id);
-    const label = pixelWorldReadableAgentLabel(agent, selection.id);
-    const numericAgent = label.match(/^Agent (\d+)$/i);
-    return numericAgent && isLocaleZh2 ? `行动体 ${numericAgent[1]}` : label;
+    return pixelWorldReadableAgentLabel(agent, selection.id, isLocaleZh2);
   }
   const location = visualState.locations.find((candidate) => candidate.id === selection.id);
   return pixelWorldReadableLocationLabel(location, selection.id, isLocaleZh2);
@@ -9964,8 +9981,8 @@ function safeNumber(value2, fallback = 0) {
   const number = Number(value2);
   return Number.isFinite(number) ? number : fallback;
 }
-function pixelWorldAgentIdentity(agent, fallbackId = "") {
-  return pixelWorldReadableAgentLabel(agent, fallbackId) || "Agent";
+function pixelWorldAgentIdentity(agent, fallbackId = "", isLocaleZh2 = false) {
+  return pixelWorldReadableAgentLabel(agent, fallbackId, isLocaleZh2) || "Agent";
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -10272,39 +10289,42 @@ function PixelWorldHostVisualLayer(props) {
     get each() {
       return visualState().agents.slice(0, 10);
     },
-    children: (agent, index) => (() => {
-      var _el$10 = _tmpl$0$2(), _el$11 = _el$10.firstChild;
-      _el$10.$$click = () => props.onSelect({
-        kind: "agent",
-        id: agent().id
-      });
-      _el$10.addEventListener("mouseleave", () => props.onHover(null));
-      _el$10.addEventListener("mouseenter", () => props.onHover({
-        kind: "agent",
-        id: agent().id
-      }));
-      insert(_el$11, () => agent().label.slice(0, 1).toUpperCase());
-      createRenderEffect((_p$) => {
-        var _v$21 = agent().id, _v$22 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$23 = agent().position_source, _v$24 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$25 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${agent().label || agent().id}`, _v$26 = agentMarkerStyle(agent(), index, visualState().worldBounds), _v$27 = agent().label;
-        _v$21 !== _p$.e && setAttribute(_el$10, "data-agent-id", _p$.e = _v$21);
-        _v$22 !== _p$.t && setAttribute(_el$10, "data-selected", _p$.t = _v$22);
-        _v$23 !== _p$.a && setAttribute(_el$10, "data-position-source", _p$.a = _v$23);
-        _v$24 !== _p$.o && setAttribute(_el$10, "aria-pressed", _p$.o = _v$24);
-        _v$25 !== _p$.i && setAttribute(_el$10, "aria-label", _p$.i = _v$25);
-        _p$.n = style(_el$10, _v$26, _p$.n);
-        _v$27 !== _p$.s && setAttribute(_el$10, "title", _p$.s = _v$27);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0,
-        s: void 0
-      });
-      return _el$10;
-    })()
+    children: (agent, index) => {
+      const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, isLocaleZh(props.locale()));
+      return (() => {
+        var _el$10 = _tmpl$0$2(), _el$11 = _el$10.firstChild;
+        _el$10.$$click = () => props.onSelect({
+          kind: "agent",
+          id: agent().id
+        });
+        _el$10.addEventListener("mouseleave", () => props.onHover(null));
+        _el$10.addEventListener("mouseenter", () => props.onHover({
+          kind: "agent",
+          id: agent().id
+        }));
+        insert(_el$11, () => label().slice(0, 1).toUpperCase());
+        createRenderEffect((_p$) => {
+          var _v$21 = agent().id, _v$22 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$23 = agent().position_source, _v$24 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$25 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${label()}`, _v$26 = agentMarkerStyle(agent(), index, visualState().worldBounds), _v$27 = label();
+          _v$21 !== _p$.e && setAttribute(_el$10, "data-agent-id", _p$.e = _v$21);
+          _v$22 !== _p$.t && setAttribute(_el$10, "data-selected", _p$.t = _v$22);
+          _v$23 !== _p$.a && setAttribute(_el$10, "data-position-source", _p$.a = _v$23);
+          _v$24 !== _p$.o && setAttribute(_el$10, "aria-pressed", _p$.o = _v$24);
+          _v$25 !== _p$.i && setAttribute(_el$10, "aria-label", _p$.i = _v$25);
+          _p$.n = style(_el$10, _v$26, _p$.n);
+          _v$27 !== _p$.s && setAttribute(_el$10, "title", _p$.s = _v$27);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0,
+          o: void 0,
+          i: void 0,
+          n: void 0,
+          s: void 0
+        });
+        return _el$10;
+      })();
+    }
   })];
 }
 function PixelWorldCanvasAgentHitTargets(props) {
@@ -10313,39 +10333,41 @@ function PixelWorldCanvasAgentHitTargets(props) {
     get each() {
       return visualState().agents.slice(0, 10);
     },
-    children: (agent, index) => (() => {
-      var _el$12 = _tmpl$1$1(), _el$13 = _el$12.firstChild;
-      _el$12.$$click = () => props.onSelect({
-        kind: "agent",
-        id: agent.id
-      });
-      _el$12.addEventListener("mouseleave", () => props.onHover(null));
-      _el$12.addEventListener("mouseenter", () => props.onHover({
-        kind: "agent",
-        id: agent.id
-      }));
-      insert(_el$13, () => agent.label.slice(0, 1).toUpperCase());
-      createRenderEffect((_p$) => {
-        var _v$28 = agent.id, _v$29 = agent.position_source, _v$30 = props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false", _v$31 = props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false", _v$32 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${agent.label || agent.id}`, _v$33 = agentMarkerStyle(agent, index(), visualState().worldBounds), _v$34 = agent.label;
-        _v$28 !== _p$.e && setAttribute(_el$12, "data-agent-id", _p$.e = _v$28);
-        _v$29 !== _p$.t && setAttribute(_el$12, "data-position-source", _p$.t = _v$29);
-        _v$30 !== _p$.a && setAttribute(_el$12, "data-selected", _p$.a = _v$30);
-        _v$31 !== _p$.o && setAttribute(_el$12, "aria-pressed", _p$.o = _v$31);
-        _v$32 !== _p$.i && setAttribute(_el$12, "aria-label", _p$.i = _v$32);
-        _p$.n = style(_el$12, _v$33, _p$.n);
-        _v$34 !== _p$.s && setAttribute(_el$12, "title", _p$.s = _v$34);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0,
-        s: void 0
-      });
-      return _el$12;
-    })()
+    children: (agent, index) => {
+      const label = pixelWorldReadableAgentLabel(agent, agent.id, isLocaleZh(props.locale()));
+      return (() => {
+        var _el$12 = _tmpl$1$1(), _el$13 = _el$12.firstChild;
+        _el$12.$$click = () => props.onSelect({
+          kind: "agent",
+          id: agent.id
+        });
+        _el$12.addEventListener("mouseleave", () => props.onHover(null));
+        _el$12.addEventListener("mouseenter", () => props.onHover({
+          kind: "agent",
+          id: agent.id
+        }));
+        setAttribute(_el$12, "title", label);
+        insert(_el$13, () => label.slice(0, 1).toUpperCase());
+        createRenderEffect((_p$) => {
+          var _v$28 = agent.id, _v$29 = agent.position_source, _v$30 = props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false", _v$31 = props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false", _v$32 = `${tr$1(props.locale(), "选择 Agent", "Select Agent")} ${label}`, _v$33 = agentMarkerStyle(agent, index(), visualState().worldBounds);
+          _v$28 !== _p$.e && setAttribute(_el$12, "data-agent-id", _p$.e = _v$28);
+          _v$29 !== _p$.t && setAttribute(_el$12, "data-position-source", _p$.t = _v$29);
+          _v$30 !== _p$.a && setAttribute(_el$12, "data-selected", _p$.a = _v$30);
+          _v$31 !== _p$.o && setAttribute(_el$12, "aria-pressed", _p$.o = _v$31);
+          _v$32 !== _p$.i && setAttribute(_el$12, "aria-label", _p$.i = _v$32);
+          _p$.n = style(_el$12, _v$33, _p$.n);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0,
+          o: void 0,
+          i: void 0,
+          n: void 0
+        });
+        return _el$12;
+      })();
+    }
   });
 }
 function createPixelWorldHostAdapter({
@@ -10670,9 +10692,9 @@ function PixelWorldCanvasRenderer(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$35 = props.rendererStatus?.() === "ready" ? "true" : void 0, _v$36 = tr$1(props.locale(), "世界 Canvas 概览", "World canvas overview");
-      _v$35 !== _p$.e && setAttribute(_el$14, "data-renderer-ready", _p$.e = _v$35);
-      _v$36 !== _p$.t && setAttribute(_el$15, "aria-label", _p$.t = _v$36);
+      var _v$34 = props.rendererStatus?.() === "ready" ? "true" : void 0, _v$35 = tr$1(props.locale(), "世界 Canvas 概览", "World canvas overview");
+      _v$34 !== _p$.e && setAttribute(_el$14, "data-renderer-ready", _p$.e = _v$34);
+      _v$35 !== _p$.t && setAttribute(_el$15, "aria-label", _p$.t = _v$35);
       return _p$;
     }, {
       e: void 0,
@@ -10719,12 +10741,12 @@ function PixelWorldActionReceipt(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$37 = props.id, _v$38 = `pixel-world-action-receipt ${props.class ?? ""}`, _v$39 = receipt().present ? "true" : "false", _v$40 = receipt().state, _v$41 = receipt().confidence;
-      _v$37 !== _p$.e && setAttribute(_el$22, "id", _p$.e = _v$37);
-      _v$38 !== _p$.t && className(_el$22, _p$.t = _v$38);
-      _v$39 !== _p$.a && setAttribute(_el$22, "data-receipt-present", _p$.a = _v$39);
-      _v$40 !== _p$.o && setAttribute(_el$22, "data-receipt-state", _p$.o = _v$40);
-      _v$41 !== _p$.i && setAttribute(_el$22, "data-receipt-confidence", _p$.i = _v$41);
+      var _v$36 = props.id, _v$37 = `pixel-world-action-receipt ${props.class ?? ""}`, _v$38 = receipt().present ? "true" : "false", _v$39 = receipt().state, _v$40 = receipt().confidence;
+      _v$36 !== _p$.e && setAttribute(_el$22, "id", _p$.e = _v$36);
+      _v$37 !== _p$.t && className(_el$22, _p$.t = _v$37);
+      _v$38 !== _p$.a && setAttribute(_el$22, "data-receipt-present", _p$.a = _v$38);
+      _v$39 !== _p$.o && setAttribute(_el$22, "data-receipt-state", _p$.o = _v$39);
+      _v$40 !== _p$.i && setAttribute(_el$22, "data-receipt-confidence", _p$.i = _v$40);
       return _p$;
     }, {
       e: void 0,
@@ -10809,7 +10831,7 @@ function PixelWorldCommercialHud(props) {
   const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
   const activeAgentId = () => String(surface()?.active_agent_id || "").trim();
   const activeAgent = () => props.renderState().agents.find((agent) => agent.id === activeAgentId());
-  const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId()) || tr$1(props.locale(), "未选择 Agent", "No Agent selected");
+  const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId(), isLocaleZh(props.locale())) || tr$1(props.locale(), "未选择 Agent", "No Agent selected");
   const executableNextMoveKinds = /* @__PURE__ */ new Set(["gameplay_action", "claim_first_agent", "claim_starter_oc", "step", "play", "request_snapshot"]);
   const nextMoveRoutesToGameplayDetails = () => executableNextMoveKinds.has(surface().next_action.execute_kind);
   const nextMoveRoute = () => nextMoveRoutesToGameplayDetails() ? "gameplay_details" : "command";
@@ -10884,18 +10906,18 @@ function PixelWorldCommercialHud(props) {
         insert(_el$49, () => tr$1(props.locale(), "当前 Agent", "Selected Agent"));
         insert(_el$50, activeAgentLabel);
         createRenderEffect((_p$) => {
-          var _v$42 = activeAgentId(), _v$43 = surface().player_leverage.state, _v$44 = nextMoveRoute(), _v$45 = surface().next_action.execute_kind || "none", _v$46 = surface().blocker.label ? "true" : "false", _v$47 = nextMoveHref(), _v$48 = `${tr$1(props.locale(), "下一步", "Next Move")}: ${surface().next_action.label}`, _v$49 = nextMoveDisabledReason() ? "true" : void 0, _v$50 = nextMovePending() ? "true" : "false", _v$51 = nextMoveDisabledReason() ? -1 : void 0, _v$52 = activeAgentLabel();
-          _v$42 !== _p$.e && setAttribute(_el$31, "data-active-agent", _p$.e = _v$42);
-          _v$43 !== _p$.t && setAttribute(_el$31, "data-leverage-state", _p$.t = _v$43);
-          _v$44 !== _p$.a && setAttribute(_el$32, "data-next-move-route", _p$.a = _v$44);
-          _v$45 !== _p$.o && setAttribute(_el$32, "data-execute-kind", _p$.o = _v$45);
-          _v$46 !== _p$.i && setAttribute(_el$32, "data-blocker-present", _p$.i = _v$46);
-          _v$47 !== _p$.n && setAttribute(_el$38, "href", _p$.n = _v$47);
-          _v$48 !== _p$.s && setAttribute(_el$38, "aria-label", _p$.s = _v$48);
-          _v$49 !== _p$.h && setAttribute(_el$38, "aria-disabled", _p$.h = _v$49);
-          _v$50 !== _p$.r && setAttribute(_el$38, "aria-busy", _p$.r = _v$50);
-          _v$51 !== _p$.d && setAttribute(_el$38, "tabindex", _p$.d = _v$51);
-          _v$52 !== _p$.l && setAttribute(_el$48, "data-selected-agent-label", _p$.l = _v$52);
+          var _v$41 = activeAgentId(), _v$42 = surface().player_leverage.state, _v$43 = nextMoveRoute(), _v$44 = surface().next_action.execute_kind || "none", _v$45 = surface().blocker.label ? "true" : "false", _v$46 = nextMoveHref(), _v$47 = `${tr$1(props.locale(), "下一步", "Next Move")}: ${surface().next_action.label}`, _v$48 = nextMoveDisabledReason() ? "true" : void 0, _v$49 = nextMovePending() ? "true" : "false", _v$50 = nextMoveDisabledReason() ? -1 : void 0, _v$51 = activeAgentLabel();
+          _v$41 !== _p$.e && setAttribute(_el$31, "data-active-agent", _p$.e = _v$41);
+          _v$42 !== _p$.t && setAttribute(_el$31, "data-leverage-state", _p$.t = _v$42);
+          _v$43 !== _p$.a && setAttribute(_el$32, "data-next-move-route", _p$.a = _v$43);
+          _v$44 !== _p$.o && setAttribute(_el$32, "data-execute-kind", _p$.o = _v$44);
+          _v$45 !== _p$.i && setAttribute(_el$32, "data-blocker-present", _p$.i = _v$45);
+          _v$46 !== _p$.n && setAttribute(_el$38, "href", _p$.n = _v$46);
+          _v$47 !== _p$.s && setAttribute(_el$38, "aria-label", _p$.s = _v$47);
+          _v$48 !== _p$.h && setAttribute(_el$38, "aria-disabled", _p$.h = _v$48);
+          _v$49 !== _p$.r && setAttribute(_el$38, "aria-busy", _p$.r = _v$49);
+          _v$50 !== _p$.d && setAttribute(_el$38, "tabindex", _p$.d = _v$50);
+          _v$51 !== _p$.l && setAttribute(_el$48, "data-selected-agent-label", _p$.l = _v$51);
           return _p$;
         }, {
           e: void 0,
@@ -10995,12 +11017,12 @@ function PixelWorldFocusHud(props) {
         return () => _c$4() ? tr$1(props.locale(), "还原布局", "Restore Layout") : tr$1(props.locale(), "最大化", "Maximize");
       })());
       createRenderEffect((_p$) => {
-        var _v$53 = surface().blocker.label ? "true" : "false", _v$54 = surface().blocker.label ? "critical" : "clear", _v$55 = surface().action_receipt.confidence, _v$56 = surface().action_receipt.present ? "receipt" : "waiting", _v$57 = tr$1(props.locale(), "电影视图控制", "Cinematic controls");
-        _v$53 !== _p$.e && setAttribute(_el$71, "data-blocker-present", _p$.e = _v$53);
-        _v$54 !== _p$.t && setAttribute(_el$71, "data-hud-priority", _p$.t = _v$54);
-        _v$55 !== _p$.a && setAttribute(_el$74, "data-receipt-confidence", _p$.a = _v$55);
-        _v$56 !== _p$.o && setAttribute(_el$74, "data-hud-priority", _p$.o = _v$56);
-        _v$57 !== _p$.i && setAttribute(_el$78, "aria-label", _p$.i = _v$57);
+        var _v$52 = surface().blocker.label ? "true" : "false", _v$53 = surface().blocker.label ? "critical" : "clear", _v$54 = surface().action_receipt.confidence, _v$55 = surface().action_receipt.present ? "receipt" : "waiting", _v$56 = tr$1(props.locale(), "电影视图控制", "Cinematic controls");
+        _v$52 !== _p$.e && setAttribute(_el$71, "data-blocker-present", _p$.e = _v$52);
+        _v$53 !== _p$.t && setAttribute(_el$71, "data-hud-priority", _p$.t = _v$53);
+        _v$54 !== _p$.a && setAttribute(_el$74, "data-receipt-confidence", _p$.a = _v$54);
+        _v$55 !== _p$.o && setAttribute(_el$74, "data-hud-priority", _p$.o = _v$55);
+        _v$56 !== _p$.i && setAttribute(_el$78, "aria-label", _p$.i = _v$56);
         return _p$;
       }, {
         e: void 0,
@@ -11052,7 +11074,7 @@ function PixelWorldFocusRail(props) {
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
-  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent(), isLocaleZh(props.locale()));
   const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), isLocaleZh(props.locale()));
   const routeCount = () => props.renderState().links.length;
   const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
@@ -11116,7 +11138,7 @@ function PixelWorldFocusMinimapCard(props) {
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
-  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent(), isLocaleZh(props.locale()));
   const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), isLocaleZh(props.locale()));
   const primaryLocation = () => props.renderState().locations[0] || null;
   return createComponent(Show, {
@@ -11159,9 +11181,9 @@ function PixelWorldFocusMinimapCard(props) {
       insert(_el$123, () => `routes=${props.renderState().links.length}`);
       insert(_el$124, () => `fragments=${props.renderState().fragment_terrain.length}`);
       createRenderEffect((_p$) => {
-        var _v$58 = props.renderState().links.length, _v$59 = tr$1(props.locale(), "世界摘要", "World summary");
-        _v$58 !== _p$.e && setAttribute(_el$110, "data-routes", _p$.e = _v$58);
-        _v$59 !== _p$.t && setAttribute(_el$120, "aria-label", _p$.t = _v$59);
+        var _v$57 = props.renderState().links.length, _v$58 = tr$1(props.locale(), "世界摘要", "World summary");
+        _v$57 !== _p$.e && setAttribute(_el$110, "data-routes", _p$.e = _v$57);
+        _v$58 !== _p$.t && setAttribute(_el$120, "aria-label", _p$.t = _v$58);
         return _p$;
       }, {
         e: void 0,
@@ -11222,7 +11244,7 @@ function PixelWorldFocusCommandSurface(props) {
     return id && isAgentVisibleToCurrentSession(id) ? id : null;
   };
   const agentEntity = () => state.snapshot?.model?.agents?.[agentId()] || null;
-  const agentName = () => pixelWorldAgentIdentity(agentEntity(), agentId());
+  const agentName = () => pixelWorldAgentIdentity(agentEntity(), agentId(), isLocaleZh(locale()));
   const authSurface = () => buildAuthSurfaceModel();
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const binding = () => selectedAgentBindingInfo();
@@ -11279,10 +11301,10 @@ function PixelWorldFocusCommandSurface(props) {
           _el$145.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
           insert(_el$145, () => tr$1(locale(), "发送聊天", "Send Chat"));
           createRenderEffect((_p$) => {
-            var _v$60 = chatControlsEnabled() ? "true" : "false", _v$61 = blockerLabel() !== tr$1(locale(), "无阻塞", "No blocker") ? "true" : "false", _v$62 = !chatControlsEnabled();
-            _v$60 !== _p$.e && setAttribute(_el$134, "data-chat-ready", _p$.e = _v$60);
-            _v$61 !== _p$.t && setAttribute(_el$139, "data-blocker-present", _p$.t = _v$61);
-            _v$62 !== _p$.a && (_el$145.disabled = _p$.a = _v$62);
+            var _v$59 = chatControlsEnabled() ? "true" : "false", _v$60 = blockerLabel() !== tr$1(locale(), "无阻塞", "No blocker") ? "true" : "false", _v$61 = !chatControlsEnabled();
+            _v$59 !== _p$.e && setAttribute(_el$134, "data-chat-ready", _p$.e = _v$59);
+            _v$60 !== _p$.t && setAttribute(_el$139, "data-blocker-present", _p$.t = _v$60);
+            _v$61 !== _p$.a && (_el$145.disabled = _p$.a = _v$61);
             return _p$;
           }, {
             e: void 0,
@@ -11387,10 +11409,10 @@ function PixelWorldFocusCommandSurface(props) {
             }
           }));
           createRenderEffect((_p$) => {
-            var _v$63 = tr$1(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$64 = !chatControlsEnabled(), _v$65 = !chatControlsEnabled();
-            _v$63 !== _p$.e && setAttribute(_el$156, "placeholder", _p$.e = _v$63);
-            _v$64 !== _p$.t && (_el$156.disabled = _p$.t = _v$64);
-            _v$65 !== _p$.a && (_el$158.disabled = _p$.a = _v$65);
+            var _v$62 = tr$1(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$63 = !chatControlsEnabled(), _v$64 = !chatControlsEnabled();
+            _v$62 !== _p$.e && setAttribute(_el$156, "placeholder", _p$.e = _v$62);
+            _v$63 !== _p$.t && (_el$156.disabled = _p$.t = _v$63);
+            _v$64 !== _p$.a && (_el$158.disabled = _p$.a = _v$64);
             return _p$;
           }, {
             e: void 0,
@@ -11779,9 +11801,9 @@ function PixelWorldHost(props) {
           })()] : tr$1(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.");
         })());
         createRenderEffect((_p$) => {
-          var _v$66 = rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : void 0, _v$67 = rendererStatus();
-          _v$66 !== _p$.e && setAttribute(_el$184, "id", _p$.e = _v$66);
-          _v$67 !== _p$.t && setAttribute(_el$184, "data-renderer-state", _p$.t = _v$67);
+          var _v$65 = rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : void 0, _v$66 = rendererStatus();
+          _v$65 !== _p$.e && setAttribute(_el$184, "id", _p$.e = _v$65);
+          _v$66 !== _p$.t && setAttribute(_el$184, "data-renderer-state", _p$.t = _v$66);
           return _p$;
         }, {
           e: void 0,
@@ -11964,14 +11986,14 @@ function PixelWorldHost(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$68 = `pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`, _v$69 = focusMode() ? "true" : "false", _v$70 = focusMode() && maximized() ? "true" : "false", _v$71 = shouldShowFocusCinematic(renderState()) ? "false" : "true", _v$72 = focusMode(), _v$73 = !renderState(), _v$74 = rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : "pixel-world-focus-entry-hint";
-      _v$68 !== _p$.e && className(_el$176, _p$.e = _v$68);
-      _v$69 !== _p$.t && setAttribute(_el$176, "data-world-focus", _p$.t = _v$69);
-      _v$70 !== _p$.a && setAttribute(_el$176, "data-world-focus-maximized", _p$.a = _v$70);
-      _v$71 !== _p$.o && setAttribute(_el$176, "data-focus-comparable", _p$.o = _v$71);
-      _v$72 !== _p$.i && (_el$181.hidden = _p$.i = _v$72);
-      _v$73 !== _p$.n && (_el$183.disabled = _p$.n = _v$73);
-      _v$74 !== _p$.s && setAttribute(_el$183, "aria-describedby", _p$.s = _v$74);
+      var _v$67 = `pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`, _v$68 = focusMode() ? "true" : "false", _v$69 = focusMode() && maximized() ? "true" : "false", _v$70 = shouldShowFocusCinematic(renderState()) ? "false" : "true", _v$71 = focusMode(), _v$72 = !renderState(), _v$73 = rendererStatus() === "unavailable" ? PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID : "pixel-world-focus-entry-hint";
+      _v$67 !== _p$.e && className(_el$176, _p$.e = _v$67);
+      _v$68 !== _p$.t && setAttribute(_el$176, "data-world-focus", _p$.t = _v$68);
+      _v$69 !== _p$.a && setAttribute(_el$176, "data-world-focus-maximized", _p$.a = _v$69);
+      _v$70 !== _p$.o && setAttribute(_el$176, "data-focus-comparable", _p$.o = _v$70);
+      _v$71 !== _p$.i && (_el$181.hidden = _p$.i = _v$71);
+      _v$72 !== _p$.n && (_el$183.disabled = _p$.n = _v$72);
+      _v$73 !== _p$.s && setAttribute(_el$183, "aria-describedby", _p$.s = _v$73);
       return _p$;
     }, {
       e: void 0,

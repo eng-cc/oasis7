@@ -49,8 +49,8 @@ function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
-function pixelWorldAgentIdentity(agent, fallbackId = "") {
-  return pixelWorldReadableAgentLabel(agent, fallbackId) || "Agent";
+function pixelWorldAgentIdentity(agent, fallbackId = "", isLocaleZh = false) {
+  return pixelWorldReadableAgentLabel(agent, fallbackId, isLocaleZh) || "Agent";
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -306,23 +306,25 @@ function PixelWorldHostVisualLayer(props) {
         )}
       </Index>
       <Index each={visualState().agents.slice(0, 10)}>
-        {(agent, index) => (
-          <button
-            class="pixel-world-entity pixel-world-entity--agent"
-            data-pixel-world-agent-marker="true"
-            data-agent-id={agent().id}
-            data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
-            data-position-source={agent().position_source}
-            aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().label || agent().id}`}
-            style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
-            title={agent().label}
-            onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
-            onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "agent", id: agent().id })}
-          >
-            <span>{agent().label.slice(0, 1).toUpperCase()}</span>
-          </button>
-        )}
+        {(agent, index) => {
+            const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, core.isLocaleZh(props.locale())); return (
+              <button
+                class="pixel-world-entity pixel-world-entity--agent"
+                data-pixel-world-agent-marker="true"
+                data-agent-id={agent().id}
+                data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
+                data-position-source={agent().position_source}
+                aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label()}`}
+                style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
+                title={label()}
+                onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
+                onMouseLeave={() => props.onHover(null)}
+                onClick={() => props.onSelect({ kind: "agent", id: agent().id })}
+              >
+                <span>{label().slice(0, 1).toUpperCase()}</span>
+              </button>
+            );
+        }}
       </Index>
     </>
   );
@@ -331,23 +333,25 @@ function PixelWorldCanvasAgentHitTargets(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
   return (
     <For each={visualState().agents.slice(0, 10)}>
-      {(agent, index) => (
-        <button
-          type="button"
-          class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"
-          data-pixel-world-agent-marker="true"
-          data-agent-id={agent.id}
-          data-position-source={agent.position_source}
-          data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.label || agent.id}`}
-          style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
-          title={agent.label}
-          onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
-          onMouseLeave={() => props.onHover(null)}
-          onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
-        >
-          <span>{agent.label.slice(0, 1).toUpperCase()}</span>
-        </button>
-      )}
+      {(agent, index) => {
+          const label = pixelWorldReadableAgentLabel(agent, agent.id, core.isLocaleZh(props.locale())); return (
+            <button
+              type="button"
+              class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"
+              data-pixel-world-agent-marker="true"
+              data-agent-id={agent.id}
+              data-position-source={agent.position_source}
+              data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label}`}
+              style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
+              title={label}
+              onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
+              onMouseLeave={() => props.onHover(null)}
+              onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
+            >
+              <span>{label.slice(0, 1).toUpperCase()}</span>
+            </button>
+          );
+      }}
     </For>
   );
 }
@@ -694,7 +698,7 @@ export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
 }
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface; const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
-  const activeAgentId = () => String(surface()?.active_agent_id || "").trim(); const activeAgent = () => props.renderState().agents.find((agent) => agent.id === activeAgentId()); const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId()) || tr(props.locale(), "未选择 Agent", "No Agent selected");
+  const activeAgentId = () => String(surface()?.active_agent_id || "").trim(); const activeAgent = () => props.renderState().agents.find((agent) => agent.id === activeAgentId()); const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId(), core.isLocaleZh(props.locale())) || tr(props.locale(), "未选择 Agent", "No Agent selected");
   const executableNextMoveKinds = new Set([
     "gameplay_action",
     "claim_first_agent",
@@ -928,7 +932,7 @@ function PixelWorldFocusRail(props) {
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
-  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent(), core.isLocaleZh(props.locale()));
   const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), core.isLocaleZh(props.locale()));
   const routeCount = () => props.renderState().links.length;
   const hasFocusItems = () => Boolean(activeAgent() || selected() || routeCount() > 0);
@@ -971,7 +975,7 @@ function PixelWorldFocusMinimapCard(props) {
   const selected = () => props.renderState().selection;
   const activeAgent = () => surface()?.active_agent_id || props.renderState().agents[0]?.id || null;
   const activeAgentEntity = () => props.renderState().agents.find((agent) => agent.id === activeAgent());
-  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent());
+  const activeAgentName = () => pixelWorldAgentIdentity(activeAgentEntity(), activeAgent(), core.isLocaleZh(props.locale()));
   const selectedName = () => pixelWorldSelectedEntityLabel(props.renderState(), selected(), core.isLocaleZh(props.locale()));
   const primaryLocation = () => props.renderState().locations[0] || null;
   return (
@@ -1060,7 +1064,7 @@ function PixelWorldFocusCommandSurface(props) {
     return id && core.isAgentVisibleToCurrentSession(id) ? id : null;
   };
   const agentEntity = () => core.state.snapshot?.model?.agents?.[agentId()] || null;
-  const agentName = () => pixelWorldAgentIdentity(agentEntity(), agentId());
+  const agentName = () => pixelWorldAgentIdentity(agentEntity(), agentId(), core.isLocaleZh(locale()));
   const authSurface = () => core.buildAuthSurfaceModel();
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const binding = () => core.selectedAgentBindingInfo();
