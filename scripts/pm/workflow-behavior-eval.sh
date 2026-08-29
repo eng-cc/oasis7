@@ -121,6 +121,8 @@ python3 "$ROOT_DIR/scripts/pm/recover-terminal-task-mapping.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-crash.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-reconciliation-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-task-audit-project-semantics.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/non-merge-finalize-red.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/non-merge-finalize-functional.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/finalize-task-remote-branch-mismatch.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/review-provenance-trust.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/new-task-worktree-module-validation.test.sh" >/dev/null

@@ -51,7 +51,7 @@ The production supervisor is a target runtime executor and is currently
 blocked; the state machine below defines required order, not implemented
 automation.
 
-`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`
+`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; classified non-merge branch: `task done -> closed_without_merge`.
 
 ## Workflow states
 - `running`: the recorded action authority is executing its typed action.
@@ -129,10 +129,8 @@ approval or the up-to-date protection represented by `BEHIND`. No separate colla
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**
 
-A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and
-post-merge finalization have completed in that order.
-
-`done` is not terminal reconciliation; only `post_merge_done` proves receipts, finalizer ledger, closed Issue, terminal Project fields, absent task checkout/branch, and an external terminal tombstone with `checkout_recreation_forbidden: true`; audit one task read-only with `terminal-task-audit.py --task-uid <uid> --json`, and only explicit `--resume-finalizer` grants receipt-bound repair.
+A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and post-merge finalization complete in that order for a merged PR; classified non-merge work uses `non-merge-finalize.py` to record evidence-bound `closed_without_merge`.
+`done` is not terminal reconciliation: `post_merge_done` proves merged receipts; `closed_without_merge` proves its receipt/ledger and terminal tombstone (`checkout_recreation_forbidden: true`). Merged path uses `terminal-task-audit.py --task-uid <uid> --json`; non-merge uses receipt/ledger readback; only explicit `--resume-finalizer` repairs merged path.
 
 ## State, gate, and PM mapping
 | Workflow state | Gate meaning | GitHub Project status | Resume authority |
@@ -141,7 +139,7 @@ post-merge finalization have completed in that order.
 | `action_required` | authorized consumer required | in progress | authorized consumer |
 | `external_wait` | external condition with resume authority | blocked | recorded authority |
 | `capability_blocked` | required trusted producer missing | blocked | capability provider |
-| `completed` | `post_merge_done` proven | done | none |
+| `completed` | `post_merge_done` or `closed_without_merge` proven | done | none |
 | `failed` | non-retryable contract failure | blocked | escalation authority may authorize a new epoch or rebootstrap |
 
 ## Documentation policy
@@ -332,18 +330,14 @@ Project field taxonomy:
 | `Module` | TPM during task creation/routing | Large work queue and reporting group, not owner role or free tag | `engineering`, `game-strategy`, `visualization`, `chain-world-state-substrate` |
 | GitHub Project built-in `Status` | TPM and Project views | Human cockpit lane for day-to-day queue visibility | `Todo`, `In Progress`, `Blocked`, `Ready / PR`, `PR Watch`, `Done` |
 | `PM Status` | PM lifecycle scripts | Deterministic lifecycle state used by helpers/audits | `candidate`, `committed`, `blocked`, `ready`, `pr_watch`, `done`, `deferred` |
-| `Workflow Phase` | Workflow helpers | Project cockpit stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pre_pr_ready`, `pr_watch`, `blocked`, `done` |
+| `Workflow Phase` | Workflow helpers | Project cockpit stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pre_pr_ready`, `pr_watch`, `blocked`, `done` (internal `closed_without_merge` projects as `done`) |
 | Priority | Owner / TPM | Scheduling priority, not severity | repo-defined `P0`..`P3` values |
 
 Scripts that sync Project state must keep GitHub built-in `Status`, custom `PM
 Status`, and `Workflow Phase` aligned through deterministic mapping:
 `candidate -> Todo/execution`, `committed -> In Progress/execution` (draft candidate may use `In Progress/verification`), `blocked -> Blocked/blocked`, `ready -> Ready / PR/pre_pr_ready`,
-`pr_watch -> PR Watch/pr_watch`, `done -> In Progress/done`, and
-`deferred -> Done/blocked`; internal receipts retain the finer
-`task_done -> main_sync -> post_merge_done` sequence while the Project cockpit
-uses the coarse `done` phase. For PM status `done`, only the finalizer advances
-built-in Status to `Done`; `deferred` remains a separate non-completion archive
-lane.
+`pr_watch -> PR Watch/pr_watch`, `done/task_done -> In Progress/done`, `done/closed_without_merge -> Done/done`, and `deferred -> Done/blocked`;
+internal receipts retain `task_done -> main_sync -> post_merge_done` or `closed_without_merge`; the Project cockpit uses coarse `done`. For PM status `done`, only terminal finalization advances built-in Status to `Done`; `deferred` remains a non-completion archive lane.
 `Blocked`, `Ready / PR`, `PR Watch`, and `Done` are cockpit lanes, not modules
 or owner roles.
 
@@ -375,11 +369,12 @@ Deterministic script contract:
   success commands are not lifecycle proof. `done` requires a recorded merged
   PR, or a classified `non_pr_task`, plus verified `task_complete` evidence. It
   persists the trusted receipt and advances only to PM `done` / `task_done`;
-  the issue stays open and processing follows the [terminal runbook](#terminal-runbook).
+  the issue stays open and follows the [terminal runbook](#terminal-runbook); use
+  `non-merge-finalize.py --reason <reason> --evidence-file <path>` for classified non-merge outcomes.
   It is the lifecycle writer for `last_closed_at`; workflow-report close is not
   a terminal closeout.
 
-`post-merge-finalize.py` is the only `post_merge_done` and issue-close writer.
+`post-merge-finalize.py` remains the only `post_merge_done` writer; `non-merge-finalize.py` is the only `closed_without_merge` and non-merge Issue-close writer.
 - `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
   the task to `pr_watch` when GitHub-backed mapping exists. PR creation is
   resumable: before creating, query all states using the exact head repository,

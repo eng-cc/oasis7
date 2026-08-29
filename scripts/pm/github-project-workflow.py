@@ -452,7 +452,7 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "done": "Done",
         "deferred": "Done",
     }.get(status, "Todo")
-    if status == "done" and internal_phase != "post_merge_done":
+    if status == "done" and internal_phase not in {"closed_without_merge", "post_merge_done"}:
         project_status = "In Progress"
     return {
         "Status": project_status,

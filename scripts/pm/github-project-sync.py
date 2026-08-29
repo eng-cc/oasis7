@@ -489,7 +489,7 @@ def workflow_phase_for(status: str) -> str:
 def project_workflow_phase(task: OrderedDict[str, Any]) -> str:
     """Map fine terminal receipt phases onto the Project cockpit's coarse done lane."""
     internal = str(task.get("workflow_phase") or workflow_phase_for(str(task.get("status") or "")))
-    if internal in {"task_done", "main_sync", "post_merge_done"}:
+    if internal in {"task_done", "main_sync", "closed_without_merge", "post_merge_done"}:
         return "done"
     return internal
 
@@ -553,7 +553,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
 def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
     return {
-        "Status": "In Progress" if status == "done" and task.get("workflow_phase") != "post_merge_done" else project_status_for(status),
+        "Status": "In Progress" if status == "done" and task.get("workflow_phase") not in {"closed_without_merge", "post_merge_done"} else project_status_for(status),
         "Task UID": str(task.get("task_uid") or ""),
         "Owner Role": str(task.get("owner_role") or ""),
         "Module": str(task.get("module") or ""),
