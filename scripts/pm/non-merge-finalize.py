@@ -53,6 +53,11 @@ MIGRATED_RECEIPT_NAME = "closed-without-merge-receipt-migrated.json"
 LEDGER_NAME = "non-merge-finalizer-ledger.json"
 MIGRATED_LEDGER_NAME = "non-merge-finalizer-ledger-migrated.json"
 NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
+ELIGIBLE_NON_MERGE_PHASES = {
+    "", "bootstrap", "planning", "execution", "verification",
+    "pre_pr_review", "pre_pr_ready", "pr_watch", "blocked",
+    "task_done", "closed_without_merge",
+}
 
 
 def _intent_matches(stored: object, expected: dict) -> bool:
@@ -1050,12 +1055,7 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted during terminal effects: {key}")
         current_phase = str(current.get("workflow_phase") or "")
-        eligible_phases = {
-            "", "bootstrap", "planning", "execution", "verification",
-            "pre_pr_review", "pre_pr_ready", "pr_watch", "blocked",
-            "task_done", "closed_without_merge",
-        }
-        if current_phase not in eligible_phases:
+        if current_phase not in ELIGIBLE_NON_MERGE_PHASES:
             fail(f"workflow phase is not eligible for non-merge closeout: {current_phase}")
         if current_phase == "closed_without_merge":
             expected_digest = ((record.get("phase_receipt_sha256") or {})
@@ -1113,6 +1113,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     record = dict(record)
     record["_project"] = mapping.get("project") or {}
     was_terminal = str(record.get("workflow_phase") or "") == "closed_without_merge"
+    if str(record.get("workflow_phase") or "") not in ELIGIBLE_NON_MERGE_PHASES:
+        fail(f"workflow phase is not eligible for non-merge closeout: {record.get('workflow_phase')}")
     project_identity = _project_identity(record["_project"])
     if str(record.get("task_uid") or task_uid) != task_uid:
         fail("task UID mapping identity mismatch")
