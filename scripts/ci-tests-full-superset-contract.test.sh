@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ci_tests="$repo_root/scripts/ci-tests.sh"
 
-full_tier_source="$(sed -n '/^run_full_core_tier_tests() {/,/^echo "+ ci test tier: \$tier"/p' "$ci_tests")"
+full_tier_source="$(sed -n '/^run_full_required_superset() {/,/^}/p' "$ci_tests")"
 
 require_full_check() {
   local expected="$1"
