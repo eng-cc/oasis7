@@ -259,7 +259,8 @@ class AuthoritativeMappingContract(unittest.TestCase):
             "pr_state": None, "mergedAt": None,
         }, sort_keys=True) + "\n")
         source_digest = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
-        (receipt_root / "closed-without-merge-receipt-migrated.json").write_text(json.dumps({
+        migrated_path = receipt_root / "closed-without-merge-receipt-migrated.json"
+        migrated_path.write_text(json.dumps({
             "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
             "issuer": "non-merge-finalize", "task_uid": self.uid,
             "repository": "eng-cc/oasis7", "issue_number": 1,
@@ -271,6 +272,9 @@ class AuthoritativeMappingContract(unittest.TestCase):
             "migrated_from": "closed-without-merge-receipt.json",
             "migrated_from_sha256": source_digest,
         }, sort_keys=True) + "\n")
+        intent["migrated_receipt_sha256"] = hashlib.sha256(
+            migrated_path.read_bytes()
+        ).hexdigest()
 
         self.assertEqual(
             "execution",

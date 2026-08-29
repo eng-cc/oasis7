@@ -317,6 +317,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": reason,
             "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
             "pr_state": "CLOSED", "mergedAt": None,
+            "headRefOid": self.env.get("GH_PR_HEAD_OID", "head-oid"),
+            "headRefName": self.env.get("GH_PR_HEAD_NAME", "task/fixture"),
         }
         payload.update(extra)
         path = receipt_root / "closed-without-merge-receipt.json"
@@ -442,7 +444,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
-    def test_legacy_prehead_terminal_receipt_migrates_without_mutating_history(self) -> None:
+    def test_legacy_prehead_terminal_pr_receipt_is_rejected_without_historical_head(self) -> None:
         evidence = self.evidence()
         evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
         self.mapping(pr=True, status="done", phase="closed_without_merge", extra={
@@ -473,17 +475,10 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         legacy_bytes = legacy_path.read_bytes()
 
         result = self.invoke("duplicate", evidence)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        payload = json.loads(result.stdout[result.stdout.find("{"):])
-        migrated_path = Path(payload["receipt"])
-        self.assertNotEqual(migrated_path, legacy_path)
-        self.assertTrue(migrated_path.name.startswith("closed-without-merge-receipt-migrated"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("historical PR head authority", result.stderr)
         self.assertEqual(legacy_path.read_bytes(), legacy_bytes)
-        migrated = self.read_json(migrated_path)
-        self.assertEqual(migrated["headRefOid"], "head-oid")
-        self.assertEqual(migrated["headRefName"], "task/fixture")
-        self.assertEqual(migrated["evidence"], {"text": "owner decision: terminal non-merge closure"})
-        self.assertEqual(self.read_json(self.closes), ["not planned"])
+        self.assertEqual(self.read_json(self.closes), [])
 
     def test_legacy_committed_comment_alias_reconciles_without_duplicate(self) -> None:
         evidence = self.evidence()
@@ -502,6 +497,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "issue_number": ISSUE, "project_item_id": "ITEM1", "reason": "duplicate",
             "evidence_sha256": evidence_digest, "pr_number": 22, "pr_url": PR_URL,
             "pr_state": "CLOSED", "mergedAt": None,
+            "headRefOid": "head-oid", "headRefName": "task/fixture",
         }) + "\n")
         legacy_operation_id = hashlib.sha256(
             f"{UID}:closed_without_merge:evidence_comment".encode()
@@ -536,7 +532,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
         self.assertEqual(record["evidence_comments"], [f"{ISSUE_URL}#issuecomment-1"])
 
-    def test_preterminal_legacy_receipt_migrates_without_rewriting_canonical(self) -> None:
+    def test_preterminal_legacy_pr_receipt_is_rejected_without_historical_head(self) -> None:
         evidence = self.evidence()
         evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
         self.mapping(pr=True, phase="execution")
@@ -555,9 +551,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         baseline = legacy_path.read_bytes()
 
         result = self.invoke("superseded", evidence)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        payload = json.loads(result.stdout[result.stdout.find("{"):])
-        self.assertNotEqual(Path(payload["receipt"]), legacy_path)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("historical PR head authority", result.stderr)
         self.assertEqual(legacy_path.read_bytes(), baseline)
 
     def test_terminal_mapping_repairs_missing_pr_head_before_retry_effects(self) -> None:
@@ -596,6 +591,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "evidence_sha256": evidence_digest,
             "evidence": {"text": "owner decision: terminal non-merge closure\n"},
             "pr_number": 22, "pr_url": PR_URL, "pr_state": "CLOSED", "mergedAt": None,
+            "headRefOid": "head-oid", "headRefName": "task/fixture",
         }) + "\n")
 
         result = self.invoke("duplicate", evidence)
@@ -1097,6 +1093,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "pr_url": PR_URL,
             "pr_state": "CLOSED",
             "mergedAt": None,
+            "headRefOid": "head-oid",
+            "headRefName": "task/fixture",
         }) + "\n")
         operation_id = hashlib.sha256(
             f"{UID}:closed_without_merge:evidence_comment".encode()
@@ -1288,6 +1286,19 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         retry = self.invoke("superseded")
         self.assertEqual(retry.returncode, 0, retry.stderr)
         self.assertIn("- status: `done`", self.issue_body.read_text())
+
+    def test_retry_preserves_original_non_merge_finalization_timestamp(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        first = self.invoke("duplicate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        original = self.read_json(mapping_path)["tasks"][UID]["non_merge_finalized_at"]
+
+        retry = self.invoke("duplicate")
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(
+            self.read_json(mapping_path)["tasks"][UID]["non_merge_finalized_at"],
+            original,
+        )
 
     def test_all_non_merge_reason_close_reason_mapping(self) -> None:
         for reason in ("duplicate", "not_planned", "non_pr_completed"):

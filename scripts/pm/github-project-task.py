@@ -193,6 +193,10 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
     if receipt is None or not receipt_path.is_file():
         die("refresh-task: pending non-merge intent has no receipt")
     migrated = receipt_path != canonical_path
+    if migrated:
+        receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        if intent.get("migrated_receipt_sha256") != receipt_digest:
+            die("refresh-task: migrated non-merge receipt digest authority mismatch")
     if receipt.get("receipt_type") != "oasis7_closed_without_merge":
         die("refresh-task: pending non-merge receipt type mismatch")
     if receipt.get("schema_version") != NON_MERGE_RECEIPT_SCHEMA_VERSION or receipt.get("issuer") != "non-merge-finalize":

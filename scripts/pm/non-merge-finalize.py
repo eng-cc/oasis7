@@ -55,6 +55,14 @@ MIGRATED_LEDGER_NAME = "non-merge-finalizer-ledger-migrated.json"
 NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
 
 
+def _intent_matches(stored: object, expected: dict) -> bool:
+    if not isinstance(stored, dict):
+        return False
+    normalized = dict(stored)
+    normalized.pop("migrated_receipt_sha256", None)
+    return normalized == expected
+
+
 def _load_module(name: str, path: pathlib.Path):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -478,6 +486,24 @@ def _receipt_needs_migration(existing_receipt: dict, pr_head: dict[str, str]) ->
     return any(key not in existing_receipt for key in required)
 
 
+def _bind_migrated_receipt_digest(path: pathlib.Path, task_uid: str,
+                                  digest: str) -> None:
+    """Bind a migration sidecar before any remote effect can consume it."""
+    def update(mapping: dict) -> None:
+        current = (mapping.get("tasks") or {}).get(task_uid) or {}
+        intent = current.get(NON_MERGE_INTENT_FIELD)
+        if not isinstance(intent, dict):
+            fail("migrated non-merge receipt has no pending intent authority")
+        bound = intent.get("migrated_receipt_sha256")
+        if bound not in (None, digest):
+            fail("migrated non-merge receipt digest authority drifted")
+        intent["migrated_receipt_sha256"] = digest
+        current[NON_MERGE_INTENT_FIELD] = intent
+        mapping.setdefault("tasks", {})[task_uid] = current
+
+    durable_store.transact_json(path, update)
+
+
 def _project_readback(record: dict, task_uid: str) -> tuple[str, dict, dict]:
     item_id = str(record.get("project_item_id") or "")
     if not item_id:
@@ -718,7 +744,7 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
         for key in TERMINAL_CAS_FIELDS:
             if (key in current, current.get(key)) != (key in record, record.get(key)):
                 fail(f"task authority drifted before terminal effects: {key}")
-        if current.get(NON_MERGE_INTENT_FIELD) != intent:
+        if not _intent_matches(current.get(NON_MERGE_INTENT_FIELD), intent):
             fail("non-merge closeout intent authority drifted")
 
     durable_store.transact_json(path, check)
@@ -931,7 +957,8 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
         }
         if current_phase not in eligible_phases:
             fail(f"workflow phase is not eligible for non-merge closeout: {current_phase}")
-        if current_phase != "closed_without_merge" and current.get(NON_MERGE_INTENT_FIELD) != intent:
+        if (current_phase != "closed_without_merge"
+                and not _intent_matches(current.get(NON_MERGE_INTENT_FIELD), intent)):
             fail("non-merge closeout intent authority drifted")
         current["status"] = "done"
         current["workflow_phase"] = "closed_without_merge"
@@ -946,7 +973,8 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
             current["evidence_comments"].append(comment)
         if not current.get("last_closed_at"):
             current["last_closed_at"] = now()
-        current["non_merge_finalized_at"] = now()
+        if not current.get("non_merge_finalized_at"):
+            current["non_merge_finalized_at"] = now()
         current["last_evidence_at"] = now()
         mapping.setdefault("tasks", {})[task_uid] = current
 
@@ -999,6 +1027,10 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     if receipt_path == migrated_receipt_path:
         ledger_path = _migrated_ledger_path(canonical_ledger_path)
     migrated_ledger_preexisting = receipt_path != canonical_receipt_path and ledger_path.exists()
+    historical_pr_head = {
+        key: str(record.get(key) or "") for key in PR_HEAD_REQUIRED_FIELDS
+        if record.get(key)
+    }
     pr = _identity_pr(record)
     pr_head = _bind_pr_head(record, pr, existing_receipt)
     recovery_candidate = _receipt_recovery_candidate(
@@ -1028,6 +1060,16 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         and _receipt_needs_migration(existing_receipt, pr_head)
     )
     if legacy_receipt_migration:
+        receipt_has_head = all(
+            existing_receipt.get(key) == pr_head.get(key)
+            for key in PR_HEAD_REQUIRED_FIELDS
+        )
+        mapping_has_head = all(
+            historical_pr_head.get(key) == pr_head.get(key)
+            for key in PR_HEAD_REQUIRED_FIELDS
+        )
+        if pr_head and not (receipt_has_head or mapping_has_head):
+            fail("PR-bound legacy non-merge receipt lacks historical PR head authority")
         receipt_path = migrated_receipt_path
         ledger_path = _migrated_ledger_path(canonical_ledger_path)
     issue = _identity_issue(record, task_uid, allow_closed=existing_receipt is not None)
@@ -1098,6 +1140,19 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
                           evidence_digest, project_identity)
     if legacy_receipt_migration:
         _write_immutable_json(receipt_path, receipt, "migrated non-merge receipt")
+        receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        if not was_terminal:
+            _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
+    elif receipt_path == migrated_receipt_path:
+        receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        if was_terminal:
+            bound = ((record.get("phase_receipt_sha256") or {})
+                     .get("closed_without_merge"))
+        else:
+            intent = record.get(NON_MERGE_INTENT_FIELD) or {}
+            bound = intent.get("migrated_receipt_sha256")
+        if bound != receipt_digest:
+            fail("migrated non-merge receipt lacks matching immutable digest authority")
     if receipt_path == migrated_receipt_path:
         required = (
             ("issue_body_update", "project_update", "evidence_comment")
