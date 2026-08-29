@@ -688,6 +688,8 @@ describe("pixel world host", () => {
       expect(receipt).toHaveAttribute("data-receipt-confidence", "world_delta");
     });
     expect(receipt).not.toHaveTextContent(/\b(world_delta|accepted_intent|none)\b/i);
+    expect(receipt).toHaveTextContent("Agent 0");
+    expect(receipt).not.toHaveTextContent("agent=agent-0");
     expect(receipt).toHaveTextContent(/blocked|confirmed|waiting|queued|accepted/i);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -854,9 +856,10 @@ describe("pixel world host", () => {
     expect(secondAgentMarker).toHaveAttribute("aria-label", "Select Agent Agent 1");
     expect(agentMarker.style.transform).not.toEqual(secondAgentMarker.style.transform);
     agentMarker.click();
-    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Agent 0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).not.toHaveTextContent("agent/agent-0");
     expect(canvas.querySelector(".pixel-world-route")).toBeNull();
-    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Agent 0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 

@@ -775,9 +775,8 @@ body {
   }
 
   [data-viewer-shell="player-fullscreen"] .pixel-world-readout {
+    display: none;
     top: 112px;
-    left: 10px;
-    max-width: calc(100vw - 20px);
   }
 
   [data-viewer-overlay="feed"] {

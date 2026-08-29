@@ -5,6 +5,7 @@ import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_prob
 import { applyPixelWorldRendererRoute, createPixelWorldRendererRouteSignals, resolvePixelWorldRendererRoute } from "./pixel_world_renderer_route.js";
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
+import { pixelWorldReadableAgentLabel, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
 export { pixelWorldSelectedBlockerVisualFixture };
 function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
@@ -49,11 +50,6 @@ function safeNumber(value, fallback = 0) {
 }
 function pixelWorldAgentIdentity(agent, fallbackId = "") {
   return String(agent?.name || agent?.label || agent?.id || fallbackId || "Agent").trim();
-}
-function pixelWorldReadableAgentLabel(agent, fallbackId = "") {
-  const id = String(agent?.id || fallbackId || "").trim(); const explicitLabel = String(agent?.name || agent?.label || "").trim();
-  if (explicitLabel && explicitLabel !== id) return explicitLabel; const numericAgentId = id.match(/^agent[-_](\d+)$/i);
-  return numericAgentId ? `Agent ${numericAgentId[1]}` : explicitLabel || id;
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
@@ -544,6 +540,7 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
 function PixelWorldCanvasRenderer(props) {
   let canvasRef;
   const visualState = () => pixelWorldVisualState(props.renderState());
+  const selectedEntityLabel = () => pixelWorldSelectedEntityLabel(visualState(), visualState().selection, core.isLocaleZh(props.locale()));
   createEffect(() => {
     if (!canvasRef) {
       return;
@@ -609,7 +606,7 @@ function PixelWorldCanvasRenderer(props) {
       </div>
       <Show when={visualState().selection}>
         <div class="pixel-world-canvas__selection">
-          {`${tr(props.locale(), "已选中", "Selected")}: ${visualState().selection.kind}/${visualState().selection.id}`}
+          {`${tr(props.locale(), "已选中", "Selected")}: ${selectedEntityLabel()}`}
         </div>
       </Show>
     </div>
@@ -645,7 +642,7 @@ function PixelWorldActionReceipt(props) {
         <div class="pixel-world-action-receipt__meta">
           <span>{receiptConfidenceLabel(receipt().confidence, props.locale())}</span>
           <Show when={receipt().target_agent_id}>
-            <span>{`agent=${receipt().target_agent_id}`}</span>
+            <span>{`${tr(props.locale(), "行动体", "Agent")} ${String(receipt().target_agent_id).replace(/^agent[-_]/i, "")}`}</span>
           </Show>
         </div>
       </Show>
