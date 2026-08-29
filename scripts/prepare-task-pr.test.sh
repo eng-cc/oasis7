@@ -1619,6 +1619,166 @@ if "viewer_js_required:crates/oasis7_viewer/src/lib.rs" not in reason:
     raise SystemExit(f"expected viewer reason, got: {reason}")
 PY
 
+assert_planner_selector_evidence() {
+  local json_path="$1"
+  local expected_capabilities="$2"
+  local fixture_root="$3"
+  local expected_true_selector="$4"
+  python3 - "$json_path" "$expected_capabilities" "$fixture_root" "$expected_true_selector" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+expected_capabilities = sys.argv[2]
+fixture_root = Path(sys.argv[3])
+expected_true_selector = sys.argv[4]
+command = required["recommended_required_command"] or ""
+
+if required.get("selected_capabilities") != expected_capabilities:
+    raise SystemExit(
+        "local required evidence must preserve selected_capabilities: "
+        f"expected {expected_capabilities!r}, got {required}"
+    )
+
+expected_digest = "sha256:" + hashlib.sha256(
+    (fixture_root / "scripts/ci-required-scope.v2.json").read_bytes()
+).hexdigest()
+if required.get("planner_config_sha256") != expected_digest:
+    raise SystemExit(
+        "local required evidence must preserve planner_config_sha256: "
+        f"expected {expected_digest!r}, got {required}"
+    )
+
+expected_selectors = {
+    "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS": "false",
+    "OASIS7_CI_RUN_SCENARIO_REGRESSION": "false",
+    "OASIS7_CI_RUN_CONSENSUS_TESTS": "false",
+    "OASIS7_CI_RUN_DISTFS_TESTS": "false",
+    "OASIS7_CI_RUN_OASIS7_NODE_TESTS": "false",
+    "OASIS7_CI_RUN_OASIS7_NET_TESTS": "false",
+    "OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS": "false",
+    "OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS": "false",
+    "OASIS7_CI_RUN_VIEWER_WASM_CHECK": "false",
+    "OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS": "false",
+    "OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK": "false",
+    "OASIS7_CI_RUN_VIEWER_PERF_SMOKE": "false",
+    "OASIS7_CI_RUN_LAUNCHER_WEB_BUILD": "false",
+    "OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS": "false",
+    "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS": "false",
+    "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION": "false",
+    "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS": "false",
+    "OASIS7_CI_RUN_RUST_BASELINE": "false",
+}
+if expected_true_selector not in expected_selectors:
+    raise SystemExit(f"unknown expected planner selector: {expected_true_selector}")
+expected_selectors[expected_true_selector] = "true"
+missing = [f"{key}={value}" for key, value in expected_selectors.items() if f"{key}={value}" not in command]
+if missing:
+    raise SystemExit(
+        "local required command must explicitly serialize every planner selector; "
+        f"missing {missing}: {command}"
+    )
+PY
+}
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/ci-compile-metrics.sh"
+source_planner_config="$SMOKE_WORKTREE/scripts/ci-required-scope.v2.json"
+caller_planner_config="$ROOT_DIR/scripts/ci-required-scope.v2.json"
+python3 - "$caller_planner_config" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+config = json.loads(path.read_text(encoding="utf-8"))
+config["rules"].append(
+    {
+        "match": ["scripts/ci-compile-metrics.sh"],
+        "capabilities": ["codex_agent_config_validation"],
+        "reason": "caller_only_override",
+    }
+)
+path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+python3 - "$source_planner_config" "$caller_planner_config" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+source_digest = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+caller_digest = hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest()
+if source_digest == caller_digest:
+    raise SystemExit("source and caller planner configs must differ for this regression")
+PY
+source_bound_json="$TMPDIR/source-bound-planner.json"
+run_prepare "$TMPDIR/gh-source-bound.log" "$TMPDIR/git-source-bound.log" --json >"$source_bound_json"
+assert_planner_selector_evidence "$source_bound_json" "compile_metrics" "$SMOKE_WORKTREE" "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS"
+cp "$source_planner_config" "$caller_planner_config"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/ci-compile-metrics.sh"
+compile_metrics_required_json="$TMPDIR/compile-metrics-required.json"
+run_prepare "$TMPDIR/gh-compile-metrics-required.log" "$TMPDIR/git-compile-metrics-required.log" --json >"$compile_metrics_required_json"
+python3 - "$compile_metrics_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+required = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["local_required_validation"]
+command = required["recommended_required_command"] or ""
+if "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS=true" not in command:
+    raise SystemExit(f"compile-metrics plan must enable its focused contract: {command}")
+PY
+assert_planner_selector_evidence "$compile_metrics_required_json" "compile_metrics" "$ROOT_DIR" "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/ci-tests-codex-agent-config-required-contract.test.sh"
+codex_required_json="$TMPDIR/codex-required.json"
+run_prepare "$TMPDIR/gh-codex-required.log" "$TMPDIR/git-codex-required.log" --json >"$codex_required_json"
+python3 - "$codex_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+required = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["local_required_validation"]
+command = required["recommended_required_command"] or ""
+if "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION=true" not in command:
+    raise SystemExit(f"Codex plan must enable config validation: {command}")
+PY
+assert_planner_selector_evidence "$codex_required_json" "codex_agent_config_validation" "$ROOT_DIR" "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/pm/terminal-task-audit.py"
+workflow_governance_required_json="$TMPDIR/workflow-governance-required.json"
+run_prepare "$TMPDIR/gh-workflow-governance-required.log" "$TMPDIR/git-workflow-governance-required.log" --json >"$workflow_governance_required_json"
+python3 - "$workflow_governance_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+required = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["local_required_validation"]
+command = required["recommended_required_command"] or ""
+if "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS=true" not in command:
+    raise SystemExit(f"workflow-governance plan must enable operational contracts: {command}")
+PY
+assert_planner_selector_evidence "$workflow_governance_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS"
+
 reset_smoke_branch_to_base
 write_changed_path_fixture "README.md"
 docs_required_json="$TMPDIR/docs-required.json"
