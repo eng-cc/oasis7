@@ -59,7 +59,8 @@ def _intent_matches(stored: object, expected: dict) -> bool:
     if not isinstance(stored, dict):
         return False
     normalized = dict(stored)
-    normalized.pop("migrated_receipt_sha256", None)
+    if "migrated_receipt_sha256" not in expected:
+        normalized.pop("migrated_receipt_sha256", None)
     return normalized == expected
 
 
@@ -419,7 +420,8 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
                                evidence_data: dict,
                                project_identity: dict[str, str],
                                pr_head: dict[str, str],
-                               *, require_modern_authority: bool = False) -> None:
+                               *, require_modern_authority: bool = False,
+                               legacy_source: dict | None = None) -> None:
     expected = {
         "receipt_type": receipt["receipt_type"],
         "schema_version": receipt["schema_version"],
@@ -452,6 +454,13 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
             "migrated_from", "migrated_from_sha256", "observed_at",
         }
         unknown = set(existing_receipt) - allowed_modern
+        source_bound = {
+            key for key in unknown
+            if isinstance(legacy_source, dict)
+            and key in legacy_source
+            and existing_receipt.get(key) == legacy_source.get(key)
+        }
+        unknown -= source_bound
         if unknown:
             fail("migrated non-merge receipt has unrecognized immutable fields")
         # Repository identity is optional in the PR head authority.  The
@@ -761,6 +770,10 @@ def _verify_closeout_authority(path: pathlib.Path, task_uid: str, record: dict,
                                project_identity: dict[str, str]) -> None:
     intent = _closeout_intent(task_uid, record, reason, evidence_digest,
                               project_identity)
+    bound_digest = ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                    .get("migrated_receipt_sha256"))
+    if bound_digest:
+        intent["migrated_receipt_sha256"] = bound_digest
 
     def check(mapping: dict) -> None:
         if _project_identity(mapping.get("project") or {}) != project_identity:
@@ -977,6 +990,10 @@ def _commit_mapping(path: pathlib.Path, task_uid: str, record: dict,
                     project_identity: dict[str, str]) -> None:
     intent = _closeout_intent(task_uid, record, reason, evidence_digest,
                               project_identity)
+    bound_digest = ((record.get(NON_MERGE_INTENT_FIELD) or {})
+                    .get("migrated_receipt_sha256"))
+    if bound_digest:
+        intent["migrated_receipt_sha256"] = bound_digest
 
     def update(mapping: dict) -> None:
         if _project_identity(mapping.get("project") or {}) != project_identity:
@@ -1062,7 +1079,6 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     migrated_receipt_path = _migrated_receipt_path(canonical_receipt_path)
     if receipt_path == migrated_receipt_path:
         ledger_path = _migrated_ledger_path(canonical_ledger_path)
-    migrated_ledger_preexisting = receipt_path != canonical_receipt_path and ledger_path.exists()
     historical_pr_head = {
         key: str(record.get(key) or "") for key in PR_HEAD_REQUIRED_FIELDS
         if record.get(key)
@@ -1139,11 +1155,16 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     }
     receipt.update(pr_head)
     if existing_receipt is not None:
+        legacy_source = (
+            _read_json_object(canonical_receipt_path, "legacy non-merge receipt")
+            if receipt_path == migrated_receipt_path else None
+        )
         _validate_existing_receipt(
             existing_receipt, receipt, evidence_data, project_identity, pr_head,
             require_modern_authority=(
                 not legacy_receipt_migration and receipt_path == migrated_receipt_path
             ),
+            legacy_source=legacy_source,
         )
         if not legacy_receipt_migration:
             receipt = existing_receipt
@@ -1185,6 +1206,9 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             )
         else:
             _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
+            record.setdefault(NON_MERGE_INTENT_FIELD, {})[
+                "migrated_receipt_sha256"
+            ] = receipt_digest
     elif receipt_path == migrated_receipt_path:
         receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
         if was_terminal:
@@ -1199,14 +1223,15 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
             )
         elif bound is None:
             _bind_migrated_receipt_digest(mapping_path, task_uid, receipt_digest)
+            record.setdefault(NON_MERGE_INTENT_FIELD, {})[
+                "migrated_receipt_sha256"
+            ] = receipt_digest
         elif bound != receipt_digest:
             fail("migrated non-merge receipt lacks matching immutable digest authority")
     if receipt_path == migrated_receipt_path:
         required = (
             ("issue_body_update", "project_update", "evidence_comment")
-            if migrated_ledger_preexisting
-            and str(record.get("workflow_phase") or "") == "closed_without_merge"
-            else ()
+            if record.get("closed_without_merge_receipt") == receipt else ()
         )
         _migrate_legacy_ledger(
             canonical_ledger_path, ledger_path, task_uid, pr_head,

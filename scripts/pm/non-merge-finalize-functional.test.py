@@ -179,6 +179,13 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
         mapping = json.loads(mapping_path.read_text())
         mapping["project"].update({"owner": "other", "number": 2, "id": "P2"})
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+    if os.environ.get("GH_MUTATE_MIGRATED_DIGEST_ON_COMMENT_READBACK") == "1":
+        mapping_path = path("GH_MAPPING")
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][uid]["closed_without_merge_intent"][
+            "migrated_receipt_sha256"
+        ] = "0" * 64
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
     print(json.dumps([read("GH_COMMENTS", [])]))
 elif args[:2] == ["api", "graphql"]:
     if os.environ.get("GH_PROJECT_ITEM_MISSING") == "1":
@@ -664,6 +671,23 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(migrated["legacy_lifecycle"], {"attempt": 3, "phase": "review"})
         self.assertEqual(migrated["previous_status"], "committed")
         self.assertEqual(migrated["previous_workflow_phase"], "verification")
+        retry = self.invoke("duplicate", evidence)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+
+    def test_migrated_digest_drift_during_readback_fails_before_terminal_effects(self) -> None:
+        evidence = self.evidence()
+        digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        mapping_path = self.mapping(pr=True)
+        self.legacy_receipt(digest)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_MUTATE_MIGRATED_DIGEST_ON_COMMENT_READBACK": "1",
+        })
+        result = self.invoke("duplicate", evidence)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("authority drifted", result.stderr)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
 
     def test_legacy_text_evidence_whitespace_compatibility_remains_digest_bound(self) -> None:
         evidence = self.evidence()
