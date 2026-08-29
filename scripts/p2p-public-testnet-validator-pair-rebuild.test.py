@@ -3226,6 +3226,9 @@ raise SystemExit(module.main())
         self.assertEqual(interrupted.get("adapter_callback", {}).get("status"), "completed")
         self.assertEqual(interrupted.get("adapter_callback", {}).get("phase"), "apply")
         before_resume_phases = phases.read_text(encoding="utf-8").splitlines()
+        before_resume_github_calls = len(
+            Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines()
+        )
         resumed = subprocess.run(
             [
                 str(self.executor_launcher),
@@ -3249,6 +3252,87 @@ raise SystemExit(module.main())
         self.assertIn("host_receipt", recovered)
         self.assertNotIn("adapter_callback", recovered)
         self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), before_resume_phases)
+        after_resume_github_calls = len(
+            Path(self.human_direct_fixture["github_calls"]).read_text(encoding="utf-8").splitlines()
+        )
+        self.assertGreater(after_resume_github_calls, before_resume_github_calls)
+
+    def test_resume_fails_closed_on_durable_failed_callback_without_replay(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "failed-callback-resume-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        phases = self.root / "failed-callback-resume-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "preflight")
+        failed = subprocess.run(
+            self._apply_args(plan_path, adapter),
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(transaction["phase"], "preflight_failed")
+        self.assertEqual(transaction.get("adapter_callback", {}).get("status"), "failed")
+        before_resume = plan_path.read_bytes()
+        resumed = subprocess.run(
+            [
+                str(self.executor_launcher),
+                "resume",
+                "--transaction",
+                str(plan_path),
+                "--host-adapter",
+                str(adapter),
+                "--request",
+                str(self.human_direct_fixture["request"]),
+                "--known-hosts",
+                str(self.human_direct_fixture["known_hosts"]),
+            ],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        self.assertNotEqual(resumed.returncode, 0)
+        self.assertRegex(resumed.stderr, r"(?i)(failed|non.?retry|reconcil)")
+        self.assertEqual(plan_path.read_bytes(), before_resume)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["preflight"])
+
+    def test_rollback_fails_closed_on_durable_failed_callback_without_replay(self) -> None:
+        plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)
+        plan_path = self.out / "failed-callback-rollback-transaction.json"
+        plan_path.write_text(plan.stdout, encoding="utf-8")
+        applied = subprocess.run(
+            self._apply_args(plan_path, self._write_host_adapter()),
+            text=True,
+            capture_output=True,
+            check=True,
+            env=os.environ.copy(),
+        )
+        self.assertEqual(applied.returncode, 0)
+        phases = self.root / "failed-callback-rollback-phases.log"
+        adapter = self._write_failure_host_adapter(phases, "rollback")
+        rollback_args = [
+            str(self.executor_launcher),
+            "rollback",
+            "--transaction",
+            str(plan_path),
+            "--host-adapter",
+            str(adapter),
+            "--request",
+            str(self.human_direct_fixture["request"]),
+            "--known-hosts",
+            str(self.human_direct_fixture["known_hosts"]),
+        ]
+        failed = subprocess.run(rollback_args, text=True, capture_output=True, env=os.environ.copy())
+        self.assertNotEqual(failed.returncode, 0)
+        transaction = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(transaction["phase"], "rollback_failed")
+        self.assertEqual(transaction.get("adapter_callback", {}).get("status"), "failed")
+        before_retry = plan_path.read_bytes()
+        retry = subprocess.run(rollback_args, text=True, capture_output=True, env=os.environ.copy())
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertRegex(retry.stderr, r"(?i)(failed|non.?retry|reconcil)")
+        self.assertEqual(plan_path.read_bytes(), before_retry)
+        self.assertEqual(phases.read_text(encoding="utf-8").splitlines(), ["rollback"])
 
     def test_resume_rejects_disappeared_persisted_backups_without_rewrite(self) -> None:
         plan = subprocess.run(self._base_args(), text=True, capture_output=True, check=True)

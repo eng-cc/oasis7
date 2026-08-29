@@ -4030,6 +4030,8 @@ def resume_transaction(
         callback_phase = callback_state["phase"]
         if callback_state["status"] == "in_flight":
             fail("host adapter callback is ambiguous in-flight; explicit governed reconciliation is required")
+        if callback_state["status"] == "failed" and phase != "rollback_required":
+            fail("host adapter callback previously failed; explicit governed reconciliation is required")
         if callback_state["status"] == "completed":
             allowed_transaction_phases = {
                 "preflight": {"preflight", "preflight_failed"},
@@ -4040,6 +4042,12 @@ def resume_transaction(
             if phase not in allowed_transaction_phases[callback_phase]:
                 fail("completed host adapter callback phase does not match transaction phase")
             if callback_phase != "rollback" and phase != "rollback_required":
+                if callback_phase == "apply":
+                    effective_direct_args = _resume_direct_args(transaction, direct_args)
+                    _record_transaction_direct_reobserve(transaction, effective_direct_args)
+                    if direct_args is not None and hasattr(effective_direct_args, "_credential_secret"):
+                        direct_args._credential_secret = effective_direct_args._credential_secret
+                    write_json(path, transaction)
                 transaction = _adopt_completed_adapter_callback(path, transaction, callback_state)
                 if callback_phase == "apply":
                     return transaction
@@ -4474,6 +4482,8 @@ def rollback_transaction(
     callback_state = _validate_adapter_callback_state(transaction)
     if callback_state is not None and callback_state["status"] == "in_flight":
         fail("host adapter callback is ambiguous in-flight; explicit governed reconciliation is required")
+    if callback_state is not None and callback_state["status"] == "failed" and callback_state["phase"] == "rollback":
+        fail("rollback host adapter callback previously failed; explicit governed reconciliation is required")
     completed_rollback_callback = (
         callback_state is not None
         and callback_state["status"] == "completed"
