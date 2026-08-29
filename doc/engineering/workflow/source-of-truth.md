@@ -51,7 +51,7 @@ The production supervisor is a target runtime executor and is currently
 blocked; the state machine below defines required order, not implemented
 automation.
 
-`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; classified non-merge branch: `task done -> closed_without_merge`.
+`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; a classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
 
 ## Workflow states
 - `running`: the recorded action authority is executing its typed action.

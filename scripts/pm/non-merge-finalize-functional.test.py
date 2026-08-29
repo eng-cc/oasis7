@@ -910,6 +910,30 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(len(self.read_json(self.comments)), 1)
         self.assertEqual(self.read_json(self.closes), ["not planned"])
 
+    def test_retry_rejects_predecessor_status_and_phase_drift(self) -> None:
+        mapping_path = self.mapping(pr=True)
+        self.env.update({
+            "GH_MAPPING": str(mapping_path),
+            "GH_PROJECT_FAILURE_MARKER": str(Path(self.tmp.name) / "project-failure-marker"),
+            "GH_PROJECT_UPDATE_EDIT_COUNT": str(Path(self.tmp.name) / "project-update-count"),
+            "GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT": "1",
+        })
+        crashed = self.invoke("duplicate")
+        self.assertNotEqual(crashed.returncode, 0)
+        receipt_path = self.root / ".git/oasis7-workflow-receipts" / UID / "closed-without-merge-receipt.json"
+        self.assertTrue(receipt_path.exists())
+        mapping = self.read_json(mapping_path)
+        mapping["tasks"][UID]["status"] = "blocked"
+        mapping["tasks"][UID]["workflow_phase"] = "blocked"
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
+        self.env.pop("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT")
+
+        retry = self.invoke("duplicate")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertRegex(retry.stderr.lower(), r"receipt|intent|authority|drift|predecessor")
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+
     def test_retry_with_renamed_same_evidence_is_idempotent(self) -> None:
         mapping_path = self.mapping(pr=True)
         self.env["GH_MAPPING"] = str(mapping_path)

@@ -11,7 +11,11 @@ TPM is the coordinator/integrator for this sequence. Gate meanings, retry/dispos
 
 ## When to Use
 
-Use after implementation and its required verification are complete.
+Use after implementation and its required verification are complete, or when a
+bound task has a classified non-merge outcome. In particular, `not_planned`
+may enter from bootstrap, planning, or execution without implementation
+verification and must proceed directly to the canonical non-merge terminal
+route below.
 
 ## Freeze-Commit Gates
 

@@ -177,6 +177,12 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
     }
     if intent.get("project_identity") != project_identity:
         die("refresh-task: pending non-merge intent Project identity mismatch")
+    for key, current_key in (
+        ("previous_status", "status"),
+        ("previous_workflow_phase", "workflow_phase"),
+    ):
+        if key in intent and intent.get(key) != existing.get(current_key):
+            die("refresh-task: pending non-merge intent predecessor disagrees")
     try:
         finalizer = load_non_merge_finalizer_module()
         canonical_path, receipt_path, receipt, _ = finalizer.resolve_non_merge_receipt(
@@ -194,6 +200,7 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
     authority_fields = (
         "task_uid", "repository", "issue_number", "project_item_id",
         "project_identity", "reason", "evidence_sha256", "pr_number", "pr_url",
+        "previous_status", "previous_workflow_phase",
     ) + PR_HEAD_FIELDS
     pr_bound = bool(intent.get("pr_number") or intent.get("pr_url"))
     if migrated:
@@ -208,7 +215,10 @@ def pending_non_merge_phase(root: pathlib.Path, task_uid: str,
             die("refresh-task: migrated non-merge receipt lacks evidence authority")
     else:
         # The canonical receipt may still be a legacy pre-migration payload.
-        legacy_optional = {"project_identity", *PR_HEAD_FIELDS}
+        legacy_optional = {
+            "project_identity", "previous_status", "previous_workflow_phase",
+            *PR_HEAD_FIELDS,
+        }
     for key in authority_fields:
         if key not in receipt:
             if key not in legacy_optional:
@@ -1266,6 +1276,11 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         }
         if pending_phase is not None:
             record["workflow_phase"] = pending_phase
+            pending_intent = existing.get("closed_without_merge_intent") or {}
+            if isinstance(pending_intent, dict) and pending_intent.get("previous_status"):
+                # Coarse Project `done` is an in-flight terminal side effect,
+                # not authority to rewrite the predecessor bound by intent.
+                record["status"] = pending_intent["previous_status"]
         elif project_status == "done" and existing_phase in fine_terminal_phases:
             # Project exposes both terminal receipt phases as coarse `done`;
             # refreshing its fields must not erase the finer local phase.

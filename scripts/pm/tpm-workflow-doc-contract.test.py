@@ -31,6 +31,7 @@ HUMAN_REVIEW_ENTRYPOINTS = (
 )
 BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
+WORKFLOW_ROUTER_SKILL = ROOT / ".agents/skills/repo-owned-workflow-router/SKILL.md"
 PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
 
 
@@ -79,6 +80,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(term=term):
                 self.assertIn(term, normalized)
+
         self.assertNotIn("back off to 300", normalized)
 
         finishing = FINISHING.read_text(encoding="utf-8").lower()
@@ -96,6 +98,16 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(duplicated_policy=duplicated_policy):
                 self.assertNotIn(duplicated_policy, finishing)
+
+    def test_early_not_planned_outcome_routes_to_non_merge_terminal_entry(self) -> None:
+        router = WORKFLOW_ROUTER_SKILL.read_text(encoding="utf-8")
+        finishing = FINISHING.read_text(encoding="utf-8")
+        for phase in ("bootstrap", "planning", "execution"):
+            self.assertIn(phase, router)
+        self.assertIn("not_planned", router)
+        self.assertIn("finishing-a-development-branch", router)
+        self.assertIn("not_planned", finishing)
+        self.assertIn("without implementation\nverification", finishing)
 
     def test_bounded_slices_default_to_head_bound_task_packets(self) -> None:
         dispatch = self.section("5.2 TPM planning and subagent dispatch")

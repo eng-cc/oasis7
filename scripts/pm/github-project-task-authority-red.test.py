@@ -230,6 +230,7 @@ class AuthoritativeMappingContract(unittest.TestCase):
             "issue_number": 1, "project_item_id": "ITEM_ID",
             "project_identity": project_identity, "reason": "non_pr_completed",
             "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "previous_status": "committed", "previous_workflow_phase": "execution",
         }
         existing = {
             "task_uid": self.uid, "status": "committed", "workflow_phase": "execution",
@@ -273,6 +274,48 @@ class AuthoritativeMappingContract(unittest.TestCase):
                 self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
             ),
         )
+
+    def test_refresh_rejects_intent_receipt_predecessor_disagreement(self) -> None:
+        project_identity = {"owner": "eng-cc", "number": "1", "id": "PROJECT_ID"}
+        digest = "d" * 64
+        intent = {
+            "schema": "oasis7_non_merge_closeout_intent_v1",
+            "task_uid": self.uid, "repository": "eng-cc/oasis7",
+            "issue_number": 1, "project_item_id": "ITEM_ID",
+            "project_identity": project_identity, "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "previous_status": "blocked", "previous_workflow_phase": "blocked",
+        }
+        existing = {
+            "task_uid": self.uid, "status": "committed", "workflow_phase": "execution",
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "closed_without_merge_intent": intent,
+            **self.expected,
+        }
+        receipt_root = self.repo / ".git/oasis7-workflow-receipts" / self.uid
+        receipt_root.mkdir(parents=True)
+        canonical_path = receipt_root / "closed-without-merge-receipt.json"
+        canonical_path.write_text(json.dumps({
+            "receipt_type": "oasis7_closed_without_merge", "schema_version": 1,
+            "issuer": "non-merge-finalize", "task_uid": self.uid,
+            "repository": "eng-cc/oasis7", "issue_number": 1,
+            "project_item_id": "ITEM_ID", "reason": "non_pr_completed",
+            "evidence_sha256": digest, "pr_number": None, "pr_url": None,
+            "pr_state": None, "mergedAt": None,
+            "previous_status": "committed", "previous_workflow_phase": "execution",
+        }, sort_keys=True) + "\n")
+        with self.assertRaises(SystemExit):
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            )
+        legacy = json.loads(canonical_path.read_text())
+        legacy.pop("previous_status")
+        legacy.pop("previous_workflow_phase")
+        canonical_path.write_text(json.dumps(legacy, sort_keys=True) + "\n")
+        with self.assertRaises(SystemExit):
+            MODULE.pending_non_merge_phase(
+                self.repo, self.uid, existing, "eng-cc/oasis7", project_identity,
+            )
 
     def test_refresh_rejects_missing_project_binding_without_mutation_and_allows_repaired_retry(self) -> None:
         args = self.args()

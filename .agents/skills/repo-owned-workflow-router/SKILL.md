@@ -22,8 +22,11 @@ Read-only/chat-only requests enter this router after `default-workflow-bootstrap
 3. Behavior change with a stable narrow harness -> `tdd-test-writer` before execution.
 4. Observed failure -> `systematic-debugging` before speculative fixes.
 5. Review feedback -> `receiving-code-review`.
-6. Implementation verified -> `finishing-a-development-branch`.
-7. Already-bound read-only professional/domain judgment -> matching bounded role slice. Pure fact lookup needs no professional slice.
+6. A classified non-merge outcome, including `not_planned` during bootstrap,
+   planning, or execution -> `finishing-a-development-branch` and its canonical
+   non-merge terminal route; implementation verification is not a prerequisite.
+7. Implementation verified -> `finishing-a-development-branch`.
+8. Already-bound read-only professional/domain judgment -> matching bounded role slice. Pure fact lookup needs no professional slice.
 
 Do not treat specialist domain skills as mandatory default workflow phases. Select them only when their trigger matches.
 

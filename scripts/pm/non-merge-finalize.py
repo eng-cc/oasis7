@@ -307,6 +307,8 @@ def _closeout_intent(task_uid: str, record: dict, reason: str,
         "project_identity": project_identity,
         "reason": reason,
         "evidence_sha256": evidence_digest,
+        "previous_status": record.get("status"),
+        "previous_workflow_phase": record.get("workflow_phase") or "",
         "pr_number": record.get("pr_number"),
         "pr_url": record.get("pr_url"),
     }
@@ -422,10 +424,15 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
         "pr_url": receipt.get("pr_url"),
         "pr_state": receipt.get("pr_state"),
         "mergedAt": receipt.get("mergedAt"),
+        "previous_status": receipt.get("previous_status"),
+        "previous_workflow_phase": receipt.get("previous_workflow_phase"),
     }
     expected.update({key: receipt[key] for key in pr_head if key in existing_receipt})
     if require_modern_authority:
-        required_modern = {"evidence", "project_identity"}
+        required_modern = {
+            "evidence", "project_identity", "previous_status",
+            "previous_workflow_phase",
+        }
         if pr_head:
             required_modern.update(PR_HEAD_REQUIRED_FIELDS)
         if any(key not in existing_receipt for key in required_modern):
@@ -437,7 +444,10 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
         # A canonical receipt may be a pre-migration legacy record.  Keep its
         # historical omissions compatible while validating every value that
         # is present; migration writes a new immutable sidecar.
-        legacy_optional = {"evidence", "project_identity", *PR_HEAD_FIELDS}
+        legacy_optional = {
+            "evidence", "project_identity", "previous_status",
+            "previous_workflow_phase", *PR_HEAD_FIELDS,
+        }
     for key, value in expected.items():
         if key not in existing_receipt:
             if key not in legacy_optional:
@@ -457,7 +467,10 @@ def _validate_existing_receipt(existing_receipt: dict, receipt: dict,
 
 
 def _receipt_needs_migration(existing_receipt: dict, pr_head: dict[str, str]) -> bool:
-    required = {"evidence", "project_identity", *PR_HEAD_REQUIRED_FIELDS}
+    required = {
+        "evidence", "project_identity", "previous_status",
+        "previous_workflow_phase", *PR_HEAD_REQUIRED_FIELDS,
+    }
     if not pr_head:
         required.difference_update(PR_HEAD_REQUIRED_FIELDS)
     return any(key not in existing_receipt for key in required)
@@ -1026,8 +1039,16 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
         "reason": reason,
         "evidence_sha256": evidence_digest,
         "evidence": evidence_data,
-        "previous_status": record.get("status"),
-        "previous_workflow_phase": record.get("workflow_phase") or "",
+        "previous_status": (
+            existing_receipt.get("previous_status")
+            if was_terminal and existing_receipt is not None
+            else record.get("status")
+        ),
+        "previous_workflow_phase": (
+            existing_receipt.get("previous_workflow_phase")
+            if was_terminal and existing_receipt is not None
+            else record.get("workflow_phase") or ""
+        ),
         "pr_number": record.get("pr_number"),
         "pr_url": record.get("pr_url"),
         "pr_state": (pr or {}).get("state") if pr else None,
