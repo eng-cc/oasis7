@@ -482,8 +482,8 @@ taxonomy. Lifecycle transitions use only the five [canonical gates](#canonical-g
 - LiveOps/community review for external messaging, incidents, or player
   commitments.
 
-The current path uses explicit TPM continuation. The future unattended
-executor is limited by the [unattended invariants](#appendix-a-target-supervisor-contract).
+**Human-operated `human_direct_ssh` authority.**
+`human_direct_ssh` is an evidence-only quiescence mode: after a separately authorized human stop, the executor may use only repository-owned fixed commands, roles, canonical roots, and named services over SSH with pinned host keys and `StrictHostKeyChecking=yes`; credentials enter only through a temporary FD or environment binding and never argv, logs, or receipts; it observes quiescence read-only, accepts no arbitrary adapter JSON or caller assertion, cannot mutate/restart/stop, and does not claim compromised-host resistance. Acceptance criteria (all required, fail closed): task-bound human authority and stop evidence; fixed command/role/root/service allowlist; host-key pin; strict SSH checking; secret-free argv/log/receipt audit; live read-only quiescence readback after stop; no generic adapter input; and runtime-issued dispatch/return attestation for unattended automation, else `capability_blocked`.
 ## 4. Failure and Rollback Paths
 ### 4.1 Verification failure
 - Stop completion claim.

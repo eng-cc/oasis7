@@ -11,27 +11,59 @@ Governed transaction contract (current path):
     --identity-receipts <validator-identity-receipts.json> \
     --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
     --consumer-impact-record <record.json> \
+    --human-direct-ssh-request <executor-bound-human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
+    --quiescence-transaction-id <bounded-quiescence-id> \
     --capacity-json <per-node-capacity.json> \
     --node storage-205=local:<stopped-node-root> \
     --node sequencer-204=local:<stopped-node-root> \
     --sequencer-proof-url <bounded-proof-endpoint> \
     --out-dir <transaction-dir>
+  (A persisted --stopped-quiescence-proof may be supplied only as an
+   audit-routing locator when the direct request flags are unavailable; it is
+   never an admission authority.)
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
+  OASIS7_VALIDATOR_PAIR_NONCE_LEDGER=/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl \
+  ./scripts/p2p-public-testnet-rebuild-validators.sh resume \
+    --transaction <transaction-dir>/transaction.json \
+    --host-adapter <governed-host-adapter> \
+    --human-direct-ssh-request <fresh-live-human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
+    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
+  quiesce --host-adapter is retired and fails closed; use the direct mode:
+  ./scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
+    --request <human-stop-request.json> \
+    --known-hosts <pinned-known-hosts> \
+    --out-dir <quiescence-dir> \
+    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
   ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
 
-Plan is local-only and emits a stable
-oasis7.validator_pair_rebuild_plan.v1 digest. Apply/rollback require the
-governed host adapter and emit transaction-bound phase receipts. The plan
-contract binds per-node/platform inventories, exact destructive targets,
-quiescence, forensic non-seed backup metadata, post-delete absence targets,
-new-epoch provenance digests, reset/stage/start and same-window health gates,
-and a rollback boundary that forbids restoring deleted chain state.
+Plan is non-mutating but performs bounded live GitHub/SSH read-only
+re-observation and emits a stable oasis7.validator_pair_rebuild_plan.v1
+digest. It does not call systemd or modify validator state. Apply/rollback
+require the governed host adapter and emit transaction-bound phase receipts.
+Resume is a governed recovery operation: it requires an explicit transaction,
+host adapter, fresh live human-direct-SSH request, canonical pinned known-hosts,
+one temporary credential seam, and an already provisioned absolute
+`OASIS7_VALIDATOR_PAIR_NONCE_LEDGER` environment binding. The nonce environment
+path must match the request's exact `nonce_ledger_path`; the wrapper never
+infers, creates, or falls back to a transaction/output ledger. Persisted proofs
+are audit routing only and cannot authorize resume.
+The plan contract binds per-node/platform inventories, exact destructive
+targets, quiescence, forensic non-seed backup metadata, post-delete absence
+targets, new-epoch provenance digests, reset/stage/start and same-window
+health gates, and a rollback boundary that forbids restoring deleted chain
+state.
 `--plan`/`--test-mode`, `--apply`, and `--rollback` are accepted as aliases
 for the subcommands.
+`quiesce --host-adapter` is retired and fails closed because caller-supplied
+JSON cannot establish host-state authority. Use `human_direct_ssh` for the
+bounded, read-only stop evidence path. It never preflights, resets, stages,
+starts, or mutates observer state.
 
 Historical SSH audit path (not the current governed transaction contract):
   ./scripts/p2p-public-testnet-rebuild-validators.sh \
@@ -89,6 +121,67 @@ require_file() {
   [[ -f "$path" ]] || die "missing file: $path"
 }
 
+require_resume_inputs() {
+  local transaction=""
+  local host_adapter=""
+  local direct_request=""
+  local known_hosts=""
+  local credential_env=""
+  local credential_fd=""
+  while (($#)); do
+    case "$1" in
+      --transaction)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --transaction"
+        [[ -z "$transaction" ]] || die "resume received duplicate --transaction"
+        transaction=$2
+        shift 2
+        ;;
+      --host-adapter)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --host-adapter"
+        [[ -z "$host_adapter" ]] || die "resume received duplicate --host-adapter"
+        host_adapter=$2
+        shift 2
+        ;;
+      --human-direct-ssh-request|--direct-request|--request)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for $1"
+        [[ -z "$direct_request" ]] || die "resume received duplicate live authority request"
+        direct_request=$2
+        shift 2
+        ;;
+      --known-hosts)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --known-hosts"
+        [[ -z "$known_hosts" ]] || die "resume received duplicate --known-hosts"
+        known_hosts=$2
+        shift 2
+        ;;
+      --credential-env)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --credential-env"
+        [[ -z "$credential_env" && -z "$credential_fd" ]] || die "resume accepts exactly one credential seam"
+        credential_env=$2
+        shift 2
+        ;;
+      --credential-fd)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --credential-fd"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "resume --credential-fd must be numeric"
+        [[ -z "$credential_env" && -z "$credential_fd" ]] || die "resume accepts exactly one credential seam"
+        credential_fd=$2
+        shift 2
+        ;;
+      *)
+        die "resume rejects unsupported or positional input: $1"
+        ;;
+    esac
+  done
+  [[ -n "$transaction" ]] || die "resume requires --transaction"
+  [[ -n "$host_adapter" ]] || die "resume requires --host-adapter"
+  [[ -n "$direct_request" ]] || die "resume requires --request for fresh live GitHub authority"
+  [[ -n "$known_hosts" ]] || die "resume requires --known-hosts for the canonical SSH pin"
+  [[ -n "$credential_env" || -n "$credential_fd" ]] || die "resume requires exactly one temporary credential seam"
+  local nonce_ledger=${OASIS7_VALIDATOR_PAIR_NONCE_LEDGER:-}
+  [[ -n "$nonce_ledger" ]] || die "resume requires OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"
+  [[ "$nonce_ledger" = /* ]] || die "resume requires an absolute OASIS7_VALIDATOR_PAIR_NONCE_LEDGER path"
+}
+
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
@@ -96,9 +189,10 @@ cd "$repo_root"
 # governed pair transactions must go through the local-first executor.  Keep
 # this dispatch in the shell entrypoint so operators and automation have one
 # stable command surface while the executor owns the signed provenance and
-# host-adapter gates.  The envelope below is intentionally derived only from
-# the executor's JSON; plan mode never opens SSH, invokes systemd, or deletes a
-# path.
+# direct-SSH read-only gate.  The envelope below is intentionally derived only from
+# the executor's JSON; the plan path performs only the bounded, direct
+# read-only re-observation required by the human_direct_ssh contract and never
+# invokes systemd or deletes a path.
 receipt_contract_envelope() {
   local mode=$1
   shift
@@ -122,6 +216,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -143,6 +238,53 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def durable_write(path: Path, payload: str) -> None:
+    """Publish a receipt atomically, with file and parent-directory barriers."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_fd = -1
+    temporary: Path | None = None
+    try:
+        temporary_fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", dir=str(path.parent)
+        )
+        temporary = Path(temporary_name)
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
+            temporary_fd = -1
+            handle.write(payload + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(str(path.parent), directory_flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        if temporary_fd >= 0:
+            try:
+                os.close(temporary_fd)
+            except OSError:
+                pass
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise SystemExit(f"durable receipt write failed: {error.__class__.__name__}")
+
+
+REPOSITORY_EXECUTABLE_RELATIVE = "scripts/p2p-public-testnet-validator-pair-rebuild.py"
+REPOSITORY_EXECUTABLE = Path.cwd() / REPOSITORY_EXECUTABLE_RELATIVE
+if REPOSITORY_EXECUTABLE.is_symlink() or not REPOSITORY_EXECUTABLE.is_file():
+    raise SystemExit("repository-owned validator-pair executor is not a regular file")
+REPOSITORY_EXECUTABLE_IDENTITY = {
+    "schema_version": "oasis7.validator_pair_rebuild_repository_executable.v1",
+    "path": REPOSITORY_EXECUTABLE_RELATIVE,
+    "sha256": sha256_file(REPOSITORY_EXECUTABLE),
+}
 
 
 def entry(path: Path, relative: str) -> dict[str, object]:
@@ -278,7 +420,7 @@ def node_contracts() -> dict[str, object]:
             "observer_equivalents_not_mutated_by_pair_transaction": True,
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
-        if mode != "plan":
+        if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
             observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
             if not isinstance(observed, dict):
@@ -288,7 +430,7 @@ def node_contracts() -> dict[str, object]:
             post_delete_proof["receipt"] = observed
         backup_receipt = None
         backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
-        if mode != "plan":
+        if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
             if not isinstance(observed_backup, dict):
                 raise SystemExit(f"missing forensic backup receipt for {role}")
@@ -350,8 +492,8 @@ def node_contracts() -> dict[str, object]:
             },
             "stopped_quiescence_proof": {
                 "required": True,
-                "remote_activity": False if mode == "plan" else "adapter_receipt_required",
-                "proof": "governed host-adapter quiesce receipt binds active=false,running=false before reset",
+                "remote_activity": "executor-owned-direct-ssh-read-only" if mode in {"plan", "human_direct_ssh"} else False,
+                "proof": "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset",
             },
         }
         if backup_receipt is not None:
@@ -367,6 +509,7 @@ contract.update(
         "mutation_order": value.get("mutation_order", ["storage-205", "sequencer-204"]),
         "startup_order": value.get("startup_order", ["sequencer-204", "storage-205"]),
         "nodes": node_contracts(),
+        "repository_executable": REPOSITORY_EXECUTABLE_IDENTITY,
         "provenance_epoch": value.get("provenance", {}).get("epoch", "plan-bound"),
         "provenance_digests": {
             "package": {
@@ -408,9 +551,29 @@ if isinstance(governed, dict):
 if mode == "plan":
     # Plan output is deliberately timestamp-free and therefore byte-stable.
     contract["deterministic"] = True
-    contract["remote_activity"] = False
+    # ``plan`` performs the executor-owned live GitHub authority read and
+    # direct SSH quiescence observation before emitting the plan.  The plan
+    # remains non-mutating, but reporting no remote activity is false.
+    contract["remote_activity"] = "executor-owned-direct-ssh-read-only"
     contract["systemd_activity"] = False
     contract["destructive_activity"] = False
+elif mode in {"quiesce", "human_direct_ssh"}:
+    # Quiescence is an evidence-only transition.  It may not preflight,
+    # reset, stage, start, or mutate any observer or validator state.
+    contract["deterministic"] = False
+    contract["remote_activity"] = "executor-owned-direct-ssh-read-only" if mode == "human_direct_ssh" else "governed-host-adapter-quiesce-only"
+    contract["systemd_activity"] = False
+    contract["destructive_activity"] = False
+    contract["quiescence_only"] = True
+    contract["preflight"] = "forbidden"
+    contract["reset"] = "forbidden"
+    contract["stage"] = "forbidden"
+    if mode == "human_direct_ssh":
+        contract["authority"] = "human_direct_ssh"
+        contract["provider"] = value.get("provider")
+        contract["fixed_command_allowlist"] = value.get("commands")
+        contract["host_key_pins"] = value.get("host_fingerprints")
+        contract["credential_seam"] = "temporary-fd-or-environment; secret-free argv/log/receipt"
 else:
     contract["captured_at"] = value.get("host_receipt", {}).get("captured_at")
     contract["deterministic"] = False
@@ -441,8 +604,7 @@ if target is None:
     target = str(Path(out_dir).resolve() / "transaction.json") if out_dir else None
 if target:
     destination = Path(target)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(output + "\n", encoding="utf-8")
+    durable_write(destination, output)
 print(output)
 PY
 }
@@ -451,7 +613,12 @@ PY
 # historical SSH fixture contract and are intentionally not used for a current
 # destructive rebuild.
 case "${1:-}" in
-  plan|apply|rollback)
+  plan|apply|rollback|quiesce|human_direct_ssh)
+    receipt_contract_envelope "$@"
+    exit $?
+    ;;
+  resume)
+    require_resume_inputs "${@:2}"
     receipt_contract_envelope "$@"
     exit $?
     ;;
@@ -463,6 +630,11 @@ case "${1:-}" in
   --apply)
     shift
     receipt_contract_envelope apply "$@"
+    exit $?
+    ;;
+  --quiesce)
+    shift
+    receipt_contract_envelope quiesce "$@"
     exit $?
     ;;
   --rollback)
