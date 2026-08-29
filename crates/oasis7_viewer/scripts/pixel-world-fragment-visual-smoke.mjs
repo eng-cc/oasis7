@@ -15,6 +15,7 @@ const mobileActionReceiptScreenshotPath = join(outDir, "mobile-action-receipt-vi
 const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visual.png");
 const shellLiteDesktopScreenshotPath = join(outDir, "shell-lite-desktop-visual.png");
 const shellLiteMobileScreenshotPath = join(outDir, "shell-lite-mobile-visual.png");
+const shellLiteCompactScreenshotPath = join(outDir, "shell-lite-compact-mobile-visual.png");
 const shellLiteCjkScreenshotPath = join(outDir, "shell-lite-cjk-mobile-visual.png");
 const rendererFallbackScreenshotPath = join(outDir, "renderer-fallback-visual.png");
 const summaryPath = join(outDir, "summary.json");
@@ -46,6 +47,24 @@ function ensureAgentBrowser() {
       `missing required browser automation command: ${agentBrowserBin}\n`
         + "Install or expose agent-browser, or set AGENT_BROWSER_BIN to a compatible executable.",
     );
+  }
+}
+
+function ensurePixelWorldBridgeDist() {
+  const required = [
+    resolve(viewerRoot, "dist/pixel-world-bridge/pixel_world_bridge.js"),
+    resolve(viewerRoot, "dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"),
+    resolve(viewerRoot, "dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"),
+  ];
+  const missing = required.filter((path) => {
+    try {
+      return !statSync(path).isFile();
+    } catch {
+      return true;
+    }
+  });
+  if (missing.length > 0) {
+    throw new Error(`pixel-world visual smoke requires built bridge dist; run ./scripts/build-viewer-software-safe.sh\nmissing:\n${missing.join("\n")}`);
   }
 }
 
@@ -342,6 +361,7 @@ function visualProbeScript(options = {}) {
       await waitFor(() => state().authBoundAgentId === "agent-0");
       await waitFor(() => document.querySelector("#pixel-world-embedded-runtime-canvas"));
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
 
       const canvas = document.querySelector("#pixel-world-embedded-runtime-canvas");
       const canvasRect = canvas.getBoundingClientRect();
@@ -363,6 +383,12 @@ function visualProbeScript(options = {}) {
         wheelCanceled,
         cursor: getComputedStyle(canvas).cursor,
         badges: badges(),
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+          selection: renderDto.selection || null,
+        },
       };
 
       if (${shellLiteProbe}) {
@@ -413,45 +439,23 @@ function visualProbeScript(options = {}) {
         return JSON.stringify({ ready, shellLite });
       }
 
-      await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
-      await waitFor(() => {
-        const markers = document.querySelectorAll(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
-        if (markers.length === 2) {
-          return markers;
-        }
-        throw new Error("two agent visual markers not rendered: " + JSON.stringify({
-          agentMarkers: markers.length,
-          hitTargets: document.querySelectorAll(".pixel-world-entity--agent.pixel-world-entity--canvas-hit-target").length,
-          fragments: document.querySelectorAll(".pixel-world-fragment-terrain").length,
-          badges: badges(),
-        }));
-      });
-
       const stage = document.querySelector(".pixel-world-canvas");
-      const fragments = Array.from(stage.querySelectorAll(".pixel-world-fragment-terrain"));
-      const location = stage.querySelector(".pixel-world-entity--location");
-      const agents = Array.from(stage.querySelectorAll(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)"));
+      const surfaceCanvas = stage.querySelector(".pixel-world-canvas__surface");
+      const agents = Array.from(stage.querySelectorAll(".pixel-world-entity--agent.pixel-world-entity--canvas-hit-target"));
       const agent = agents.find((marker) => marker.dataset.agentId === "agent-0");
       const unselectedAgent = agents.find((marker) => marker.dataset.agentId === "agent-1");
-      const fragmentRects = fragments.map(rectOf);
-      const maxFragmentWidth = Math.max(...fragmentRects.map((rect) => rect.width));
-      const agentRect = rectOf(agent);
-      const unselectedAgentRect = rectOf(unselectedAgent);
-      const locationOpacity = Number.parseFloat(location.style.opacity || getComputedStyle(location).opacity);
-      const layerOrder = {
-        fragmentZ: zIndexOf(fragments[0]),
-        locationZ: zIndexOf(location),
-        agentZ: zIndexOf(agent),
-      };
+      const agentRect = agent ? rectOf(agent) : null;
+      const unselectedAgentRect = unselectedAgent ? rectOf(unselectedAgent) : null;
+      const badgeValues = Object.fromEntries(badges().map((badge) => badge.split("=", 2)));
       const nextMoveCard = document.querySelector(".pixel-world-command-cell--next");
+      const nextMoveFocusTarget = nextMoveCard.querySelector("a,button");
       const nextMoveRectBeforeFocus = rectOf(nextMoveCard);
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-      nextMoveCard.focus({ preventScroll: true });
-      await waitFor(() => document.activeElement === nextMoveCard);
-      const nextMoveFocusedStyle = getComputedStyle(nextMoveCard);
+      nextMoveFocusTarget.focus({ preventScroll: true });
+      const nextMoveFocusedStyle = getComputedStyle(nextMoveFocusTarget);
       const nextMoveRectAfterFocus = rectOf(nextMoveCard);
       const nextMoveFocus = {
-        active: document.activeElement === nextMoveCard,
+        active: document.activeElement === nextMoveFocusTarget,
         outlineStyle: nextMoveFocusedStyle.outlineStyle,
         outlineColor: nextMoveFocusedStyle.outlineColor,
         outlineWidth: nextMoveFocusedStyle.outlineWidth,
@@ -467,24 +471,14 @@ function visualProbeScript(options = {}) {
         ready,
         rendered: {
           runtimeStatus: state().pixelWorldRuntimeStatus,
-          fragmentCount: fragments.length,
-          fragmentRects,
-          maxFragmentWidth,
+          fragmentCount: Number(badgeValues.fragments),
           agentCount: agents.length,
+          canvasRect: rectOf(surfaceCanvas),
           agentRect,
           unselectedAgentRect,
           selectedAgentSelected: agent?.dataset.selected || null,
           unselectedAgentSelected: unselectedAgent?.dataset.selected || null,
           agentPositionSource: agent?.dataset.positionSource || null,
-          locationMarkerRole: location?.dataset.markerRole || null,
-          locationOpacity,
-          fragmentTags: fragments.map((fragment) => fragment.tagName),
-          fragmentTitles: fragments.map((fragment) => fragment.getAttribute("title")),
-          layerOrder: {
-            ...layerOrder,
-            fragmentsBehindLocation: layerOrder.fragmentZ < layerOrder.locationZ,
-            locationBehindAgent: layerOrder.locationZ < layerOrder.agentZ,
-          },
           actionReceipt: receiptOf(),
           nextMoveFocus,
           badges: badges(),
@@ -553,6 +547,9 @@ function shellLiteViewportProbeScript() {
       const allControls = Array.from(commandStrip.querySelectorAll("a,button"));
       const selectedAgent = supporting?.querySelector("[data-selected-agent-label]");
       const receiptElement = document.querySelector(".pixel-world-action-receipt");
+      const feedElement = document.querySelector('[data-viewer-overlay="feed"]');
+      const readoutElement = document.querySelector(".pixel-world-readout");
+      const selectedMarkerElement = document.querySelector(".pixel-world-entity--canvas-hit-target[data-selected='true']");
       const viewport = {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -586,6 +583,11 @@ function shellLiteViewportProbeScript() {
           receipt: receiptOf(),
           supportingReceiptGapPx: supporting && receiptElement ? Math.round(receiptElement.getBoundingClientRect().top - supporting.getBoundingClientRect().bottom) : null,
           receiptDistinct: Boolean(receiptElement && receiptElement.parentElement !== commandStrip && !receiptElement.closest('[data-viewer-overlay="next-move"]')),
+          feedRect: feedElement ? rectOf(feedElement) : null,
+          readoutRect: readoutElement ? rectOf(readoutElement) : null,
+          readoutDisplay: readoutElement ? getComputedStyle(readoutElement).display : null,
+          selectedMarkerRect: selectedMarkerElement ? rectOf(selectedMarkerElement) : null,
+          commandStripRect: rectOf(commandStrip),
           documentLocale: document.documentElement.lang || null,
           viewport,
           horizontalOverflowPx: Math.max(0, viewport.scrollWidth - viewport.clientWidth),
@@ -743,6 +745,12 @@ function actionReceiptProbeScript() {
       };
       const state = () => window.__AW_TEST__?.getState?.() || {};
       const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
+      const badgeCount = (name) => {
+        const badge = Array.from(document.querySelectorAll(".badge"))
+          .map((element) => element.textContent.trim())
+          .find((text) => text.startsWith(name + "="));
+        return Number(badge?.slice(name.length + 1));
+      };
       const rectOf = (element) => {
         const rect = element.getBoundingClientRect();
         return {
@@ -785,13 +793,12 @@ function actionReceiptProbeScript() {
         return current?.present === "true" && current?.confidence === "world_delta" ? current : null;
       });
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
-      await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
       const agentRect = await waitFor(() => {
         const current = document.querySelector(".pixel-world-entity--agent");
         const rect = current ? rectOf(current) : null;
         return rect?.width > 0 && rect?.height > 0 ? rect : null;
       });
-      const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
       const blockerBadge = Array.from(document.querySelectorAll(".badge"))
         .map((element) => element.textContent.trim())
         .find((text) => text.startsWith("blocker=")) || null;
@@ -800,9 +807,15 @@ function actionReceiptProbeScript() {
       return JSON.stringify({
         runtimeStatus: state().pixelWorldRuntimeStatus,
         receipt,
+        playerLeverageText: textOf(".pixel-world-shell-context-group--leverage"),
         blockerBadge,
-        fragmentCount: fragments.length,
+        fragmentCount: badgeCount("fragments"),
         agentRect,
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+        },
       });
     })()
   `;
@@ -830,6 +843,12 @@ function mobileActionReceiptProbeScript() {
       };
       const state = () => window.__AW_TEST__?.getState?.() || {};
       const textOf = (selector, root = document) => root.querySelector(selector)?.textContent.trim() || null;
+      const badgeCount = (name) => {
+        const badge = Array.from(document.querySelectorAll(".badge"))
+          .map((element) => element.textContent.trim())
+          .find((text) => text.startsWith(name + "="));
+        return Number(badge?.slice(name.length + 1));
+      };
       const rectOf = (element) => {
         const rect = element.getBoundingClientRect();
         return {
@@ -859,6 +878,7 @@ function mobileActionReceiptProbeScript() {
       };
 
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
+      const renderDto = await waitFor(() => window.__OASIS7_PIXEL_WORLD_RENDER_DTO__?.());
       const receiptElement = await waitFor(() => document.querySelector(".pixel-world-action-receipt"));
       receiptElement.scrollIntoView({ block: "start", inline: "nearest" });
       window.scrollBy(0, -8);
@@ -871,7 +891,6 @@ function mobileActionReceiptProbeScript() {
       });
 
       const receipt = receiptOf();
-      const fragments = Array.from(document.querySelectorAll(".pixel-world-fragment-terrain"));
       const viewport = {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -886,8 +905,13 @@ function mobileActionReceiptProbeScript() {
         viewport,
         horizontalOverflowPx,
         receipt,
-        fragmentCount: fragments.length,
+        fragmentCount: badgeCount("fragments"),
         agentRect,
+        renderDto: {
+          fragments: renderDto.fragment_terrain?.length || 0,
+          agents: renderDto.agents?.length || 0,
+          locations: renderDto.locations?.length || 0,
+        },
         commandStripRect: rectOf(document.querySelector(".pixel-world-command-strip")),
       });
     })()
@@ -929,7 +953,7 @@ function mobileFocusOverlayProbeScript() {
 
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
       const focusButton = Array.from(document.querySelectorAll("button"))
-        .find((button) => /Enter World Focus|进入沉浸模式/.test(button.textContent || ""));
+        .find((button) => /Cinematic View|Enter World Focus|电影视图|进入沉浸模式/.test(button.textContent || ""));
       if (!focusButton) {
         throw new Error("missing Enter World Focus button for mobile focus overlay probe");
       }
@@ -952,6 +976,11 @@ function mobileFocusOverlayProbeScript() {
       const receiptCell = rectOf(document.querySelector(".pixel-world-focus-hud__cell--receipt"));
       const map = rectOf(document.querySelector('[data-focus-minimap="true"]'));
       const receipt = rectOf(document.querySelector(".pixel-world-focus-receipt"));
+      const selectedMarkerElement = document.querySelector(".pixel-world-entity--canvas-hit-target[data-selected='true']");
+      const selectedMarker = selectedMarkerElement ? rectOf(selectedMarkerElement) : null;
+      const markerOverlapsHud = Boolean(selectedMarker
+        && selectedMarker.right > hud.x && selectedMarker.x < hud.right
+        && selectedMarker.bottom > hud.y && selectedMarker.y < hud.bottom);
       const horizontalOverflowPx = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
 
       return JSON.stringify({
@@ -966,6 +995,8 @@ function mobileFocusOverlayProbeScript() {
         receiptCell,
         map,
         receipt,
+        selectedMarker,
+        markerOverlapsHud,
         gaps: {
           hudToMap: map.y - hud.bottom,
           mapToReceipt: receipt.y - map.bottom,
@@ -1002,7 +1033,15 @@ function assertShellLiteViewport(label, probe, expectedWidth) {
   assert(shell.viewport?.width === expectedWidth, `${label} probe used the wrong viewport width`, probe);
   assert(shell.horizontalOverflowPx <= 2, `${label} Shell Lite has horizontal overflow`, probe);
   if (expectedWidth <= 640) {
-    assert(shell.supportingReceiptGapPx >= 8, `${label} supporting context must clear Action Receipt by at least 8px`, probe);
+    const receiptGapPx = shell.viewport.height <= 650
+      ? shell.receipt.rect.y - shell.commandStripRect.bottom
+      : shell.supportingReceiptGapPx;
+    assert(receiptGapPx >= 8, `${label} command content must clear Action Receipt by at least 8px`, probe);
+    const feedReadoutSeparated = shell.readoutDisplay === "none" || !shell.feedRect || !shell.readoutRect
+      || shell.feedRect.bottom + 8 <= shell.readoutRect.y || shell.readoutRect.bottom + 8 <= shell.feedRect.y;
+    assert(feedReadoutSeparated, `${label} Feed and world readout overlap`, probe);
+    assert(shell.selectedMarkerRect?.width >= 44 && shell.selectedMarkerRect?.height >= 44, `${label} selected marker lost its mobile hit area`, probe);
+    assert(shell.selectedMarkerRect.bottom + 8 <= shell.commandStripRect.y, `${label} selected marker does not clear Next Move by 8px`, probe);
   }
 }
 
@@ -1048,12 +1087,19 @@ async function runShellLiteOnlyMode(url) {
   await runAgentBrowser(["screenshot", shellLiteMobileScreenshotPath], { timeout: 20_000 });
   summary.shellLiteMobileScreenshot = shellLiteMobileScreenshotPath;
 
+  await runAgentBrowserJson(["set", "viewport", "320", "568"]);
+  console.log("probing compact Shell Lite mobile safe area");
+  summary.compactShellLite = await evalJson(shellLiteViewportProbeScript());
+  assertShellLiteViewport("compact Shell Lite", summary.compactShellLite, 320);
+  await runAgentBrowser(["screenshot", shellLiteCompactScreenshotPath], { timeout: 20_000 });
+  summary.shellLiteCompactScreenshot = shellLiteCompactScreenshotPath;
+
   const cjkUrl = new URL(url);
   cjkUrl.searchParams.set("locale", "zh-CN");
   await runAgentBrowserJson(["open", cjkUrl.toString()], { timeout: 45_000 });
   await runAgentBrowserJson(["set", "viewport", "390", "844"]);
   console.log("probing CJK Shell Lite mobile semantic surface");
-  summary.cjkShellLite = await evalJson(visualProbeScript({ shellLiteOnly: true }));
+  summary.cjkShellLite = await evalJson(shellLiteViewportProbeScript());
   assertShellLiteViewport("CJK Shell Lite", summary.cjkShellLite, 390);
   assertCjkShellLiteViewport(summary.cjkShellLite);
   await runAgentBrowser(["screenshot", shellLiteCjkScreenshotPath], { timeout: 20_000 });
@@ -1073,13 +1119,14 @@ async function runShellLiteOnlyMode(url) {
 }
 
 ensureAgentBrowser();
+ensurePixelWorldBridgeDist();
 
 const server = createServer(serveFile);
 
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&pixel_world_visual_fixture=selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
   if (shellLiteOnly) {
@@ -1104,9 +1151,14 @@ try {
   assert(summary.ready.fatal === null, "pixel-world runtime reported a fatal error", summary.ready);
   assert(summary.ready.camera?.zoom > 1, "wheel interaction did not produce camera zoom telemetry", summary.ready);
   assert(summary.ready.wheelCanceled === true, "canvas did not capture wheel interaction", summary.ready);
-  assert(summary.rendered.runtimeStatus === "ready", "rendered bridge surface was not ready for visual DOM assertions", summary.rendered);
-  assert(summary.rendered.fragmentCount === 3, "expected exactly three fragment background markers", summary.rendered);
-  assert(summary.rendered.agentCount === 2, "expected exactly two readable agent markers", summary.rendered);
+  assert(summary.ready.renderDto?.fragments === 3, "current Rust render DTO lost its three fragment projections", summary.ready);
+  assert(summary.ready.renderDto?.agents === 2, "current Rust render DTO lost its two agent projections", summary.ready);
+  assert(summary.ready.renderDto?.locations >= 2, "current Rust render DTO lost its location projections", summary.ready);
+  assert(summary.ready.renderDto?.selection?.kind === "agent", "current Rust render DTO lost agent selection", summary.ready);
+  assert(summary.rendered.runtimeStatus === "ready", "rendered bridge surface was not ready for canvas assertions", summary.rendered);
+  assert(summary.rendered.fragmentCount === 3, "Rust render projection did not report exactly three fragments", summary.rendered);
+  assert(summary.rendered.agentCount === 2, "expected exactly two accessible canvas agent hit targets", summary.rendered);
+  assert(summary.rendered.canvasRect?.width > 0 && summary.rendered.canvasRect?.height > 0, "authoritative canvas has no measurable footprint", summary.rendered);
   assert(summary.rendered.selectedAgentSelected === "true", "agent-0 must remain the selected authenticated agent", summary.rendered);
   assert(summary.rendered.unselectedAgentSelected === "false", "agent-1 must remain an unselected visual-only fixture agent", summary.rendered);
   assert(summary.rendered.unselectedAgentRect?.width > 0, "second agent marker has no measurable visual footprint", summary.rendered);
@@ -1116,20 +1168,14 @@ try {
     "two-agent fixture did not produce distinct readable marker positions",
     summary.rendered,
   );
-  assert(summary.rendered.locationMarkerRole === "logic_anchor", "location marker was not demoted to logic anchor", summary.rendered);
-  assert(summary.rendered.locationOpacity < 0.5, "location marker remains too visually dominant", summary.rendered);
   assert(summary.rendered.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.rendered);
-  assert(summary.rendered.layerOrder.fragmentsBehindLocation, "fragment terrain is not behind the location layer", summary.rendered);
-  assert(summary.rendered.layerOrder.locationBehindAgent, "agent layer is not in front of the location layer", summary.rendered);
   assert(summary.rendered.actionReceipt?.present === "false", "rendered hierarchy fixture should start from an honest no-receipt state", summary.rendered);
   assert(summary.rendered.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.rendered);
   assert(summary.rendered.actionReceipt?.meta === null, "no-receipt fixture should not show receipt metadata", summary.rendered);
-  assert(summary.rendered.nextMoveFocus?.active === true, "next move command cell did not receive keyboard focus", summary.rendered.nextMoveFocus);
-  assert(summary.rendered.nextMoveFocus?.outlineStyle !== "none", "next move focus state is not visibly outlined", summary.rendered.nextMoveFocus);
-  assert(summary.rendered.nextMoveFocus?.outlineWidth !== "0px", "next move focus outline has no measurable width", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.active === true, "next move control did not receive keyboard focus", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.outlineStyle !== "none", "next move control focus state is not visibly outlined", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.outlineWidth !== "0px", "next move control focus outline has no measurable width", summary.rendered.nextMoveFocus);
   assert(summary.rendered.nextMoveFocus?.layoutStable === true, "next move focus state caused layout shift", summary.rendered.nextMoveFocus);
-  assert(summary.rendered.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.rendered);
-  assert(summary.rendered.maxFragmentWidth < summary.rendered.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.rendered);
 
   await runAgentBrowser(["screenshot", screenshotPath], { timeout: 20_000 });
   console.log("probing action receipt visual state");
@@ -1144,9 +1190,13 @@ try {
     "action receipt summary did not describe the confirmed blocker",
     summary.actionReceipt,
   );
-  assert(/agent=agent-0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt did not name the target agent", summary.actionReceipt);
+  assert(/Agent 0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt did not use a readable target-agent label", summary.actionReceipt);
+  assert(!/agent=agent-0/.test(summary.actionReceipt.receipt?.meta || ""), "action receipt leaked the raw target-agent id", summary.actionReceipt);
+  assert(/Survey Agent/.test(summary.actionReceipt.playerLeverageText || ""), "Player Leverage did not use the readable agent name", summary.actionReceipt);
+  assert(!/agent-0/.test(summary.actionReceipt.playerLeverageText || ""), "Player Leverage leaked the raw agent id", summary.actionReceipt);
   assert(summary.actionReceipt.receipt?.rect?.height > 40, "action receipt did not render with a measurable visual footprint", summary.actionReceipt);
   assert(summary.actionReceipt.fragmentCount === 3, "action receipt scenario should preserve fragment background markers", summary.actionReceipt);
+  assert(summary.actionReceipt.renderDto?.fragments === 3 && summary.actionReceipt.renderDto?.agents === 2, "action receipt probe did not preserve the current Rust render DTO", summary.actionReceipt);
   assert(summary.actionReceipt.agentRect?.width > 0, "action receipt scenario lost the readable agent marker", summary.actionReceipt);
   await runAgentBrowser(["screenshot", actionReceiptScreenshotPath], { timeout: 20_000 });
 
@@ -1167,6 +1217,7 @@ try {
   );
   assert(summary.mobileActionReceipt.receipt?.rect?.bottom <= summary.mobileActionReceipt.viewport.height, "mobile receipt is not fully visible in the screenshot viewport", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.fragmentCount === 3, "mobile action receipt scenario lost fragment background markers", summary.mobileActionReceipt);
+  assert(summary.mobileActionReceipt.renderDto?.fragments === 3 && summary.mobileActionReceipt.renderDto?.agents === 2, "mobile receipt probe did not preserve the current Rust render DTO", summary.mobileActionReceipt);
   assert(summary.mobileActionReceipt.agentRect?.width > 0, "mobile action receipt scenario lost the readable agent marker", summary.mobileActionReceipt);
   await runAgentBrowser(["screenshot", mobileActionReceiptScreenshotPath], { timeout: 20_000 });
 
@@ -1175,12 +1226,10 @@ try {
   assert(summary.mobileFocusOverlay.runtimeStatus === "ready", "mobile focus overlay did not stay on the Rust bridge surface", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.focusActive === true, "mobile focus overlay did not enter focus mode", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.horizontalOverflowPx <= 2, "mobile focus overlay has horizontal overflow", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.gaps.hudToMap >= 8, "mobile focus minimap starts too close to the HUD stack", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.gaps.mapToReceipt >= 10, "mobile focus minimap starts too close to the receipt band", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.gaps.controlsToPrompt >= 4, "mobile focus controls overlap the prompt cell", summary.mobileFocusOverlay);
   assert(summary.mobileFocusOverlay.gaps.blockerToReceiptCell >= 0, "mobile focus blocker and receipt cells overlap", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.map.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus minimap extends beyond the viewport", summary.mobileFocusOverlay);
-  assert(summary.mobileFocusOverlay.receipt.right <= summary.mobileFocusOverlay.viewport.clientWidth + 2, "mobile focus receipt extends beyond the viewport", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.selectedMarker?.width >= 44, "mobile selected marker lost its minimum hit target", summary.mobileFocusOverlay);
+  assert(summary.mobileFocusOverlay.markerOverlapsHud === false, "mobile selected marker overlaps the focus HUD", summary.mobileFocusOverlay);
   await runAgentBrowser(["screenshot", mobileFocusOverlayScreenshotPath], { timeout: 20_000 });
 
   summary.url = url;

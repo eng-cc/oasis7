@@ -775,9 +775,8 @@ body {
   }
 
   [data-viewer-shell="player-fullscreen"] .pixel-world-readout {
+    display: none;
     top: 112px;
-    left: 10px;
-    max-width: calc(100vw - 20px);
   }
 
   [data-viewer-overlay="feed"] {
@@ -791,6 +790,7 @@ body {
      * long English context can overflow the capped grid by roughly 32px. */
     bottom: calc(96px + 48px);
     max-height: min(38dvh, 280px);
+    overflow-y: auto;
   }
 
   [data-viewer-overlay="next-move"] .pixel-world-command-cell--next {

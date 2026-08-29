@@ -688,6 +688,8 @@ describe("pixel world host", () => {
       expect(receipt).toHaveAttribute("data-receipt-confidence", "world_delta");
     });
     expect(receipt).not.toHaveTextContent(/\b(world_delta|accepted_intent|none)\b/i);
+    expect(receipt).toHaveTextContent("Agent 0");
+    expect(receipt).not.toHaveTextContent("agent=agent-0");
     expect(receipt).toHaveTextContent(/blocked|confirmed|waiting|queued|accepted/i);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -854,9 +856,10 @@ describe("pixel world host", () => {
     expect(secondAgentMarker).toHaveAttribute("aria-label", "Select Agent Agent 1");
     expect(agentMarker.style.transform).not.toEqual(secondAgentMarker.style.transform);
     agentMarker.click();
-    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Agent 0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).not.toHaveTextContent("agent/agent-0");
     expect(canvas.querySelector(".pixel-world-route")).toBeNull();
-    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: agent/agent-0");
+    expect(canvas.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Agent 0");
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1231,7 +1234,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Missing Material");
     expect(document.querySelectorAll(".pixel-world-focus-rail__item")[0]).toHaveClass("pixel-world-focus-rail__item--blocker");
@@ -1255,7 +1259,8 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"] .sr-only')).toHaveTextContent("Reference: Factory Anchor");
     expect(document.querySelector(".pixel-world-focus-minimap__node--target")).not.toHaveTextContent("Anchor");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Build smelter mk1");
-    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agent-0");
+    expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("Agent 0");
+    expect(document.querySelector('[data-focus-minimap="true"]')).not.toHaveTextContent("agent-0");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("targets=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=1");
@@ -1280,13 +1285,13 @@ describe("pixel world host", () => {
     expect(commandDrawer).toHaveProperty("open", true);
     expect(focusDiagnosticsDrawer).toHaveProperty("open", false);
     expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "true");
-    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("agent=agent-0");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("Agent 0");
+    expect(commandDrawer).not.toHaveTextContent("agent=agent-0");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--receipt")).toHaveTextContent("Blocked");
     expect(commandDrawer).toHaveTextContent("Agent Chat");
     expect(commandDrawer).toHaveTextContent("Command Surface");
     expect(commandDrawer).toHaveTextContent("Current Target");
-    expect(commandDrawer).toHaveTextContent("agent=agent-0");
     expect(commandDrawer).toHaveTextContent("Message");
     expect(commandDrawer).toHaveTextContent("Send Chat");
     expect(commandDrawer).toHaveTextContent("No chat feedback yet.");
@@ -1385,15 +1390,16 @@ describe("pixel world host", () => {
     });
     expect(host).toHaveAttribute("data-focus-comparable", "true");
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
-    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent/agent-0");
+    expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
     expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=4");
-    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("agent=agent-0");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("Agent 0");
+    expect(document.querySelector(".pixel-world-focus-drawer--command")).not.toHaveTextContent("agent=agent-0");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("projects the shared non-color beacon for selected agents and locations only", async () => {

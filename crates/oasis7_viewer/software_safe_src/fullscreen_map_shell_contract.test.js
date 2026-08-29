@@ -229,6 +229,38 @@ describe("fullscreen map shell contract", () => {
     expect(readoutTop).toBeGreaterThanOrEqual(entryTop + 44);
   });
 
+  it("does not leave the low-priority mobile readout under the Feed overlay", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    const readoutRule = findRule(
+      mobileBlock,
+      /\[data-viewer-shell=["']player-fullscreen["']\]\s+\.pixel-world-readout/,
+    );
+    const feedRule = findRule(mobileBlock, /\[data-viewer-overlay=["']feed["']\]/);
+    expect(readoutRule, "mobile Player readout must have an explicit safe-area policy").not.toBeNull();
+    expect(feedRule, "mobile Feed must have an explicit safe-area policy").not.toBeNull();
+
+    const readoutIsHidden = hasDeclaration(readoutRule, "display", /none/);
+    const readoutTop = Number(readoutRule?.declarations.match(/top\s*:\s*(\d+)px/i)?.[1]);
+    const feedTop = Number(feedRule?.declarations.match(/top\s*:\s*(\d+)px/i)?.[1]);
+    const bandsAreSeparated = Number.isFinite(readoutTop)
+      && Number.isFinite(feedTop)
+      && feedTop >= readoutTop + 44;
+
+    expect(
+      readoutIsHidden || bandsAreSeparated,
+      "mobile Feed and the low-priority world readout must be hidden or occupy disjoint vertical bands",
+    ).toBe(true);
+  });
+
+  it("moves the selected mobile marker into the ordinary Shell safe area", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*?\[data-viewer-overlay=["']next-move["']\]\s*\{[^}]*overflow-y\s*:\s*auto/i);
+    const safeAreaSource = await readFile("software_safe_src/pixel_world_mobile_safe_area.js", "utf8");
+    expect(safeAreaSource).toContain("commandTop - SAFE_AREA_GAP_PX - markerBottom");
+    expect(safeAreaSource).toContain("feedBottom + SAFE_AREA_GAP_PX - markerTop");
+  });
+
   it("keeps the narrow Command context row sticky while the route panel scrolls independently", async () => {
     const { terminalShellCss } = await readViewerHtml();
     const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
