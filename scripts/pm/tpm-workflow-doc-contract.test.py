@@ -1108,6 +1108,54 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("durable production-supervisor checkpoint", design_state.group(0))
         self.assertIn("transient human helper status is not a transition", design_state.group(0))
 
+    def test_supervisor_pr_identity_readbacks_are_post_action_guards(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor phase guard matrix is required")
+        assert matrix is not None
+        draft = re.search(r"(?m)^\| `draft_candidate` .*", matrix.group(0))
+        self.assertIsNotNone(draft, "draft_candidate guard is required")
+        assert draft is not None
+        self.assertIn("candidate inputs", draft.group(0))
+        self.assertNotIn("draft PR identity", draft.group(0))
+        for phase, evidence, next_phase in (
+            ("create_pr", "Draft PR create receipt", "record_pr"),
+            ("record_pr", "Recorded PR identity", "comment"),
+            ("comment", "Issue-comment receipt", "verify"),
+        ):
+            row = re.search(rf"(?m)^\| `{phase}` .*", matrix.group(0))
+            self.assertIsNotNone(row, phase)
+            assert row is not None
+            self.assertIn(evidence, row.group(0), phase)
+            self.assertIn(f"/ `{next_phase}`", row.group(0), phase)
+
+    def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        text = section.group(1)
+        normalized = re.sub(r"\s+", " ", text)
+        self.assertIn("The `subcases` array is empty for non-A05 rows", normalized)
+        for field in (
+            "id", "fault", "injection", "expected_outcome", "status", "phase",
+            "cardinality", "recovery", "readback", "digest",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", text)
+        self.assertIn("A parent passes iff every A05 subcase", normalized)
+        self.assertIn('"subcases":[{', normalized)
+        example = next(
+            example for example in re.findall(r"(?ms)^```json\n(.*?)^```", text)
+            if '"schema": "tpm-supervisor-staging-case/v1"' in example
+        )
+        self.assertRegex(example, r'"subcases": \[\]')
+        self.assertIn("one nested object per typed variant", text)
+
     def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
         catalog = re.search(
             r"(?ms)^`input_workflow_state` .*?(?=^Cardinality is)",
@@ -1219,6 +1267,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertIn("non-identity local paths", text)
         self.assertIn("`canonical_worktree` is the canonical identity string", text)
+        self.assertIn("only the transition digest currently being published is", text)
+        self.assertIn("`transition_parent_digest`", text)
+        self.assertNotIn("Envelope digests, signatures", text)
 
     def test_supervisor_human_report_partitions_all_catalog_records(self) -> None:
         report = re.search(

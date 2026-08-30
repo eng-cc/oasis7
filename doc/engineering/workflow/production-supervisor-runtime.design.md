@@ -307,12 +307,10 @@ contains typed condition, logical deadline tick, and delivery state;
 `effect_states` is sorted by logical action/attempt/target; and the rejection
 parent covers rejections committed before this event. Event/transition/
 rejection fields use parent-chain, never soon-to-be-published head, digests.
-Envelope digests, signatures, transport metadata, leases/fencing, journal
-generation, non-identity local paths, wall clocks, and runtime IDs normalized by
-`runtime_id_map` are excluded but remain independently checked safety/audit
-data. `canonical_worktree` is the canonical identity string shown in the
-preimage and is included; changing it changes the bootstrap identity/epoch and
-the state hash.
+For `state_digest`, only the transition digest currently being published is excluded.
+`event_parent_digest`, `transition_parent_digest`, `rejection_parent_digest`, and referenced effect/receipt/proof digests remain in the state preimage.
+Signatures, transport metadata, leases/fencing, journal generation, non-identity local paths, wall clocks, and normalized runtime IDs remain excluded safety/audit data.
+`canonical_worktree` is the canonical identity string shown in the preimage and is included; changing it changes the bootstrap identity/epoch and state hash.
 
 Replay compares state digest after every transition and at final state. The
 first unsupported schema/migration or expected-vs-actual preimage mismatch
@@ -354,8 +352,10 @@ the CAS/lease/fencing rules above.
 | `dispatch` / `execute` | Runtime dispatch acknowledgement and bounded slice return/attempt state | `Wait(condition)` until returns are due; then `Dispatch` retry/replace or advance to `integrate` |
 | `integrate` | All required returns are attested, digest-valid, and scope-compatible | `Execute(freeze)`; incomplete slices wait, while exhausted/invalid slices become the classified retry or failure outcome, never a merge bypass |
 | `freeze` | Frozen implementation head and comparison/base identity | `Execute(draft_candidate)` at `draft_candidate` |
-| `draft_candidate` | Frozen-head draft PR identity and independent create/record/comment readback | `Execute(create_pr)` / `create_pr` |
-| `create_pr` / `record_pr` / `comment` | Draft PR helper receipt plus independent task/PR and issue-comment readback | `Execute(verify)` / `verify` |
+| `draft_candidate` | Frozen-head candidate inputs (task, branch, base/head, epoch, manifest) validated before any PR identity exists | `Execute(create_pr)` / `create_pr` |
+| `create_pr` | Draft PR create receipt plus independent PR identity/readback | `Execute(record_pr)` / `record_pr` |
+| `record_pr` | Recorded PR identity plus independent task/PR readback | `Execute(comment)` / `comment` |
+| `comment` | Issue-comment receipt plus independent task/issue-comment readback | `Execute(verify)` / `verify` |
 | `verify` | Trusted exact-head CI receipt and planner authority | `Dispatch(review)` / `review` |
 | `review` | All required role returns and dispositions for the same frozen head/epoch | `Execute(closeout)` / `pre_pr_ready` |
 | `closeout` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `promote_draft` |
@@ -881,22 +881,22 @@ The staging case's `observed.transitions`, `observed.effects`, and
 repository envelope identity/digest (`transition/v1`, `effect/v1`, or
 `readback/v1`), carries state/phase or attempt/query, proof/fencing, expected
 and observed digests, closed status/result, and staging-only `run_id`/`case_id`
-binding outside its standalone preimage. Arrays have deterministic sort keys
-(`new_revision`/ID, `action_id`/`attempt`/ID, `query_id`/ID); corresponding
-digest lists must match exactly. Unknown fields, duplicate IDs, malformed
-items, or case identity/digest mismatch reject without lifecycle progress.
-`record_digest` is the complete case-object preimage (excluding itself) under
-`oasis7/tpm/tpm-supervisor-staging-case/v1`; items never contain it, and
-signatures/transport framing/non-identity local paths are excluded while the
-canonical identity field `canonical_worktree` remains included.
+binding. Arrays have deterministic sort keys and matching digest lists; unknown
+fields, duplicate IDs, malformed items, or case identity/digest mismatch reject
+without lifecycle progress. `record_digest` is the complete case-object
+preimage (excluding itself) under `oasis7/tpm/tpm-supervisor-staging-case/v1`.
 
-Each case emits one immutable `tpm-supervisor-staging-case/v1` JSON record.
-The required shape includes the catalog identity, input state/phase, typed
-status/phase rules, outcome-code enum, cardinality predicates, and bounded
-recovery rule; numeric assertions use `{op:eq|lte|gte,value:n}`, while
-booleans and exact arrays are typed. The shorthand `A/P/S/R/B/C` expands to the named integer
-fields shown below (`P` is phase advances and `S` is workflow-state changes),
-and `canonical`/`same_as_input` is a tagged object rather than a prose value.
+Each case emits one immutable `tpm-supervisor-staging-case/v1` JSON record with
+catalog identity, input state/phase, typed status/phase rules, outcome enum,
+cardinality predicates, and bounded recovery rule. Numeric assertions use
+`{op:eq|lte|gte,value:n}`; booleans and exact arrays are typed, and the
+`A/P/S/R/B/C` shorthand expands to named integer fields. The `subcases` array
+is empty for non-A05 rows; A05 requires one nested object per typed variant with
+required fields `id`, `fault`, `injection`, `expected_outcome`, `status`,
+`phase`, `cardinality`, `recovery`, `readback`, and `digest`. Each uses the same
+closed enums/predicates as its parent. A parent passes iff every A05 subcase
+passes all those predicates; nesting does not increase the 87 parent records.
+The A05 shape is `{"subcases":[{"id":"forged","fault":"...","injection":"...","expected_outcome":"rejected(authority)","status":{},"phase":{},"cardinality":{},"recovery":{},"readback":{},"digest":"..."}]}`; non-A05 uses `[]` as in the example.
 ```json
 {
   "schema": "tpm-supervisor-staging-case/v1", "run_id": "...", "case_id": "adversarial-B01-7001", "seed": 7001,
@@ -907,6 +907,7 @@ and `canonical`/`same_as_input` is a tagged object rather than a prose value.
   "observed": {"fault_boundary": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
     "final": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
     "transitions": [], "effects": [], "readbacks": [], "attempts": 0, "wake_deliveries": 0, "elapsed_s": 0, "charged_cost_usd": 0.0},
+  "subcases": [],
   "recovery": {"restart_count": 0, "takeover_count": 0, "readback_queries": [], "signature": "...", "rule": "capability_unchanged", "attempts": 1, "elapsed_s": 0, "new_epoch": false, "same_idempotency_key": false, "final_status": {"kind": "canonical", "value": "capability_blocked"}},
   "expected": {"status_rule": {"kind": "canonical", "value": "capability_blocked"}, "phase_rule": {"kind": "same_as_input"}, "expected_outcome_code": "producer_missing",
     "effect_cardinality": {"accepted_external_effects": {"op": "eq", "value": 0}, "phase_advances": {"op": "eq", "value": 0}, "state_changes": {"op": "eq", "value": 1}, "classified_rejections": {"op": "eq", "value": 0}, "capability_blocks": {"op": "eq", "value": 1}, "cleanup_mutations": {"op": "eq", "value": 0}},
