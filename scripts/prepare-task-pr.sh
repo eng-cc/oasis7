@@ -1317,6 +1317,11 @@ BOUND_TASK_UID=""
 BOUND_TASK_ISSUE_URL=""
 BOUND_TASK_ISSUE_NUMBER=""
 if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
+  DRAFT_FREEZE_EVIDENCE_HELPER="${PREPARE_TASK_PR_DRAFT_FREEZE_EVIDENCE_PATH:-$SOURCE_WORKTREE/scripts/pm/record-draft-freeze-evidence.py}"
+  python3 "$DRAFT_FREEZE_EVIDENCE_HELPER" --worktree "$SOURCE_WORKTREE" \
+    --branch "$SOURCE_BRANCH" --head "$SOURCE_HEAD" \
+    --comparison-ref "$COMPARISON_REF" --comparison-oid "$COMPARISON_HEAD" >/dev/null \
+    || die "cannot record and read back canonical draft_candidate frozen identity before push/PR creation"
   BOUND_TASK_FIELDS="$(validate_draft_candidate_binding \
     "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$COMPARISON_HEAD")" \
     || die "cannot validate canonical draft_candidate task binding before push/PR creation"

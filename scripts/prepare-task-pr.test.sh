@@ -737,6 +737,32 @@ EOF
   commit --no-verify -m "test: fresh draft candidate fixture" >/dev/null
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 
+# A producer failure must stop before issue evidence, push, PR creation, or
+# task-state mutation. This proves the producer is part of the real path.
+producer_failure_log="$TMPDIR/gh-producer-failure.log"
+producer_failure_git_log="$TMPDIR/git-producer-failure.log"
+producer_failure_err="$TMPDIR/producer-failure.err"
+if PREPARE_TASK_PR_DRAFT_FREEZE_EVIDENCE_PATH=/usr/bin/false \
+  run_prepare "$producer_failure_log" "$producer_failure_git_log" --draft-candidate \
+  >"$TMPDIR/producer-failure.out" 2>"$producer_failure_err"; then
+  echo "expected draft freeze evidence producer failure" >&2
+  exit 1
+fi
+python3 - "$producer_failure_log" "$producer_failure_git_log" "$producer_failure_err" <<'PY'
+from pathlib import Path
+import sys
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+if gh_lines:
+    raise SystemExit(f"producer failure reached GitHub: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"producer failure pushed: {git_lines}")
+if "cannot record and read back canonical draft_candidate frozen identity" not in stderr:
+    raise SystemExit(f"unexpected producer failure: {stderr}")
+PY
+
 draft_log="$TMPDIR/gh-draft-candidate.log"
 draft_git_log="$TMPDIR/git-draft-candidate.log"
 draft_out="$TMPDIR/draft-candidate.out"
@@ -767,6 +793,9 @@ err=Path(sys.argv[3]).read_text(encoding="utf-8")
 branch=sys.argv[4]
 if f"pr create --base main --head {branch} --fill" not in gh or "--draft" not in gh:
     raise SystemExit(f"fresh task did not reach draft PR creation: {gh}")
+freeze_write = "issue comment 123 -R example/oasis7 --body-file "
+if freeze_write not in gh or gh.index(freeze_write) > gh.index("pr create "):
+    raise SystemExit(f"draft freeze evidence was not produced before PR creation: {gh}")
 if "Created PR:" not in out:
     raise SystemExit(f"fresh draft candidate was not recorded: {out}")
 if "pre-PR local role-return validation failed" in err or "machine-checkable role-return ledger" in err:
@@ -827,9 +856,12 @@ git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 expected_error = sys.argv[4]
 issue_read = "issue view 123 -R example/oasis7 --json comments"
-unexpected_gh = [line for line in gh_lines if line != issue_read]
+unexpected_gh = [
+    line for line in gh_lines
+    if line != issue_read and not line.startswith("issue comment 123 -R example/oasis7 --body-file ")
+]
 if unexpected_gh:
-    raise SystemExit(f"draft candidate rejection reached a GitHub side effect: {gh_lines}")
+    raise SystemExit(f"draft candidate rejection reached a PR side effect: {gh_lines}")
 if any(line.startswith("push ") or " push " in line for line in git_lines):
     raise SystemExit(f"draft candidate rejection pushed before validation: {git_lines}")
 if expected_error not in stderr:
@@ -860,7 +892,7 @@ if run_prepare_with_issue_fixture "$draft_issue_body" "$stale_source_comments" \
 fi
 assert_draft_candidate_issue_rejection_has_no_side_effects \
   "$stale_source_log" "$stale_source_git_log" "$stale_source_err" \
-  "issue evidence Source Head is stale or invalid"
+  "written frozen identity was not observed on bound issue readback"
 
 # A current Source Head does not authorize a different base identity. A
 # Comparison Ref mismatch must fail before every external write as well.
@@ -884,7 +916,7 @@ if run_prepare_with_issue_fixture "$draft_issue_body" "$comparison_ref_comments"
 fi
 assert_draft_candidate_issue_rejection_has_no_side_effects \
   "$comparison_ref_log" "$comparison_ref_git_log" "$comparison_ref_err" \
-  "issue evidence Comparison Ref differs from the canonical comparison ref"
+  "written frozen identity was not observed on bound issue readback"
 
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(
@@ -1264,7 +1296,10 @@ if gh_lines:
     raise SystemExit(f"misbound draft candidate reached GitHub before rejection: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"misbound draft candidate pushed before rejection: {git_lines}")
-if "draft_candidate canonical task binding invalid" not in stderr:
+if not any(marker in stderr for marker in (
+    "draft_candidate canonical task binding invalid",
+    "draft freeze evidence: expected one canonical worktree/branch mapping",
+)):
     raise SystemExit(f"expected canonical binding failure, got: {stderr}")
 PY
 

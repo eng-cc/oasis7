@@ -20,7 +20,7 @@ route below.
 ## Freeze-Commit Gates
 
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
-2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create` and obtain a trusted `ci_ready_receipt` for its exact head.
+2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create`; the helper records and reads back canonical task/head/base identity on the bound issue before push or PR creation, then obtains a trusted `ci_ready_receipt` for that exact head.
 3. Use `requesting-repo-owned-review`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
