@@ -15,6 +15,7 @@ Options:
   --task-uid <uid>                  Bound task UID
   --pr <number>                     Bound merged pull request
   --repo-root <path>                Canonical default worktree (default: current repository root)
+  --preflight                       Validate terminal identity without mutating state
   --patch-equivalence-receipt <p>  Reuse an existing canonical squash/rebase proof
   --resume                          Resume the same durable task/PR identity (default behavior)
   --json                            Print a machine-readable result
@@ -23,13 +24,14 @@ EOF
 }
 
 fail() { echo "finalize-task: $*" >&2; exit 1; }
-task_uid="" pr_number="" repo_root="$ROOT_DIR" supplied_patch="" resume=0 output_json=0
+task_uid="" pr_number="" repo_root="$ROOT_DIR" supplied_patch="" resume=0 preflight=0 output_json=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) task_uid="${2:-}"; shift 2 ;;
     --pr) pr_number="${2:-}"; shift 2 ;;
     --repo-root) repo_root="${2:-}"; shift 2 ;;
     --patch-equivalence-receipt) supplied_patch="${2:-}"; shift 2 ;;
+    --preflight) preflight=1; shift ;;
     --resume) resume=1; shift ;;
     --json) output_json=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -43,27 +45,142 @@ SCRIPT_DIR="$repo_root/scripts/pm"
 [[ -x "$SCRIPT_DIR/finalize-task.sh" ]] || fail "--repo-root does not contain the terminal orchestrator"
 mapping="$repo_root/.pm/github-project-sync/tasks.json"
 [[ -f "$mapping" ]] || fail "canonical task mapping is unavailable"
-fields="$(python3 - "$mapping" "$task_uid" "$pr_number" <<'PY'
-import json,sys
-r=(json.load(open(sys.argv[1])).get("tasks") or {}).get(sys.argv[2]) or {}
-if str(r.get("pr_number") or "") != sys.argv[3]: raise SystemExit("finalize-task: task/PR mismatch")
-if str(r.get("task_uid") or "") != sys.argv[2]: raise SystemExit("finalize-task: task UID mismatch")
-for key in ("issue_number","pr_url","canonical_worktree","task_branch","default_branch","owner_role","repository"):
- if not r.get(key): raise SystemExit(f"finalize-task: task truth missing {key}")
-print(r["canonical_worktree"]); print(r["task_branch"]); print(r["default_branch"]); print(r["owner_role"]); print(r["repository"])
-PY
-)"
-task_worktree="$(printf '%s\n' "$fields" | sed -n '1p')"
-task_branch="$(printf '%s\n' "$fields" | sed -n '2p')"
-main_ref="$(printf '%s\n' "$fields" | sed -n '3p')"
-owner_role="$(printf '%s\n' "$fields" | sed -n '4p')"
 receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$repo_root" --task-uid "$task_uid" --create)" \
   || fail "cannot resolve canonical receipt root"
 merge_receipt="$receipt_root/merge-receipt.json"
 main_sync_receipt="$receipt_root/main-sync-receipt.json"
 terminal_receipt="$receipt_root/terminal-cleanup-receipt.json"
 patch_equivalence="$receipt_root/patch-equivalence-receipt.json"
+allow_missing_task_worktree=0
+[[ "$preflight" == 0 && -f "$terminal_receipt" ]] && allow_missing_task_worktree=1
+identity_json="$(python3 - "$repo_root" "$mapping" "$task_uid" "$pr_number" "$allow_missing_task_worktree" <<'PY'
+import json
+import pathlib
+import re
+import subprocess
+import sys
 
+repo_root, mapping_path, task_uid, pr_number, allow_missing_worktree = sys.argv[1:]
+root = pathlib.Path(repo_root).resolve()
+record = (json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8")).get("tasks") or {}).get(task_uid) or {}
+bound = {
+    "task_uid": str(record.get("task_uid") or task_uid),
+    "pr_number": str(record.get("pr_number") or ""),
+    "repository": str(record.get("repository") or ""),
+    "issue_number": str(record.get("issue_number") or ""),
+    "pr_url": str(record.get("pr_url") or ""),
+    "canonical_worktree": str(record.get("canonical_worktree") or ""),
+    "task_branch": str(record.get("task_branch") or ""),
+    "default_branch": str(record.get("default_branch") or ""),
+    "owner_role": str(record.get("owner_role") or ""),
+}
+blockers = []
+
+def blocker(message):
+    if message not in blockers:
+        blockers.append(message)
+
+if not record:
+    blocker("task identity: task UID is absent from canonical mapping")
+if bound["task_uid"] != task_uid:
+    blocker("task identity: task UID mismatch")
+if bound["pr_number"] != pr_number:
+    blocker("task/PR mismatch: mapping PR does not match requested PR")
+for key in ("issue_number", "pr_url", "canonical_worktree", "task_branch", "default_branch", "owner_role", "repository"):
+    if not bound[key]:
+        blocker(f"task identity: task truth missing {key}")
+if bound["repository"] and not re.fullmatch(r"[^/\\s]+/[^/\\s]+", bound["repository"]):
+    blocker("repository mismatch: task repository identity is malformed")
+if bound["pr_url"]:
+    pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", bound["pr_url"])
+    if not pr_match or pr_match.group(1) != pr_number:
+        blocker("task/PR mismatch: task PR URL does not match requested PR")
+
+def git(path, *args):
+    try:
+        return subprocess.check_output(["git", "-C", str(path), *args], text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+def common_dir(path):
+    raw = git(path, "rev-parse", "--git-common-dir")
+    if not raw:
+        return ""
+    return str((path / raw if not pathlib.Path(raw).is_absolute() else pathlib.Path(raw)).resolve())
+
+task_path = pathlib.Path(bound["canonical_worktree"]).expanduser()
+if allow_missing_worktree == "1":
+    pass
+elif not task_path.exists():
+    blocker("worktree mismatch: canonical task worktree is missing")
+else:
+    task_path = task_path.resolve()
+    root_common = common_dir(root)
+    task_common = common_dir(task_path)
+    if not task_common:
+        blocker("repository mismatch: canonical task worktree is not a Git worktree")
+    elif root_common and task_common != root_common:
+        blocker("repository mismatch: task worktree belongs to a different Git repository")
+
+registered = {}
+current_path = ""
+for line in (git(root, "worktree", "list", "--porcelain") + "\n").splitlines():
+    if line.startswith("worktree "):
+        current_path = str(pathlib.Path(line[9:]).resolve())
+    elif line.startswith("branch refs/heads/") and current_path:
+        registered[current_path] = line.removeprefix("branch refs/heads/")
+    elif not line:
+        current_path = ""
+if allow_missing_worktree != "1" and task_path.exists() and str(task_path) not in registered:
+    blocker("worktree mismatch: canonical task worktree is detached or unregistered")
+if allow_missing_worktree != "1" and task_path.exists():
+    actual_branch = git(task_path, "symbolic-ref", "--short", "HEAD")
+    if actual_branch != bound["task_branch"]:
+        blocker(f"branch mismatch: task worktree is {actual_branch or 'detached'}, expected {bound['task_branch']}")
+actual_default = git(root, "symbolic-ref", "--short", "HEAD")
+if actual_default and actual_default != bound["default_branch"]:
+    blocker(f"branch mismatch: default worktree is {actual_default}, expected {bound['default_branch']}")
+
+payload = {
+    "status": "ready" if not blockers else "blocked",
+    "identity_status": "bound" if not blockers else "blocked",
+    **bound,
+    "pr_number": int(pr_number),
+    "repo_root": str(root),
+    "blockers": blockers,
+    "next_command": ([] if blockers else [
+        "./scripts/pm/finalize-task.sh", "--repo-root", str(root), "--task-uid", task_uid,
+        "--pr", pr_number, "--resume", "--json",
+    ]),
+}
+print(json.dumps(payload, sort_keys=True))
+PY
+)"
+identity_status="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$identity_json")"
+if [[ "$identity_status" != "ready" ]]; then
+  if [[ "$preflight" == 1 ]]; then
+    if [[ "$output_json" == 1 ]]; then
+      python3 -m json.tool <<<"$identity_json"
+    else
+      python3 -c 'import json,sys; print("finalize-task preflight: " + "; ".join(json.load(sys.stdin)["blockers"]))' <<<"$identity_json" >&2
+    fi
+  else
+    python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["blockers"]))' <<<"$identity_json" >&2
+  fi
+  exit 1
+fi
+if [[ "$preflight" == 1 ]]; then
+  if [[ "$output_json" == 1 ]]; then
+    python3 -m json.tool <<<"$identity_json"
+  else
+    echo "finalize-task preflight: ready $task_uid PR #$pr_number"
+  fi
+  exit 0
+fi
+task_worktree="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["canonical_worktree"])' <<<"$identity_json")"
+task_branch="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task_branch"])' <<<"$identity_json")"
+main_ref="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["default_branch"])' <<<"$identity_json")"
+owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_role"])' <<<"$identity_json")"
 # already_finalized retries remain live-readback operations, never a second identity.
 if [[ -f "$terminal_receipt" ]]; then
   ledger_existed=0

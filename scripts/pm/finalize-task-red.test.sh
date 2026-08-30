@@ -57,4 +57,13 @@ for marker in \
   }
 done
 
+# RED: callers need a pre-merge, mutation-free readiness result with one exact
+# continuation command and identity blockers before terminal effects begin.
+for marker in '--preflight' 'blockers' 'canonical_worktree' 'task_branch' 'next_command'; do
+  grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
+    echo "RED finalize-task: missing preflight marker $marker" >&2
+    exit 1
+  }
+done
+
 echo "finalize-task-red.test: OK"
