@@ -852,7 +852,7 @@ The closed positive catalog is `positive-7001`, `positive-7002`, and `positive-7
 `case_kind=positive`, input `action_required/bootstrap`,
 `final_status={kind:canonical,value:completed}`,
 `final_phase={kind:canonical,value:done}`, `terminal_outcome={schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done}`, `workflow_phase_projection={schema:"tpm-supervisor-workflow-phase/v1",sequence:[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]}`, `implementation_operation_sequence={schema:"tpm-supervisor-operation-sequence/v1",sequence:[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,create_pr,record_pr,comment,verify,review,ready,promote_draft,pr_watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize]}`,
-`expected_outcome={kind:code,code:accepted}`, `verdict=pass` when all typed assertions match, exactly four independently read-back
+`expected_outcome={kind:code,code:accepted}`, `observed_outcome={kind:code,code:accepted}`, `verdict=pass` when all typed assertions match, exactly four independently read-back
 producer classes, and the exact phase sequence
 `[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]`.
 This is the canonical `Workflow Phase` projection from the source of truth; route/dispatch/execute/integrate/freeze/PR/merge/cleanup labels remain typed operation evidence and are not additional phases. `pre_pr_ready` is a required gate before promotion, `blocked` is not on a positive path, and `post_merge_done` is a terminal outcome rather than a workflow phase.

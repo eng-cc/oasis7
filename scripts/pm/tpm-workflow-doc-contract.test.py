@@ -1036,6 +1036,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
         advances = re.search(r"phase_advances\s*=\s*(\d+)", catalog)
         self.assertIsNotNone(advances)
         self.assertEqual("7", advances.group(1))
+        self.assertIn("`expected_outcome={kind:code,code:accepted}`", catalog)
+        self.assertIn("`observed_outcome={kind:code,code:accepted}`", catalog)
+        self.assertIn("`verdict=pass` when all typed assertions match", catalog)
         self.assertRegex(
             self.supervisor_design,
             r"exact canonical 8-phase/7-advance sequence\s+with `pre_pr_ready` before promotion and terminal outcome `post_merge_done`",
@@ -1326,6 +1329,81 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn("./scripts/prepare-task-pr.sh --draft-candidate --create", text)
                 self.assertIn("--promote-draft <fresh ci_ready_receipt.json>", text)
+
+    def test_task_pr_docs_order_draft_identity_review_closeout_and_promotion(self) -> None:
+        readme = PM_README.read_text(encoding="utf-8")
+        readme_section = re.search(
+            r"(?ms)^## Pre-PR and PR\n(.*?)(?=^## |\Z)", readme
+        )
+        self.assertIsNotNone(readme_section, "PM README must publish the Pre-PR sequence")
+        assert readme_section is not None
+        readme_text = readme_section.group(1)
+        readme_positions = [
+            readme_text.index("./scripts/prepare-task-pr.sh --draft-candidate --create"),
+            readme_text.index("after exact-head CI and local role review"),
+            readme_text.index("./scripts/pm/task-closeout.sh"),
+            readme_text.index("./scripts/prepare-task-pr.sh --promote-draft"),
+        ]
+        self.assertEqual(sorted(readme_positions), readme_positions)
+        self.assertIn("after exact-head CI and local role review", readme_text)
+        self.assertIn("after task closeout succeeds", readme_text)
+        self.assertIn("--ci-ready-receipt <ci_ready_receipt.json>", readme_text)
+
+        prd = SCRIPTS_PRD.read_text(encoding="utf-8")
+        sc12e = re.search(r"(?m)^\s*- SC-12E:.*$", prd)
+        self.assertIsNotNone(sc12e, "scripts PRD must publish SC-12E")
+        assert sc12e is not None
+        sc12e_text = sc12e.group(0)
+        identity = "Task UID`、`Source Worktree`、`Source Branch`、`Source Head` 与 `Comparison Ref`"
+        self.assertIn(identity, sc12e_text)
+        self.assertIn("draft candidate 创建不得要求 `Pre-PR Local Role Review: passed`", sc12e_text)
+        self.assertLess(
+            sc12e_text.index("task/frozen-head identity"),
+            sc12e_text.index("Pre-PR Local Role Review: passed"),
+        )
+        self.assertNotIn(
+            "缺少匹配 `Task UID`、`Source Worktree`、`Source Branch`、`Source Head`、`Comparison Ref` 与 `Pre-PR Local Role Review: passed`",
+            sc12e_text,
+        )
+        ac18j = re.search(r"(?m)^\s*- AC-18J:.*$", prd)
+        self.assertIsNotNone(ac18j, "scripts PRD must publish AC-18J")
+        assert ac18j is not None
+        ac18j_text = ac18j.group(0)
+        self.assertIn("task-bound legacy `--create`", ac18j_text)
+        self.assertIn("`--draft-candidate --create`", ac18j_text)
+        self.assertIn("只在候选创建前强制校验 source-bound Task UID / frozen-head identity", ac18j_text)
+        self.assertIn("把 pre-PR local role review evidence 留到 `Pre-PR Ready` / draft promotion", ac18j_text)
+        self.assertNotIn(
+            "`--create` 必须在 push / `gh pr create` 前强制要求 source-bound pre-PR local role review evidence",
+            ac18j_text,
+        )
+
+        flow = re.search(r"(?m)^\s*6\. Flow-SCR-006:.*$", prd)
+        self.assertIsNotNone(flow, "scripts PRD must publish Flow-SCR-006")
+        assert flow is not None
+        flow_text = flow.group(0)
+        flow_positions = [
+            flow_text.index("Task UID / frozen-head identity"),
+            flow_text.index("创建 frozen-head draft candidate"),
+            flow_text.index("exact-head CI"),
+            flow_text.index("task-closeout"),
+            flow_text.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(flow_positions), flow_positions)
+
+        flow_d = re.search(r"(?m)^\s*6D\. Flow-SCR-006D:.*$", prd)
+        self.assertIsNotNone(flow_d, "scripts PRD must publish Flow-SCR-006D")
+        assert flow_d is not None
+        flow_d_text = flow_d.group(0)
+        self.assertIn("不要求 role-review packet", flow_d_text)
+        flow_d_positions = [
+            flow_d_text.index("Task UID / frozen-head identity"),
+            flow_d_text.index("创建 draft candidate"),
+            flow_d_text.index("exact-head CI"),
+            flow_d_text.index("task-closeout"),
+            flow_d_text.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(flow_d_positions), flow_d_positions)
 
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(

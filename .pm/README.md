@@ -40,10 +40,12 @@ This file is an operator command index, not a second workflow specification.
 ## Pre-PR and PR
 
 ```bash
-./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --comparison-ref <ref> \
-  --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json>
 ./scripts/prepare-task-pr.sh --draft-candidate --create
-# after exact-head CI and local role review:
+# after exact-head CI and local role review, record Pre-PR Ready:
+./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --comparison-ref <ref> \
+  --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json> \
+  --ci-ready-receipt <ci_ready_receipt.json>
+# after task closeout succeeds:
 ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>
 ./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
