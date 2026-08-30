@@ -343,7 +343,7 @@
     },
     {
       "path": "doc/engineering/prd.md",
-      "content_sha256": "c69e82d903bcea2f235b1d20d1c1b8a9e3bd10b3202034a3a5985c6106b97a05",
+      "content_sha256": "5818455981215149df08e6557796d0edf256fb5327c67e2a96a1d7864c53db1b",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -399,7 +399,7 @@
     },
     {
       "path": "doc/engineering/workflow/production-supervisor-runtime.design.md",
-      "content_sha256": "dad320b4933a33396e9539ec7844bc70f414c2c942ed9a50c657c52be049aab7",
+      "content_sha256": "1045753397227ed7d9d188dea4162cd0eb4740598bcccefd5096be2386ec19a8",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
