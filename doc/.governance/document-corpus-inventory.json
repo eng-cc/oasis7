@@ -3101,7 +3101,7 @@
     },
     {
       "path": "doc/scripts/prd.md",
-      "content_sha256": "bfdd88bbdcc8bd11116a962c5c6eb6e8d8e5a8718fd1bfc90a8d7d01d1ed10a8",
+      "content_sha256": "01e9b8706e2c0b919e65e5d293b1dce835cfec3e837215711f8ecce300710c06",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
