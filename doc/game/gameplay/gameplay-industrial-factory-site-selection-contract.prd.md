@@ -35,7 +35,7 @@
 
 ## 4. 建设后的失败恢复与禁止迁移
 
-已接受但尚未开工的 intent、WIP、in-transit 与 buffer-held 工作保留其原 site、factory、path、ledger、batch 与 root identity，不因新站点候选自动迁移。若未来专业 profile 支持 relocation，必须按既有 cutover/处置合同逐项产生 parent-linked 结果；本合同不把 `use_another_legal_site` 扩展为既有工作迁移。
+已接受但尚未开工的 intent、WIP、in-transit、buffer-held 与 terminal-pending 工作保留其原 site、factory、path、ledger、batch 与 root identity，不因新站点候选自动迁移；terminal-pending 同时保留 recipient、destination、admission、capacity obligation 与 provenance，直到 matching settlement 或一次受支持处置。若未来专业 profile 支持 relocation，必须按既有 cutover/处置合同逐项产生 parent-linked 结果；本合同不把 `use_another_legal_site` 扩展为既有工作迁移。
 
 站点被阻塞时，玩家必须看见最早 root blocker、已消费/仍占用价值、受影响的输入/输出边、稳定窗口影响与下一复查点，并只能执行当前 profile 支持的补料/补电、等待容量、改路、换合法站点、降载、延期或放弃。没有合法站点或安全恢复路径时返回 `no_safe_site_fallback`，结束当前建厂意图并要求 `reprioritize_goal`、`return_to_goal_selection` 或等待新的 authority；不得用后台重试、自动迁厂或“已接受”伪造建设成功。
 
