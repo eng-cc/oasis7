@@ -79,7 +79,7 @@ PY
 # revalidates the live PR, local tip, and remote branch before deleting.
 printf '{}\n' >"$RECEIPT_ROOT/terminal-cleanup-receipt.json"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","workflow_phase":"main_sync","repository":"eng-cc/oasis7","issue_number":1,"pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","canonical_worktree":"$TASK","task_branch":"$BRANCH","default_branch":"main","owner_role":"repository_health_engineer"}}}
+{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","workflow_phase":"main_sync","repository":"eng-cc/oasis7","issue_number":1,"issue_url":"https://github.com/eng-cc/oasis7/issues/1","pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","canonical_worktree":"$TASK","task_branch":"$BRANCH","default_branch":"main","owner_role":"repository_health_engineer"}}}
 EOF
 cat >"$TMPDIR/bin/gh" <<EOF
 #!/usr/bin/env bash

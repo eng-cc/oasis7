@@ -70,11 +70,32 @@ def github_object_identity(url: str, kind: str) -> tuple[str, str] | None:
     if not url:
         return None
     match = re.search(
-        rf"github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
+        rf"^https?://github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
         url,
         re.IGNORECASE,
     )
     return (match.group(1), match.group(2)) if match else None
+
+
+def github_repository_identity(origin: str) -> str | None:
+    """Return a GitHub owner/repository slug for supported origin forms."""
+    if not origin:
+        return None
+    match = re.fullmatch(
+        r"(?:https?://|ssh://git@|git@)github\.com[:/]([^/\s?#]+/[^/\s?#]+?)(?:\.git)?/?",
+        origin.strip(),
+        re.IGNORECASE,
+    )
+    return match.group(1) if match else None
+
+
+def repository_identity(value: str) -> str | None:
+    """Normalize a checkpoint repository value to the canonical GitHub slug."""
+    if not value:
+        return None
+    if re.fullmatch(r"[^/\s]+/[^/\s]+", value):
+        return value
+    return github_repository_identity(value)
 
 
 def verify_mapping_identity(
@@ -116,21 +137,23 @@ def verify_mapping_identity(
             f"stale identity: canonical mapping branch is {live_branch or 'detached'}, expected {task_branch}",
         )
     origin = git_value(canonical, "config", "--get", "remote.origin.url")
-    origin_identity = re.search(
-        r"github\.com[:/]([^/\s]+/[^/\s?#]+?)(?:\.git)?$",
-        origin,
-        re.IGNORECASE,
-    )
-    if origin_identity and origin_identity.group(1) != repository:
+    origin_identity = github_repository_identity(origin)
+    if not origin:
+        add_blocker(blockers, "stale identity: canonical mapping local origin is missing")
+    elif not origin_identity:
+        add_blocker(blockers, "stale identity: canonical mapping local origin is unsupported (GitHub origin required)")
+    elif origin_identity != repository:
         add_blocker(blockers, "stale identity: canonical mapping repository differs from local origin")
 
-    issue_identity = github_object_identity(str(task.get("issue_url") or ""), "issues")
+    issue_url = str(task.get("issue_url") or "")
+    issue_identity = github_object_identity(issue_url, "issues")
     issue_number = str(task.get("issue_number") or "")
-    if issue_identity:
-        if issue_identity[0] != repository:
-            add_blocker(blockers, "stale identity: task Issue URL belongs to a different repository")
-        if issue_number and issue_identity[1] != issue_number:
-            add_blocker(blockers, "stale identity: task Issue URL does not match issue number")
+    if not issue_identity:
+        add_blocker(blockers, "stale identity: task Issue URL is malformed or unsupported (GitHub Issue URL required)")
+    elif issue_identity[0] != repository:
+        add_blocker(blockers, "stale identity: task Issue URL belongs to a different repository")
+    elif issue_number and issue_identity[1] != issue_number:
+        add_blocker(blockers, "stale identity: task Issue URL does not match issue number")
     pr_identity = github_object_identity(
         str(task.get("pr_url") or task.get("pull_request_url") or ""),
         "pulls?",
@@ -226,6 +249,15 @@ def verify_checkpoint(
         add_blocker(blockers, "stale identity: durable workflow checkpoint repository is missing")
     elif pathlib.Path(str(checkpoint["repo"])).resolve() != root:
         add_blocker(blockers, "stale identity: durable workflow checkpoint repository drift")
+    checkpoint_repository = str(checkpoint.get("repository") or "")
+    checkpoint_repository_identity = repository_identity(checkpoint_repository)
+    task_repository = str(task.get("repository") or "")
+    if not checkpoint_repository:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint remote repository is missing")
+    elif not checkpoint_repository_identity:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint remote repository is unsupported")
+    elif checkpoint_repository_identity != task_repository:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint remote repository drift")
     if checkpoint.get("state") not in (None, "") and pathlib.Path(str(checkpoint["state"])).resolve() != path:
         add_blocker(blockers, "stale identity: durable workflow checkpoint path drift")
     terminal = checkpoint.get("terminal_authority")
@@ -235,6 +267,7 @@ def verify_checkpoint(
         else:
             for key, expected in (
                 ("task_uid", task.get("task_uid")),
+                ("repository", task_repository),
                 ("canonical_worktree", task.get("canonical_worktree")),
                 ("task_branch", task.get("task_branch")),
                 ("default_branch", task.get("default_branch")),
@@ -245,6 +278,14 @@ def verify_checkpoint(
                 elif key == "canonical_worktree":
                     if pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve():
                         add_blocker(blockers, "stale identity: durable workflow checkpoint terminal worktree drift")
+                elif key == "repository":
+                    terminal_identity = repository_identity(str(actual))
+                    if not terminal_identity:
+                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository is unsupported")
+                    elif terminal_identity != task_repository:
+                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
+                    elif checkpoint_repository_identity and terminal_identity != checkpoint_repository_identity:
+                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
                 elif str(actual) != str(expected):
                     add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} drift")
     return checkpoint

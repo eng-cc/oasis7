@@ -89,7 +89,7 @@ if bound["task_uid"] != task_uid:
     blocker("task identity: task UID mismatch")
 if bound["pr_number"] != pr_number:
     blocker("task/PR mismatch: mapping PR does not match requested PR")
-for key in ("issue_number", "pr_url", "canonical_worktree", "task_branch", "default_branch", "owner_role", "repository"):
+for key in ("issue_number", "issue_url", "pr_url", "canonical_worktree", "task_branch", "default_branch", "owner_role", "repository"):
     if not bound[key]:
         blocker(f"task identity: task truth missing {key}")
 if bound["repository"] and not re.fullmatch(r"[^/\s]+/[^/\s]+", bound["repository"]):
@@ -99,18 +99,19 @@ def github_object_identity(url, kind):
     if not url:
         return None
     match = re.search(
-        rf"github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
+        rf"^https?://github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
         url,
         re.IGNORECASE,
     )
     return (match.group(1), match.group(2)) if match else None
 
 issue_identity = github_object_identity(bound["issue_url"], "issues")
-if issue_identity:
-    if issue_identity[0] != bound["repository"]:
-        blocker("repository mismatch: task Issue URL belongs to a different repository")
-    if issue_identity[1] != bound["issue_number"]:
-        blocker("task identity: Issue URL does not match issue number")
+if not issue_identity:
+    blocker("task identity: Issue URL is malformed or unsupported (GitHub Issue URL required)")
+elif issue_identity[0] != bound["repository"]:
+    blocker("repository mismatch: task Issue URL belongs to a different repository")
+elif issue_identity[1] != bound["issue_number"]:
+    blocker("task identity: Issue URL does not match issue number")
 pr_identity = github_object_identity(bound["pr_url"], "pulls?")
 if bound["pr_url"]:
     pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", bound["pr_url"])
@@ -126,9 +127,13 @@ def git(path, *args):
         return ""
 
 origin = git(root, "config", "--get", "remote.origin.url")
-origin_match = re.search(r"github\.com[:/]([^/\s]+/[^/\s?#]+?)(?:\.git)?$", origin, re.IGNORECASE)
+origin_match = re.fullmatch(
+    r"(?:https?://|ssh://git@|git@)github\.com[:/]([^/\s?#]+/[^/\s?#]+?)(?:\.git)?/?",
+    origin.strip(),
+    re.IGNORECASE,
+)
 if not origin_match:
-    blocker("repository mismatch: local origin identity is unavailable")
+    blocker("repository mismatch: local origin identity is unavailable or unsupported (GitHub origin required)")
 elif origin_match.group(1) != bound["repository"]:
     blocker("repository mismatch: task repository differs from the local origin")
 

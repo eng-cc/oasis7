@@ -40,7 +40,7 @@ git -C "$REPO" push -q origin main
 git -C "$REPO" update-ref refs/remotes/origin/main "$INITIAL_MAIN_OID"
 
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
+{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"issue_url":"https://github.com/fixture/repo/issues/3379","pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
 EOF
 
 make_mock() {
@@ -140,6 +140,14 @@ data["tasks"][uid][key] = value
 json.dump(data, open(path, "w", encoding="utf-8"))
 PY
 }
+
+git -C "$REPO" config --unset remote.origin.url
+preflight_blocker missing-origin 7 origin
+git -C "$REPO" config remote.origin.url https://github.com/fixture/repo.git
+
+set_task_field issue_url https://example.invalid/issues/3379
+preflight_blocker malformed-issue-url 7 "Issue URL"
+set_task_field issue_url https://github.com/fixture/repo/issues/3379
 
 preflight_blocker task-pr 8 "task/PR"
 set_task_field task_uid task_22222222222222222222222222222222

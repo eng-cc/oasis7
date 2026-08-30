@@ -27,6 +27,16 @@ class WorkflowNextTest(unittest.TestCase):
         (self.root / "README").write_text("fixture\n")
         subprocess.run(["git", "-C", str(self.root), "add", "README"], check=True)
         subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture"], check=True)
+        self.origin = self.root.parent / "origin.git"
+        subprocess.run(["git", "init", "--bare", "-q", str(self.origin)], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.root), "remote", "add", "origin", "https://github.com/fixture/repo.git"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.root), "config", f"url.{self.origin}.insteadOf", "https://github.com/fixture/repo.git"],
+            check=True,
+        )
         self.mapping = self.root / ".pm/github-project-sync/tasks.json"
 
     def tearDown(self) -> None:
@@ -166,6 +176,89 @@ class WorkflowNextTest(unittest.TestCase):
             code, payload = self.run_query()
             self.assertNotEqual(code, 0, payload)
             self.assertTrue(any("checkpoint" in item.lower() for item in payload["blockers"]), payload)
+
+    def test_repository_and_issue_identity_fail_closed(self) -> None:
+        self.write_mapping(status="committed", workflow_phase="execution")
+
+        self.write_mapping(
+            status="committed",
+            workflow_phase="execution",
+            issue_url="https://example.invalid/issues/11",
+        )
+        with self.subTest(identity="malformed-issue-url"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertEqual(payload["next_command"], [], payload)
+            self.assertTrue(any("Issue URL" in item for item in payload["blockers"]), payload)
+
+        self.write_mapping(status="committed", workflow_phase="execution")
+        checkpoint = self.root / ".pm/tasks" / f"{UID}.workflow.json"
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_text(json.dumps({
+            "task_uid": UID,
+            "repo": str(self.root),
+            "repository": "https://github.com/fixture/repo.git",
+            "phase": "execution",
+            "terminal_authority": {
+                "task_uid": UID,
+                "repository": "https://github.com/fixture/repo.git",
+                "canonical_worktree": str(self.root),
+                "task_branch": "task/fixture",
+                "default_branch": "main",
+            },
+        }))
+        with self.subTest(identity="checkpoint-github-url"):
+            code, payload = self.run_query()
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["blockers"], [], payload)
+            self.assertTrue(payload["next_command"], payload)
+
+        checkpoint.write_text(json.dumps({
+            "task_uid": UID,
+            "repo": str(self.root),
+            "repository": "fixture/other-repo",
+            "phase": "execution",
+            "terminal_authority": {
+                "task_uid": UID,
+                "repository": "fixture/repo",
+                "canonical_worktree": str(self.root),
+                "task_branch": "task/fixture",
+                "default_branch": "main",
+            },
+        }))
+        with self.subTest(identity="checkpoint-repository"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertEqual(payload["next_command"], [], payload)
+            self.assertTrue(any("checkpoint" in item.lower() for item in payload["blockers"]), payload)
+
+        checkpoint.write_text(json.dumps({
+            "task_uid": UID,
+            "repo": str(self.root),
+            "repository": "fixture/repo",
+            "phase": "execution",
+            "terminal_authority": {
+                "task_uid": UID,
+                "repository": "fixture/other-repo",
+                "canonical_worktree": str(self.root),
+                "task_branch": "task/fixture",
+                "default_branch": "main",
+            },
+        }))
+        with self.subTest(identity="checkpoint-terminal-repository"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertEqual(payload["next_command"], [], payload)
+            self.assertTrue(any("terminal" in item.lower() and "repository" in item.lower()
+                                for item in payload["blockers"]), payload)
+
+        checkpoint.unlink()
+        subprocess.run(["git", "-C", str(self.root), "remote", "remove", "origin"], check=True)
+        with self.subTest(identity="missing-origin"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertEqual(payload["next_command"], [], payload)
+            self.assertTrue(any("origin" in item.lower() for item in payload["blockers"]), payload)
 
 
 if __name__ == "__main__":
