@@ -139,6 +139,21 @@ def atomic_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
             os.unlink(temporary)
 
 
+def atomic_text(path: pathlib.Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(value)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def merge_project_mapping(path: pathlib.Path, project: dict[str, Any]) -> None:
     def update(latest: dict[str, Any]) -> None:
         latest_project = dict(latest.get("project") or {})
@@ -914,6 +929,9 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
     updated = json.loads(json.dumps(record))
     updated["completion_mode"] = "non_pr_task"
     updated["non_pr_completion_evidence"] = evidence
+    evidence_file = args.root.resolve() / ".pm" / "scratch" / args.task_uid / "non-pr-completion-evidence.txt"
+    atomic_text(evidence_file, evidence)
+    updated["non_pr_completion_evidence_file"] = str(evidence_file)
     updated["updated_at"] = now()
     task = task_from_record(args.task_uid, updated)
     update_issue_body(args.repo, int(live["issue_number"]), task)
@@ -941,6 +959,7 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         "task_uid": args.task_uid,
         "completion_mode": "non_pr_task",
         "non_pr_completion_evidence": evidence,
+        "non_pr_completion_evidence_file": str(evidence_file),
         "issue_url": live.get("issue_url"),
         "comment_url": comment_url,
         "comment_readback_verified": True,

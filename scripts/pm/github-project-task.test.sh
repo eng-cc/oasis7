@@ -278,6 +278,7 @@ payload = json.loads(pathlib.Path(sys.argv[3]).read_text())
 record = mapping["tasks"][sys.argv[2]]
 assert record["completion_mode"] == "non_pr_task", record
 assert record["non_pr_completion_evidence"] == "Read-only workflow audit completed without a PR.", record
+assert pathlib.Path(record["non_pr_completion_evidence_file"]).read_text().strip() == record["non_pr_completion_evidence"], record
 assert payload["status"] == "ok" and payload["comment_url"], payload
 assert payload["comment_readback_verified"] is True, payload
 PY
