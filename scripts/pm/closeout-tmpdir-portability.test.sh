@@ -4,9 +4,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-mkdir -p "$ROOT_DIR/.pm/scratch"
-TEST_ROOT="$(mktemp -d "$ROOT_DIR/.pm/scratch/closeout-tmpdir-test.XXXXXX")"
-trap 'rm -rf "$TEST_ROOT"' EXIT
+SCRATCH_ROOT="${OASIS7_WORKFLOW_EVAL_SCRATCH:-$ROOT_DIR/.pm/scratch}"
+CREATED_SCRATCH_ROOT=0
+if [[ ! -d "$SCRATCH_ROOT" ]]; then
+  mkdir -p "$SCRATCH_ROOT"
+  CREATED_SCRATCH_ROOT=1
+fi
+TEST_ROOT="$(mktemp -d "$SCRATCH_ROOT/closeout-tmpdir-test.XXXXXX")"
+cleanup() {
+  local status=$?
+  rm -rf "$TEST_ROOT"
+  if [[ "$CREATED_SCRATCH_ROOT" == 1 ]]; then
+    rmdir "$SCRATCH_ROOT" >/dev/null 2>&1 || true
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
 
 TMPDIR_ASSERT='case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) [[ "${TMPDIR:-}" == [A-Za-z]:/* ]] ;; *) [[ -z "${TMPDIR:-}" ]] ;; esac'
 env -u TMPDIR OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1 \

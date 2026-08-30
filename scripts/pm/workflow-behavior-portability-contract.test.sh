@@ -10,6 +10,13 @@ import pathlib,sys
 
 source=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 execution,results=source.split('RESULT_JSON=',1)
+closeout=pathlib.Path(sys.argv[1]).with_name('closeout-tmpdir-portability.test.sh').read_text(encoding='utf-8')
+assert 'OASIS7_WORKFLOW_EVAL_SCRATCH="$TMP_DIR/pm-scratch"' in execution, \
+    'workflow behavior eval must allocate its scratch outside the repository projection'
+assert 'export OASIS7_WORKFLOW_EVAL_SCRATCH' in execution, \
+    'workflow behavior eval must export its isolated scratch root to child fixtures'
+assert 'OASIS7_WORKFLOW_EVAL_SCRATCH:-$ROOT_DIR/.pm/scratch' in closeout, \
+    'closeout portability fixture must consume the eval-owned scratch root'
 required_commands=(
     './scripts/pm/closeout-tmpdir-portability.test.sh',
     './scripts/pm/claim-ready-ready-pr.test.sh',
