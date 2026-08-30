@@ -37,7 +37,7 @@
 - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`：首局、后引导、首次持续能力与失败恢复的产品承诺；专业玩法合同见 `doc/game/gameplay/gameplay-top-level-design.prd.md`，执行状态由对应 GitHub task evidence 与 `doc/testing/evidence/` 确认。
 - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
 - `doc/game/gameplay/gameplay-industrial-backpressure-recovery-contract.prd.md`：下游 stage/edge/buffer/terminal 容量不足时，上游暂停、降载、持有、合法改道、释放与等待的玩家恢复闭环。
-- `doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md`：需求满足、取消、到期、未知或缩减后，accepted/WIP/in-transit/buffer-held 既有工作的玩家处置闭环。
+- `doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md`：需求满足、取消、到期、未知或缩减后，accepted/WIP/in-transit/buffer-held/terminal-pending 既有工作的玩家处置闭环。
 - `doc/game/gameplay/gameplay-industrial-maintenance-planned-downtime-contract.prd.md`：维护真值、计划停机、带风险运行、既有工作处置与 current/target 证据切线。
 - `doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md`：配方六态的玩家选择、准入/退役、旧工作处置、successor 与 current/target 证据切线。
 - `doc/game/gameplay/gameplay-industrial-raw-material-qualification-substitution-contract.prd.md`：原材料适用性失败后的换源、合法替代、换配方、因果隔离与恢复闭环。
