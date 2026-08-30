@@ -21,6 +21,7 @@ VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL
 SUPERVISOR_SKILL = ROOT / ".agents/skills/tpm-production-supervisor/SKILL.md"
 SUPERVISOR_DESIGN = ROOT / "doc/engineering/workflow/production-supervisor-runtime.design.md"
 ENGINEERING_README = ROOT / "doc/engineering/README.md"
+ENGINEERING_PRD = ROOT / "doc/engineering/prd.md"
 ENGINEERING_PRD_INDEX = ROOT / "doc/engineering/prd.index.md"
 SKILLS_README = ROOT / ".agents/skills/README.md"
 PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
@@ -1405,6 +1406,27 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ]
         self.assertEqual(sorted(flow_d_positions), flow_d_positions)
 
+    def test_engineering_prd_active_pr_flows_use_draft_candidate_order(self) -> None:
+        prd = ENGINEERING_PRD.read_text(encoding="utf-8")
+        flow_labels = ("SC-24A", "Flow-ENG-001", "Flow-ENG-014")
+        markers = (
+            "--draft-candidate --create",
+            "exact-head CI",
+            "pre-PR local role subagent review",
+            "task-closeout",
+            "--promote-draft <fresh ci_ready_receipt.json>",
+        )
+        for label in flow_labels:
+            line = re.search(rf"(?m)^.*{re.escape(label)}:.*$", prd)
+            self.assertIsNotNone(line, f"engineering PRD must publish {label}")
+            assert line is not None
+            flow = line.group(0)
+            with self.subTest(flow=label):
+                positions = [flow.index(marker) for marker in markers]
+                self.assertEqual(sorted(positions), positions)
+                self.assertNotIn("-> prepare-task-pr ->", flow)
+                self.assertNotIn("-> 执行 prepare-task-pr GitHub PR preflight / create", flow)
+
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(
             r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
@@ -1693,6 +1715,17 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(mapping=mapping):
                 self.assertIn(mapping, text)
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        m01 = re.search(r"(?m)^\| `M01` .*", matrix.group(0))
+        self.assertIsNotNone(m01, "M01 merge-receipt case is required")
+        assert m01 is not None
+        self.assertIn("`rejected(malformed)`", m01.group(0))
+        self.assertNotIn("`receipt_mismatch`", m01.group(0))
 
     def test_supervisor_fault_rows_do_not_implicitly_reset_epoch(self) -> None:
         matrix = re.search(
