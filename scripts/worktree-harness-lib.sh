@@ -92,19 +92,114 @@ wh_prepare_dirs() {
   mkdir -p "$harness_root" "$(wh_runtime_dir "$harness_root")" "$(wh_artifacts_dir "$harness_root")" "$(wh_browser_dir "$harness_root")" "$(wh_bundle_root "$harness_root")"
 }
 
-wh_resolve_ports_json() {
-  python3 - "$(wh_worktree_path)" <<'PY'
+# Publish a complete record with a same-directory temporary file and an
+# atomic replacement.  Readers that do not take the lock still see either the
+# old complete record or the new complete record, never a partially-written
+# file.  The lock is deliberately kept beside the record so concurrent
+# read/modify/write callers do not lose updates while they are assembling a
+# new state snapshot.
+wh_atomic_write() {
+  local destination=$1
+  local contents=${2-}
+  mkdir -p "$(dirname "$destination")"
+  python3 - "$destination" "$contents" <<'PY'
 from __future__ import annotations
 
+import fcntl
+import os
+import pathlib
+import tempfile
+import sys
+
+destination = pathlib.Path(sys.argv[1])
+contents = sys.argv[2]
+destination.parent.mkdir(parents=True, exist_ok=True)
+lock_path = destination.with_name(f".{destination.name}.lock")
+
+with lock_path.open("a+", encoding="utf-8") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    mode = destination.stat().st_mode & 0o777 if destination.exists() else 0o644
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        dir=str(destination.parent),
+    )
+    temporary_path = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.chmod(temporary_path, mode)
+        os.replace(temporary_path, destination)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(destination.parent, directory_flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+PY
+}
+
+wh_resolve_ports_json() {
+  local harness_root=${1:-}
+  local owner_pid=${2:-$$}
+  local worktree_path=${3:-$(wh_worktree_path)}
+  [[ -n "$harness_root" ]] || {
+    echo "error: wh_resolve_ports_json requires a harness root" >&2
+    return 2
+  }
+  mkdir -p "$harness_root"
+  python3 - "$harness_root" "$owner_pid" "$worktree_path" <<'PY'
+from __future__ import annotations
+
+import fcntl
 import hashlib
 import json
+import os
 import socket
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
-worktree_path = str(Path(sys.argv[1]).resolve())
+harness_root = Path(sys.argv[1]).resolve()
+owner_pid = int(sys.argv[2]) if sys.argv[2] else os.getppid()
+worktree_path = str(Path(sys.argv[3]).resolve())
 seed = int(hashlib.sha256(worktree_path.encode("utf-8")).hexdigest()[:8], 16)
 start = 43000 + (seed % 1500) * 10
+reservation_path = harness_root / ".ports.reservation.json"
+lock_path = harness_root / ".ports.lock"
+
+
+def pid_alive(pid: int) -> bool:
+    if pid <= 1:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def atomic_write(path: Path, contents: str) -> None:
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(path.parent, directory_flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def free(port: int) -> bool:
@@ -117,22 +212,121 @@ def free(port: int) -> bool:
     return True
 
 
-for step in range(1500):
-    base = start + step * 10
-    ports = [base, base + 1, base + 2, base + 3]
-    if ports[-1] > 65000:
-        continue
-    if all(free(port) for port in ports):
-        payload = {
-            "viewer_port": ports[0],
-            "web_bind": f"127.0.0.1:{ports[1]}",
-            "live_bind": f"127.0.0.1:{ports[2]}",
-            "chain_status_bind": f"127.0.0.1:{ports[3]}",
-        }
-        print(json.dumps(payload, ensure_ascii=True))
-        break
-else:
-    raise SystemExit("error: unable to allocate free loopback ports for worktree harness")
+with lock_path.open("a+", encoding="utf-8") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    if reservation_path.exists():
+        try:
+            reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"error: invalid harness port reservation: {exc}")
+        reservation_owner = int(reservation.get("owner_pid", 0))
+        if pid_alive(reservation_owner):
+            raise SystemExit(
+                f"error: harness ports are already reserved by live owner {reservation_owner}"
+            )
+        reservation_path.unlink()
+
+    for step in range(1500):
+        base = start + step * 10
+        ports = [base, base + 1, base + 2, base + 3]
+        if ports[-1] > 65000:
+            continue
+        if all(free(port) for port in ports):
+            token = uuid.uuid4().hex
+            payload = {
+                "viewer_port": ports[0],
+                "web_bind": f"127.0.0.1:{ports[1]}",
+                "live_bind": f"127.0.0.1:{ports[2]}",
+                "chain_status_bind": f"127.0.0.1:{ports[3]}",
+            }
+            reservation = {
+                "schema": 1,
+                "reservation_token": token,
+                "owner_pid": owner_pid,
+                "worktree_path": worktree_path,
+                "ports": payload,
+            }
+            atomic_write(reservation_path, json.dumps(reservation, sort_keys=True) + "\n")
+            payload["reservation_token"] = token
+            payload["reservation_file"] = str(reservation_path)
+            print(json.dumps(payload, ensure_ascii=True))
+            break
+    else:
+        raise SystemExit("error: unable to allocate free loopback ports for worktree harness")
+PY
+}
+
+wh_bind_ports_owner() {
+  local harness_root=$1
+  local reservation_token=$2
+  local old_owner_pid=$3
+  local new_owner_pid=$4
+  python3 - "$harness_root" "$reservation_token" "$old_owner_pid" "$new_owner_pid" <<'PY'
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import pathlib
+import tempfile
+import sys
+
+harness_root = pathlib.Path(sys.argv[1]).resolve()
+expected_token = sys.argv[2]
+old_owner_pid = int(sys.argv[3]) if sys.argv[3] else os.getppid()
+new_owner_pid = int(sys.argv[4])
+reservation_path = harness_root / ".ports.reservation.json"
+lock_path = harness_root / ".ports.lock"
+with lock_path.open("a+", encoding="utf-8") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    if not reservation_path.exists():
+        raise SystemExit("error: harness port reservation disappeared before owner binding")
+    reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+    if reservation.get("reservation_token") != expected_token:
+        raise SystemExit("error: harness port reservation token changed before owner binding")
+    if int(reservation.get("owner_pid", 0)) != old_owner_pid:
+        raise SystemExit("error: harness port reservation owner changed before owner binding")
+    reservation["owner_pid"] = new_owner_pid
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{reservation_path.name}.", dir=str(harness_root))
+    temporary_path = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(json.dumps(reservation, sort_keys=True) + "\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, reservation_path)
+        directory_fd = os.open(harness_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+PY
+}
+
+wh_release_ports_reservation() {
+  local harness_root=$1
+  local reservation_token=$2
+  python3 - "$harness_root" "$reservation_token" <<'PY'
+from __future__ import annotations
+
+import fcntl
+import json
+import pathlib
+import sys
+
+harness_root = pathlib.Path(sys.argv[1]).resolve()
+expected_token = sys.argv[2]
+reservation_path = harness_root / ".ports.reservation.json"
+lock_path = harness_root / ".ports.lock"
+with lock_path.open("a+", encoding="utf-8") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    if not reservation_path.exists():
+        raise SystemExit(0)
+    reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+    if reservation.get("reservation_token") == expected_token:
+        reservation_path.unlink()
 PY
 }
 
@@ -143,18 +337,46 @@ wh_state_write() {
   python3 - "$state_file" "$patch_json" <<'PY'
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import pathlib
+import tempfile
 import sys
 
 state_path = pathlib.Path(sys.argv[1])
 patch = json.loads(sys.argv[2])
-if state_path.exists():
-    current = json.loads(state_path.read_text(encoding="utf-8"))
-else:
-    current = {}
-current.update(patch)
-state_path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+state_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path = state_path.with_name(f".{state_path.name}.lock")
+with lock_path.open("a+", encoding="utf-8") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    if state_path.exists():
+        current = json.loads(state_path.read_text(encoding="utf-8"))
+    else:
+        current = {}
+    current.update(patch)
+    contents = json.dumps(current, ensure_ascii=False, indent=2) + "\n"
+    mode = state_path.stat().st_mode & 0o777 if state_path.exists() else 0o644
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{state_path.name}.",
+        dir=str(state_path.parent),
+    )
+    temporary_path = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.chmod(temporary_path, mode)
+        os.replace(temporary_path, state_path)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(state_path.parent, directory_flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 PY
 }
 
@@ -313,6 +535,99 @@ wh_pid_alive() {
   local pid=$1
   [[ -n "$pid" ]] || return 1
   kill -0 "$pid" >/dev/null 2>&1
+}
+
+wh_process_group_id() {
+  local pid=$1
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  ps -o pgid= -p "$pid" | awk 'NF { print $1; exit }'
+}
+
+wh_process_group_alive() {
+  local pgid=$1
+  [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || return 1
+  ps -axo pid=,pgid= | awk -v target="$pgid" '$2 == target { found = 1 } END { exit found ? 0 : 1 }'
+}
+
+# Terminate only the process group that was recorded at launch.  The caller
+# must provide the launcher's PID and the PGID captured from that PID; a live
+# PID whose group changed is rejected before any signal is sent.  If the group
+# leader was killed already, the durable PID/PGID pair still identifies the
+# group that may contain descendants left behind by that failure.
+wh_terminate_process_group() {
+  local pid=${1:-}
+  local pgid=${2:-}
+  local timeout_ms=${3:-2000}
+  local current_pgid deadline_ms
+
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 2
+  [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || return 2
+  [[ "$timeout_ms" =~ ^[0-9]+$ ]] || return 2
+  [[ "$pgid" -gt 1 ]] || return 2
+
+  # Never permit a stale record to target the process group running the
+  # cleanup caller itself.
+  current_pgid=$(wh_process_group_id "$$" 2>/dev/null || true)
+  [[ -n "$current_pgid" && "$pgid" != "$current_pgid" ]] || return 2
+
+  if wh_pid_alive "$pid"; then
+    current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
+    [[ "$current_pgid" == "$pgid" ]] || return 2
+  elif ! wh_process_group_alive "$pgid"; then
+    return 0
+  fi
+
+  if ! wh_process_group_alive "$pgid"; then
+    return 0
+  fi
+  kill -TERM "-$pgid" >/dev/null 2>&1 || true
+  deadline_ms=$(( $(wh_clock_ms) + timeout_ms ))
+  while wh_process_group_alive "$pgid"; do
+    if (( $(wh_clock_ms) >= deadline_ms )); then
+      break
+    fi
+    sleep 0.05
+  done
+
+  if wh_process_group_alive "$pgid"; then
+    kill -KILL "-$pgid" >/dev/null 2>&1 || true
+    deadline_ms=$(( $(wh_clock_ms) + 1000 ))
+    while wh_process_group_alive "$pgid" && (( $(wh_clock_ms) < deadline_ms )); do
+      sleep 0.05
+    done
+  fi
+
+  if wh_process_group_alive "$pgid"; then
+    return 1
+  fi
+  wait "$pid" >/dev/null 2>&1 || true
+}
+
+# Launch a shell command in a dedicated process group and expose the recorded
+# identity through WH_MANAGED_PID/WH_MANAGED_PGID.  Redirections belong around
+# this function call so the child inherits the caller's chosen logs.
+wh_start_managed() {
+  local monitor_was_enabled=0
+  case "$-" in
+    *m*) monitor_was_enabled=1 ;;
+  esac
+  set -m
+  "$@" &
+  WH_MANAGED_PID=$!
+  # The managed process outlives the launching shell in normal harness use;
+  # disown it so a later group KILL does not produce a misleading job-control
+  # diagnostic on the operator's terminal.
+  disown "$WH_MANAGED_PID" >/dev/null 2>&1 || true
+  if [[ "$monitor_was_enabled" -eq 0 ]]; then
+    set +m
+  fi
+  WH_MANAGED_PGID="$(wh_process_group_id "$WH_MANAGED_PID" 2>/dev/null || true)"
+  if [[ -z "$WH_MANAGED_PGID" ]]; then
+    kill "$WH_MANAGED_PID" >/dev/null 2>&1 || true
+    wait "$WH_MANAGED_PID" >/dev/null 2>&1 || true
+    echo "error: unable to record managed process group for PID $WH_MANAGED_PID" >&2
+    return 1
+  fi
 }
 
 wh_env_file_get() {

@@ -49,6 +49,7 @@ BUNDLE_DIR="$(wh_default_bundle_dir "$HARNESS_ROOT")"
 STARTUP_LOG="$(wh_startup_log "$HARNESS_ROOT")"
 META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
 BROWSER_SESSION="$(wh_browser_session "$WORKTREE_ID")"
+PORT_RESERVATION_TOKEN=""
 
 wh_prepare_dirs "$HARNESS_ROOT"
 
@@ -60,19 +61,33 @@ fi
 shift || true
 
 kill_recorded_processes() {
-  local harness_pid launcher_pid
+  local harness_pid harness_pgid launcher_pid launcher_pgid reservation_token
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
+  harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
   launcher_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
+  launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
+  reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
 
-  if wh_pid_alive "$harness_pid"; then
-    kill "$harness_pid" >/dev/null 2>&1 || true
-    wait "$harness_pid" >/dev/null 2>&1 || true
+  # Older state records predate PGID publication.  Derive the group only
+  # while its recorded PID is live; otherwise leave the stale record alone so
+  # cleanup cannot guess at an unrelated process group.
+  if [[ -z "$launcher_pgid" ]] && wh_pid_alive "$launcher_pid"; then
+    launcher_pgid=$(wh_process_group_id "$launcher_pid" 2>/dev/null || true)
   fi
-  if wh_pid_alive "$launcher_pid"; then
-    kill "$launcher_pid" >/dev/null 2>&1 || true
-    wait "$launcher_pid" >/dev/null 2>&1 || true
+  if [[ -z "$harness_pgid" ]] && wh_pid_alive "$harness_pid"; then
+    harness_pgid=$(wh_process_group_id "$harness_pid" 2>/dev/null || true)
+  fi
+
+  if [[ -n "$launcher_pid" && -n "$launcher_pgid" ]]; then
+    wh_terminate_process_group "$launcher_pid" "$launcher_pgid" 2000 || true
+  fi
+  if [[ -n "$harness_pid" && -n "$harness_pgid" ]]; then
+    wh_terminate_process_group "$harness_pid" "$harness_pgid" 2000 || true
   fi
   ab_cmd "$BROWSER_SESSION" close >/dev/null 2>&1 || true
+  if [[ -n "$reservation_token" ]]; then
+    wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" || true
+  fi
 }
 
 viewer_http_ready() {
@@ -92,7 +107,7 @@ refresh_state() {
 
   if [[ "$current_status" == "ready" ]]; then
     if ! wh_pid_alive "$harness_pid" && ! wh_pid_alive "$launcher_pid"; then
-      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "launcher_pid": null}'
+      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "launcher_pid": null, "launcher_pgid": null, "port_reservation_token": null}'
       return 0
     fi
   fi
@@ -259,11 +274,12 @@ case "$action" in
     kill_recorded_processes
     rm -f "$META_FILE" "$STARTUP_LOG"
 
-    ports_json=$(wh_resolve_ports_json)
+    ports_json=$(wh_resolve_ports_json "$HARNESS_ROOT" "" "$(wh_worktree_path)")
     viewer_port=$(json_get "$ports_json" viewer_port)
     web_bind=$(json_get "$ports_json" web_bind)
     live_bind=$(json_get "$ports_json" live_bind)
     chain_status_bind=$(json_get "$ports_json" chain_status_bind)
+    PORT_RESERVATION_TOKEN=$(json_get "$ports_json" reservation_token)
     STARTUP_DEADLINE_MS=$(( $(wh_clock_ms) + STARTUP_TIMEOUT * 1000 ))
 
     wh_state_write "$STATE_FILE" "$(python3 - \
@@ -283,7 +299,9 @@ case "$action" in
       "$BROWSER_SESSION" \
       "$STARTUP_LOG" \
       "$STARTUP_TIMEOUT" \
-      "$STARTUP_DEADLINE_MS" <<'PY'
+      "$STARTUP_DEADLINE_MS" \
+      "$PORT_RESERVATION_TOKEN" \
+      "$(json_get "$ports_json" reservation_file)" <<'PY'
 import json
 import sys
 payload = {
@@ -313,6 +331,8 @@ payload = {
         "message": "resolving worktree ports",
         "updated_epoch_ms": int(sys.argv[17]) - int(sys.argv[16]) * 1000,
     },
+    "port_reservation_token": sys.argv[18],
+    "port_reservation_file": sys.argv[19],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -354,9 +374,18 @@ PY
     run_args+=(--with-llm)
 
     wh_state_phase "$STATE_FILE" "starting_launcher" "launching run-launcher-stack.sh" "$STARTUP_DEADLINE_MS"
-    nohup ./scripts/run-launcher-stack.sh "${run_args[@]}" >"$STARTUP_LOG" 2>&1 < /dev/null &
-    HARNESS_PID=$!
-    wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID}"
+    launch_stack() {
+      nohup ./scripts/run-launcher-stack.sh "${run_args[@]}"
+    }
+    wh_start_managed launch_stack >"$STARTUP_LOG" 2>&1
+    HARNESS_PID=$WH_MANAGED_PID
+    HARNESS_PGID=$WH_MANAGED_PGID
+    if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID"; then
+      kill_recorded_processes
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "unable to bind port reservation to managed harness process"}'
+      exit 1
+    fi
+    wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID, \"harness_pgid\": $HARNESS_PGID}"
 
     wh_state_phase "$STATE_FILE" "waiting_metadata" "waiting for STACK_READY metadata" "$STARTUP_DEADLINE_MS"
     attempt=0
@@ -364,6 +393,7 @@ PY
       attempt=$((attempt + 1))
       if ! wh_pid_alive "$HARNESS_PID"; then
         wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh exited before STACK_READY"}'
+        kill_recorded_processes
         echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2
         tail -n 120 "$STARTUP_LOG" >&2 || true
         exit 1
@@ -381,6 +411,7 @@ PY
 
     if [[ ! -f "$META_FILE" ]] || [[ "$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)" != "1" ]]; then
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "startup deadline exceeded waiting for STACK_READY"}'
+      kill_recorded_processes
       echo "error: timed out waiting for worktree harness readiness" >&2
       tail -n 120 "$STARTUP_LOG" >&2 || true
       exit 1
@@ -388,10 +419,13 @@ PY
 
     viewer_url=$(wh_env_file_get "$META_FILE" GAME_URL)
     launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
+    launcher_pgid=$(wh_env_file_get "$META_FILE" LAUNCHER_PGID 2>/dev/null || true)
     wh_state_write "$STATE_FILE" "$(python3 - \
       "$viewer_url" \
       "$launcher_pid" \
-      "$META_FILE" <<'PY'
+      "$launcher_pgid" \
+      "$META_FILE" \
+      "$PORT_RESERVATION_TOKEN" <<'PY'
 import json
 import sys
 launcher_pid = sys.argv[2]
@@ -400,7 +434,9 @@ payload = {
     "phase": "ready",
     "viewer_url": sys.argv[1],
     "launcher_pid": int(launcher_pid) if launcher_pid else None,
-    "meta_file": sys.argv[3],
+    "launcher_pgid": int(sys.argv[3]) if sys.argv[3] else None,
+    "meta_file": sys.argv[4],
+    "port_reservation_token": sys.argv[5],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -415,7 +451,7 @@ PY
     ;;
   down)
     kill_recorded_processes
-    wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "launcher_pid": null}'
+    wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "launcher_pid": null, "launcher_pgid": null, "port_reservation_token": null}'
     echo "worktree harness stopped: $WORKTREE_ID"
     ;;
   status)

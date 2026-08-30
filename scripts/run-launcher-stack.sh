@@ -2,10 +2,25 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 source "$ROOT_DIR/scripts/hosted-login-gate-env-lib.sh"
+
+# Test-only seam used by the repository-owned lifecycle acceptance lane.  It
+# is intentionally an explicit environment variable and exits before any
+# production provider/build path; normal callers retain the real launcher
+# default because the variable is unset.
+TEST_ONLY_LAUNCHER_COMMAND="${OASIS7_HARNESS_TEST_LAUNCHER_COMMAND:-}"
+ORIGINAL_ARGS=("$@")
+if [[ -n "$TEST_ONLY_LAUNCHER_COMMAND" ]]; then
+  if [[ "$TEST_ONLY_LAUNCHER_COMMAND" != /* || ! -x "$TEST_ONLY_LAUNCHER_COMMAND" ]]; then
+    echo "error: OASIS7_HARNESS_TEST_LAUNCHER_COMMAND must be an executable absolute path" >&2
+    exit 1
+  fi
+  exec "$TEST_ONLY_LAUNCHER_COMMAND" "${ORIGINAL_ARGS[@]}"
+fi
 
 VIEWER_HOST="127.0.0.1"
 VIEWER_PORT="4173"
@@ -761,16 +776,52 @@ fi
 mkdir -p "$(dirname "$META_FILE")"
 
 LAUNCHER_PID=""
+LAUNCHER_PGID=""
+
+write_session_meta() {
+  local stack_ready=$1
+  local meta_payload
+  meta_payload="$({
+    printf 'RUN_ID=%s\n' "$RUN_ID"
+    printf 'OUTPUT_DIR=%s\n' "$OUTPUT_DIR"
+    printf 'WORLD_PID=%s\n' "$LAUNCHER_PID"
+    printf 'WEB_PID=\n'
+    printf 'LAUNCHER_PID=%s\n' "$LAUNCHER_PID"
+    printf 'LAUNCHER_PGID=%s\n' "$LAUNCHER_PGID"
+    printf 'LIVE_BIND_ADDR=%s\n' "$LIVE_BIND_ADDR"
+    printf 'WEB_BRIDGE_ADDR=%s\n' "$WEB_BRIDGE_ADDR"
+    printf 'VIEWER_HOST=%s\n' "$VIEWER_HOST"
+    printf 'VIEWER_PORT=%s\n' "$VIEWER_PORT"
+    printf 'CHAIN_ENABLED=%s\n' "$CHAIN_ENABLED"
+    printf 'DEPLOYMENT_MODE=%s\n' "$DEPLOYMENT_MODE"
+    printf 'CHAIN_NODE_ID=%s\n' "$CHAIN_NODE_ID"
+    printf 'CHAIN_STATUS_BIND_ADDR=%s\n' "$CHAIN_STATUS_BIND_ADDR"
+    printf 'LAUNCH_MODE=%s\n' "$LAUNCH_MODE"
+    printf 'LAUNCH_CMD=%s\n' "$LAUNCH_CMD"
+    printf 'BUNDLE_DIR=%s\n' "$BUNDLE_DIR"
+    printf 'LLM_PROVIDER_PREFLIGHT_SKIPPED=%s\n' "$SKIP_LLM_PROVIDER_PREFLIGHT"
+    printf 'LLM_PROVIDER_PROBE_JSON=%s\n' "$LLM_PROVIDER_PROBE_JSON"
+    printf 'LLM_PROVIDER_PROBE_LOG=%s\n' "$LLM_PROVIDER_PROBE_LOG"
+    printf 'HOSTED_ACCOUNT_STORE_PATH=%s\n' "$HOSTED_ACCOUNT_STORE_PATH"
+    printf 'STACK_READY=%s\n' "$stack_ready"
+    if [[ "$stack_ready" == "1" ]]; then
+      printf 'GAME_URL=%s\n' "$GAME_URL"
+      printf 'VIEWER_URL_ZH=%s\n' "$VIEWER_URL_ZH"
+      printf 'VIEWER_URL_EN=%s\n' "$VIEWER_URL_EN"
+      printf 'SOFTWARE_SAFE_VIEWER_URL_ZH=%s\n' "$SOFTWARE_SAFE_VIEWER_URL_ZH"
+      printf 'SOFTWARE_SAFE_VIEWER_URL_EN=%s\n' "$SOFTWARE_SAFE_VIEWER_URL_EN"
+    fi
+  })"
+  wh_atomic_write "$META_FILE" "$meta_payload"
+}
 
 cleanup() {
   local exit_code=$?
   trap - EXIT INT TERM
 
-  if [[ -n "$LAUNCHER_PID" ]] && kill -0 "$LAUNCHER_PID" >/dev/null 2>&1; then
-    kill "$LAUNCHER_PID" >/dev/null 2>&1 || true
+  if [[ -n "$LAUNCHER_PID" ]]; then
+    wh_terminate_process_group "$LAUNCHER_PID" "$LAUNCHER_PGID" 2000 || true
   fi
-
-  wait "$LAUNCHER_PID" >/dev/null 2>&1 || true
 
   exit "$exit_code"
 }
@@ -854,10 +905,11 @@ if [[ -n "$BUNDLE_DIR" ]]; then
       exit 1
     fi
   fi
-  (
+  launch_bundle() {
     cd "$BUNDLE_DIR"
     env "${LAUNCHER_ENV_DEFAULTS[@]}" "$BUNDLE_DIR/run-game.sh" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
-  ) &
+  }
+  wh_start_managed launch_bundle
 else
   LAUNCH_MODE="source"
   SOURCE_MODE_TARGET_DIR="$(resolve_source_mode_target_dir)"
@@ -899,43 +951,23 @@ else
     fi
   fi
   LAUNCH_CMD="$SOURCE_MODE_LAUNCHER_BIN"
-  (
+  launch_source() {
     cd "$ROOT_DIR"
     env "${LAUNCHER_ENV_DEFAULTS[@]}" \
     OASIS7_VIEWER_LIVE_BIN="$SOURCE_MODE_VIEWER_LIVE_BIN" \
     OASIS7_CHAIN_RUNTIME_BIN="$SOURCE_MODE_CHAIN_RUNTIME_BIN" \
     "$SOURCE_MODE_LAUNCHER_BIN" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
-  ) &
+  }
+  wh_start_managed launch_source
 fi
-LAUNCHER_PID=$!
+LAUNCHER_PID="$WH_MANAGED_PID"
+LAUNCHER_PGID="$WH_MANAGED_PGID"
 cat <<'INFO' >"$WEB_LOG"
 run-viewer-web.sh no longer runs as a standalone process in this stack.
 web viewer is served by oasis7_game_launcher built-in static server.
 INFO
 
-{
-  echo "RUN_ID=$RUN_ID"
-  echo "OUTPUT_DIR=$OUTPUT_DIR"
-  echo "WORLD_PID=$LAUNCHER_PID"
-  echo "WEB_PID="
-  echo "LAUNCHER_PID=$LAUNCHER_PID"
-  echo "LIVE_BIND_ADDR=$LIVE_BIND_ADDR"
-  echo "WEB_BRIDGE_ADDR=$WEB_BRIDGE_ADDR"
-  echo "VIEWER_HOST=$VIEWER_HOST"
-  echo "VIEWER_PORT=$VIEWER_PORT"
-  echo "CHAIN_ENABLED=$CHAIN_ENABLED"
-  echo "DEPLOYMENT_MODE=$DEPLOYMENT_MODE"
-  echo "CHAIN_NODE_ID=$CHAIN_NODE_ID"
-  echo "CHAIN_STATUS_BIND_ADDR=$CHAIN_STATUS_BIND_ADDR"
-  echo "LAUNCH_MODE=$LAUNCH_MODE"
-  echo "LAUNCH_CMD=$LAUNCH_CMD"
-  echo "BUNDLE_DIR=$BUNDLE_DIR"
-  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
-  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
-  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
-  echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
-  echo "STACK_READY=0"
-} >"$META_FILE"
+write_session_meta 0
 
 if ! wait_for_http_ready "http://${VIEWER_HOST}:${VIEWER_PORT}/" 180 "$LAUNCHER_PID"; then
   if ensure_launcher_alive "$LAUNCHER_PID"; then
@@ -972,37 +1004,10 @@ VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=viewer&ws=w
 SOFTWARE_SAFE_VIEWER_URL_ZH="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=zh"
 SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=en"
 
-{
-  echo "RUN_ID=$RUN_ID"
-  echo "OUTPUT_DIR=$OUTPUT_DIR"
-  echo "WORLD_PID=$LAUNCHER_PID"
-  echo "WEB_PID="
-  echo "LAUNCHER_PID=$LAUNCHER_PID"
-  echo "LIVE_BIND_ADDR=$LIVE_BIND_ADDR"
-  echo "WEB_BRIDGE_ADDR=$WEB_BRIDGE_ADDR"
-  echo "VIEWER_HOST=$VIEWER_HOST"
-  echo "VIEWER_PORT=$VIEWER_PORT"
-  echo "CHAIN_ENABLED=$CHAIN_ENABLED"
-  echo "DEPLOYMENT_MODE=$DEPLOYMENT_MODE"
-  echo "CHAIN_NODE_ID=$CHAIN_NODE_ID"
-  echo "CHAIN_STATUS_BIND_ADDR=$CHAIN_STATUS_BIND_ADDR"
-  echo "LAUNCH_MODE=$LAUNCH_MODE"
-  echo "LAUNCH_CMD=$LAUNCH_CMD"
-  echo "BUNDLE_DIR=$BUNDLE_DIR"
-  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
-  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
-  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
-  echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
-  echo "STACK_READY=1"
-  echo "GAME_URL=$GAME_URL"
-  echo "VIEWER_URL_ZH=$VIEWER_URL_ZH"
-  echo "VIEWER_URL_EN=$VIEWER_URL_EN"
-  echo "SOFTWARE_SAFE_VIEWER_URL_ZH=$SOFTWARE_SAFE_VIEWER_URL_ZH"
-  echo "SOFTWARE_SAFE_VIEWER_URL_EN=$SOFTWARE_SAFE_VIEWER_URL_EN"
-} >"$META_FILE"
+write_session_meta 1
 
 if [[ "$JSON_READY" == "1" ]]; then
-  python3 - "$RUN_ID" "$OUTPUT_DIR" "$LAUNCHER_PID" "$LIVE_BIND_ADDR" "$WEB_BRIDGE_ADDR" "$VIEWER_HOST" "$VIEWER_PORT" "$CHAIN_ENABLED" "$CHAIN_NODE_ID" "$CHAIN_STATUS_BIND_ADDR" "$LAUNCH_MODE" "$LAUNCH_CMD" "$BUNDLE_DIR" "$GAME_URL" "$VIEWER_URL_ZH" "$VIEWER_URL_EN" "$SOFTWARE_SAFE_VIEWER_URL_ZH" "$SOFTWARE_SAFE_VIEWER_URL_EN" "$META_FILE" <<'PY'
+  python3 - "$RUN_ID" "$OUTPUT_DIR" "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LIVE_BIND_ADDR" "$WEB_BRIDGE_ADDR" "$VIEWER_HOST" "$VIEWER_PORT" "$CHAIN_ENABLED" "$CHAIN_NODE_ID" "$CHAIN_STATUS_BIND_ADDR" "$LAUNCH_MODE" "$LAUNCH_CMD" "$BUNDLE_DIR" "$GAME_URL" "$VIEWER_URL_ZH" "$VIEWER_URL_EN" "$SOFTWARE_SAFE_VIEWER_URL_ZH" "$SOFTWARE_SAFE_VIEWER_URL_EN" "$META_FILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -1012,22 +1017,23 @@ payload = {
     "run_id": sys.argv[1],
     "output_dir": sys.argv[2],
     "launcher_pid": int(sys.argv[3]),
-    "live_bind_addr": sys.argv[4],
-    "web_bridge_addr": sys.argv[5],
-    "viewer_host": sys.argv[6],
-    "viewer_port": int(sys.argv[7]),
-    "chain_enabled": sys.argv[8] == "1",
-    "chain_node_id": sys.argv[9],
-    "chain_status_bind_addr": sys.argv[10],
-    "launch_mode": sys.argv[11],
-    "launch_cmd": sys.argv[12],
-    "bundle_dir": sys.argv[13],
-    "game_url": sys.argv[14],
-    "viewer_url_zh": sys.argv[15],
-    "viewer_url_en": sys.argv[16],
-    "software_safe_compat_viewer_url_zh": sys.argv[17],
-    "software_safe_compat_viewer_url_en": sys.argv[18],
-    "meta_file": sys.argv[19],
+    "launcher_pgid": int(sys.argv[4]),
+    "live_bind_addr": sys.argv[5],
+    "web_bridge_addr": sys.argv[6],
+    "viewer_host": sys.argv[7],
+    "viewer_port": int(sys.argv[8]),
+    "chain_enabled": sys.argv[9] == "1",
+    "chain_node_id": sys.argv[10],
+    "chain_status_bind_addr": sys.argv[11],
+    "launch_mode": sys.argv[12],
+    "launch_cmd": sys.argv[13],
+    "bundle_dir": sys.argv[14],
+    "game_url": sys.argv[15],
+    "viewer_url_zh": sys.argv[16],
+    "viewer_url_en": sys.argv[17],
+    "software_safe_compat_viewer_url_zh": sys.argv[18],
+    "software_safe_compat_viewer_url_en": sys.argv[19],
+    "meta_file": sys.argv[20],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
