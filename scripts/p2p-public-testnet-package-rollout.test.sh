@@ -2023,6 +2023,137 @@ then
   package_contract_failed=1
 fi
 
+# Execute the generated one-SSH stream through a local fake ssh/sshd pair.
+# The node-upgrade entrypoint directly invokes four sibling helpers; the
+# streamed envelope must therefore carry every one before the remote shell
+# reaches the mutation boundary.  This RED test reports the missing staged
+# helpers while proving no mutation sentinel is reached after server-side
+# reparse.
+if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+from pathlib import Path
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+command = storage["commands"][0]
+argv = shlex.split(command)
+ssh_index = argv.index("ssh")
+target_index = next(
+    index for index in range(ssh_index + 1, len(argv)) if argv[index].startswith("root@")
+)
+remote_argv = argv[target_index + 1 :]
+parsed_remote = shlex.split(" ".join(remote_argv))
+if parsed_remote[:2] != ["bash", "-c"]:
+    raise AssertionError("expected a remote bash -c envelope")
+original_body = parsed_remote[2]
+helper_name = "p2p-public-testnet-package-node-upgrade.sh"
+required_helpers = (
+    "p2p-safe-extract-tar.py",
+    "p2p-safe-validate-deb-tree.py",
+    "p2p-verify-linux-package-bundle.py",
+    "p2p-rebuild-linux-bundle-checksums.py",
+)
+if helper_name not in original_body:
+    raise AssertionError("generated stream does not invoke the node-upgrade helper")
+
+with tempfile.TemporaryDirectory(prefix="oasis7-streamed-helper-reparse-") as tmp:
+    tmp_path = Path(tmp)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    (fake_bin / "sshpass").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "[[ \"${1:-}\" == -e && \"${2:-}\" == ssh ]]\n"
+        "shift 2\n"
+        "exec ssh \"$@\"\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "ssh").write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import shlex\n"
+        "import sys\n"
+        "args = sys.argv[1:]\n"
+        "while args and args[0] == '-o':\n"
+        "    args = args[2:]\n"
+        "if not args:\n"
+        "    raise SystemExit('fake ssh missing target')\n"
+        "remote = shlex.split(' '.join(args[1:]))\n"
+        "if remote[:2] != ['bash', '-c']:\n"
+        "    raise SystemExit('fake ssh missing remote bash -c')\n"
+        "os.execvp(remote[0], remote)\n",
+        encoding="utf-8",
+    )
+    for path in fake_bin.iterdir():
+        path.chmod(0o755)
+
+    sentinel = tmp_path / "mutation-sentinel"
+    sentinel_literal = shlex.quote(str(sentinel))
+    required_helper_literals = " ".join(shlex.quote(name) for name in required_helpers)
+    remote_body = "\n".join(
+        [
+            "set -euo pipefail",
+            'stage="$(mktemp -d /tmp/oasis7-package-rollout.XXXXXX)"',
+            'trap \'rm -rf "$stage"\' EXIT',
+            'tar -xzf - -C "$stage"',
+            f'test -f "$stage/{helper_name}"',
+            f'for required_helper in {required_helper_literals}; do',
+            f'  grep -Fq "$required_helper" "$stage/{helper_name}" || {{',
+            '    printf \'%s\\n\' "node-upgrade helper does not reference $required_helper" >&2',
+            "    exit 43",
+            "  }",
+            f'  if [[ ! -f "$stage/$required_helper" ]]; then',
+            f'    printf \'%s\\n\' "missing direct staged helper: $required_helper" >&2',
+            "    missing_helpers+=\" $required_helper\"",
+            "  fi",
+            "done",
+            'if [[ -n "${missing_helpers:-}" ]]; then',
+            '  printf \'%s\\n\' "direct helper closure incomplete:$missing_helpers" >&2',
+            "  exit 42",
+            "fi",
+            f"printf '%s' mutation > {sentinel_literal}",
+        ]
+    )
+    remote_command = command.replace(
+        shlex.quote(remote_argv[2]), shlex.quote(shlex.quote(remote_body)), 1
+    )
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["PUBLIC_TESTNET_STORAGE_SSHPASS"] = "fixture-only"
+    result = subprocess.run(
+        ["bash", "-c", remote_command],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.returncode != 0:
+        if "direct helper closure incomplete:" in result.stderr:
+            if sentinel.exists():
+                raise AssertionError(
+                    "direct helper closure failure reached the mutation sentinel"
+                )
+            print(
+                f"{result.stderr.strip()} mutation_sentinel=False",
+                file=sys.stderr,
+            )
+            raise SystemExit(42)
+        raise AssertionError(
+            "remote streamed-envelope reparse failed for an unexpected reason: "
+            f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+    if not sentinel.exists():
+        raise AssertionError("streamed-envelope reparse did not reach its mutation sentinel")
+PY
+then
+  package_contract_failed=1
+fi
+
 if ! python3 - \
   "$TMP_DIR/plan-only.json" \
   "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \

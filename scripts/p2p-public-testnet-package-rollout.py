@@ -862,8 +862,16 @@ def linux_plan_commands(
     user = str(node.get("user") or "root")
     operator_known_hosts = validate_operator_known_hosts(known_hosts_path)
     helper_asset = ROOT_DIR / "scripts" / "p2p-public-testnet-package-node-upgrade.sh"
-    if helper_asset.is_symlink() or not helper_asset.is_file() or not stat.S_ISREG(helper_asset.lstat().st_mode):
-        die(f"missing Linux package upgrade helper: {helper_asset}")
+    direct_helper_assets = [
+        ("safe_extract", ROOT_DIR / "scripts" / "p2p-safe-extract-tar.py"),
+        ("safe_validate", ROOT_DIR / "scripts" / "p2p-safe-validate-deb-tree.py"),
+        ("verify_bundle", ROOT_DIR / "scripts" / "p2p-verify-linux-package-bundle.py"),
+        ("rebuild_checksums", ROOT_DIR / "scripts" / "p2p-rebuild-linux-bundle-checksums.py"),
+    ]
+    local_assets = [("upgrade helper", helper_asset), *direct_helper_assets]
+    for description, asset in local_assets:
+        if asset.is_symlink() or not asset.is_file() or not stat.S_ISREG(asset.lstat().st_mode):
+            die(f"missing Linux package {description}: {asset}")
     node_root = str(node.get("node_root") or "")
     if not node_root:
         die(f"linux node {node.get('name', '<unnamed>')} missing node_root")
@@ -877,6 +885,11 @@ def linux_plan_commands(
     package_size = linux_asset.stat().st_size
     ops_tools_size = linux_ops_tools_asset.stat().st_size
     helper_size = helper_asset.stat().st_size
+    direct_helper_metadata = [
+        (label, asset.name, sha256_file(asset), asset.stat().st_size)
+        for label, asset in direct_helper_assets
+    ]
+    direct_helper_names = [name for _, name, _, _ in direct_helper_metadata]
 
     def remote_file(name: str) -> str:
         return f'"$stage/{name}"'
@@ -930,34 +943,59 @@ def linux_plan_commands(
             f" --post-restart-timeout-secs {remote_quote(str(node.get('post_restart_timeout_secs') or 120))}"
         )
 
-    remote_body = "\n".join(
+    remote_body_lines = [
+        "set -euo pipefail",
+        'stage="$(mktemp -d /tmp/oasis7-package-rollout.XXXXXX)"',
+        'cleanup() { rm -rf "$stage"; }',
+        "trap cleanup EXIT",
+        'tar -xzf - -C "$stage"',
+        f'test -f {remote_file(package_name)}',
+        f'test -f {remote_file(ops_tools_name)}',
+        f'test -f {remote_file(helper_name)}',
+    ]
+    remote_body_lines.extend(
+        f'test -f {remote_file(name)}' for name in direct_helper_names
+    )
+    remote_body_lines.extend(
         [
-            "set -euo pipefail",
-            'stage="$(mktemp -d /tmp/oasis7-package-rollout.XXXXXX)"',
-            'cleanup() { rm -rf "$stage"; }',
-            "trap cleanup EXIT",
-            'tar -xzf - -C "$stage"',
-            f'test -f {remote_file(package_name)}',
-            f'test -f {remote_file(ops_tools_name)}',
-            f'test -f {remote_file(helper_name)}',
             f"expected_package_sha={remote_quote(package_sha)}",
             f"expected_ops_tools_sha={remote_quote(ops_tools_sha)}",
             f"expected_helper_sha={remote_quote(helper_sha)}",
             f"expected_package_size={remote_quote(str(package_size))}",
             f"expected_ops_tools_size={remote_quote(str(ops_tools_size))}",
             f"expected_helper_size={remote_quote(str(helper_size))}",
+        ]
+    )
+    remote_body_lines.extend(
+        f"expected_{label}_sha={remote_quote(digest)}\nexpected_{label}_size={remote_quote(str(size))}"
+        for label, _, digest, size in direct_helper_metadata
+    )
+    remote_body_lines.extend(
+        [
             f'test "$(sha256sum {remote_file(package_name)} | awk \'{{print $1}}\')" = "$expected_package_sha"',
             f'test "$(sha256sum {remote_file(ops_tools_name)} | awk \'{{print $1}}\')" = "$expected_ops_tools_sha"',
             f'test "$(sha256sum {remote_file(helper_name)} | awk \'{{print $1}}\')" = "$expected_helper_sha"',
             f'test "$(stat -c %s {remote_file(package_name)})" = "$expected_package_size"',
             f'test "$(stat -c %s {remote_file(ops_tools_name)})" = "$expected_ops_tools_size"',
             f'test "$(stat -c %s {remote_file(helper_name)})" = "$expected_helper_size"',
+        ]
+    )
+    for label, name, _, _ in direct_helper_metadata:
+        remote_body_lines.extend(
+            [
+                f'test "$(sha256sum {remote_file(name)} | awk \'{{print $1}}\')" = "$expected_{label}_sha"',
+                f'test "$(stat -c %s {remote_file(name)})" = "$expected_{label}_size"',
+            ]
+        )
+    remote_body_lines.extend(
+        [
             "printf '%s\\n' streamed_envelope_sha256_verified=true",
             "printf '%s\\n' streamed_envelope_size_verified=true",
             "printf '%s\\n' streamed_envelope_complete=true",
             f"exec {remote_invocation}",
         ]
     )
+    remote_body = "\n".join(remote_body_lines)
     provider_env_name = re.sub(
         r"[^A-Z0-9_]",
         "_",
@@ -966,7 +1004,9 @@ def linux_plan_commands(
     credential_env = f"PUBLIC_TESTNET_{provider_env_name}_SSHPASS"
     tar_command = (
         f"tar -czf - -C {remote_quote(str(linux_asset.parent))} {remote_quote(package_name)}"
-        f" {remote_quote(ops_tools_name)} -C {remote_quote(str(helper_asset.parent))} {remote_quote(helper_name)}"
+        f" {remote_quote(ops_tools_name)} -C {remote_quote(str(helper_asset.parent))}"
+        f" {remote_quote(helper_name)}"
+        + " ".join(f" {remote_quote(name)}" for name in direct_helper_names)
     )
     ssh_command = (
         f'SSHPASS="${{{credential_env}:?{credential_env} is required}}" '
