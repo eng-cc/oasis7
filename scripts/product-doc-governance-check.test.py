@@ -19,6 +19,7 @@ COPY_PATHS = (
     "doc/game/gameplay/gameplay-industrial-externality-contract.prd.md",
     "doc/game/gameplay/gameplay-industrial-factory-capability-lifecycle-contract.prd.md",
     "doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md",
+    "doc/game/gameplay/gameplay-industrial-pipeline-service-window-contract.prd.md",
     "doc/core/prd.md",
     "doc/engineering/doc-governance/doc-structure-standard.design.md",
     "doc/world-runtime/prd.md",
