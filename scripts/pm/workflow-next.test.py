@@ -64,6 +64,7 @@ class WorkflowNextTest(unittest.TestCase):
             ({"status": "committed", "workflow_phase": "verification", "pr_url": "https://example.invalid/pull/7", "pr_number": 7}, "verification", "prepare-task-pr.sh"),
             ({"status": "pr_watch", "workflow_phase": "pr_watch", "pr_url": "https://example.invalid/pull/7", "pr_number": 7}, "pr_watch", "pr-lifecycle-gate.py"),
             ({"status": "done", "workflow_phase": "task_done", "pr_url": "https://example.invalid/pull/7", "pr_number": 7}, "task_done", "finalize-task.sh"),
+            ({"status": "done", "workflow_phase": "main_sync", "pr_url": "https://example.invalid/pull/7", "pr_number": 7}, "main_sync", "finalize-task.sh"),
             ({"status": "done", "workflow_phase": "task_done", "completion_mode": "non_pr_task", "non_pr_completion_evidence": "completed"}, "task_done", "non-merge-finalize.py"),
         ]
         for updates, phase, command in cases:
@@ -99,6 +100,19 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertNotEqual(code, 0, payload)
         self.assertEqual(payload["next_command"], [], payload)
         self.assertTrue(any("ambiguous" in item for item in payload["blockers"]), payload)
+
+        self.write_mapping(status="done", workflow_phase="main_sync")
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertTrue(any("main-sync" in item for item in payload["blockers"]), payload)
+
+        self.write_mapping(status="committed", workflow_phase="execution",
+                           pr_number=7, pr_url="https://example.invalid/pull/8")
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertTrue(any("PR URL" in item for item in payload["blockers"]), payload)
 
 
 if __name__ == "__main__":

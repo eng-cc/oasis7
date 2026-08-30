@@ -182,6 +182,9 @@ def command_for(
             "--pr", pr, "--preflight", "--json",
         ]
     if phase == "main_sync":
+        if not pr or not pr.isdigit() or not pr_url:
+            add_blocker(blockers, "ambiguous state: main-sync phase lacks bound PR identity")
+            return []
         return ["./scripts/pm/finalize-task.sh", "--repo-root", str(root), "--task-uid", uid, "--pr", pr, "--resume", "--json"]
     add_blocker(blockers, f"ambiguous state: unsupported workflow phase {phase!r}")
     return []
@@ -231,6 +234,14 @@ def main() -> int:
             add_blocker(blockers, f"stale identity: task truth missing {key}")
     raw_phase = str(task.get("workflow_phase") or "")
     status = str(task.get("status") or "")
+    pr_number = str(task.get("pr_number") or "")
+    pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
+    if pr_url:
+        pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", pr_url)
+        if not pr_match:
+            add_blocker(blockers, "stale identity: task PR URL is malformed")
+        elif pr_number and pr_match.group(1) != pr_number:
+            add_blocker(blockers, "stale identity: task PR URL does not match PR number")
     if raw_phase not in PHASES and raw_phase != "":
         add_blocker(blockers, f"ambiguous state: unsupported workflow phase {raw_phase!r}")
         phase = raw_phase
