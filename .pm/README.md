@@ -40,13 +40,18 @@ This file is an operator command index, not a second workflow specification.
 ## Pre-PR and PR
 
 ```bash
+./scripts/prepare-task-pr.sh --draft-candidate --create
+# after exact-head CI and local role review, record Pre-PR Ready:
 ./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --comparison-ref <ref> \
-  --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json>
-./scripts/prepare-task-pr.sh --create
+  --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json> \
+  --ci-ready-receipt <ci_ready_receipt.json>
+# after task closeout succeeds:
+./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>
 ./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
+Task-bound legacy `--create` is rejected; promotion requires the fresh receipt and live draft-state checks above.
 The canonical links define all lifecycle gates, review attestation, and merge authority. These helpers enforce those definitions; this README does not restate them.
 
 For classified non-merge outcomes, follow the [canonical terminal runbook](../doc/engineering/workflow/source-of-truth.md#terminal-runbook).

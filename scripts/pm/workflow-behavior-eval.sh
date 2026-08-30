@@ -13,7 +13,9 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
   -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
-  -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup
+  -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review
+  -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix
+  -> review-thread-closeout -> merge/cleanup
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
 provable in local automation rather than only in prose.
@@ -798,7 +800,7 @@ scenarios = [
     },
     {
         "id": "pre_pr_requires_repo_owned_role_review",
-        "expected_route": "requesting-repo-owned-review -> prepare-task-pr -> GitHub PR watch/fix/merge",
+        "expected_route": "prepare-task-pr --draft-candidate --create -> exact-head CI -> requesting-repo-owned-review -> task-closeout -> prepare-task-pr --promote-draft -> GitHub PR watch/fix/merge",
         "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
         "required_markers": [
             "a branch is about to create a PR",
@@ -960,7 +962,7 @@ scenarios = [
     },
     {
         "id": "closeout_routes_to_local_role_review_then_github_pr_review",
-        "expected_route": "finishing-a-development-branch -> local role review -> prepare-task-pr -> GitHub required checks/review -> merge/cleanup",
+        "expected_route": "finishing-a-development-branch -> prepare-task-pr --draft-candidate --create -> exact-head CI -> local role review -> task-closeout -> prepare-task-pr --promote-draft -> GitHub required checks/review -> merge/cleanup",
         "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
         "required_markers": [
             "Use `requesting-repo-owned-review`; resolve findings against that same head.",
@@ -1148,7 +1150,7 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, GitHub-backed PM runtime tests, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",

@@ -615,8 +615,13 @@ def build_workflow_checklist(
         )
         add(
             "prepare-pr-review",
-            "创建 PR 前必须先完成本地相关角色 subagent review 并写入 `Pre-PR Local Role Review: passed` evidence packet；随后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create。普通 PR 创建后默认继续盯 GitHub required checks、mergeability、PR comments 与 unresolved review threads；`REVIEW_REQUIRED` 与 `BEHIND` 只作为状态信息回报，不是 block 项。若当前 HEAD 可合并、需要 review approval，且 `mergeStateStatus` 为 approval-only `BLOCKED` 或 `BEHIND`，则 repository standing policy 在复查 checks、mergeability、requested changes、comments/thread 和 holds 后默认使用 repo admin merge path，无需再次索取 task/user 授权。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或非 review-approval/up-to-date protection 原因的 GitHub merge API/branch protection 实际拒绝时，才修复/验证/推送或回复/resolve；通过且 comments/thread 已收口后合入并清理；只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。",
-            command="./scripts/prepare-task-pr.sh",
+            "先校验 source-bound Task UID / frozen-head identity，再用 `./scripts/prepare-task-pr.sh --draft-candidate --create` 创建或恢复 frozen-head draft candidate；候选创建后取得 exact-head CI，完成本地相关角色 subagent review 并写入 `Pre-PR Local Role Review: passed` evidence packet。普通 PR 创建后默认继续盯 GitHub required checks、mergeability、PR comments 与 unresolved review threads；`REVIEW_REQUIRED` 与 `BEHIND` 只作为状态信息回报，不是 block 项。若当前 HEAD 可合并、需要 review approval，且 `mergeStateStatus` 为 approval-only `BLOCKED` 或 `BEHIND`，则 repository standing policy 在复查 checks、mergeability、requested changes、comments/thread 和 holds 后默认使用 repo admin merge path，无需再次索取 task/user 授权。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或非 review-approval/up-to-date protection 原因的 GitHub merge API/branch protection 实际拒绝时，才修复/验证/推送或回复/resolve；通过且 comments/thread 已收口后合入并清理；只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。",
+            command="./scripts/prepare-task-pr.sh --draft-candidate --create",
+        )
+        add(
+            "promote-draft",
+            "完成 exact-head CI 与同头 role review 后，先用 task-closeout 记录 `Pre-PR Ready`；若 evidence-only closeout commit 改变 HEAD，则重新跑 exact-head CI / review / closeout，最后仅用 fresh `ci_ready_receipt.json` 通过 `./scripts/prepare-task-pr.sh --promote-draft` 晋级 draft。",
+            command="./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(

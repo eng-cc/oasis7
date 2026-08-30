@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import unittest
@@ -18,6 +19,12 @@ TPM_ROLE = ROOT / ".agents/roles/tpm.md"
 PM_README = ROOT / ".pm/README.md"
 VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL.md"
 SUPERVISOR_SKILL = ROOT / ".agents/skills/tpm-production-supervisor/SKILL.md"
+SUPERVISOR_DESIGN = ROOT / "doc/engineering/workflow/production-supervisor-runtime.design.md"
+ENGINEERING_README = ROOT / "doc/engineering/README.md"
+ENGINEERING_PRD = ROOT / "doc/engineering/prd.md"
+ENGINEERING_PRD_INDEX = ROOT / "doc/engineering/prd.index.md"
+PM_REPORTING = ROOT / "scripts/pm/pm_store_reporting.py"
+SKILLS_README = ROOT / ".agents/skills/README.md"
 PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
 PROJECT_SYNC = ROOT / "scripts/pm/github-project-sync.py"
 PROJECT_WORKFLOW = ROOT / "scripts/pm/github-project-workflow.py"
@@ -33,12 +40,14 @@ BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
 WORKFLOW_ROUTER_SKILL = ROOT / ".agents/skills/repo-owned-workflow-router/SKILL.md"
 PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
+SCRIPTS_PRD = ROOT / "doc/scripts/prd.md"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.text = SOURCE.read_text(encoding="utf-8")
+        cls.supervisor_design = SUPERVISOR_DESIGN.read_text(encoding="utf-8")
 
     def section(self, heading: str) -> str:
         match = re.search(
@@ -61,6 +70,120 @@ class WorkflowDocumentationContract(unittest.TestCase):
             self.assertRegex(table, rf"(?im)^\|[^\n]*\b{state}\b[^\n]*\|$")
         self.assertIn("production supervisor", table.lower())
         self.assertRegex(table.lower(), r"production supervisor[^\n]*\bblocked\b")
+
+    def test_target_supervisor_contract_is_canonical_and_companion_is_non_normative(self) -> None:
+        capability = self.section("Capability status")
+        states = self.section("Workflow states")
+        self.assertIn("production-supervisor-runtime.design.md", capability)
+        declaration_match = re.search(
+            r"(?is)requires\s+four\s+independently observable producer classes:\s*"
+            r"(?P<declaration>[^.]+)\.\s*",
+            capability,
+        )
+        self.assertIsNotNone(
+            declaration_match,
+            "Capability status must publish one four-class producer declaration",
+        )
+        raw_producers = re.split(
+            r"\s*,\s*|\s+and\s+", declaration_match.group("declaration").strip()
+        )
+        producers = set()
+        for producer in raw_producers:
+            normalized_producer = producer.strip().lower()
+            normalized_producer = re.sub(r"^and\s+", "", normalized_producer)
+            normalized_producer = re.sub(
+                r"^(?:task-bound|runtime-issued|durable)\s+", "", normalized_producer
+            )
+            normalized_producer = re.sub(r"/readback$", "", normalized_producer)
+            normalized_producer = re.sub(
+                r"/return\s+attestation", "/attestation", normalized_producer
+            )
+            normalized_producer = re.sub(r"\s+delivery$", "", normalized_producer)
+            producers.add(normalized_producer)
+        expected_producers = {
+            "mechanical/bootstrap action",
+            "independent live validator",
+            "collaboration/attestation",
+            "wake/scheduler",
+        }
+        self.assertEqual(4, len(raw_producers))
+        self.assertEqual(expected_producers, producers)
+        self.assertIn("all four", capability.lower())
+        self.assertIn("QA", capability)
+        self.assertIn("wait_class", states)
+        self.assertNotIn("external_wait.system", states)
+        self.assertNotIn("external_wait.policy", states)
+        self.assertRegex(self.supervisor_design, r"(?i)non-normative")
+
+    def test_supervisor_milestones_and_live_evaluation_boundary_are_explicit(self) -> None:
+        milestone_headings = (
+            "M1 — durable supervisor core",
+            "M2 — trusted mechanical path",
+            "M3 — trusted collaboration",
+            "M4 — wake/event runtime",
+        )
+        positions = []
+        for heading in milestone_headings:
+            with self.subTest(heading=heading):
+                self.assertIn(heading, self.supervisor_design)
+                positions.append(self.supervisor_design.index(heading))
+        self.assertEqual(sorted(positions), positions)
+
+        canonical = re.sub(r"\s+", " ", self.text.lower())
+        self.assertRegex(
+            canonical,
+            r"no (?:single )?milestone(?: or fixture)?[^.]{0,120}"
+            r"(?:change|alter)[^.]{0,80}(?:capability|status)",
+        )
+        self.assertRegex(
+            canonical,
+            r"(?is)(?=[^.!?]*(?:live|staging)[^.!?]*(?:evaluation|evidence))"
+            r"(?=[^.!?]*supervisor[- ]runtime)"
+            r"(?=[^.!?]*(?:target(?:ed)?|promotion))"
+            r"(?=[^.!?]*(?:not|rather than)[^.!?]*"
+            r"(?:universal|every|each)[^.!?]*(?:workflow|document))"
+            r"[^.!?]+",
+        )
+
+    def test_supervisor_thin_surfaces_link_without_copying_target_matrices(self) -> None:
+        surfaces = (
+            ENGINEERING_README,
+            ENGINEERING_PRD_INDEX,
+            SKILLS_README,
+            SUPERVISOR_SKILL,
+        )
+        supervisor_links = (
+            "production-supervisor-runtime.design.md",
+            "source-of-truth.md#appendix-a-target-supervisor-contract",
+            "source-of-truth.md#capability-and-ownership",
+        )
+        producer_rows = (
+            "trusted mechanical/bootstrap action",
+            "independent live validator/readback",
+            "trusted collaboration/attestation",
+            "wake/scheduler runtime",
+        )
+        milestone_rows = (
+            "m1 — durable supervisor core",
+            "m2 — trusted mechanical path",
+            "m3 — trusted collaboration",
+            "m4 — wake/event runtime",
+        )
+        for path in surfaces:
+            normalized = re.sub(r"\s+", " ", path.read_text(encoding="utf-8").lower())
+            with self.subTest(path=path):
+                self.assertTrue(
+                    any(link in normalized for link in supervisor_links),
+                    f"{path} must link the canonical supervisor contract or companion",
+                )
+                self.assertFalse(
+                    all(row in normalized for row in producer_rows),
+                    f"{path} must not copy the four-row producer matrix",
+                )
+                self.assertFalse(
+                    all(row in normalized for row in milestone_rows),
+                    f"{path} must not copy the M1-M4 acceptance matrix",
+                )
 
     def test_stable_required_gate_wait_uses_bounded_codex_heartbeat(self) -> None:
         budget = self.section("GitHub query budget and terminal defaults")
@@ -367,6 +490,22 @@ class WorkflowDocumentationContract(unittest.TestCase):
         pre_pr = finishing[: finishing.lower().find("## post-pr / pre-merge gates")]
         self.assertRegex(pre_pr, r"(?is)pre-PR.*\bReady\b")
         self.assertNotRegex(pre_pr, r"(?is)(close|complete) the task.*(?:before|pre-PR|PR creation)")
+
+    def test_finishing_explicitly_produces_exact_head_ci_receipt(self) -> None:
+        finishing = FINISHING.read_text(encoding="utf-8")
+        pre_pr = finishing[: finishing.lower().find("## post-pr / pre-merge gates")]
+        self.assertIn("python3 ./scripts/pm/ci-ready-receipt.py", pre_pr)
+        self.assertIn("--check-name required-gate", pre_pr)
+        self.assertIn("--check-app-id <required-check-app-id>", pre_pr)
+        self.assertIn("--planner-digest auto --json > <ci_ready_receipt.json>", pre_pr)
+        self.assertIn("active repository rules returned by `pr-lifecycle-gate.py`", pre_pr)
+        self.assertIn("do not infer it from whichever same-name check", pre_pr)
+        self.assertIn("does not create this artifact", pre_pr)
+        self.assertIn("--promote-draft <ci_ready_receipt.json>", pre_pr)
+        self.assertRegex(
+            pre_pr,
+            r"(?is)required-gate.{0,400}ci-ready-receipt\.py.{0,700}requesting-repo-owned-review",
+        )
 
     def test_state_gate_and_pm_mapping_is_explicit_and_total(self) -> None:
         mapping = self.section("State, gate, and PM mapping")
@@ -888,7 +1027,1048 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("optional", commits[0].lower())
         self.assertEqual(1, len(creates), labels)
         self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}human-operated evidence validated")
-        self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}PR creat")
+        self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}Promote draft")
+
+    def test_supervisor_positive_catalog_reaches_terminal_outcome(self) -> None:
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        catalog = positive.group(0)
+        sequence = re.search(r"exact phase sequence\s+`\[(.*?)\]`", catalog, re.S)
+        self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
+        phases = [phase.strip() for phase in sequence.group(1).split(",")]
+        expected = [
+            "bootstrap", "planning", "execution", "verification", "pre_pr_review",
+            "pre_pr_ready", "pr_watch", "done",
+        ]
+        self.assertEqual(expected, phases)
+        self.assertEqual("done", phases[-1])
+        self.assertEqual(8, len(phases), phases)
+        self.assertRegex(catalog, r"final_phase=\{kind:canonical,value:done\}")
+        self.assertRegex(
+            catalog,
+            r'terminal_outcome=\{schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done\}',
+        )
+        advances = re.search(r"phase_advances\s*=\s*(\d+)", catalog)
+        self.assertIsNotNone(advances)
+        self.assertEqual("7", advances.group(1))
+        self.assertIn("`expected_outcome={kind:code,code:accepted}`", catalog)
+        self.assertIn("`observed_outcome={kind:code,code:accepted}`", catalog)
+        self.assertIn("`verdict=pass` when all typed assertions match", catalog)
+        self.assertRegex(
+            self.supervisor_design,
+            r"exact canonical 8-phase/7-advance sequence\s+with `pre_pr_ready` before promotion and terminal outcome `post_merge_done`",
+        )
+
+    def test_supervisor_positive_phase_sequence_matches_canonical_source_enum(self) -> None:
+        contract = self.section("1.2.3 GitHub Project-Backed PM Contract")
+        enum_match = re.search(
+            r"(?im)^\|[ \t]*`Workflow Phase`[ \t]*\|[^\n]*\|[^\n]*\|[ \t]*([^\n]+)\|$",
+            contract,
+        )
+        self.assertIsNotNone(enum_match, "Workflow Phase must publish one closed enum")
+        assert enum_match is not None
+        enum_text = enum_match.group(1).split(" (", 1)[0]
+        canonical = re.findall(r"`([a-z][a-z0-9_]*)`", enum_text)
+        self.assertEqual(
+            [
+                "bootstrap", "planning", "execution", "verification", "pre_pr_review",
+                "pre_pr_ready", "pr_watch", "blocked", "done",
+            ],
+            canonical,
+        )
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        assert positive is not None
+        sequence = re.search(r"exact phase sequence\s+`\[(.*?)\]`", positive.group(0), re.S)
+        self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
+        assert sequence is not None
+        phases = [phase.strip() for phase in sequence.group(1).split(",")]
+        self.assertEqual([phase for phase in canonical if phase != "blocked"], phases)
+        self.assertNotIn("closeout", phases)
+        self.assertNotRegex(self.supervisor_design, r"(?m)^\| `closeout`\b")
+        projection = re.search(
+            r"workflow_phase_projection=\{schema:\"tpm-supervisor-workflow-phase/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(projection, "positive workflow phase projection is required")
+        assert projection is not None
+        self.assertEqual(phases, [item.strip() for item in projection.group(1).split(",")])
+        operations = re.search(
+            r"implementation_operation_sequence=\{schema:\"tpm-supervisor-operation-sequence/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(operations, "positive implementation operation sequence is required")
+        assert operations is not None
+        self.assertEqual(
+            [
+                "bootstrap", "route", "dispatch", "execute", "integrate", "freeze",
+                "draft_candidate", "create_pr", "record_pr", "comment", "verify",
+                "review", "ready", "promote_draft", "pr_watch", "merge",
+                "merge_receipt", "task_done", "main_sync", "safe_cleanup",
+                "post_merge_finalize",
+            ],
+            [item.strip() for item in operations.group(1).split(",")],
+        )
+        self.assertRegex(
+            positive.group(0),
+            r'terminal_outcome=\{schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done\}',
+        )
+        self.assertIn("`verdict=pass` when all typed assertions match", positive.group(0))
+        schema = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(schema, "machine-readable case schema is required")
+        assert schema is not None
+        schema_text = re.sub(r"\s+", " ", schema.group(1))
+        self.assertIn("typed `terminal_outcome`", schema_text)
+        self.assertRegex(
+            schema_text,
+            r"positive cases require typed `?workflow_phase_projection`? and `?implementation_operation_sequence`?",
+        )
+
+    def test_supervisor_soak_timeout_is_distinct_from_ordinary_case_budget(self) -> None:
+        budgets = re.search(
+            r"(?ms)^### 10\.3 Initial staging budgets and deterministic repetitions\n(.*?)(?=^### 10\.4)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(budgets, "staging budgets are required")
+        assert budgets is not None
+        self.assertIn("`120 s` per matrix/operational/positive case", budgets.group(1))
+        self.assertIn("Cross-process soak case timeout", budgets.group(1))
+        self.assertIn("At least `900 s` per soak case", budgets.group(1))
+        soak = re.search(
+            r"(?ms)^The closed soak catalog .*?(?=^Every catalog row)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(soak, "closed soak catalog is required")
+        assert soak is not None
+        self.assertIn("case_timeout_s >= 900", soak.group(0))
+        self.assertIn("ordinary case timeout remains `120 s`", soak.group(0))
+        self.assertIn("`expected_outcome={kind:code,code:accepted}`", soak.group(0))
+        self.assertIn("`observed_outcome={kind:code,code:accepted}`", soak.group(0))
+
+    def test_supervisor_a05_typed_outcomes_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        row = re.search(r"(?m)^\| `A05` .*", matrix.group(0))
+        self.assertIsNotNone(row, "A05 typed receipt variants are required")
+        assert row is not None
+        text = row.group(0)
+        for mapping in (
+            "forged -> rejected(authority)",
+            "malformed -> rejected(malformed)",
+            "wrong identity -> rejected(identity)",
+            "stale/revision/different digest -> stale_receipt",
+            "fencing -> stale_fencing",
+        ):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, text)
+        self.assertIn("new_epoch=false", text)
+        self.assertIn("reject_same_epoch", text)
+        self.assertIn("one case record per seed", self.supervisor_design)
+        self.assertIn("total_case_count=87", self.supervisor_design)
+
+    def test_external_wait_metadata_is_durable_checkpoint_only(self) -> None:
+        states = self.section("Workflow states")
+        for phrase in (
+            "only a durable production-supervisor checkpoint emission",
+            "Transient human-operated helper transport/status JSON",
+            "`pr-watch-loop`",
+            "current collaboration probe",
+            "cannot be persisted or promoted as one",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, states)
+        machine = re.sub(r"\s+", " ", self.section("Canonical state machine"))
+        expected = (
+            "draft_candidate -> create/record/comment draft PR -> CI verify -> review -> "
+            "pre_pr_ready -> promote_draft -> pr_watch"
+        )
+        self.assertIn(expected, machine)
+        design_state = re.search(
+            r"(?m)^\| `running` \| Trusted temporary external condition.*$",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(design_state, "design external_wait transition is required")
+        assert design_state is not None
+        self.assertIn("durable production-supervisor checkpoint", design_state.group(0))
+        self.assertIn("transient human helper status is not a transition", design_state.group(0))
+
+    def test_supervisor_pr_identity_readbacks_are_post_action_guards(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor phase guard matrix is required")
+        assert matrix is not None
+        draft = re.search(r"(?m)^\| `draft_candidate` .*", matrix.group(0))
+        self.assertIsNotNone(draft, "draft_candidate guard is required")
+        assert draft is not None
+        self.assertIn("candidate inputs", draft.group(0))
+        self.assertNotIn("draft PR identity", draft.group(0))
+        for phase, evidence, next_phase in (
+            ("create_pr", "Draft PR create receipt", "record_pr"),
+            ("record_pr", "Recorded PR identity", "comment"),
+            ("comment", "Issue-comment receipt", "verify"),
+        ):
+            row = re.search(rf"(?m)^\| `{phase}` .*", matrix.group(0))
+            self.assertIsNotNone(row, phase)
+            assert row is not None
+            self.assertIn(evidence, row.group(0), phase)
+            self.assertIn(f"/ `{next_phase}`", row.group(0), phase)
+
+        trust = re.search(
+            r"(?ms)^#### Phase-to-producer and validator trust matrix\n(.*?)(?=^The executor receipt)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(trust, "phase-to-producer trust matrix is required")
+        assert trust is not None
+        trust_rows = trust.group(1)
+        for phase, evidence in (
+            ("draft_candidate", "candidate-input readback; no PR identity yet"),
+            ("create_pr", "Draft PR create receipt and independent PR identity/readback"),
+            ("record_pr", "Recorded PR identity plus independent task/PR readback"),
+            ("comment", "Issue-comment receipt plus independent task/issue-comment readback"),
+        ):
+            row = re.search(rf"(?m)^\| `{phase}` .*", trust_rows)
+            self.assertIsNotNone(row, phase)
+            assert row is not None
+            self.assertIn(evidence, row.group(0), phase)
+
+    def test_supervisor_promote_receipt_enters_pr_watch_once(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor phase transition matrix is required")
+        assert matrix is not None
+        pre_ready = re.search(r"(?m)^\| `pre_pr_ready` .*", matrix.group(0))
+        self.assertIsNotNone(pre_ready, "pre_pr_ready transition is required")
+        assert pre_ready is not None
+        self.assertIn("Execute(promote_draft)", pre_ready.group(0))
+        promote = re.search(r"(?m)^\| `promote_draft` .*", matrix.group(0))
+        self.assertIsNotNone(promote, "promote_draft receipt guard is required")
+        assert promote is not None
+        self.assertIn("Successful validated `Execute(promote_draft)` receipt", promote.group(0))
+        self.assertIn("`Wait(pr_watch)` once", promote.group(0))
+        self.assertIn("no second `promote_draft` emission", promote.group(0))
+        self.assertEqual(1, promote.group(0).count("Execute(promote_draft)"))
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        assert positive is not None
+        operations = re.search(
+            r"implementation_operation_sequence=\{schema:\"tpm-supervisor-operation-sequence/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(operations, "positive operation sequence is required")
+        assert operations is not None
+        self.assertEqual(1, operations.group(1).split(",").count("promote_draft"))
+
+    def test_draft_candidate_command_uses_canonical_flags(self) -> None:
+        canonical = "./scripts/prepare-task-pr.sh --draft-candidate --create"
+        legacy = "./scripts/prepare-task-pr.sh --create " + "--draft"
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        surfaces = {
+            "source-of-truth": self.text,
+            "prepare-task-pr": PREPARE_TASK_PR.read_text(encoding="utf-8"),
+            "prepare-task-pr --help": help_text,
+            "finishing skill": FINISHING.read_text(encoding="utf-8"),
+        }
+        for name, surface in surfaces.items():
+            with self.subTest(surface=name):
+                self.assertIn(canonical, surface)
+                self.assertNotIn(legacy, surface)
+        finishing = surfaces["finishing skill"]
+        self.assertRegex(
+            finishing,
+            r"(?is)after frozen-head draft-candidate creation and trusted exact-head CI,"
+            r".*before draft promotion",
+        )
+        legacy_review_phrase = (
+            "review packet recorded after immutable verification and "
+            + "before PR creation"
+        )
+        self.assertNotIn(legacy_review_phrase, finishing.lower())
+
+    def test_prepare_help_keeps_optional_closeout_before_fresh_promotion(self) -> None:
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        standard = re.search(r"(?m)^- standard path: (.*)$", help_text)
+        self.assertIsNotNone(standard, "prepare-task-pr help must publish its standard path")
+        assert standard is not None
+        self.assertIn(
+            "./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>",
+            standard.group(1),
+        )
+        self.assertNotIn("evidence-only", standard.group(1).lower())
+
+        optional = re.search(
+            r"(?ms)^- optional evidence-only closeout: (.*?)(?=^Options:)",
+            help_text,
+        )
+        self.assertIsNotNone(
+            optional,
+            "prepare-task-pr help must describe evidence-only closeout separately",
+        )
+        assert optional is not None
+        for phrase in (
+            "if it changes HEAD",
+            "rerun exact-head CI and local role review",
+            "regenerate the packet and ci_ready receipt",
+            "promote only with that new receipt",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, optional.group(1))
+        self.assertNotIn(
+            "evidence-only closeout commit -> ./scripts/prepare-task-pr.sh --promote-draft",
+            help_text.lower(),
+        )
+
+    def test_task_bound_legacy_create_is_rejected_before_pr_recording(self) -> None:
+        script = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        guard = (
+            'if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" '
+            '&& "$LOCAL_ROLE_REVIEW_STATUS" == "passed" '
+            '&& -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then'
+        )
+        self.assertIn(guard, script)
+        guard_index = script.index(guard)
+        create_index = script.index('if [[ "$CREATE_PR" == "1" ]]; then', guard_index)
+        record_index = script.index('github-project-task.py" record-pr', create_index)
+        self.assertLess(guard_index, create_index)
+        self.assertLess(guard_index, record_index)
+        self.assertIn("legacy task-bound", script)
+        self.assertIn("--create", script)
+
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        self.assertIn("legacy task-bound `--create` is rejected", help_text)
+        for path in (PM_README, SCRIPTS_PRD):
+            with self.subTest(surface=path):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("./scripts/prepare-task-pr.sh --draft-candidate --create", text)
+                self.assertIn("--promote-draft <fresh ci_ready_receipt.json>", text)
+
+    def test_draft_candidate_binding_is_canonical_and_pre_side_effect(self) -> None:
+        script = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        producer = (ROOT / "scripts/pm/record-draft-freeze-evidence.py").read_text(encoding="utf-8")
+        validator = script.index("validate_draft_candidate_binding()")
+        issue_read = script.index(
+            '"gh",\n            "issue",\n            "view",',
+            validator,
+        )
+        call = script.index("BOUND_TASK_FIELDS=\"$(validate_draft_candidate_binding", validator)
+        producer_call = script.index('python3 "$DRAFT_FREEZE_EVIDENCE_HELPER"', validator)
+        role_status = script.index(
+            'LOCAL_ROLE_REVIEW_OUTPUT=\"$(local_role_review_status',
+            call,
+        )
+        self.assertLess(issue_read, call)
+        self.assertLess(producer_call, call)
+        push = script.index('git -C \"$SOURCE_WORKTREE\" push', call)
+        gh_create = script.index('CREATE_CMD=("gh" "pr" "create"', call)
+        self.assertLess(call, role_status)
+        self.assertLess(call, push)
+        self.assertLess(call, gh_create)
+        for marker in (
+            "canonical_worktree",
+            "task_branch",
+            "checked-out worktree HEAD differs",
+            "source branch ref differs",
+            "comparison ref differs",
+            "expected exactly one canonical_worktree/task_branch match",
+            "oasis7-pm-evidence",
+            "identity_keys",
+            "Source Worktree",
+            "Source Branch",
+            "Source Head",
+            "Comparison Ref",
+            "Comparison OID",
+            "bound GitHub issue",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script)
+        for marker in ("oasis7-pm-evidence", "Source Worktree", "Source Branch", "Source Head", "Comparison Ref", "Comparison OID"):
+            self.assertIn(marker, producer)
+        self.assertIn("Evidence Phase: draft_candidate_freeze", producer)
+        self.assertIn('"body,number,url"', producer)
+        self.assertIn("<!-- oasis7-pm-task -->", producer)
+        self.assertIn("task_uid:", producer)
+        self.assertIn("live issue identity does not match canonical task mapping", producer)
+        self.assertIn("written frozen identity was not observed on bound issue readback", producer)
+        self.assertNotIn("canonical_hits or legacy_hits", script)
+        self.assertIn(
+            'local role-review task UID does not match canonical task binding',
+            script,
+        )
+
+    def test_task_pr_docs_order_draft_identity_review_closeout_and_promotion(self) -> None:
+        readme = PM_README.read_text(encoding="utf-8")
+        readme_section = re.search(
+            r"(?ms)^## Pre-PR and PR\n(.*?)(?=^## |\Z)", readme
+        )
+        self.assertIsNotNone(readme_section, "PM README must publish the Pre-PR sequence")
+        assert readme_section is not None
+        readme_text = readme_section.group(1)
+        readme_positions = [
+            readme_text.index("./scripts/prepare-task-pr.sh --draft-candidate --create"),
+            readme_text.index("after exact-head CI and local role review"),
+            readme_text.index("./scripts/pm/task-closeout.sh"),
+            readme_text.index("./scripts/prepare-task-pr.sh --promote-draft"),
+        ]
+        self.assertEqual(sorted(readme_positions), readme_positions)
+        self.assertIn("after exact-head CI and local role review", readme_text)
+        self.assertIn("after task closeout succeeds", readme_text)
+        self.assertIn("--ci-ready-receipt <ci_ready_receipt.json>", readme_text)
+
+        prd = SCRIPTS_PRD.read_text(encoding="utf-8")
+        sc12e = re.search(r"(?m)^\s*- SC-12E:.*$", prd)
+        self.assertIsNotNone(sc12e, "scripts PRD must publish SC-12E")
+        assert sc12e is not None
+        sc12e_text = sc12e.group(0)
+        identity = "Task UID`、`Source Worktree`、`Source Branch`、`Source Head`、`Comparison Ref` 与 `Comparison OID`"
+        self.assertIn(identity, sc12e_text)
+        self.assertIn("canonical `<!-- oasis7-pm-evidence -->`", sc12e_text)
+        self.assertIn("写入失败、缺少或不匹配的 issue evidence 必须 fail closed", sc12e_text)
+        self.assertIn("再 read back 并确认", sc12e_text)
+        self.assertIn("draft candidate 创建不得要求 `Pre-PR Local Role Review: passed`", sc12e_text)
+        self.assertLess(
+            sc12e_text.index("frozen identity"),
+            sc12e_text.index("Pre-PR Local Role Review: passed"),
+        )
+        self.assertNotIn(
+            "缺少匹配 `Task UID`、`Source Worktree`、`Source Branch`、`Source Head`、`Comparison Ref` 与 `Pre-PR Local Role Review: passed`",
+            sc12e_text,
+        )
+        ac18j = re.search(r"(?m)^\s*- AC-18J:.*$", prd)
+        self.assertIsNotNone(ac18j, "scripts PRD must publish AC-18J")
+        assert ac18j is not None
+        ac18j_text = ac18j.group(0)
+        self.assertIn("task-bound legacy `--create`", ac18j_text)
+        self.assertIn("`--draft-candidate --create`", ac18j_text)
+        self.assertIn("只在候选创建前强制校验 source-bound Task UID / frozen-head identity", ac18j_text)
+        self.assertIn("把 pre-PR local role review evidence 留到 `Pre-PR Ready` / draft promotion", ac18j_text)
+        self.assertNotIn(
+            "`--create` 必须在 push / `gh pr create` 前强制要求 source-bound pre-PR local role review evidence",
+            ac18j_text,
+        )
+
+        flow = re.search(r"(?m)^\s*6\. Flow-SCR-006:.*$", prd)
+        self.assertIsNotNone(flow, "scripts PRD must publish Flow-SCR-006")
+        assert flow is not None
+        flow_text = flow.group(0)
+        flow_positions = [
+            flow_text.index("Task UID / frozen-head identity"),
+            flow_text.index("创建 frozen-head draft candidate"),
+            flow_text.index("exact-head CI"),
+            flow_text.index("task-closeout"),
+            flow_text.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(flow_positions), flow_positions)
+
+        flow_d = re.search(r"(?m)^\s*6D\. Flow-SCR-006D:.*$", prd)
+        self.assertIsNotNone(flow_d, "scripts PRD must publish Flow-SCR-006D")
+        assert flow_d is not None
+        flow_d_text = flow_d.group(0)
+        self.assertIn("不要求 role-review packet", flow_d_text)
+        flow_d_positions = [
+            flow_d_text.index("Task UID / frozen-head identity"),
+            flow_d_text.index("创建 draft candidate"),
+            flow_d_text.index("exact-head CI"),
+            flow_d_text.index("task-closeout"),
+            flow_d_text.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(flow_d_positions), flow_d_positions)
+
+    def test_engineering_prd_active_pr_flows_use_draft_candidate_order(self) -> None:
+        prd = ENGINEERING_PRD.read_text(encoding="utf-8")
+        flow_labels = ("SC-24A", "Flow-ENG-001", "Flow-ENG-014")
+        markers = (
+            "--draft-candidate --create",
+            "exact-head CI",
+            "pre-PR local role subagent review",
+            "task-closeout",
+            "--promote-draft <fresh ci_ready_receipt.json>",
+        )
+        for label in flow_labels:
+            line = re.search(rf"(?m)^.*{re.escape(label)}:.*$", prd)
+            self.assertIsNotNone(line, f"engineering PRD must publish {label}")
+            assert line is not None
+            flow = line.group(0)
+            with self.subTest(flow=label):
+                positions = [flow.index(marker) for marker in markers]
+                self.assertEqual(sorted(positions), positions)
+                self.assertNotIn("-> prepare-task-pr ->", flow)
+                self.assertNotIn("-> 执行 prepare-task-pr GitHub PR preflight / create", flow)
+
+    def test_active_workflow_emitters_keep_draft_first_order(self) -> None:
+        prd = ENGINEERING_PRD.read_text(encoding="utf-8")
+        for label, review_marker in (
+            ("SC-23", "subagent review evidence packet"),
+            ("角色协作工作流", "本地相关角色 subagent review evidence packet"),
+        ):
+            line = re.search(rf"(?m)^.*{re.escape(label)}.*$", prd)
+            self.assertIsNotNone(line, f"engineering PRD must publish {label}")
+            assert line is not None
+            text = line.group(0)
+            with self.subTest(surface=f"engineering-prd:{label}"):
+                markers = (
+                    "--draft-candidate --create",
+                    "exact-head CI",
+                    review_marker,
+                    "task-closeout",
+                    "--promote-draft",
+                )
+                positions = [text.index(marker) for marker in markers]
+                self.assertEqual(sorted(positions), positions)
+                self.assertNotIn("创建 PR 前必须先完成本地", text)
+        sc24 = re.search(r"(?m)^.*SC-24:.*$", prd)
+        self.assertIsNotNone(sc24, "engineering PRD must publish SC-24")
+        assert sc24 is not None
+        self.assertIn("draft candidate 创建不得等待 role review", sc24.group(0))
+        self.assertIn("exact-head CI", sc24.group(0))
+        self.assertIn("task-closeout", sc24.group(0))
+        self.assertNotIn("创建 PR 前必须先完成本地", sc24.group(0))
+
+        reporting = PM_REPORTING.read_text(encoding="utf-8")
+        prepare = reporting.index('"prepare-pr-review"')
+        promote = reporting.index('"promote-draft"', prepare)
+        checklist = reporting[prepare:]
+        markers = (
+            "source-bound Task UID / frozen-head identity",
+            "--draft-candidate --create",
+            "exact-head CI",
+            "Pre-PR Local Role Review: passed",
+            "task-closeout",
+            "--promote-draft",
+        )
+        positions = [checklist.index(marker) for marker in markers]
+        self.assertEqual(sorted(positions), positions)
+        self.assertLess(prepare, promote)
+        self.assertNotIn("创建 PR 前必须先完成本地相关角色 subagent review", checklist)
+
+        workflow_eval = WORKFLOW_EVAL.read_text(encoding="utf-8")
+        usage_start = workflow_eval.index("Run the repo-owned workflow behavior eval")
+        usage_end = workflow_eval.index("Options:", usage_start)
+        usage = workflow_eval[usage_start:usage_end]
+        usage_positions = [
+            usage.index("--draft-candidate --create"),
+            usage.index("exact-head CI"),
+            usage.index("role review"),
+            usage.index("task-closeout"),
+            usage.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(usage_positions), usage_positions)
+        workflow_line = next(
+            line for line in workflow_eval.splitlines() if '"workflow_path":' in line
+        )
+        workflow_positions = [
+            workflow_line.index("--draft-candidate --create"),
+            workflow_line.index("exact-head CI"),
+            workflow_line.index("role review"),
+            workflow_line.index("task-closeout"),
+            workflow_line.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(workflow_positions), workflow_positions)
+        self.assertNotIn("task-closeout -> prepare-task-pr ->", workflow_eval)
+        self.assertNotIn(
+            "requesting-repo-owned-review -> prepare-task-pr ->",
+            workflow_eval,
+        )
+
+    def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        text = section.group(1)
+        normalized = re.sub(r"\s+", " ", text)
+        self.assertIn(
+            "The `subcases` array is `[]` except for composite parent IDs `B02`, `A05`, `C03`, and `W01`",
+            normalized,
+        )
+        for field in (
+            "id", "fault", "injection", "expected_outcome", "observed_outcome", "verdict", "status", "phase",
+            "cardinality", "recovery", "consume_result", "readback", "digest",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", text)
+        self.assertIn("Aggregate cardinality is the component-wise sum of subcase cardinalities", normalized)
+        self.assertIn("the parent passes iff every declared subcase", normalized)
+        for case_id in ("B02", "A05", "C03", "W01"):
+            self.assertIn(case_id, normalized)
+        self.assertIn('"subcases":[{', normalized)
+        example = next(
+            example for example in re.findall(r"(?ms)^```json\n(.*?)^```", text)
+            if '"schema": "tpm-supervisor-staging-case/v1"' in example
+        )
+        self.assertRegex(example, r'"subcases": \[\]')
+        self.assertIn("one nested object per declared variant", text)
+
+    def test_supervisor_proof_and_transition_bind_task_and_epoch_identity(self) -> None:
+        self.assertIn("| Envelope | Required fields and invariants |", self.supervisor_design)
+        for schema in ("tpm-validator-proof/v1", "tpm-supervisor-transition/v1"):
+            row = re.search(rf"(?m)^\| `{re.escape(schema)}` \| .*", self.supervisor_design)
+            self.assertIsNotNone(row, schema)
+            assert row is not None
+            for field in ("task_uid", "repository", "canonical_worktree", "bootstrap_epoch", "evidence_epoch"):
+                with self.subTest(schema=schema, field=field):
+                    self.assertIn(f"`{field}`", row.group(0))
+            self.assertNotIn("run_id", row.group(0))
+            self.assertNotIn("case_id", row.group(0))
+        self.assertRegex(
+            self.supervisor_design,
+            r"evidence_epoch[\s\S]*?concrete on\s+all later route/action/receipt/proof/collaboration/wake/transition envelopes",
+        )
+
+    def test_supervisor_b02_identity_and_epoch_subcases_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        row = re.search(r"(?m)^\| `B02` .*", matrix.group(0))
+        self.assertIsNotNone(row, "B02 row is required")
+        assert row is not None
+        for mapping in ("identity -> rejected(identity)", "epoch -> rejected(epoch)"):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, row.group(0))
+        self.assertIn("typed_subcases aggregate:A=0/P=0/S=0/R=2/B=0/C=0", row.group(0))
+        self.assertIn("typed_subcases per_subcase: reject_same_epoch", row.group(0))
+        schema = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(schema, "machine-readable case schema is required")
+        assert schema is not None
+        normalized = re.sub(r"\s+", " ", schema.group(1))
+        self.assertIn("B02={identity,epoch}", normalized)
+        self.assertIn('observed_outcome={"kind":"all_subcases_pass"', normalized)
+
+    def test_supervisor_wake_rows_separate_external_wait_state_from_phase(self) -> None:
+        phase_matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(phase_matrix, "phase matrix is required")
+        assert phase_matrix is not None
+        valid_phases = set(re.findall(r"`([a-z][a-z0-9_]*)`", phase_matrix.group(0)))
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        for case_id in ("W01", "W02", "W03"):
+            row = re.search(
+                rf"(?m)^\| `{case_id}` \| [^|]+ \| `([^`]+)` \| `([^`]+)` \|",
+                matrix.group(0),
+            )
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            state, phase = row.groups()
+            self.assertEqual("external_wait", state, case_id)
+            self.assertIn(phase, valid_phases, case_id)
+            self.assertNotEqual("external_wait", phase, case_id)
+        self.assertIn("input={workflow_state:external_wait,phase:execute}", self.supervisor_design)
+        operational = re.search(
+            r"(?ms)^\| Operational ID \| Fault family / injection .*?(?=^The closed positive catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(operational, "operational matrix is required")
+        assert operational is not None
+        for state, phase in re.findall(r"\| `([^`]+)` / `([^`]+)` \|", operational.group(0)):
+            self.assertIn(phase, valid_phases, f"{state}/{phase}")
+            self.assertNotEqual("external_wait", phase, f"{state}/{phase}")
+
+    def test_supervisor_return_and_wake_variants_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        for case_id, mappings in (
+            (
+                "C03",
+                (
+                    "forged -> rejected(authority)",
+                    "stale -> stale_return(category=stale)",
+                    "replayed -> stale_return(category=replay)",
+                    "out_of_order -> stale_return(category=ordering)",
+                    "partial -> rejected(malformed)",
+                    "wrong_scope -> rejected(scope)",
+                ),
+            ),
+            (
+                "W01",
+                (
+                    "same_digest_duplicate -> accepted",
+                    "different_digest_duplicate -> stale_receipt",
+                    "stale -> stale_fencing",
+                    "out_of_order -> stale_fencing",
+                    "fencing -> stale_fencing",
+                ),
+            ),
+        ):
+            row = re.search(rf"(?m)^\| `{case_id}` .*", matrix.group(0))
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            for mapping in mappings:
+                with self.subTest(case_id=case_id, mapping=mapping):
+                    self.assertIn(mapping, row.group(0))
+            self.assertIn("new_epoch=false", row.group(0), case_id)
+        w01 = re.search(r"(?m)^\| `W01` .*", matrix.group(0))
+        self.assertIsNotNone(w01)
+        assert w01 is not None
+        self.assertNotIn("accepted(existing_result)", w01.group(0))
+        self.assertIn("consume_result=existing_result", w01.group(0))
+        self.assertIn("readback=existing_result", w01.group(0))
+
+    def test_supervisor_composite_subcases_bind_matrix_and_aggregate(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        expected_aggregates = {"B02": "R=2", "A05": "R=7", "C03": "R=6", "W01": "R=4"}
+        for case_id, aggregate in expected_aggregates.items():
+            row = re.search(rf"(?m)^\| `{case_id}` .*", matrix.group(0))
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            self.assertIn("typed_subcases aggregate:", row.group(0), case_id)
+            self.assertIn(aggregate, row.group(0), case_id)
+            self.assertNotIn("A=0/P=0/S=0/R=1", row.group(0), case_id)
+            self.assertIn("typed_subcases per_subcase:", row.group(0), case_id)
+
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        schema = re.sub(r"\s+", " ", section.group(1))
+        self.assertIn('`cardinality={"aggregate_from":"subcases","operation":"sum"}`', schema)
+        self.assertIn('`recovery={"aggregate":"all_subcases"}`', schema)
+        self.assertIn("never one tuple", schema)
+        self.assertIn(
+            'parent uses `expected_outcome={"kind":"subcases","child_ids":[...],"child_outcomes":[...]}`',
+            schema,
+        )
+        self.assertIn(
+            'observed_outcome={"kind":"all_subcases_pass","child_ids":[...],"child_outcomes":[...]}`',
+            schema,
+        )
+        self.assertIn("separate closed `verdict` (`pass|fail|blocked`)", schema)
+        self.assertIn("`verdict` is never an outcome code", schema)
+        self.assertIn("aggregate verdict is `blocked` if any case is blocked", schema)
+        self.assertIn("scalar parent code is invalid when subcases exist", schema)
+        self.assertIn("a composite expected field", schema)
+        self.assertIn(
+            '"expected_outcome":{"kind":"code","code":"rejected(authority)"}',
+            schema,
+        )
+        self.assertIn(
+            '"observed_outcome":{"kind":"code","code":"rejected(authority)"}',
+            schema,
+        )
+        self.assertIn('"verdict":"pass"', schema)
+        self.assertIn("same-digest W01 has semantic outcome `accepted`, typed `consume_result=existing_result`/`readback=existing_result`, R=0, idempotent_existing", schema)
+        self.assertIn("every other W01 subcase has R=1/reject_same_epoch", schema)
+        for variant in (
+            "B02={identity,epoch}",
+            "A05={forged,malformed,wrong_identity,stale,revision,different_digest,fencing}",
+            "C03={forged,stale,replayed,out_of_order,partial,wrong_scope}",
+            "W01={same_digest_duplicate,different_digest_duplicate,stale,out_of_order,fencing}",
+        ):
+            self.assertIn(variant, schema)
+
+    def test_supervisor_soak_wake_evidence_is_nested_and_aggregateable(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        text = section.group(1)
+        normalized = re.sub(r"\s+", " ", text)
+        self.assertIn("`observed.wakes` is a typed nested array", normalized)
+        for field in (
+            "wake_id", "delivery_id", "attempt", "fencing_token",
+            "consume_result", "readback", "digest",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", text)
+        self.assertIn("len(wakes)=wake_deliveries=wake_consumes", normalized)
+        self.assertIn('"wakes": []', text)
+
+    def test_supervisor_unavailable_observed_outcome_requires_blocked_verdict(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        normalized = re.sub(r"\s+", " ", section.group(1))
+        unavailable = re.search(
+            r"An unavailable observed field is (`\{\"kind\":\"unavailable\",\"reason\":\"<closed-reason>\",\"evidence_digest\":\"\.\.\.\"\}`) only with `verdict=blocked`",
+            normalized,
+        )
+        self.assertIsNotNone(unavailable, "unavailable observed shape must be explicit")
+        assert unavailable is not None
+        self.assertEqual(
+            {"kind": "unavailable", "reason": "<closed-reason>", "evidence_digest": "..."},
+            json.loads(unavailable.group(1).strip("`")),
+        )
+        for reason in (
+            "producer_missing", "validator_unavailable", "readback_unavailable",
+            "wake_unavailable", "transport_unavailable",
+        ):
+            self.assertIn(reason, normalized)
+        self.assertIn("`evidence_digest` binds retained evidence", normalized)
+        self.assertIn("unavailable is invalid with pass/fail", normalized)
+
+    def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
+        catalog = re.search(
+            r"(?ms)^`input_workflow_state` .*?(?=^Cardinality is)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(catalog, "supervisor outcome catalog is required")
+        text = catalog.group(0)
+        for code in (
+            "stale_receipt",
+            "identity_mismatch",
+            "receipt_mismatch",
+            "stale_fencing",
+            "rejected",
+        ):
+            with self.subTest(code=code):
+                self.assertIn(f"`{code}`", text)
+        for category in (
+            "schema", "identity", "epoch", "revision", "lease", "fencing",
+            "scope", "ordering", "authority", "malformed",
+        ):
+            with self.subTest(category=category):
+                self.assertIn(category, text)
+        for mapping in (
+            "schema|malformed -> rejected(category)",
+            "identity|epoch|scope|authority -> rejected(category)",
+            "revision|lease|ordering -> stale_receipt",
+            "fencing -> stale_fencing",
+            "same-digest duplicates use semantic outcome `accepted` plus typed consume/readback `existing_result`",
+            "different-digest duplicates map to `stale_receipt`",
+        ):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, text)
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        m01 = re.search(r"(?m)^\| `M01` .*", matrix.group(0))
+        self.assertIsNotNone(m01, "M01 merge-receipt case is required")
+        assert m01 is not None
+        self.assertIn("`rejected(malformed)`", m01.group(0))
+        self.assertNotIn("`receipt_mismatch`", m01.group(0))
+
+    def test_supervisor_fault_rows_do_not_implicitly_reset_epoch(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The closed positive catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault and operational matrices are required")
+        rows = matrix.group(0)
+        no_reset_cases = ("B01", "B02", "A05", "V01", "C01", "C03", "W01", "R01", "M01", "O05", "O06", "O07", "O08")
+        for case_id in no_reset_cases:
+            row = re.search(rf"(?m)^\| `{case_id}` .*", rows)
+            self.assertIsNotNone(row, case_id)
+            self.assertIn("new_epoch=false", row.group(0), case_id)
+            self.assertRegex(row.group(0), r"(?:capability_unchanged|reject_same_epoch)", case_id)
+        for case_id in ("A04", "V02", "W03", "O01", "O02", "O04"):
+            row = re.search(rf"(?m)^\| `{case_id}` .*", rows)
+            self.assertIsNotNone(row, case_id)
+            self.assertIn("authorized_reset(", row.group(0), case_id)
+            self.assertIn("reset_authority=", row.group(0), case_id)
+        for row in re.findall(r"(?m)^\| `[^`]+` .*", rows):
+            if "new_epoch=true" in row:
+                self.assertIn("authorized_reset(", row)
+                self.assertIn("reset_authority=", row)
+
+    def test_supervisor_embedded_recovery_examples_require_authorized_reset(self) -> None:
+        examples = re.findall(r"(?ms)^```json\n(.*?)^```", self.supervisor_design)
+        json_example = next(
+            (example for example in examples if '"schema": "tpm-supervisor-staging-case/v1"' in example),
+            None,
+        )
+        self.assertIsNotNone(json_example, "supervisor staging case JSON example is required")
+        assert json_example is not None
+        b01 = re.search(
+            r'"case_id": "adversarial-B01-7001".*?(?=^  "expected")',
+            json_example,
+            re.S | re.M,
+        )
+        self.assertIsNotNone(b01, "embedded B01 case example is required")
+        self.assertRegex(b01.group(0), r'"rule": "capability_unchanged"')
+        self.assertRegex(b01.group(0), r'"new_epoch": false')
+        recovery_lines = re.findall(r"(?m)^\s*\"recovery\": \{.*$", json_example)
+        self.assertTrue(recovery_lines, "embedded recovery examples are required")
+        for line in recovery_lines:
+            if '"new_epoch": true' in line:
+                self.assertRegex(line, r'"rule": "authorized_reset"')
+                self.assertRegex(line, r'"reset_authority": "[^"]+"')
+
+    def test_supervisor_b01_capability_block_transition_is_typed_and_coherent(self) -> None:
+        examples = re.findall(r"(?ms)^```json\n(.*?)^```", self.supervisor_design)
+        example = next(
+            (item for item in examples if '"case_id": "adversarial-B01-7001"' in item),
+            None,
+        )
+        self.assertIsNotNone(example, "embedded B01 case example is required")
+        assert example is not None
+        record = json.loads(example)
+        transitions = record["observed"]["transitions"]
+        self.assertEqual(1, len(transitions))
+        transition = transitions[0]
+        self.assertEqual("tpm-supervisor-transition/v1", transition["schema"])
+        allowed_transition_fields = {
+            "schema", "task_uid", "repository", "canonical_worktree", "bootstrap_epoch",
+            "evidence_epoch", "transition_id", "event_id", "action_id", "receipt_id",
+            "parent_event_digest", "parent_transition_digest", "parent_rejection_digest",
+            "from_state", "to_state", "from_phase", "to_phase", "expected_revision",
+            "new_revision", "lease_id", "fencing_token", "validator_proof_digest",
+            "outcome_code", "status", "result", "expected_state_digest",
+            "observed_state_digest", "state_digest", "committed_at", "transition_digest",
+        }
+        self.assertEqual(allowed_transition_fields, set(transition))
+        self.assertNotIn("run_id", transition)
+        self.assertNotIn("case_id", transition)
+        for field in ("task_uid", "repository", "canonical_worktree", "bootstrap_epoch", "evidence_epoch"):
+            self.assertEqual(record[field], transition[field], field)
+        self.assertEqual("running", transition["from_state"])
+        self.assertEqual("capability_blocked", transition["to_state"])
+        self.assertEqual("bootstrap", transition["from_phase"])
+        self.assertEqual("bootstrap", transition["to_phase"])
+        self.assertEqual("producer_missing", transition["outcome_code"])
+        self.assertEqual("CapabilityBlocked(producer_missing)", transition["result"])
+        self.assertEqual(0, transition["expected_revision"])
+        self.assertEqual(1, transition["new_revision"])
+        self.assertIsNone(transition["action_id"])
+        self.assertIsNone(transition["receipt_id"])
+        self.assertIsNone(transition["validator_proof_digest"])
+        self.assertEqual(transition["state_digest"], transition["observed_state_digest"])
+        self.assertEqual([transition["transition_digest"]], record["transition_digests"])
+        final_cardinality = record["observed"]["final"]["cardinality"]
+        self.assertEqual(0, final_cardinality["accepted_external_effects"])
+        self.assertEqual(0, final_cardinality["phase_advances"])
+        self.assertEqual(1, final_cardinality["state_changes"])
+        self.assertEqual(0, final_cardinality["classified_rejections"])
+        self.assertEqual(1, final_cardinality["capability_blocks"])
+        self.assertEqual([], record["observed"]["effects"])
+        self.assertEqual([], record["observed"]["readbacks"])
+        self.assertEqual(
+            {"kind": "code", "code": "producer_missing"},
+            record["expected"]["expected_outcome"],
+        )
+        self.assertEqual(
+            {"kind": "code", "code": "producer_missing"},
+            record["observed_outcome"],
+        )
+        self.assertEqual("pass", record["verdict"])
+        self.assertNotIn("outcome", record)
+        self.assertIn("nested repository envelopes never carry", self.supervisor_design)
+        self.assertNotIn("staging-only `run_id`/`case_id` binding", self.supervisor_design)
+
+    def test_supervisor_state_hash_has_canonical_preimage_and_ascii_lf(self) -> None:
+        section = re.search(
+            r"(?ms)^#### Replay envelope and canonical state hash\n(.*?)(?=^#### State and phase transition matrix)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "supervisor state-hash contract is required")
+        assert section is not None
+        text = section.group(1)
+        self.assertIn(
+            '`SHA-256(ASCII("oasis7/tpm/tpm-supervisor-state-hash/v1") || byte[0x0A] || UTF-8(canonical_json(preimage)))`',
+            text,
+        )
+        self.assertNotRegex(text, r"tpm-supervisor-state-hash/v1\\\\n")
+        self.assertRegex(
+            text,
+            r"(?s)canonical_worktree.*preimage.*included",
+        )
+        field_order = re.search(r"exact\s+semantic\s+field\s+order.*?`\[(.*?)\]`", text, re.S)
+        self.assertIsNotNone(field_order, "state-hash field order must be explicit")
+        assert field_order is not None
+        self.assertEqual(
+            [
+                "schema", "task_uid", "repository", "canonical_worktree", "task_branch",
+                "bootstrap_epoch", "evidence_epoch", "workflow_state", "phase", "next_result",
+                "revision", "head_oid", "base_oid", "comparison_oid", "event_parent_digest",
+                "transition_parent_digest", "validator_proof_digest", "active_action", "wait", "effect_states",
+                "rejection_parent_digest", "terminal_outcome",
+            ],
+            [field.strip() for field in field_order.group(1).split(",")],
+        )
+        self.assertIn("non-identity local paths", text)
+        self.assertIn("`canonical_worktree` is the canonical identity string", text)
+        self.assertIn("only the `transition_digest` of the transition currently being published is", text)
+        self.assertIn("referenced `validator_proof_digest`/effect/receipt digests remain", text)
+        self.assertIn("`validator_proof_digest` is included as a referenced proof input", self.supervisor_design)
+        self.assertIn("`transition_parent_digest`", text)
+        self.assertNotIn("Envelope digests, signatures", text)
+
+    def test_supervisor_human_report_partitions_all_catalog_records(self) -> None:
+        report = re.search(
+            r"(?ms)^The human `staging-report\.md` .*?(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(report, "human staging-report contract is required")
+        text = report.group(0)
+        for phrase in (
+            "81 adversarial rows",
+            "one per positive seed (3)",
+            "one per soak seed (3)",
+            "exactly 87 case/seed rows",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
 
     def test_eval_and_role_fit_own_disjoint_scratch_roots(self) -> None:
         eval_text = WORKFLOW_EVAL.read_text(encoding="utf-8")

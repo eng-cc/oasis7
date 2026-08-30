@@ -22,6 +22,7 @@
 - Rust 体量治理、结构切片约束与 required gate：统一从 `doc/engineering/rust-governance/README.md` 分流
 - `.pm` / self-evolution：当前 task truth 与 evidence sink 先看 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`；repo-local memory / working_memory / stage-gate 对象背景再看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`，历史需求锚点保留为 `PRD-ENGINEERING-021`
 - 历史迁移、审读记录与文件级专题检索：从 `doc/engineering/prd.index.md` 下钻；当前运行型工程治理资料从 `doc/engineering/governance/README.md` 下钻
+- production-supervisor workflow 治理：规范以 [workflow source of truth](workflow/source-of-truth.md#capability-and-ownership) 为准，target design 见 [production-supervisor-runtime.design.md](workflow/production-supervisor-runtime.design.md)。
 
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。

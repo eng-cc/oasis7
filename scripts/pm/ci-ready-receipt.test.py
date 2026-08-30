@@ -93,6 +93,16 @@ class ReceiptTest(unittest.TestCase):
   def test_wrong_app(self):
     with self.api():
       with self.assertRaisesRegex(SystemExit,"wrong_app|uncertain"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","77")
+  def test_check_app_selector_is_mandatory(self):
+    with self.assertRaisesRegex(SystemExit,"check app id is required"):
+      M.live("eng-cc/oasis7",UID,1,7,"required-gate",None)
+  def test_newer_wrong_app_success_cannot_mask_ruleset_bound_failure(self):
+    required=run("failure",app=42)
+    wrong=run("success",app=99999)
+    wrong.update(id=10,completed_at="2026-07-14T00:01:00Z")
+    with self.api(runs=[required,wrong]):
+      with self.assertRaisesRegex(SystemExit,"conclusion=failure"):
+        M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
   def test_cancelled(self):
     with self.api(runs=[run("cancelled")]):
       with self.assertRaisesRegex(SystemExit,"cancelled"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")

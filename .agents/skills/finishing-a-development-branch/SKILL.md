@@ -20,19 +20,30 @@ route below.
 ## Freeze-Commit Gates
 
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
-2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create` and obtain a trusted `ci_ready_receipt` for its exact head.
-3. Use `requesting-repo-owned-review`; resolve findings against that same head.
+2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create`; the helper records and reads back canonical task/head/base identity on the bound issue before push or PR creation.
+3. After the draft's exact-head `required-gate` succeeds, produce the trusted receipt explicitly:
+
+```bash
+python3 ./scripts/pm/ci-ready-receipt.py \
+  --repository <owner/repo> --task-uid <TASK-UID> \
+  --task-issue-number <issue-number> --pr-number <pr-number> \
+  --check-name required-gate --check-app-id <required-check-app-id> \
+  --planner-digest auto --json > <ci_ready_receipt.json>
+```
+
+Resolve `<required-check-app-id>` from the active repository rules returned by `pr-lifecycle-gate.py`; do not infer it from whichever same-name check finished most recently. The producer validates the live PR, exact HEAD, ruleset-bound required check, base, and planner artifact before emitting the receipt. `prepare-task-pr.sh --draft-candidate --create` does not create this artifact.
+4. Use `requesting-repo-owned-review` with `<ci_ready_receipt.json>`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
 
-4. If review/evidence helpers produce metadata after the frozen head, allow only an evidence-only commit; any implementation change invalidates the freeze and review.
+5. If review/evidence helpers produce metadata after the frozen head, allow only an evidence-only commit; any implementation change invalidates the freeze and review.
    If that evidence-only commit changes HEAD, follow the canonical [PR creation
    gate](../../../doc/engineering/workflow/source-of-truth.md#pr-creation-gate):
    re-run final-head verification and review, then issue a new packet
    for the final PR head;
    otherwise do not create the PR. The resulting packet binds the reviewed PR
    head.
-5. Record Pre-PR Ready with the adapter:
+6. Record Pre-PR Ready with the adapter:
 
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> \
@@ -41,18 +52,18 @@ route below.
 ```
 
 Partial remote state recovers via refresh -> audit -> retry; do not edit cache JSON.
-6. Promote the existing draft only through:
+7. Promote the existing draft only through:
 
 ```bash
-./scripts/prepare-task-pr.sh --promote-draft <receipt.json>
+./scripts/prepare-task-pr.sh --promote-draft <ci_ready_receipt.json>
 ```
 
-Pre-PR local role review packet recorded after immutable verification and before PR creation; its schema is only at the canonical review-packet link.
+Pre-PR local role review packet recorded after frozen-head draft-candidate creation and trusted exact-head CI, and before draft promotion; its schema is only at the canonical review-packet link.
 
 ## Post-PR / Pre-Merge Gates
 
-7. Record the PR purpose decision after PR creation. Manual packaging/release CI may wait for an operator only when task policy says so.
-8. Otherwise inspect the current PR gates with one batched read:
+8. Record the PR purpose decision after PR creation. Manual packaging/release CI may wait for an operator only when task policy says so.
+9. Otherwise inspect the current PR gates with one batched read:
 
 ```bash
 ./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <task_uid> --json
@@ -69,7 +80,7 @@ On a non-Codex surface, use the finite fallback:
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
-9. Merge only with trusted gate evidence and the gate-selected repository path.
+10. Merge only with trusted gate evidence and the gate-selected repository path.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
    when the gate emits `use_admin_merge: true`; do not request separate task or
@@ -78,7 +89,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 ## Post-Merge Cleanup
 
-10. From the canonical default worktree, use the terminal runbook's resumable
+11. From the canonical default worktree, use the terminal runbook's resumable
 operator entry:
 
 ```bash

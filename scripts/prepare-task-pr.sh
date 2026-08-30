@@ -9,12 +9,14 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/prepare-task-pr.sh [source-branch] [options]
 
-Validate one task branch for GitHub PR closure, print the exact PR command, and
-optionally push the branch plus open the PR through `gh`. The preflight summary
-also reports a local required-gate validation recommendation, a claim-ready
-helper command for fresh PR-readiness verification, local role-review evidence
-status, plus planner reason summary derived from the current changed-path scope.
-After PR creation, the default workflow continues into required-check/comment/
+Validate one task branch for the GitHub draft-candidate and PR lifecycle, print
+the exact PR command, and optionally push the branch plus open the draft through
+`gh`. The preflight summary also reports a local required-gate validation
+recommendation, a claim-ready helper command for fresh PR-readiness
+verification, local role-review evidence status, plus planner reason summary
+derived from the current changed-path scope. The canonical path creates or
+resumes the frozen-head draft candidate before exact-head CI and role review;
+after promotion, the default workflow continues into required-check/comment/
 mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
 records that the PR exists only to run manual-trigger packaging/release CI.
 Generated task PR bodies include a non-closing GitHub reference to the bound task issue
@@ -26,19 +28,23 @@ cleanly, the workflow does not force a local rebase before merge.
 When mergeStateStatus=BLOCKED is only missing review approval, the fresh live gate
 may emit `use_admin_merge: true` under standing policy; no additional authorization.
 See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
+Task-bound legacy `--create` is rejected before push or PR recording; use
+`--draft-candidate --create`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
+after same-head CI and draft-state checks.
 
 Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: implementation-freeze commit -> fresh verification -> local role-subagent review -> evidence-only closeout commit -> prepare-task-pr -> GitHub PR watch/fix/merge
+- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> exact-head CI -> local role-subagent review -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
+- optional evidence-only closeout: if review/evidence metadata needs a commit after the frozen head, allow only an evidence-only commit; if it changes HEAD, rerun exact-head CI and local role review, regenerate the packet and ci_ready receipt for that head, and promote only with that new receipt
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
   --remote <name>         Remote name for push / base comparison (default: origin)
-  --create                Push branch if needed and run `gh pr create`
-  --draft                 Add `--draft` when creating the PR
-  --draft-candidate       Create/resume the frozen-head draft_candidate before readiness
+  --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
+  --draft                 Add `--draft` when creating a PR
+  --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
@@ -54,7 +60,7 @@ Options:
 Examples:
   ./scripts/prepare-task-pr.sh
   ./scripts/prepare-task-pr.sh task/engineering-github-pr-landing-governance --json
-  ./scripts/prepare-task-pr.sh --create --draft
+  ./scripts/prepare-task-pr.sh --draft-candidate --create
 USAGE
 }
 
@@ -805,7 +811,13 @@ else:
         repo_name = str(project.get("repo") or "eng-cc/oasis7")
         matched: list[dict[str, object]] = []
         for uid, record in sorted((mapping.get("tasks") or {}).items()):
-            if worktree_hint_matches(record.get("worktree_hint"), source_worktree):
+            canonical_worktree = str(record.get("canonical_worktree") or "").strip()
+            canonical_match = (
+                bool(canonical_worktree)
+                and os.path.realpath(canonical_worktree) == os.path.realpath(source_worktree)
+                and str(record.get("task_branch") or "") == source_branch
+            )
+            if canonical_match or worktree_hint_matches(record.get("worktree_hint"), source_worktree):
                 record = dict(record)
                 record["task_uid"] = uid
                 matched.append(record)
@@ -1038,6 +1050,229 @@ emit(
 PY
 }
 
+validate_draft_candidate_binding() {
+  local source_worktree="$1"
+  local source_branch="$2"
+  local source_head="$3"
+  local comparison_ref="$4"
+  local comparison_head="$5"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$comparison_head" "$BASE_BRANCH" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+source_worktree = Path(sys.argv[1]).resolve()
+source_branch, source_head = sys.argv[2:4]
+comparison_ref, comparison_head, base_branch = sys.argv[4:7]
+mapping_path = source_worktree / ".pm" / "github-project-sync" / "tasks.json"
+task_uid_re = re.compile(r"task_[0-9a-f]{32}")
+oid_re = re.compile(r"[0-9a-f]{40}")
+
+def fail(reason: str) -> None:
+    raise SystemExit(f"draft_candidate canonical task binding invalid: {reason}")
+
+if not mapping_path.is_file():
+    fail(f"mapping is missing: {mapping_path}")
+try:
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"mapping cannot be read: {exc}")
+tasks = mapping.get("tasks") if isinstance(mapping, dict) else None
+if not isinstance(tasks, dict):
+    fail("mapping tasks object is missing")
+
+resolved_worktree = os.path.realpath(source_worktree)
+hits: list[tuple[str, dict[str, object]]] = []
+for uid, raw_record in tasks.items():
+    if not isinstance(raw_record, dict):
+        continue
+    canonical = str(raw_record.get("canonical_worktree") or "").strip()
+    task_branch = str(raw_record.get("task_branch") or "").strip()
+    if not canonical or not task_branch:
+        continue
+    if os.path.realpath(canonical) == resolved_worktree and task_branch == source_branch:
+        hits.append((str(uid), raw_record))
+if len(hits) != 1:
+    fail(
+        "expected exactly one canonical_worktree/task_branch match for "
+        f"{source_worktree}:{source_branch}, found {len(hits)}"
+    )
+
+task_uid, record = hits[0]
+if not task_uid_re.fullmatch(task_uid):
+    fail(f"mapped task UID is invalid: {task_uid}")
+record_uid = str(record.get("task_uid") or "").strip()
+if record_uid != task_uid:
+    fail(f"record task_uid does not match mapping key {task_uid}: {record_uid or '<missing>'}")
+issue_number = str(record.get("issue_number") or "").strip()
+if not issue_number.isdigit() or int(issue_number) <= 0:
+    fail(f"mapped issue_number is invalid for {task_uid}: {issue_number or '<missing>'}")
+issue_url = str(record.get("issue_url") or record.get("url") or "").strip()
+if issue_url and f"/issues/{issue_number}" not in issue_url:
+    fail(f"mapped issue_url does not identify issue #{issue_number}: {issue_url}")
+record_default_branch = str(record.get("default_branch") or "").strip()
+if record_default_branch and record_default_branch != base_branch:
+    fail(f"mapped default_branch is {record_default_branch}, expected {base_branch}")
+
+repo_name = str((mapping.get("project") or {}).get("repo") or record.get("repository") or "").strip()
+if not re.fullmatch(r"[^/\s]+/[^/\s]+", repo_name):
+    fail(f"mapped repository is invalid: {repo_name or '<missing>'}")
+
+def issue_comments_via_rest(repo: str, issue_number: int) -> list[dict[str, object]]:
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        fail(f"mapped repository is invalid: {repo}")
+    payload = subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/issues/{issue_number}/comments",
+            "--paginate",
+        ],
+        text=True,
+    )
+    if not payload.strip():
+        return []
+    decoder = json.JSONDecoder()
+    comments: list[dict[str, object]] = []
+    index = 0
+    while index < len(payload):
+        while index < len(payload) and payload[index].isspace():
+            index += 1
+        if index >= len(payload):
+            break
+        page, next_index = decoder.raw_decode(payload, index)
+        if not isinstance(page, list):
+            fail("GitHub issue comments REST response is not a list")
+        comments.extend(item for item in page if isinstance(item, dict))
+        index = next_index
+    return comments
+
+try:
+    issue_payload = subprocess.check_output(
+        [
+            "gh",
+            "issue",
+            "view",
+            issue_number,
+            "-R",
+            repo_name,
+            "--json",
+            "comments",
+        ],
+        text=True,
+    )
+    issue_view = json.loads(issue_payload)
+    comments = issue_view.get("comments") if isinstance(issue_view, dict) else None
+    if not isinstance(comments, list):
+        fail("GitHub issue comments response is missing a comments list")
+except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError) as exc:
+    try:
+        comments = issue_comments_via_rest(repo_name, int(issue_number))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError) as rest_exc:
+        fail(f"bound GitHub issue comments cannot be read: {exc}; REST fallback failed: {rest_exc}")
+
+identity_keys = (
+    "Task UID",
+    "Source Worktree",
+    "Source Branch",
+    "Source Head",
+    "Comparison Ref",
+    "Comparison OID",
+)
+
+def issue_identity_fields(body: str) -> dict[str, str] | None:
+    if "<!-- oasis7-pm-evidence -->" not in body:
+        return None
+    fields: dict[str, str] = {}
+    for key in identity_keys:
+        match = re.search(rf"^{re.escape(key)}:\s*(.+)$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1).strip().strip("`")
+    # Generic execution evidence comments use the same envelope but do not
+    # carry frozen identity. A Task UID alone is not an identity assertion;
+    # once any worktree/head/ref field appears, a partial block is malformed
+    # and must fail closed.
+    return fields if any(key != "Task UID" for key in fields) else None
+
+identity_blocks = [
+    fields
+    for comment in comments
+    if isinstance(comment, dict)
+    for fields in [issue_identity_fields(str(comment.get("body") or ""))]
+    if fields is not None
+]
+if not identity_blocks:
+    fail(
+        "bound GitHub issue has no canonical frozen identity evidence; expected an "
+        "oasis7-pm-evidence comment with Task UID, Source Worktree, Source Branch, "
+        "Source Head, Comparison Ref, and Comparison OID"
+    )
+
+identity = identity_blocks[-1]
+missing_identity = [key for key in identity_keys if not identity.get(key)]
+if missing_identity:
+    fail("bound GitHub issue frozen identity evidence is incomplete: " + ", ".join(missing_identity))
+if identity["Task UID"] != task_uid:
+    fail(f"issue evidence Task UID differs from canonical mapping: {identity['Task UID']}")
+
+evidence_worktree = identity["Source Worktree"]
+resolved_worktree = os.path.realpath(source_worktree)
+worktree_candidates = {evidence_worktree, Path(evidence_worktree).name}
+if Path(evidence_worktree).is_absolute():
+    worktree_candidates.add(os.path.realpath(os.path.expanduser(evidence_worktree)))
+if resolved_worktree not in worktree_candidates and source_worktree.name not in worktree_candidates:
+    fail(
+        "issue evidence Source Worktree differs from canonical mapping: "
+        f"{evidence_worktree} (expected {source_worktree})"
+    )
+if identity["Source Branch"] != source_branch:
+    fail(f"issue evidence Source Branch differs from current task branch: {identity['Source Branch']}")
+if not oid_re.fullmatch(identity["Source Head"]) or identity["Source Head"] != source_head:
+    fail(
+        "issue evidence Source Head is stale or invalid: "
+        f"{identity['Source Head']} (expected {source_head})"
+    )
+if identity["Comparison Ref"] != comparison_ref:
+    fail(
+        "issue evidence Comparison Ref differs from the canonical comparison ref: "
+        f"{identity['Comparison Ref']} (expected {comparison_ref})"
+    )
+if not oid_re.fullmatch(identity["Comparison OID"]) or identity["Comparison OID"] != comparison_head:
+    fail(
+        "issue evidence Comparison OID is stale or invalid: "
+        f"{identity['Comparison OID']} (expected {comparison_head})"
+    )
+
+def git_rev(*args: str) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(source_worktree), *args],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        fail(f"cannot resolve git identity: {' '.join(args)}")
+        return ""
+
+if git_rev("rev-parse", "--verify", "HEAD^{commit}") != source_head:
+    fail("checked-out worktree HEAD differs from the source branch head")
+if git_rev("rev-parse", "--verify", f"refs/heads/{source_branch}^{{commit}}") != source_head:
+    fail("source branch ref differs from the source head")
+if git_rev("rev-parse", "--verify", f"{comparison_ref}^{{commit}}") != comparison_head:
+    fail("comparison ref differs from the frozen comparison head")
+
+print(task_uid)
+print(issue_url)
+print(issue_number)
+PY
+}
+
 ensure_branch_exists "$SOURCE_BRANCH"
 SOURCE_COMMIT_REF="refs/heads/${SOURCE_BRANCH}^{commit}"
 SOURCE_HEAD="$(git rev-parse "$SOURCE_COMMIT_REF")"
@@ -1075,6 +1310,24 @@ COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
+fi
+
+BOUND_TASK_FIELDS=""
+BOUND_TASK_UID=""
+BOUND_TASK_ISSUE_URL=""
+BOUND_TASK_ISSUE_NUMBER=""
+if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
+  DRAFT_FREEZE_EVIDENCE_HELPER="${PREPARE_TASK_PR_DRAFT_FREEZE_EVIDENCE_PATH:-$SOURCE_WORKTREE/scripts/pm/record-draft-freeze-evidence.py}"
+  python3 "$DRAFT_FREEZE_EVIDENCE_HELPER" --worktree "$SOURCE_WORKTREE" \
+    --branch "$SOURCE_BRANCH" --head "$SOURCE_HEAD" \
+    --comparison-ref "$COMPARISON_REF" --comparison-oid "$COMPARISON_HEAD" >/dev/null \
+    || die "cannot record and read back canonical draft_candidate frozen identity before push/PR creation"
+  BOUND_TASK_FIELDS="$(validate_draft_candidate_binding \
+    "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$COMPARISON_HEAD")" \
+    || die "cannot validate canonical draft_candidate task binding before push/PR creation"
+  BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
+  BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
+  BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
 fi
 
 read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
@@ -1185,30 +1438,17 @@ LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_e
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
 LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
 LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_evidence_digest")"
-if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
-  BOUND_TASK_FIELDS="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$SOURCE_WORKTREE" "$SOURCE_BRANCH" <<'PY'
-import json,os,sys
-p,worktree,branch=sys.argv[1:]
-d=json.load(open(p,encoding='utf-8'))
-canonical_hits=[]
-legacy_hits=[]
-resolved_worktree=os.path.realpath(worktree)
-for uid,r in (d.get('tasks') or {}).items():
-    canonical_worktree=os.path.realpath(str(r.get('canonical_worktree') or '')) if r.get('canonical_worktree') else ''
-    task_branch=str(r.get('task_branch') or '')
-    if canonical_worktree==resolved_worktree and task_branch==branch:
-        canonical_hits.append((uid,r))
-    hint=os.path.realpath(str(r.get('worktree_hint') or '')) if r.get('worktree_hint') else ''
-    if hint==os.path.realpath(worktree) or str(r.get('branch') or r.get('source_branch') or '')==branch:
-        legacy_hits.append((uid,r))
-hits=canonical_hits or legacy_hits
-if len(hits)!=1: raise SystemExit(f'draft_candidate requires exactly one bound task mapping, found {len(hits)}')
-uid,r=hits[0]; print(uid); print(r.get('issue_url') or ''); print(r.get('issue_number') or '')
-PY
-)" || die "cannot infer draft_candidate task truth from mapping"
-  LOCAL_ROLE_REVIEW_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
-  LOCAL_ROLE_REVIEW_LOG_PATH="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
-  BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
+fi
+if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
+  if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" && "$LOCAL_ROLE_REVIEW_TASK_UID" != "$BOUND_TASK_UID" ]]; then
+    die "draft_candidate local role-review task UID does not match canonical task binding"
+  fi
+  LOCAL_ROLE_REVIEW_TASK_UID="$BOUND_TASK_UID"
+  if [[ -z "$LOCAL_ROLE_REVIEW_LOG_PATH" ]]; then
+    LOCAL_ROLE_REVIEW_LOG_PATH="$BOUND_TASK_ISSUE_URL"
+  fi
 fi
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
 if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then

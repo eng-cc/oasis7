@@ -8,6 +8,11 @@ description: Use when assessing or developing the blocked production-supervisor 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the
 > single normative workflow spec.  GitHub task issue evidence comments remain
 > the formal task-truth sink.
+>
+> Target schemas and staging design: [production-supervisor-runtime.design.md](../../../doc/engineering/workflow/production-supervisor-runtime.design.md)
+
+The four producer classes and promotion criteria are canonicalized in the
+[workflow source of truth](../../../doc/engineering/workflow/source-of-truth.md#capability-and-ownership); use the companion for non-normative target detail only.
 
 ## When to Use
 
