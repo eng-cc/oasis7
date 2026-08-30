@@ -27,10 +27,11 @@ route below.
 python3 ./scripts/pm/ci-ready-receipt.py \
   --repository <owner/repo> --task-uid <TASK-UID> \
   --task-issue-number <issue-number> --pr-number <pr-number> \
-  --check-name required-gate --planner-digest auto --json > <ci_ready_receipt.json>
+  --check-name required-gate --check-app-id <required-check-app-id> \
+  --planner-digest auto --json > <ci_ready_receipt.json>
 ```
 
-The producer validates the live PR, exact HEAD, required check, base, and planner artifact before emitting the receipt. `prepare-task-pr.sh --draft-candidate --create` does not create this artifact.
+Resolve `<required-check-app-id>` from the active repository rules returned by `pr-lifecycle-gate.py`; do not infer it from whichever same-name check finished most recently. The producer validates the live PR, exact HEAD, ruleset-bound required check, base, and planner artifact before emitting the receipt. `prepare-task-pr.sh --draft-candidate --create` does not create this artifact.
 4. Use `requesting-repo-owned-review` with `<ci_ready_receipt.json>`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
@@ -79,7 +80,7 @@ On a non-Codex surface, use the finite fallback:
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
-9. Merge only with trusted gate evidence and the gate-selected repository path.
+10. Merge only with trusted gate evidence and the gate-selected repository path.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
    when the gate emits `use_admin_merge: true`; do not request separate task or
@@ -88,7 +89,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 ## Post-Merge Cleanup
 
-10. From the canonical default worktree, use the terminal runbook's resumable
+11. From the canonical default worktree, use the terminal runbook's resumable
 operator entry:
 
 ```bash

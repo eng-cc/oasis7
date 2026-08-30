@@ -496,7 +496,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         pre_pr = finishing[: finishing.lower().find("## post-pr / pre-merge gates")]
         self.assertIn("python3 ./scripts/pm/ci-ready-receipt.py", pre_pr)
         self.assertIn("--check-name required-gate", pre_pr)
+        self.assertIn("--check-app-id <required-check-app-id>", pre_pr)
         self.assertIn("--planner-digest auto --json > <ci_ready_receipt.json>", pre_pr)
+        self.assertIn("active repository rules returned by `pr-lifecycle-gate.py`", pre_pr)
+        self.assertIn("do not infer it from whichever same-name check", pre_pr)
         self.assertIn("does not create this artifact", pre_pr)
         self.assertIn("--promote-draft <ci_ready_receipt.json>", pre_pr)
         self.assertRegex(
