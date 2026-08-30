@@ -211,6 +211,121 @@ pub(super) fn committed_decision(height: u64) -> PosDecision {
 }
 
 #[test]
+fn authenticated_remote_checkpoint_rejects_same_size_corrupt_local_member_before_publication() {
+    let world_id = "world-authenticated-remote-checkpoint-corrupt-local-member";
+    let dir_a = temp_dir("authenticated-remote-checkpoint-corrupt-local-member-a");
+    let dir_b = temp_dir("authenticated-remote-checkpoint-corrupt-local-member-b");
+    let (_, public_key_a) = deterministic_keypair_hex(228);
+    let (_, public_key_b) = deterministic_keypair_hex(229);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 228)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 228)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 229)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a.clone());
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let bundle = checkpoint_bundle(64, "exec-block-64", "exec-state-64");
+    let replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let descriptor = replication_a
+        .store_execution_checkpoint_bundle(&bundle)
+        .expect("store remote checkpoint closure");
+    let corrupt_hash = descriptor
+        .blobs
+        .first()
+        .expect("checkpoint blob ref")
+        .content_hash
+        .clone();
+    let corrupt_bytes = vec![0_u8; bundle.blobs.first().expect("checkpoint blob").bytes.len()];
+    assert_ne!(
+        oasis7_distfs::blake3_hex(corrupt_bytes.as_slice()),
+        corrupt_hash,
+        "fixture must contain a same-size, wrong-hash local CAS member"
+    );
+
+    let replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    fs::create_dir_all(dir_b.join("store").join("blobs"))
+        .expect("create local CAS blob directory");
+    fs::write(
+        dir_b
+            .join("store")
+            .join("blobs")
+            .join(format!("{corrupt_hash}.blob")),
+        corrupt_bytes.as_slice(),
+    )
+    .expect("seed corrupt local CAS member");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FirstReadyHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols: Arc::new(Mutex::new(Vec::new())),
+    });
+    register_replication_fetch_handlers(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
+        &replication_config_a,
+        world_id,
+        &config_a.network_policy,
+    )
+    .expect("register remote checkpoint closure handler");
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "remote-checkpoint-provider",
+        "local-checkpoint-provider",
+    ));
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("local-checkpoint-provider");
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+
+    let result = engine_b.fetch_execution_checkpoint_bundle(
+        &endpoint_b,
+        world_id,
+        &replication_b,
+        &descriptor,
+        true,
+    );
+    assert!(
+        result.is_err(),
+        "same-size wrong-hash local checkpoint member must fail closed before publication: {result:?}"
+    );
+    assert!(
+        dht.published_records().is_empty(),
+        "invalid checkpoint closure must not advertise any provider records: {:?}",
+        dht.published_records()
+    );
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn fresh_observer_discovers_checkpoint_after_first_ready_replication_head() {
     let _nonce_lock = lock_checkpoint_probe_nonce();
     let world_id = "world-gap-sync-first-ready-checkpoint-head";

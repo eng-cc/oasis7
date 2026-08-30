@@ -74,6 +74,15 @@ impl PosNodeEngine {
                     ),
                 });
             }
+            let actual = blake3_hex(bytes.as_slice());
+            if actual != content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint local blob hash mismatch expected={} actual={}",
+                        content_hash, actual
+                    ),
+                });
+            }
             return Ok(collect_fetch_observations.then(|| {
                 serde_json::json!({
                     "content_hash": content_hash,
@@ -81,7 +90,7 @@ impl PosNodeEngine {
                     "expected_size_bytes": expected_size_bytes,
                     "observed_size_bytes": bytes.len(),
                     "response_found": true,
-                    "observed_content_hash": blake3_hex(bytes.as_slice()),
+                    "observed_content_hash": actual,
                 })
             }));
         }

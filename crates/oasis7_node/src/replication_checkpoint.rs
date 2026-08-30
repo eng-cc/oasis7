@@ -63,6 +63,15 @@ impl ReplicationRuntime {
                 ),
             });
         }
+        let actual_manifest_hash = oasis7_distfs::blake3_hex(manifest_json.as_slice());
+        if actual_manifest_hash != descriptor.manifest_ref {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "execution checkpoint manifest hash mismatch expected={} actual={}",
+                    descriptor.manifest_ref, actual_manifest_hash
+                ),
+            });
+        }
         let mut blobs = Vec::with_capacity(descriptor.blobs.len());
         for blob_ref in &descriptor.blobs {
             let Some(bytes) = self.load_blob_by_hash(blob_ref.content_hash.as_str())? else {
@@ -75,6 +84,15 @@ impl ReplicationRuntime {
                         blob_ref.content_hash,
                         blob_ref.size_bytes,
                         bytes.len()
+                    ),
+                });
+            }
+            let actual_hash = oasis7_distfs::blake3_hex(bytes.as_slice());
+            if actual_hash != blob_ref.content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint blob hash mismatch hash={} actual={}",
+                        blob_ref.content_hash, actual_hash
                     ),
                 });
             }
