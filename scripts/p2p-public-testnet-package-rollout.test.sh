@@ -1542,6 +1542,23 @@ EOF
   --known-hosts "$operator_known_hosts" \
   --json >"$TMP_DIR/plan-only.json"
 
+if ! python3 - "$ROOT_DIR/doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md" <<'PY'
+from pathlib import Path
+import sys
+
+runbook = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = runbook.index("### Package version replacement")
+end = runbook.index("默认模式只生成计划", start)
+section = runbook[start:end]
+assert "--known-hosts <operator-local-pinned-known-hosts>" in section, (
+    "canonical package rollout command must pass an operator-local known-hosts pin"
+)
+PY
+then
+  echo "known-hosts RED: canonical runbook command omits operator-local --known-hosts" >&2
+  exit 1
+fi
+
 # Provider SSH generation must consume an explicit operator-local known-hosts
 # file.  The path intentionally contains spaces so the rendered UserKnownHostsFile
 # option must survive both the local shell and the later SSH reparse boundary.
