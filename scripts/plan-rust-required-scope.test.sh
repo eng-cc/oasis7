@@ -93,6 +93,26 @@ assert_key_equals "$site_output" needs_system_deps false
 assert_reason_contains "$site_output" "site_quality:site/index.html"
 assert_reason_absent "$site_output" "unclassified_or_unresolvable:"
 
+pages_workflow_output="$(plan_for_path .github/workflows/pages.yml)"
+assert_key_equals "$pages_workflow_output" scope full
+assert_key_equals "$pages_workflow_output" run_rust_baseline true
+assert_key_equals "$pages_workflow_output" needs_rust_toolchain true
+assert_reason_contains "$pages_workflow_output" "shared_required_gate:.github/workflows/pages.yml"
+
+site_readme_output="$(plan_for_path README.md)"
+assert_key_equals "$site_readme_output" scope targeted
+assert_key_equals "$site_readme_output" selected_capabilities site_quality
+assert_key_equals "$site_readme_output" run_site_contract_tests true
+assert_key_equals "$site_readme_output" run_rust_baseline false
+assert_key_equals "$site_readme_output" needs_rust_toolchain false
+
+site_manual_output="$(plan_for_path doc/world-simulator/viewer/viewer-manual.manual.md)"
+assert_key_equals "$site_manual_output" scope targeted
+assert_key_equals "$site_manual_output" selected_capabilities site_quality
+assert_key_equals "$site_manual_output" run_site_contract_tests true
+assert_key_equals "$site_manual_output" run_rust_baseline false
+assert_key_equals "$site_manual_output" needs_rust_toolchain false
+
 launcher_output="$(plan_for_path crates/oasis7_client_launcher/src/lib.rs)"
 assert_key_equals "$launcher_output" needs_node true
 assert_key_equals "$launcher_output" needs_trunk true

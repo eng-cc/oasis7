@@ -1795,21 +1795,6 @@ reset_smoke_branch_to_base
 write_changed_path_fixture "README.md"
 docs_required_json="$TMPDIR/docs-required.json"
 run_prepare "$TMPDIR/gh-docs-required.log" "$TMPDIR/git-docs-required.log" --json >"$docs_required_json"
-
-python3 - "$docs_required_json" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-required = payload["local_required_validation"]
-command = required["recommended_required_command"] or ""
-if required["scope"] != "minimal":
-    raise SystemExit(f"expected minimal docs-only scope, got: {required}")
-if "OASIS7_CI_RUN_RUST_BASELINE" in command:
-    raise SystemExit(f"docs-only command must not recommend Rust baseline: {command}")
-PY
+assert_planner_selector_evidence "$docs_required_json" "site_quality" "$ROOT_DIR" "OASIS7_CI_RUN_SITE_CONTRACT_TESTS"
 
 echo "prepare-task-pr.test: OK"

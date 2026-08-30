@@ -4,6 +4,16 @@ set -euo pipefail
 repo_root="${OASIS7_STANDALONE_TOOL_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$repo_root"
 
+rust_baseline_selector="${OASIS7_CI_RUN_RUST_BASELINE:-true}"
+case "$rust_baseline_selector" in
+  true|1) validate_lockfile_metadata=true ;;
+  false|0) validate_lockfile_metadata=false ;;
+  *)
+    echo "error: OASIS7_CI_RUN_RUST_BASELINE must be true|false (or 1|0), got: $rust_baseline_selector" >&2
+    exit 1
+    ;;
+esac
+
 tracked_standalone_file_set=$'\n'
 manifests=()
 lockfiles=()
@@ -41,11 +51,15 @@ for manifest in "${manifests[@]}"; do
     exit 1
   fi
 
-  echo "checking standalone lockfile: $manifest"
-  env -u RUSTC_WRAPPER cargo metadata \
-    --manifest-path "$manifest" \
-    --locked \
-    --format-version 1 >/dev/null
+  if [[ "$validate_lockfile_metadata" == true ]]; then
+    echo "checking standalone lockfile: $manifest"
+    env -u RUSTC_WRAPPER cargo metadata \
+      --manifest-path "$manifest" \
+      --locked \
+      --format-version 1 >/dev/null
+  else
+    echo "checking standalone lockfile structure: $manifest"
+  fi
   checked=$((checked + 1))
 done
 
@@ -58,3 +72,6 @@ for lockfile in "${lockfiles[@]}"; do
 done
 
 echo "ok: standalone lockfiles are locked and manifest-consistent ($checked manifests)"
+if [[ "$validate_lockfile_metadata" == false ]]; then
+  echo "ok: standalone lockfiles structurally checked; Cargo metadata validation skipped because Rust baseline is disabled"
+fi

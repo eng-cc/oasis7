@@ -69,6 +69,33 @@ OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
 grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$valid_out"
 test "$(grep -c "^git ls-files " "$tmp_dir/git-calls.log")" -eq 1
 
+cargo_call_log="$tmp_dir/cargo-calls.log"
+cat >"$fake_bin/cargo" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$OASIS7_CARGO_CALL_LOG"
+SH
+chmod +x "$fake_bin/cargo"
+: >"$cargo_call_log"
+no_cargo_out="$tmp_dir/no-cargo.out"
+if ! OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
+  OASIS7_REAL_GIT="$real_git" \
+  OASIS7_GIT_CALL_LOG="$tmp_dir/git-calls-no-cargo.log" \
+  OASIS7_CARGO_CALL_LOG="$cargo_call_log" \
+  OASIS7_CI_RUN_RUST_BASELINE=false \
+  PATH="$fake_bin:$PATH" \
+  "$script_path" >"$no_cargo_out"; then
+  echo "expected structural standalone lockfile checks to pass with Rust baseline disabled" >&2
+  cat "$no_cargo_out" >&2
+  exit 1
+fi
+grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$no_cargo_out"
+if [[ -s "$cargo_call_log" ]]; then
+  echo "standalone lockfile structural checks invoked Cargo with Rust baseline disabled" >&2
+  cat "$cargo_call_log" >&2
+  exit 1
+fi
+
 mkdir -p tools/missing_lock/src
 cat >tools/missing_lock/Cargo.toml <<'TOML'
 [package]
