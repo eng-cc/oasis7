@@ -21,6 +21,12 @@ class WorkflowNextTest(unittest.TestCase):
         self.root = Path(self.tmp.name) / "repo"
         (self.root / ".pm/github-project-sync").mkdir(parents=True)
         (self.root / ".pm/scratch" / UID).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "task/fixture", str(self.root)], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "fixture@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Fixture"], check=True)
+        (self.root / "README").write_text("fixture\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture"], check=True)
         self.mapping = self.root / ".pm/github-project-sync/tasks.json"
 
     def tearDown(self) -> None:
@@ -78,6 +84,9 @@ class WorkflowNextTest(unittest.TestCase):
                 self.assertEqual(payload["blockers"], [], payload)
                 self.assertTrue(payload["next_command"], payload)
                 self.assertIn(command, " ".join(payload["next_command"]), payload)
+                if phase == "task_done" and updates.get("pr_number"):
+                    self.assertIn("--resume", payload["next_command"], payload)
+                    self.assertNotIn("--preflight", payload["next_command"], payload)
 
     def test_stale_identity_and_ambiguous_phase_fail_closed(self) -> None:
         self.write_mapping(status="committed", workflow_phase="execution")
@@ -113,6 +122,50 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertNotEqual(code, 0, payload)
         self.assertEqual(payload["next_command"], [], payload)
         self.assertTrue(any("PR URL" in item for item in payload["blockers"]), payload)
+
+    def test_mapping_and_evidence_identity_drift_fails_closed(self) -> None:
+        mapping_cases = (
+            ({"task_uid": "task_22222222222222222222222222222222"}, "task UID"),
+            ({"repository": "not-a-repository"}, "repository"),
+            ({"canonical_worktree": str(self.root / "missing")}, "worktree"),
+        )
+        for updates, marker in mapping_cases:
+            with self.subTest(mapping=updates):
+                self.write_mapping(status="committed", workflow_phase="execution", **updates)
+                code, payload = self.run_query()
+                self.assertNotEqual(code, 0, payload)
+                self.assertEqual(payload["next_command"], [], payload)
+                self.assertTrue(any(marker.lower() in item.lower() for item in payload["blockers"]), payload)
+
+        self.write_mapping(status="committed", workflow_phase="execution")
+        snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        snapshot.write_text(json.dumps({
+            "schema": "oasis7.bootstrap-task-snapshot/v1",
+            "task": {"project": {"item_id": "ITEM1"}},
+            "repository": "fixture/repo",
+            "git": {"worktree": str(self.root), "branch": "task/fixture"},
+        }))
+        with self.subTest(evidence="snapshot"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertTrue(any("snapshot" in item.lower() for item in payload["blockers"]), payload)
+
+        snapshot.unlink()
+        ledger = self.root / ".pm/scratch" / UID / "slice-ledger.jsonl"
+        ledger.write_text(json.dumps({"role": "repository_health_engineer"}) + "\n")
+        with self.subTest(evidence="ledger"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertTrue(any("ledger" in item.lower() for item in payload["blockers"]), payload)
+
+        ledger.unlink()
+        checkpoint = self.root / ".pm/tasks" / f"{UID}.workflow.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_text(json.dumps({"repo": str(self.root), "phase": "execution"}))
+        with self.subTest(evidence="checkpoint"):
+            code, payload = self.run_query()
+            self.assertNotEqual(code, 0, payload)
+            self.assertTrue(any("checkpoint" in item.lower() for item in payload["blockers"]), payload)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,8 @@ printf 'base\n' >"$REPO/file"
 git -C "$REPO" add file
 git -C "$REPO" commit -qm base
 git init -q --bare "$ORIGIN"
-git -C "$REPO" remote add origin "$ORIGIN"
+git -C "$REPO" remote add origin https://github.com/eng-cc/oasis7.git
+git -C "$REPO" config url."$ORIGIN".insteadOf https://github.com/eng-cc/oasis7.git
 git -C "$REPO" push -q origin main
 git -C "$REPO" worktree add -qb "$BRANCH" "$TASK"
 printf 'task\n' >>"$TASK/file"

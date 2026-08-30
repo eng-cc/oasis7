@@ -7,7 +7,7 @@ trap 'rm -rf "$TMP"' EXIT
 REPO="$TMP/repo"
 TASK="$TMP/task"
 UID_VALUE="task_11111111111111111111111111111111"
-mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync" "$TASK" "$REPO/.git/receipts"
+mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync" "$TASK"
 cp "$SOURCE_ROOT/scripts/pm/finalize-task.sh" "$REPO/scripts/pm/finalize-task.sh"
 chmod +x "$REPO/scripts/pm/finalize-task.sh"
 
@@ -20,7 +20,8 @@ git -C "$REPO" commit -qm fixture
 INITIAL_MAIN_OID="$(git -C "$REPO" rev-parse HEAD)"
 ORIGIN="$TMP/origin.git"
 git init --bare -q "$ORIGIN"
-git -C "$REPO" remote add origin "$ORIGIN"
+git -C "$REPO" remote add origin https://github.com/fixture/repo.git
+git -C "$REPO" config url."$ORIGIN".insteadOf https://github.com/fixture/repo.git
 git -C "$REPO" push -q origin main
 
 # The canonical task checkout is a registered worktree so preflight can prove
@@ -54,8 +55,11 @@ EOF
 make_mock refresh-task-cache.sh "echo refresh >>\"\$TEST_SEQUENCE\"; printf \"{}\\n\""
 cat >"$REPO/scripts/pm/canonical-receipt-root.py" <<'PY'
 #!/usr/bin/env python3
-import os
-print(os.environ["TEST_REPO"] + "/.git/receipts")
+import os, pathlib, sys
+root = pathlib.Path(os.environ["TEST_REPO"]) / ".git/receipts"
+if "--create" in sys.argv[1:]:
+    root.mkdir(parents=True, exist_ok=True)
+print(root)
 PY
 chmod +x "$REPO/scripts/pm/canonical-receipt-root.py"
 cat >"$REPO/scripts/pm/pr-merge-receipt.py" <<'PY'
@@ -90,6 +94,8 @@ TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
     exit 1
   }
 test ! -s "$PREFLIGHT_SEQUENCE"
+test ! -e "$REPO/.git/receipts"
+mkdir -p "$REPO/.git/receipts"
 python3 - "$TMP/preflight.json" <<'PY'
 import json, sys
 result = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -148,6 +154,14 @@ set_task_field task_branch task/finalize
 set_task_field repository invalid-repository
 preflight_blocker repository
 set_task_field repository fixture/repo
+set_task_field pr_url https://github.com/other/repo/pull/7
+preflight_blocker foreign-pr 7 repository
+set_task_field pr_url https://example.invalid/pull/7
+set_task_field repository other/repo
+set_task_field pr_url https://github.com/other/repo/pull/7
+preflight_blocker foreign-repo 7 repository
+set_task_field repository fixture/repo
+set_task_field pr_url https://example.invalid/pull/7
 
 TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/result.json"

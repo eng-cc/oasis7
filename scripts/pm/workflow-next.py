@@ -12,6 +12,7 @@ import hashlib
 import json
 import pathlib
 import re
+import subprocess
 from typing import Any
 
 
@@ -54,6 +55,90 @@ def add_blocker(blockers: list[str], message: str) -> None:
         blockers.append(message)
 
 
+def git_value(path: pathlib.Path, *args: str) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(path), *args],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def github_object_identity(url: str, kind: str) -> tuple[str, str] | None:
+    if not url:
+        return None
+    match = re.search(
+        rf"github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
+        url,
+        re.IGNORECASE,
+    )
+    return (match.group(1), match.group(2)) if match else None
+
+
+def verify_mapping_identity(
+    root: pathlib.Path,
+    task_uid: str,
+    task: dict[str, Any],
+    blockers: list[str],
+) -> None:
+    mapped_uid = str(task.get("task_uid") or "")
+    if mapped_uid != task_uid:
+        add_blocker(blockers, "stale identity: canonical mapping task UID does not match its key")
+
+    repository = str(task.get("repository") or "")
+    if not repository:
+        return
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", repository):
+        add_blocker(blockers, "stale identity: canonical mapping repository is malformed")
+
+    canonical_text = str(task.get("canonical_worktree") or "")
+    if not canonical_text:
+        return
+    canonical = pathlib.Path(canonical_text).expanduser().resolve()
+    if canonical != root:
+        add_blocker(blockers, "stale identity: canonical mapping worktree differs from query root")
+    if not canonical.exists():
+        add_blocker(blockers, "stale identity: canonical mapping worktree is unavailable")
+        return
+    live_root = git_value(canonical, "rev-parse", "--show-toplevel")
+    if not live_root:
+        add_blocker(blockers, "stale identity: canonical mapping worktree is not a Git worktree")
+    elif pathlib.Path(live_root).resolve() != canonical:
+        add_blocker(blockers, "stale identity: canonical mapping worktree resolves to a different repository")
+
+    task_branch = str(task.get("task_branch") or "")
+    live_branch = git_value(canonical, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if task_branch and live_branch != task_branch:
+        add_blocker(
+            blockers,
+            f"stale identity: canonical mapping branch is {live_branch or 'detached'}, expected {task_branch}",
+        )
+    origin = git_value(canonical, "config", "--get", "remote.origin.url")
+    origin_identity = re.search(
+        r"github\.com[:/]([^/\s]+/[^/\s?#]+?)(?:\.git)?$",
+        origin,
+        re.IGNORECASE,
+    )
+    if origin_identity and origin_identity.group(1) != repository:
+        add_blocker(blockers, "stale identity: canonical mapping repository differs from local origin")
+
+    issue_identity = github_object_identity(str(task.get("issue_url") or ""), "issues")
+    issue_number = str(task.get("issue_number") or "")
+    if issue_identity:
+        if issue_identity[0] != repository:
+            add_blocker(blockers, "stale identity: task Issue URL belongs to a different repository")
+        if issue_number and issue_identity[1] != issue_number:
+            add_blocker(blockers, "stale identity: task Issue URL does not match issue number")
+    pr_identity = github_object_identity(
+        str(task.get("pr_url") or task.get("pull_request_url") or ""),
+        "pulls?",
+    )
+    if pr_identity and pr_identity[0] != repository:
+        add_blocker(blockers, "stale identity: task PR URL belongs to a different repository")
+
+
 def verify_snapshot(
     path: pathlib.Path,
     task: dict[str, Any],
@@ -78,14 +163,20 @@ def verify_snapshot(
             add_blocker(blockers, "stale identity: bootstrap snapshot digest mismatch")
     snapshot_task = snapshot.get("task") if isinstance(snapshot.get("task"), dict) else {}
     snapshot_git = snapshot.get("git") if isinstance(snapshot.get("git"), dict) else {}
-    if snapshot_task.get("uid") not in (None, task.get("task_uid")):
+    if snapshot_task.get("uid") != task.get("task_uid"):
         add_blocker(blockers, "stale identity: bootstrap snapshot task UID drift")
     for label, expected, actual in (
         ("repository", task.get("repository"), snapshot.get("repository")),
         ("worktree", task.get("canonical_worktree"), snapshot_git.get("worktree")),
         ("branch", task.get("task_branch"), snapshot_git.get("branch")),
     ):
-        if actual not in (None, "") and expected not in (None, "") and str(actual) != str(expected):
+        if actual in (None, ""):
+            add_blocker(blockers, f"stale identity: bootstrap snapshot {label} is missing")
+        elif expected not in (None, "") and (
+            pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve()
+            if label == "worktree"
+            else str(actual) != str(expected)
+        ):
             add_blocker(blockers, f"stale identity: bootstrap snapshot {label} drift")
 
 
@@ -111,7 +202,7 @@ def verify_ledger(
         except json.JSONDecodeError:
             add_blocker(blockers, f"ambiguous state: slice ledger line {line_number} is not JSON")
             continue
-        if not isinstance(entry, dict) or entry.get("task_uid") not in (None, task_uid):
+        if not isinstance(entry, dict) or entry.get("task_uid") != task_uid:
             add_blocker(blockers, f"stale identity: slice ledger line {line_number} has a different task UID")
 
 
@@ -129,10 +220,33 @@ def verify_checkpoint(
     if error or not isinstance(checkpoint, dict):
         add_blocker(blockers, f"stale identity: durable workflow checkpoint is unreadable ({error or 'not an object'})")
         return None
-    if checkpoint.get("task_uid") not in (None, task.get("task_uid")):
+    if checkpoint.get("task_uid") != task.get("task_uid"):
         add_blocker(blockers, "stale identity: durable workflow checkpoint task UID drift")
-    if checkpoint.get("repo") not in (None, "") and pathlib.Path(str(checkpoint["repo"])).resolve() != root:
+    if checkpoint.get("repo") in (None, ""):
+        add_blocker(blockers, "stale identity: durable workflow checkpoint repository is missing")
+    elif pathlib.Path(str(checkpoint["repo"])).resolve() != root:
         add_blocker(blockers, "stale identity: durable workflow checkpoint repository drift")
+    if checkpoint.get("state") not in (None, "") and pathlib.Path(str(checkpoint["state"])).resolve() != path:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint path drift")
+    terminal = checkpoint.get("terminal_authority")
+    if terminal is not None:
+        if not isinstance(terminal, dict):
+            add_blocker(blockers, "stale identity: durable workflow checkpoint terminal authority is malformed")
+        else:
+            for key, expected in (
+                ("task_uid", task.get("task_uid")),
+                ("canonical_worktree", task.get("canonical_worktree")),
+                ("task_branch", task.get("task_branch")),
+                ("default_branch", task.get("default_branch")),
+            ):
+                actual = terminal.get(key)
+                if actual in (None, ""):
+                    add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} is missing")
+                elif key == "canonical_worktree":
+                    if pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve():
+                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal worktree drift")
+                elif str(actual) != str(expected):
+                    add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} drift")
     return checkpoint
 
 
@@ -179,7 +293,7 @@ def command_for(
             return []
         return [
             "./scripts/pm/finalize-task.sh", "--repo-root", str(root), "--task-uid", uid,
-            "--pr", pr, "--preflight", "--json",
+            "--pr", pr, "--resume", "--json",
         ]
     if phase == "main_sync":
         if not pr or not pr.isdigit() or not pr_url:
@@ -218,7 +332,7 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
-    task["task_uid"] = args.task_uid
+    verify_mapping_identity(root, args.task_uid, task, blockers)
     payload["task_uid"] = args.task_uid
     payload.update({
         "status": str(task.get("status") or ""),

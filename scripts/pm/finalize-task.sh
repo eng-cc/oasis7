@@ -45,7 +45,9 @@ SCRIPT_DIR="$repo_root/scripts/pm"
 [[ -x "$SCRIPT_DIR/finalize-task.sh" ]] || fail "--repo-root does not contain the terminal orchestrator"
 mapping="$repo_root/.pm/github-project-sync/tasks.json"
 [[ -f "$mapping" ]] || fail "canonical task mapping is unavailable"
-receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$repo_root" --task-uid "$task_uid" --create)" \
+receipt_root_args=(--default-worktree "$repo_root" --task-uid "$task_uid")
+[[ "$preflight" == 0 ]] && receipt_root_args+=(--create)
+receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" "${receipt_root_args[@]}")" \
   || fail "cannot resolve canonical receipt root"
 merge_receipt="$receipt_root/merge-receipt.json"
 main_sync_receipt="$receipt_root/main-sync-receipt.json"
@@ -68,6 +70,7 @@ bound = {
     "pr_number": str(record.get("pr_number") or ""),
     "repository": str(record.get("repository") or ""),
     "issue_number": str(record.get("issue_number") or ""),
+    "issue_url": str(record.get("issue_url") or ""),
     "pr_url": str(record.get("pr_url") or ""),
     "canonical_worktree": str(record.get("canonical_worktree") or ""),
     "task_branch": str(record.get("task_branch") or ""),
@@ -89,18 +92,45 @@ if bound["pr_number"] != pr_number:
 for key in ("issue_number", "pr_url", "canonical_worktree", "task_branch", "default_branch", "owner_role", "repository"):
     if not bound[key]:
         blocker(f"task identity: task truth missing {key}")
-if bound["repository"] and not re.fullmatch(r"[^/\\s]+/[^/\\s]+", bound["repository"]):
+if bound["repository"] and not re.fullmatch(r"[^/\s]+/[^/\s]+", bound["repository"]):
     blocker("repository mismatch: task repository identity is malformed")
+
+def github_object_identity(url, kind):
+    if not url:
+        return None
+    match = re.search(
+        rf"github\.com/([^/\s]+/[^/\s?#]+)/{kind}/(\d+)(?:$|[?#])",
+        url,
+        re.IGNORECASE,
+    )
+    return (match.group(1), match.group(2)) if match else None
+
+issue_identity = github_object_identity(bound["issue_url"], "issues")
+if issue_identity:
+    if issue_identity[0] != bound["repository"]:
+        blocker("repository mismatch: task Issue URL belongs to a different repository")
+    if issue_identity[1] != bound["issue_number"]:
+        blocker("task identity: Issue URL does not match issue number")
+pr_identity = github_object_identity(bound["pr_url"], "pulls?")
 if bound["pr_url"]:
     pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", bound["pr_url"])
     if not pr_match or pr_match.group(1) != pr_number:
         blocker("task/PR mismatch: task PR URL does not match requested PR")
+if pr_identity and pr_identity[0] != bound["repository"]:
+    blocker("repository mismatch: task PR URL belongs to a different repository")
 
 def git(path, *args):
     try:
         return subprocess.check_output(["git", "-C", str(path), *args], text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+origin = git(root, "config", "--get", "remote.origin.url")
+origin_match = re.search(r"github\.com[:/]([^/\s]+/[^/\s?#]+?)(?:\.git)?$", origin, re.IGNORECASE)
+if not origin_match:
+    blocker("repository mismatch: local origin identity is unavailable")
+elif origin_match.group(1) != bound["repository"]:
+    blocker("repository mismatch: task repository differs from the local origin")
 
 def common_dir(path):
     raw = git(path, "rev-parse", "--git-common-dir")
