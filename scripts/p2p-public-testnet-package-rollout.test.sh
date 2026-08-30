@@ -1628,11 +1628,11 @@ PY
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 plan_current_target=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(readlink "$node_root/current")")
 test "$plan_current_target" = "$node_root_abs/releases/old"
-jq -e '
+if ! jq -e '
   (.nodes[] | select(.name == "sequencer") | .applied == false)
-  and (.nodes[] | select(.name == "storage") | .commands[0] | startswith("scp "))
-  and (.nodes[] | select(.name == "storage") | .commands[1] | startswith("scp "))
-  and (.nodes[] | select(.name == "storage") | .commands[2] | startswith("ssh root@198.51.100.44 "))
+  and (.nodes[] | select(.name == "storage") | (.commands | length == 1))
+  and (.nodes[] | select(.name == "storage") | .commands[0] | contains("ssh "))
+  and (.nodes[] | select(.name == "storage") | .commands[0] | contains("scp ") | not)
   and (.nodes[] | select(.name == "windows-observer") | any(.commands[]; contains("staging_parent_ready=")))
   and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))
   and (.nodes[] | select(.name == "windows-observer") | .package_provenance.package_version == "0.0.0+testnet.89.419e119bc897")
@@ -1640,7 +1640,10 @@ jq -e '
   and (.nodes[] | select(.name == "macos-observer") | .package_provenance.package_version == "0.0.0+testnet.90.419e119bc897")
   and (.nodes[] | select(.name == "macos-observer") | .package_provenance.run_id == "27605906796")
   and (.nodes[] | select(.name == "macos-observer") | .package_provenance.sha256sums_sha256 | length == 64)' \
-  "$TMP_DIR/plan-only.json" >/dev/null
+  "$TMP_DIR/plan-only.json" >/dev/null; then
+  echo "provider transport RED: expected one pinned SSH stream and zero SCP transfers" >&2
+  exit 1
+fi
 
 observer_gate_manifest="$TMP_DIR/linux-observer-gate-manifest.json"
 jq '{nodes: [
@@ -1728,6 +1731,191 @@ grep -q "windows-observer" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 grep -q "rollback_backup_root" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 
 package_contract_failed=0
+
+# A remote Linux provider must receive the package and operator tools through
+# one pinned-host SSH session.  The old plan emitted two SCP transfers followed
+# by a separate SSH mutation, which made the authentication boundary and the
+# streamed payload impossible to attest as one transaction.
+if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+from pathlib import Path
+import json
+import shlex
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+commands = storage["commands"]
+assert len(commands) == 1, (
+    "remote Linux provider rollout must use one streamed SSH command, "
+    f"got {len(commands)} commands: {commands!r}"
+)
+command = commands[0]
+tokens = shlex.split(command)
+ssh_tokens = [token for token in tokens if token == "ssh" or token.endswith("/ssh")]
+scp_tokens = [token for token in tokens if token == "scp" or token.endswith("/scp")]
+assert len(ssh_tokens) == 1, f"expected exactly one SSH invocation, got {ssh_tokens!r}"
+assert not scp_tokens, f"streamed provider rollout must not invoke SCP: {scp_tokens!r}"
+assert command.count("root@198.51.100.44") == 1, (
+    "provider rollout must authenticate exactly the pinned storage host once"
+)
+assert "|" in tokens or "<" in tokens, (
+    "provider rollout must stream the verified envelope over the SSH session"
+)
+assert any(marker in command.lower() for marker in ("envelope", "stdin", "tar")), (
+    "provider rollout command must identify a streamed envelope"
+)
+for required in (
+    "HostKeyAlgorithms=ssh-ed25519",
+    "StrictHostKeyChecking=yes",
+    "GlobalKnownHostsFile=/dev/null",
+):
+    assert required in command, f"missing governed SSH option: {required}"
+known_hosts = next(
+    (token.split("=", 1)[1] for token in tokens if token.startswith("UserKnownHostsFile=")),
+    None,
+)
+assert known_hosts and known_hosts != "/dev/null", (
+    "provider rollout must use a non-empty pinned UserKnownHostsFile"
+)
+assert known_hosts.endswith("public-testnet-validator-pair-known-hosts"), (
+    "provider rollout must use the governed public-testnet pinned host-key file"
+)
+assert "StrictHostKeyChecking=no" not in command
+assert "StrictHostKeyChecking=accept-new" not in command
+PY
+then
+  package_contract_failed=1
+fi
+
+# The streamed envelope is part of the mutation boundary: completeness and
+# hash/size validation must be visible before the restart/install operation.
+# This is deliberately a plan-level RED contract; it never opens a provider
+# connection or touches a node.
+if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+command = storage["commands"][0].lower()
+assert any(marker in command for marker in ("sha256sum", "sha256", "checksum")), (
+    "streamed provider envelope must verify a SHA-256/checksum before mutation"
+)
+assert any(marker in command for marker in ("expected", "mismatch", " -c ", "compare")), (
+    "streamed provider envelope must compare against an expected digest"
+)
+assert any(marker in command for marker in ("complete", "manifest", "size", "wc -c", "stat")), (
+    "streamed provider envelope must reject incomplete or short payloads"
+)
+mutation_markers = ("--restart-service", "systemctl restart", "dpkg -i")
+mutation_indexes = [command.find(marker) for marker in mutation_markers if marker in command]
+assert mutation_indexes, "provider command must expose a transactional mutation boundary"
+mutation_index = min(mutation_indexes)
+for marker in ("sha256", "checksum", "complete", "manifest", "size", "wc -c", "stat"):
+    if marker in command:
+        assert command.find(marker) < mutation_index, (
+            f"envelope guard {marker!r} must precede the mutation boundary"
+        )
+PY
+then
+  package_contract_failed=1
+fi
+
+# Reparse the generated provider command through a local fake server shell.
+# OpenSSH joins remote argv elements with spaces before handing them to the
+# server-side shell; an unquoted `bash -c <body>` therefore turns `set -e`
+# into an argument to bash and can continue past a failed envelope guard.
+# This is a deterministic execution regression: no provider, network, or
+# credential is involved, and the sentinel stands in for the mutation helper.
+if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+from pathlib import Path
+import json
+import shlex
+import subprocess
+import sys
+import tempfile
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+command = storage["commands"][0]
+argv = shlex.split(command)
+
+try:
+    ssh_index = argv.index("ssh")
+except ValueError as exc:
+    raise AssertionError("linux provider command does not invoke ssh") from exc
+
+try:
+    target_index = next(
+        index
+        for index in range(ssh_index + 1, len(argv))
+        if argv[index].startswith("root@")
+    )
+except StopIteration as exc:
+    raise AssertionError("linux provider command has no pinned remote target") from exc
+
+remote_argv = argv[target_index + 1 :]
+parsed_remote = shlex.split(" ".join(remote_argv))
+if parsed_remote[:2] != ["bash", "-c"]:
+    raise AssertionError(
+        "linux provider command must use a remote bash -c envelope for this SSH reparse regression"
+    )
+original_body = parsed_remote[2]
+
+
+def fake_server_command(injected_body: str) -> str:
+    """Model sshd/OpenSSH joining remote argv with spaces before a shell."""
+
+    raw_remote = " ".join(remote_argv)
+    if remote_argv == ["bash", "-c", original_body]:
+        # Vulnerable shape: an unquoted -c payload is re-parsed by the server
+        # shell, so `set -euo pipefail` becomes an argument to bash.
+        return " ".join(["bash", "-c", injected_body])
+
+    quoted_body = shlex.quote(original_body)
+    if quoted_body not in raw_remote:
+        raise AssertionError("cannot locate quoted remote body in SSH argv")
+    # Fixed shape: `bash -c '<body>'` remains one remote argv element.
+    return raw_remote.replace(quoted_body, shlex.quote(injected_body), 1)
+
+
+with tempfile.TemporaryDirectory(prefix="oasis7-ssh-reparse-") as tmp:
+    sentinel = Path(tmp) / "mutation-sentinel"
+    sentinel_literal = shlex.quote(str(sentinel))
+    cases = {
+        "incomplete-envelope": 'test "${STREAM_ENVELOPE_COMPLETE:-}" = true',
+        "tampered-envelope": 'test "payload-tampered" = "payload-original"',
+        "hash-mismatch": 'test "actual-sha256" = "expected-sha256"',
+    }
+    for label, guard in cases.items():
+        injected_body = "\n".join(
+            [
+                "set -euo pipefail",
+                guard,
+                f"printf '%s' mutation > {sentinel_literal}",
+            ]
+        )
+        result = subprocess.run(
+            ["bash", "-c", fake_server_command(injected_body)],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={},
+        )
+        if result.returncode == 0:
+            raise AssertionError(
+                f"{label}: fake server returned success after failed envelope guard"
+            )
+        if sentinel.exists():
+            raise AssertionError(
+                f"{label}: envelope validation failure reached mutation sentinel"
+            )
+PY
+then
+  package_contract_failed=1
+fi
+
 if ! python3 - \
   "$TMP_DIR/plan-only.json" \
   "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \
