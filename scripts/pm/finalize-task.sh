@@ -64,7 +64,7 @@ repo_root, mapping_path, task_uid, pr_number, allow_missing_worktree = sys.argv[
 root = pathlib.Path(repo_root).resolve()
 record = (json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8")).get("tasks") or {}).get(task_uid) or {}
 bound = {
-    "task_uid": str(record.get("task_uid") or task_uid),
+    "task_uid": str(record.get("task_uid") or ""),
     "pr_number": str(record.get("pr_number") or ""),
     "repository": str(record.get("repository") or ""),
     "issue_number": str(record.get("issue_number") or ""),

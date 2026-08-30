@@ -136,6 +136,9 @@ PY
 }
 
 preflight_blocker task-pr 8 "task/PR"
+set_task_field task_uid task_22222222222222222222222222222222
+preflight_blocker task-uid 7 "task UID"
+set_task_field task_uid "$UID_VALUE"
 set_task_field canonical_worktree /tmp/not-the-task-worktree
 preflight_blocker worktree
 set_task_field canonical_worktree "$TASK"
