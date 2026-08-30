@@ -188,7 +188,12 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
             "migrated_receipt_sha256"
         ] = "0" * 64
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
-    print(json.dumps([read("GH_COMMENTS", [])]))
+    comments = read("GH_COMMENTS", [])
+    if len(args) == 2 and "/issues/comments/" in args[1]:
+        comment_id = int(args[1].rsplit("/", 1)[-1])
+        print(json.dumps(comments[comment_id - 1]))
+    else:
+        print(json.dumps([comments]))
 elif args[:2] == ["api", "graphql"]:
     if os.environ.get("GH_PROJECT_ITEM_MISSING") == "1":
         print(json.dumps({"data": {"nodes": []}}))
@@ -312,6 +317,14 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             sys.executable, str(HELPER), "--repo-root", str(self.root),
             "--task-uid", UID, "--reason", reason,
             "--evidence-file", str(evidence), "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+    def classify_non_pr(self, evidence: str) -> subprocess.CompletedProcess[str]:
+        self.env["GH_REFRESH_TASK"] = "1"
+        return subprocess.run([
+            sys.executable, str(PROJECT_TASK), "classify-non-pr-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--evidence", evidence, "--validation-command", "fixture classification", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
 
     def legacy_receipt(self, evidence_digest: str, *, reason: str = "duplicate",
@@ -1296,6 +1309,43 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         result = self.invoke("non_pr_completed")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_public_non_pr_classification_feeds_task_complete_and_finalizer(self) -> None:
+        mapping_path = self.mapping()
+        evidence = "public classification fixture: no PR is required"
+
+        classified = self.classify_non_pr(evidence)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        payload = json.loads(classified.stdout)
+        self.assertEqual(payload["completion_mode"], "non_pr_task")
+        self.assertEqual(payload["non_pr_completion_evidence"], evidence)
+        self.assertTrue(Path(payload["non_pr_completion_evidence_file"]).is_file())
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["completion_mode"], "non_pr_task")
+        self.assertEqual(record["non_pr_completion_evidence"], evidence)
+        self.assertIn("completion_mode: `non_pr_task`", self.issue_body.read_text())
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-08-30T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["status"], "done")
+        self.assertEqual(record["workflow_phase"], "task_done")
+        self.assertEqual(record["completion_mode"], "non_pr_task")
+
+        finalized = self.invoke("non_pr_completed")
+        self.assertEqual(finalized.returncode, 0, finalized.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+        self.assertEqual(len(self.read_json(self.comments)), 3)
 
     def test_non_merge_and_post_merge_finalizers_share_task_scoped_lock_path(self) -> None:
         canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"
