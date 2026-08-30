@@ -67,10 +67,15 @@
 | `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` |
 | `doc/game/gameplay/gameplay-industrial-backpressure-recovery-contract.prd.md` | PRD-only；本专题只承载玩家选择、节奏、机会成本与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md` | PRD-only；本专题只承载需求变化后的既有工作选择、机会成本与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-externality-contract.prd.md` | PRD-only；本专题只承载工业外部性的玩家可读影响、处置选择与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-factory-capability-lifecycle-contract.prd.md` | PRD-only；本专题只承载工厂能力生命周期的玩家选择、恢复与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-factory-site-selection-contract.prd.md` | PRD-only；本专题只承载选址与物流拓扑的玩家取舍、失败恢复与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-maintenance-planned-downtime-contract.prd.md` | PRD-only；本专题只承载维护/计划停机的玩家选择、证据切线与验收，不新增实现结构 |
-| `doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md` | PRD-only；本专题只承载配方生命周期的玩家投影、旧工作处置与验收，不新增实现结构 |
-| `doc/game/gameplay/gameplay-industrial-raw-material-qualification-substitution-contract.prd.md` | PRD-only；本专题只承载原材料适用性/替代的玩家投影、机会成本、恢复与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-pipeline-service-window-contract.prd.md` | PRD-only；本专题只承载 service-window/power continuity 的玩家投影、机会成本、恢复与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-raw-material-qualification-substitution-contract.prd.md` | PRD-only；本专题只承载原材料适用性/替代的玩家投影、机会成本、恢复与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md` | PRD-only；本专题只承载配方生命周期的玩家投影、旧工作处置与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md` | PRD-only；本专题只承载代表性工业链的玩家顺序、取舍、恢复与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-starter-completion-contract.prd.md` | PRD-only；本专题只承载首产物完成边界、失败恢复与下一步动力，不新增实现结构 |
 | `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md` | PRD-only；本专题不新增接口、状态机、回滚或实现算法，后续引入实现结构时再补同名 design |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` |
 | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` |
