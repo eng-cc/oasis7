@@ -2132,6 +2132,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertIn(term, normalized)
         finishing = FINISHING.read_text(encoding="utf-8")
         self.assertIn("source-of-truth.md#terminal-readiness-preflight", finishing)
+        self.assertIn("<canonical-task-worktree>/scripts/pm/finalize-task.sh", normalized)
+        self.assertIn("--repo-root <canonical-default-worktree>", normalized)
 
     def test_touched_workflow_command_examples_match_real_help_contracts(self) -> None:
         surfaces = "\n".join(

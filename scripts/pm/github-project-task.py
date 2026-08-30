@@ -874,6 +874,68 @@ def has_verified_task_complete(record: dict[str, Any]) -> bool:
     )
 
 
+def validate_authoritative_project_fields(
+    args: argparse.Namespace,
+    mapping: dict[str, Any],
+    record: dict[str, Any],
+    live_issue: dict[str, Any],
+) -> None:
+    """Read the live Project item and reject Issue/Project lifecycle drift."""
+    sync = load_sync_module()
+    try:
+        project_id, _project_fields = sync.project_context(args.project_owner, args.project_number)
+        cached_project_id = str((mapping.get("project") or {}).get("id") or "")
+        if cached_project_id and cached_project_id != project_id:
+            die("classify-non-pr-task: cached/live Project identity drift")
+        recovered = sync.recover_project_mapping_for_task_uids(
+            args.project_owner,
+            args.project_number,
+            args.repo,
+            [args.task_uid],
+            project_id,
+        )
+    except Exception as exc:
+        die(f"classify-non-pr-task: live GitHub Project fields unavailable: {exc}")
+    project_record = recovered.get(args.task_uid)
+    if not isinstance(project_record, dict):
+        die(f"classify-non-pr-task: live GitHub Project item not found for {args.task_uid}")
+    cached_item_id = str(record.get("project_item_id") or "")
+    live_item_id = str(project_record.get("project_item_id") or "")
+    if not cached_item_id or not live_item_id or cached_item_id != live_item_id:
+        die("classify-non-pr-task: cached/live Project item identity drift")
+    values = project_record.get("project_field_values")
+    if not isinstance(values, dict):
+        die("classify-non-pr-task: live GitHub Project field values are missing")
+    status = str(live_issue.get("status") or "")
+    issue_phase = str(live_issue.get("workflow_phase") or "")
+    project_phase = issue_phase
+    if issue_phase in {"", "bootstrap"}:
+        project_phase = sync.workflow_phase_for(status)
+    elif issue_phase in {"task_done", "main_sync", "closed_without_merge", "post_" + "merge_done"}:
+        project_phase = "done"
+    expected = {
+        "Task UID": args.task_uid,
+        "Status": sync.project_status_for(status),
+        "PM Status": status,
+        "Workflow Phase": project_phase,
+        "Owner Role": str(live_issue.get("owner_role") or ""),
+        "Module": str(live_issue.get("module") or ""),
+        "Priority": str(live_issue.get("priority") or ""),
+        "Canonical Worktree": str(live_issue.get("worktree_hint") or ""),
+    }
+    for field_name, expected_value in expected.items():
+        if not expected_value:
+            die(f"classify-non-pr-task: live Issue field {field_name} is missing")
+        actual_value = str(values.get(field_name) or "")
+        if not actual_value:
+            die(f"classify-non-pr-task: live GitHub Project field {field_name} is missing")
+        if expected_value and actual_value != expected_value:
+            die(
+                "classify-non-pr-task: Issue/Project lifecycle authority drift "
+                f"({field_name}: Issue={expected_value!r} Project={actual_value!r})"
+            )
+
+
 def command_append_evidence(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     issue_number = int(record["issue_number"])
@@ -903,7 +965,7 @@ def command_append_evidence(args: argparse.Namespace) -> int:
 
 
 def command_classify_non_pr_task(args: argparse.Namespace) -> int:
-    mapping_path, _mapping, record = require_record(args)
+    mapping_path, mapping, record = require_record(args)
     if str(record.get("task_uid") or "") != args.task_uid:
         die("classify-non-pr-task: canonical mapping embedded Task UID does not match its key")
     required_identity = ("repository", "canonical_worktree", "task_branch", "default_branch")
@@ -927,6 +989,7 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         die(f"classify-non-pr-task: live GitHub issue not found for {args.task_uid}")
     if str(live.get("task_uid") or "") != args.task_uid:
         die("classify-non-pr-task: live Issue Task UID mismatch")
+    validate_authoritative_project_fields(args, mapping, record, live)
     for key in ("issue_number", "issue_url"):
         cached = str(record.get(key) or "")
         current = str(live.get(key) or "")

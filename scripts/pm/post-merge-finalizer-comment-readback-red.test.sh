@@ -6,10 +6,10 @@ REPO="$TMP/repo"; UID_VALUE="task_77777777777777777777777777777777"
 git init -q -b main "$REPO"; mkdir -p "$REPO/.pm/github-project-sync" "$TMP/task" "$TMP/bin"
 ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$REPO" --task-uid "$UID_VALUE" --create)"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TMP/task","issue_number":11,"pr_number":22,"workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
+{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TMP/task","task_branch":"task/finalize","issue_number":11,"pr_number":22,"workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
 EOF
 cat >"$ROOT/terminal-cleanup-receipt.json" <<EOF
-{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22}
+{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22,"worktree":"$TMP/task","branch":"task/finalize"}
 EOF
 cat >"$TMP/bin/gh" <<'SH'
 #!/usr/bin/env bash

@@ -8,10 +8,10 @@ git init -q -b main "$FIXTURE"
 RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$FIXTURE" --task-uid "$UID_VALUE" --create)"
 TERMINAL="$RECEIPT_ROOT/terminal-cleanup-receipt.json"
 cat >"$FIXTURE/.pm/github-project-sync/tasks.json" <<EOF
-{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TMPDIR/canonical-task-worktree","issue_number":11,"pr_number":22,"workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
+{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TMPDIR/canonical-task-worktree","task_branch":"task/finalize","default_branch":"main","issue_number":11,"pr_number":22,"workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
 EOF
 cat >"$TERMINAL" <<EOF
-{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22}
+{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22,"worktree":"$TMPDIR/canonical-task-worktree","branch":"task/finalize"}
 EOF
 cat >"$FIXTURE/scripts/pm/github-project-task.py" <<'PY'
 #!/usr/bin/env python3
@@ -61,6 +61,31 @@ if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" 
   echo "expected mismatched terminal receipt to fail" >&2; exit 1
 fi
 grep -Fqi 'mismatch' "$TMPDIR/forged.err"
+cp "$TMPDIR/terminal.valid.json" "$TERMINAL"
+
+python3 - "$FIXTURE/.pm/github-project-sync/tasks.json" <<'PY'
+import json,sys
+path=sys.argv[1]
+mapping=json.load(open(path))
+record=next(iter(mapping["tasks"].values()))
+record["workflow_phase"]="main_sync"
+record.get("phase_receipts",{}).pop("post_merge_done",None)
+record.get("phase_receipt_sha256",{}).pop("post_merge_done",None)
+json.dump(mapping,open(path,"w"))
+PY
+python3 - "$TERMINAL" <<'PY'
+import json,sys
+path=sys.argv[1]
+receipt=json.load(open(path))
+receipt["worktree"]="/tmp/forged-task-worktree"
+receipt["branch"]="task/forged"
+json.dump(receipt,open(path,"w"))
+PY
+if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null 2>"$TMPDIR/identity.err"; then
+  echo "expected mismatched terminal worktree/branch identity to fail" >&2; exit 1
+fi
+grep -Eqi 'worktree|branch|identity' "$TMPDIR/identity.err"
 cp "$TMPDIR/terminal.valid.json" "$TERMINAL"
 
 # Production-like records reject digest substitution before any finalizer effect.

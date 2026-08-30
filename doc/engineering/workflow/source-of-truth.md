@@ -643,11 +643,11 @@ helpers.
 #### Terminal readiness preflight
 
 Before merge, the canonical default worktree must pass the mutation-free
-`finalize-task.sh --preflight --json` gate. It must report `status: ready`, no
-blockers, and an exact executable `next_command`; detached/default-worktree,
-Issue/PR/repository, or task-worktree drift fails closed. Repair canonical
-identity and rerun the same preflight before merge; this gate creates no
-receipt and advances no lifecycle state.
+`finalize-task.sh --preflight --json` gate with `status: ready`, no blockers, and
+an exact executable `next_command`; identity drift fails closed. If the default
+worktree still has the pre-change helper, invoke the reviewed helper with
+`<canonical-task-worktree>/scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <task-uid> --pr <pr-number> --preflight --json`.
+Repair identity and rerun preflight; this gate creates no receipt or lifecycle state.
 
 After preflight and merge, use `<canonical-task-worktree>` for task evidence and
 `<canonical-default-worktree>` for sync, receipts, and finalization. Helpers

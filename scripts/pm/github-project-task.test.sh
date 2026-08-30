@@ -38,10 +38,11 @@ def read_state(name, fallback):
 pm_status=read_state("GH_PROJECT_STATE_FILE", pm_status)
 status=read_state("GH_PROJECT_STATUS_STATE_FILE", {"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(pm_status,"Todo"))
 phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase") or {"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(pm_status,"execution"))
-nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
-if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
-node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":nodes}}
-print(json.dumps({"data":{"nodes":[node]}}))
+field_nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
+if next_record.get("pr_url"): field_nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
+project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
+issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
+print(json.dumps({"data":{"s0":{"nodes":[issue]}}}))
 PY
     ;;
   "issue create -R eng-cc/oasis7 --title "*)
@@ -261,6 +262,41 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
+
+# RED: non-PR classification must reject a live Project lifecycle that drifts
+# from the authoritative Issue before editing the Issue or local cache.
+CLASSIFY_MAPPING_BEFORE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+CLASSIFY_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
+printf 'PR Watch\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'pr_watch\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+set +e
+python3 "$TMPDIR/github-project-task.py" classify-non-pr-task "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$TASK_UID" \
+  --evidence "Read-only workflow audit completed without a PR." \
+  --json > "$TMPDIR/classify-non-pr-drift.json" 2> "$TMPDIR/classify-non-pr-drift.err"
+CLASSIFY_DRIFT_STATUS=$?
+set -e
+if [[ "$CLASSIFY_DRIFT_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected Issue/Project lifecycle drift to fail closed" >&2
+  exit 1
+fi
+grep -Eqi 'Project|drift' "$TMPDIR/classify-non-pr-drift.err"
+CLASSIFY_MAPPING_AFTER="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$CLASSIFY_MAPPING_BEFORE" == "$CLASSIFY_MAPPING_AFTER" ]]
+CLASSIFY_NEW_CALLS="$TMPDIR/classify-non-pr-new-calls.log"
+tail -n +$((CLASSIFY_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$CLASSIFY_NEW_CALLS"
+if grep -Eq 'issue (edit|comment)' "$CLASSIFY_NEW_CALLS"; then
+  echo "github-project-task.test: Project drift must fail before Issue mutation" >&2
+  cat "$CLASSIFY_NEW_CALLS" >&2
+  exit 1
+fi
+printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 
 # RED: the public non-PR classification command must exist and persist a
 # runtime-verified issue-comment receipt plus refreshed task fields.

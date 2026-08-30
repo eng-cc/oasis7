@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "pm" / "workflow-next.py"
+BOOTSTRAP = ROOT / "scripts" / "pm" / "bootstrap-task-snapshot.py"
 UID = "task_11111111111111111111111111111111"
 
 
@@ -28,6 +29,11 @@ class WorkflowNextTest(unittest.TestCase):
         (self.root / "README").write_text("fixture\n")
         subprocess.run(["git", "-C", str(self.root), "add", "README"], check=True)
         subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture"], check=True)
+        self.default_root = Path(self.tmp.name) / "default"
+        subprocess.run(
+            ["git", "-C", str(self.root), "worktree", "add", "-q", "-b", "main", str(self.default_root), "HEAD"],
+            check=True,
+        )
         self.origin = self.root.parent / "origin.git"
         subprocess.run(["git", "init", "--bare", "-q", str(self.origin)], check=True)
         subprocess.run(
@@ -61,24 +67,17 @@ class WorkflowNextTest(unittest.TestCase):
             "acceptance": ["query is deterministic"],
             "updated_at": "2026-08-30T00:00:00+00:00",
         }
+        snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        snapshot.unlink(missing_ok=True)
+        self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1}, "tasks": {UID: task}}))
+        subprocess.run(
+            [sys.executable, str(BOOTSTRAP), "create", "--repo-root", str(self.root),
+             "--task-uid", UID, "--request-identity", "Workflow next fixture", "--producer", "fixture"],
+            check=True,
+            capture_output=True,
+        )
         task.update(updates)
         self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1}, "tasks": {UID: task}}))
-        snapshot = {
-            "schema": "oasis7.bootstrap-task-snapshot/v1",
-            "task": {"uid": UID, "project": {"item_id": "ITEM1"}},
-            "repository": "fixture/repo",
-            "git": {"worktree": str(self.root), "branch": "task/fixture"},
-            "request": {"identity": "Workflow next fixture"},
-            "producer": "fixture",
-            "created_at": "2026-08-30T00:00:00Z",
-        }
-        snapshot["digest"] = "sha256:" + hashlib.sha256(
-            json.dumps({k: v for k, v in snapshot.items()}, ensure_ascii=False,
-                       sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        (self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json").write_text(
-            json.dumps(snapshot)
-        )
 
     def install_terminal_proof(self, phase: str) -> None:
         receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
@@ -116,7 +115,8 @@ class WorkflowNextTest(unittest.TestCase):
                 terminal, terminal_digest = write("terminal-cleanup-receipt.json", {
                     "receipt_type": "oasis7_terminal_cleanup",
                     "issuer": "post-merge-cleanup", "task_uid": UID,
-                    "repository": "fixture/repo",
+                    "repository": "fixture/repo", "worktree": str(self.root),
+                    "branch": "task/fixture",
                 })
                 ledger_name = "finalizer-ledger.json"
             write(ledger_name, {"schema": "oasis7_finalizer_ledger_v1",
@@ -416,6 +416,66 @@ class WorkflowNextTest(unittest.TestCase):
         code, payload = self.run_query()
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["command_cwd"], str(self.root.resolve()), payload)
+
+    def test_terminal_command_targets_canonical_default_worktree(self) -> None:
+        self.write_mapping(
+            status="done",
+            workflow_phase="main_sync",
+            pr_url="https://github.com/fixture/repo/pull/7",
+            pr_number=7,
+        )
+        self.install_terminal_proof("main_sync")
+        code, payload = self.run_query()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["command_cwd"], str(self.default_root.resolve()), payload)
+        command = payload["next_command"]
+        self.assertEqual(command[command.index("--repo-root") + 1], str(self.default_root.resolve()), payload)
+
+    def test_snapshot_immutable_fields_use_strict_bootstrap_validator(self) -> None:
+        self.write_mapping(status="committed", workflow_phase="execution")
+        snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        saved = json.loads(snapshot.read_text())
+        saved["task"]["project"]["item_id"] = "FORGED_ITEM"
+        saved["task"]["acceptance"] = ["forged acceptance"]
+        saved["request"]["acceptance"] = ["forged acceptance"]
+        saved["digest"] = "sha256:" + hashlib.sha256(
+            json.dumps({k: v for k, v in saved.items() if k != "digest"},
+                       ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        snapshot.write_text(json.dumps(saved))
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("snapshot" in item.lower() and "drift" in item.lower()
+                            for item in payload["blockers"]), payload)
+
+    def test_terminal_receipt_worktree_and_branch_identity_is_bound(self) -> None:
+        self.write_mapping(
+            status="done",
+            workflow_phase="post_merge_done",
+            pr_url="https://github.com/fixture/repo/pull/7",
+            pr_number=7,
+        )
+        self.install_terminal_proof("post_merge_done")
+        terminal_path = self.root / ".git/oasis7-workflow-receipts" / UID / "terminal-cleanup-receipt.json"
+        terminal = json.loads(terminal_path.read_text())
+        terminal["worktree"] = str(self.root / "forged-task")
+        terminal["branch"] = "task/forged"
+        terminal_path.write_text(json.dumps(terminal, sort_keys=True) + "\n")
+        mapping = json.loads(self.mapping.read_text())
+        mapping["tasks"][UID]["phase_receipts"]["post_merge_done"] = terminal
+        mapping["tasks"][UID]["phase_receipt_sha256"]["post_merge_done"] = hashlib.sha256(
+            terminal_path.read_bytes()
+        ).hexdigest()
+        tombstone_path = terminal_path.with_name("terminal-tombstone.json")
+        tombstone = json.loads(tombstone_path.read_text())
+        tombstone["terminal_receipt_sha256"] = mapping["tasks"][UID]["phase_receipt_sha256"]["post_merge_done"]
+        tombstone_path.write_text(json.dumps(tombstone, sort_keys=True) + "\n")
+        self.mapping.write_text(json.dumps(mapping))
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("terminal receipt" in item.lower() and
+                            ("worktree" in item.lower() or "branch" in item.lower())
+                            for item in payload["blockers"]), payload)
 
 
 if __name__ == "__main__":

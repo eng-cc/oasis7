@@ -27,6 +27,9 @@ git -C "$REPO" push -q origin main
 # The canonical task checkout is a registered worktree so preflight can prove
 # repository/common-dir and branch identity before terminal effects.
 git -C "$REPO" worktree add -q -b task/finalize "$TASK" HEAD
+mkdir -p "$TASK/scripts/pm"
+cp "$SOURCE_ROOT/scripts/pm/finalize-task.sh" "$TASK/scripts/pm/finalize-task.sh"
+chmod +x "$TASK/scripts/pm/finalize-task.sh"
 
 # The remote-tracking ref is deliberately stale while the real origin/main
 # already contains the ordinary fast-forward integration.  The orchestrator
@@ -87,6 +90,30 @@ make_mock patch-equivalence-receipt.sh 'echo unexpected-patch >&2; exit 91'
 SEQUENCE="$TMP/sequence"
 PREFLIGHT_SEQUENCE="$TMP/preflight-sequence"
 : >"$PREFLIGHT_SEQUENCE"
+# Before merge, the default worktree may still carry a helper that predates
+# --preflight.  The reviewed task-worktree helper must remain usable while
+# retaining the default worktree as --repo-root.
+cp "$REPO/scripts/pm/finalize-task.sh" "$TMP/current-finalize-task.sh"
+cat >"$REPO/scripts/pm/finalize-task.sh" <<'EOF'
+#!/usr/bin/env bash
+echo 'legacy default helper does not support --preflight' >&2
+exit 2
+EOF
+chmod +x "$REPO/scripts/pm/finalize-task.sh"
+TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+  "$TASK/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --preflight --json >"$TMP/compat-preflight.json" 2>"$TMP/compat-preflight.err" || {
+    cat "$TMP/compat-preflight.err" >&2
+    cat "$TMP/compat-preflight.json" >&2
+    exit 1
+  }
+python3 - "$TMP/compat-preflight.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding="utf-8"))
+assert result["status"] == "ready", result
+assert result["repo_root"].endswith("/repo"), result
+PY
+cp "$TMP/current-finalize-task.sh" "$REPO/scripts/pm/finalize-task.sh"
+
 TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --preflight --json >"$TMP/preflight.json" 2>"$TMP/preflight.err" || {
     cat "$TMP/preflight.err" >&2

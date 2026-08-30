@@ -14,6 +14,7 @@ import json
 import pathlib
 import re
 import subprocess
+import sys
 from typing import Any
 
 
@@ -69,6 +70,32 @@ def git_value(path: pathlib.Path, *args: str) -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def registered_worktrees(root: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
+    entries: list[tuple[pathlib.Path, str]] = []
+    current_path: pathlib.Path | None = None
+    for line in (git_value(root, "worktree", "list", "--porcelain") + "\n").splitlines():
+        if line.startswith("worktree "):
+            current_path = pathlib.Path(line[len("worktree "):]).resolve()
+        elif line.startswith("branch refs/heads/") and current_path is not None:
+            entries.append((current_path, line[len("branch refs/heads/"):]))
+        elif not line:
+            current_path = None
+    return entries
+
+
+def canonical_default_worktree(
+    root: pathlib.Path,
+    task: dict[str, Any],
+    blockers: list[str],
+) -> pathlib.Path:
+    default_branch = str(task.get("default_branch") or "")
+    for path, branch in registered_worktrees(root):
+        if branch == default_branch:
+            return path
+    add_blocker(blockers, "stale identity: canonical default worktree is unavailable")
+    return root
 
 
 def github_object_identity(url: str, kind: str) -> tuple[str, str] | None:
@@ -172,6 +199,8 @@ def verify_mapping_identity(
 
 def verify_snapshot(
     path: pathlib.Path,
+    root: pathlib.Path,
+    mapping_path: pathlib.Path,
     task: dict[str, Any],
     blockers: list[str],
     sources: list[str],
@@ -189,40 +218,28 @@ def verify_snapshot(
         return
     if snapshot.get("schema") != SNAPSHOT_SCHEMA:
         add_blocker(blockers, "stale identity: bootstrap snapshot schema is unsupported")
-    expected_digest = str(snapshot.get("digest") or "")
-    unsigned = dict(snapshot)
-    unsigned.pop("digest", None)
-    actual = "sha256:" + hashlib.sha256(
-        json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
-        add_blocker(blockers, "stale identity: bootstrap snapshot digest is missing or malformed")
-    elif actual != expected_digest:
-        add_blocker(blockers, "stale identity: bootstrap snapshot digest mismatch")
     if not isinstance(snapshot.get("producer"), str) or not snapshot.get("producer"):
         add_blocker(blockers, "stale identity: bootstrap snapshot producer is missing")
     if not isinstance(snapshot.get("created_at"), str) or not snapshot.get("created_at"):
         add_blocker(blockers, "stale identity: bootstrap snapshot creation time is missing")
-    for key in ("task", "repository", "git", "request"):
-        if key not in snapshot:
-            add_blocker(blockers, f"stale identity: bootstrap snapshot {key} is missing")
-    snapshot_task = snapshot.get("task") if isinstance(snapshot.get("task"), dict) else {}
-    snapshot_git = snapshot.get("git") if isinstance(snapshot.get("git"), dict) else {}
-    if snapshot_task.get("uid") != task.get("task_uid"):
-        add_blocker(blockers, "stale identity: bootstrap snapshot task UID drift")
-    for label, expected, actual in (
-        ("repository", task.get("repository"), snapshot.get("repository")),
-        ("worktree", task.get("canonical_worktree"), snapshot_git.get("worktree")),
-        ("branch", task.get("task_branch"), snapshot_git.get("branch")),
-    ):
-        if actual in (None, ""):
-            add_blocker(blockers, f"stale identity: bootstrap snapshot {label} is missing")
-        elif expected not in (None, "") and (
-            pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve()
-            if label == "worktree"
-            else str(actual) != str(expected)
-        ):
-            add_blocker(blockers, f"stale identity: bootstrap snapshot {label} drift")
+    request = snapshot.get("request")
+    request_identity = request.get("identity") if isinstance(request, dict) else ""
+    if not isinstance(request_identity, str) or not request_identity:
+        add_blocker(blockers, "stale identity: bootstrap snapshot request identity is missing")
+        return
+    validator = pathlib.Path(__file__).with_name("bootstrap-task-snapshot.py")
+    result = subprocess.run(
+        [sys.executable, str(validator), "validate-epoch-identity",
+         "--repo-root", str(root), "--tasks-json", str(mapping_path),
+         "--snapshot", str(path), "--task-uid", str(task.get("task_uid") or ""),
+         "--request-identity", request_identity],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "validator rejected snapshot"
+        add_blocker(blockers, f"stale identity: bootstrap snapshot validator rejected snapshot ({detail})")
 
 
 def verify_ledger(
@@ -466,6 +483,16 @@ def verify_terminal_proof(
             if (terminal.get("task_uid") != task.get("task_uid")
                     or terminal.get("repository") != task.get("repository")):
                 add_blocker(blockers, "stale identity: terminal receipt task/repository identity drift")
+            expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
+            receipt_worktree = terminal.get("worktree")
+            if not receipt_worktree:
+                add_blocker(blockers, "stale identity: terminal receipt worktree identity is missing")
+            elif pathlib.Path(str(receipt_worktree)).expanduser().resolve() != expected_worktree:
+                add_blocker(blockers, "stale identity: terminal receipt worktree identity drift")
+            if not terminal.get("branch"):
+                add_blocker(blockers, "stale identity: terminal receipt branch identity is missing")
+            elif str(terminal.get("branch")) != str(task.get("task_branch") or ""):
+                add_blocker(blockers, "stale identity: terminal receipt branch identity drift")
             tombstone_path = receipt_root / "terminal-tombstone.json"
             sources.append(str(tombstone_path))
             tombstone, error = load_json(tombstone_path)
@@ -514,6 +541,7 @@ def command_for(
     task: dict[str, Any],
     root: pathlib.Path,
     blockers: list[str],
+    default_root: pathlib.Path | None = None,
 ) -> list[str]:
     uid = str(task.get("task_uid") or "")
     status = str(task.get("status") or "")
@@ -539,6 +567,7 @@ def command_for(
             return []
         return ["python3", "./scripts/pm/pr-lifecycle-gate.py", pr, "--task-uid", uid, "--json"]
     if phase == "task_done":
+        terminal_root = default_root or root
         if status == "done" and task.get("completion_mode") == "non_pr_task":
             evidence_path = str(task.get("non_pr_completion_evidence_file") or
                                 root / ".pm/scratch" / uid / "non-pr-completion-evidence.txt")
@@ -546,21 +575,22 @@ def command_for(
                 add_blocker(blockers, "ambiguous state: non-PR completion evidence file is unavailable")
                 return []
             return [
-                "python3", "./scripts/pm/non-merge-finalize.py", "--repo-root", str(root),
+                "python3", "./scripts/pm/non-merge-finalize.py", "--repo-root", str(terminal_root),
                 "--task-uid", uid, "--reason", "non_pr_completed", "--evidence-file", evidence_path, "--json",
             ]
         if not pr or not pr.isdigit() or not pr_url:
             add_blocker(blockers, "ambiguous state: merged terminal phase lacks bound PR identity")
             return []
         return [
-            "./scripts/pm/finalize-task.sh", "--repo-root", str(root), "--task-uid", uid,
+            "./scripts/pm/finalize-task.sh", "--repo-root", str(terminal_root), "--task-uid", uid,
             "--pr", pr, "--resume", "--json",
         ]
     if phase == "main_sync":
         if not pr or not pr.isdigit() or not pr_url:
             add_blocker(blockers, "ambiguous state: main-sync phase lacks bound PR identity")
             return []
-        return ["./scripts/pm/finalize-task.sh", "--repo-root", str(root), "--task-uid", uid, "--pr", pr, "--resume", "--json"]
+        terminal_root = default_root or root
+        return ["./scripts/pm/finalize-task.sh", "--repo-root", str(terminal_root), "--task-uid", uid, "--pr", pr, "--resume", "--json"]
     add_blocker(blockers, f"ambiguous state: unsupported workflow phase {phase!r}")
     return []
 
@@ -644,7 +674,7 @@ def main() -> int:
     ledger_path = pathlib.Path(args.slice_ledger).resolve() if args.slice_ledger else root / ".pm/scratch" / args.task_uid / "slice-ledger.jsonl"
     checkpoint_path = pathlib.Path(args.checkpoint).resolve() if args.checkpoint else root / ".pm/tasks" / f"{args.task_uid}.workflow.json"
     sources = payload["evidence_sources"]
-    verify_snapshot(snapshot_path, task, blockers, sources,
+    verify_snapshot(snapshot_path, root, mapping_path, task, blockers, sources,
                     required=phase not in {"intake", "bootstrap"})
     verify_ledger(ledger_path, args.task_uid, blockers, sources)
     checkpoint = verify_checkpoint(checkpoint_path, root, task, blockers, sources)
@@ -652,8 +682,11 @@ def main() -> int:
         add_blocker(blockers, "ambiguous state: durable workflow checkpoint phase disagrees with task mapping")
     verify_terminal_proof(root, phase, task, blockers, sources)
     payload["evidence_sources"] = list(dict.fromkeys(sources))
+    default_root = None
+    if phase in {"task_done", "main_sync"}:
+        default_root = canonical_default_worktree(root, task, blockers)
     if not blockers:
-        payload["next_command"] = command_for(phase, task, root, blockers)
+        payload["next_command"] = command_for(phase, task, root, blockers, default_root)
         payload["next_action"] = "run_command" if payload["next_command"] else (
             "completed" if phase in {"closed_without_merge", "post_merge_done"} else "action_required"
         )
@@ -663,7 +696,7 @@ def main() -> int:
     else:
         payload["identity_status"] = "bound"
     if payload["next_command"]:
-        payload["command_cwd"] = str(root)
+        payload["command_cwd"] = str(default_root if phase in {"task_done", "main_sync"} else root)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if blockers else 0
 
