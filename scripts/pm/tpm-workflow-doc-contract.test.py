@@ -23,6 +23,7 @@ SUPERVISOR_DESIGN = ROOT / "doc/engineering/workflow/production-supervisor-runti
 ENGINEERING_README = ROOT / "doc/engineering/README.md"
 ENGINEERING_PRD = ROOT / "doc/engineering/prd.md"
 ENGINEERING_PRD_INDEX = ROOT / "doc/engineering/prd.index.md"
+PM_REPORTING = ROOT / "scripts/pm/pm_store_reporting.py"
 SKILLS_README = ROOT / ".agents/skills/README.md"
 PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
 PROJECT_SYNC = ROOT / "scripts/pm/github-project-sync.py"
@@ -1212,6 +1213,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             assert row is not None
             self.assertIn(evidence, row.group(0), phase)
             self.assertIn(f"/ `{next_phase}`", row.group(0), phase)
+
         trust = re.search(
             r"(?ms)^#### Phase-to-producer and validator trust matrix\n(.*?)(?=^The executor receipt)",
             self.supervisor_design,
@@ -1229,6 +1231,39 @@ class WorkflowDocumentationContract(unittest.TestCase):
             self.assertIsNotNone(row, phase)
             assert row is not None
             self.assertIn(evidence, row.group(0), phase)
+
+    def test_supervisor_promote_receipt_enters_pr_watch_once(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor phase transition matrix is required")
+        assert matrix is not None
+        pre_ready = re.search(r"(?m)^\| `pre_pr_ready` .*", matrix.group(0))
+        self.assertIsNotNone(pre_ready, "pre_pr_ready transition is required")
+        assert pre_ready is not None
+        self.assertIn("Execute(promote_draft)", pre_ready.group(0))
+        promote = re.search(r"(?m)^\| `promote_draft` .*", matrix.group(0))
+        self.assertIsNotNone(promote, "promote_draft receipt guard is required")
+        assert promote is not None
+        self.assertIn("Successful validated `Execute(promote_draft)` receipt", promote.group(0))
+        self.assertIn("`Wait(pr_watch)` once", promote.group(0))
+        self.assertIn("no second `promote_draft` emission", promote.group(0))
+        self.assertEqual(1, promote.group(0).count("Execute(promote_draft)"))
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        assert positive is not None
+        operations = re.search(
+            r"implementation_operation_sequence=\{schema:\"tpm-supervisor-operation-sequence/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(operations, "positive operation sequence is required")
+        assert operations is not None
+        self.assertEqual(1, operations.group(1).split(",").count("promote_draft"))
 
     def test_draft_candidate_command_uses_canonical_flags(self) -> None:
         canonical = "./scripts/prepare-task-pr.sh --draft-candidate --create"
@@ -1331,6 +1366,35 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertIn("./scripts/prepare-task-pr.sh --draft-candidate --create", text)
                 self.assertIn("--promote-draft <fresh ci_ready_receipt.json>", text)
 
+    def test_draft_candidate_binding_is_canonical_and_pre_side_effect(self) -> None:
+        script = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        validator = script.index("validate_draft_candidate_binding()")
+        call = script.index("BOUND_TASK_FIELDS=\"$(validate_draft_candidate_binding", validator)
+        role_status = script.index(
+            'LOCAL_ROLE_REVIEW_OUTPUT=\"$(local_role_review_status',
+            call,
+        )
+        push = script.index('git -C \"$SOURCE_WORKTREE\" push', call)
+        gh_create = script.index('CREATE_CMD=("gh" "pr" "create"', call)
+        self.assertLess(call, role_status)
+        self.assertLess(call, push)
+        self.assertLess(call, gh_create)
+        for marker in (
+            "canonical_worktree",
+            "task_branch",
+            "checked-out worktree HEAD differs",
+            "source branch ref differs",
+            "comparison ref differs",
+            "expected exactly one canonical_worktree/task_branch match",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script)
+        self.assertNotIn("canonical_hits or legacy_hits", script)
+        self.assertIn(
+            'local role-review task UID does not match canonical task binding',
+            script,
+        )
+
     def test_task_pr_docs_order_draft_identity_review_closeout_and_promotion(self) -> None:
         readme = PM_README.read_text(encoding="utf-8")
         readme_section = re.search(
@@ -1426,6 +1490,81 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertEqual(sorted(positions), positions)
                 self.assertNotIn("-> prepare-task-pr ->", flow)
                 self.assertNotIn("-> 执行 prepare-task-pr GitHub PR preflight / create", flow)
+
+    def test_active_workflow_emitters_keep_draft_first_order(self) -> None:
+        prd = ENGINEERING_PRD.read_text(encoding="utf-8")
+        for label, review_marker in (
+            ("SC-23", "subagent review evidence packet"),
+            ("角色协作工作流", "本地相关角色 subagent review evidence packet"),
+        ):
+            line = re.search(rf"(?m)^.*{re.escape(label)}.*$", prd)
+            self.assertIsNotNone(line, f"engineering PRD must publish {label}")
+            assert line is not None
+            text = line.group(0)
+            with self.subTest(surface=f"engineering-prd:{label}"):
+                markers = (
+                    "--draft-candidate --create",
+                    "exact-head CI",
+                    review_marker,
+                    "task-closeout",
+                    "--promote-draft",
+                )
+                positions = [text.index(marker) for marker in markers]
+                self.assertEqual(sorted(positions), positions)
+                self.assertNotIn("创建 PR 前必须先完成本地", text)
+        sc24 = re.search(r"(?m)^.*SC-24:.*$", prd)
+        self.assertIsNotNone(sc24, "engineering PRD must publish SC-24")
+        assert sc24 is not None
+        self.assertIn("draft candidate 创建不得等待 role review", sc24.group(0))
+        self.assertIn("exact-head CI", sc24.group(0))
+        self.assertIn("task-closeout", sc24.group(0))
+        self.assertNotIn("创建 PR 前必须先完成本地", sc24.group(0))
+
+        reporting = PM_REPORTING.read_text(encoding="utf-8")
+        prepare = reporting.index('"prepare-pr-review"')
+        promote = reporting.index('"promote-draft"', prepare)
+        checklist = reporting[prepare:]
+        markers = (
+            "source-bound Task UID / frozen-head identity",
+            "--draft-candidate --create",
+            "exact-head CI",
+            "Pre-PR Local Role Review: passed",
+            "task-closeout",
+            "--promote-draft",
+        )
+        positions = [checklist.index(marker) for marker in markers]
+        self.assertEqual(sorted(positions), positions)
+        self.assertLess(prepare, promote)
+        self.assertNotIn("创建 PR 前必须先完成本地相关角色 subagent review", checklist)
+
+        workflow_eval = WORKFLOW_EVAL.read_text(encoding="utf-8")
+        usage_start = workflow_eval.index("Run the repo-owned workflow behavior eval")
+        usage_end = workflow_eval.index("Options:", usage_start)
+        usage = workflow_eval[usage_start:usage_end]
+        usage_positions = [
+            usage.index("--draft-candidate --create"),
+            usage.index("exact-head CI"),
+            usage.index("role review"),
+            usage.index("task-closeout"),
+            usage.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(usage_positions), usage_positions)
+        workflow_line = next(
+            line for line in workflow_eval.splitlines() if '"workflow_path":' in line
+        )
+        workflow_positions = [
+            workflow_line.index("--draft-candidate --create"),
+            workflow_line.index("exact-head CI"),
+            workflow_line.index("role review"),
+            workflow_line.index("task-closeout"),
+            workflow_line.index("--promote-draft"),
+        ]
+        self.assertEqual(sorted(workflow_positions), workflow_positions)
+        self.assertNotIn("task-closeout -> prepare-task-pr ->", workflow_eval)
+        self.assertNotIn(
+            "requesting-repo-owned-review -> prepare-task-pr ->",
+            workflow_eval,
+        )
 
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(

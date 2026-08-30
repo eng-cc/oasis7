@@ -1138,11 +1138,11 @@ claim_verify_items = [item for item in workflow_close["checklist"] if item.get("
 if claim_verify_items[0].get("command") != "./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<fresh verification command>'":
     raise SystemExit("workflow close checklist should point to claim-ready helper with an explicit verification placeholder")
 prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
-if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh":
-    raise SystemExit("workflow close PR review checklist should point to prepare-task-pr.sh")
+if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh --draft-candidate --create":
+    raise SystemExit("workflow close PR review checklist should point to draft-candidate creation")
 prepare_summary = prepare_items[0].get("summary", "")
 if "Pre-PR Local Role Review: passed" not in prepare_summary:
-    raise SystemExit("workflow close PR review checklist should require local role review evidence before prepare-task-pr")
+    raise SystemExit("workflow close PR review checklist should require local role review evidence after draft creation")
 for marker in ("required checks", "mergeability", "PR comments", "unresolved review threads", "REVIEW_REQUIRED", "不是 block 项", "repo admin merge path", "manual packaging/release CI"):
     if marker not in prepare_summary:
         raise SystemExit(f"workflow close PR review checklist should mention post-PR watch/merge marker: {marker}")

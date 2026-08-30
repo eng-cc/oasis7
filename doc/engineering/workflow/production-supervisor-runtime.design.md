@@ -356,7 +356,7 @@ the CAS/lease/fencing rules above.
 | `verify` | Trusted exact-head CI receipt and planner authority | `Dispatch(review)` / `review` |
 | `review` | All required role returns and dispositions for the same frozen head/epoch | `Execute(ready)` / `pre_pr_ready` |
 | `pre_pr_ready` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `promote_draft` |
-| `promote_draft` | Same-head CI/review evidence, open draft PR, and task-truth readback | `Execute(promote_draft)` / `pr_watch` |
+| `promote_draft` | Successful validated `Execute(promote_draft)` receipt with same-head CI/review evidence, open draft PR, and task-truth readback | `Wait(pr_watch)` once, entering the PR-watch action/wait; no second `promote_draft` emission / `pr_watch` |
 | `pr_watch` | Current-head required checks, mergeability, reviews, comments, threads, and holds | `Wait` for a temporary condition, `Dispatch(fix)` for actionable findings, or `Execute(merge)` only on the live gate receipt |
 | `fix` / `reverify` / `push` | Current-head fix artifact and fresh verification/readback | Return to `review`/`pr_watch`; any head change creates a new evidence epoch |
 | `merge` / `merge_receipt` | Live merged PR receipt bound to the reviewed head/epoch | `Execute(task_done)`; an intermediate merge receipt is not terminal |

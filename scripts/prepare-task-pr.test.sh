@@ -709,7 +709,7 @@ draft_git_log="$TMPDIR/git-draft-candidate.log"
 draft_out="$TMPDIR/draft-candidate.out"
 draft_err="$TMPDIR/draft-candidate.err"
 draft_issue_body="$TMPDIR/draft-issue-body.json"
-printf '{"body":"Task UID: %s\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
+printf '{"body":"Task UID: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
 if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
   run_prepare "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
   cat "$draft_err" >&2
@@ -1087,6 +1087,9 @@ cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
       "status": "ready",
       "task_uid": "$TASK_UID",
       "title": "prepare task pr role review fixture",
+      "canonical_worktree": "$SMOKE_WORKTREE_CANONICAL",
+      "task_branch": "$SMOKE_BRANCH",
+      "default_branch": "main",
       "worktree_hint": "$SMOKE_WORKTREE_CANONICAL"
     }
   },
@@ -1094,6 +1097,69 @@ cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
 }
 EOF
 commit_fixture_evidence
+
+# A stale/misbound canonical mapping must fail even when a role-review packet
+# already supplies a task UID and the historical worktree hint still matches.
+# The validator must reject before any push, PR creation, or task recording.
+python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$SMOKE_WORKTREE_CANONICAL" <<'PY'
+import json
+import sys
+
+path, canonical = sys.argv[1:]
+data = json.loads(open(path, encoding="utf-8").read())
+record = next(iter(data["tasks"].values()))
+record["canonical_worktree"] = canonical + "-misbound"
+open(path, "w", encoding="utf-8").write(json.dumps(data) + "\n")
+PY
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: reject misbound draft candidate mapping" >/dev/null
+
+misbound_draft_log="$TMPDIR/gh-misbound-draft-candidate.log"
+misbound_draft_git_log="$TMPDIR/git-misbound-draft-candidate.log"
+misbound_draft_err="$TMPDIR/misbound-draft-candidate.err"
+if run_prepare "$misbound_draft_log" "$misbound_draft_git_log" --draft-candidate >"$TMPDIR/misbound-draft-candidate.out" 2>"$misbound_draft_err"; then
+  echo "expected misbound canonical draft candidate to fail closed" >&2
+  exit 1
+fi
+python3 - "$misbound_draft_log" "$misbound_draft_git_log" "$misbound_draft_err" <<'PY'
+from pathlib import Path
+import sys
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+if gh_lines:
+    raise SystemExit(f"misbound draft candidate reached GitHub before rejection: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"misbound draft candidate pushed before rejection: {git_lines}")
+if "draft_candidate canonical task binding invalid" not in stderr:
+    raise SystemExit(f"expected canonical binding failure, got: {stderr}")
+PY
+
+# Repair the canonical mapping while retaining the role-review packet; the
+# subsequent legacy --create assertion must still exercise its own guard.
+python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" <<'PY'
+import json
+import sys
+
+path, canonical, branch = sys.argv[1:]
+data = json.loads(open(path, encoding="utf-8").read())
+record = next(iter(data["tasks"].values()))
+record["canonical_worktree"] = canonical
+record["task_branch"] = branch
+record["default_branch"] = "main"
+open(path, "w", encoding="utf-8").write(json.dumps(data) + "\n")
+PY
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: repair canonical draft candidate mapping" >/dev/null
 
 success_log="$TMPDIR/gh-success.log"
 success_git_log="$TMPDIR/git-success.log"

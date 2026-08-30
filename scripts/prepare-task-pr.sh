@@ -811,7 +811,13 @@ else:
         repo_name = str(project.get("repo") or "eng-cc/oasis7")
         matched: list[dict[str, object]] = []
         for uid, record in sorted((mapping.get("tasks") or {}).items()):
-            if worktree_hint_matches(record.get("worktree_hint"), source_worktree):
+            canonical_worktree = str(record.get("canonical_worktree") or "").strip()
+            canonical_match = (
+                bool(canonical_worktree)
+                and os.path.realpath(canonical_worktree) == os.path.realpath(source_worktree)
+                and str(record.get("task_branch") or "") == source_branch
+            )
+            if canonical_match or worktree_hint_matches(record.get("worktree_hint"), source_worktree):
                 record = dict(record)
                 record["task_uid"] = uid
                 matched.append(record)
@@ -1044,6 +1050,98 @@ emit(
 PY
 }
 
+validate_draft_candidate_binding() {
+  local source_worktree="$1"
+  local source_branch="$2"
+  local source_head="$3"
+  local comparison_ref="$4"
+  local comparison_head="$5"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$comparison_head" "$BASE_BRANCH" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+source_worktree = Path(sys.argv[1]).resolve()
+source_branch, source_head = sys.argv[2:4]
+comparison_ref, comparison_head, base_branch = sys.argv[4:7]
+mapping_path = source_worktree / ".pm" / "github-project-sync" / "tasks.json"
+task_uid_re = re.compile(r"task_[0-9a-f]{32}")
+
+def fail(reason: str) -> None:
+    raise SystemExit(f"draft_candidate canonical task binding invalid: {reason}")
+
+if not mapping_path.is_file():
+    fail(f"mapping is missing: {mapping_path}")
+try:
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"mapping cannot be read: {exc}")
+tasks = mapping.get("tasks") if isinstance(mapping, dict) else None
+if not isinstance(tasks, dict):
+    fail("mapping tasks object is missing")
+
+resolved_worktree = os.path.realpath(source_worktree)
+hits: list[tuple[str, dict[str, object]]] = []
+for uid, raw_record in tasks.items():
+    if not isinstance(raw_record, dict):
+        continue
+    canonical = str(raw_record.get("canonical_worktree") or "").strip()
+    task_branch = str(raw_record.get("task_branch") or "").strip()
+    if not canonical or not task_branch:
+        continue
+    if os.path.realpath(canonical) == resolved_worktree and task_branch == source_branch:
+        hits.append((str(uid), raw_record))
+if len(hits) != 1:
+    fail(
+        "expected exactly one canonical_worktree/task_branch match for "
+        f"{source_worktree}:{source_branch}, found {len(hits)}"
+    )
+
+task_uid, record = hits[0]
+if not task_uid_re.fullmatch(task_uid):
+    fail(f"mapped task UID is invalid: {task_uid}")
+record_uid = str(record.get("task_uid") or "").strip()
+if record_uid != task_uid:
+    fail(f"record task_uid does not match mapping key {task_uid}: {record_uid or '<missing>'}")
+issue_number = str(record.get("issue_number") or "").strip()
+if not issue_number.isdigit() or int(issue_number) <= 0:
+    fail(f"mapped issue_number is invalid for {task_uid}: {issue_number or '<missing>'}")
+issue_url = str(record.get("issue_url") or record.get("url") or "").strip()
+if issue_url and f"/issues/{issue_number}" not in issue_url:
+    fail(f"mapped issue_url does not identify issue #{issue_number}: {issue_url}")
+record_default_branch = str(record.get("default_branch") or "").strip()
+if record_default_branch and record_default_branch != base_branch:
+    fail(f"mapped default_branch is {record_default_branch}, expected {base_branch}")
+
+def git_rev(*args: str) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(source_worktree), *args],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        fail(f"cannot resolve git identity: {' '.join(args)}")
+        return ""
+
+if git_rev("rev-parse", "--verify", "HEAD^{commit}") != source_head:
+    fail("checked-out worktree HEAD differs from the source branch head")
+if git_rev("rev-parse", "--verify", f"refs/heads/{source_branch}^{{commit}}") != source_head:
+    fail("source branch ref differs from the source head")
+if git_rev("rev-parse", "--verify", f"{comparison_ref}^{{commit}}") != comparison_head:
+    fail("comparison ref differs from the frozen comparison head")
+
+print(task_uid)
+print(issue_url)
+print(issue_number)
+PY
+}
+
 ensure_branch_exists "$SOURCE_BRANCH"
 SOURCE_COMMIT_REF="refs/heads/${SOURCE_BRANCH}^{commit}"
 SOURCE_HEAD="$(git rev-parse "$SOURCE_COMMIT_REF")"
@@ -1081,6 +1179,19 @@ COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
+fi
+
+BOUND_TASK_FIELDS=""
+BOUND_TASK_UID=""
+BOUND_TASK_ISSUE_URL=""
+BOUND_TASK_ISSUE_NUMBER=""
+if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
+  BOUND_TASK_FIELDS="$(validate_draft_candidate_binding \
+    "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$COMPARISON_HEAD")" \
+    || die "cannot validate canonical draft_candidate task binding before push/PR creation"
+  BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
+  BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
+  BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
 fi
 
 read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
@@ -1194,30 +1305,14 @@ LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "re
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
 fi
-if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
-  BOUND_TASK_FIELDS="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$SOURCE_WORKTREE" "$SOURCE_BRANCH" <<'PY'
-import json,os,sys
-p,worktree,branch=sys.argv[1:]
-d=json.load(open(p,encoding='utf-8'))
-canonical_hits=[]
-legacy_hits=[]
-resolved_worktree=os.path.realpath(worktree)
-for uid,r in (d.get('tasks') or {}).items():
-    canonical_worktree=os.path.realpath(str(r.get('canonical_worktree') or '')) if r.get('canonical_worktree') else ''
-    task_branch=str(r.get('task_branch') or '')
-    if canonical_worktree==resolved_worktree and task_branch==branch:
-        canonical_hits.append((uid,r))
-    hint=os.path.realpath(str(r.get('worktree_hint') or '')) if r.get('worktree_hint') else ''
-    if hint==os.path.realpath(worktree) or str(r.get('branch') or r.get('source_branch') or '')==branch:
-        legacy_hits.append((uid,r))
-hits=canonical_hits or legacy_hits
-if len(hits)!=1: raise SystemExit(f'draft_candidate requires exactly one bound task mapping, found {len(hits)}')
-uid,r=hits[0]; print(uid); print(r.get('issue_url') or ''); print(r.get('issue_number') or '')
-PY
-)" || die "cannot infer draft_candidate task truth from mapping"
-  LOCAL_ROLE_REVIEW_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
-  LOCAL_ROLE_REVIEW_LOG_PATH="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
-  BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
+  if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" && "$LOCAL_ROLE_REVIEW_TASK_UID" != "$BOUND_TASK_UID" ]]; then
+    die "draft_candidate local role-review task UID does not match canonical task binding"
+  fi
+  LOCAL_ROLE_REVIEW_TASK_UID="$BOUND_TASK_UID"
+  if [[ -z "$LOCAL_ROLE_REVIEW_LOG_PATH" ]]; then
+    LOCAL_ROLE_REVIEW_LOG_PATH="$BOUND_TASK_ISSUE_URL"
+  fi
 fi
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
 if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
