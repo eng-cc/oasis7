@@ -208,17 +208,43 @@ elif args[:2] == ["api", "graphql"]:
     values = read("GH_PROJECT_FIELDS", {"Status": "In Progress",
                                          "PM Status": "committed",
                                          "Workflow Phase": "execution"})
-    if os.environ.get("GH_PROJECT_DRIFT") == "1":
-        content = {"body": "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
-                   "number": 99, "url": f"https://github.com/{repo}/issues/99"}
+    if "search(query:" in " ".join(args):
+        # github-project-task.py recovers the authoritative Project item by
+        # searching the Issue and reading its nested projectItems fields.
+        body = path("GH_ISSUE_BODY").read_text()
+        def issue_field(name, fallback=""):
+            match = next((line for line in body.splitlines()
+                          if line.startswith(f"- {name}: `") and line.endswith("`")), "")
+            return match[len(f"- {name}: `"):-1] if match else fallback
+
+        field_nodes = [
+            {"name": values.get("Status", ""), "field": {"name": "Status"}},
+            {"text": uid, "field": {"name": "Task UID"}},
+            {"name": issue_field("owner_role"), "field": {"name": "Owner Role"}},
+            {"name": issue_field("module"), "field": {"name": "Module"}},
+            {"name": values.get("PM Status", ""), "field": {"name": "PM Status"}},
+            {"name": values.get("Workflow Phase", ""), "field": {"name": "Workflow Phase"}},
+            {"name": issue_field("priority"), "field": {"name": "Priority"}},
+            {"text": issue_field("worktree_hint"), "field": {"name": "Canonical Worktree"}},
+        ]
+        project_item = {"id": "ITEM1", "project": {"id": "P1", "number": 1},
+                        "fieldValues": {"pageInfo": {"hasNextPage": False},
+                                         "nodes": field_nodes}}
+        issue_node = {"number": issue, "url": issue_url, "body": body,
+                      "projectItems": {"nodes": [project_item]}}
+        print(json.dumps({"data": {"s0": {"nodes": [issue_node]}}}))
     else:
-        content = {"body": f"task_uid: {uid}\n", "number": issue, "url": issue_url}
-    nodes = [{"name": values.get(name, ""), "field": {"name": name}}
-             for name in ("Status", "PM Status", "Workflow Phase")]
-    node = {"id": "ITEM1", "project": {"id": "P1", "number": 1,
-            "owner": {"login": "fixture"}}, "content": content,
-            "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": nodes}}
-    print(json.dumps({"data": {"nodes": [node]}}))
+        if os.environ.get("GH_PROJECT_DRIFT") == "1":
+            content = {"body": "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+                       "number": 99, "url": f"https://github.com/{repo}/issues/99"}
+        else:
+            content = {"body": f"task_uid: {uid}\n", "number": issue, "url": issue_url}
+        nodes = [{"name": values.get(name, ""), "field": {"name": name}}
+                 for name in ("Status", "PM Status", "Workflow Phase")]
+        node = {"id": "ITEM1", "project": {"id": "P1", "number": 1,
+                "owner": {"login": "fixture"}}, "content": content,
+                "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": nodes}}
+        print(json.dumps({"data": {"nodes": [node]}}))
 else:
     print("unexpected gh invocation: " + " ".join(args), file=sys.stderr)
     raise SystemExit(90)
@@ -251,7 +277,12 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.write_state(self.issue_state, {"state": "OPEN"})
         self.issue_body.write_text(
             f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
             "- status: `committed`\n- workflow_phase: `execution`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
         )
         self.write_state(self.project_fields, {
             "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution"
@@ -325,7 +356,12 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             self.write_state(path, value)
         self.issue_body.write_text(
             f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
             "- status: `committed`\n- workflow_phase: `execution`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
         )
         receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
         if receipt_root.exists():
@@ -401,7 +437,12 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         before = mapping_path.read_bytes()
         self.issue_body.write_text(
             f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
             "- status: `done`\n- workflow_phase: `task_done`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
         )
         result = self.classify_non_pr("live terminal truth")
         self.assertNotEqual(result.returncode, 0, result.stderr)
