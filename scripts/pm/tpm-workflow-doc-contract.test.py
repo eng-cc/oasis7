@@ -2118,6 +2118,20 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertRegex(normalized, r"tdd_test_writer.{0,180}(only when|when) registered")
         self.assertRegex(normalized, r"fallback:.{0,140}tdd_test_writer unavailable")
         self.assertNotRegex(skill, r"(?i)spawn a `?tdd_test_writer`? subagent")
+        self.assertIn("Assigned implementation role", skill)
+        self.assertNotRegex(skill, r"(?im)^- Subagent: tdd_test_writer$")
+
+    def test_terminal_readiness_preflight_is_owned_by_canonical_source(self) -> None:
+        preflight = self.section("Terminal readiness preflight")
+        normalized = re.sub(r"\s+", " ", preflight.lower())
+        for term in (
+            "mutation-free", "finalize-task.sh --preflight --json", "status: ready",
+            "exact executable", "fails closed", "rerun", "creates no receipt",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, normalized)
+        finishing = FINISHING.read_text(encoding="utf-8")
+        self.assertIn("source-of-truth.md#terminal-readiness-preflight", finishing)
 
     def test_touched_workflow_command_examples_match_real_help_contracts(self) -> None:
         surfaces = "\n".join(

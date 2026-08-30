@@ -347,7 +347,7 @@ def pr_number_from_url(pr_url: str) -> int | None:
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode"):
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -471,6 +471,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- owner_role: `{task.get('owner_role')}`",
         f"- module: `{task.get('module') or ''}`",
         f"- status: `{task.get('status')}`",
+        f"- workflow_phase: `{task.get('workflow_phase') or ''}`",
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
@@ -754,6 +755,7 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("module", args.module or ""),
             ("worktree_hint", args.worktree_hint or ""),
             ("status", "candidate"),
+            ("workflow_phase", "bootstrap"),
             ("priority", args.priority),
             ("source_signal", args.source_signal or ""),
             ("source_type", args.source_type or ""),
@@ -902,6 +904,21 @@ def command_append_evidence(args: argparse.Namespace) -> int:
 
 def command_classify_non_pr_task(args: argparse.Namespace) -> int:
     mapping_path, _mapping, record = require_record(args)
+    if str(record.get("task_uid") or "") != args.task_uid:
+        die("classify-non-pr-task: canonical mapping embedded Task UID does not match its key")
+    required_identity = ("repository", "canonical_worktree", "task_branch", "default_branch")
+    if any(record.get(key) in (None, "") for key in required_identity):
+        die("classify-non-pr-task: canonical repository/worktree identity is incomplete")
+    repository_identity = authoritative_repository_identity(
+        args.root.resolve(), str(record["repository"]), str(record["canonical_worktree"]),
+    )
+    for key in ("repository", "canonical_worktree", "task_branch", "default_branch"):
+        if key == "canonical_worktree":
+            matches = pathlib.Path(str(record.get(key) or "")).expanduser().resolve() == pathlib.Path(repository_identity[key]).resolve()
+        else:
+            matches = str(record.get(key) or "") == repository_identity[key]
+        if not matches:
+            die(f"classify-non-pr-task: canonical {key} identity drift")
     evidence = str(args.evidence or "").strip()
     if not evidence:
         die("classify-non-pr-task: --evidence must be non-empty")
@@ -915,9 +932,15 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         current = str(live.get(key) or "")
         if cached and current and cached != current:
             die(f"classify-non-pr-task: cached/live Issue identity drift ({key})")
-    status = str(record.get("status") or live.get("status") or "")
-    phase = str(record.get("workflow_phase") or live.get("workflow_phase") or "")
-    if status in {"done", "deferred"} or phase in {"task_done", "closed_without_merge", "post_merge_done"}:
+    status = str(live.get("status") or "")
+    phase = str(live.get("workflow_phase") or "")
+    if not status or not phase:
+        die("classify-non-pr-task: live Issue status and workflow phase are required")
+    for key, current in (("status", status), ("workflow_phase", phase)):
+        cached = str(record.get(key) or "")
+        if cached and cached != current:
+            die(f"classify-non-pr-task: cached/live lifecycle authority drift ({key})")
+    if status in {"done", "deferred"} or phase in {"task_done", "closed_without_merge", "post_" + "merge_done"}:
         die("classify-non-pr-task: terminal tasks cannot be classified")
     if any(record.get(key) not in (None, "", 0, False, {}) for key in
            ("pr_number", "pr_url", "pull_request_url", "merge_receipt")):
@@ -927,11 +950,19 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         die("classify-non-pr-task: live Issue is PR-bound")
 
     updated = json.loads(json.dumps(record))
+    updated["status"] = status
+    updated["workflow_phase"] = phase
+    for key in ("pr_number", "pr_url", "pull_request_url"):
+        if live.get(key) not in (None, "", 0, False, {}):
+            updated[key] = live[key]
     updated["completion_mode"] = "non_pr_task"
     updated["non_pr_completion_evidence"] = evidence
     evidence_file = args.root.resolve() / ".pm" / "scratch" / args.task_uid / "non-pr-completion-evidence.txt"
     atomic_text(evidence_file, evidence)
     updated["non_pr_completion_evidence_file"] = str(evidence_file)
+    updated["non_pr_completion_evidence_sha256"] = hashlib.sha256(
+        evidence_file.read_bytes()
+    ).hexdigest()
     updated["updated_at"] = now()
     task = task_from_record(args.task_uid, updated)
     update_issue_body(args.repo, int(live["issue_number"]), task)
@@ -960,6 +991,7 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         "completion_mode": "non_pr_task",
         "non_pr_completion_evidence": evidence,
         "non_pr_completion_evidence_file": str(evidence_file),
+        "non_pr_completion_evidence_sha256": updated["non_pr_completion_evidence_sha256"],
         "issue_url": live.get("issue_url"),
         "comment_url": comment_url,
         "comment_readback_verified": True,
@@ -1067,7 +1099,11 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         if not record.get("project_item_id"):
             die("closeout-task: done requires a recoverable GitHub Project item")
     task = task_from_record(args.task_uid, record)
-    terminal_phase = "task_done" if args.to_status == "done" else "pre_pr_ready"
+    terminal_phase = (
+        "task_done" if args.to_status == "done"
+        else "blocked" if args.to_status == "deferred"
+        else "pre_pr_ready"
+    )
     record["workflow_phase"] = terminal_phase
     task = task_from_record(args.task_uid, record)
     evidence_fields = {

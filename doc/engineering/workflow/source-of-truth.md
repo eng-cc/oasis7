@@ -12,7 +12,7 @@ Mandatory rule:
 
 ### GitHub query budget and terminal defaults
 
-- The canonical source remains concise through one 780-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract.test.py`; do not add a second line-limit contract elsewhere.
+- The canonical source remains concise through one 790-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract.test.py`; do not add a second line-limit contract elsewhere.
 - Terminal refresh, sync, PR-watch audit, and closeout require the selected `task_uid`; broad Project or repository issue traversal requires explicit `--global-maintenance`.
 - Selected terminal audit is `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`; repository-wide repair is the separate operator action `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`, guarded by the live GraphQL budget before issue listing.
 - Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.
@@ -639,7 +639,17 @@ helpers.
 <a id="terminal-runbook"></a>
 ### Terminal runbook
 
-After merge, use `<canonical-task-worktree>` for task evidence and
+<a id="terminal-readiness-preflight"></a>
+#### Terminal readiness preflight
+
+Before merge, the canonical default worktree must pass the mutation-free
+`finalize-task.sh --preflight --json` gate. It must report `status: ready`, no
+blockers, and an exact executable `next_command`; detached/default-worktree,
+Issue/PR/repository, or task-worktree drift fails closed. Repair canonical
+identity and rerun the same preflight before merge; this gate creates no
+receipt and advances no lifecycle state.
+
+After preflight and merge, use `<canonical-task-worktree>` for task evidence and
 `<canonical-default-worktree>` for sync, receipts, and finalization. Helpers
 fail closed on repository/task/PR/head/worktree/branch/default-branch drift.
 Receipt/common-dir relocation requires a trusted new epoch; never edit receipts.

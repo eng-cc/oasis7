@@ -110,8 +110,9 @@ Return a block that implementation agents must follow. The handoff must include:
 TDD RED PHASE COMPLETE
 
 ## Authoring Mode
-- Subagent: tdd_test_writer
-- Fallback: [only if subagent unavailable]
+- Assigned implementation role: [role responsible for the bounded change]
+- Optional specialist: `tdd_test_writer` only when registered and reachable;
+  otherwise fallback: [reason the assigned role authored the RED tests]
 
 ## Test Files
 - [path]

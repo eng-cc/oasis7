@@ -8,6 +8,7 @@ decision can never mint or satisfy merge/main-sync authority.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import hashlib
 import importlib.util
@@ -105,6 +106,30 @@ def _has_non_pr_task_classification(record: dict) -> bool:
         str(record.get("completion_mode") or "") == "non_pr_task"
         and record.get("non_pr_completion_evidence") not in (None, "", {}, [], False)
     )
+
+
+def _verify_non_pr_evidence_binding(
+    root: pathlib.Path, record: dict, supplied_path: pathlib.Path,
+    supplied_digest: str,
+) -> None:
+    """Require finalization to consume the exact classification artifact."""
+    expected_path = (root / ".pm" / "scratch" / str(record.get("task_uid") or "") /
+                     "non-pr-completion-evidence.txt").resolve()
+    recorded_path = pathlib.Path(str(record.get("non_pr_completion_evidence_file") or "")).resolve()
+    if recorded_path != expected_path or supplied_path.resolve() != expected_path:
+        fail("non_pr_completed requires the canonical classification evidence file")
+    bound_digest = str(record.get("non_pr_completion_evidence_sha256") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", bound_digest):
+        fail("non_pr_completed requires a classification evidence digest")
+    try:
+        raw = supplied_path.read_bytes()
+    except OSError as exc:
+        fail(f"classification evidence file cannot be read: {exc}")
+    if supplied_digest != bound_digest or hashlib.sha256(raw).hexdigest() != bound_digest:
+        fail("classification evidence digest disagrees with task mapping")
+    expected_raw = (str(record.get("non_pr_completion_evidence") or "") + "\n").encode("utf-8")
+    if raw != expected_raw:
+        fail("classification evidence content disagrees with task mapping")
 
 
 def run_json(command: list[str]) -> dict:
@@ -258,6 +283,18 @@ def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) 
             or str(issue.get("url") or "") != str(record.get("issue_url") or expected_url)
             or not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE)):
         fail("Issue identity mismatch")
+    if str(record.get("completion_mode") or "") == "non_pr_task":
+        body_modes = re.findall(r"(?m)^- completion_mode: `([^`]*)`$", body)
+        body_evidence = re.findall(r"(?m)^- non_pr_completion_evidence_b64: `([^`]*)`$", body)
+        if len(body_modes) != 1 or body_modes[0] != "non_pr_task" or len(body_evidence) != 1:
+            fail("Issue non-PR classification authority is missing")
+        try:
+            padding = "=" * (-len(body_evidence[0]) % 4)
+            live_evidence = base64.urlsafe_b64decode(body_evidence[0] + padding).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            fail("Issue non-PR classification evidence is malformed")
+        if live_evidence != str(record.get("non_pr_completion_evidence") or ""):
+            fail("Issue non-PR classification evidence disagrees with task mapping")
     body_pr_urls = re.findall(r"(?m)^- pr_url: `([^`]*)`$", body)
     body_pr_numbers = re.findall(r"(?m)^- pr_number: `([^`]*)`$", body)
     mapped_pr_url = str(record.get("pr_url") or "")
@@ -279,6 +316,13 @@ def _identity_pr(record: dict) -> dict | None:
         return None
     if not pr_number or not pr_url:
         fail("recorded PR identity is incomplete")
+    expected_url = re.fullmatch(
+        rf"https://github\.com/{re.escape(str(record.get('repository') or ''))}/pulls?/{pr_number}",
+        pr_url,
+        re.IGNORECASE,
+    )
+    if not expected_url:
+        fail("recorded PR URL is malformed or unsupported (GitHub PR URL required)")
     pr = run_json(["gh", "pr", "view", pr_number, "-R", str(record["repository"]),
                    "--json", "number,url,state,mergedAt,headRefOid,headRefName,"
                    "headRepositoryOwner,headRepository"])
@@ -1145,6 +1189,8 @@ def _finalize(root: pathlib.Path, task_uid: str, reason: str,
     if reason == "non_pr_completed" and _has_authority(record, NON_PR_FORBIDDEN_AUTHORITY):
         fail("non_pr_completed cannot carry PR or merge receipt authority")
     evidence_digest, evidence_data, public_evidence = _read_evidence(evidence_path)
+    if reason == "non_pr_completed":
+        _verify_non_pr_evidence_binding(root, record, evidence_path, evidence_digest)
     try:
         (canonical_receipt_path, receipt_path, existing_receipt,
          canonical_receipt_bytes) = resolve_non_merge_receipt(root, task_uid)

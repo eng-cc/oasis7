@@ -86,7 +86,7 @@ On a non-Codex surface, use the finite fallback:
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
-9. Before merge, run the mutation-free terminal readiness preflight from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact `next_command`; any identity mismatch must be repaired and reverified before merge:
+9. Before merge, follow the canonical [terminal-readiness preflight](../../../doc/engineering/workflow/source-of-truth.md#terminal-readiness-preflight) from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact executable `next_command`; any identity mismatch must be repaired and reverified before merge:
 
 ```bash
 ./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --preflight --json

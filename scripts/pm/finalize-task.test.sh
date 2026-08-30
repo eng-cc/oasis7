@@ -40,7 +40,7 @@ git -C "$REPO" push -q origin main
 git -C "$REPO" update-ref refs/remotes/origin/main "$INITIAL_MAIN_OID"
 
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"issue_url":"https://github.com/fixture/repo/issues/3379","pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
+{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"issue_url":"https://github.com/fixture/repo/issues/3379","pr_url":"https://github.com/fixture/repo/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
 EOF
 
 make_mock() {
@@ -149,6 +149,14 @@ set_task_field issue_url https://example.invalid/issues/3379
 preflight_blocker malformed-issue-url 7 "Issue URL"
 set_task_field issue_url https://github.com/fixture/repo/issues/3379
 
+set_task_field pr_url https://example.invalid/pull/7
+preflight_blocker unsupported-pr-url 7 "PR URL"
+set_task_field pr_url https://github.com/fixture/repo/pull/7
+
+git -C "$REPO" checkout --detach -q HEAD
+preflight_blocker detached-default 7 detached
+git -C "$REPO" switch -q main
+
 preflight_blocker task-pr 8 "task/PR"
 set_task_field task_uid task_22222222222222222222222222222222
 preflight_blocker task-uid 7 "task UID"
@@ -164,12 +172,12 @@ preflight_blocker repository
 set_task_field repository fixture/repo
 set_task_field pr_url https://github.com/other/repo/pull/7
 preflight_blocker foreign-pr 7 repository
-set_task_field pr_url https://example.invalid/pull/7
+set_task_field pr_url https://github.com/fixture/repo/pull/7
 set_task_field repository other/repo
 set_task_field pr_url https://github.com/other/repo/pull/7
 preflight_blocker foreign-repo 7 repository
 set_task_field repository fixture/repo
-set_task_field pr_url https://example.invalid/pull/7
+set_task_field pr_url https://github.com/fixture/repo/pull/7
 
 TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/result.json"
@@ -268,7 +276,7 @@ import json,sys
 path,uid=sys.argv[1:]
 data=json.load(open(path,encoding='utf-8'))
 r=data['tasks'][uid]
-r.update(task_branch='task/finalize-squash',pr_number=9,pr_url='https://example.invalid/pull/9')
+r.update(task_branch='task/finalize-squash',pr_number=9,pr_url='https://github.com/fixture/repo/pull/9')
 json.dump(data,open(path,'w',encoding='utf-8'))
 PY
 rm -f "$REPO/.git/receipts/terminal-cleanup-receipt.json" \

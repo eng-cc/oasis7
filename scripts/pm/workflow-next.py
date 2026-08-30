@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Report the one supported next workflow command for a bound task.
 
-The task mapping is the only workflow authority.  Bootstrap snapshots, slice
-ledgers, and the durable supervisor checkpoint are read-only evidence inputs
-used to detect stale or ambiguous state and to make a compact resume report.
+GitHub Issue/Project truth is authoritative; the local mapping is a refreshed
+cache and this command never mutates it.  Bootstrap snapshots, slice ledgers,
+receipts, tombstones, and the durable supervisor checkpoint are read-only
+evidence inputs used to detect stale or ambiguous state.
 """
 from __future__ import annotations
 
@@ -17,18 +18,22 @@ from typing import Any
 
 
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
-PHASES = {"intake", "bootstrap", "route", "execution", "verification",
+PHASES = {"intake", "bootstrap", "planning", "route", "execution", "verification",
+          "blocked",
           "pre_pr_review", "pre_pr_ready", "pr_watch", "task_done",
           "main_sync", "closed_without_merge", "post_merge_done"}
 STATUS_PHASES = {
-    "candidate": {"", "intake", "bootstrap", "route"},
+    "candidate": {"", "intake", "bootstrap", "planning", "route"},
     "committed": {"", "execution", "verification", "pre_pr_review"},
     "blocked": {"", "blocked"},
     "ready": {"pre_pr_ready"},
     "pr_watch": {"pr_watch"},
     "done": {"task_done", "main_sync", "closed_without_merge", "post_merge_done"},
-    "deferred": {"", "closed_without_merge"},
+    "deferred": {"", "blocked"},
 }
+SNAPSHOT_SCHEMA = "oasis7.bootstrap-task-snapshot/v1"
+CHECKPOINT_SCHEMA = "tpm-production-supervisor/v2"
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -158,7 +163,10 @@ def verify_mapping_identity(
         str(task.get("pr_url") or task.get("pull_request_url") or ""),
         "pulls?",
     )
-    if pr_identity and pr_identity[0] != repository:
+    pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
+    if pr_url and not pr_identity:
+        add_blocker(blockers, "stale identity: task PR URL is malformed or unsupported (GitHub PR URL required)")
+    elif pr_identity and pr_identity[0] != repository:
         add_blocker(blockers, "stale identity: task PR URL belongs to a different repository")
 
 
@@ -167,23 +175,37 @@ def verify_snapshot(
     task: dict[str, Any],
     blockers: list[str],
     sources: list[str],
+    *,
+    required: bool = False,
 ) -> None:
     if not path.exists():
+        if required:
+            add_blocker(blockers, "stale identity: bootstrap snapshot is missing after bootstrap")
         return
     sources.append(str(path))
     snapshot, error = load_json(path)
     if error or not isinstance(snapshot, dict):
         add_blocker(blockers, f"stale identity: bootstrap snapshot is unreadable ({error or 'not an object'})")
         return
-    expected_digest = snapshot.get("digest")
-    if expected_digest:
-        unsigned = dict(snapshot)
-        unsigned.pop("digest", None)
-        actual = "sha256:" + hashlib.sha256(
-            json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        if actual != expected_digest:
-            add_blocker(blockers, "stale identity: bootstrap snapshot digest mismatch")
+    if snapshot.get("schema") != SNAPSHOT_SCHEMA:
+        add_blocker(blockers, "stale identity: bootstrap snapshot schema is unsupported")
+    expected_digest = str(snapshot.get("digest") or "")
+    unsigned = dict(snapshot)
+    unsigned.pop("digest", None)
+    actual = "sha256:" + hashlib.sha256(
+        json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
+        add_blocker(blockers, "stale identity: bootstrap snapshot digest is missing or malformed")
+    elif actual != expected_digest:
+        add_blocker(blockers, "stale identity: bootstrap snapshot digest mismatch")
+    if not isinstance(snapshot.get("producer"), str) or not snapshot.get("producer"):
+        add_blocker(blockers, "stale identity: bootstrap snapshot producer is missing")
+    if not isinstance(snapshot.get("created_at"), str) or not snapshot.get("created_at"):
+        add_blocker(blockers, "stale identity: bootstrap snapshot creation time is missing")
+    for key in ("task", "repository", "git", "request"):
+        if key not in snapshot:
+            add_blocker(blockers, f"stale identity: bootstrap snapshot {key} is missing")
     snapshot_task = snapshot.get("task") if isinstance(snapshot.get("task"), dict) else {}
     snapshot_git = snapshot.get("git") if isinstance(snapshot.get("git"), dict) else {}
     if snapshot_task.get("uid") != task.get("task_uid"):
@@ -227,6 +249,8 @@ def verify_ledger(
             continue
         if not isinstance(entry, dict) or entry.get("task_uid") != task_uid:
             add_blocker(blockers, f"stale identity: slice ledger line {line_number} has a different task UID")
+        elif any(not str(entry.get(key) or "") for key in ("role", "status", "head")):
+            add_blocker(blockers, f"stale identity: slice ledger line {line_number} lacks role/status/head authority")
 
 
 def verify_checkpoint(
@@ -243,6 +267,13 @@ def verify_checkpoint(
     if error or not isinstance(checkpoint, dict):
         add_blocker(blockers, f"stale identity: durable workflow checkpoint is unreadable ({error or 'not an object'})")
         return None
+    if checkpoint.get("schema") != CHECKPOINT_SCHEMA:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint schema is unsupported")
+    if type(checkpoint.get("revision")) is not int or checkpoint.get("revision") < 1:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint revision is missing or invalid")
+    for key in ("phase", "status", "capability_status"):
+        if not isinstance(checkpoint.get(key), str) or not checkpoint.get(key):
+            add_blocker(blockers, f"stale identity: durable workflow checkpoint {key} is missing")
     if checkpoint.get("task_uid") != task.get("task_uid"):
         add_blocker(blockers, "stale identity: durable workflow checkpoint task UID drift")
     if checkpoint.get("repo") in (None, ""):
@@ -261,34 +292,221 @@ def verify_checkpoint(
     if checkpoint.get("state") not in (None, "") and pathlib.Path(str(checkpoint["state"])).resolve() != path:
         add_blocker(blockers, "stale identity: durable workflow checkpoint path drift")
     terminal = checkpoint.get("terminal_authority")
-    if terminal is not None:
-        if not isinstance(terminal, dict):
-            add_blocker(blockers, "stale identity: durable workflow checkpoint terminal authority is malformed")
-        else:
-            for key, expected in (
-                ("task_uid", task.get("task_uid")),
-                ("repository", task_repository),
-                ("canonical_worktree", task.get("canonical_worktree")),
-                ("task_branch", task.get("task_branch")),
-                ("default_branch", task.get("default_branch")),
-            ):
-                actual = terminal.get(key)
-                if actual in (None, ""):
-                    add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} is missing")
-                elif key == "canonical_worktree":
-                    if pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve():
-                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal worktree drift")
-                elif key == "repository":
-                    terminal_identity = repository_identity(str(actual))
-                    if not terminal_identity:
-                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository is unsupported")
-                    elif terminal_identity != task_repository:
-                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
-                    elif checkpoint_repository_identity and terminal_identity != checkpoint_repository_identity:
-                        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
-                elif str(actual) != str(expected):
-                    add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} drift")
+    if terminal is None:
+        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal authority is missing")
+    elif not isinstance(terminal, dict):
+        add_blocker(blockers, "stale identity: durable workflow checkpoint terminal authority is malformed")
+    else:
+        for key, expected in (
+            ("task_uid", task.get("task_uid")),
+            ("repository", task_repository),
+            ("canonical_worktree", task.get("canonical_worktree")),
+            ("task_branch", task.get("task_branch")),
+            ("default_branch", task.get("default_branch")),
+        ):
+            actual = terminal.get(key)
+            if actual in (None, ""):
+                add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} is missing")
+            elif key == "canonical_worktree":
+                if pathlib.Path(str(actual)).resolve() != pathlib.Path(str(expected)).resolve():
+                    add_blocker(blockers, "stale identity: durable workflow checkpoint terminal worktree drift")
+            elif key == "repository":
+                terminal_identity = repository_identity(str(actual))
+                if not terminal_identity:
+                    add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository is unsupported")
+                elif terminal_identity != task_repository:
+                    add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
+                elif checkpoint_repository_identity and terminal_identity != checkpoint_repository_identity:
+                    add_blocker(blockers, "stale identity: durable workflow checkpoint terminal repository drift")
+            elif str(actual) != str(expected):
+                add_blocker(blockers, f"stale identity: durable workflow checkpoint terminal {key} drift")
     return checkpoint
+
+
+def canonical_receipt_root(root: pathlib.Path, task_uid: str,
+                           blockers: list[str], sources: list[str]) -> pathlib.Path | None:
+    raw_common = git_value(root, "rev-parse", "--git-common-dir")
+    if not raw_common:
+        add_blocker(blockers, "stale identity: cannot resolve canonical Git common directory for terminal proof")
+        return None
+    common = pathlib.Path(raw_common)
+    if not common.is_absolute():
+        common = root / common
+    receipt_root = common.resolve() / "oasis7-workflow-receipts" / task_uid
+    return receipt_root
+
+
+def verify_bound_json_file(
+    path: pathlib.Path,
+    expected_digest: object,
+    expected_object: object,
+    label: str,
+    blockers: list[str],
+    sources: list[str],
+) -> dict[str, Any] | None:
+    sources.append(str(path))
+    if not isinstance(expected_digest, str) or not SHA256_RE.fullmatch(expected_digest):
+        add_blocker(blockers, f"stale identity: terminal {label} digest authority is missing or malformed")
+        return None
+    if not path.is_file():
+        add_blocker(blockers, f"stale identity: terminal {label} proof is missing")
+        return None
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        add_blocker(blockers, f"stale identity: terminal {label} proof is unreadable ({exc})")
+        return None
+    actual_digest = hashlib.sha256(raw).hexdigest()
+    if actual_digest != expected_digest:
+        add_blocker(blockers, f"stale identity: terminal {label} digest mismatch")
+    if expected_object is not None and value != expected_object:
+        add_blocker(blockers, f"stale identity: terminal {label} differs from task mapping authority")
+    if not isinstance(value, dict):
+        add_blocker(blockers, f"stale identity: terminal {label} is not an object")
+        return None
+    return value
+
+
+def verify_terminal_proof(
+    root: pathlib.Path,
+    phase: str,
+    task: dict[str, Any],
+    blockers: list[str],
+    sources: list[str],
+) -> None:
+    """Require durable proof before exposing a terminal command or completion."""
+    if phase not in {"task_done", "main_sync", "closed_without_merge", "post_merge_done"}:
+        return
+    receipt_root = canonical_receipt_root(root, str(task.get("task_uid") or ""), blockers, sources)
+    if receipt_root is None:
+        return
+
+    phase_receipts = task.get("phase_receipts")
+    phase_receipts = phase_receipts if isinstance(phase_receipts, dict) else {}
+    phase_digests = task.get("phase_receipt_sha256")
+    phase_digests = phase_digests if isinstance(phase_digests, dict) else {}
+
+    def require_phase_receipt(name: str, filenames: tuple[str, ...]) -> dict[str, Any] | None:
+        expected = phase_receipts.get(name)
+        digest = phase_digests.get(name)
+        candidates = [receipt_root / filename for filename in filenames]
+        for candidate in candidates:
+            if candidate.is_file():
+                return verify_bound_json_file(candidate, digest, expected,
+                                              f"{name.replace('_', '-')} receipt", blockers, sources)
+        # Keep the missing-proof message deterministic while still checking
+        # the digest contract against the canonical candidate path.
+        return verify_bound_json_file(candidates[0], digest, expected,
+                                      f"{name.replace('_', '-')} receipt", blockers, sources)
+
+    if phase == "task_done":
+        if str(task.get("completion_mode") or "") == "non_pr_task":
+            evidence_file = pathlib.Path(str(task.get("non_pr_completion_evidence_file") or ""))
+            expected_digest = task.get("non_pr_completion_evidence_sha256")
+            if not evidence_file.is_absolute() or evidence_file.resolve() != (
+                    root / ".pm/scratch" / str(task.get("task_uid") or "") /
+                    "non-pr-completion-evidence.txt").resolve():
+                add_blocker(blockers, "stale identity: non-PR completion evidence path is not canonical")
+            if not evidence_file.is_file():
+                add_blocker(blockers, "stale identity: non-PR completion evidence proof is missing")
+            else:
+                raw = evidence_file.read_bytes()
+                sources.append(str(evidence_file))
+                if not isinstance(expected_digest, str) or not SHA256_RE.fullmatch(expected_digest):
+                    add_blocker(blockers, "stale identity: non-PR completion evidence digest is missing or malformed")
+                elif hashlib.sha256(raw).hexdigest() != expected_digest:
+                    add_blocker(blockers, "stale identity: non-PR completion evidence digest mismatch")
+                expected_raw = (str(task.get("non_pr_completion_evidence") or "") + "\n").encode("utf-8")
+                if raw != expected_raw:
+                    add_blocker(blockers, "stale identity: non-PR completion evidence content drift")
+        else:
+            merge = task.get("merge_receipt")
+            if not isinstance(merge, dict):
+                add_blocker(blockers, "stale identity: merge receipt authority is missing")
+            else:
+                receipt = verify_bound_json_file(
+                    receipt_root / "merge-receipt.json", task.get("merge_receipt_sha256"),
+                    merge, "merge", blockers, sources,
+                )
+                if receipt is not None and (
+                    receipt.get("task_uid") != task.get("task_uid")
+                    or receipt.get("repository") != task.get("repository")
+                ):
+                    add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+        return
+
+    if phase in {"main_sync", "post_merge_done"}:
+        merge = task.get("merge_receipt")
+        if not isinstance(merge, dict):
+            add_blocker(blockers, "stale identity: terminal receipt chain lacks merge receipt authority")
+        else:
+            receipt = verify_bound_json_file(
+                receipt_root / "merge-receipt.json", task.get("merge_receipt_sha256"),
+                merge, "merge", blockers, sources,
+            )
+            if receipt is not None and (
+                    receipt.get("task_uid") != task.get("task_uid")
+                    or receipt.get("repository") != task.get("repository")):
+                add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+    if phase in {"main_sync", "post_merge_done"}:
+        sync = require_phase_receipt("main_sync", ("main-sync-receipt.json",))
+        if sync is not None and (
+                sync.get("task_uid") != task.get("task_uid")
+                or sync.get("repository") != task.get("repository")):
+            add_blocker(blockers, "stale identity: main-sync receipt task/repository identity drift")
+    if phase in {"closed_without_merge", "post_merge_done"}:
+        terminal_name = "closed_without_merge" if phase == "closed_without_merge" else "post_merge_done"
+        filenames = (("closed-without-merge-receipt.json",
+                      "closed-without-merge-receipt-migrated.json")
+                     if phase == "closed_without_merge"
+                     else ("terminal-cleanup-receipt.json",))
+        terminal = require_phase_receipt(terminal_name, filenames)
+        if terminal is not None:
+            if (terminal.get("task_uid") != task.get("task_uid")
+                    or terminal.get("repository") != task.get("repository")):
+                add_blocker(blockers, "stale identity: terminal receipt task/repository identity drift")
+            tombstone_path = receipt_root / "terminal-tombstone.json"
+            sources.append(str(tombstone_path))
+            tombstone, error = load_json(tombstone_path)
+            if error or not isinstance(tombstone, dict):
+                add_blocker(blockers, f"stale identity: terminal tombstone is unreadable ({error or 'not an object'})")
+            else:
+                if tombstone.get("schema") != "oasis7_terminal_tombstone_v1":
+                    add_blocker(blockers, "stale identity: terminal tombstone schema is unsupported")
+                if tombstone.get("task_uid") != task.get("task_uid"):
+                    add_blocker(blockers, "stale identity: terminal tombstone task UID drift")
+                if tombstone.get("repository") != task.get("repository"):
+                    add_blocker(blockers, "stale identity: terminal tombstone repository drift")
+                if tombstone.get("workflow_phase") != phase:
+                    add_blocker(blockers, "stale identity: terminal tombstone phase drift")
+                if tombstone.get("terminal_receipt_sha256") != phase_digests.get(terminal_name):
+                    add_blocker(blockers, "stale identity: terminal tombstone digest drift")
+                if tombstone.get("checkout_recreation_forbidden") is not True:
+                    add_blocker(blockers, "stale identity: terminal tombstone lacks cleanup prohibition")
+            ledger_names = (("non-merge-finalizer-ledger.json",
+                             "non-merge-finalizer-ledger-migrated.json")
+                            if phase == "closed_without_merge"
+                            else ("finalizer-ledger.json",))
+            ledger_path = next((receipt_root / name for name in ledger_names
+                                if (receipt_root / name).is_file()), receipt_root / ledger_names[0])
+            ledger = load_json(ledger_path)[0] if ledger_path.is_file() else None
+            sources.append(str(ledger_path))
+            if not isinstance(ledger, dict):
+                add_blocker(blockers, "stale identity: terminal finalizer ledger is missing or unreadable")
+            else:
+                if ledger.get("task_uid") != task.get("task_uid"):
+                    add_blocker(blockers, "stale identity: terminal finalizer ledger task UID drift")
+                if ledger.get("schema") not in {"oasis7_non_merge_finalizer_ledger_v1",
+                                                  "oasis7_finalizer_ledger_v1"}:
+                    add_blocker(blockers, "stale identity: terminal finalizer ledger schema is unsupported")
+                if type(ledger.get("revision")) is not int or ledger.get("revision") < 1:
+                    add_blocker(blockers, "stale identity: terminal finalizer ledger revision is missing or invalid")
+                operations = ledger.get("operations")
+                if (not isinstance(operations, dict)
+                        or not any(isinstance(entry, dict) and entry.get("committed") is True
+                                   for entry in operations.values())):
+                    add_blocker(blockers, "stale identity: terminal finalizer ledger has no committed operation proof")
 
 
 def command_for(
@@ -301,6 +519,8 @@ def command_for(
     status = str(task.get("status") or "")
     pr = str(task.get("pr_number") or "")
     pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
+    if phase in {"intake", "planning", "route", "blocked"}:
+        return []
     if phase in {"closed_without_merge", "post_merge_done"}:
         return []
     if phase == "bootstrap":
@@ -356,6 +576,7 @@ def main() -> int:
         "evidence_sources": [str(mapping_path)],
         "blockers": [],
         "next_command": [],
+        "next_action": "blocked",
     }
     blockers = payload["blockers"]
     if not TASK_UID_RE.fullmatch(args.task_uid):
@@ -392,6 +613,11 @@ def main() -> int:
     pr_number = str(task.get("pr_number") or "")
     pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
     if pr_url:
+        pr_identity = github_object_identity(pr_url, "pulls?")
+        if not pr_identity:
+            add_blocker(blockers, "stale identity: task PR URL is malformed or unsupported (GitHub PR URL required)")
+        elif pr_identity[0] != str(task.get("repository") or ""):
+            add_blocker(blockers, "stale identity: task PR URL belongs to a different repository")
         pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", pr_url)
         if not pr_match:
             add_blocker(blockers, "stale identity: task PR URL is malformed")
@@ -404,30 +630,40 @@ def main() -> int:
         phase = raw_phase
         if not phase:
             phase = {"candidate": "bootstrap", "committed": "execution", "ready": "pre_pr_ready",
-                     "pr_watch": "pr_watch", "done": "task_done", "deferred": "closed_without_merge"}.get(status, "")
+                     "pr_watch": "pr_watch", "done": "task_done", "deferred": "blocked",
+                     "blocked": "blocked"}.get(status, "")
         if status not in STATUS_PHASES:
             add_blocker(blockers, f"ambiguous state: unsupported task status {status!r}")
         elif raw_phase not in STATUS_PHASES[status]:
             add_blocker(blockers, f"ambiguous state: status {status!r} cannot use workflow phase {raw_phase!r}")
     payload["workflow_phase"] = phase
+    if phase not in {"intake", "bootstrap"} and not str(task.get("cache_refreshed_at") or ""):
+        add_blocker(blockers, "stale identity: task mapping lacks live GitHub refresh evidence")
 
     snapshot_path = pathlib.Path(args.snapshot).resolve() if args.snapshot else root / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
     ledger_path = pathlib.Path(args.slice_ledger).resolve() if args.slice_ledger else root / ".pm/scratch" / args.task_uid / "slice-ledger.jsonl"
     checkpoint_path = pathlib.Path(args.checkpoint).resolve() if args.checkpoint else root / ".pm/tasks" / f"{args.task_uid}.workflow.json"
     sources = payload["evidence_sources"]
-    verify_snapshot(snapshot_path, task, blockers, sources)
+    verify_snapshot(snapshot_path, task, blockers, sources,
+                    required=phase not in {"intake", "bootstrap"})
     verify_ledger(ledger_path, args.task_uid, blockers, sources)
     checkpoint = verify_checkpoint(checkpoint_path, root, task, blockers, sources)
     if checkpoint and checkpoint.get("phase") not in (None, "", phase):
         add_blocker(blockers, "ambiguous state: durable workflow checkpoint phase disagrees with task mapping")
+    verify_terminal_proof(root, phase, task, blockers, sources)
     payload["evidence_sources"] = list(dict.fromkeys(sources))
     if not blockers:
         payload["next_command"] = command_for(phase, task, root, blockers)
+        payload["next_action"] = "run_command" if payload["next_command"] else (
+            "completed" if phase in {"closed_without_merge", "post_merge_done"} else "action_required"
+        )
     if blockers:
         payload["next_command"] = []
         payload["identity_status"] = "stale" if any(item.startswith("stale identity") for item in blockers) else "ambiguous"
     else:
         payload["identity_status"] = "bound"
+    if payload["next_command"]:
+        payload["command_cwd"] = str(root)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if blockers else 0
 

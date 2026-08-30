@@ -114,6 +114,8 @@ elif issue_identity[1] != bound["issue_number"]:
     blocker("task identity: Issue URL does not match issue number")
 pr_identity = github_object_identity(bound["pr_url"], "pulls?")
 if bound["pr_url"]:
+    if not pr_identity:
+        blocker("task identity: PR URL is malformed or unsupported (GitHub PR URL required)")
     pr_match = re.search(r"/pulls?/(\d+)(?:$|[?#])", bound["pr_url"])
     if not pr_match or pr_match.group(1) != pr_number:
         blocker("task/PR mismatch: task PR URL does not match requested PR")
@@ -173,7 +175,9 @@ if allow_missing_worktree != "1" and task_path.exists():
     if actual_branch != bound["task_branch"]:
         blocker(f"branch mismatch: task worktree is {actual_branch or 'detached'}, expected {bound['task_branch']}")
 actual_default = git(root, "symbolic-ref", "--short", "HEAD")
-if actual_default and actual_default != bound["default_branch"]:
+if not actual_default:
+    blocker("branch mismatch: default worktree is detached")
+elif actual_default != bound["default_branch"]:
     blocker(f"branch mismatch: default worktree is {actual_default}, expected {bound['default_branch']}")
 
 payload = {
