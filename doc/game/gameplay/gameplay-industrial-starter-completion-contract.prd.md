@@ -21,7 +21,7 @@
 | 阶段 | 玩家动作 | 进度/收益/下一动力 | 失败成本与恢复边界 |
 | --- | --- | --- | --- |
 | `accepted/scheduled` | 查看生产回执并按 profile 等待；修复前置、补料/补电、改道、重报价或延期 | 仅证明意图接受；不推进首产物、稳定窗口、交付需求、奖励或下一目标 | 状态漂移只能原子拒绝或重报价；不得当作生产完成 |
-| `production_settled` | 仅 `production_only` 可完成首产物；随后继续稳定产线或打开交易/交付预览 | 一个 matching production receipt 至多完成一次，结果标为 `production-stable/undelivered`，动力转为首笔交易/工业用途 | 无匹配 receipt 保持待决；不减少交付需求，不发 terminal 奖励 |
+| `production_settled` | 仅 `production_only` 可完成首产物；随后继续稳定产线或打开交易/交付预览 | 一个 matching production receipt 至多完成一次首产物，结果标为 `produced/undelivered`；只有另行声明的稳定条件全部通过后才可标为 `production-stable`，动力转为稳定产线、首笔交易或工业用途 | 无匹配 receipt 保持待决；不减少交付需求，不发 terminal 奖励，也不以首产物 receipt 代替稳定窗口证据 |
 | `terminal_pending` | 等待/取得终端容量、交付、持有、改道、重报价或延期（profile 支持时） | 生产结果存在但终端未结算；不减需求、不发交付奖励，玩家承担库存/容量占用和延迟 | owner、资格、容量或路线失效时保留有界 pending/hold；不得免费销毁、自动改道或退款 |
 | `delivery/terminal_settled` | 仅显式 `terminal-admission` 可进入交易、区域服务或下一工业目标 | matching delivery/terminal receipt 至多完成一次 profile，并打开一次下一 beat | 不同 root、非 matching、旧 receipt 或 replay 不得重复目标、奖励或释放容量 |
 | `profile/authority unknown` | 建立/选择有效目标，或等待补证后复查 | 返回 `no_safe_starter_chain`；不产生排程、sink、稳定进度、奖励或下一 beat | 不得默认 profile，不得用 `0`、空缺口或“已完成”填充缺失 authority |
@@ -36,7 +36,7 @@
 
 - 同一 root、profile 与 matching receipt 只能推进一次；重复确认、重连、Agent retry、snapshot restore、乱序事件与 replay 必须返回原处置，不得复制 production、delivery、需求减少、奖励、`W` 或下一目标解锁。
 - Viewer、pure API 与 Agent 必须对 profile、阶段、primary blocker、已占用/已消费价值、`next_action`、`next_recheck` 与 `progression_effect` 给出同义结果；任一 surface 缺少 authority 时都显示 `no_safe_starter_chain`，不得自造默认完成。
-- 验收必须覆盖：accepted 不推进；`production_only` 的单个 matching production receipt 只完成一次；terminal pending 不发交付收益；terminal settled 只由显式 terminal profile 完成；缺 profile/authority fail closed；报价/权限/容量漂移、重复提交、重连、乱序与 replay 不复制 sink、receipt、奖励或下一目标。
+- 验收必须覆盖：accepted 不推进；`production_only` 的单个 matching production receipt 只完成一次首产物且不会提前产生 `production-stable`；稳定标签仅在另行声明的稳定条件全部通过后产生；terminal pending 不发交付收益；terminal settled 只由显式 terminal profile 完成；缺 profile/authority fail closed；报价/权限/容量漂移、重复提交、重连、乱序与 replay 不复制 sink、receipt、奖励或下一目标。
 
 ## 6. 非目标与 residual risk
 
