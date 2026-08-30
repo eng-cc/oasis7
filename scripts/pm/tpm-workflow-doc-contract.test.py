@@ -1086,6 +1086,29 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertIn("authorized_reset(", row)
                 self.assertIn("reset_authority=", row)
 
+    def test_supervisor_embedded_recovery_examples_require_authorized_reset(self) -> None:
+        examples = re.findall(r"(?ms)^```json\n(.*?)^```", self.supervisor_design)
+        json_example = next(
+            (example for example in examples if '"schema": "tpm-supervisor-staging-case/v1"' in example),
+            None,
+        )
+        self.assertIsNotNone(json_example, "supervisor staging case JSON example is required")
+        assert json_example is not None
+        b01 = re.search(
+            r'"case_id": "adversarial-B01-7001".*?(?=^  "expected")',
+            json_example,
+            re.S | re.M,
+        )
+        self.assertIsNotNone(b01, "embedded B01 case example is required")
+        self.assertRegex(b01.group(0), r'"rule": "capability_unchanged"')
+        self.assertRegex(b01.group(0), r'"new_epoch": false')
+        recovery_lines = re.findall(r"(?m)^\s*\"recovery\": \{.*$", json_example)
+        self.assertTrue(recovery_lines, "embedded recovery examples are required")
+        for line in recovery_lines:
+            if '"new_epoch": true' in line:
+                self.assertRegex(line, r'"rule": "authorized_reset"')
+                self.assertRegex(line, r'"reset_authority": "[^"]+"')
+
     def test_supervisor_human_report_partitions_all_catalog_records(self) -> None:
         report = re.search(
             r"(?ms)^The human `staging-report\.md` .*?(?=^### 10\.6)",
