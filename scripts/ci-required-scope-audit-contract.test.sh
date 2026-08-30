@@ -43,8 +43,18 @@ require_reason_contains "$minimal_plan" required_gate_baseline:always_on
 operational_plan="$("$planner" --event-name pull_request --changed-path scripts/p2p-public-testnet-package-rollout.test.sh)"
 require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
+require_key "$operational_plan" run_rust_baseline false
+require_key "$operational_plan" needs_rust_toolchain false
 require_key "$operational_plan" selected_capabilities operational_contracts
 require_reason_contains "$operational_plan" operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh
+
+site_plan="$("$planner" --event-name pull_request --changed-path site/index.html)"
+require_key "$site_plan" run_required_gate_baseline true
+require_key "$site_plan" run_site_contract_tests true
+require_key "$site_plan" run_rust_baseline false
+require_key "$site_plan" needs_rust_toolchain false
+require_key "$site_plan" selected_capabilities site_quality
+require_reason_contains "$site_plan" site_quality:site/index.html
 
 operational_contracts_source="$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"
 if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$operational_contracts_source"; then
@@ -53,6 +63,20 @@ if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$operat
 fi
 if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$operational_contracts_source"; then
   echo "required scope audit contract is not wired into run_operational_contract_tests" >&2
+  exit 1
+fi
+
+if ! grep -Fqx '    run_required_component "site quality contracts" "${OASIS7_CI_RUN_SITE_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_site_contract_tests' "$ci_tests"; then
+  echo "site quality contracts are not wired to the planner selector in ci-tests" >&2
+  exit 1
+fi
+
+# This is intentionally a direct-source guard.  Operational contract fixtures
+# may mention Cargo or use fake Cargo binaries in their own test processes, but
+# the runner itself must not gain a real Rust toolchain invocation unnoticed.
+if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$operational_contracts_source" || \
+   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$operational_contracts_source"; then
+  echo "operational contract runner must not invoke Cargo or rustup directly" >&2
   exit 1
 fi
 

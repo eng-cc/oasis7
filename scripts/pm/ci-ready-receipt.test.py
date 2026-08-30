@@ -52,16 +52,20 @@ class ReceiptTest(unittest.TestCase):
   def test_all_planner_gate_selectors_are_preserved_in_receipt_authority(self):
     raw=plan()
     for field in ("run_scenario_regression", "run_operational_contracts",
-                  "run_codex_agent_config_validation", "run_required_gate_baseline"):
+                  "run_codex_agent_config_validation", "run_required_gate_baseline",
+                  "run_site_contract_tests"):
       raw[field]="true"
     planner=M.canonical_planner(raw)
     for field in ("run_scenario_regression", "run_operational_contracts",
-                  "run_codex_agent_config_validation", "run_required_gate_baseline"):
+                  "run_codex_agent_config_validation", "run_required_gate_baseline",
+                  "run_site_contract_tests"):
+      self.assertIn(field, planner,
+                    f"canonical planner omitted {field} from CI receipt authority")
       self.assertIs(planner[field], True,
                     f"canonical planner dropped {field} from CI receipt authority")
 
     changed=dict(raw)
-    changed["run_operational_contracts"]="false"
+    changed["run_site_contract_tests"]="false"
     changed_planner=M.canonical_planner(changed)
     digest=lambda value: M.hashlib.sha256(
       json.dumps(value,sort_keys=True,separators=(",", ":")).encode()

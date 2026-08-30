@@ -64,6 +64,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
+      run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -111,6 +112,7 @@ jobs:
           echo "run_oasis7_workspace_support_crate_tests=${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"
           echo "run_scenario_regression=${{ steps.scope.outputs.run_scenario_regression }}"
           echo "run_operational_contracts=${{ steps.scope.outputs.run_operational_contracts }}"
+          echo "run_site_contract_tests=${{ steps.scope.outputs.run_site_contract_tests }}"
           echo "run_codex_agent_config_validation=${{ steps.scope.outputs.run_codex_agent_config_validation }}"
           echo "run_compile_metrics_contract_tests=${{ steps.scope.outputs.run_compile_metrics_contract_tests }}"
           echo "run_required_gate_baseline=${{ steps.scope.outputs.run_required_gate_baseline }}"
@@ -137,7 +139,7 @@ jobs:
               "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
               "run_pixel_world_bridge_lib_tests", "run_pixel_world_bridge_wasm_check",
               "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
-              "run_scenario_regression", "run_operational_contracts", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_required_gate_baseline",
+              "run_scenario_regression", "run_operational_contracts", "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_required_gate_baseline",
               "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
           )
           missing=[field for field in fields if field not in source]
@@ -248,6 +250,7 @@ jobs:
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
           OASIS7_CI_RUN_SCENARIO_REGRESSION: ${{ steps.scope.outputs.run_scenario_regression }}
           OASIS7_CI_RUN_OPERATIONAL_CONTRACTS: ${{ steps.scope.outputs.run_operational_contracts }}
+          OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ steps.scope.outputs.run_site_contract_tests }}
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}

@@ -82,6 +82,17 @@ assert_key_equals "$product_doc_output" needs_node false
 assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
 assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
 
+site_output="$(plan_for_path site/index.html)"
+assert_key_equals "$site_output" scope targeted
+assert_key_equals "$site_output" selected_capabilities site_quality
+assert_key_equals "$site_output" run_site_contract_tests true
+assert_key_equals "$site_output" run_rust_baseline false
+assert_key_equals "$site_output" needs_rust_toolchain false
+assert_key_equals "$site_output" needs_node false
+assert_key_equals "$site_output" needs_system_deps false
+assert_reason_contains "$site_output" "site_quality:site/index.html"
+assert_reason_absent "$site_output" "unclassified_or_unresolvable:"
+
 launcher_output="$(plan_for_path crates/oasis7_client_launcher/src/lib.rs)"
 assert_key_equals "$launcher_output" needs_node true
 assert_key_equals "$launcher_output" needs_trunk true
@@ -192,6 +203,17 @@ assert_reason_contains "$bundle_portability_output" \
   "operational_contracts:scripts/build-game-launcher-bundle.sh"
 assert_reason_contains "$bundle_portability_output" \
   "operational_contracts:scripts/build-game-launcher-bundle-macos-bash3.test.sh"
+
+operational_contract_output="$(plan_for_path scripts/p2p-public-testnet-package-rollout.test.sh)"
+assert_key_equals "$operational_contract_output" scope targeted
+assert_key_equals "$operational_contract_output" selected_capabilities operational_contracts
+assert_key_equals "$operational_contract_output" run_operational_contracts true
+assert_key_equals "$operational_contract_output" run_rust_baseline false
+assert_key_equals "$operational_contract_output" needs_rust_toolchain false
+assert_key_equals "$operational_contract_output" needs_system_deps false
+assert_reason_contains "$operational_contract_output" \
+  "operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh"
+assert_reason_absent "$operational_contract_output" "unclassified_or_unresolvable:"
 
 governance_helper_output="$(plan_for_paths \
   scripts/prepare-task-pr.sh \

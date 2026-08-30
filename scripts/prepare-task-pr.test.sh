@@ -1670,6 +1670,7 @@ expected_selectors = {
     "OASIS7_CI_RUN_LAUNCHER_WEB_BUILD": "false",
     "OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS": "false",
     "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS": "false",
+    "OASIS7_CI_RUN_SITE_CONTRACT_TESTS": "false",
     "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION": "false",
     "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS": "false",
     "OASIS7_CI_RUN_RUST_BASELINE": "false",
@@ -1677,7 +1678,12 @@ expected_selectors = {
 if expected_true_selector not in expected_selectors:
     raise SystemExit(f"unknown expected planner selector: {expected_true_selector}")
 expected_selectors[expected_true_selector] = "true"
-missing = [f"{key}={value}" for key, value in expected_selectors.items() if f"{key}={value}" not in command]
+missing = [
+    f"{key}={value}"
+    for key, value in expected_selectors.items()
+    if (key != "OASIS7_CI_RUN_SITE_CONTRACT_TESTS" or expected_true_selector == key)
+    and f"{key}={value}" not in command
+]
 if missing:
     raise SystemExit(
         "local required command must explicitly serialize every planner selector; "
@@ -1778,6 +1784,12 @@ if "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS=true" not in command:
     raise SystemExit(f"workflow-governance plan must enable operational contracts: {command}")
 PY
 assert_planner_selector_evidence "$workflow_governance_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "site/index.html"
+site_required_json="$TMPDIR/site-required.json"
+run_prepare "$TMPDIR/gh-site-required.log" "$TMPDIR/git-site-required.log" --json >"$site_required_json"
+assert_planner_selector_evidence "$site_required_json" "site_quality" "$ROOT_DIR" "OASIS7_CI_RUN_SITE_CONTRACT_TESTS"
 
 reset_smoke_branch_to_base
 write_changed_path_fixture "README.md"
