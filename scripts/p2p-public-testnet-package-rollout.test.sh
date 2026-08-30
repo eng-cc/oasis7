@@ -1822,6 +1822,100 @@ then
   package_contract_failed=1
 fi
 
+# Reparse the generated provider command through a local fake server shell.
+# OpenSSH joins remote argv elements with spaces before handing them to the
+# server-side shell; an unquoted `bash -c <body>` therefore turns `set -e`
+# into an argument to bash and can continue past a failed envelope guard.
+# This is a deterministic execution regression: no provider, network, or
+# credential is involved, and the sentinel stands in for the mutation helper.
+if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+from pathlib import Path
+import json
+import shlex
+import subprocess
+import sys
+import tempfile
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+command = storage["commands"][0]
+argv = shlex.split(command)
+
+try:
+    ssh_index = argv.index("ssh")
+except ValueError as exc:
+    raise AssertionError("linux provider command does not invoke ssh") from exc
+
+try:
+    target_index = next(
+        index
+        for index in range(ssh_index + 1, len(argv))
+        if argv[index].startswith("root@")
+    )
+except StopIteration as exc:
+    raise AssertionError("linux provider command has no pinned remote target") from exc
+
+remote_argv = argv[target_index + 1 :]
+parsed_remote = shlex.split(" ".join(remote_argv))
+if parsed_remote[:2] != ["bash", "-c"]:
+    raise AssertionError(
+        "linux provider command must use a remote bash -c envelope for this SSH reparse regression"
+    )
+original_body = parsed_remote[2]
+
+
+def fake_server_command(injected_body: str) -> str:
+    """Model sshd/OpenSSH joining remote argv with spaces before a shell."""
+
+    raw_remote = " ".join(remote_argv)
+    if remote_argv == ["bash", "-c", original_body]:
+        # Vulnerable shape: an unquoted -c payload is re-parsed by the server
+        # shell, so `set -euo pipefail` becomes an argument to bash.
+        return " ".join(["bash", "-c", injected_body])
+
+    quoted_body = shlex.quote(original_body)
+    if quoted_body not in raw_remote:
+        raise AssertionError("cannot locate quoted remote body in SSH argv")
+    # Fixed shape: `bash -c '<body>'` remains one remote argv element.
+    return raw_remote.replace(quoted_body, shlex.quote(injected_body), 1)
+
+
+with tempfile.TemporaryDirectory(prefix="oasis7-ssh-reparse-") as tmp:
+    sentinel = Path(tmp) / "mutation-sentinel"
+    sentinel_literal = shlex.quote(str(sentinel))
+    cases = {
+        "incomplete-envelope": 'test "${STREAM_ENVELOPE_COMPLETE:-}" = true',
+        "tampered-envelope": 'test "payload-tampered" = "payload-original"',
+        "hash-mismatch": 'test "actual-sha256" = "expected-sha256"',
+    }
+    for label, guard in cases.items():
+        injected_body = "\n".join(
+            [
+                "set -euo pipefail",
+                guard,
+                f"printf '%s' mutation > {sentinel_literal}",
+            ]
+        )
+        result = subprocess.run(
+            ["bash", "-c", fake_server_command(injected_body)],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={},
+        )
+        if result.returncode == 0:
+            raise AssertionError(
+                f"{label}: fake server returned success after failed envelope guard"
+            )
+        if sentinel.exists():
+            raise AssertionError(
+                f"{label}: envelope validation failure reached mutation sentinel"
+            )
+PY
+then
+  package_contract_failed=1
+fi
+
 if ! python3 - \
   "$TMP_DIR/plan-only.json" \
   "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \

@@ -962,7 +962,12 @@ def linux_plan_commands(
             "ControlMaster=no",
             "-o",
             "ControlPath=none",
-            shell_join([f"{user}@{host}", "bash", "-c", remote_body]),
+            shell_join(
+                [
+                    f"{user}@{host}",
+                    shell_join(["bash", "-c", remote_body]),
+                ]
+            ),
         ]
     )
     return [f"set -o pipefail; {tar_command} | {ssh_command}"]
