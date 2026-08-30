@@ -47,7 +47,7 @@ Partial remote state recovers via refresh -> audit -> retry; do not edit cache J
 ./scripts/prepare-task-pr.sh --promote-draft <receipt.json>
 ```
 
-Pre-PR local role review packet recorded after immutable verification and before PR creation; its schema is only at the canonical review-packet link.
+Pre-PR local role review packet recorded after frozen-head draft-candidate creation and trusted exact-head CI, and before draft promotion; its schema is only at the canonical review-packet link.
 
 ## Post-PR / Pre-Merge Gates
 

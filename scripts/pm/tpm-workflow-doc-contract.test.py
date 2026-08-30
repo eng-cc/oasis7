@@ -1149,14 +1149,36 @@ class WorkflowDocumentationContract(unittest.TestCase):
             self.assertIn(evidence, row.group(0), phase)
 
     def test_draft_candidate_command_uses_canonical_flags(self) -> None:
-        self.assertIn(
-            "./scripts/prepare-task-pr.sh --draft-candidate --create",
-            self.text,
+        canonical = "./scripts/prepare-task-pr.sh --draft-candidate --create"
+        legacy = "./scripts/prepare-task-pr.sh --create " + "--draft"
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        surfaces = {
+            "source-of-truth": self.text,
+            "prepare-task-pr": PREPARE_TASK_PR.read_text(encoding="utf-8"),
+            "prepare-task-pr --help": help_text,
+            "finishing skill": FINISHING.read_text(encoding="utf-8"),
+        }
+        for name, surface in surfaces.items():
+            with self.subTest(surface=name):
+                self.assertIn(canonical, surface)
+                self.assertNotIn(legacy, surface)
+        finishing = surfaces["finishing skill"]
+        self.assertRegex(
+            finishing,
+            r"(?is)after frozen-head draft-candidate creation and trusted exact-head CI,"
+            r".*before draft promotion",
         )
-        self.assertNotIn(
-            "./scripts/prepare-task-pr.sh --create --draft",
-            self.text,
+        legacy_review_phrase = (
+            "review packet recorded after immutable verification and "
+            + "before PR creation"
         )
+        self.assertNotIn(legacy_review_phrase, finishing.lower())
 
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(
@@ -1167,21 +1189,27 @@ class WorkflowDocumentationContract(unittest.TestCase):
         assert section is not None
         text = section.group(1)
         normalized = re.sub(r"\s+", " ", text)
-        self.assertIn("The `subcases` array is empty for non-A05 rows", normalized)
+        self.assertIn(
+            "The `subcases` array is `[]` except for composite parent IDs `A05`, `C03`, and `W01`",
+            normalized,
+        )
         for field in (
             "id", "fault", "injection", "expected_outcome", "status", "phase",
             "cardinality", "recovery", "readback", "digest",
         ):
             with self.subTest(field=field):
                 self.assertIn(f"`{field}`", text)
-        self.assertIn("A parent passes iff every A05 subcase", normalized)
+        self.assertIn("Aggregate cardinality is the component-wise sum of subcase cardinalities", normalized)
+        self.assertIn("the parent passes iff every declared subcase", normalized)
+        for case_id in ("A05", "C03", "W01"):
+            self.assertIn(case_id, normalized)
         self.assertIn('"subcases":[{', normalized)
         example = next(
             example for example in re.findall(r"(?ms)^```json\n(.*?)^```", text)
             if '"schema": "tpm-supervisor-staging-case/v1"' in example
         )
         self.assertRegex(example, r'"subcases": \[\]')
-        self.assertIn("one nested object per typed variant", text)
+        self.assertIn("one nested object per declared variant", text)
 
     def test_supervisor_return_and_wake_variants_follow_closed_mapping(self) -> None:
         matrix = re.search(
@@ -1195,10 +1223,11 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 "C03",
                 (
                     "forged -> rejected(authority)",
-                    "stale/replayed -> stale_return(category=stale_or_replay)",
-                    "out-of-order -> stale_return(category=ordering)",
+                    "stale -> stale_return(category=stale)",
+                    "replayed -> stale_return(category=replay)",
+                    "out_of_order -> stale_return(category=ordering)",
                     "partial -> rejected(malformed)",
-                    "wrong-scope -> rejected(scope)",
+                    "wrong_scope -> rejected(scope)",
                 ),
             ),
             (
@@ -1206,7 +1235,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 (
                     "same_digest_duplicate -> accepted(existing_result)",
                     "different_digest_duplicate -> stale_receipt",
-                    "out-of-order/stale-lease -> stale_fencing",
+                    "stale -> stale_fencing",
+                    "out_of_order -> stale_fencing",
+                    "fencing -> stale_fencing",
                 ),
             ),
         ):
@@ -1217,6 +1248,44 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 with self.subTest(case_id=case_id, mapping=mapping):
                     self.assertIn(mapping, row.group(0))
             self.assertIn("new_epoch=false", row.group(0), case_id)
+
+    def test_supervisor_composite_subcases_bind_matrix_and_aggregate(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        expected_aggregates = {"A05": "R=7", "C03": "R=6", "W01": "R=4"}
+        for case_id, aggregate in expected_aggregates.items():
+            row = re.search(rf"(?m)^\| `{case_id}` .*", matrix.group(0))
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            self.assertIn("typed_subcases aggregate:", row.group(0), case_id)
+            self.assertIn(aggregate, row.group(0), case_id)
+            self.assertNotIn("A=0/P=0/S=0/R=1", row.group(0), case_id)
+            self.assertIn("typed_subcases per_subcase:", row.group(0), case_id)
+
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        schema = re.sub(r"\s+", " ", section.group(1))
+        self.assertIn(
+            'parent uses `cardinality={"aggregate_from":"subcases","operation":"sum"}` and '
+            '`recovery={"aggregate":"all_subcases"}`, never one tuple',
+            schema,
+        )
+        self.assertIn("same-digest W01 is accepted(existing_result), R=0, idempotent_existing", schema)
+        self.assertIn("every other W01 subcase has R=1/reject_same_epoch", schema)
+        for variant in (
+            "A05={forged,malformed,wrong_identity,stale,revision,different_digest,fencing}",
+            "C03={forged,stale,replayed,out_of_order,partial,wrong_scope}",
+            "W01={same_digest_duplicate,different_digest_duplicate,stale,out_of_order,fencing}",
+        ):
+            self.assertIn(variant, schema)
 
     def test_supervisor_soak_wake_evidence_is_nested_and_aggregateable(self) -> None:
         section = re.search(
@@ -1277,7 +1346,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertIsNotNone(matrix, "supervisor fault and operational matrices are required")
         rows = matrix.group(0)
-        no_reset_cases = ("B01", "B02", "A05", "V01", "C01", "C03", "R01", "M01", "O05", "O06", "O07", "O08")
+        no_reset_cases = ("B01", "B02", "A05", "V01", "C01", "C03", "W01", "R01", "M01", "O05", "O06", "O07", "O08")
         for case_id in no_reset_cases:
             row = re.search(rf"(?m)^\| `{case_id}` .*", rows)
             self.assertIsNotNone(row, case_id)

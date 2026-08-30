@@ -9,12 +9,14 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/prepare-task-pr.sh [source-branch] [options]
 
-Validate one task branch for GitHub PR closure, print the exact PR command, and
-optionally push the branch plus open the PR through `gh`. The preflight summary
-also reports a local required-gate validation recommendation, a claim-ready
-helper command for fresh PR-readiness verification, local role-review evidence
-status, plus planner reason summary derived from the current changed-path scope.
-After PR creation, the default workflow continues into required-check/comment/
+Validate one task branch for the GitHub draft-candidate and PR lifecycle, print
+the exact PR command, and optionally push the branch plus open the draft through
+`gh`. The preflight summary also reports a local required-gate validation
+recommendation, a claim-ready helper command for fresh PR-readiness
+verification, local role-review evidence status, plus planner reason summary
+derived from the current changed-path scope. The canonical path creates or
+resumes the frozen-head draft candidate before exact-head CI and role review;
+after promotion, the default workflow continues into required-check/comment/
 mergeability watch, failure fixes, merge, and cleanup unless the task explicitly
 records that the PR exists only to run manual-trigger packaging/release CI.
 Generated task PR bodies include a non-closing GitHub reference to the bound task issue
@@ -31,14 +33,14 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: implementation-freeze commit -> fresh verification -> local role-subagent review -> evidence-only closeout commit -> prepare-task-pr -> GitHub PR watch/fix/merge
+- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> exact-head CI -> local role-subagent review -> evidence-only closeout commit -> ./scripts/prepare-task-pr.sh --promote-draft <receipt.json> -> GitHub PR watch/fix/merge
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`
-  --draft                 Add `--draft` when creating the PR
-  --draft-candidate       Create/resume the frozen-head draft_candidate before readiness
+  --draft                 Add `--draft` when creating a PR
+  --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
@@ -54,7 +56,7 @@ Options:
 Examples:
   ./scripts/prepare-task-pr.sh
   ./scripts/prepare-task-pr.sh task/engineering-github-pr-landing-governance --json
-  ./scripts/prepare-task-pr.sh --create --draft
+  ./scripts/prepare-task-pr.sh --draft-candidate --create
 USAGE
 }
 
