@@ -17,14 +17,14 @@
 | 评估 | 查看当前 recipe/factory 的 externality profile、scope、mandatory mitigation、已占用/可用能力、production/terminal 影响与 `next_recheck` | 立即知道这次运行是否需要运营缓解及其机会成本；unknown/blocked 不可排程，下一步是补齐 authority、恢复缓解能力或延期 |
 | 比较 | 只比较 profile 真实支持的 `run_with_existing_mitigation`、`run_reduced_or_defer`、`hold_for_treatment_or_legal_disposition` | 维持缓解可保住吞吐/目标但占用 mitigation、power、space 或时间；减产/延期保留 headroom 但延迟交付；hold/处理避免释放风险但占用 buffer 并承担等待成本；未声明 treatment/repair/legal disposition 不得展示 |
 | 确认 | 玩家确认一个选项；提交前 fresh revalidate factory、recipe、profile、mitigation capacity 与既有 terminal obligations | 成功只形成一次可追溯 operation intent；profile/容量/终端漂移只能 fresh requote 或无 sink 的 atomic reject，不得静默运行、降级、清理、改道或给予区域 credit |
-| 结算/恢复 | 读取 production、externality disposition 与 terminal 分层结果；遇 blocker 时执行 profile 支持的 hold、reduce、defer 或 mitigation recovery | known-contained run 至多产生一次 linked production result 与一次 externality disposition；失败保留已消费/占用/损失价值，WIP/transit/buffer 按 profile 单次处置；安全运行完成后动力是交付、服务或下一配方，而非免费重复吞吐 |
+| 结算/恢复 | 读取 production、externality disposition 与 terminal 分层结果；遇 blocker 时执行 profile 支持的 hold、reduce、defer 或 mitigation recovery | known-contained run 至多产生一次 linked production result 与一次 externality disposition；失败保留已消费/占用/损失价值，WIP/transit/buffer/terminal-pending 按 profile 单次处置；安全运行完成后动力是交付、服务或下一配方，而非免费重复吞吐 |
 
 `production`、`externality/mitigation` 与 `delivery/terminal` 是独立事实：外部性处置不能改变材料数量/质量，production receipt 不能冒充 mitigation、cleanup 或 terminal settlement。只有 profile 明确的 boundary 才能产生相应 progression；本合同不授予 regional credit、治理资格或危机 containment 权利。
 
 ## 3. 失败恢复与状态守恒
 
 - mitigation authority、容量、scope 或 terminal obligation 在首个不可逆 sink 前不成立时，只能 `unknown/blocked`、fresh requote 或 atomic reject；不能 overdraft、自动补足、免费清理、静默降产或把风险转嫁成成功。
-- 已产生 WIP、in-transit、buffer-held 或 production effect 后，只能沿 profile 声明的 hold、treatment、legal disposition、reduce、defer 或其他 mitigation recovery 各处置一次；保留 root、revision、batch、edge、destination 与实际损失。未声明的动作不展示。
+- 已产生 WIP、in-transit、buffer-held、terminal-pending 或 production effect 后，只能沿 profile 声明的 hold、treatment、legal disposition、reduce、defer、return/reroute/handoff/reject 或其他 mitigation recovery 各处置一次；terminal-pending 必须保留 quantity、recipient、destination、admission、capacity obligation 与 provenance，直到 matching settlement 或一次受支持处置，不得静默改绑或提前 settlement。其他状态保留 root、revision、batch、edge、destination 与实际损失；未声明的动作不展示。
 - externality facet 的变化不能改写 quality/custody、byproduct、maintenance 或 delivery receipt；改变 factory/recipe/operation 的产出因果时，沿既有 candidate/cutover 规则建立 parent-linked 新候选并从 `W=0` 开始。
 
 ## 4. Current/target evidence cutline
@@ -41,7 +41,7 @@
 
 ## 6. Required / full acceptance
 
-`test_tier_required` 至少覆盖：profile-less legacy unchanged；声明 `industrial_externality` 且 known-contained、mitigation capacity full、mandatory authority unknown 四态；preview 无世界效果；`run_with_existing_mitigation`、`run_reduced_or_defer`、`hold_for_treatment_or_legal_disposition` 只有 profile 支持时可选并披露吞吐、buffer、时间与下一复查代价；提交 fresh revalidation 与 drift atomic reject；production、externality disposition、terminal settlement 分层；WIP/transit/buffer 单次处置；重复 submit、reconnect、Agent retry、restore、reorder、replay 不复制效果；Viewer/pure API/Agent parity。
+`test_tier_required` 至少覆盖：profile-less legacy unchanged；声明 `industrial_externality` 且 known-contained、mitigation capacity full、mandatory authority unknown 四态；preview 无世界效果；`run_with_existing_mitigation`、`run_reduced_or_defer`、`hold_for_treatment_or_legal_disposition` 只有 profile 支持时可选并披露吞吐、buffer、时间与下一复查代价；提交 fresh revalidation 与 drift atomic reject；production、externality disposition、terminal settlement 分层；WIP/transit/buffer/terminal-pending 单次处置，terminal-pending 的 quantity/recipient/destination/admission/capacity obligation/provenance 与 settlement 边界保持不变；重复 submit、reconnect、Agent retry、restore、reorder、replay 不复制效果；Viewer/pure API/Agent parity。
 
 `test_tier_full` 延后至 M4/runtime 的多阶段、长时与区域影响 authority；未来可覆盖多个 operation 争用 mitigation、profile cutover、持久化恢复及 compensation，但不得把该目标测试写成当前实现通过。
 

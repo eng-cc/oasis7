@@ -49,13 +49,13 @@
 
 - 同一 site candidate、goal、factory kind、authority snapshot 与 accepted intent 只能产生一次建设效果；重复确认、重连、Agent retry、snapshot restore、乱序事件与 replay 不得复制 `FactoryBuilt`、资源 sink、path reservation、PowerPlant 输出、稳定进度或奖励。
 - 站点候选、site/path context、primary blocker、已消费/仍占用价值、`next_action`、`next_recheck` 与 `progression_effect` 必须在 Viewer、pure API、Agent 读面保持同义；Agent 推荐不能替玩家确认换站、治理、长期路径或 relocation 承诺。
-- 已接受/WIP/in-transit/buffer 的 site/path identity 不得由 replay 或刷新重写；失败只保留原状态、产生一次 receipt，或进入声明的 pending/hold/reject disposition。
+- 已接受/WIP/in-transit/buffer/terminal-pending 的 site/path identity 不得由 replay、刷新、换站或 relocation candidate 重写；terminal-pending 同时保留 recipient、destination、admission、capacity obligation 与 provenance，直到 matching settlement 或一次受支持处置。失败只保留原状态、产生一次 receipt，或进入声明的 pending/hold/return/reroute/handoff/reject disposition。
 
 ## 7. Required acceptance
 
-`test_tier_required` 至少覆盖：同一工业目标下两个合法站点（原料近但输出拥挤；终端近但输入损耗较高）的候选比较；site/path/capacity/power/buffer/terminal authority 缺失时的 `site_unknown`/`unknown/degraded`；报价后 owner、地点、chunk 或 profile 明示的 construction/topology prerequisite 漂移会 fresh requote/atomic reject；recipe 未固定时 advisory path/capacity/power/buffer/terminal 漂移不阻断建厂，并在 recipe discovery/排程重新读取；建厂成功只产生一次 receipt 并打开真实下一步；无合法站点时 `no_safe_site_fallback`；已接受/WIP/in-transit/buffer 工作不静默迁移；重复提交、重连、Agent retry、snapshot restore 与 replay 不复制效果；Viewer/pure API/Agent 对候选、取舍、blocker、下一步与复查点保持一致。
+`test_tier_required` 至少覆盖：同一工业目标下两个合法站点（原料近但输出拥挤；终端近但输入损耗较高）的候选比较；site/path/capacity/power/buffer/terminal authority 缺失时的 `site_unknown`/`unknown/degraded`；报价后 owner、地点、chunk 或 profile 明示的 construction/topology prerequisite 漂移会 fresh requote/atomic reject；recipe 未固定时 advisory path/capacity/power/buffer/terminal 漂移不阻断建厂，并在 recipe discovery/排程重新读取；建厂成功只产生一次 receipt 并打开真实下一步；无合法站点时 `no_safe_site_fallback`；已接受/WIP/in-transit/buffer/terminal-pending 工作不静默迁移，terminal-pending 保留 recipient/destination/admission/capacity obligation/provenance 并只接受一次合法处置；重复提交、重连、Agent retry、snapshot restore 与 replay 不复制效果；Viewer/pure API/Agent 对候选、取舍、blocker、旧工作 identity/处置、下一步与复查点保持一致。
 
-`test_tier_full` 另覆盖三站点以上的共享边/终端容量争用、recipe 固定前后的 advisory/prerequisite 分界、拓扑变化期间的 WIP/in-transit/buffer 处置、支持的 relocation/cutover profile 与 parent linkage；本合同要求结果可解释，但不把这些目标测试视为当前实现通过。
+`test_tier_full` 另覆盖三站点以上的共享边/终端容量争用、recipe 固定前后的 advisory/prerequisite 分界、拓扑变化期间的 WIP/in-transit/buffer/terminal-pending 处置、支持的 relocation/cutover profile 与 parent linkage；本合同要求结果可解释，但不把这些目标测试视为当前实现通过。
 
 ## 8. Non-goals 与 residual risk
 
