@@ -1,7 +1,7 @@
 # 工业需求变化后的既有工作处置合同
 
 - 上层产品映射：本合同承接 `doc/product/world-rules-core-gameplay/prd.md` 的 demand goal identity、数量分层、matching settlement、取消/到期/缩减与满足边界。
-- 主题 authority：本文件只拥有 demand goal 变为 `matched / cancelled / expired / unknown / reduced` 后，玩家如何处置已接受、在制、在途与已入 buffer 工作的选择、机会成本、恢复和验收语义。
+- 主题 authority：本文件只拥有 demand goal 变为 `matched / cancelled / expired / unknown / reduced` 后，玩家如何处置已接受、在制、在途、已入 buffer 与 terminal-pending 工作的选择、机会成本、恢复和验收语义。
 - 专业边界：M4/runtime 继续拥有 bucket、root/revision、receipt、数量守恒、ordering、持久化与 replay；本文是 target gameplay contract，不声明任何 surface 已实现。
 
 ## 1. 玩家问题与触发边界
