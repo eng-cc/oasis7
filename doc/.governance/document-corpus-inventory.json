@@ -203,7 +203,7 @@
     },
     {
       "path": "doc/engineering/README.md",
-      "content_sha256": "40de1a3595eac1e4823f2447f736698817591f903fdce7ac5af79e6d556b8120",
+      "content_sha256": "148884e4ea203638a05a29a0ab6faa9a197b8f6566b0cbcea698949c98ddeb3f",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -329,7 +329,7 @@
     },
     {
       "path": "doc/engineering/prd.index.md",
-      "content_sha256": "fd3aceb41b279b22609ca3da93a95ad8dd6690e89a500bc3d5fd72f074555ebf",
+      "content_sha256": "475c5cf789f0837731fd01667c8f07d8f248a7ad09ececaf2e9c9333fa97a9cd",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -398,8 +398,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/engineering/workflow/production-supervisor-runtime.design.md",
+      "content_sha256": "abeeb21dbbb6098508a5eff409c95cc54d362f87aadb8fb4254faf8934746871",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "4c48448c9cc20db4c4c5477d5d13dac24bc106c585eb18e1a28752ed8da8d946",
+      "content_sha256": "70f65dfbac8d2f3f5f3a04b9c54bd96747cf31aa7c29770878a33bf7e61fe7ec",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
