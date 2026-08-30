@@ -906,7 +906,7 @@ A05={forged,malformed,wrong_identity,stale,revision,different_digest,fencing}, C
   "budgets": {"case_timeout_s": 120, "action_timeout_s": 30, "max_attempts": 3, "wake_deadline_s": 120, "recovery_deadline_s": 60},
   "observed": {"fault_boundary": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
     "final": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
-    "transitions": [], "effects": [], "readbacks": [], "wakes": [], "attempts": 0, "wake_deliveries": 0, "elapsed_s": 0, "charged_cost_usd": 0.0},
+    "transitions": [{"schema": "tpm-supervisor-transition/v1", "run_id": "...", "case_id": "adversarial-B01-7001", "transition_id": "...", "event_id": "...", "action_id": null, "receipt_id": null, "parent_event_digest": "...", "parent_transition_digest": "...", "parent_rejection_digest": "...", "from_state": "running", "to_state": "capability_blocked", "from_phase": "bootstrap", "to_phase": "bootstrap", "expected_revision": 0, "new_revision": 1, "lease_id": "...", "fencing_token": "...", "validator_proof_digest": null, "outcome_code": "producer_missing", "status": "capability_blocked", "result": "CapabilityBlocked(producer_missing)", "expected_state_digest": "...", "observed_state_digest": "...", "state_digest": "...", "committed_at": "...", "transition_digest": "..."}], "effects": [], "readbacks": [], "wakes": [], "attempts": 0, "wake_deliveries": 0, "elapsed_s": 0, "charged_cost_usd": 0.0},
   "subcases": [],
   "recovery": {"restart_count": 0, "takeover_count": 0, "readback_queries": [], "signature": "...", "rule": "capability_unchanged", "attempts": 1, "elapsed_s": 0, "new_epoch": false, "same_idempotency_key": false, "final_status": {"kind": "canonical", "value": "capability_blocked"}},
   "expected": {"status_rule": {"kind": "canonical", "value": "capability_blocked"}, "phase_rule": {"kind": "same_as_input"}, "expected_outcome_code": "producer_missing",
@@ -914,7 +914,7 @@ A05={forged,malformed,wrong_identity,stale,revision,different_digest,fencing}, C
     "recovery": {"rule": "capability_unchanged", "max_attempts": 1, "max_elapsed_s": 60, "new_epoch": false, "same_idempotency_key": false}},
   "assertions": {"required_producer_classes": null, "required_phase_sequence": [], "wake_deliveries": null, "wake_consumes": null, "kill_restart_points": null, "takeovers": null, "active_turn_poll_count": null, "all_effects_independently_readback": true},
   "outcome": "pass|fail|blocked", "independent_readback": {"authority_id": "...", "query_id": "...", "observation_digest": "..."},
-  "transition_digests": [], "effect_digests": [], "readback_digests": [], "artifact_digests": [], "failure_signature": null, "residual_risk": [], "record_digest": "..."
+  "transition_digests": ["..."], "effect_digests": [], "readback_digests": [], "artifact_digests": [], "failure_signature": null, "residual_risk": [], "record_digest": "..."
 }
 ```
 

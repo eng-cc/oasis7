@@ -33,7 +33,8 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> exact-head CI -> local role-subagent review -> evidence-only closeout commit -> ./scripts/prepare-task-pr.sh --promote-draft <receipt.json> -> GitHub PR watch/fix/merge
+- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> exact-head CI -> local role-subagent review -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
+- optional evidence-only closeout: if review/evidence metadata needs a commit after the frozen head, allow only an evidence-only commit; if it changes HEAD, rerun exact-head CI and local role review, regenerate the packet and ci_ready receipt for that head, and promote only with that new receipt
 
 Options:
   --base <branch>         Base branch for the PR (default: main)

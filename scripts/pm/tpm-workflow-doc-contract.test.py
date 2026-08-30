@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import unittest
@@ -1180,6 +1181,45 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertNotIn(legacy_review_phrase, finishing.lower())
 
+    def test_prepare_help_keeps_optional_closeout_before_fresh_promotion(self) -> None:
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        standard = re.search(r"(?m)^- standard path: (.*)$", help_text)
+        self.assertIsNotNone(standard, "prepare-task-pr help must publish its standard path")
+        assert standard is not None
+        self.assertIn(
+            "./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>",
+            standard.group(1),
+        )
+        self.assertNotIn("evidence-only", standard.group(1).lower())
+
+        optional = re.search(
+            r"(?ms)^- optional evidence-only closeout: (.*?)(?=^Options:)",
+            help_text,
+        )
+        self.assertIsNotNone(
+            optional,
+            "prepare-task-pr help must describe evidence-only closeout separately",
+        )
+        assert optional is not None
+        for phrase in (
+            "if it changes HEAD",
+            "rerun exact-head CI and local role review",
+            "regenerate the packet and ci_ready receipt",
+            "promote only with that new receipt",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, optional.group(1))
+        self.assertNotIn(
+            "evidence-only closeout commit -> ./scripts/prepare-task-pr.sh --promote-draft",
+            help_text.lower(),
+        )
+
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(
             r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
@@ -1384,6 +1424,42 @@ class WorkflowDocumentationContract(unittest.TestCase):
             if '"new_epoch": true' in line:
                 self.assertRegex(line, r'"rule": "authorized_reset"')
                 self.assertRegex(line, r'"reset_authority": "[^"]+"')
+
+    def test_supervisor_b01_capability_block_transition_is_typed_and_coherent(self) -> None:
+        examples = re.findall(r"(?ms)^```json\n(.*?)^```", self.supervisor_design)
+        example = next(
+            (item for item in examples if '"case_id": "adversarial-B01-7001"' in item),
+            None,
+        )
+        self.assertIsNotNone(example, "embedded B01 case example is required")
+        assert example is not None
+        record = json.loads(example)
+        transitions = record["observed"]["transitions"]
+        self.assertEqual(1, len(transitions))
+        transition = transitions[0]
+        self.assertEqual("tpm-supervisor-transition/v1", transition["schema"])
+        self.assertEqual("adversarial-B01-7001", transition["case_id"])
+        self.assertEqual("running", transition["from_state"])
+        self.assertEqual("capability_blocked", transition["to_state"])
+        self.assertEqual("bootstrap", transition["from_phase"])
+        self.assertEqual("bootstrap", transition["to_phase"])
+        self.assertEqual("producer_missing", transition["outcome_code"])
+        self.assertEqual("CapabilityBlocked(producer_missing)", transition["result"])
+        self.assertEqual(0, transition["expected_revision"])
+        self.assertEqual(1, transition["new_revision"])
+        self.assertIsNone(transition["action_id"])
+        self.assertIsNone(transition["receipt_id"])
+        self.assertIsNone(transition["validator_proof_digest"])
+        self.assertEqual(transition["state_digest"], transition["observed_state_digest"])
+        self.assertEqual([transition["transition_digest"]], record["transition_digests"])
+        final_cardinality = record["observed"]["final"]["cardinality"]
+        self.assertEqual(0, final_cardinality["accepted_external_effects"])
+        self.assertEqual(0, final_cardinality["phase_advances"])
+        self.assertEqual(1, final_cardinality["state_changes"])
+        self.assertEqual(0, final_cardinality["classified_rejections"])
+        self.assertEqual(1, final_cardinality["capability_blocks"])
+        self.assertEqual([], record["observed"]["effects"])
+        self.assertEqual([], record["observed"]["readbacks"])
 
     def test_supervisor_state_hash_has_canonical_preimage_and_ascii_lf(self) -> None:
         section = re.search(
