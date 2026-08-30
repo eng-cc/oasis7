@@ -284,11 +284,22 @@ cat >"$fake_bin/git" <<'FAKE_GIT'
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "rev-parse" && "${2:-}" == "--verify" ]]; then
+  printf '%s\n' "${FAKE_BASELINE_COMMIT_OID:-${FAKE_COMMIT_OID:?}}"
+  exit 0
+fi
 if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" ]]; then
-  printf '%s\n' "${FAKE_COMMIT_OID:?}"
+  if [[ "${2:-}" == */baseline-worktree && -n "${FAKE_BASELINE_COMMIT_OID:-}" ]]; then
+    printf '%s\n' "$FAKE_BASELINE_COMMIT_OID"
+  else
+    printf '%s\n' "${FAKE_COMMIT_OID:?}"
+  fi
   exit 0
 fi
 if [[ "${1:-}" == "worktree" && "${2:-}" == "add" ]]; then
+  if [[ -n "${FAKE_GIT_WORKTREE_ADD_LOG:-}" ]]; then
+    printf '%s\n' "$*" >>"$FAKE_GIT_WORKTREE_ADD_LOG"
+  fi
   mkdir -p "${4:?}"
   exit 0
 fi
@@ -303,6 +314,7 @@ chmod +x "$fake_bin/git"
 
 out_dir="$tmp_dir/metrics"
 expected_commit_oid=$(git rev-parse HEAD)
+expected_baseline_oid=$(git rev-parse HEAD^)
 FAKE_CARGO_LOG="$tmp_dir/cargo.log" \
 FAKE_CARGO_HOME_LOG="$tmp_dir/cargo-home.log" \
 FAKE_CARGO_INCREMENTAL_LOG="$tmp_dir/cargo-incremental.log" \
@@ -346,6 +358,7 @@ assert metrics["release_binary_bytes"] is None
 assert comparison["metric_rows"] == []
 assert comparison["current_commit_oid"] == expected_commit_oid
 assert comparison["baseline_commit_oid"] is None
+assert comparison["baseline_ref"] is None
 assert "not measured (check-only package)" in summary
 assert expected_commit_oid in summary
 PY
@@ -475,6 +488,8 @@ FAKE_RUSTC_WRAPPER_LOG="$tmp_dir/baseline-cargo-rustc-wrapper.log" \
 FAKE_CARGO_TARGET_LOG="$tmp_dir/baseline-cargo-target.log" \
 FAKE_HOST_TARGET="$host_target" \
 FAKE_COMMIT_OID="$expected_commit_oid" \
+FAKE_BASELINE_COMMIT_OID="$expected_commit_oid" \
+FAKE_GIT_WORKTREE_ADD_LOG="$tmp_dir/baseline-git-worktree-add.log" \
 FAKE_CARGO_TREE_FIXTURE=none \
 CARGO_INCREMENTAL=1 \
 CARGO_PROFILE_DEV_DEBUG=2 \
@@ -511,7 +526,24 @@ for path_arg, variable in zip(
 print("compile environment (current+baseline): all Cargo calls normalized")
 PY
 
-python3 - "$baseline_out_dir/baseline.metrics.json" "$baseline_out_dir/comparison.json" <<'PY'
+python3 - "$tmp_dir/baseline-git-worktree-add.log" "$expected_commit_oid" <<'PY'
+from pathlib import Path
+import sys
+
+worktree_adds = [line for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if line]
+expected_baseline_ref = sys.argv[2]
+if not worktree_adds or worktree_adds[-1].split()[-1] != expected_baseline_ref:
+    raise SystemExit(
+        "symbolic baseline ref was not normalized before worktree creation: "
+        f"{worktree_adds}"
+    )
+print("symbolic baseline ref normalization: OK")
+PY
+
+python3 - \
+  "$baseline_out_dir/baseline.metrics.json" \
+  "$baseline_out_dir/comparison.json" \
+  "$expected_commit_oid" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -521,6 +553,7 @@ assert metrics["wasmtime_present"] is False
 assert metrics["wasm_executor_present"] is False
 
 comparison = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+expected_baseline_ref = sys.argv[3]
 expected_identity = {
     "package": "fake_library",
     "binary": None,
@@ -534,6 +567,9 @@ assert {
 assert {
     field: comparison["baseline"][field] for field in expected_identity
 } == expected_identity
+assert comparison["current_commit_oid"] == expected_baseline_ref
+assert comparison["baseline_ref"] == expected_baseline_ref
+assert comparison["baseline_commit_oid"] == expected_baseline_ref
 print("measurement identity matching contract: OK")
 PY
 
@@ -591,7 +627,7 @@ for checkout_index, tree_position in enumerate(tree_positions):
 print("dependency-tree queries (current+baseline): 2")
 PY
 
-python3 - "$tmp_dir/comparison.json" <<'PY'
+python3 - "$tmp_dir/comparison.json" "$expected_commit_oid" "$expected_baseline_oid" <<'PY'
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -599,6 +635,8 @@ import subprocess
 import sys
 
 comparison_path = Path(sys.argv[1])
+current_commit_oid = sys.argv[2]
+baseline_commit_oid = sys.argv[3]
 matching_comparison = {
     "measurement_identity": {
         "package": "fake_library",
@@ -606,18 +644,23 @@ matching_comparison = {
         "check_only": True,
         "no_default_features": False,
     },
+    "current_commit_oid": current_commit_oid,
     "current": {
         "package": "fake_library",
         "binary": None,
         "check_only": True,
         "no_default_features": False,
+        "commit_oid": current_commit_oid,
         "wasmtime_present": False,
     },
+    "baseline_ref": baseline_commit_oid,
+    "baseline_commit_oid": baseline_commit_oid,
     "baseline": {
         "package": "fake_library",
         "binary": None,
         "check_only": True,
         "no_default_features": False,
+        "commit_oid": baseline_commit_oid,
         "package_count": 10,
     },
     "metric_rows": [
@@ -677,6 +720,20 @@ passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
 
+stale_current = deepcopy(matching_comparison)
+stale_current["current_commit_oid"] = baseline_commit_oid
+stale_current["current"]["commit_oid"] = baseline_commit_oid
+stale = run_gate(stale_current)
+if (
+    stale.returncode == 0
+    or "current metrics commit_oid does not match repository HEAD" not in stale.stdout
+    or "comparison current_commit_oid does not match repository HEAD" not in stale.stdout
+):
+    raise SystemExit(
+        "stale current commit provenance unexpectedly passed or used wrong error: "
+        f"{stale.stdout}{stale.stderr}"
+    )
+
 missing_identity = dict(matching_comparison)
 missing_identity.pop("measurement_identity")
 missing = run_gate(missing_identity)
@@ -699,6 +756,129 @@ if (
     raise SystemExit(
         "mismatched measurement identity unexpectedly passed or used wrong error: "
         f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+missing_current_commit = deepcopy(matching_comparison)
+missing_current_commit.pop("current_commit_oid")
+missing = run_gate(missing_current_commit)
+if (
+    missing.returncode == 0
+    or "comparison current_commit_oid must be a non-empty string" not in missing.stdout
+):
+    raise SystemExit(
+        "missing current commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+missing_current_metrics_commit = deepcopy(matching_comparison)
+missing_current_metrics_commit["current"].pop("commit_oid")
+missing = run_gate(missing_current_metrics_commit)
+if (
+    missing.returncode == 0
+    or "current metrics commit_oid must be a non-empty string" not in missing.stdout
+):
+    raise SystemExit(
+        "missing current metrics commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+mismatched_current_commit = deepcopy(matching_comparison)
+mismatched_current_commit["current_commit_oid"] = baseline_commit_oid
+mismatched = run_gate(mismatched_current_commit)
+if (
+    mismatched.returncode == 0
+    or "comparison current_commit_oid does not match current metrics commit_oid"
+    not in mismatched.stdout
+):
+    raise SystemExit(
+        "mismatched current commit provenance unexpectedly passed or used wrong error: "
+        f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+missing_baseline_commit = deepcopy(matching_comparison)
+missing_baseline_commit.pop("baseline_commit_oid")
+missing = run_gate(missing_baseline_commit)
+if (
+    missing.returncode == 0
+    or "comparison baseline_commit_oid must be a non-empty string with baseline metrics"
+    not in missing.stdout
+):
+    raise SystemExit(
+        "missing baseline commit provenance unexpectedly passed or used wrong error: "
+        f"{missing.stdout}{missing.stderr}"
+    )
+
+mismatched_baseline_commit = deepcopy(matching_comparison)
+mismatched_baseline_commit["baseline"]["commit_oid"] = current_commit_oid
+mismatched = run_gate(mismatched_baseline_commit)
+if (
+    mismatched.returncode == 0
+    or "comparison baseline_commit_oid does not match baseline metrics commit_oid"
+    not in mismatched.stdout
+):
+    raise SystemExit(
+        "mismatched baseline commit provenance unexpectedly passed or used wrong error: "
+        f"{mismatched.stdout}{mismatched.stderr}"
+    )
+
+invalid_current_whitespace = deepcopy(matching_comparison)
+invalid_current_whitespace["current_commit_oid"] = f" {current_commit_oid}"
+invalid = run_gate(invalid_current_whitespace)
+if (
+    invalid.returncode == 0
+    or "comparison current_commit_oid must be a canonical full Git OID" not in invalid.stdout
+):
+    raise SystemExit(
+        "whitespace-padded current commit OID unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+invalid_current_path = deepcopy(matching_comparison)
+invalid_current_path["current"]["commit_oid"] = "../HEAD"
+invalid = run_gate(invalid_current_path)
+if (
+    invalid.returncode == 0
+    or "current metrics commit_oid must be a canonical full Git OID" not in invalid.stdout
+):
+    raise SystemExit(
+        "path-like current commit OID unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+invalid_baseline_length = deepcopy(matching_comparison)
+invalid_baseline_length["baseline_commit_oid"] = baseline_commit_oid[:-1]
+invalid = run_gate(invalid_baseline_length)
+if (
+    invalid.returncode == 0
+    or "comparison baseline_commit_oid must be a canonical full Git OID" not in invalid.stdout
+):
+    raise SystemExit(
+        "wrong-length baseline commit OID unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+invalid_baseline_ref = deepcopy(matching_comparison)
+invalid_baseline_ref["baseline_ref"] = "0" * len(baseline_commit_oid)
+invalid = run_gate(invalid_baseline_ref)
+if (
+    invalid.returncode == 0
+    or "comparison baseline_ref does not resolve to a commit object" not in invalid.stdout
+):
+    raise SystemExit(
+        "nonexistent baseline ref unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+mismatched_baseline_ref = deepcopy(matching_comparison)
+mismatched_baseline_ref["baseline_ref"] = current_commit_oid
+invalid = run_gate(mismatched_baseline_ref)
+if (
+    invalid.returncode == 0
+    or "comparison baseline_ref does not match baseline_commit_oid" not in invalid.stdout
+):
+    raise SystemExit(
+        "mismatched baseline ref unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
     )
 
 invalid_identity_cases = (
