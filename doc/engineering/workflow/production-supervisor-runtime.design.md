@@ -254,7 +254,7 @@ needs independent proof.
 Transition `outcome_code` uses the repository-owned catalog (including
 `accepted`, `producer_missing`, `retry_exhausted`, `return_exhausted`,
 `stale_return`, `stale_timeout`, `stale_fencing`, `identity_mismatch`,
-`receipt_mismatch`, `replay_mismatch`, `wake_expired`, `wake_cancelled`, and
+`receipt_mismatch`, `stale_receipt`, `rejected(category)`, `replay_mismatch`, `wake_expired`, `wake_cancelled`, and
 `unresolved_effect`); additions require a schema/validator update.
 
 Cross-bindings are one-way to avoid cycles: action binds effect by
@@ -791,39 +791,40 @@ from the phase matrix. `expected_status`/`expected_phase` are typed
 `canonical:<value>` or `same_as_input`; a phase is never a status. The closed
 outcome catalog is `accepted`, `producer_missing`, `retry_exhausted`,
 `return_exhausted`, `stale_return`, `stale_timeout`, `stale_fencing`,
-`identity_mismatch`, `receipt_mismatch`, `replay_mismatch`, `wake_expired`,
-`wake_cancelled`, and `unresolved_effect`; an adapter may not add codes.
+`stale_receipt`, `identity_mismatch`, `receipt_mismatch`, `replay_mismatch`,
+`wake_expired`, `wake_cancelled`, `unresolved_effect`, and `rejected`; adapters may not add codes. Generic `rejected` requires one category: `schema|identity|epoch|revision|lease|fencing|scope|ordering|authority|malformed`.
+Mapping is `schema|malformed -> rejected(category)`, `identity|epoch|scope|authority -> rejected(category)`,
+`revision|lease|ordering -> stale_receipt`, and `fencing -> stale_fencing`; same-digest duplicates return the existing result, while different-digest duplicates map to `stale_receipt`.
+Phase-specific aliases remain closed and must carry their category in evidence.
 
 Cardinality is six integer predicates `A/P/S/R/B/C`: accepted external effects,
-phase advances (`from_phase != to_phase`), workflow-state changes
-(`from_state != to_state`), classified rejections, capability blocks, and
-cleanup mutations. Matrix predicates are `=n` or `<=n`; positive/soak
-assertions also allow `>=n` and machine form is `{op:eq|lte|gte,value:n}`.
-`A<=1K`/`A<=2K` binds effects to stable logical keys. Recovery tokens are typed
-`rule(attempts<=n,elapsed_s<=n,new_epoch=<bool>,same_key=<bool>)` values.
+phase advances, workflow-state changes, classified rejections, capability
+blocks, and cleanup mutations. Predicates are `=n`/`<=n` (positive/soak also
+allow `>=n`, encoded as `{op:eq|lte|gte,value:n}`); `A<=1K`/`A<=2K` binds stable
+logical keys. Recovery tokens use `rule(attempts<=n,elapsed_s<=n,new_epoch=<bool>,same_key=<bool>)`;
+`reject_same_epoch`/`capability_unchanged` require `new_epoch=false`, while
+only `authorized_reset` may set `new_epoch=true` and must name its authority.
 
-The following matrix is the minimum fault suite. Status/phase are observed at
-the fault boundary; cardinality covers the bounded case including recovery.
-Each injection records its point and proves every predicate by readback.
+The following matrix is the minimum fault suite; status/phase are observed at the fault boundary, cardinality covers recovery, and each injection records its point and proves every predicate by readback.
 | Case ID | Stage | Input workflow state | Input phase | Fault injection | Expected status rule | Expected phase rule | Expected outcome code | Effect cardinality | Recovery rule |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `B01` | Bootstrap | `running` | `bootstrap` | Missing/partial manifest, producer, trust root, or attestation | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `B02` | Bootstrap | `running` | `bootstrap` | Wrong task UID, worktree, branch, base/head, or epoch in an input packet | `same_as_input` | `same_as_input` | `identity_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `B01` | Bootstrap | `running` | `bootstrap` | Missing/partial manifest, producer, trust root, or attestation | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `B02` | Bootstrap | `running` | `bootstrap` | Wrong task UID, worktree, branch, base/head, or epoch in an input packet | `same_as_input` | `same_as_input` | `identity_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `A01` | Action | `action_required` | `execute` | Kill before durable intent | `canonical:action_required` | `same_as_input` | `accepted` | `A<=1K/P=0/S=0/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `A02` | Action | `running` | `execute` | Kill after intent but before response/readback | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=1K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `A03` | Action | `running` | `execute` | Transient external failure or `Retry-After` | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=1K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=120,new_epoch=false,same_key=true)` |
-| `A04` | Action | `running` | `execute` | Unqueryable or contradictory effect after an ambiguous response | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `A05` | Action/receipt | `running` | `execute` | Forged, stale, duplicate-with-different-digest, wrong task/head, or wrong lease/fencing receipt | `same_as_input` | `same_as_input` | `receipt_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `V01` | Validator | `running` | `verify` | Validator unavailable, expired, wrong authority, or schema/protocol digest mismatch | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `V02` | Validator | `running` | `verify` | Live readback disagrees with requested effect or receipt digest | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `C01` | Collaboration dispatch | `running` | `dispatch` | Required producer absent before dispatch | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `A04` | Action | `running` | `execute` | Unqueryable or contradictory effect after an ambiguous response | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
+| `A05` | Action/receipt | `running` | `execute` | Forged, stale, duplicate-with-different-digest, wrong task/head, or wrong lease/fencing receipt | `same_as_input` | `same_as_input` | `stale_receipt` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `V01` | Validator | `running` | `verify` | Validator unavailable before proof can be issued | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `V02` | Validator | `running` | `verify` | Live readback disagrees with requested effect or receipt digest | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
+| `C01` | Collaboration dispatch | `running` | `dispatch` | Required producer absent before dispatch | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `C02` | Collaboration return | `external_wait` | `execute` | Trusted dispatch exists but return is temporarily absent/late | `canonical:external_wait` | `same_as_input` | `accepted` | `A=0/P=0/S=0/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=120,new_epoch=false,same_key=true)` |
-| `C03` | Collaboration return | `external_wait` | `execute` | Forged, stale, replayed, out-of-order, partial, or wrong-scope return | `same_as_input` | `same_as_input` | `stale_return` | `A=0/P=0/S=0/R=1/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `C03` | Collaboration return | `external_wait` | `execute` | Forged, stale, replayed, out-of-order, partial, or wrong-scope return | `same_as_input` | `same_as_input` | `stale_return` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `W01` | Wake | `external_wait` | `external_wait` | Duplicate, out-of-order, or stale-lease wake | `same_as_input` | `same_as_input` | `stale_fencing` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_unchanged(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
 | `W02` | Wake | `external_wait` | `external_wait` | Valid wake races process restart/takeover | `canonical:running` | `same_as_input` | `accepted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `wake_race(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=true)` |
-| `W03` | Wake | `external_wait` | `external_wait` | Logical wake deadline expires | `canonical:failed` | `same_as_input` | `wake_expired` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false)` |
-| `R01` | Review/fix | `running` | `review` | Head changes, exact-head artifact missing, or review/CI receipt is stale | `canonical:running` | `same_as_input` | `identity_mismatch` | `A=0/P=0/S=0/R=0/B=0/C=0` | `reverify_head(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false)` |
-| `M01` | Merge receipt | `running` | `watch` | Forged, partial, wrong PR/head/epoch, or malformed merge receipt input | `same_as_input` | `same_as_input` | `receipt_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `W03` | Wake | `external_wait` | `external_wait` | Logical wake deadline expires | `canonical:failed` | `same_as_input` | `wake_expired` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false,reset_authority=owner)` |
+| `R01` | Review/fix | `running` | `review` | Exact-head artifact missing or review/CI receipt is stale | `canonical:running` | `same_as_input` | `stale_receipt` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
+| `M01` | Merge receipt | `running` | `watch` | Malformed merge receipt input | `same_as_input` | `same_as_input` | `receipt_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `S01` | Main sync | `running` | `main_sync` | Process kill after merge effect but before sync/readback | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=2K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `K01` | Safe cleanup | `running` | `safe_cleanup` | Incomplete, contradictory, or missing cleanup evidence | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `no_delete(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 The operational catalog is also closed and not inferred from matrix prose; its
@@ -835,23 +836,23 @@ faults); no new outcome code may be invented by an adapter.
 
 | Operational ID | Fault family / injection | Input state/phase | Expected status / phase | Expected outcome | Effect cardinality | Recovery rule |
 | --- | --- | --- | --- | --- | --- | --- |
-| `O01` | retry / retry budget exhausted | `running` / `execute` | `canonical:failed` / `same_as_input` | `retry_exhausted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `O02` | return / collaboration deadline exhausted | `external_wait` / `execute` | `canonical:failed` / `same_as_input` | `return_exhausted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `O01` | retry / retry budget exhausted | `running` / `execute` | `canonical:failed` / `same_as_input` | `retry_exhausted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
+| `O02` | return / collaboration deadline exhausted | `external_wait` / `execute` | `canonical:failed` / `same_as_input` | `return_exhausted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
 | `O03` | timeout / stale timeout loses return race | `external_wait` / `execute` | `same_as_input` / `same_as_input` | `stale_timeout` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_unchanged(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
-| `O04` | wake / authorized cancellation without replacement | `external_wait` / `external_wait` | `canonical:failed` / `same_as_input` | `wake_cancelled` | `A=0/P=0/S=1/R=0/B=0/C=0` | `new_epoch(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false)` |
-| `O05` | replay / input or state-hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `O06` | migration / unsupported or partially published transform | `running` / `bootstrap` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `O07` | compaction / manifest or before-after hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
-| `O08` | replay / attempted external effect or forbidden final-state accept | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `new_epoch(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false)` |
+| `O04` | wake / authorized cancellation without replacement | `external_wait` / `external_wait` | `canonical:failed` / `same_as_input` | `wake_cancelled` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false,reset_authority=owner)` |
+| `O05` | replay / input or state-hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `O06` | migration / unsupported or partially published transform | `running` / `bootstrap` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `O07` | compaction / manifest or before-after hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `O08` | replay / attempted external effect or forbidden final-state accept | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 The closed positive catalog is `positive-7001`, `positive-7002`, and
 `positive-7003` (one per fixed seed), each with typed assertions:
 `case_kind=positive`, input `action_required/bootstrap`,
 `final_status={kind:canonical,value:completed}`,
-`final_phase={kind:canonical,value:post_merge_finalize}`,
+`final_phase={kind:canonical,value:post_merge_done}`,
 `expected_outcome_code=accepted`, exactly four independently read-back
 producer classes, and the exact phase sequence
-`[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,verify,review,closeout,promote_draft,create_pr,record_pr,comment,watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize]`,
-`accepted_external_effects >= 1`, `phase_advances = 20`,
+`[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,verify,review,closeout,promote_draft,create_pr,record_pr,comment,watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize,post_merge_done]`,
+`accepted_external_effects >= 1`, `phase_advances = 21`,
 `classified_rejections = 0`, `capability_blocks = 0`,
 `cleanup_mutations = 1`, and `all_effects_independently_readback = true`.
 Fix/reverify loops are not silently inserted into this positive catalog; a
@@ -922,14 +923,8 @@ missing/partial/stale evidence, residual risks, signatures, and one
 `adversarial_case_count=(19+8)*3=81`, `positive_case_count=3`, `soak_case_count=3`, `total_case_count=87`; every catalog ID/seed pair occurs exactly once and both
 ID arrays equal their closed catalogs. Supervisor-only output is not authority.
 
-The human `staging-report.md` mirrors `tpm-supervisor-staging-report/v1` with
-identity/authority, namespace, commands/results, M1–M4 links, positive/fault/
-soak timelines, budgets, reproduction, missing evidence, residual risk, and
-QA recommendation. Front matter carries epochs, frozen OIDs, manifest/catalog
-and aggregate digests, exact counts, outcome, and report digest. Its table has
-one typed row per matrix/operational ID/seed (input state/phase, status,
-outcome, cardinality, recovery, observations, case digest); omissions or
-human/aggregate mismatch are incomplete.
+The human `staging-report.md` mirrors `tpm-supervisor-staging-report/v1` with identity/authority, namespace, commands/results, M1–M4 links, timelines, budgets, reproduction, missing evidence, residual risk, and QA recommendation.
+Front matter carries epochs, frozen OIDs, manifest/catalog and aggregate digests, exact counts, outcome, and report digest. Its explicit partitions have one typed row per matrix/operational ID/seed (81 adversarial rows), one per positive seed (3), and one per soak seed (3): exactly 87 case/seed rows; omissions or human/aggregate mismatch are incomplete.
 ### 10.6 Promotion predicates
 
 The target acceptance set requires all of the following:
@@ -945,7 +940,8 @@ The target acceptance set requires all of the following:
   or cleanup on a rejected/forged/stale/partial input;
 - the catalog set equals the 19 matrix plus 8 operational IDs above and the
   aggregate contains exactly 81 adversarial, 3 positive, 3 soak, and 87 total
-  records; each positive has the exact 20-advance phase sequence, four
+  records; each positive has the exact 21-advance phase sequence ending in
+  `post_merge_done`, four
   producer readbacks, and zero rejection/block records;
 - every soak repetition has exactly 100 wake deliveries/consumes and 3 kill/
   restart/takeover points, with zero duplicate consumes or stale wake accepts,

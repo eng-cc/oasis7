@@ -1009,6 +1009,99 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}human-operated evidence validated")
         self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}PR creat")
 
+    def test_supervisor_positive_catalog_reaches_post_merge_done(self) -> None:
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        catalog = positive.group(0)
+        sequence = re.search(r"exact phase sequence\s+`\[(.*?)\]`", catalog, re.S)
+        self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
+        phases = [phase.strip() for phase in sequence.group(1).split(",")]
+        self.assertEqual("post_merge_done", phases[-1])
+        self.assertEqual(22, len(phases), phases)
+        self.assertRegex(catalog, r"final_phase=.*post_merge_done")
+        advances = re.search(r"phase_advances\s*=\s*(\d+)", catalog)
+        self.assertIsNotNone(advances)
+        self.assertEqual("21", advances.group(1))
+        self.assertRegex(
+            self.supervisor_design,
+            r"exact 21-advance phase sequence ending in\s+`post_merge_done`",
+        )
+
+    def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
+        catalog = re.search(
+            r"(?ms)^`input_workflow_state` .*?(?=^Cardinality is)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(catalog, "supervisor outcome catalog is required")
+        text = catalog.group(0)
+        for code in (
+            "stale_receipt",
+            "identity_mismatch",
+            "receipt_mismatch",
+            "stale_fencing",
+            "rejected",
+        ):
+            with self.subTest(code=code):
+                self.assertIn(f"`{code}`", text)
+        for category in (
+            "schema", "identity", "epoch", "revision", "lease", "fencing",
+            "scope", "ordering", "authority", "malformed",
+        ):
+            with self.subTest(category=category):
+                self.assertIn(category, text)
+        for mapping in (
+            "schema|malformed -> rejected(category)",
+            "identity|epoch|scope|authority -> rejected(category)",
+            "revision|lease|ordering -> stale_receipt",
+            "fencing -> stale_fencing",
+            "same-digest duplicates return the existing result",
+            "different-digest duplicates map to `stale_receipt`",
+        ):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, text)
+
+    def test_supervisor_fault_rows_do_not_implicitly_reset_epoch(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The closed positive catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault and operational matrices are required")
+        rows = matrix.group(0)
+        no_reset_cases = ("B01", "B02", "A05", "V01", "C01", "C03", "R01", "M01", "O05", "O06", "O07", "O08")
+        for case_id in no_reset_cases:
+            row = re.search(rf"(?m)^\| `{case_id}` .*", rows)
+            self.assertIsNotNone(row, case_id)
+            self.assertIn("new_epoch=false", row.group(0), case_id)
+            self.assertRegex(row.group(0), r"(?:capability_unchanged|reject_same_epoch)", case_id)
+        for case_id in ("A04", "V02", "W03", "O01", "O02", "O04"):
+            row = re.search(rf"(?m)^\| `{case_id}` .*", rows)
+            self.assertIsNotNone(row, case_id)
+            self.assertIn("authorized_reset(", row.group(0), case_id)
+            self.assertIn("reset_authority=", row.group(0), case_id)
+        for row in re.findall(r"(?m)^\| `[^`]+` .*", rows):
+            if "new_epoch=true" in row:
+                self.assertIn("authorized_reset(", row)
+                self.assertIn("reset_authority=", row)
+
+    def test_supervisor_human_report_partitions_all_catalog_records(self) -> None:
+        report = re.search(
+            r"(?ms)^The human `staging-report\.md` .*?(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(report, "human staging-report contract is required")
+        text = report.group(0)
+        for phrase in (
+            "81 adversarial rows",
+            "one per positive seed (3)",
+            "one per soak seed (3)",
+            "exactly 87 case/seed rows",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
     def test_eval_and_role_fit_own_disjoint_scratch_roots(self) -> None:
         eval_text = WORKFLOW_EVAL.read_text(encoding="utf-8")
         role_text = ROLE_FIT.read_text(encoding="utf-8")
