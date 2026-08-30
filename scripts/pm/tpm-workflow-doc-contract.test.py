@@ -38,6 +38,7 @@ BOOTSTRAP_SKILL = ROOT / ".agents/skills/default-workflow-bootstrap/SKILL.md"
 RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL.md"
 WORKFLOW_ROUTER_SKILL = ROOT / ".agents/skills/repo-owned-workflow-router/SKILL.md"
 PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
+SCRIPTS_PRD = ROOT / "doc/scripts/prd.md"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -1131,6 +1132,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
         assert soak is not None
         self.assertIn("case_timeout_s >= 900", soak.group(0))
         self.assertIn("ordinary case timeout remains `120 s`", soak.group(0))
+        self.assertIn("`expected_outcome={kind:code,code:accepted}`", soak.group(0))
+        self.assertIn("`observed_outcome={kind:code,code:accepted}`", soak.group(0))
 
     def test_supervisor_a05_typed_outcomes_follow_closed_mapping(self) -> None:
         matrix = re.search(
@@ -1294,6 +1297,36 @@ class WorkflowDocumentationContract(unittest.TestCase):
             help_text.lower(),
         )
 
+    def test_task_bound_legacy_create_is_rejected_before_pr_recording(self) -> None:
+        script = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        guard = (
+            'if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" '
+            '&& "$LOCAL_ROLE_REVIEW_STATUS" == "passed" '
+            '&& -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then'
+        )
+        self.assertIn(guard, script)
+        guard_index = script.index(guard)
+        create_index = script.index('if [[ "$CREATE_PR" == "1" ]]; then', guard_index)
+        record_index = script.index('github-project-task.py" record-pr', create_index)
+        self.assertLess(guard_index, create_index)
+        self.assertLess(guard_index, record_index)
+        self.assertIn("legacy task-bound", script)
+        self.assertIn("--create", script)
+
+        help_text = subprocess.run(
+            [str(PREPARE_TASK_PR), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        self.assertIn("legacy task-bound `--create` is rejected", help_text)
+        for path in (PM_README, SCRIPTS_PRD):
+            with self.subTest(surface=path):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("./scripts/prepare-task-pr.sh --draft-candidate --create", text)
+                self.assertIn("--promote-draft <fresh ci_ready_receipt.json>", text)
+
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(
             r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
@@ -1309,7 +1342,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         for field in (
             "id", "fault", "injection", "expected_outcome", "observed_outcome", "verdict", "status", "phase",
-            "cardinality", "recovery", "readback", "digest",
+            "cardinality", "recovery", "consume_result", "readback", "digest",
         ):
             with self.subTest(field=field):
                 self.assertIn(f"`{field}`", text)
@@ -1424,7 +1457,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             (
                 "W01",
                 (
-                    "same_digest_duplicate -> accepted(existing_result)",
+                    "same_digest_duplicate -> accepted",
                     "different_digest_duplicate -> stale_receipt",
                     "stale -> stale_fencing",
                     "out_of_order -> stale_fencing",
@@ -1439,6 +1472,12 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 with self.subTest(case_id=case_id, mapping=mapping):
                     self.assertIn(mapping, row.group(0))
             self.assertIn("new_epoch=false", row.group(0), case_id)
+        w01 = re.search(r"(?m)^\| `W01` .*", matrix.group(0))
+        self.assertIsNotNone(w01)
+        assert w01 is not None
+        self.assertNotIn("accepted(existing_result)", w01.group(0))
+        self.assertIn("consume_result=existing_result", w01.group(0))
+        self.assertIn("readback=existing_result", w01.group(0))
 
     def test_supervisor_composite_subcases_bind_matrix_and_aggregate(self) -> None:
         matrix = re.search(
@@ -1489,7 +1528,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             schema,
         )
         self.assertIn('"verdict":"pass"', schema)
-        self.assertIn("same-digest W01 is accepted(existing_result), R=0, idempotent_existing", schema)
+        self.assertIn("same-digest W01 has semantic outcome `accepted`, typed `consume_result=existing_result`/`readback=existing_result`, R=0, idempotent_existing", schema)
         self.assertIn("every other W01 subcase has R=1/reject_same_epoch", schema)
         for variant in (
             "B02={identity,epoch}",
@@ -1518,6 +1557,32 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("len(wakes)=wake_deliveries=wake_consumes", normalized)
         self.assertIn('"wakes": []', text)
 
+    def test_supervisor_unavailable_observed_outcome_requires_blocked_verdict(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        normalized = re.sub(r"\s+", " ", section.group(1))
+        unavailable = re.search(
+            r"An unavailable observed field is (`\{\"kind\":\"unavailable\",\"reason\":\"<closed-reason>\",\"evidence_digest\":\"\.\.\.\"\}`) only with `verdict=blocked`",
+            normalized,
+        )
+        self.assertIsNotNone(unavailable, "unavailable observed shape must be explicit")
+        assert unavailable is not None
+        self.assertEqual(
+            {"kind": "unavailable", "reason": "<closed-reason>", "evidence_digest": "..."},
+            json.loads(unavailable.group(1).strip("`")),
+        )
+        for reason in (
+            "producer_missing", "validator_unavailable", "readback_unavailable",
+            "wake_unavailable", "transport_unavailable",
+        ):
+            self.assertIn(reason, normalized)
+        self.assertIn("`evidence_digest` binds retained evidence", normalized)
+        self.assertIn("unavailable is invalid with pass/fail", normalized)
+
     def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
         catalog = re.search(
             r"(?ms)^`input_workflow_state` .*?(?=^Cardinality is)",
@@ -1545,7 +1610,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             "identity|epoch|scope|authority -> rejected(category)",
             "revision|lease|ordering -> stale_receipt",
             "fencing -> stale_fencing",
-            "same-digest duplicates return the existing result",
+            "same-digest duplicates use semantic outcome `accepted` plus typed consume/readback `existing_result`",
             "different-digest duplicates map to `stale_receipt`",
         ):
             with self.subTest(mapping=mapping):

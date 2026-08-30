@@ -28,6 +28,9 @@ cleanly, the workflow does not force a local rebase before merge.
 When mergeStateStatus=BLOCKED is only missing review approval, the fresh live gate
 may emit `use_admin_merge: true` under standing policy; no additional authorization.
 See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
+Task-bound legacy `--create` is rejected before push or PR recording; use
+`--draft-candidate --create`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
+after same-head CI and draft-state checks.
 
 Default conventions:
 - source branch: current branch
@@ -39,7 +42,7 @@ Default conventions:
 Options:
   --base <branch>         Base branch for the PR (default: main)
   --remote <name>         Remote name for push / base comparison (default: origin)
-  --create                Push branch if needed and run `gh pr create`
+  --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
   --draft                 Add `--draft` when creating a PR
   --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
@@ -1188,6 +1191,9 @@ LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_e
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
 LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
 LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_evidence_digest")"
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
+fi
 if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   BOUND_TASK_FIELDS="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$SOURCE_WORKTREE" "$SOURCE_BRANCH" <<'PY'
 import json,os,sys

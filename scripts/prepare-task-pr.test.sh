@@ -1023,39 +1023,37 @@ if ! TEST_GH_ISSUE_LIST_JSON="$NO_CACHE_ISSUE_LIST" \
   TEST_GH_ISSUE_FULL_JSON="$NO_CACHE_ISSUE_FULL" \
   TEST_GH_ISSUE_VIEW_JSON="$NO_CACHE_ISSUE_COMMENTS" \
   PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK=1 \
-  run_prepare "$no_cache_log" "$no_cache_git_log" --create >"$no_cache_out" 2>"$no_cache_err"; then
+  run_prepare "$no_cache_log" "$no_cache_git_log" --json >"$no_cache_out" 2>"$no_cache_err"; then
   cat "$no_cache_err" >&2
   cat "$no_cache_log" >&2
   exit 1
 fi
-python3 - "$no_cache_log" "$no_cache_out" "$no_cache_err" "$SMOKE_BRANCH" <<'PY'
+python3 - "$no_cache_log" "$no_cache_git_log" "$no_cache_out" "$no_cache_err" <<'PY'
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
 gh_lines = gh_text.splitlines()
-stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
-stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
-branch = sys.argv[4]
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 
-if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
-    raise SystemExit(f"expected gh pr create on no-cache path, got: {gh_lines}")
-if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
-    raise SystemExit(f"generated no-cache PR body must reference without auto-closing task issue #123, got: {gh_text}")
+payload = json.loads(stdout)
+if payload["pre_pr_local_role_review"]["status"] != "passed":
+    raise SystemExit(f"expected no-cache fallback review to pass, got: {payload}")
+if any(line.startswith("pr create ") for line in gh_lines):
+    raise SystemExit(f"preflight must not create a PR, got: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"preflight must not push, got: {git_lines}")
 if not any(line.startswith("issue list -R eng-cc/oasis7 --search") for line in gh_lines):
     raise SystemExit(f"expected no-cache GitHub issue search, got: {gh_lines}")
-if any(line.startswith("project item-edit") for line in gh_lines):
-    raise SystemExit(f"did not expect Project item edit without cached project_item_id, got: {gh_lines}")
-if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
-    raise SystemExit(f"expected no-cache record-pr issue body update, got: {gh_lines}")
-if not any(line.startswith("issue comment 123 -R eng-cc/oasis7") for line in gh_lines):
-    raise SystemExit(f"expected no-cache record-pr PR-watch evidence comment, got: {gh_lines}")
-if "Created PR:" not in stdout:
-    raise SystemExit(f"expected PR creation output, got: {stdout}")
+if not any(line.startswith("issue view 123 -R eng-cc/oasis7 --json comments") for line in gh_lines):
+    raise SystemExit(f"expected no-cache GitHub issue comment lookup, got: {gh_lines}")
 if stderr:
-    raise SystemExit(f"did not expect stderr on no-cache create path: {stderr}")
+    raise SystemExit(f"did not expect stderr on no-cache preflight: {stderr}")
 PY
 
 reset_smoke_branch_to_base
@@ -1101,14 +1099,15 @@ success_log="$TMPDIR/gh-success.log"
 success_git_log="$TMPDIR/git-success.log"
 success_out="$TMPDIR/success.out"
 success_err="$TMPDIR/success.err"
-if ! run_prepare "$success_log" "$success_git_log" --create >"$success_out" 2>"$success_err"; then
-  cat "$success_err" >&2
+if run_prepare "$success_log" "$success_git_log" --create >"$success_out" 2>"$success_err"; then
+  echo "expected task-bound legacy --create to fail closed" >&2
   exit 1
 fi
 
-python3 - "$success_log" "$success_git_log" "$success_out" "$success_err" "$SMOKE_BRANCH" <<'PY'
+python3 - "$success_log" "$success_git_log" "$success_out" "$success_err" "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -1117,36 +1116,25 @@ gh_lines = gh_text.splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
-branch = sys.argv[5]
+mapping = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
+record = mapping["tasks"][sys.argv[6]]
 
-if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
-    raise SystemExit(f"expected gh pr create first, got: {gh_lines}")
-if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
-    raise SystemExit(f"generated PR body must reference without auto-closing task issue #123, got: {gh_text}")
-if not any(line.startswith("project item-edit") for line in gh_lines):
-    raise SystemExit(f"expected record-pr Project field update calls, got: {gh_lines}")
-if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
-    raise SystemExit(f"expected record-pr issue body update, got: {gh_lines}")
-if not any(line.startswith("issue comment 123 -R eng-cc/oasis7") for line in gh_lines):
-    raise SystemExit(f"expected record-pr issue evidence comment, got: {gh_lines}")
-if not any(
-    line.endswith(f"push -u origin {branch}")
-    or line.endswith(f"push origin {branch}")
-    for line in git_lines
-):
-    raise SystemExit(f"expected push attempt after valid review packet, got: {git_lines}")
-if "Created PR:" not in stdout or "https://github.com/example/oasis7/pull/999" not in stdout:
-    raise SystemExit("expected created PR output")
-if "Pre-PR Local Role Review:" not in stdout or "- status: passed" not in stdout:
-    raise SystemExit("expected local role review status in output")
-if "- review package: .pm/scratch/" not in stdout:
-    raise SystemExit("expected review package path in local role review output")
-if "- review verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved" not in stdout:
-    raise SystemExit("expected multi-role dual review verdicts in local role review output")
-if "- slice ledger: .pm/scratch/" not in stdout:
-    raise SystemExit("expected slice ledger path in local role review output")
-if stderr:
-    raise SystemExit(f"did not expect stderr on success path: {stderr}")
+if any(line.startswith("pr create ") for line in gh_lines):
+    raise SystemExit(f"legacy task-bound create reached gh pr create: {gh_lines}")
+if any(line.startswith("project item-edit ") for line in gh_lines):
+    raise SystemExit(f"legacy task-bound create reached Project record: {gh_lines}")
+if any(line.startswith("issue edit ") or line.startswith("issue comment ") for line in gh_lines):
+    raise SystemExit(f"legacy task-bound create reached issue record: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"legacy task-bound create pushed before rejection: {git_lines}")
+if "legacy task-bound `--create`" not in stderr:
+    raise SystemExit(f"expected legacy task-bound create error, got: {stderr}")
+if "Created PR:" in stdout:
+    raise SystemExit(f"legacy task-bound create reported a PR: {stdout}")
+if record.get("status") == "pr_watch" or record.get("workflow_phase") == "pr_watch":
+    raise SystemExit(f"legacy task-bound create reached pr_watch: {record}")
+if record.get("pr_url"):
+    raise SystemExit(f"legacy task-bound create recorded a PR URL: {record}")
 PY
 
 promotion_receipt="$TMPDIR/promotion-receipt.json"
@@ -1258,7 +1246,7 @@ title_log="$TMPDIR/gh-title.log"
 title_git_log="$TMPDIR/git-title.log"
 title_out="$TMPDIR/title.out"
 title_err="$TMPDIR/title.err"
-if ! run_prepare "$title_log" "$title_git_log" --create --title "Fixture PR title" >"$title_out" 2>"$title_err"; then
+if ! run_prepare "$title_log" "$title_git_log" --draft-candidate --title "Fixture PR title" >"$title_out" 2>"$title_err"; then
   cat "$title_err" >&2
   exit 1
 fi
@@ -1290,7 +1278,7 @@ closed_reuse_git_log="$TMPDIR/git-closed-reuse.log"
 closed_reuse_out="$TMPDIR/closed-reuse.out"
 closed_reuse_err="$TMPDIR/closed-reuse.err"
 TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/closed\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"CLOSED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
-  run_prepare "$closed_reuse_log" "$closed_reuse_git_log" --create \
+  run_prepare "$closed_reuse_log" "$closed_reuse_git_log" --draft-candidate \
   >"$closed_reuse_out" 2>"$closed_reuse_err"
 python3 - "$closed_reuse_log" "$closed_reuse_out" "$closed_reuse_err" "$SMOKE_BRANCH" <<'PY'
 from pathlib import Path
@@ -1312,7 +1300,7 @@ reset_project_mapping_after_record_pr
 foreign_log="$TMPDIR/gh-foreign.log"
 foreign_git_log="$TMPDIR/git-foreign.log"
 TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/foreign/oasis7/pull/7\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"OPEN\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"foreign\"}}]" \
-  run_prepare "$foreign_log" "$foreign_git_log" --create >"$TMPDIR/foreign.out" 2>"$TMPDIR/foreign.err"
+  run_prepare "$foreign_log" "$foreign_git_log" --draft-candidate >"$TMPDIR/foreign.out" 2>"$TMPDIR/foreign.err"
 grep -F "pr create --base main --head $SMOKE_BRANCH" "$foreign_log" >/dev/null
 if grep -F 'foreign/oasis7/pull/7' "$TMPDIR/foreign.out" >/dev/null; then
   echo "foreign same-name head PR must not be reused" >&2; exit 1
@@ -1322,7 +1310,7 @@ reset_project_mapping_after_record_pr
 merged_log="$TMPDIR/gh-merged.log"
 merged_git_log="$TMPDIR/git-merged.log"
 if TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/8\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"MERGED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
-  run_prepare "$merged_log" "$merged_git_log" --create >"$TMPDIR/merged.out" 2>"$TMPDIR/merged.err"; then
+  run_prepare "$merged_log" "$merged_git_log" --draft-candidate >"$TMPDIR/merged.out" 2>"$TMPDIR/merged.err"; then
   echo "MERGED exact PR must block replacement creation" >&2; exit 1
 fi
 grep -F 'already MERGED; reconcile task truth' "$TMPDIR/merged.err" >/dev/null
@@ -1336,7 +1324,7 @@ printf 'Task body without GitHub task reference.\n' > "$bad_body_file"
 bad_body_log="$TMPDIR/gh-bad-body.log"
 bad_body_git_log="$TMPDIR/git-bad-body.log"
 bad_body_err="$TMPDIR/bad-body.err"
-if run_prepare "$bad_body_log" "$bad_body_git_log" --create --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
+if run_prepare "$bad_body_log" "$bad_body_git_log" --draft-candidate --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
   echo "expected --body-file without task reference to fail" >&2
   exit 1
 fi
@@ -1365,7 +1353,7 @@ for closing_link in \
   closing_body_file="$TMPDIR/closing-pr-body.md"
   printf 'Refs #123\n%s\n' "$closing_link" > "$closing_body_file"
   if run_prepare "$TMPDIR/gh-closing-body.log" "$TMPDIR/git-closing-body.log" \
-    --create --body-file "$closing_body_file" >/dev/null 2>"$TMPDIR/closing-body.err"; then
+    --draft-candidate --body-file "$closing_body_file" >/dev/null 2>"$TMPDIR/closing-body.err"; then
     echo "expected qualified auto-close link to fail: $closing_link" >&2
     exit 1
   fi
@@ -1376,7 +1364,7 @@ behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
 behind_out="$TMPDIR/behind.out"
 behind_err="$TMPDIR/behind.err"
-TEST_REV_LIST_COUNTS="1 2" run_prepare "$behind_log" "$behind_git_log" --create >"$behind_out" 2>"$behind_err"
+TEST_REV_LIST_COUNTS="1 2" run_prepare "$behind_log" "$behind_git_log" --draft-candidate >"$behind_out" 2>"$behind_err"
 
 python3 - "$behind_log" "$behind_git_log" "$behind_out" "$behind_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
@@ -1420,7 +1408,7 @@ addressed_log="$TMPDIR/gh-addressed.log"
 addressed_git_log="$TMPDIR/git-addressed.log"
 addressed_out="$TMPDIR/addressed.out"
 addressed_err="$TMPDIR/addressed.err"
-run_prepare "$addressed_log" "$addressed_git_log" --create >"$addressed_out" 2>"$addressed_err"
+run_prepare "$addressed_log" "$addressed_git_log" --draft-candidate >"$addressed_out" 2>"$addressed_err"
 
 python3 - "$addressed_log" "$addressed_out" "$addressed_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
