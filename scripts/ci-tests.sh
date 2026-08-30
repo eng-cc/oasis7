@@ -263,6 +263,11 @@ run_site_contract_tests() {
   run bash ./scripts/site-checks-contract.test.sh
 }
 
+run_standalone_tool_lockfiles_checks() {
+  run bash ./scripts/check-standalone-tool-lockfiles.test.sh
+  run ./scripts/check-standalone-tool-lockfiles.sh
+}
+
 run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
   run python3 ./scripts/product-doc-governance-check.test.py
@@ -281,7 +286,7 @@ run_required_gate_checks() {
   run bash ./scripts/rust-required-gate-apt-contract.test.sh
   run bash ./scripts/viewer-performance-report-only-contract.test.sh
   run bash ./scripts/pm/find-python-with-module.test.sh
-  run ./scripts/check-standalone-tool-lockfiles.sh
+  run_required_component "standalone tool lockfiles" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_standalone_tool_lockfiles_checks
   run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
   run ./scripts/rust-required-gate-compile-command-contract.test.sh

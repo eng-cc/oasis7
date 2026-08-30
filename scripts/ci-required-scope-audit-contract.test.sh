@@ -34,6 +34,53 @@ require_reason_contains() {
   fi
 }
 
+require_ci_tests_line() {
+  local expected="$1"
+  if ! grep -Fqx -- "$expected" "$ci_tests"; then
+    echo "standalone lockfile checks are not planner-gated: missing ci-tests line: $expected" >&2
+    exit 1
+  fi
+}
+
+required_component_impl="$(
+  sed -n '/^should_run_ci_required_component() {/,/^}/p' "$ci_tests"
+  sed -n '/^run_required_component() {/,/^}/p' "$ci_tests"
+)"
+if [[ -z "$required_component_impl" ]]; then
+  echo "unable to extract run_required_component from ci-tests.sh for the fixture" >&2
+  exit 1
+fi
+eval "$required_component_impl"
+
+fixture_dir="$(mktemp -d)"
+trap 'rm -rf "$fixture_dir"' EXIT
+fixture_marker="$fixture_dir/standalone-lockfile-check-ran"
+run_standalone_tool_lockfiles_checks_fixture() {
+  : >"$fixture_marker"
+}
+
+OASIS7_CI_RUN_RUST_BASELINE=false
+run_required_component \
+  "standalone tool lockfiles" \
+  "$OASIS7_CI_RUN_RUST_BASELINE" \
+  "disabled_by_scope_planner" \
+  run_standalone_tool_lockfiles_checks_fixture
+if [[ -e "$fixture_marker" ]]; then
+  echo "standalone lockfile fixture ran while OASIS7_CI_RUN_RUST_BASELINE=false" >&2
+  exit 1
+fi
+
+OASIS7_CI_RUN_RUST_BASELINE=true
+run_required_component \
+  "standalone tool lockfiles" \
+  "$OASIS7_CI_RUN_RUST_BASELINE" \
+  "disabled_by_scope_planner" \
+  run_standalone_tool_lockfiles_checks_fixture
+if [[ ! -e "$fixture_marker" ]]; then
+  echo "standalone lockfile fixture did not run while OASIS7_CI_RUN_RUST_BASELINE=true" >&2
+  exit 1
+fi
+
 minimal_plan="$("$planner" --event-name pull_request --changed-path doc/testing/prd.md)"
 require_key "$minimal_plan" run_required_gate_baseline true
 require_key "$minimal_plan" run_operational_contracts false
@@ -79,6 +126,11 @@ if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$operationa
   echo "operational contract runner must not invoke Cargo or rustup directly" >&2
   exit 1
 fi
+
+require_ci_tests_line 'run_standalone_tool_lockfiles_checks() {'
+require_ci_tests_line '  run bash ./scripts/check-standalone-tool-lockfiles.test.sh'
+require_ci_tests_line '  run ./scripts/check-standalone-tool-lockfiles.sh'
+require_ci_tests_line '  run_required_component "standalone tool lockfiles" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_standalone_tool_lockfiles_checks'
 
 workflow="$repo_root/.github/workflows/rust.yml"
 for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
