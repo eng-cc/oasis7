@@ -87,6 +87,38 @@ require_key "$minimal_plan" run_operational_contracts false
 require_key "$minimal_plan" selected_capabilities required_gate_baseline
 require_reason_contains "$minimal_plan" required_gate_baseline:always_on
 
+packaging_plan="$($planner --event-name pull_request \
+  --changed-path scripts/package-native-installer.sh \
+  --changed-path scripts/validate-release-platform-entrypoints.sh \
+  --changed-path scripts/package-viewer-web-delivery.sh \
+  --changed-path scripts/packaging-artifact-size-contract.test.sh \
+  --changed-path scripts/copy-viewer-web-dist.test.sh \
+  --changed-path scripts/native-packaging-contract.test.sh)"
+require_key "$packaging_plan" scope targeted
+require_key "$packaging_plan" selected_capabilities packaging_contracts
+require_key "$packaging_plan" run_operational_contracts true
+require_key "$packaging_plan" run_rust_baseline false
+require_key "$packaging_plan" needs_rust_toolchain false
+require_key "$packaging_plan" needs_node false
+require_key "$packaging_plan" needs_system_deps false
+for packaging_path in \
+  scripts/package-native-installer.sh \
+  scripts/validate-release-platform-entrypoints.sh \
+  scripts/package-viewer-web-delivery.sh \
+  scripts/packaging-artifact-size-contract.test.sh \
+  scripts/copy-viewer-web-dist.test.sh \
+  scripts/native-packaging-contract.test.sh; do
+  require_reason_contains "$packaging_plan" "packaging_contracts:$packaging_path"
+done
+require_reason_contains "$packaging_plan" "required_gate_baseline:always_on"
+
+release_packaging_plan="$($planner --event-name pull_request \
+  --changed-path .github/workflows/release-packages.yml \
+  --changed-path scripts/build-game-launcher-bundle.sh)"
+require_key "$release_packaging_plan" scope full
+require_key "$release_packaging_plan" run_rust_baseline true
+require_key "$release_packaging_plan" needs_rust_toolchain true
+
 operational_plan="$("$planner" --event-name pull_request --changed-path scripts/p2p-public-testnet-package-rollout.test.sh)"
 require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
@@ -117,6 +149,147 @@ if ! grep -Fqx '    run_required_component "site quality contracts" "${OASIS7_CI
   echo "site quality contracts are not wired to the planner selector in ci-tests" >&2
   exit 1
 fi
+
+packaging_runner_source="$(sed -n '/^run_packaging_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run bash ./scripts/native-packaging-contract.test.sh' <<<"$packaging_runner_source"; then
+  echo "packaging contract runner is not wired to native packaging fixtures" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run bash ./scripts/packaging-artifact-size-contract.test.sh' <<<"$packaging_runner_source"; then
+  echo "packaging contract runner is not wired to artifact-size fixtures" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run bash ./scripts/copy-viewer-web-dist.test.sh' <<<"$packaging_runner_source"; then
+  echo "packaging contract runner is not wired to Viewer delivery fixtures" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run_packaging_contract_tests' <<<"$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"; then
+  echo "operational contract runner must include the focused packaging runner" >&2
+  exit 1
+fi
+
+# The focused runner must stay a non-Rust boundary even when its fixture
+# scripts inspect Rust-producing workflows as data.
+if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$packaging_runner_source" || \
+   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$packaging_runner_source"; then
+  echo "packaging contract runner must not invoke Cargo or rustup directly" >&2
+  exit 1
+fi
+
+python3 - \
+  "$repo_root/scripts/ci-required-scope.v2.json" \
+  "$ci_tests" \
+  "$repo_root/.github/workflows/rust.yml" \
+  "$planner" <<'PY'
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+config_path, ci_tests_path, workflow_path, planner_path = map(Path, sys.argv[1:])
+config = json.loads(config_path.read_text(encoding="utf-8"))
+ownership = config.get("selector_ownership")
+if not isinstance(ownership, list):
+    raise SystemExit("selector ownership registry is missing")
+declared = {}
+for item in ownership:
+    if not isinstance(item, dict):
+        raise SystemExit("selector ownership entries must be objects")
+    name = item.get("name")
+    if not isinstance(name, str) or name in declared:
+        raise SystemExit(f"selector ownership name is missing or duplicated: {name!r}")
+    declared[name] = item
+inventory = set(re.findall(r"OASIS7_CI_RUN_[A-Z0-9_]+", ci_tests_path.read_text(encoding="utf-8")))
+if inventory != set(declared):
+    raise SystemExit(
+        "selector ownership drift: "
+        f"missing={sorted(inventory - set(declared))}, "
+        f"stale={sorted(set(declared) - inventory)}"
+    )
+for name, item in declared.items():
+    mode = item.get("mode")
+    if mode == "planner-owned":
+        if not isinstance(item.get("planner_field"), str) or not item["planner_field"].startswith("run_"):
+            raise SystemExit(f"planner-owned selector lacks planner field: {name}")
+        if "owner" in item or "reason" in item:
+            raise SystemExit(f"planner-owned selector has manual-only metadata: {name}")
+    elif mode == "manual-only":
+        if not item.get("owner") or not item.get("reason"):
+            raise SystemExit(f"manual-only selector lacks owner/reason: {name}")
+        if "planner_field" in item:
+            raise SystemExit(f"manual-only selector unexpectedly has planner field: {name}")
+    else:
+        raise SystemExit(f"selector has invalid ownership mode: {name}")
+
+planner_run = subprocess.run(
+    [
+        str(planner_path),
+        "--event-name",
+        "pull_request",
+        "--config",
+        str(config_path),
+        "--changed-path",
+        "README.md",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if planner_run.returncode != 0:
+    raise SystemExit(
+        "required-gate planner failed while auditing selector output path: "
+        + planner_run.stderr.strip()
+    )
+planner_outputs = {
+    key: value
+    for line in planner_run.stdout.splitlines()
+    if "=" in line
+    for key, value in [line.split("=", 1)]
+}
+
+workflow_text = workflow_path.read_text(encoding="utf-8")
+required_gate_match = re.search(
+    r"(?ms)^  required-gate:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+    workflow_text,
+)
+if not required_gate_match:
+    raise SystemExit("required-gate workflow job is missing")
+required_gate_body = required_gate_match.group("body")
+if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
+    raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
+run_tier_match = re.search(
+    r"(?ms)^      - name: Run required test tier\n(?P<body>.*?)(?=^      - |\Z)",
+    required_gate_body,
+)
+if not run_tier_match:
+    raise SystemExit("required-gate test-tier env path is missing")
+run_tier_body = run_tier_match.group("body")
+
+for name, item in declared.items():
+    if item.get("mode") == "planner-owned":
+        field = item["planner_field"]
+        if field not in planner_outputs:
+            raise SystemExit(
+                f"planner-owned selector is missing planner output: {name} -> {field}"
+            )
+        expected_env = f"          {name}: ${{{{ steps.scope.outputs.{field} }}}}"
+        if expected_env not in run_tier_body:
+            raise SystemExit(
+                "planner-owned selector is not passed through required-gate env: "
+                f"{name} -> {field}"
+            )
+    else:
+        if name in workflow_text:
+            raise SystemExit(
+                f"manual-only selector is unexpectedly auto-wired in workflow: {name}"
+            )
+        expected_default = f"${{{name}:-false}}"
+        if expected_default not in ci_tests_path.read_text(encoding="utf-8"):
+            raise SystemExit(
+                f"manual-only selector does not default disabled in ci-tests: {name}"
+            )
+PY
 
 # This is intentionally a direct-source guard.  Operational contract fixtures
 # may mention Cargo or use fake Cargo binaries in their own test processes, but

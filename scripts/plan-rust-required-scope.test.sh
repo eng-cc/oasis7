@@ -235,6 +235,44 @@ assert_reason_contains "$operational_contract_output" \
   "operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh"
 assert_reason_absent "$operational_contract_output" "unclassified_or_unresolvable:"
 
+# Native installer and split Viewer delivery helpers are pure packaging
+# contracts. They must run their focused non-Rust fixtures without inheriting
+# the Rust baseline or the viewer JS build capability.
+packaging_contract_output="$(plan_for_paths \
+  scripts/package-native-installer.sh \
+  scripts/validate-release-platform-entrypoints.sh \
+  scripts/package-viewer-web-delivery.sh \
+  scripts/packaging-artifact-size-contract.test.sh \
+  scripts/copy-viewer-web-dist.test.sh \
+  scripts/native-packaging-contract.test.sh)"
+assert_key_equals "$packaging_contract_output" scope targeted
+assert_key_equals "$packaging_contract_output" selected_capabilities packaging_contracts
+assert_key_equals "$packaging_contract_output" run_operational_contracts true
+assert_key_equals "$packaging_contract_output" run_rust_baseline false
+assert_key_equals "$packaging_contract_output" needs_rust_toolchain false
+assert_key_equals "$packaging_contract_output" needs_node false
+assert_key_equals "$packaging_contract_output" needs_system_deps false
+for packaging_path in \
+  scripts/package-native-installer.sh \
+  scripts/validate-release-platform-entrypoints.sh \
+  scripts/package-viewer-web-delivery.sh \
+  scripts/packaging-artifact-size-contract.test.sh \
+  scripts/copy-viewer-web-dist.test.sh \
+  scripts/native-packaging-contract.test.sh; do
+  assert_reason_contains "$packaging_contract_output" \
+    "packaging_contracts:$packaging_path"
+done
+assert_reason_absent "$packaging_contract_output" "unclassified_or_unresolvable:"
+
+# Release workflows and Rust-producing bundle boundaries remain full even
+# though their packaging consumers have a focused non-Rust capability.
+release_packaging_output="$(plan_for_paths \
+  .github/workflows/release-packages.yml \
+  scripts/build-game-launcher-bundle.sh)"
+assert_key_equals "$release_packaging_output" scope full
+assert_key_equals "$release_packaging_output" run_rust_baseline true
+assert_key_equals "$release_packaging_output" needs_rust_toolchain true
+
 governance_helper_output="$(plan_for_paths \
   scripts/prepare-task-pr.sh \
   scripts/pm/patch-equivalence-receipt.sh \
@@ -392,7 +430,6 @@ viewer_web_wrapper_output="$(plan_for_paths \
   scripts/bundle-freshness-lib.sh \
   scripts/bundle-freshness-lib.test.sh \
   scripts/copy-viewer-web-dist.sh \
-  scripts/copy-viewer-web-dist.test.sh \
   scripts/viewer-web-dist-contract.sh)"
 assert_key_equals "$viewer_web_wrapper_output" scope targeted
 assert_key_equals "$viewer_web_wrapper_output" run_viewer_contract_tests true
@@ -408,7 +445,6 @@ assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/bundle-freshness-lib.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/bundle-freshness-lib.test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/copy-viewer-web-dist.sh"
-assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/copy-viewer-web-dist.test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-web-dist-contract.sh"
 assert_reason_absent "$viewer_web_wrapper_output" "unclassified_or_unresolvable:"
 
@@ -540,7 +576,7 @@ assert_reason_contains "$role_template_output" \
   "governance_doc:.agents/roles/templates/subagent-slice-card.md"
 
 invalid_config="$(mktemp)"
-trap 'rm -f "$invalid_config"' EXIT
+trap 'rm -f "$invalid_config"; rm -rf "${missing_selector_source_dir:-}"' EXIT
 printf '{not json}\n' >"$invalid_config"
 if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" --event-name pull_request --config "$invalid_config" --changed-path README.md >"$invalid_config.out" 2>"$invalid_config.err"; then
   echo "expected invalid planner configuration to fail closed" >&2
@@ -588,6 +624,57 @@ PY
 
 assert_invalid_selector_type full
 assert_invalid_selector_type minimal
+
+invalid_selector_ownership_config="$(mktemp)"
+python3 - "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$invalid_selector_ownership_config" <<'PY'
+import json
+import sys
+
+source, destination = sys.argv[1:]
+with open(source, encoding="utf-8") as handle:
+    config = json.load(handle)
+config["selector_ownership"] = config["selector_ownership"][:-1]
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(config, handle)
+    handle.write("\n")
+PY
+if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name pull_request \
+  --config "$invalid_selector_ownership_config" \
+  --changed-path README.md \
+  >"$invalid_selector_ownership_config.out" 2>"$invalid_selector_ownership_config.err"; then
+  echo "expected selector ownership drift to fail closed" >&2
+  exit 1
+fi
+if ! grep -qi "selector ownership" "$invalid_selector_ownership_config.err"; then
+  echo "expected selector ownership validation failure, got:" >&2
+  cat "$invalid_selector_ownership_config.err" >&2
+  exit 1
+fi
+rm -f \
+  "$invalid_selector_ownership_config" \
+  "$invalid_selector_ownership_config.out" \
+  "$invalid_selector_ownership_config.err"
+
+missing_selector_source_dir="$(mktemp -d)"
+missing_selector_source_planner="$missing_selector_source_dir/plan-rust-required-scope.py"
+cp "$ROOT_DIR/scripts/plan-rust-required-scope.py" "$missing_selector_source_planner"
+if python3 "$missing_selector_source_planner" \
+  --event-name pull_request \
+  --config "$ROOT_DIR/scripts/ci-required-scope.v2.json" \
+  --changed-path README.md \
+  >"$missing_selector_source_dir/out" 2>"$missing_selector_source_dir/err"; then
+  echo "expected selector parity to fail closed when ci-tests.sh is absent" >&2
+  cat "$missing_selector_source_dir/out" >&2
+  cat "$missing_selector_source_dir/err" >&2
+  exit 1
+fi
+if ! grep -qi "selector source" "$missing_selector_source_dir/err"; then
+  echo "expected missing selector source validation failure, got:" >&2
+  cat "$missing_selector_source_dir/err" >&2
+  exit 1
+fi
+rm -rf "$missing_selector_source_dir"
 
 wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
 assert_key_equals "$wasm_build_output" scope targeted
