@@ -30,6 +30,9 @@ WINDOWS_GOVERNED_BOOTSTRAP = (
 )
 CANONICAL_PROVIDER_NAMES = ("sequencer", "storage")
 MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
+LINUX_PROVIDER_KNOWN_HOSTS = (
+    "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts"
+)
 
 
 def die(message: str) -> None:
@@ -828,26 +831,141 @@ def linux_plan_commands(
     if not host:
         return [shell_join(linux_command(node, linux_asset, linux_ops_tools_asset, version, commit, run_id, readiness_policy))]
     user = str(node.get("user") or "root")
-    remote_package = str(node.get("remote_package") or linux_asset.name)
-    remote_ops_tools = str(node.get("remote_ops_tools") or linux_ops_tools_asset.name)
-    remote_script = str(node.get("remote_script") or "./scripts/p2p-public-testnet-package-node-upgrade.sh")
-    remote_command = linux_command(
-        node,
-        linux_asset,
-        linux_ops_tools_asset,
-        version,
-        commit,
-        run_id,
-        readiness_policy,
-        package_deb=remote_package,
-        ops_tools_tar=remote_ops_tools,
-        script_path=remote_script,
+    helper_asset = ROOT_DIR / "scripts" / "p2p-public-testnet-package-node-upgrade.sh"
+    if helper_asset.is_symlink() or not helper_asset.is_file() or not stat.S_ISREG(helper_asset.lstat().st_mode):
+        die(f"missing Linux package upgrade helper: {helper_asset}")
+    node_root = str(node.get("node_root") or "")
+    if not node_root:
+        die(f"linux node {node.get('name', '<unnamed>')} missing node_root")
+
+    package_name = linux_asset.name
+    ops_tools_name = linux_ops_tools_asset.name
+    helper_name = helper_asset.name
+    package_sha = sha256_file(linux_asset)
+    ops_tools_sha = sha256_file(linux_ops_tools_asset)
+    helper_sha = sha256_file(helper_asset)
+    package_size = linux_asset.stat().st_size
+    ops_tools_size = linux_ops_tools_asset.stat().st_size
+    helper_size = helper_asset.stat().st_size
+
+    def remote_file(name: str) -> str:
+        return f'"$stage/{name}"'
+
+    def remote_quote(value: str) -> str:
+        return shlex.quote(value)
+
+    if node.get("restart", False):
+        status_url = str(node.get("status_url") or "")
+        healthz_url = str(node.get("healthz_url") or "")
+        if not healthz_url:
+            status_suffix = "/v1/chain/status"
+            if not status_url.endswith(status_suffix):
+                die(
+                    f"linux node {node.get('name', '<unnamed>')} remote restart requires "
+                    "healthz_url or status_url ending with /v1/chain/status"
+                )
+            healthz_url = status_url[: -len(status_suffix)] + "/healthz"
+        if not healthz_url.endswith("/healthz"):
+            die(
+                f"linux node {node.get('name', '<unnamed>')} remote healthz_url must end with /healthz"
+            )
+
+    remote_invocation = " ".join(
+        [
+            "bash",
+            remote_file(helper_name),
+            "--node-root",
+            remote_quote(node_root),
+            "--package-deb",
+            remote_file(package_name),
+            "--ops-tools-tar",
+            remote_file(ops_tools_name),
+            "--package-version",
+            remote_quote(version),
+            "--commit",
+            remote_quote(commit),
+            "--run-id",
+            remote_quote(run_id),
+            "--artifact-ref",
+            remote_quote(artifact_ref("linux-x64", version, linux_asset.name, "oasis7_chain_runtime")),
+        ]
     )
-    return [
-        shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_package}"]),
-        shell_join(["scp", str(linux_ops_tools_asset), f"{user}@{host}:{remote_ops_tools}"]),
-        shell_join(["ssh", f"{user}@{host}", shell_join(remote_command)]),
-    ]
+    service = str(node.get("systemd_service") or "")
+    if node.get("restart", False):
+        if not service:
+            die(f"linux node {node.get('name', '<unnamed>')} has restart=true but no systemd_service")
+        remote_invocation += (
+            f" --systemd-service {remote_quote(service)} --restart-service"
+            f" --post-restart-health-url {remote_quote(healthz_url)}"
+            f" --post-restart-timeout-secs {remote_quote(str(node.get('post_restart_timeout_secs') or 120))}"
+        )
+
+    remote_body = "\n".join(
+        [
+            "set -euo pipefail",
+            'stage="$(mktemp -d /tmp/oasis7-package-rollout.XXXXXX)"',
+            'cleanup() { rm -rf "$stage"; }',
+            "trap cleanup EXIT",
+            'tar -xzf - -C "$stage"',
+            f'test -f {remote_file(package_name)}',
+            f'test -f {remote_file(ops_tools_name)}',
+            f'test -f {remote_file(helper_name)}',
+            f"expected_package_sha={remote_quote(package_sha)}",
+            f"expected_ops_tools_sha={remote_quote(ops_tools_sha)}",
+            f"expected_helper_sha={remote_quote(helper_sha)}",
+            f"expected_package_size={remote_quote(str(package_size))}",
+            f"expected_ops_tools_size={remote_quote(str(ops_tools_size))}",
+            f"expected_helper_size={remote_quote(str(helper_size))}",
+            f'test "$(sha256sum {remote_file(package_name)} | awk \'{{print $1}}\')" = "$expected_package_sha"',
+            f'test "$(sha256sum {remote_file(ops_tools_name)} | awk \'{{print $1}}\')" = "$expected_ops_tools_sha"',
+            f'test "$(sha256sum {remote_file(helper_name)} | awk \'{{print $1}}\')" = "$expected_helper_sha"',
+            f'test "$(stat -c %s {remote_file(package_name)})" = "$expected_package_size"',
+            f'test "$(stat -c %s {remote_file(ops_tools_name)})" = "$expected_ops_tools_size"',
+            f'test "$(stat -c %s {remote_file(helper_name)})" = "$expected_helper_size"',
+            "printf '%s\\n' streamed_envelope_sha256_verified=true",
+            "printf '%s\\n' streamed_envelope_size_verified=true",
+            "printf '%s\\n' streamed_envelope_complete=true",
+            f"exec {remote_invocation}",
+        ]
+    )
+    provider_env_name = re.sub(
+        r"[^A-Z0-9_]",
+        "_",
+        str(node.get("name") or "LINUX_PROVIDER").upper(),
+    )
+    credential_env = f"PUBLIC_TESTNET_{provider_env_name}_SSHPASS"
+    tar_command = (
+        f"tar -czf - -C {remote_quote(str(linux_asset.parent))} {remote_quote(package_name)}"
+        f" {remote_quote(ops_tools_name)} -C {remote_quote(str(helper_asset.parent))} {remote_quote(helper_name)}"
+    )
+    ssh_command = " ".join(
+        [
+            f'SSHPASS="${{{credential_env}:?{credential_env} is required}}"',
+            "sshpass",
+            "-e",
+            "ssh",
+            "-o",
+            "HostKeyAlgorithms=ssh-ed25519",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "-o",
+            f"UserKnownHostsFile={LINUX_PROVIDER_KNOWN_HOSTS}",
+            "-o",
+            "GlobalKnownHostsFile=/dev/null",
+            "-o",
+            "PreferredAuthentications=password",
+            "-o",
+            "PubkeyAuthentication=no",
+            "-o",
+            "NumberOfPasswordPrompts=1",
+            "-o",
+            "ControlMaster=no",
+            "-o",
+            "ControlPath=none",
+            shell_join([f"{user}@{host}", "bash", "-c", remote_body]),
+        ]
+    )
+    return [f"set -o pipefail; {tar_command} | {ssh_command}"]
 
 
 def write_linux_observer_plan(
