@@ -354,8 +354,8 @@ the CAS/lease/fencing rules above.
 | `record_pr` | Recorded PR identity plus independent task/PR readback | `Execute(comment)` / `comment` |
 | `comment` | Issue-comment receipt plus independent task/issue-comment readback | `Execute(verify)` / `verify` |
 | `verify` | Trusted exact-head CI receipt and planner authority | `Dispatch(review)` / `review` |
-| `review` | All required role returns and dispositions for the same frozen head/epoch | `Execute(closeout)` / `pre_pr_ready` |
-| `closeout` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `promote_draft` |
+| `review` | All required role returns and dispositions for the same frozen head/epoch | `Execute(ready)` / `pre_pr_ready` |
+| `pre_pr_ready` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `promote_draft` |
 | `promote_draft` | Same-head CI/review evidence, open draft PR, and task-truth readback | `Execute(promote_draft)` / `pr_watch` |
 | `pr_watch` | Current-head required checks, mergeability, reviews, comments, threads, and holds | `Wait` for a temporary condition, `Dispatch(fix)` for actionable findings, or `Execute(merge)` only on the live gate receipt |
 | `fix` / `reverify` / `push` | Current-head fix artifact and fresh verification/readback | Return to `review`/`pr_watch`; any head change creates a new evidence epoch |
@@ -585,7 +585,7 @@ assertion as its own validation.
 | `comment` | Trusted mechanical/bootstrap action | Issue-comment receipt plus independent task/issue-comment readback |
 | `verify` | Trusted mechanical/bootstrap action | Independent CI/check planner receipt bound to the frozen head |
 | `review` | Trusted collaboration/attestation | Task-issue review ledger, role/slice identity, artifact digest, and head/epoch readback |
-| `closeout`, `promote_draft` | Trusted mechanical/bootstrap action | Same-head review/CI evidence and draft-to-ready PR transition readback |
+| `pre_pr_ready`, `promote_draft` | Trusted mechanical/bootstrap action | Same-head review/CI evidence and draft-to-ready PR transition readback |
 | `pr_watch` | Trusted mechanical/bootstrap action | Independent live PR-gate readback of checks, mergeability, reviews, threads, comments, and holds |
 | `fix` | Trusted collaboration/attestation | Runtime return attestation plus current-head artifact and scope readback |
 | `reverify`, `push` | Trusted mechanical/bootstrap action | Repository-owned verification/Git remote readback at the same head/epoch |
@@ -851,11 +851,12 @@ faults); no new outcome code may be invented by an adapter.
 The closed positive catalog is `positive-7001`, `positive-7002`, and `positive-7003` (one per fixed seed), each with typed assertions:
 `case_kind=positive`, input `action_required/bootstrap`,
 `final_status={kind:canonical,value:completed}`,
-`final_phase={kind:canonical,value:post_merge_done}`,
+`final_phase={kind:canonical,value:done}`, `terminal_outcome={kind:canonical,value:post_merge_done}`,
 `expected_outcome_code=accepted`, exactly four independently read-back
 producer classes, and the exact phase sequence
-`[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,create_pr,record_pr,comment,verify,review,closeout,promote_draft,pr_watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize,post_merge_done]`,
-`accepted_external_effects >= 1`, `phase_advances = 21`,
+`[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]`.
+This is the canonical `Workflow Phase` projection from the source of truth; route/dispatch/execute/integrate/freeze/PR/merge/cleanup labels remain typed operation evidence and are not additional phases. `pre_pr_ready` is a required gate before promotion, `blocked` is not on a positive path, and `post_merge_done` is a terminal outcome rather than a workflow phase.
+`accepted_external_effects >= 1`, `phase_advances = 7`,
 `classified_rejections = 0`, `capability_blocks = 0`,
 `cleanup_mutations = 1`, and `all_effects_independently_readback = true`.
 Fix/reverify loops are not silently inserted into this positive catalog; a loop requires a separate catalog version and exact sequence.
@@ -943,9 +944,8 @@ The target acceptance set requires all of the following:
   or cleanup on a rejected/forged/stale/partial input;
 - the catalog set equals the 19 matrix plus 8 operational IDs above and the
 aggregate contains exactly 81 adversarial, 3 positive, 3 soak, and 87 total
-  records; each positive has the exact 22-phase/21-advance sequence with draft
-  PR creation before CI/review and `promote_draft -> pr_watch`, ending in
-  `post_merge_done`, four
+  records; each positive has the exact canonical 8-phase/7-advance sequence
+  with `pre_pr_ready` before promotion and terminal outcome `post_merge_done`, four
   producer readbacks, and zero rejection/block records;
 - every soak repetition has exactly 100 wake deliveries/consumes and 3 kill/
   restart/takeover points, with zero duplicate consumes or stale wake accepts,

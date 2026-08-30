@@ -1010,7 +1010,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}human-operated evidence validated")
         self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}Promote draft")
 
-    def test_supervisor_positive_catalog_reaches_post_merge_done(self) -> None:
+    def test_supervisor_positive_catalog_reaches_terminal_outcome(self) -> None:
         positive = re.search(
             r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
             self.supervisor_design,
@@ -1021,23 +1021,52 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
         phases = [phase.strip() for phase in sequence.group(1).split(",")]
         expected = [
-            "bootstrap", "route", "dispatch", "execute", "integrate", "freeze",
-            "draft_candidate", "create_pr", "record_pr", "comment", "verify",
-            "review", "closeout", "promote_draft", "pr_watch", "merge",
-            "merge_receipt", "task_done", "main_sync", "safe_cleanup",
-            "post_merge_finalize", "post_merge_done",
+            "bootstrap", "planning", "execution", "verification", "pre_pr_review",
+            "pre_pr_ready", "pr_watch", "done",
         ]
         self.assertEqual(expected, phases)
-        self.assertEqual("post_merge_done", phases[-1])
-        self.assertEqual(22, len(phases), phases)
-        self.assertRegex(catalog, r"final_phase=.*post_merge_done")
+        self.assertEqual("done", phases[-1])
+        self.assertEqual(8, len(phases), phases)
+        self.assertRegex(catalog, r"final_phase=\{kind:canonical,value:done\}")
+        self.assertRegex(catalog, r"terminal_outcome=\{kind:canonical,value:post_merge_done\}")
         advances = re.search(r"phase_advances\s*=\s*(\d+)", catalog)
         self.assertIsNotNone(advances)
-        self.assertEqual("21", advances.group(1))
+        self.assertEqual("7", advances.group(1))
         self.assertRegex(
             self.supervisor_design,
-            r"exact 22-phase/21-advance sequence with draft\s+PR creation before CI/review and `promote_draft -> pr_watch`, ending in\s+`post_merge_done`",
+            r"exact canonical 8-phase/7-advance sequence\s+with `pre_pr_ready` before promotion and terminal outcome `post_merge_done`",
         )
+
+    def test_supervisor_positive_phase_sequence_matches_canonical_source_enum(self) -> None:
+        contract = self.section("1.2.3 GitHub Project-Backed PM Contract")
+        enum_match = re.search(
+            r"(?im)^\|[ \t]*`Workflow Phase`[ \t]*\|[^\n]*\|[^\n]*\|[ \t]*([^\n]+)\|$",
+            contract,
+        )
+        self.assertIsNotNone(enum_match, "Workflow Phase must publish one closed enum")
+        assert enum_match is not None
+        enum_text = enum_match.group(1).split(" (", 1)[0]
+        canonical = re.findall(r"`([a-z][a-z0-9_]*)`", enum_text)
+        self.assertEqual(
+            [
+                "bootstrap", "planning", "execution", "verification", "pre_pr_review",
+                "pre_pr_ready", "pr_watch", "blocked", "done",
+            ],
+            canonical,
+        )
+        positive = re.search(
+            r"(?ms)^The closed positive catalog .*?(?=^Fix/reverify loops)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(positive, "positive supervisor catalog is required")
+        assert positive is not None
+        sequence = re.search(r"exact phase sequence\s+`\[(.*?)\]`", positive.group(0), re.S)
+        self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
+        assert sequence is not None
+        phases = [phase.strip() for phase in sequence.group(1).split(",")]
+        self.assertEqual([phase for phase in canonical if phase != "blocked"], phases)
+        self.assertNotIn("closeout", phases)
+        self.assertNotRegex(self.supervisor_design, r"(?m)^\| `closeout`\b")
 
     def test_supervisor_soak_timeout_is_distinct_from_ordinary_case_budget(self) -> None:
         budgets = re.search(
