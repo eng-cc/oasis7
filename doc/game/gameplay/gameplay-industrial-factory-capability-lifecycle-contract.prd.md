@@ -43,6 +43,7 @@ Cutover 前后的 factory、candidate、recipe、work、reservation、receipt、
 | `WIP` | profile 支持的 `finish`、`pause`、`hold`、`rework`、`salvage`、`terminate` | 已消费投入、在制状态与旧 lineage 保留；不默认退款或跨 candidate 继续 |
 | `in-transit` | profile 支持的 `finish`、`hold`、`return`、`reroute`、`reject` | 保留原 edge、目的地、receipt、损耗与 owner；不得瞬移或静默改道 |
 | `buffer` | profile 支持的 `hold`、`handoff`、`conversion`、`reject` | 保留旧 ledger/lineage；新 candidate 只能经显式适用性与容量复验消费 |
+| `terminal-pending` | 继续原合法 terminal commitment、等待/取得准入，或 profile 支持的 `hold`、`return`、`reroute`、`handoff`、`reject` | 保留 recipient、destination、admission、capacity obligation 与 provenance；successor/cutover 不得提前 settlement 或静默释放/迁移容量义务，只能由一次显式 disposition 改变 |
 
 每个 bucket 在同一 root/revision/cutover 下至多产生一个 disposition receipt；没有 profile 支持的动作不展示。`retiring` 只允许既有工作按声明规则排空/处置，`retired` 只保留历史/回放与最终处置；二者都禁止新排程。不得同时产生退款与完成、销毁与成功、旧任务迁移与旧身份完成。
 
@@ -56,7 +57,7 @@ Cutover 前后的 factory、candidate、recipe、work、reservation、receipt、
 
 当前证据仅支持既有 Build/Maintain/Recycle/Pause/Schedule 窄路径；没有与 SC-25 完整对应的 upgrade/reconfigure capability action、组合 lifecycle surface 或 composite receipt。因此本合同是 `target-contract`，不能宣称当前 capability lifecycle 已实现。
 
-`test_tier_required` 至少覆盖：两种 profile-supported capability 选择；六类动作的只读 preview 与 unsupported 隐藏；成本/停机/容量/物流/终端/旧工作影响；fresh revalidation 与 drift requote/atomic reject；causal 与 non-causal 变更；单一 parent-linked cutover 与 successor `W=0`；`retiring/retired` 禁止新排程；四类旧工作各一次 disposition；successor 不自动迁移；重复 submit/reconnect/retry/restore/replay 无重复效果；Viewer/pure API/Agent parity。
+`test_tier_required` 至少覆盖：两种 profile-supported capability 选择；六类动作的只读 preview 与 unsupported 隐藏；成本/停机/容量/物流/终端/旧工作影响；fresh revalidation 与 drift requote/atomic reject；causal 与 non-causal 变更；单一 parent-linked cutover 与 successor `W=0`；`retiring/retired` 禁止新排程；五类旧工作各一次 disposition，其中 terminal-pending 保留 recipient/destination/admission/capacity obligation/provenance 且不提前结算或静默改绑；successor 不自动迁移；重复 submit/reconnect/retry/restore/replay 无重复效果；Viewer/pure API/Agent 对五类 bucket 保持 parity。
 
 `test_tier_full` 延后至 M4/runtime/QA 提供多阶段升级、并发容量、部分失败、持久化恢复与 successor conversion 的 composite evidence 后执行；测试目标不是当前通过声明。
 
