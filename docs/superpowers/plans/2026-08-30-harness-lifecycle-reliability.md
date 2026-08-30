@@ -46,12 +46,12 @@
 
 **Interfaces:**
 - Consumes: recorded harness-owned PID/process-group identity.
-- Produces: bounded TERM, liveness polling, then KILL only for the same recorded process group.
+- Produces: bounded TERM, liveness polling, then KILL only after stable leader identity validation and final process-group quiescence proof.
 
 - [x] **Step 1:** Add a fake parent that spawns a child and a failing assertion that `down` removes both.
 - [x] **Step 2:** Run the focused contract test and verify the child remains alive under current behavior.
-- [x] **Step 3:** Implement one reusable process-group termination helper and use it in harness and launcher cleanup.
-- [x] **Step 4:** Rerun the regression, verify unrelated sentinel processes survive, and record the shutdown result (commit deferred to the integration owner).
+- [x] **Step 3:** Implement one reusable process-group termination helper with stable leader identity checks, fail-closed signaling, and use it in harness and launcher cleanup.
+- [x] **Step 4:** Rerun the regression, verify unrelated/reused identities and non-quiescent groups are not signaled or released, and record the shutdown result (commit deferred to the integration owner).
 
 ### Task 3: Serialized port reservation
 
@@ -76,10 +76,10 @@
 - Modify: `scripts/worktree-harness.sh`
 
 **Interfaces:**
-- Consumes: an explicit test-only launcher command environment variable and isolated temporary harness root.
+- Consumes: an explicit test-only launcher command environment variable, isolated temporary harness root, and serialized lifecycle transitions.
 - Produces: production-identical `up`, `status --json`, `url`, and `down` behavior without network or compiled binaries.
 
-- [x] **Step 1:** Add the fake launcher and assertions for ready state, URL, timeout state, port release, and child cleanup; verify the current CLI lacks the injection seam.
+- [x] **Step 1:** Add the fake launcher and assertions for ready state, URL, timeout state, port release, child cleanup, concurrent up/down ordering, and fail-closed cleanup; verify the current CLI lacks the injection seam.
 - [x] **Step 2:** Implement the minimal explicit test-only launcher injection while retaining the production default.
 - [x] **Step 3:** Run `rtk ./scripts/worktree-harness-lifecycle.test.sh`, `rtk ./scripts/worktree-harness-contract.test.sh`, `rtk ./scripts/run-launcher-stack-local-mock-lane.test.sh`, and `rtk git diff --check`.
 - [x] **Step 4:** Record the acceptance result and return exact evidence for independent QA (commit deferred to the integration owner).

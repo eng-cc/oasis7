@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 
 TMP_DIR="$(mktemp -d)"
 WORKTREE_ID="$(python3 - "$PWD" <<'PY'
@@ -51,6 +52,7 @@ child_pid_file="${FAKE_LAUNCHER_CHILD_PID_FILE:?FAKE_LAUNCHER_CHILD_PID_FILE is 
 sleep 300 &
 child_pid=$!
 echo "$child_pid" >"$child_pid_file"
+source "$(pwd)/scripts/worktree-harness-lib.sh"
 
 python3 - "$viewer_port" <<'PY' &
 import http.server
@@ -64,9 +66,10 @@ if [[ "${FAKE_LAUNCHER_MODE:-ready}" == "ready" ]]; then
   launcher_pgid="$(ps -o pgid= -p "$$" | awk 'NF { print $1; exit }')"
   mkdir -p "$(dirname "$meta_file")"
   {
-    printf 'RUN_ID=%s\n' "$run_id"
-    printf 'LAUNCHER_PID=%s\n' "$$"
-    printf 'LAUNCHER_PGID=%s\n' "$launcher_pgid"
+  printf 'RUN_ID=%s\n' "$run_id"
+  printf 'LAUNCHER_PID=%s\n' "$$"
+  printf 'LAUNCHER_PGID=%s\n' "$launcher_pgid"
+  printf 'LAUNCHER_IDENTITY=%s\n' "$(wh_process_identity "$$")"
     printf 'STACK_READY=1\n'
     printf 'GAME_URL=http://127.0.0.1:%s/\n' "$viewer_port"
   } >"$meta_file"
@@ -95,6 +98,8 @@ assert state["status"] == "ready", state
 assert state["launcher_pgid"] == state["harness_pgid"], state
 assert state["launcher_pid"] != state["harness_pid"], state
 assert state["port_reservation_token"], state
+assert state["harness_identity"], state
+assert state["launcher_identity"], state
 PY
 
 status_json="$TMP_DIR/status.json"
@@ -163,6 +168,57 @@ else:
     raise SystemExit("lifecycle acceptance: viewer port was not released after down")
 PY
 
+CONCURRENT_DELAY_FILE="$TMP_DIR/concurrent-delay.marker"
+CONCURRENT_CHILD_PID_FILE="$TMP_DIR/concurrent-child.pid"
+rm -f "$CONCURRENT_DELAY_FILE" "$CONCURRENT_CHILD_PID_FILE"
+FAKE_LAUNCHER_CHILD_PID_FILE="$CONCURRENT_CHILD_PID_FILE" \
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$CONCURRENT_DELAY_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
+./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/concurrent-up.log" 2>&1 &
+concurrent_up_pid=$!
+for _ in $(seq 1 40); do
+  [[ -e "$CONCURRENT_DELAY_FILE" ]] && break
+  sleep 0.05
+done
+[[ -e "$CONCURRENT_DELAY_FILE" ]] || {
+  echo "lifecycle acceptance: concurrent up did not reach the synchronization point" >&2
+  exit 1
+}
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
+./scripts/worktree-harness.sh down >"$TMP_DIR/concurrent-down.log" 2>&1 &
+concurrent_down_pid=$!
+set +e
+wait "$concurrent_up_pid"
+concurrent_up_status=$?
+wait "$concurrent_down_pid"
+concurrent_down_status=$?
+set -e
+if [[ "$concurrent_up_status" -ne 0 || "$concurrent_down_status" -ne 0 ]]; then
+  cat "$TMP_DIR/concurrent-up.log" "$TMP_DIR/concurrent-down.log" >&2
+  exit 1
+fi
+python3 - "$HARNESS_ROOT/state.json" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if state["status"] != "stopped" or state["phase"] != "stopped":
+    raise SystemExit(f"lifecycle acceptance: concurrent up/down left non-stopped state: {state}")
+PY
+concurrent_child_pid="$(cat "$CONCURRENT_CHILD_PID_FILE")"
+for _ in $(seq 1 40); do
+  if ! kill -0 "$concurrent_child_pid" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.05
+done
+if kill -0 "$concurrent_child_pid" >/dev/null 2>&1; then
+  echo "lifecycle acceptance: concurrent up/down left an orphan launcher child" >&2
+  exit 1
+fi
+
 FAKE_LAUNCHER_CHILD_PID_FILE="$TIMEOUT_CHILD_PID_FILE" \
 FAKE_LAUNCHER_MODE=timeout \
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
@@ -191,5 +247,63 @@ if kill -0 "$timeout_child_pid" >/dev/null 2>&1; then
   echo "lifecycle acceptance: timeout launcher child survived cleanup" >&2
   exit 1
 fi
+
+FAILURE_COMMON_DIR="$TMP_DIR/failure-common"
+failure_ports_json="$TMP_DIR/failure-ports.json"
+wh_start_managed sleep 300 >"$TMP_DIR/failure-group.log" 2>&1
+failure_pid="$WH_MANAGED_PID"
+failure_pgid="$WH_MANAGED_PGID"
+failure_identity="$WH_MANAGED_IDENTITY"
+wh_resolve_ports_json "$HARNESS_ROOT" "$$" "$(wh_worktree_path)" "$FAILURE_COMMON_DIR" >"$failure_ports_json"
+failure_token="$(python3 - "$failure_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())['reservation_token'])
+PY
+)"
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$failure_pid" "$failure_pgid" "$failure_token" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": "unrelated-reused-process-identity",
+    "launcher_pid": None,
+    "launcher_pgid": None,
+    "launcher_identity": None,
+    "port_reservation_token": sys.argv[3],
+}))
+PY
+)"
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >"$TMP_DIR/failure-down.log" 2>&1
+failure_down_status=$?
+set -e
+[[ "$failure_down_status" -ne 0 ]] || {
+  echo "lifecycle acceptance: failed cleanup unexpectedly reported success" >&2
+  exit 1
+}
+python3 - "$HARNESS_ROOT/state.json" "$HARNESS_ROOT/.ports.reservation.json" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] == "failed", state
+assert state["phase"] == "cleanup_failed", state
+assert state["port_reservation_token"], state
+assert pathlib.Path(sys.argv[2]).exists(), "cleanup failure released the reservation"
+PY
+if ! kill -0 "$failure_pid" >/dev/null 2>&1; then
+  echo "lifecycle acceptance: failed cleanup killed a group without proving identity" >&2
+  exit 1
+fi
+wh_terminate_process_group "$failure_pid" "$failure_pgid" 100 "$failure_identity"
+wh_release_ports_reservation "$HARNESS_ROOT" "$failure_token" "$FAILURE_COMMON_DIR"
 
 echo "worktree harness lifecycle acceptance: PASS"

@@ -777,6 +777,7 @@ mkdir -p "$(dirname "$META_FILE")"
 
 LAUNCHER_PID=""
 LAUNCHER_PGID=""
+LAUNCHER_IDENTITY=""
 
 write_session_meta() {
   local stack_ready=$1
@@ -788,6 +789,7 @@ write_session_meta() {
     printf 'WEB_PID=\n'
     printf 'LAUNCHER_PID=%s\n' "$LAUNCHER_PID"
     printf 'LAUNCHER_PGID=%s\n' "$LAUNCHER_PGID"
+    printf 'LAUNCHER_IDENTITY=%s\n' "$LAUNCHER_IDENTITY"
     printf 'LIVE_BIND_ADDR=%s\n' "$LIVE_BIND_ADDR"
     printf 'WEB_BRIDGE_ADDR=%s\n' "$WEB_BRIDGE_ADDR"
     printf 'VIEWER_HOST=%s\n' "$VIEWER_HOST"
@@ -820,7 +822,10 @@ cleanup() {
   trap - EXIT INT TERM
 
   if [[ -n "$LAUNCHER_PID" ]]; then
-    wh_terminate_process_group "$LAUNCHER_PID" "$LAUNCHER_PGID" 2000 || true
+    if ! wh_terminate_process_group "$LAUNCHER_PID" "$LAUNCHER_PGID" 2000 "$LAUNCHER_IDENTITY"; then
+      echo "error: unable to prove launcher process-group quiescence" >&2
+      exit_code=1
+    fi
   fi
 
   exit "$exit_code"
@@ -962,6 +967,7 @@ else
 fi
 LAUNCHER_PID="$WH_MANAGED_PID"
 LAUNCHER_PGID="$WH_MANAGED_PGID"
+LAUNCHER_IDENTITY="$WH_MANAGED_IDENTITY"
 cat <<'INFO' >"$WEB_LOG"
 run-viewer-web.sh no longer runs as a standalone process in this stack.
 web viewer is served by oasis7_game_launcher built-in static server.

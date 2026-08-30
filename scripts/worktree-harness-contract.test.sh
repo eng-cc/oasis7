@@ -76,16 +76,35 @@ process_tree_fixture() {
 wh_start_managed process_tree_fixture >"$TMP_DIR/process-tree.log" 2>&1
 process_tree_pid="$WH_MANAGED_PID"
 process_tree_pgid="$WH_MANAGED_PGID"
+process_tree_identity="${WH_MANAGED_IDENTITY:-}"
 for _ in $(seq 1 20); do
   [[ -s "$PROCESS_TREE_CHILD_PID_FILE" ]] && break
   sleep 0.05
 done
 process_tree_child_pid="$(cat "$PROCESS_TREE_CHILD_PID_FILE")"
-wh_terminate_process_group "$process_tree_pid" "$process_tree_pgid" 100
+wh_terminate_process_group "$process_tree_pid" "$process_tree_pgid" 100 "$process_tree_identity"
 if kill -0 "$process_tree_pid" >/dev/null 2>&1 || kill -0 "$process_tree_child_pid" >/dev/null 2>&1; then
   echo "process-tree shutdown left a managed process alive" >&2
   exit 1
 fi
+
+wh_start_managed sleep 30 >"$TMP_DIR/reused-identity.log" 2>&1
+reused_identity_pid="$WH_MANAGED_PID"
+reused_identity_pgid="$WH_MANAGED_PGID"
+reused_identity="${WH_MANAGED_IDENTITY:-}"
+set +e
+wh_terminate_process_group \
+  "$reused_identity_pid" \
+  "$reused_identity_pgid" \
+  100 \
+  "unrelated-reused-process-identity"
+reused_identity_status=$?
+set -e
+if [[ "$reused_identity_status" -eq 0 ]] || ! kill -0 "$reused_identity_pid" >/dev/null 2>&1; then
+  echo "process-group identity contract: mismatched leader identity was allowed to terminate a live group" >&2
+  exit 1
+fi
+wh_terminate_process_group "$reused_identity_pid" "$reused_identity_pgid" 100 "$reused_identity"
 
 PORT_ROOT="$TMP_DIR/port-reservations"
 PORT_COMMON_DIR="$TMP_DIR/port-registry"

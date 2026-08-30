@@ -51,6 +51,7 @@ STARTUP_LOG="$(wh_startup_log "$HARNESS_ROOT")"
 META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
 BROWSER_SESSION="$(wh_browser_session "$WORKTREE_ID")"
 PORT_RESERVATION_TOKEN=""
+HARNESS_IDENTITY=""
 
 wh_prepare_dirs "$HARNESS_ROOT"
 
@@ -61,12 +62,20 @@ if [[ -z "$action" ]]; then
 fi
 shift || true
 
+if [[ "$action" == "up" || "$action" == "down" ]]; then
+  wh_lifecycle_lock_acquire "$HARNESS_ROOT" || exit 1
+  trap 'wh_lifecycle_lock_release' EXIT
+fi
+
 kill_recorded_processes() {
   local harness_pid harness_pgid launcher_pid launcher_pgid reservation_token
+  local harness_identity launcher_identity cleanup_status=0
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
   harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
+  harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
   launcher_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
   launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
+  launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
   reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
 
   # Older state records predate PGID publication.  Derive the group only
@@ -79,15 +88,41 @@ kill_recorded_processes() {
     harness_pgid=$(wh_process_group_id "$harness_pid" 2>/dev/null || true)
   fi
 
-  if [[ -n "$launcher_pid" && -n "$launcher_pgid" ]]; then
-    wh_terminate_process_group "$launcher_pid" "$launcher_pgid" 2000 || true
+  if [[ -n "$launcher_pid" || -n "$launcher_pgid" ]]; then
+    if [[ -z "$launcher_pid" || -z "$launcher_pgid" ]]; then
+      if { [[ -n "$launcher_pid" ]] && wh_pid_alive "$launcher_pid"; } || { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }; then
+        echo "error: incomplete launcher process-group record prevents safe cleanup" >&2
+        cleanup_status=1
+      fi
+    elif [[ "$cleanup_status" -eq 0 ]]; then
+      if ! wh_terminate_process_group "$launcher_pid" "$launcher_pgid" 2000 "$launcher_identity"; then
+        echo "error: unable to prove launcher process-group quiescence" >&2
+        cleanup_status=1
+      fi
+    fi
   fi
-  if [[ -n "$harness_pid" && -n "$harness_pgid" ]]; then
-    wh_terminate_process_group "$harness_pid" "$harness_pgid" 2000 || true
+  if [[ "$cleanup_status" -eq 0 && ( -n "$harness_pid" || -n "$harness_pgid" ) ]]; then
+    if [[ -z "$harness_pid" || -z "$harness_pgid" ]]; then
+      if { [[ -n "$harness_pid" ]] && wh_pid_alive "$harness_pid"; } || { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }; then
+        echo "error: incomplete harness process-group record prevents safe cleanup" >&2
+        cleanup_status=1
+      fi
+    else
+      if ! wh_terminate_process_group "$harness_pid" "$harness_pgid" 2000 "$harness_identity"; then
+        echo "error: unable to prove harness process-group quiescence" >&2
+        cleanup_status=1
+      fi
+    fi
+  fi
+  if [[ "$cleanup_status" -ne 0 ]]; then
+    return 1
   fi
   ab_cmd "$BROWSER_SESSION" close >/dev/null 2>&1 || true
   if [[ -n "$reservation_token" ]]; then
-    wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" "$PORT_REGISTRY_COMMON_DIR" || true
+    if ! wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" "$PORT_REGISTRY_COMMON_DIR"; then
+      echo "error: unable to release harness port reservation after shutdown" >&2
+      return 1
+    fi
   fi
 }
 
@@ -99,16 +134,22 @@ viewer_http_ready() {
 }
 
 refresh_state() {
-  local current_status harness_pid launcher_pid
+  local current_status harness_pid harness_pgid launcher_pid launcher_pgid
 
   [[ -f "$STATE_FILE" ]] || return 0
   current_status=$(wh_state_get "$STATE_FILE" status 2>/dev/null || true)
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
+  harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
   launcher_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
+  launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
 
   if [[ "$current_status" == "ready" ]]; then
     if ! wh_pid_alive "$harness_pid" && ! wh_pid_alive "$launcher_pid"; then
-      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "launcher_pid": null, "launcher_pgid": null, "port_reservation_token": null}'
+      if { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; } || { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }; then
+        wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "recorded process leaders exited but their process group remains alive"}'
+        return 1
+      fi
+      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
       return 0
     fi
   fi
@@ -272,7 +313,10 @@ case "$action" in
       exit 0
     fi
 
-    kill_recorded_processes
+    if ! kill_recorded_processes; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "unable to prove previous harness quiescence"}'
+      exit 1
+    fi
     rm -f "$META_FILE" "$STARTUP_LOG"
 
     ports_json=$(wh_resolve_ports_json "$HARNESS_ROOT" "" "$(wh_worktree_path)" "$PORT_REGISTRY_COMMON_DIR")
@@ -381,12 +425,17 @@ PY
     wh_start_managed launch_stack >"$STARTUP_LOG" 2>&1
     HARNESS_PID=$WH_MANAGED_PID
     HARNESS_PGID=$WH_MANAGED_PGID
+    HARNESS_IDENTITY=$WH_MANAGED_IDENTITY
+    wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID, \"harness_pgid\": $HARNESS_PGID, \"harness_identity\": \"$HARNESS_IDENTITY\"}"
+    if [[ -n "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE:-}" ]]; then
+      : >"$OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE"
+      sleep "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS:-1}"
+    fi
     if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID" "$PORT_REGISTRY_COMMON_DIR"; then
       kill_recorded_processes
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "unable to bind port reservation to managed harness process"}'
       exit 1
     fi
-    wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID, \"harness_pgid\": $HARNESS_PGID}"
 
     wh_state_phase "$STATE_FILE" "waiting_metadata" "waiting for STACK_READY metadata" "$STARTUP_DEADLINE_MS"
     attempt=0
@@ -421,23 +470,27 @@ PY
     viewer_url=$(wh_env_file_get "$META_FILE" GAME_URL)
     launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
     launcher_pgid=$(wh_env_file_get "$META_FILE" LAUNCHER_PGID 2>/dev/null || true)
+    launcher_identity=$(wh_env_file_get "$META_FILE" LAUNCHER_IDENTITY 2>/dev/null || true)
     wh_state_write "$STATE_FILE" "$(python3 - \
       "$viewer_url" \
       "$launcher_pid" \
       "$launcher_pgid" \
+      "$launcher_identity" \
       "$META_FILE" \
       "$PORT_RESERVATION_TOKEN" <<'PY'
 import json
 import sys
 launcher_pid = sys.argv[2]
+launcher_identity = sys.argv[4]
 payload = {
     "status": "ready",
     "phase": "ready",
     "viewer_url": sys.argv[1],
     "launcher_pid": int(launcher_pid) if launcher_pid else None,
     "launcher_pgid": int(sys.argv[3]) if sys.argv[3] else None,
-    "meta_file": sys.argv[4],
-    "port_reservation_token": sys.argv[5],
+    "launcher_identity": launcher_identity or None,
+    "meta_file": sys.argv[5],
+    "port_reservation_token": sys.argv[6],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -451,8 +504,12 @@ PY
     echo "worktree harness ready: $viewer_url"
     ;;
   down)
-    kill_recorded_processes
-    wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "launcher_pid": null, "launcher_pgid": null, "port_reservation_token": null}'
+    if ! kill_recorded_processes; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "unable to prove harness quiescence; reservation retained"}'
+      echo "error: worktree harness shutdown did not reach quiescence; reservation retained" >&2
+      exit 1
+    fi
+    wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
     echo "worktree harness stopped: $WORKTREE_ID"
     ;;
   status)

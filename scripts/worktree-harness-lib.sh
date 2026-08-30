@@ -699,16 +699,110 @@ wh_process_group_alive() {
   ps -axo pid=,pgid= | awk -v target="$pgid" '$2 == target { found = 1 } END { exit found ? 0 : 1 }'
 }
 
+# Return a stable identity for a process incarnation.  PID and PGID values can
+# be reused after a crash, so cleanup records this value at launch and refuses
+# to signal a replacement process.  Linux exposes a monotonic start-time tick
+# in /proc; macOS falls back to a digest of ps start time plus process context.
+wh_process_identity() {
+  local pid=${1:-}
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  if [[ -r "/proc/$pid/stat" ]]; then
+    python3 - "$pid" <<'PY'
+from __future__ import annotations
+
+import pathlib
+import sys
+
+pid = sys.argv[1]
+contents = pathlib.Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+right_paren = contents.rfind(") ")
+if right_paren < 0:
+    raise SystemExit(1)
+fields = contents[right_paren + 2 :].split()
+if len(fields) <= 19:
+    raise SystemExit(1)
+print(f"proc-starttime:{fields[19]}")
+PY
+    return
+  fi
+
+  local ps_snapshot
+  ps_snapshot=$(ps -o lstart=,ppid=,pgid=,uid=,command= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  [[ -n "$ps_snapshot" ]] || return 1
+  python3 - "$ps_snapshot" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import sys
+
+print(f"ps-start:{hashlib.sha256(sys.argv[1].encode('utf-8')).hexdigest()}")
+PY
+}
+
+# Serialize up/down transitions before they touch state, process records, or
+# port reservations.  The symlink target is the owner PID plus its launch
+# identity, allowing a later invocation to recover a lock left by a crashed
+# process without trusting a reused PID.  The lifecycle lock is acquired
+# before the per-harness port lock; port helpers retain their local-then-shared
+# registry lock order.
+WH_LIFECYCLE_LOCK_PATH=""
+WH_LIFECYCLE_LOCK_RECORD=""
+wh_lifecycle_lock_acquire() {
+  local harness_root=${1:-}
+  [[ -n "$harness_root" ]] || return 2
+  mkdir -p "$harness_root"
+  local lock_path="$harness_root/.lifecycle.lock"
+  local owner_identity
+  owner_identity=$(wh_process_identity "$$") || {
+    echo "error: unable to identify lifecycle lock owner $$" >&2
+    return 1
+  }
+  local owner_record="$$:$owner_identity"
+  local waited_ms=0 current_record current_pid current_identity observed_identity
+
+  while ! ln -s "$owner_record" "$lock_path" 2>/dev/null; do
+    current_record=$(readlink "$lock_path" 2>/dev/null || true)
+    if [[ "$current_record" =~ ^([1-9][0-9]*):(.+)$ ]]; then
+      current_pid="${BASH_REMATCH[1]}"
+      current_identity="${BASH_REMATCH[2]}"
+      observed_identity=$(wh_process_identity "$current_pid" 2>/dev/null || true)
+      if [[ -z "$observed_identity" || "$observed_identity" != "$current_identity" ]]; then
+        if [[ "$(readlink "$lock_path" 2>/dev/null || true)" == "$current_record" ]]; then
+          rm -f "$lock_path"
+        fi
+        continue
+      fi
+    fi
+    if (( waited_ms >= 120000 )); then
+      echo "error: timed out waiting for lifecycle lock: $lock_path" >&2
+      return 1
+    fi
+    sleep 0.05
+    waited_ms=$((waited_ms + 50))
+  done
+  WH_LIFECYCLE_LOCK_PATH="$lock_path"
+  WH_LIFECYCLE_LOCK_RECORD="$owner_record"
+}
+
+wh_lifecycle_lock_release() {
+  [[ -n "$WH_LIFECYCLE_LOCK_PATH" && -n "$WH_LIFECYCLE_LOCK_RECORD" ]] || return 0
+  if [[ "$(readlink "$WH_LIFECYCLE_LOCK_PATH" 2>/dev/null || true)" == "$WH_LIFECYCLE_LOCK_RECORD" ]]; then
+    rm -f "$WH_LIFECYCLE_LOCK_PATH"
+  fi
+  WH_LIFECYCLE_LOCK_PATH=""
+  WH_LIFECYCLE_LOCK_RECORD=""
+}
+
 # Terminate only the process group that was recorded at launch.  The caller
-# must provide the launcher's PID and the PGID captured from that PID; a live
-# PID whose group changed is rejected before any signal is sent.  If the group
-# leader was killed already, the durable PID/PGID pair still identifies the
-# group that may contain descendants left behind by that failure.
+# must provide the launcher's PID, the PGID captured from that PID, and the
+# stable leader identity captured at launch; a reused PID or changed group is
+# rejected before any signal is sent.
 wh_terminate_process_group() {
   local pid=${1:-}
   local pgid=${2:-}
   local timeout_ms=${3:-2000}
-  local current_pgid deadline_ms
+  local expected_identity=${4:-}
+  local current_pgid current_identity deadline_ms
 
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 2
   [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || return 2
@@ -720,17 +814,20 @@ wh_terminate_process_group() {
   current_pgid=$(wh_process_group_id "$$" 2>/dev/null || true)
   [[ -n "$current_pgid" && "$pgid" != "$current_pgid" ]] || return 2
 
-  if wh_pid_alive "$pid"; then
-    current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
-    [[ "$current_pgid" == "$pgid" ]] || return 2
-  elif ! wh_process_group_alive "$pgid"; then
-    return 0
-  fi
-
   if ! wh_process_group_alive "$pgid"; then
+    if wh_pid_alive "$pid"; then
+      return 2
+    fi
     return 0
   fi
-  kill -TERM "-$pgid" >/dev/null 2>&1 || true
+  [[ -n "$expected_identity" ]] || return 2
+  wh_pid_alive "$pid" || return 2
+  current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
+  [[ -n "$current_identity" && "$current_identity" == "$expected_identity" ]] || return 2
+  current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
+  [[ "$current_pgid" == "$pgid" ]] || return 2
+
+  kill -TERM "-$pgid" >/dev/null 2>&1 || return 1
   deadline_ms=$(( $(wh_clock_ms) + timeout_ms ))
   while wh_process_group_alive "$pgid"; do
     if (( $(wh_clock_ms) >= deadline_ms )); then
@@ -740,7 +837,7 @@ wh_terminate_process_group() {
   done
 
   if wh_process_group_alive "$pgid"; then
-    kill -KILL "-$pgid" >/dev/null 2>&1 || true
+    kill -KILL "-$pgid" >/dev/null 2>&1 || return 1
     deadline_ms=$(( $(wh_clock_ms) + 1000 ))
     while wh_process_group_alive "$pgid" && (( $(wh_clock_ms) < deadline_ms )); do
       sleep 0.05
@@ -772,10 +869,11 @@ wh_start_managed() {
     set +m
   fi
   WH_MANAGED_PGID="$(wh_process_group_id "$WH_MANAGED_PID" 2>/dev/null || true)"
-  if [[ -z "$WH_MANAGED_PGID" ]]; then
+  WH_MANAGED_IDENTITY="$(wh_process_identity "$WH_MANAGED_PID" 2>/dev/null || true)"
+  if [[ -z "$WH_MANAGED_PGID" || -z "$WH_MANAGED_IDENTITY" ]]; then
     kill "$WH_MANAGED_PID" >/dev/null 2>&1 || true
     wait "$WH_MANAGED_PID" >/dev/null 2>&1 || true
-    echo "error: unable to record managed process group for PID $WH_MANAGED_PID" >&2
+    echo "error: unable to record managed process identity for PID $WH_MANAGED_PID" >&2
     return 1
   fi
 }
