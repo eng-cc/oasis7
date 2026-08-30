@@ -399,7 +399,7 @@
     },
     {
       "path": "doc/engineering/workflow/production-supervisor-runtime.design.md",
-      "content_sha256": "abeeb21dbbb6098508a5eff409c95cc54d362f87aadb8fb4254faf8934746871",
+      "content_sha256": "c7a36c8d121fa6a392eb831b56634359bb6713d51b7a560e64de4528727873c5",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
