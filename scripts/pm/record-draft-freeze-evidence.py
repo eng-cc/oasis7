@@ -57,9 +57,9 @@ def main() -> int:
     live_body = str(live_issue.get("body") or "") if isinstance(live_issue, dict) else ""
     live_number = live_issue.get("number") if isinstance(live_issue, dict) else None
     live_url = str(live_issue.get("url") or "") if isinstance(live_issue, dict) else ""
-    if live_number != int(issue) or not live_url.endswith(f"/issues/{issue}") or not re.search(
-        rf"(?m)^Task UID:\s*`?{re.escape(task_uid)}`?\s*$", live_body
-    ):
+    if (live_number != int(issue) or not live_url.endswith(f"/issues/{issue}")
+            or "<!-- oasis7-pm-task -->" not in live_body
+            or not re.search(rf"(?m)^task_uid:\s*{re.escape(task_uid)}\s*$", live_body)):
         fail("live issue identity does not match canonical task mapping")
     if not re.fullmatch(r"[0-9a-f]{40}", args.head) or not re.fullmatch(r"[0-9a-f]{40}", args.comparison_oid): fail("head or comparison OID is invalid")
     if git(worktree, "rev-parse", "--verify", "HEAD^{commit}") != args.head: fail("worktree HEAD differs from frozen source head")

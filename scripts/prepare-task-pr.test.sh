@@ -763,7 +763,7 @@ SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 # issue. Reject before comment, push, PR creation, or task-state mutation.
 wrong_issue_body="$TMPDIR/wrong-issue-body.json"
 wrong_issue_comments="$TMPDIR/wrong-issue-comments.json"
-printf '{"body":"Task UID: task_ffffffffffffffffffffffffffffffff\\n","number":123,"title":"wrong","url":"https://github.com/example/oasis7/issues/123"}\n' >"$wrong_issue_body"
+printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: task_ffffffffffffffffffffffffffffffff\\n","number":123,"title":"wrong","url":"https://github.com/example/oasis7/issues/123"}\n' >"$wrong_issue_body"
 printf '{"comments":[]}\n' >"$wrong_issue_comments"
 wrong_issue_log="$TMPDIR/gh-wrong-issue.log"
 wrong_issue_git_log="$TMPDIR/git-wrong-issue.log"
@@ -819,7 +819,7 @@ draft_out="$TMPDIR/draft-candidate.out"
 draft_err="$TMPDIR/draft-candidate.err"
 draft_issue_body="$TMPDIR/draft-issue-body.json"
 draft_issue_comments="$TMPDIR/draft-issue-comments.json"
-printf '{"body":"Task UID: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
+printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
 printf '{"comments":[]}\n' >"$draft_issue_comments"
 if ! run_prepare_with_issue_fixture "$draft_issue_body" "$draft_issue_comments" \
   "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
