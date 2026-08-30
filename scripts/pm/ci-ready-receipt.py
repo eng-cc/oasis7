@@ -17,6 +17,7 @@ RUN_FIELDS=(
     "run_pixel_world_bridge_lib_tests", "run_pixel_world_bridge_wasm_check",
     "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
     "run_scenario_regression", "run_operational_contracts",
+    "run_site_contract_tests",
     "run_codex_agent_config_validation", "run_compile_metrics_contract_tests",
     "run_required_gate_baseline", "run_rust_baseline",
 )
