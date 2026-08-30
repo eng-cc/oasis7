@@ -16,41 +16,29 @@ Status: **non-normative design companion**
 
 ## 1. Purpose and authority boundary
 
-The target is a durable executor for the existing lifecycle, not a replacement
-for the lifecycle. It should allow a task to resume from durable evidence after
-process, session, network, model, or CI interruption while preserving the
-existing task, worktree, branch, review, merge, and cleanup authorities.
+The target is a durable executor for the existing lifecycle, not a replacement for the lifecycle. It should allow a task to resume from durable evidence after
+process, session, network, model, or CI interruption while preserving the existing task, worktree, branch, review, merge, and cleanup authorities.
 
-TPM remains the accountable workflow coordinator, integrator, and continuation
-owner. The supervisor is a target runtime executor, not an accountability owner.
-Professional roles retain domain conclusions, and `qa_engineer` retains release
-blocking judgment. The supervisor may adjudicate mechanical identity, ordering,
-freshness, and receipt validity, but it must route semantic disagreement to the
-matching professional role through TPM.
+TPM remains the accountable workflow coordinator, integrator, and continuation owner. The supervisor is a target runtime executor, not an accountability owner.
+Professional roles retain domain conclusions, and `qa_engineer` retains release blocking judgment. The supervisor may adjudicate mechanical identity, ordering,
+freshness, and receipt validity, but it must route semantic disagreement to the matching professional role through TPM.
 
-GitHub Issues, Project fields, and task-issue evidence comments remain the
-task-truth and formal evidence surfaces defined by the [GitHub Project-backed PM
-contract](./source-of-truth.md#123-github-project-backed-pm-contract). Runtime
-state may cache execution progress and wake delivery, but it must project to
+GitHub Issues, Project fields, and task-issue evidence comments remain the task-truth and formal evidence surfaces defined by the [GitHub Project-backed PM
+contract](./source-of-truth.md#123-github-project-backed-pm-contract). Runtime state may cache execution progress and wake delivery, but it must project to
 those authorities rather than create a second mutable task database.
 
 ## 2. Current capability and target
 
-The current production surface is intentionally blocked. The supervisor can
-create and identity-bind a checkpoint, but it does not advance through a
-trusted bootstrap, action, validator, collaboration, or wake connector. The
-production action and validator adapters fail closed; fixture reducers and
-fake-GitHub paths are test-only. See the [capability status](./source-of-truth.md#capability-status)
-and the operational [supervisor skill](../../../.agents/skills/tpm-production-supervisor/SKILL.md).
+The current production surface is intentionally blocked. The supervisor can create and identity-bind a checkpoint, but it does not advance through a
+trusted bootstrap, action, validator, collaboration, or wake connector. The production action and validator adapters fail closed; fixture reducers and
+fake-GitHub paths are test-only. See the [capability status](./source-of-truth.md#capability-status) and the operational [supervisor skill](../../../.agents/skills/tpm-production-supervisor/SKILL.md).
 
-The target is still subject to the same closed state enum and lifecycle order.
-Target behavior must not be described as implemented until the promotion
+The target is still subject to the same closed state enum and lifecycle order. Target behavior must not be described as implemented until the promotion
 criteria in section 11 are independently evidenced.
 
 ## 3. Exactly four trusted producer classes
 
-The target has exactly four trusted producer classes. A class is a trust
-boundary, not a workflow state or a role title.
+The target has exactly four trusted producer classes. A class is a trust boundary, not a workflow state or a role title.
 
 | Producer class | Target responsibility | Independent proof boundary |
 | --- | --- | --- |
@@ -59,10 +47,8 @@ boundary, not a workflow state or a role title.
 | Trusted collaboration/attestation | Dispatch a professional slice and return attested identity, attempt, bounded artifact, and artifact digest. | Runtime-issued dispatch/return evidence bound to the task, slice, epoch, dispatch acknowledgement, actual agent, and artifact. |
 | Wake/scheduler runtime | Persist a resume condition and deliver an event or bounded timer wake across turns and process restarts. | Runtime-owned lease, delivery identity, condition, deadline, and readback; a JSON mutation by a caller is not delivery. |
 
-The four classes are jointly necessary. A collaboration runtime cannot unblock
-unattended work without mechanical execution, independent validation, and a
-real wake owner. A live evaluation is acceptance evidence for the runtime, not
-a fifth producer class.
+The four classes are jointly necessary. A collaboration runtime cannot unblock unattended work without mechanical execution, independent validation, and a
+real wake owner. A live evaluation is acceptance evidence for the runtime, not a fifth producer class.
 
 ## 4. Durable execution model
 
