@@ -12,7 +12,7 @@
 
 ## 2. 只读生命周期决策预览
 
-在 `ScheduleRecipe`、新 hold、input sink、WIP 或 successor handoff 之前，玩家必须能读取只读 `recipe_lifecycle_decision_preview`。预览至少说明 recipe version/state/scope、Product authority reference、匹配的 factory capability、原材料批次数量与品质/保管适用性、必需 logistics path/capacity、power/maintenance、output bundle/terminal 前置、受影响 accepted/WIP/transit/buffer 工作、已占用或已消费价值、机会成本、primary blocker、对稳定窗口 `W` 的影响、`next_recheck` 与 `recommended_reason`。
+在 `ScheduleRecipe`、新 hold、input sink、WIP 或 successor handoff 之前，玩家必须能读取只读 `recipe_lifecycle_decision_preview`。预览至少说明 recipe version/state/scope、Product authority reference、匹配的 factory capability、原材料批次数量与品质/保管适用性、必需 logistics path/capacity、power/maintenance、output bundle/terminal 前置、受影响 accepted/WIP/transit/buffer/terminal-pending 工作、已占用或已消费价值、机会成本、primary blocker、对稳定窗口 `W` 的影响、`next_recheck` 与 `recommended_reason`；terminal-pending 还必须显示 recipient、destination、admission、capacity obligation 与 provenance。
 
 Preview 不验证、准入、激活、退役、锁定容量、创建 hold、排程、扣输入、生成 WIP/产出、推进 `W` 或发放奖励。Authority 缺失、过期或冲突时显示 `recipe_lifecycle_unknown/degraded`；会产生不可逆 sink 的候选必须不可选择、重新报价或原子拒绝，不能以零成本、通用 `recipe-fit`、同名版本或 Agent 建议填充。
 
