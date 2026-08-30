@@ -30,9 +30,37 @@ WINDOWS_GOVERNED_BOOTSTRAP = (
 )
 CANONICAL_PROVIDER_NAMES = ("sequencer", "storage")
 MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
-LINUX_PROVIDER_KNOWN_HOSTS = (
-    "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts"
-)
+LINUX_PROVIDER_ROOT = Path("/opt/oasis7/p2p-testnet")
+
+
+def validate_operator_known_hosts(path: Path | None) -> Path:
+    """Return an operator-local host-key file, rejecting provider paths."""
+    if path is None:
+        die(
+            "remote Linux provider rollout requires an explicit --known-hosts "
+            "operator-local pinned host-key file"
+        )
+    candidate = path.expanduser()
+    if candidate.is_symlink():
+        die(f"operator known-hosts file must not be a symlink: {candidate}")
+    if not candidate.is_file() or not stat.S_ISREG(candidate.lstat().st_mode):
+        die(f"operator known-hosts file must be a regular file: {candidate}")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as error:
+        die(f"cannot resolve operator known-hosts file {candidate}: {error}")
+    try:
+        resolved.relative_to(LINUX_PROVIDER_ROOT.resolve())
+    except ValueError:
+        pass
+    else:
+        die(
+            "operator known-hosts file must be local to the rollout operator; "
+            f"provider filesystem path is forbidden: {candidate}"
+        )
+    if resolved.stat().st_size == 0:
+        die(f"operator known-hosts file must contain a pinned host key: {candidate}")
+    return resolved
 
 
 def die(message: str) -> None:
@@ -826,11 +854,13 @@ def linux_plan_commands(
     commit: str,
     run_id: str,
     readiness_policy: str,
+    known_hosts_path: Path | None = None,
 ) -> list[str]:
     host = str(node.get("host") or "")
     if not host:
         return [shell_join(linux_command(node, linux_asset, linux_ops_tools_asset, version, commit, run_id, readiness_policy))]
     user = str(node.get("user") or "root")
+    operator_known_hosts = validate_operator_known_hosts(known_hosts_path)
     helper_asset = ROOT_DIR / "scripts" / "p2p-public-testnet-package-node-upgrade.sh"
     if helper_asset.is_symlink() or not helper_asset.is_file() or not stat.S_ISREG(helper_asset.lstat().st_mode):
         die(f"missing Linux package upgrade helper: {helper_asset}")
@@ -938,37 +968,37 @@ def linux_plan_commands(
         f"tar -czf - -C {remote_quote(str(linux_asset.parent))} {remote_quote(package_name)}"
         f" {remote_quote(ops_tools_name)} -C {remote_quote(str(helper_asset.parent))} {remote_quote(helper_name)}"
     )
-    ssh_command = " ".join(
-        [
-            f'SSHPASS="${{{credential_env}:?{credential_env} is required}}"',
-            "sshpass",
-            "-e",
-            "ssh",
-            "-o",
-            "HostKeyAlgorithms=ssh-ed25519",
-            "-o",
-            "StrictHostKeyChecking=yes",
-            "-o",
-            f"UserKnownHostsFile={LINUX_PROVIDER_KNOWN_HOSTS}",
-            "-o",
-            "GlobalKnownHostsFile=/dev/null",
-            "-o",
-            "PreferredAuthentications=password",
-            "-o",
-            "PubkeyAuthentication=no",
-            "-o",
-            "NumberOfPasswordPrompts=1",
-            "-o",
-            "ControlMaster=no",
-            "-o",
-            "ControlPath=none",
-            shell_join(
-                [
-                    f"{user}@{host}",
-                    shell_join(["bash", "-c", remote_body]),
-                ]
-            ),
-        ]
+    ssh_command = (
+        f'SSHPASS="${{{credential_env}:?{credential_env} is required}}" '
+        + shell_join(
+            [
+                "sshpass",
+                "-e",
+                "ssh",
+                "-o",
+                "HostKeyAlgorithms=ssh-ed25519",
+                "-o",
+                "StrictHostKeyChecking=yes",
+                "-o",
+                f"UserKnownHostsFile={operator_known_hosts}",
+                "-o",
+                "GlobalKnownHostsFile=/dev/null",
+                "-o",
+                "PreferredAuthentications=password",
+                "-o",
+                "PubkeyAuthentication=no",
+                "-o",
+                "NumberOfPasswordPrompts=1",
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=none",
+                f"{user}@{host}",
+                "bash",
+                "-c",
+                remote_quote(remote_body),
+            ]
+        )
     )
     return [f"set -o pipefail; {tar_command} | {ssh_command}"]
 
@@ -3022,13 +3052,19 @@ def main() -> int:
         ),
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable rollout plan")
+    parser.add_argument(
+        "--known-hosts",
+        "--operator-known-hosts",
+        dest="known_hosts",
+        type=Path,
+        help=(
+            "operator-local pinned known-hosts file for remote Linux provider SSH; "
+            "required when a canonical provider has a host"
+        ),
+    )
     args = parser.parse_args()
 
     manifest = load_manifest(args.manifest)
-    package_dir = args.package_dir.resolve()
-    out_dir = args.out_dir.resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     platforms = sorted({str(node.get("platform") or "") for node in manifest["nodes"]})
     if "" in platforms:
         die("all nodes must declare platform")
@@ -3036,6 +3072,23 @@ def main() -> int:
     if len(names) != len(manifest["nodes"]) or not all(names) or len(set(names)) != len(names):
         die("all rollout manifest nodes must have unique non-empty names")
     observer_rollout_present = any(name not in CANONICAL_PROVIDER_NAMES for name in names)
+    remote_linux_provider_present = any(
+        isinstance(node, dict)
+        and str(node.get("platform") or "") == "linux-x64"
+        and str(node.get("name") or "") in CANONICAL_PROVIDER_NAMES
+        and bool(str(node.get("host") or ""))
+        for node in manifest["nodes"]
+    )
+    operator_known_hosts = None
+    if args.known_hosts is not None:
+        operator_known_hosts = validate_operator_known_hosts(args.known_hosts)
+    elif remote_linux_provider_present:
+        validate_operator_known_hosts(None)
+
+    package_dir = args.package_dir.resolve()
+    out_dir = args.out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # This happens before the probe starts a runtime from the downloaded Linux
     # bundle.  A malformed package must fail before any package code executes.
     trust_platforms = list(platforms)
@@ -3111,8 +3164,20 @@ def main() -> int:
                     args.readiness_policy,
                 )
                 node_plan["commands"].extend(
-                    linux_plan_commands(node, platform_assets[platform], platform_ops_tools_assets[platform], version, commit, run_id, args.readiness_policy)
+                    linux_plan_commands(
+                        node,
+                        platform_assets[platform],
+                        platform_ops_tools_assets[platform],
+                        version,
+                        commit,
+                        run_id,
+                        args.readiness_policy,
+                        operator_known_hosts,
+                    )
                 )
+                if name in CANONICAL_PROVIDER_NAMES and node.get("host"):
+                    assert operator_known_hosts is not None
+                    node_plan["operator_known_hosts"] = str(operator_known_hosts)
             else:
                 assert provider_status_urls is not None
                 assert checkpoint_closure_receipt is not None

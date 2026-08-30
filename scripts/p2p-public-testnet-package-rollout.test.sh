@@ -117,6 +117,12 @@ EOF
 chmod +x "$rollout_driver"
 export OASIS7_TEST_CLOSURE_FIXTURE="$checkpoint_closure_receipt"
 
+# All positive rollout fixtures share one operator-local known-hosts pin.  Keep
+# the path centralized so every plan exercises the same single-auth boundary;
+# the negative missing/directory cases below intentionally override it.
+operator_known_hosts="$TMP_DIR/operator pinned known-hosts"
+printf '%s\n' 'fixture ssh-ed25519 AAAAoperatorlocalpin' >"$operator_known_hosts"
+
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 cat >"$bundle_src/bin/oasis7_chain_runtime" <<'EOF'
 #!/usr/bin/env bash
@@ -1533,7 +1539,87 @@ EOF
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/plan-only-out" \
+  --known-hosts "$operator_known_hosts" \
   --json >"$TMP_DIR/plan-only.json"
+
+# Provider SSH generation must consume an explicit operator-local known-hosts
+# file.  The path intentionally contains spaces so the rendered UserKnownHostsFile
+# option must survive both the local shell and the later SSH reparse boundary.
+known_hosts_plan_out="$TMP_DIR/operator-known-hosts-plan-out"
+known_hosts_plan_json="$TMP_DIR/operator-known-hosts-plan.json"
+if ! "$rollout_driver" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$package_dir" \
+  --out-dir "$known_hosts_plan_out" \
+  --known-hosts "$operator_known_hosts" \
+  --json >"$known_hosts_plan_json"; then
+  echo "known-hosts RED: expected explicit operator-local --known-hosts path to be accepted" >&2
+  exit 1
+fi
+
+python3 - \
+  "$known_hosts_plan_json" \
+  "$operator_known_hosts" <<'PY'
+from pathlib import Path
+import json
+import shlex
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+known_hosts = str(Path(sys.argv[2]).resolve())
+storage = next(node for node in plan["nodes"] if node["name"] == "storage")
+command = storage["commands"][0]
+tokens = shlex.split(command)
+known_hosts_option = f"UserKnownHostsFile={known_hosts}"
+assert known_hosts_option in tokens, (
+    "provider SSH command must bind the explicit operator-local known-hosts file"
+)
+assert shlex.quote(known_hosts_option) in command, (
+    "UserKnownHostsFile path must be shell-quoted in the rendered provider command"
+)
+assert "HostKeyAlgorithms=ssh-ed25519" in tokens
+assert "StrictHostKeyChecking=yes" in tokens
+assert "GlobalKnownHostsFile=/dev/null" in tokens
+assert tokens.count("ssh") == 1
+assert "scp" not in tokens
+assert len(storage["commands"]) == 1
+PY
+
+# Missing and non-file operator pins must fail before a plan or provider
+# transport can be generated.  The plan-only CLI never executes a provider;
+# absence of its output directory is the bounded no-transport assertion.
+missing_known_hosts="$TMP_DIR/missing operator known-hosts"
+missing_known_hosts_out="$TMP_DIR/missing-known-hosts-out"
+if "$rollout_driver" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$package_dir" \
+  --out-dir "$missing_known_hosts_out" \
+  --known-hosts "$missing_known_hosts" \
+  --json \
+  >"$TMP_DIR/missing-known-hosts.stdout" \
+  2>"$TMP_DIR/missing-known-hosts.stderr"; then
+  echo "known-hosts RED: missing operator pin unexpectedly generated a rollout plan" >&2
+  exit 1
+fi
+grep -Eqi 'known.?hosts|regular|file' "$TMP_DIR/missing-known-hosts.stderr"
+test ! -e "$missing_known_hosts_out"
+
+non_file_known_hosts="$TMP_DIR/non-file operator known-hosts"
+mkdir -p "$non_file_known_hosts"
+non_file_known_hosts_out="$TMP_DIR/non-file-known-hosts-out"
+if "$rollout_driver" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$package_dir" \
+  --out-dir "$non_file_known_hosts_out" \
+  --known-hosts "$non_file_known_hosts" \
+  --json \
+  >"$TMP_DIR/non-file-known-hosts.stdout" \
+  2>"$TMP_DIR/non-file-known-hosts.stderr"; then
+  echo "known-hosts RED: directory operator pin unexpectedly generated a rollout plan" >&2
+  exit 1
+fi
+grep -Eqi 'known.?hosts|regular|file' "$TMP_DIR/non-file-known-hosts.stderr"
+test ! -e "$non_file_known_hosts_out"
 
 python3 - \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
@@ -1666,6 +1752,7 @@ jq '{nodes: [
   --manifest "$observer_gate_manifest" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/linux-observer-gate-out" \
+  --known-hosts "$operator_known_hosts" \
   --json >"$TMP_DIR/linux-observer-gate-plan.json"
 python3 - "$TMP_DIR/linux-observer-gate-plan.json" <<'PY'
 from pathlib import Path
@@ -1709,6 +1796,7 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$cross_commit_package" \
   --out-dir "$TMP_DIR/cross-commit-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/cross-commit.stdout" 2>"$TMP_DIR/cross-commit.stderr"; then
   echo "expected cross-commit package mix to fail planning" >&2
   exit 1
@@ -1722,6 +1810,7 @@ if "$rollout_driver" \
   --manifest "$missing_remote_rollback_manifest" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/missing-remote-rollback-backup-root-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/missing-remote-rollback-backup-root.stdout" \
   2>"$TMP_DIR/missing-remote-rollback-backup-root.stderr"; then
   echo "expected remote Windows node without rollback_backup_root to fail plan generation" >&2
@@ -1736,13 +1825,14 @@ package_contract_failed=0
 # one pinned-host SSH session.  The old plan emitted two SCP transfers followed
 # by a separate SSH mutation, which made the authentication boundary and the
 # streamed payload impossible to attest as one transaction.
-if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
+if ! python3 - "$TMP_DIR/plan-only.json" "$operator_known_hosts" <<'PY'
 from pathlib import Path
 import json
 import shlex
 import sys
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+expected_known_hosts = str(Path(sys.argv[2]).resolve())
 storage = next(node for node in plan["nodes"] if node["name"] == "storage")
 commands = storage["commands"]
 assert len(commands) == 1, (
@@ -1777,8 +1867,8 @@ known_hosts = next(
 assert known_hosts and known_hosts != "/dev/null", (
     "provider rollout must use a non-empty pinned UserKnownHostsFile"
 )
-assert known_hosts.endswith("public-testnet-validator-pair-known-hosts"), (
-    "provider rollout must use the governed public-testnet pinned host-key file"
+assert known_hosts == expected_known_hosts, (
+    "provider rollout must use the explicit operator-local pinned host-key file"
 )
 assert "StrictHostKeyChecking=no" not in command
 assert "StrictHostKeyChecking=accept-new" not in command
@@ -3362,6 +3452,7 @@ PY
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$missing_package" \
     --out-dir "$TMP_DIR/missing-$missing_runtime_truth-out" \
+    --known-hosts "$operator_known_hosts" \
     >"$TMP_DIR/missing-$missing_runtime_truth.stdout" \
     2>"$TMP_DIR/missing-$missing_runtime_truth.stderr"; then
     echo "expected public_testnet Windows source missing $missing_runtime_truth to fail" >&2
@@ -3420,6 +3511,7 @@ PY
       --manifest "$TMP_DIR/manifest.json" \
       --package-dir "$escaped_package" \
       --out-dir "$escaped_out" \
+      --known-hosts "$operator_known_hosts" \
       >"$escaped_out.stdout" 2>"$escaped_out.stderr"; then
       echo "expected escaped Windows $escaped_field ref to fail before plan transfer generation" >&2
       package_contract_failed=1
@@ -3460,6 +3552,7 @@ for symlink_kind in file directory; do
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$symlink_package" \
     --out-dir "$symlink_out" \
+    --known-hosts "$operator_known_hosts" \
     >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
     echo "expected runtime-truth $symlink_kind symlink to fail before rollout generation" >&2
     package_contract_failed=1
@@ -3493,6 +3586,7 @@ for governed_name in \
     --manifest "$TMP_DIR/manifest.json" \
     --package-dir "$symlink_package" \
     --out-dir "$symlink_out" \
+    --known-hosts "$operator_known_hosts" \
     >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
     echo "expected top-level governed symlink to fail before rollout generation: $governed_name" >&2
     package_contract_failed=1
@@ -3518,6 +3612,7 @@ if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$ancestor_package" \
   --out-dir "$ancestor_out" \
+  --known-hosts "$operator_known_hosts" \
   >"$ancestor_out.stdout" 2>"$ancestor_out.stderr"; then
   echo "expected governed ancestor symlink to fail before rollout generation" >&2
   package_contract_failed=1
@@ -3537,6 +3632,7 @@ fi
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$out_dir" \
+  --known-hosts "$operator_known_hosts" \
   --apply-local \
   --json >"$TMP_DIR/plan.json"
 
@@ -4306,6 +4402,7 @@ fi
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/repeated-plan-out" \
+  --known-hosts "$operator_known_hosts" \
   --json >"$TMP_DIR/repeated-plan.json"
 cmp -s \
   "$TMP_DIR/plan-only-out/windows-observer-windows-upgrade.ps1" \
@@ -4396,6 +4493,7 @@ missing_network_metadata_out="$TMP_DIR/missing-network-manifest-metadata-out"
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$missing_network_metadata_package" \
   --out-dir "$missing_network_metadata_out" \
+  --known-hosts "$operator_known_hosts" \
   --json >"$TMP_DIR/missing-network-manifest-metadata-plan.json"
 if ! python3 - "$missing_network_metadata_out/windows-observer-windows-upgrade.ps1" <<'PY'
 from pathlib import Path
@@ -4457,6 +4555,7 @@ if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$bad_package_dir" \
   --out-dir "$TMP_DIR/bad-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/bad.out" 2>"$TMP_DIR/bad.err"; then
   echo "expected mismatched BUILDINFO to fail" >&2
   exit 1
@@ -4473,6 +4572,7 @@ if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$bad_sums_dir" \
   --out-dir "$TMP_DIR/bad-sums-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/bad-sums.out" 2>"$TMP_DIR/bad-sums.err"; then
   echo "expected missing asset checksum coverage to fail" >&2
   exit 1
@@ -4493,6 +4593,7 @@ if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$bad_ops_dir" \
   --out-dir "$TMP_DIR/bad-ops-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/bad-ops.out" 2>"$TMP_DIR/bad-ops.err"; then
   echo "expected tampered ops-tools archive to fail dedicated checksum validation" >&2
   exit 1
@@ -4532,6 +4633,7 @@ PY
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/strict-out" \
+  --known-hosts "$operator_known_hosts" \
   --readiness-policy strict-ready \
   --json >"$TMP_DIR/strict-plan.json"
 jq -e '
@@ -4556,6 +4658,7 @@ if "$rollout_driver" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
   --out-dir "$TMP_DIR/strict-missing-status-out" \
+  --known-hosts "$operator_known_hosts" \
   --readiness-policy strict-ready \
   >"$TMP_DIR/strict-missing-status.out" 2>"$TMP_DIR/strict-missing-status.err"; then
   echo "expected strict-ready restart without status_url to fail" >&2
@@ -4565,7 +4668,8 @@ grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-statu
 
 "$rollout_driver" \
   --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
-  --out-dir "$TMP_DIR/observer-closure-probe-out" --json >"$TMP_DIR/observer-closure-probe-plan.json"
+  --out-dir "$TMP_DIR/observer-closure-probe-out" \
+  --known-hosts "$operator_known_hosts" --json >"$TMP_DIR/observer-closure-probe-plan.json"
 probe_gate_script="$(python3 - "$TMP_DIR/observer-closure-probe-plan.json" <<'PY'
 import json, sys
 plan = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -4577,7 +4681,8 @@ grep -q 'fixture-checkpoint-v2' "$probe_gate_script"
 for mode in bad-digest non-network empty-candidates hash-size stale; do
   if OASIS7_TEST_PROBE_MODE="$mode" "$rollout_driver" \
     --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
-    --out-dir "$TMP_DIR/observer-probe-$mode-out" >/dev/null 2>"$TMP_DIR/observer-probe-$mode.err"; then
+    --out-dir "$TMP_DIR/observer-probe-$mode-out" \
+    --known-hosts "$operator_known_hosts" >/dev/null 2>"$TMP_DIR/observer-probe-$mode.err"; then
     echo "expected controlled probe mode $mode to fail" >&2; exit 1
   fi
   grep -q 'checkpoint closure probe' "$TMP_DIR/observer-probe-$mode.err"
@@ -4586,14 +4691,16 @@ done
 # Legacy external input is rejected by argparse, and the legacy environment is
 # rejected before the harness can be consulted.
 if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
-  --package-dir "$package_dir" --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
+  --package-dir "$package_dir" --known-hosts "$operator_known_hosts" \
+  --checkpoint-closure-receipt "$checkpoint_closure_receipt" \
   --out-dir "$TMP_DIR/legacy-arg-out" >/dev/null 2>"$TMP_DIR/legacy-arg.err"; then
   echo "expected legacy checkpoint receipt argument to fail" >&2; exit 1
 fi
 grep -q 'unrecognized arguments' "$TMP_DIR/legacy-arg.err"
 if OASIS7_CHECKPOINT_CLOSURE_RECEIPT="$checkpoint_closure_receipt" \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --manifest "$observer_gate_manifest" \
-  --package-dir "$package_dir" --out-dir "$TMP_DIR/legacy-env-out" >/dev/null 2>"$TMP_DIR/legacy-env.err"; then
+  --package-dir "$package_dir" --known-hosts "$operator_known_hosts" \
+  --out-dir "$TMP_DIR/legacy-env-out" >/dev/null 2>"$TMP_DIR/legacy-env.err"; then
   echo "expected legacy checkpoint receipt environment to fail" >&2; exit 1
 fi
 grep -q 'caller-supplied checkpoint closure receipt is forbidden' "$TMP_DIR/legacy-env.err"
@@ -4617,6 +4724,7 @@ if OASIS7_TEST_INPROCESS_PROBE_MARKER="$non_linux_probe_marker" \
   "$rollout_driver" --manifest "$non_linux_only_manifest" \
   --package-dir "$tampered_linux_probe_package" \
   --out-dir "$TMP_DIR/non-linux-tampered-out" \
+  --known-hosts "$operator_known_hosts" \
   >"$TMP_DIR/non-linux-tampered.out" 2>"$TMP_DIR/non-linux-tampered.err"; then
   echo "expected a tampered Linux probe bundle to fail a non-Linux observer plan" >&2
   exit 1
@@ -4642,7 +4750,8 @@ chmod +x "$forbidden_override"
 OASIS7_TESTING=1 OASIS7_TEST_CHECKPOINT_CLOSURE_PROBE="$forbidden_override" \
   "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$observer_gate_manifest" --package-dir "$package_dir" \
-  --out-dir "$TMP_DIR/release-cli-retired-env-out" --json \
+  --out-dir "$TMP_DIR/release-cli-retired-env-out" \
+  --known-hosts "$operator_known_hosts" --json \
   >"$TMP_DIR/release-cli-retired-env.out" \
   2>"$TMP_DIR/release-cli-retired-env.err" && {
     echo "fixture without governed node.env unexpectedly completed the real probe" >&2
