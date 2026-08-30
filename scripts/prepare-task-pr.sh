@@ -1071,6 +1071,7 @@ source_branch, source_head = sys.argv[2:4]
 comparison_ref, comparison_head, base_branch = sys.argv[4:7]
 mapping_path = source_worktree / ".pm" / "github-project-sync" / "tasks.json"
 task_uid_re = re.compile(r"task_[0-9a-f]{32}")
+oid_re = re.compile(r"[0-9a-f]{40}")
 
 def fail(reason: str) -> None:
     raise SystemExit(f"draft_candidate canonical task binding invalid: {reason}")
@@ -1117,6 +1118,136 @@ if issue_url and f"/issues/{issue_number}" not in issue_url:
 record_default_branch = str(record.get("default_branch") or "").strip()
 if record_default_branch and record_default_branch != base_branch:
     fail(f"mapped default_branch is {record_default_branch}, expected {base_branch}")
+
+repo_name = str((mapping.get("project") or {}).get("repo") or record.get("repository") or "").strip()
+if not re.fullmatch(r"[^/\s]+/[^/\s]+", repo_name):
+    fail(f"mapped repository is invalid: {repo_name or '<missing>'}")
+
+def issue_comments_via_rest(repo: str, issue_number: int) -> list[dict[str, object]]:
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        fail(f"mapped repository is invalid: {repo}")
+    payload = subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/issues/{issue_number}/comments",
+            "--paginate",
+        ],
+        text=True,
+    )
+    if not payload.strip():
+        return []
+    decoder = json.JSONDecoder()
+    comments: list[dict[str, object]] = []
+    index = 0
+    while index < len(payload):
+        while index < len(payload) and payload[index].isspace():
+            index += 1
+        if index >= len(payload):
+            break
+        page, next_index = decoder.raw_decode(payload, index)
+        if not isinstance(page, list):
+            fail("GitHub issue comments REST response is not a list")
+        comments.extend(item for item in page if isinstance(item, dict))
+        index = next_index
+    return comments
+
+try:
+    issue_payload = subprocess.check_output(
+        [
+            "gh",
+            "issue",
+            "view",
+            issue_number,
+            "-R",
+            repo_name,
+            "--json",
+            "comments",
+        ],
+        text=True,
+    )
+    issue_view = json.loads(issue_payload)
+    comments = issue_view.get("comments") if isinstance(issue_view, dict) else None
+    if not isinstance(comments, list):
+        fail("GitHub issue comments response is missing a comments list")
+except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError) as exc:
+    try:
+        comments = issue_comments_via_rest(repo_name, int(issue_number))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError) as rest_exc:
+        fail(f"bound GitHub issue comments cannot be read: {exc}; REST fallback failed: {rest_exc}")
+
+identity_keys = (
+    "Task UID",
+    "Source Worktree",
+    "Source Branch",
+    "Source Head",
+    "Comparison Ref",
+    "Comparison OID",
+)
+
+def issue_identity_fields(body: str) -> dict[str, str] | None:
+    if "<!-- oasis7-pm-evidence -->" not in body:
+        return None
+    fields: dict[str, str] = {}
+    for key in identity_keys:
+        match = re.search(rf"^{re.escape(key)}:\s*(.+)$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1).strip().strip("`")
+    # Generic execution evidence comments use the same envelope but do not
+    # carry frozen identity. A Task UID alone is not an identity assertion;
+    # once any worktree/head/ref field appears, a partial block is malformed
+    # and must fail closed.
+    return fields if any(key != "Task UID" for key in fields) else None
+
+identity_blocks = [
+    fields
+    for comment in comments
+    if isinstance(comment, dict)
+    for fields in [issue_identity_fields(str(comment.get("body") or ""))]
+    if fields is not None
+]
+if not identity_blocks:
+    fail(
+        "bound GitHub issue has no canonical frozen identity evidence; expected an "
+        "oasis7-pm-evidence comment with Task UID, Source Worktree, Source Branch, "
+        "Source Head, Comparison Ref, and Comparison OID"
+    )
+
+identity = identity_blocks[-1]
+missing_identity = [key for key in identity_keys if not identity.get(key)]
+if missing_identity:
+    fail("bound GitHub issue frozen identity evidence is incomplete: " + ", ".join(missing_identity))
+if identity["Task UID"] != task_uid:
+    fail(f"issue evidence Task UID differs from canonical mapping: {identity['Task UID']}")
+
+evidence_worktree = identity["Source Worktree"]
+resolved_worktree = os.path.realpath(source_worktree)
+worktree_candidates = {evidence_worktree, Path(evidence_worktree).name}
+if Path(evidence_worktree).is_absolute():
+    worktree_candidates.add(os.path.realpath(os.path.expanduser(evidence_worktree)))
+if resolved_worktree not in worktree_candidates and source_worktree.name not in worktree_candidates:
+    fail(
+        "issue evidence Source Worktree differs from canonical mapping: "
+        f"{evidence_worktree} (expected {source_worktree})"
+    )
+if identity["Source Branch"] != source_branch:
+    fail(f"issue evidence Source Branch differs from current task branch: {identity['Source Branch']}")
+if not oid_re.fullmatch(identity["Source Head"]) or identity["Source Head"] != source_head:
+    fail(
+        "issue evidence Source Head is stale or invalid: "
+        f"{identity['Source Head']} (expected {source_head})"
+    )
+if identity["Comparison Ref"] != comparison_ref:
+    fail(
+        "issue evidence Comparison Ref differs from the canonical comparison ref: "
+        f"{identity['Comparison Ref']} (expected {comparison_ref})"
+    )
+if not oid_re.fullmatch(identity["Comparison OID"]) or identity["Comparison OID"] != comparison_head:
+    fail(
+        "issue evidence Comparison OID is stale or invalid: "
+        f"{identity['Comparison OID']} (expected {comparison_head})"
+    )
 
 def git_rev(*args: str) -> str:
     try:

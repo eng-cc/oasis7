@@ -1369,11 +1369,16 @@ class WorkflowDocumentationContract(unittest.TestCase):
     def test_draft_candidate_binding_is_canonical_and_pre_side_effect(self) -> None:
         script = PREPARE_TASK_PR.read_text(encoding="utf-8")
         validator = script.index("validate_draft_candidate_binding()")
+        issue_read = script.index(
+            '"gh",\n            "issue",\n            "view",',
+            validator,
+        )
         call = script.index("BOUND_TASK_FIELDS=\"$(validate_draft_candidate_binding", validator)
         role_status = script.index(
             'LOCAL_ROLE_REVIEW_OUTPUT=\"$(local_role_review_status',
             call,
         )
+        self.assertLess(issue_read, call)
         push = script.index('git -C \"$SOURCE_WORKTREE\" push', call)
         gh_create = script.index('CREATE_CMD=("gh" "pr" "create"', call)
         self.assertLess(call, role_status)
@@ -1386,6 +1391,14 @@ class WorkflowDocumentationContract(unittest.TestCase):
             "source branch ref differs",
             "comparison ref differs",
             "expected exactly one canonical_worktree/task_branch match",
+            "oasis7-pm-evidence",
+            "identity_keys",
+            "Source Worktree",
+            "Source Branch",
+            "Source Head",
+            "Comparison Ref",
+            "Comparison OID",
+            "bound GitHub issue",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, script)
@@ -1419,8 +1432,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(sc12e, "scripts PRD must publish SC-12E")
         assert sc12e is not None
         sc12e_text = sc12e.group(0)
-        identity = "Task UID`、`Source Worktree`、`Source Branch`、`Source Head` 与 `Comparison Ref`"
+        identity = "Task UID`、`Source Worktree`、`Source Branch`、`Source Head`、`Comparison Ref` 与 `Comparison OID`"
         self.assertIn(identity, sc12e_text)
+        self.assertIn("canonical `<!-- oasis7-pm-evidence -->`", sc12e_text)
+        self.assertIn("缺少或不匹配的 issue evidence 必须 fail closed", sc12e_text)
         self.assertIn("draft candidate 创建不得要求 `Pre-PR Local Role Review: passed`", sc12e_text)
         self.assertLess(
             sc12e_text.index("task/frozen-head identity"),

@@ -687,6 +687,38 @@ if "missing passed pre-PR local role review evidence" not in stderr:
     raise SystemExit(f"expected missing-review error, got: {stderr}")
 PY
 
+run_prepare_with_issue_fixture() {
+  local issue_body="$1"
+  local issue_comments="$2"
+  shift 2
+  local status
+  if TEST_GH_ISSUE_BODY_JSON="$issue_body" \
+    TEST_GH_ISSUE_VIEW_JSON="$issue_comments" \
+    run_prepare "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+  return "$status"
+}
+
+refresh_current_issue_identity_fixture() {
+  local output_path="$1"
+  local current_head
+  current_head="$($REAL_GIT -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  cat >"$output_path" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:06:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $current_head\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
+    }
+  ]
+}
+EOF
+  export TEST_GH_ISSUE_BODY_JSON="$draft_issue_body"
+  export TEST_GH_ISSUE_VIEW_JSON="$output_path"
+}
+
 # A fresh task has no role-review packet or provenance ledger yet. The draft
 # candidate exists specifically to obtain same-head CI before those gates.
 reset_smoke_branch_to_base
@@ -703,15 +735,26 @@ EOF
   -c user.email="smoke@example.invalid" \
   -c commit.gpgsign=false \
   commit --no-verify -m "test: fresh draft candidate fixture" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 
 draft_log="$TMPDIR/gh-draft-candidate.log"
 draft_git_log="$TMPDIR/git-draft-candidate.log"
 draft_out="$TMPDIR/draft-candidate.out"
 draft_err="$TMPDIR/draft-candidate.err"
 draft_issue_body="$TMPDIR/draft-issue-body.json"
+draft_issue_comments="$TMPDIR/draft-issue-comments.json"
 printf '{"body":"Task UID: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
-if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
-  run_prepare "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
+cat >"$draft_issue_comments" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:04:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $SOURCE_HEAD\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
+    }
+  ]
+}
+EOF
+if ! run_prepare_with_issue_fixture "$draft_issue_body" "$draft_issue_comments" \
+  "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
   cat "$draft_err" >&2
   exit 1
 fi
@@ -750,13 +793,98 @@ EOF
   -c user.email="smoke@example.invalid" \
   -c commit.gpgsign=false \
   commit --no-verify -m "test: migrated draft candidate mapping fixture" >/dev/null
+migrated_source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+migrated_draft_comments="$TMPDIR/migrated-draft-issue-comments.json"
+cat >"$migrated_draft_comments" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:05:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $migrated_source_head\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
+    }
+  ]
+}
+EOF
 migrated_draft_log="$TMPDIR/gh-migrated-draft-candidate.log"
 migrated_draft_git_log="$TMPDIR/git-migrated-draft-candidate.log"
-if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
-  run_prepare "$migrated_draft_log" "$migrated_draft_git_log" --draft-candidate >/dev/null 2>"$TMPDIR/migrated-draft-candidate.err"; then
+if ! run_prepare_with_issue_fixture "$draft_issue_body" "$migrated_draft_comments" \
+  "$migrated_draft_log" "$migrated_draft_git_log" --draft-candidate >/dev/null 2>"$TMPDIR/migrated-draft-candidate.err"; then
   cat "$TMPDIR/migrated-draft-candidate.err" >&2
   exit 1
 fi
+reset_project_mapping_after_record_pr
+
+assert_draft_candidate_issue_rejection_has_no_side_effects() {
+  local gh_log="$1"
+  local git_log="$2"
+  local error_file="$3"
+  local expected_error="$4"
+  python3 - "$gh_log" "$git_log" "$error_file" "$expected_error" <<'PY'
+from pathlib import Path
+import sys
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+expected_error = sys.argv[4]
+issue_read = "issue view 123 -R example/oasis7 --json comments"
+unexpected_gh = [line for line in gh_lines if line != issue_read]
+if unexpected_gh:
+    raise SystemExit(f"draft candidate rejection reached a GitHub side effect: {gh_lines}")
+if any(line.startswith("push ") or " push " in line for line in git_lines):
+    raise SystemExit(f"draft candidate rejection pushed before validation: {git_lines}")
+if expected_error not in stderr:
+    raise SystemExit(f"expected {expected_error!r}, got: {stderr}")
+PY
+}
+
+# A current local mapping is insufficient when the bound issue's frozen source
+# head is stale. The issue read is allowed; push, PR creation, and record-pr
+# must not be reached.
+stale_source_comments="$TMPDIR/stale-source-issue-comments.json"
+cat >"$stale_source_comments" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:06:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $COMPARISON_OID\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
+    }
+  ]
+}
+EOF
+stale_source_log="$TMPDIR/gh-stale-source-head.log"
+stale_source_git_log="$TMPDIR/git-stale-source-head.log"
+stale_source_err="$TMPDIR/stale-source-head.err"
+if run_prepare_with_issue_fixture "$draft_issue_body" "$stale_source_comments" \
+  "$stale_source_log" "$stale_source_git_log" --draft-candidate >/dev/null 2>"$stale_source_err"; then
+  echo "expected stale issue Source Head to fail closed" >&2
+  exit 1
+fi
+assert_draft_candidate_issue_rejection_has_no_side_effects \
+  "$stale_source_log" "$stale_source_git_log" "$stale_source_err" \
+  "issue evidence Source Head is stale or invalid"
+
+# A current Source Head does not authorize a different base identity. A
+# Comparison Ref mismatch must fail before every external write as well.
+comparison_ref_comments="$TMPDIR/comparison-ref-issue-comments.json"
+cat >"$comparison_ref_comments" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:07:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $migrated_source_head\\nComparison Ref: refs/remotes/origin/not-main\\nComparison OID: $COMPARISON_OID\\n"
+    }
+  ]
+}
+EOF
+comparison_ref_log="$TMPDIR/gh-comparison-ref.log"
+comparison_ref_git_log="$TMPDIR/git-comparison-ref.log"
+comparison_ref_err="$TMPDIR/comparison-ref.err"
+if run_prepare_with_issue_fixture "$draft_issue_body" "$comparison_ref_comments" \
+  "$comparison_ref_log" "$comparison_ref_git_log" --draft-candidate >/dev/null 2>"$comparison_ref_err"; then
+  echo "expected issue Comparison Ref mismatch to fail closed" >&2
+  exit 1
+fi
+assert_draft_candidate_issue_rejection_has_no_side_effects \
+  "$comparison_ref_log" "$comparison_ref_git_log" "$comparison_ref_err" \
+  "issue evidence Comparison Ref differs from the canonical comparison ref"
 
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(
@@ -1161,6 +1289,8 @@ PY
   -c commit.gpgsign=false \
   commit --no-verify -m "test: repair canonical draft candidate mapping" >/dev/null
 
+refresh_current_issue_identity_fixture "$TMPDIR/current-issue-comments.json"
+
 success_log="$TMPDIR/gh-success.log"
 success_git_log="$TMPDIR/git-success.log"
 success_out="$TMPDIR/success.out"
@@ -1469,6 +1599,7 @@ reset_project_mapping_after_record_pr
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_role_review_packet "$SOURCE_HEAD" "addressed"
 commit_fixture_evidence
+refresh_current_issue_identity_fixture "$TMPDIR/current-issue-comments.json"
 
 addressed_log="$TMPDIR/gh-addressed.log"
 addressed_git_log="$TMPDIR/git-addressed.log"
