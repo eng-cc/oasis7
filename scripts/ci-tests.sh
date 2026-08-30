@@ -173,7 +173,14 @@ run_provider_remote_https_smoke() {
   run ./scripts/provider-remote-https/provider-bridge-contract-smoke.test.sh
 }
 
+run_packaging_contract_tests() {
+  run bash ./scripts/native-packaging-contract.test.sh
+  run bash ./scripts/packaging-artifact-size-contract.test.sh
+  run bash ./scripts/copy-viewer-web-dist.test.sh
+}
+
 run_operational_contract_tests() {
+  run_packaging_contract_tests
   run python3 ./scripts/pm/ci-ready-receipt.test.py
   run ./scripts/ci-required-scope-audit-contract.test.sh
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
@@ -181,7 +188,6 @@ run_operational_contract_tests() {
   run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
-  run bash ./scripts/packaging-artifact-size-contract.test.sh
   run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh
   run bash ./scripts/build-game-launcher-bundle-macos-bash3.test.sh
   run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh

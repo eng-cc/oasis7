@@ -1,15 +1,43 @@
 #!/usr/bin/env python3
 """Fail-closed config-driven required-gate planner."""
-import argparse, fnmatch, hashlib, json, subprocess, sys
+import argparse, fnmatch, hashlib, json, re, subprocess, sys
 from pathlib import Path
 
-CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
-FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
+CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","packaging_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
+# Packaging is a distinct planning capability, but the existing required-gate
+# workflow exposes one non-Rust operational-contract selector. Keep that
+# compatibility alias explicit until the workflow grows a separate output.
+FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","packaging_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
+PLANNER_OUTPUT_FIELDS=set(FIELDS.values())|{"run_oasis7_net_libp2p_tests","run_viewer_wasm_check","run_pixel_world_bridge_wasm_check","run_rust_baseline"}
 def die(m): raise SystemExit("plan-rust-required-scope: "+m)
 def config(path):
   try: raw=Path(path).read_bytes(); c=json.loads(raw)
   except Exception as e: die(f"invalid config: {e}")
   if c.get("schema")!="oasis7-ci-required-scope/v2" or c.get("capabilities")!=list(CAPABILITIES) or c.get("unmatched")!="full" or not isinstance(c.get("rules"),list): die("invalid config schema")
+  ownership=c.get("selector_ownership")
+  if not isinstance(ownership,list) or not ownership: die("invalid selector ownership registry")
+  declared={}
+  for item in ownership:
+    if not isinstance(item,dict): die("invalid selector ownership entry")
+    name=item.get("name")
+    if not isinstance(name,str) or not re.fullmatch(r"OASIS7_CI_RUN_[A-Z0-9_]+",name) or name in declared: die("invalid selector ownership name")
+    mode=item.get("mode")
+    if mode=="planner-owned":
+      field=item.get("planner_field")
+      if field not in PLANNER_OUTPUT_FIELDS or "owner" in item or "reason" in item: die("invalid planner-owned selector metadata")
+    elif mode=="manual-only":
+      if not isinstance(item.get("owner"),str) or not item["owner"] or not isinstance(item.get("reason"),str) or not item["reason"] or "planner_field" in item: die("invalid manual-only selector metadata")
+    else: die("invalid selector ownership mode")
+    declared[name]=item
+  selector_source=Path(__file__).with_name("ci-tests.sh")
+  if not selector_source.is_file():
+    die(f"selector source is missing: {selector_source}")
+  try:
+    inventory=set(re.findall(r"OASIS7_CI_RUN_[A-Z0-9_]+",selector_source.read_text(encoding="utf-8")))
+  except OSError as e:
+    die(f"selector source is unreadable: {e}")
+  if inventory != set(declared):
+    die("selector ownership registry does not match ci-tests selectors")
   reasons=set()
   for r in c["rules"]:
     if not isinstance(r,dict) or not isinstance(r.get("match"),list) or not r["match"] or any(not isinstance(x,str) or not x for x in r["match"]): die("invalid config rule patterns")
@@ -47,7 +75,7 @@ def main():
  vals={f:"false" for f in FIELDS.values()}
  vals.update({FIELDS[x]:"true" for x in capabilities})
  vals["run_required_gate_baseline"]="true"
- requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","site_quality"})
+ requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","packaging_contracts","site_quality"})
  vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)
