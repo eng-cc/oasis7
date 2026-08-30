@@ -491,6 +491,19 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertRegex(pre_pr, r"(?is)pre-PR.*\bReady\b")
         self.assertNotRegex(pre_pr, r"(?is)(close|complete) the task.*(?:before|pre-PR|PR creation)")
 
+    def test_finishing_explicitly_produces_exact_head_ci_receipt(self) -> None:
+        finishing = FINISHING.read_text(encoding="utf-8")
+        pre_pr = finishing[: finishing.lower().find("## post-pr / pre-merge gates")]
+        self.assertIn("python3 ./scripts/pm/ci-ready-receipt.py", pre_pr)
+        self.assertIn("--check-name required-gate", pre_pr)
+        self.assertIn("--planner-digest auto --json > <ci_ready_receipt.json>", pre_pr)
+        self.assertIn("does not create this artifact", pre_pr)
+        self.assertIn("--promote-draft <ci_ready_receipt.json>", pre_pr)
+        self.assertRegex(
+            pre_pr,
+            r"(?is)required-gate.{0,400}ci-ready-receipt\.py.{0,700}requesting-repo-owned-review",
+        )
+
     def test_state_gate_and_pm_mapping_is_explicit_and_total(self) -> None:
         mapping = self.section("State, gate, and PM mapping")
         for state in (
