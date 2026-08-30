@@ -1028,7 +1028,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual("done", phases[-1])
         self.assertEqual(8, len(phases), phases)
         self.assertRegex(catalog, r"final_phase=\{kind:canonical,value:done\}")
-        self.assertRegex(catalog, r"terminal_outcome=\{kind:canonical,value:post_merge_done\}")
+        self.assertRegex(
+            catalog,
+            r'terminal_outcome=\{schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done\}',
+        )
         advances = re.search(r"phase_advances\s*=\s*(\d+)", catalog)
         self.assertIsNotNone(advances)
         self.assertEqual("7", advances.group(1))
@@ -1067,6 +1070,47 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual([phase for phase in canonical if phase != "blocked"], phases)
         self.assertNotIn("closeout", phases)
         self.assertNotRegex(self.supervisor_design, r"(?m)^\| `closeout`\b")
+        projection = re.search(
+            r"workflow_phase_projection=\{schema:\"tpm-supervisor-workflow-phase/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(projection, "positive workflow phase projection is required")
+        assert projection is not None
+        self.assertEqual(phases, [item.strip() for item in projection.group(1).split(",")])
+        operations = re.search(
+            r"implementation_operation_sequence=\{schema:\"tpm-supervisor-operation-sequence/v1\",sequence:\[(.*?)\]\}",
+            positive.group(0),
+            re.S,
+        )
+        self.assertIsNotNone(operations, "positive implementation operation sequence is required")
+        assert operations is not None
+        self.assertEqual(
+            [
+                "bootstrap", "route", "dispatch", "execute", "integrate", "freeze",
+                "draft_candidate", "create_pr", "record_pr", "comment", "verify",
+                "review", "ready", "promote_draft", "pr_watch", "merge",
+                "merge_receipt", "task_done", "main_sync", "safe_cleanup",
+                "post_merge_finalize",
+            ],
+            [item.strip() for item in operations.group(1).split(",")],
+        )
+        self.assertRegex(
+            positive.group(0),
+            r'terminal_outcome=\{schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done\}',
+        )
+        schema = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(schema, "machine-readable case schema is required")
+        assert schema is not None
+        schema_text = re.sub(r"\s+", " ", schema.group(1))
+        self.assertIn("typed `terminal_outcome`", schema_text)
+        self.assertRegex(
+            schema_text,
+            r"positive cases require typed `?workflow_phase_projection`? and `?implementation_operation_sequence`?",
+        )
 
     def test_supervisor_soak_timeout_is_distinct_from_ordinary_case_budget(self) -> None:
         budgets = re.search(
@@ -1259,7 +1303,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         text = section.group(1)
         normalized = re.sub(r"\s+", " ", text)
         self.assertIn(
-            "The `subcases` array is `[]` except for composite parent IDs `A05`, `C03`, and `W01`",
+            "The `subcases` array is `[]` except for composite parent IDs `B02`, `A05`, `C03`, and `W01`",
             normalized,
         )
         for field in (
@@ -1270,7 +1314,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertIn(f"`{field}`", text)
         self.assertIn("Aggregate cardinality is the component-wise sum of subcase cardinalities", normalized)
         self.assertIn("the parent passes iff every declared subcase", normalized)
-        for case_id in ("A05", "C03", "W01"):
+        for case_id in ("B02", "A05", "C03", "W01"):
             self.assertIn(case_id, normalized)
         self.assertIn('"subcases":[{', normalized)
         example = next(
@@ -1279,6 +1323,81 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertRegex(example, r'"subcases": \[\]')
         self.assertIn("one nested object per declared variant", text)
+
+    def test_supervisor_proof_and_transition_bind_task_and_epoch_identity(self) -> None:
+        self.assertIn("| Envelope | Required fields and invariants |", self.supervisor_design)
+        for schema in ("tpm-validator-proof/v1", "tpm-supervisor-transition/v1"):
+            row = re.search(rf"(?m)^\| `{re.escape(schema)}` \| .*", self.supervisor_design)
+            self.assertIsNotNone(row, schema)
+            assert row is not None
+            for field in ("task_uid", "repository", "canonical_worktree", "bootstrap_epoch", "evidence_epoch"):
+                with self.subTest(schema=schema, field=field):
+                    self.assertIn(f"`{field}`", row.group(0))
+        self.assertRegex(
+            self.supervisor_design,
+            r"evidence_epoch[\s\S]*?concrete on\s+all later route/action/receipt/proof/collaboration/wake/transition envelopes",
+        )
+
+    def test_supervisor_b02_identity_and_epoch_subcases_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        row = re.search(r"(?m)^\| `B02` .*", matrix.group(0))
+        self.assertIsNotNone(row, "B02 row is required")
+        assert row is not None
+        for mapping in ("identity -> rejected(identity)", "epoch -> rejected(epoch)"):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, row.group(0))
+        self.assertIn("typed_subcases aggregate:A=0/P=0/S=0/R=2/B=0/C=0", row.group(0))
+        self.assertIn("typed_subcases per_subcase: reject_same_epoch", row.group(0))
+        schema = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(schema, "machine-readable case schema is required")
+        assert schema is not None
+        normalized = re.sub(r"\s+", " ", schema.group(1))
+        self.assertIn("B02={identity,epoch}", normalized)
+        self.assertIn('outcome={"kind":"all_subcases_pass"', normalized)
+
+    def test_supervisor_wake_rows_separate_external_wait_state_from_phase(self) -> None:
+        phase_matrix = re.search(
+            r"(?ms)^\| Phase family \| Required validated evidence .*?(?=^The final two rows)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(phase_matrix, "phase matrix is required")
+        assert phase_matrix is not None
+        valid_phases = set(re.findall(r"`([a-z][a-z0-9_]*)`", phase_matrix.group(0)))
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        for case_id in ("W01", "W02", "W03"):
+            row = re.search(
+                rf"(?m)^\| `{case_id}` \| [^|]+ \| `([^`]+)` \| `([^`]+)` \|",
+                matrix.group(0),
+            )
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            state, phase = row.groups()
+            self.assertEqual("external_wait", state, case_id)
+            self.assertIn(phase, valid_phases, case_id)
+            self.assertNotEqual("external_wait", phase, case_id)
+        self.assertIn("input={workflow_state:external_wait,phase:execute}", self.supervisor_design)
+        operational = re.search(
+            r"(?ms)^\| Operational ID \| Fault family / injection .*?(?=^The closed positive catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(operational, "operational matrix is required")
+        assert operational is not None
+        for state, phase in re.findall(r"\| `([^`]+)` / `([^`]+)` \|", operational.group(0)):
+            self.assertIn(phase, valid_phases, f"{state}/{phase}")
+            self.assertNotEqual("external_wait", phase, f"{state}/{phase}")
 
     def test_supervisor_return_and_wake_variants_follow_closed_mapping(self) -> None:
         matrix = re.search(
@@ -1325,7 +1444,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertIsNotNone(matrix, "supervisor fault matrix is required")
         assert matrix is not None
-        expected_aggregates = {"A05": "R=7", "C03": "R=6", "W01": "R=4"}
+        expected_aggregates = {"B02": "R=2", "A05": "R=7", "C03": "R=6", "W01": "R=4"}
         for case_id, aggregate in expected_aggregates.items():
             row = re.search(rf"(?m)^\| `{case_id}` .*", matrix.group(0))
             self.assertIsNotNone(row, case_id)
@@ -1342,14 +1461,19 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(section, "machine-readable case schema is required")
         assert section is not None
         schema = re.sub(r"\s+", " ", section.group(1))
+        self.assertIn('`cardinality={"aggregate_from":"subcases","operation":"sum"}`', schema)
+        self.assertIn('`recovery={"aggregate":"all_subcases"}`', schema)
+        self.assertIn("never one tuple", schema)
         self.assertIn(
-            'parent uses `cardinality={"aggregate_from":"subcases","operation":"sum"}` and '
-            '`recovery={"aggregate":"all_subcases"}`, never one tuple',
+            'parent uses `outcome={"kind":"all_subcases_pass","child_ids":[...],"child_outcomes":[...]}`',
             schema,
         )
+        self.assertIn("scalar parent code is invalid when subcases exist", schema)
+        self.assertIn("composite-only `all_subcases_pass`", schema)
         self.assertIn("same-digest W01 is accepted(existing_result), R=0, idempotent_existing", schema)
         self.assertIn("every other W01 subcase has R=1/reject_same_epoch", schema)
         for variant in (
+            "B02={identity,epoch}",
             "A05={forged,malformed,wrong_identity,stale,revision,different_digest,fencing}",
             "C03={forged,stale,replayed,out_of_order,partial,wrong_scope}",
             "W01={same_digest_duplicate,different_digest_duplicate,stale,out_of_order,fencing}",
@@ -1468,6 +1592,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
         transition = transitions[0]
         self.assertEqual("tpm-supervisor-transition/v1", transition["schema"])
         self.assertEqual("adversarial-B01-7001", transition["case_id"])
+        for field in ("task_uid", "bootstrap_epoch", "evidence_epoch"):
+            self.assertEqual(record[field], transition[field], field)
         self.assertEqual("running", transition["from_state"])
         self.assertEqual("capability_blocked", transition["to_state"])
         self.assertEqual("bootstrap", transition["from_phase"])
