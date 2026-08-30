@@ -115,6 +115,8 @@ def check_run_pull_request_identity(check_run, pr_number, expected_head):
     return base_oid,head_oid
 
 def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id, allow_ready_pr=False):
+    if check_app_id is None or not re.fullmatch(r"[0-9]+",str(check_app_id)):
+        raise SystemExit("ci-ready-receipt: check app id is required")
     pr=gh("api",f"repos/{repository}/pulls/{pr_number}")
     if not pr.get("draft") and not allow_ready_pr: raise SystemExit("ci-ready-receipt: superseded: PR is not a draft candidate")
     if not pr.get("draft") and (str(pr.get("state") or "").lower()!="open" or bool(pr.get("merged"))):
@@ -149,7 +151,7 @@ def main():
     p.add_argument("--repository",required=True); p.add_argument("--task-uid",required=True)
     p.add_argument("--task-issue-number",required=True,type=int)
     p.add_argument("--pr-number",required=True,type=int); p.add_argument("--check-name",default="required-gate")
-    p.add_argument("--check-app-id"); p.add_argument("--planner-digest",required=True)
+    p.add_argument("--check-app-id",required=True); p.add_argument("--planner-digest",required=True)
     p.add_argument("--receipt"); p.add_argument("--allow-ready-pr",action="store_true"); p.add_argument("--json",action="store_true")
     p.add_argument("--refresh-same-identity",action="store_true",
                    help="refresh only observed_at after complete live identity/planner validation")
