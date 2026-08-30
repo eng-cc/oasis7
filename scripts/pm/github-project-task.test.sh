@@ -47,6 +47,13 @@ PY
   "issue create -R eng-cc/oasis7 --title "*)
     printf 'https://github.com/eng-cc/oasis7/issues/2001\n'
     ;;
+  issue\ list\ -R\ eng-cc/oasis7\ --state\ all\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
+    if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
+      printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
+    else
+      printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
+    fi
+    ;;
   issue\ list\ -R\ eng-cc/oasis7\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
     if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
       printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
@@ -60,8 +67,18 @@ PY
     ;;
   "issue comment 2001 -R eng-cc/oasis7 --body-file "*)
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
+    mkdir -p "$GH_COMMENT_DIR"
+    cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
+    ;;
+  api\ repos/eng-cc/oasis7/issues/comments/*)
+    comment_id="${*: -1}"
+    comment_id="${comment_id##*/}"
+    python3 - "$GH_COMMENT_DIR/$comment_id" <<'PY'
+import json, pathlib, sys
+print(json.dumps({"body": pathlib.Path(sys.argv[1]).read_text()}))
+PY
     ;;
   "issue close 2001 -R eng-cc/oasis7 --reason completed")
     printf 'closed\n'
@@ -206,7 +223,7 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
@@ -222,11 +239,13 @@ printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
 export GH_PROJECT_PHASE_STATE_FILE="$TMPDIR/project-live-phase"
 printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
+export GH_COMMENT_DIR="$TMPDIR/gh-comments"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"
+mkdir -p "$GH_COMMENT_DIR"
 
 NEW_JSON="$TMPDIR/new.json"
 python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
@@ -242,6 +261,26 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
+
+# RED: the public non-PR classification command must exist and persist a
+# runtime-verified issue-comment receipt plus refreshed task fields.
+python3 "$TMPDIR/github-project-task.py" classify-non-pr-task "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$TASK_UID" \
+  --evidence "Read-only workflow audit completed without a PR." \
+  --json > "$TMPDIR/classify-non-pr.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$TMPDIR/classify-non-pr.json" <<'PY'
+import json, pathlib, sys
+mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())
+payload = json.loads(pathlib.Path(sys.argv[3]).read_text())
+record = mapping["tasks"][sys.argv[2]]
+assert record["completion_mode"] == "non_pr_task", record
+assert record["non_pr_completion_evidence"] == "Read-only workflow audit completed without a PR.", record
+assert payload["status"] == "ok" and payload["comment_url"], payload
+assert payload["comment_readback_verified"] is True, payload
+PY
 REVIEW_PACKET="$TMPDIR/review-packet.md"
 HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
 LEDGER_DIR="$TMPDIR/.pm/scratch/$TASK_UID"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import importlib.util
 import json
@@ -331,10 +332,18 @@ def pr_number_from_url(pr_url: str) -> int | None:
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity"):
+    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
+    evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
+    if evidence_match:
+        encoded = evidence_match.group(1)
+        try:
+            padding = "=" * (-len(encoded) % 4)
+            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            fields["non_pr_completion_evidence"] = ""
     hold_values: dict[str, Any] = {}
     for key in ("kind", "requester", "reason", "resume_authority", "active"):
         match = re.search(rf"^- merge_hold_{key}: `([^`]+)`$", body, re.MULTILINE)
@@ -427,6 +436,8 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
             ("merge_hold", record.get("merge_hold") or {}),
+            ("completion_mode", record.get("completion_mode") or ""),
+            ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
             ("source_refs", record.get("source_refs") or []),
             ("acceptance", record.get("acceptance") or []),
             ("updated_at", record.get("updated_at") or now()),
@@ -460,6 +471,11 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
+    if task.get("completion_mode"):
+        lines.append(f"- completion_mode: `{task.get('completion_mode')}`")
+        evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
+        encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
+        lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
     if task.get("merge_hold"):
         hold = task["merge_hold"]
         for key in ("kind", "requester", "reason", "resume_authority", "active"):
@@ -508,6 +524,21 @@ def issue_comment(repo: str, issue_number: int, body: str) -> str:
         return run_text(["gh", "issue", "comment", str(issue_number), "-R", repo, "--body-file", body_path])
     finally:
         pathlib.Path(body_path).unlink(missing_ok=True)
+
+
+def verified_issue_comment(repo: str, issue_number: int, body: str) -> str:
+    """Write an Issue comment and prove GitHub returned the exact body."""
+    comment_url = issue_comment(repo, issue_number, body)
+    match = re.search(r"issuecomment-(\d+)(?:$|[?#])", comment_url)
+    if not match:
+        die("classify-non-pr-task: issue comment URL has no comment identity")
+    try:
+        readback = json.loads(run_text(["gh", "api", f"repos/{repo}/issues/comments/{match.group(1)}"]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"classify-non-pr-task: issue comment readback failed: {exc}")
+    if str(readback.get("body") or "") != body:
+        die("classify-non-pr-task: issue comment readback mismatch")
+    return comment_url
 
 
 def evidence_body(task_uid: str, role: str, phase: str, fields: dict[str, Any]) -> str:
@@ -851,6 +882,70 @@ def command_append_evidence(args: argparse.Namespace) -> int:
         "status": "ok",
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"append-execution-log: appended evidence to {comment_url}")
+    return 0
+
+
+def command_classify_non_pr_task(args: argparse.Namespace) -> int:
+    mapping_path, _mapping, record = require_record(args)
+    evidence = str(args.evidence or "").strip()
+    if not evidence:
+        die("classify-non-pr-task: --evidence must be non-empty")
+    live = github_issue_record(args.repo, args.task_uid)
+    if not live:
+        die(f"classify-non-pr-task: live GitHub issue not found for {args.task_uid}")
+    if str(live.get("task_uid") or "") != args.task_uid:
+        die("classify-non-pr-task: live Issue Task UID mismatch")
+    for key in ("issue_number", "issue_url"):
+        cached = str(record.get(key) or "")
+        current = str(live.get(key) or "")
+        if cached and current and cached != current:
+            die(f"classify-non-pr-task: cached/live Issue identity drift ({key})")
+    status = str(record.get("status") or live.get("status") or "")
+    phase = str(record.get("workflow_phase") or live.get("workflow_phase") or "")
+    if status in {"done", "deferred"} or phase in {"task_done", "closed_without_merge", "post_merge_done"}:
+        die("classify-non-pr-task: terminal tasks cannot be classified")
+    if any(record.get(key) not in (None, "", 0, False, {}) for key in
+           ("pr_number", "pr_url", "pull_request_url", "merge_receipt")):
+        die("classify-non-pr-task: PR-bound tasks cannot be classified")
+    if any(live.get(key) not in (None, "", 0, False, {}) for key in
+           ("pr_number", "pr_url", "pull_request_url", "merge_receipt")):
+        die("classify-non-pr-task: live Issue is PR-bound")
+
+    updated = json.loads(json.dumps(record))
+    updated["completion_mode"] = "non_pr_task"
+    updated["non_pr_completion_evidence"] = evidence
+    updated["updated_at"] = now()
+    task = task_from_record(args.task_uid, updated)
+    update_issue_body(args.repo, int(live["issue_number"]), task)
+    comment_url = verified_issue_comment(
+        args.repo,
+        int(live["issue_number"]),
+        evidence_body(
+            args.task_uid,
+            args.role,
+            "non_pr_classification",
+            {
+                "Classification": "non_pr_task",
+                "Evidence": evidence,
+                "Validation Command": args.validation_command,
+                "Expected Result": "Task is explicitly classified for non-PR completion.",
+                "Actual Result": "Issue body updated and exact comment readback verified.",
+            },
+        ),
+    )
+    updated["last_evidence_at"] = now()
+    updated.setdefault("evidence_comments", []).append(comment_url)
+    merge_task_mapping(mapping_path, args.task_uid, updated)
+    payload = {
+        "status": "ok",
+        "task_uid": args.task_uid,
+        "completion_mode": "non_pr_task",
+        "non_pr_completion_evidence": evidence,
+        "issue_url": live.get("issue_url"),
+        "comment_url": comment_url,
+        "comment_readback_verified": True,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"classify-non-pr-task: classified {args.task_uid}")
     return 0
 
 
@@ -1491,6 +1586,15 @@ def build_parser() -> argparse.ArgumentParser:
     append.add_argument("--blocker-next-action", required=True)
     append.add_argument("--json", action="store_true")
     append.set_defaults(func=command_append_evidence)
+
+    classify = subparsers.add_parser("classify-non-pr-task")
+    add_common(classify)
+    classify.add_argument("--task-uid", required=True)
+    classify.add_argument("--role", default="repository_health_engineer")
+    classify.add_argument("--evidence", required=True)
+    classify.add_argument("--validation-command", default="classify-non-pr-task")
+    classify.add_argument("--json", action="store_true")
+    classify.set_defaults(func=command_classify_non_pr_task)
 
     report = subparsers.add_parser("workflow-report")
     add_common(report)
