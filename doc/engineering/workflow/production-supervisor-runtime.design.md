@@ -193,11 +193,19 @@ unknown. A pre-action capability-block transition has no action, receipt, proof,
 
 #### Digest preimages and exclusions
 
-Every digest is `SHA-256(utf8("oasis7/tpm/<schema>\n" + canonical_json(preimage)))`;
-canonical JSON sorts object keys by Unicode code point, removes whitespace,
-normalizes numbers, and preserves specified array order. The digest being
-computed, framing, signatures/authentication headers, secrets, raw payloads,
-local paths, and mutable arrival order are excluded; signatures authenticate the resulting digest and are never hashed into the bytes they sign.
+For every digest, `domain_prefix` is the exact byte sequence
+`ASCII("oasis7/tpm/<schema>") || byte[0x0A]`; the digest is
+`SHA-256(domain_prefix || UTF-8(canonical_json(preimage)))`. The delimiter is
+exactly one ASCII LF byte (`0x0A`), never the two-byte characters
+backslash-plus-`n`.
+Canonical JSON sorts object keys by Unicode code point, removes whitespace,
+normalizes numbers, and preserves specified array order. The digest currently
+being computed, signatures/authentication headers, secrets, raw payload bytes
+not represented by typed fields, transport-local paths (except the canonical
+identity field `canonical_worktree`), and mutable arrival order are excluded;
+canonical task/repository/worktree/branch identity fields remain in their
+envelope preimages. Signatures authenticate the resulting digest and are never
+hashed into the bytes they sign.
 
 Event preimages contain identity/epoch/sequence/causation, parent event head, and
 typed payload; `payload_digest` hashes payload-only JSON. Action preimages
@@ -287,9 +295,13 @@ causal dependency, then `event_id`; indeterminate order blocks replay. The
 clock is logical, the seed explicit, and runtime IDs use the recorded map.
 
 `state_digest` uses the exact algorithm
-`SHA-256(utf8("oasis7/tpm/tpm-supervisor-state-hash/v1\\n" +
-canonical_json(preimage)))`.  The preimage is this ordered semantic object;
-all keys are present, with `null` only where the envelope contract permits it:
+`SHA-256(ASCII("oasis7/tpm/tpm-supervisor-state-hash/v1") || byte[0x0A] || UTF-8(canonical_json(preimage)))`.
+The delimiter is therefore one ASCII LF byte, not a textual escape. The exact
+semantic field order of the state-hash preimage is
+`[schema, task_uid, repository, canonical_worktree, task_branch, bootstrap_epoch, evidence_epoch, workflow_state, phase, next_result, revision, head_oid, base_oid, comparison_oid, event_parent_digest, transition_parent_digest, active_action, wait, effect_states, rejection_parent_digest, terminal_outcome]`.
+Canonical JSON sorts those object keys by Unicode code point when serializing;
+the list fixes field presence and semantic order before serialization. All keys
+are present, with `null` only where the envelope contract permits it:
 
 ```json
 {
@@ -310,8 +322,11 @@ contains typed condition, logical deadline tick, and delivery state;
 parent covers rejections committed before this event. Event/transition/
 rejection fields use parent-chain, never soon-to-be-published head, digests.
 Envelope digests, signatures, transport metadata, leases/fencing, journal
-generation, paths, wall clocks, and runtime IDs normalized by `runtime_id_map`
-are excluded but remain independently checked safety/audit data.
+generation, non-identity local paths, wall clocks, and runtime IDs normalized by
+`runtime_id_map` are excluded but remain independently checked safety/audit
+data. `canonical_worktree` is the canonical identity string shown in the
+preimage and is included; changing it changes the bootstrap identity/epoch and
+the state hash.
 
 Replay compares state digest after every transition and at final state. The
 first unsupported schema/migration or expected-vs-actual preimage mismatch
@@ -886,7 +901,8 @@ digest lists must match exactly. Unknown fields, duplicate IDs, malformed
 items, or case identity/digest mismatch reject without lifecycle progress.
 `record_digest` is the complete case-object preimage (excluding itself) under
 `oasis7/tpm/tpm-supervisor-staging-case/v1`; items never contain it, and
-signatures/transport framing/local paths are excluded.
+signatures/transport framing/non-identity local paths are excluded while the
+canonical identity field `canonical_worktree` remains included.
 
 Each case emits one immutable `tpm-supervisor-staging-case/v1` JSON record.
 The required shape includes the catalog identity, input state/phase, typed

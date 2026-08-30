@@ -1109,6 +1109,39 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 self.assertRegex(line, r'"rule": "authorized_reset"')
                 self.assertRegex(line, r'"reset_authority": "[^"]+"')
 
+    def test_supervisor_state_hash_has_canonical_preimage_and_ascii_lf(self) -> None:
+        section = re.search(
+            r"(?ms)^#### Replay envelope and canonical state hash\n(.*?)(?=^#### State and phase transition matrix)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "supervisor state-hash contract is required")
+        assert section is not None
+        text = section.group(1)
+        self.assertIn(
+            '`SHA-256(ASCII("oasis7/tpm/tpm-supervisor-state-hash/v1") || byte[0x0A] || UTF-8(canonical_json(preimage)))`',
+            text,
+        )
+        self.assertNotRegex(text, r"tpm-supervisor-state-hash/v1\\\\n")
+        self.assertRegex(
+            text,
+            r"(?s)canonical_worktree.*preimage.*included",
+        )
+        field_order = re.search(r"exact\s+semantic\s+field\s+order.*?`\[(.*?)\]`", text, re.S)
+        self.assertIsNotNone(field_order, "state-hash field order must be explicit")
+        assert field_order is not None
+        self.assertEqual(
+            [
+                "schema", "task_uid", "repository", "canonical_worktree", "task_branch",
+                "bootstrap_epoch", "evidence_epoch", "workflow_state", "phase", "next_result",
+                "revision", "head_oid", "base_oid", "comparison_oid", "event_parent_digest",
+                "transition_parent_digest", "active_action", "wait", "effect_states",
+                "rejection_parent_digest", "terminal_outcome",
+            ],
+            [field.strip() for field in field_order.group(1).split(",")],
+        )
+        self.assertIn("non-identity local paths", text)
+        self.assertIn("`canonical_worktree` is the canonical identity string", text)
+
     def test_supervisor_human_report_partitions_all_catalog_records(self) -> None:
         report = re.search(
             r"(?ms)^The human `staging-report\.md` .*?(?=^### 10\.6)",
