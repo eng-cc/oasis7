@@ -18,7 +18,7 @@ Lease 到期在开始前只释放未消费 hold 一次，开始后的 WIP/transi
 
 ## 3. Service-window 验收
 
-`test_tier_required` 至少覆盖：preview 确定且只读，commit lease/best-effort/relax 的容量与交付风险取舍可读；stage、join/bundle、transit、buffer 或 terminal 在 submit 前后漂移时，hard 原子拒绝或 soft 明示 at-risk/late，lease expiry/release/renewal 各只生效一次且无 orphan hold。
+`test_tier_required` 至少覆盖：preview 确定且只读，commit lease/best-effort/relax 的容量与交付风险取舍可读；stage、join/bundle、transit、buffer 或 terminal 在首个 sink 前漂移时，hard 延期/重报价或无副作用原子拒绝，soft 明示 at-risk/late；首个 sink 后漂移时保留既有 sink、WIP/transit/output、identity 与 provenance，并在下一个 sink 前停止或按 profile 进入一次受支持的 hold/quarantine、accept-late、alternate terminal、reroute/requote、reduce、defer/abandon 处置，不回滚已发生效果；lease expiry/release/renewal 各只生效一次且无 orphan hold。
 
 重连、重复 commit/renew、retry、arrival reorder 与 replay 不免费延期、刷新优先级、复制 hold/sink/reward 或刷稳定 `W`；生产准时而运输/终端迟到的样例只产生一次 late/expired recovery。Viewer 与 pure API 对 window/lease identity、segment state、on-time/at-risk/late/expired、机会成本、root blocker 和下一步保持一致。
 

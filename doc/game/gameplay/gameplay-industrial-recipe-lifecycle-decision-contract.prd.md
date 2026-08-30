@@ -41,6 +41,7 @@ Preview 不验证、准入、激活、退役、锁定容量、创建 hold、排�
 | `active WIP` | 保留已消费投入与 lineage；只允许 finish/pause/hold/quarantine/rework/salvage/terminate 中真实支持的结果，不默认退款、完成或转换 |
 | `in-transit` | 保留原 edge、数量、损耗、目的与 receipt；只允许 finish/hold/return/reroute/reject 中 profile 支持的处置，不瞬移或冒充 delivery |
 | `buffer-held` | 保留产品、owner、ledger、容量与 provenance；只允许 hold/handoff/conversion/reject 中 profile 支持的处置，不自动销毁、转卖或 credit successor |
+| `terminal-pending` | 保留 recipient、destination、admission、capacity obligation 与 provenance；只允许继续原合法 commitment，或使用 profile 支持的 hold/return/reroute/handoff/reject 单次处置，不提前 settlement、静默改绑或重复释放容量义务 |
 
 `retiring` 只允许 cutoff 前已有工作按声明规则排空或一次性处置；`retired` 不产生新效果，只保留历史与已记录的最终 disposition。旧版本合法完成时只产生其唯一旧 receipt，不贡献 successor 的 stable window、需求或奖励。
 
@@ -56,8 +57,8 @@ Preview 不验证、准入、激活、退役、锁定容量、创建 hold、排�
 
 ## 6. Parity、验收与非目标
 
-Viewer、pure API 与 Agent 必须同义表达 canonical lifecycle state、authority/blocker reason、scope、factory/input/path/power/terminal fit、四类旧工作、真实动作、保留/损失/占用、successor/cutoff、`W` 影响、`next_recheck` 与 progression effect。Agent 只能在授权 scope 内建议或请求确认，不能改变 state、扩大授权或替玩家迁移工作。
+Viewer、pure API 与 Agent 必须同义表达 canonical lifecycle state、authority/blocker reason、scope、factory/input/path/power/terminal fit、五类旧工作、真实动作、保留/损失/占用、successor/cutoff、`W` 影响、`next_recheck` 与 progression effect。Agent 只能在授权 scope 内建议或请求确认，不能改变 state、扩大授权或替玩家迁移工作。
 
-`test_tier_required` 至少覆盖：六态各一例；preview 无副作用；pending/admission 无 sink/`W`/reward；active/restricted fresh submit 与越界拒绝；retiring/retired 无新排程；accepted-unstarted/WIP/transit/buffer 各一个唯一处置；causal successor parent-linked 且 `W=0`；authority/factory/input/path/power/terminal drift 的 requote/atomic reject；重复提交、乱序、重连、retry、restore/replay 不复制或复活；Viewer/pure API/Agent parity。`test_tier_full` 再覆盖多版本并发、多阶段 WIP/transit/buffer、连续 scope 变化、cutover 部分失败、持久化/replay 与 successor conversion。
+`test_tier_required` 至少覆盖：六态各一例；preview 无副作用；pending/admission 无 sink/`W`/reward；active/restricted fresh submit 与越界拒绝；retiring/retired 无新排程；accepted-unstarted/WIP/transit/buffer/terminal-pending 各一个唯一处置，其中 terminal-pending 保留 recipient/destination/admission/capacity obligation/provenance 且不得提前 settlement 或静默改绑；causal successor parent-linked 且 `W=0`；authority/factory/input/path/power/terminal drift 的 requote/atomic reject；重复提交、乱序、重连、retry、restore/replay 不复制或复活；Viewer/pure API/Agent parity。`test_tier_full` 再覆盖多版本并发、多阶段 WIP/transit/buffer/terminal-pending、连续 scope 变化、cutover 部分失败、持久化/replay 与 successor conversion。
 
 本合同不定义或冻结六态转换、recipe catalog/发现/解锁、授权角色、版本兼容算法、配比/产率/quantization/rounding、quality/custody、byproduct、changeover/maintenance 成本、factory capability lifecycle、M4/runtime state/event/API/schema、queue/fairness、自动换配方/迁移/退款、Agent 行为或 UI，也不声明 current implementation/readiness。
