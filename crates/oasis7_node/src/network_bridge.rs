@@ -258,18 +258,7 @@ impl NodeReplicationNetworkHandle {
         let Some(descriptor) = descriptor else {
             return Ok(());
         };
-        self.validate_checkpoint_blob_from_root(
-            root_dir,
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            self.validate_checkpoint_blob_from_root(
-                root_dir,
-                blob_ref.content_hash.as_str(),
-                blob_ref.size_bytes,
-            )?;
-        }
+        self.validate_checkpoint_descriptor_from_root(root_dir, descriptor)?;
         self.publish_checkpoint_blob_provider_from_root(
             network_policy,
             root_dir,
@@ -287,6 +276,30 @@ impl NodeReplicationNetworkHandle {
             )?;
         }
         Ok(())
+    }
+
+    pub(crate) fn publish_commit_and_checkpoint_descriptor_providers_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        commit_hash: &str,
+        descriptor: Option<&NodeExecutionCheckpointDescriptor>,
+    ) -> Result<(), NodeError> {
+        // Validate the complete checkpoint closure before publishing the
+        // commit payload. A descriptor member can be present at its expected
+        // CAS path while containing same-size corrupt bytes; publishing the
+        // commit first would advertise a partial/invalid closure.
+        if let Some(descriptor) = descriptor {
+            self.validate_checkpoint_descriptor_from_root(root_dir, descriptor)?;
+        }
+        self.publish_local_content_provider(network_policy, world_id, commit_hash)?;
+        self.publish_checkpoint_descriptor_providers_from_root(
+            network_policy,
+            root_dir,
+            world_id,
+            descriptor,
+        )
     }
 
     fn publish_checkpoint_blob_provider_from_root(
@@ -326,6 +339,35 @@ impl NodeReplicationNetworkHandle {
                     bytes.len()
                 ),
             });
+        }
+        let actual_hash = oasis7_distfs::blake3_hex(bytes.as_slice());
+        if actual_hash != content_hash {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "checkpoint provider publish local blob hash mismatch expected={} actual={}",
+                    content_hash, actual_hash
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_checkpoint_descriptor_from_root(
+        &self,
+        root_dir: &Path,
+        descriptor: &NodeExecutionCheckpointDescriptor,
+    ) -> Result<(), NodeError> {
+        self.validate_checkpoint_blob_from_root(
+            root_dir,
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        for blob_ref in &descriptor.blobs {
+            self.validate_checkpoint_blob_from_root(
+                root_dir,
+                blob_ref.content_hash.as_str(),
+                blob_ref.size_bytes,
+            )?;
         }
         Ok(())
     }

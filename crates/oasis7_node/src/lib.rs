@@ -885,22 +885,14 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                             let enqueue_result =
                                 provider_publications.enqueue(publication_key, move || {
                                     publish_handle
-                                        .publish_local_content_provider(
+                                        .publish_commit_and_checkpoint_descriptor_providers_from_root(
                                             &publish_network_policy,
+                                            publish_root_dir.as_path(),
                                             publish_world_id.as_str(),
                                             payload_content_hash.as_str(),
+                                            descriptor.as_ref(),
                                         )
                                         .map_err(|err| err.to_string())?;
-                                    if let Some(descriptor) = descriptor.as_ref() {
-                                        publish_handle
-                                            .publish_checkpoint_descriptor_providers_from_root(
-                                                &publish_network_policy,
-                                                publish_root_dir.as_path(),
-                                                publish_world_id.as_str(),
-                                                Some(descriptor),
-                                            )
-                                            .map_err(|err| err.to_string())?;
-                                    }
                                     Ok(())
                                 });
                             if matches!(
