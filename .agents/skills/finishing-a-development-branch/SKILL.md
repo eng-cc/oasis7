@@ -17,6 +17,15 @@ may enter from bootstrap, planning, or execution without implementation
 verification and must proceed directly to the canonical non-merge terminal
 route below.
 
+Before choosing a finishing route, query the bound task's compact resume state
+from the canonical worktree. Follow only its `next_command`; an unbound
+identity or any blocker stops the route until the task truth is repaired:
+
+```bash
+python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
+  --task-uid <TASK-UID> --json
+```
+
 ## Freeze-Commit Gates
 
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.

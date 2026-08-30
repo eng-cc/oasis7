@@ -15,11 +15,20 @@ Use when the task already has written scope in a PRD/design, a handoff, or GitHu
 
 1. Before editing or execution, create a `Plan-Gap Evidence` entry for every ordered execution step. Each entry must record all of: `step_id`, `acceptance_refs`, `dependencies`, `verification_command`, `verification_evidence`, `write_scope`, `out_of_scope`, and `required_role_slices`. Keep each field non-empty and map acceptance/dependencies/scope to current GitHub-backed task truth; state the verification command and expected evidence target before execution, capture the actual result afterward, and name required roles or an explicit reasoned exemption. A missing field, evidence, or mapping fails closed before editing or execution. Keep mutable task planning only in GitHub-backed task truth; repository PRD/design documents remain durable professional authority, not a second task ledger.
 2. Record ordered steps and required professional slices in GitHub task issue evidence comments.
-3. Implement one bounded step in its declared write scope.
-4. Run the step-level verification and inspect the output.
+3. At task start and after any context handoff, query the compact resume state
+   from the canonical worktree. Treat its `next_command` as the only suggested
+   continuation and stop for its blockers when `identity_status` is not bound:
+
+```bash
+python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
+  --task-uid <TASK-UID> --json
+```
+
+4. Implement one bounded step in its declared write scope.
+5. Run the step-level verification and inspect the output.
    Route commands expected to emit broad logs or search results through `./scripts/pm/bounded-command-output.py`; inspect the bounded summary and retain the reported full artifact/digest for debugging.
-5. Append result, evidence, deviation, and next step to the same task issue.
-6. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`.
+6. Append result, evidence, deviation, and next step to the same task issue.
+7. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`.
 
 If any command, test, or behavior is unexpected, automatically route to `systematic-debugging`, resolve the root cause, and resume the same step. Pause only for canonical `external_wait` or `capability_blocked`, recording resume authority and instruction from the canonical state contract.
 

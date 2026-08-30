@@ -651,7 +651,7 @@ RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --task-uid <TASK-UID> --create)"
 ```
 
-Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; classify read-only work first with `classify-non-pr-task`, then use `non_pr_completed`.
+Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; classify read-only work first with `python3 ./scripts/pm/github-project-task.py classify-non-pr-task <canonical-task-worktree> --task-uid <TASK-UID> --evidence "<evidence>" --json`, then use `non_pr_completed`. Resume state comes only from `python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json`.
 It derives identity and squash proof while preserving the six fail-closed
 authorities below as the recovery/debug contract:
 
