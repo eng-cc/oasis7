@@ -42,7 +42,11 @@ field_nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"nam
 if next_record.get("pr_url"): field_nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
 project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
 issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
-print(json.dumps({"data":{"s0":{"nodes":[issue]}}}))
+# Keep both GraphQL response shapes used by the bounded workflow commands:
+# classify/refresh search uses the aliased s0 search result, while the selected
+# audit fetches the bound Project item through the top-level nodes result.
+project_item["content"]={"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
+print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
 PY
     ;;
   "issue create -R eng-cc/oasis7 --title "*)
