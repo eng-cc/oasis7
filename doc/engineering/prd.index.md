@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md`；`documentation-governance.manual.md`（how-to） | GitHub task issue evidence comments |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
+| Production-supervisor workflow governance（normative source: [workflow source of truth](workflow/source-of-truth.md#capability-and-ownership)） | Target design: [production-supervisor-runtime.design.md](workflow/production-supervisor-runtime.design.md) | Evidence: GitHub task issue evidence comments |
 | Historical document-governance triplets | Current organization and consumption rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost routing: `doc/engineering/governance/README.md` | Historical decision/rollout evidence: Git history and GitHub task issue evidence comments |
 | Historical self-evolution / memory / borrowing / skill-surface triplets | Current task/evidence rules: `doc/engineering/workflow/source-of-truth.md`; retained pending scope: `doc/engineering/prd.md`; default-vs-library skill reachability: `.agents/skills/README.md` | Historical decision and rollout evidence: Git history and GitHub task issue evidence comments |
 
