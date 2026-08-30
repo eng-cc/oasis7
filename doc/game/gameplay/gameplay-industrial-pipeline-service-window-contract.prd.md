@@ -8,7 +8,7 @@
 
 只有专业 profile 支持时，玩家才可获得只读 `pipeline_service_window_preview`，把 stage duration/ready boundary、join/output-bundle gate、edge transit、buffer admission 与 terminal settlement 组合成同一 conditional window；否则明确为 best-effort。
 
-预览至少说明 none/soft/hard window policy、start trigger、target event、各 segment 的条件性时界与 root risk，以及 factory slot、edge throughput、destination buffer 的 lease scope/amount/expiry。玩家比较 `commit_window`、`run_best_effort`、`relax_or_requote_window`、改道或延期；preview 不锁容量、不保证精确 ETA 或未来条件。
+预览至少说明 none/soft/hard window policy、start trigger、target event、各 segment 的条件性时界与 root risk，以及 factory slot、edge throughput、destination buffer 与 terminal capacity 的 lease scope/amount/expiry；terminal capacity 未持有、仅条件成立或 non-reserved 时必须明确显示，不能把它包装成端到端 hard guarantee。玩家比较 `commit_window`、`run_best_effort`、`relax_or_requote_window`、改道或延期；preview 不锁容量、不保证精确 ETA 或未来条件。
 
 ## 2. 提交、lease 与迟到恢复
 
