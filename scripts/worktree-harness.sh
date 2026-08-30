@@ -134,21 +134,38 @@ viewer_http_ready() {
 }
 
 refresh_state() {
-  local current_status harness_pid harness_pgid launcher_pid launcher_pgid
+  local current_status harness_pid harness_pgid harness_identity launcher_pid launcher_pgid launcher_identity
+  local harness_live=0 launcher_live=0 stale_record=0
 
   [[ -f "$STATE_FILE" ]] || return 0
   current_status=$(wh_state_get "$STATE_FILE" status 2>/dev/null || true)
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
   harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
+  harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
   launcher_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
   launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
+  launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
 
   if [[ "$current_status" == "ready" ]]; then
-    if ! wh_pid_alive "$harness_pid" && ! wh_pid_alive "$launcher_pid"; then
-      if { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; } || { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }; then
-        wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "recorded process leaders exited but their process group remains alive"}'
-        return 1
+    if [[ -n "$harness_pid" ]]; then
+      if wh_process_record_alive "$harness_pid" "$harness_pgid" "$harness_identity"; then
+        harness_live=1
+      elif wh_pid_alive "$harness_pid" || { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }; then
+        stale_record=1
       fi
+    fi
+    if [[ -n "$launcher_pid" ]]; then
+      if wh_process_record_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity"; then
+        launcher_live=1
+      elif wh_pid_alive "$launcher_pid" || { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }; then
+        stale_record=1
+      fi
+    fi
+    if [[ "$stale_record" -ne 0 ]]; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "recorded process identity or process group no longer matches"}'
+      return 1
+    fi
+    if [[ "$harness_live" -eq 0 && "$launcher_live" -eq 0 ]]; then
       wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
       return 0
     fi
@@ -307,7 +324,10 @@ case "$action" in
       exit 2
     fi
 
-    if wh_pid_alive "$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)"; then
+    if wh_process_record_alive \
+      "$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)" \
+      "$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)" \
+      "$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)"; then
       echo "info: harness already running for $WORKTREE_ID"
       wh_state_show "$STATE_FILE"
       exit 0
@@ -440,8 +460,11 @@ PY
     wh_state_phase "$STATE_FILE" "waiting_metadata" "waiting for STACK_READY metadata" "$STARTUP_DEADLINE_MS"
     attempt=0
     while (( $(wh_clock_ms) < STARTUP_DEADLINE_MS )); do
+      recorded_harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
+      recorded_harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
+      recorded_harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
       attempt=$((attempt + 1))
-      if ! wh_pid_alive "$HARNESS_PID"; then
+      if ! wh_process_record_alive "$recorded_harness_pid" "$recorded_harness_pgid" "$recorded_harness_identity"; then
         wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh exited before STACK_READY"}'
         kill_recorded_processes
         echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2

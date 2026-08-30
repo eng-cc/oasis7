@@ -83,3 +83,14 @@
 - [x] **Step 2:** Implement the minimal explicit test-only launcher injection while retaining the production default.
 - [x] **Step 3:** Run `rtk ./scripts/worktree-harness-lifecycle.test.sh`, `rtk ./scripts/worktree-harness-contract.test.sh`, `rtk ./scripts/run-launcher-stack-local-mock-lane.test.sh`, and `rtk git diff --check`.
 - [x] **Step 4:** Record the acceptance result and return exact evidence for independent QA (commit deferred to the integration owner).
+
+## Review follow-up: stable liveness identity
+
+The lifecycle read paths must use the same recorded process ownership proof as
+shutdown.  A live PID is not sufficient: the recorded PID, PGID, and stable
+leader identity must match before `up` already-running detection, state
+refresh, URL readiness, or launcher readiness can accept a process.
+
+- [x] Add one shared PID/PGID/identity predicate and use it across harness and launcher liveness/readiness consumers.
+- [x] Add deterministic unrelated-live-PID regressions for `status`, `url`, repeated `up`, and startup readiness; clean all fixture process groups by recorded identity.
+- [x] Re-run syntax, lifecycle, contract, local-mock, launcher-help, bundle-freshness, and whitespace checks after the review fix.

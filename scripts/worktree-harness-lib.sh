@@ -699,10 +699,37 @@ wh_process_group_alive() {
   ps -axo pid=,pgid= | awk -v target="$pgid" '$2 == target { found = 1 } END { exit found ? 0 : 1 }'
 }
 
+# Validate a recorded process incarnation before treating it as live.  A PID
+# and PGID are only reusable numbers; the identity binds them to the process
+# that was actually launched by this harness.  Callers that make lifecycle or
+# readiness decisions must use this predicate rather than bare kill -0.
+wh_process_record_alive() {
+  local pid=${1:-}
+  local pgid=${2:-}
+  local expected_identity=${3:-}
+  local current_identity current_pgid
+
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 1
+  [[ -n "$expected_identity" ]] || return 1
+  wh_pid_alive "$pid" || return 1
+  current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
+  [[ -n "$current_identity" && "$current_identity" == "$expected_identity" ]] || return 1
+  current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
+  [[ "$current_pgid" == "$pgid" ]] || return 1
+  # The recorded leader itself proves that the group has a member.  Full
+  # group enumeration is reserved for termination/quiescence checks; keeping
+  # it out of read/readiness paths avoids making those paths depend on a
+  # potentially slow process table scan.
+  return 0
+}
+
 # Return a stable identity for a process incarnation.  PID and PGID values can
 # be reused after a crash, so cleanup records this value at launch and refuses
 # to signal a replacement process.  Linux exposes a monotonic start-time tick
-# in /proc; macOS falls back to a digest of ps start time plus process context.
+# in /proc; macOS falls back to a digest of the PID plus ps launch time.  The
+# fallback deliberately omits command/parent/group fields because exec and
+# launcher handoff are expected to change those while the process lives.
 wh_process_identity() {
   local pid=${1:-}
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
@@ -727,7 +754,7 @@ PY
   fi
 
   local ps_snapshot
-  ps_snapshot=$(ps -o lstart=,ppid=,pgid=,uid=,command= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  ps_snapshot=$(ps -o pid=,lstart= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   [[ -n "$ps_snapshot" ]] || return 1
   python3 - "$ps_snapshot" <<'PY'
 from __future__ import annotations

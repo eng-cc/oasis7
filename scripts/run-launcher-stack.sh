@@ -550,24 +550,25 @@ resolve_source_mode_target_dir() {
 }
 
 ensure_launcher_alive() {
-  local pid="$1"
-  if [[ -n "$pid" ]] && ! kill -0 "$pid" >/dev/null 2>&1; then
-    return 1
-  fi
-  return 0
+  local pid="${1:-}"
+  local pgid="${2:-}"
+  local identity="${3:-}"
+  wh_process_record_alive "$pid" "$pgid" "$identity"
 }
 
 wait_for_http_ready() {
   local url="$1"
   local timeout_secs="$2"
   local launcher_pid="${3:-}"
+  local launcher_pgid="${4:-}"
+  local launcher_identity="${5:-}"
   local i
   for ((i = 0; i < timeout_secs; i++)); do
+    if ! ensure_launcher_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity"; then
+      return 2
+    fi
     if curl -fsS "$url" >/dev/null 2>&1; then
       return 0
-    fi
-    if ! ensure_launcher_alive "$launcher_pid"; then
-      return 2
     fi
     sleep 1
   done
@@ -578,17 +579,19 @@ wait_for_tcp_listener_ready() {
   local port="$1"
   local timeout_secs="$2"
   local launcher_pid="${3:-}"
+  local launcher_pgid="${4:-}"
+  local launcher_identity="${5:-}"
   local i
   if ! command -v lsof >/dev/null 2>&1 && ! command -v ss >/dev/null 2>&1; then
     echo "warning: neither lsof nor ss found; skip passive listener probe for port ${port}" >&2
     return 0
   fi
   for ((i = 0; i < timeout_secs; i++)); do
+    if ! ensure_launcher_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity"; then
+      return 2
+    fi
     if port_in_use "$port"; then
       return 0
-    fi
-    if ! ensure_launcher_alive "$launcher_pid"; then
-      return 2
     fi
     sleep 1
   done
@@ -975,8 +978,8 @@ INFO
 
 write_session_meta 0
 
-if ! wait_for_http_ready "http://${VIEWER_HOST}:${VIEWER_PORT}/" 180 "$LAUNCHER_PID"; then
-  if ensure_launcher_alive "$LAUNCHER_PID"; then
+if ! wait_for_http_ready "http://${VIEWER_HOST}:${VIEWER_PORT}/" 180 "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LAUNCHER_IDENTITY"; then
+  if ensure_launcher_alive "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LAUNCHER_IDENTITY"; then
     echo "error: viewer HTTP did not become ready in time" >&2
   else
     echo "error: launcher exited before viewer HTTP became ready" >&2
@@ -985,8 +988,8 @@ if ! wait_for_http_ready "http://${VIEWER_HOST}:${VIEWER_PORT}/" 180 "$LAUNCHER_
   exit 1
 fi
 
-if ! wait_for_tcp_listener_ready "$WEB_BRIDGE_PORT" 60 "$LAUNCHER_PID"; then
-  if ensure_launcher_alive "$LAUNCHER_PID"; then
+if ! wait_for_tcp_listener_ready "$WEB_BRIDGE_PORT" 60 "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LAUNCHER_IDENTITY"; then
+  if ensure_launcher_alive "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LAUNCHER_IDENTITY"; then
     echo "error: web bridge port ${WEB_BRIDGE_PORT} did not become ready in time" >&2
   else
     echo "error: launcher exited before web bridge port ${WEB_BRIDGE_PORT} became ready" >&2
@@ -1073,7 +1076,7 @@ Press Ctrl+C to stop launcher process.
 INFO
 
 while true; do
-  if ! kill -0 "$LAUNCHER_PID" >/dev/null 2>&1; then
+  if ! ensure_launcher_alive "$LAUNCHER_PID" "$LAUNCHER_PGID" "$LAUNCHER_IDENTITY"; then
     set +e
     wait "$LAUNCHER_PID"
     launcher_status=$?

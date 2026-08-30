@@ -19,6 +19,23 @@ READY_CHILD_PID_FILE="$TMP_DIR/ready-child.pid"
 TIMEOUT_CHILD_PID_FILE="$TMP_DIR/timeout-child.pid"
 FAKE_LAUNCHER="$TMP_DIR/fake-launcher.sh"
 SENTINEL_PID=""
+UNRELATED_PID=""
+UNRELATED_PGID=""
+UNRELATED_IDENTITY=""
+READY_HARNESS_PID=""
+READY_HARNESS_PGID=""
+READY_HARNESS_IDENTITY=""
+READINESS_HARNESS_PID=""
+READINESS_HARNESS_PGID=""
+READINESS_HARNESS_IDENTITY=""
+
+cleanup_recorded_group() {
+  local pid=${1:-}
+  local pgid=${2:-}
+  local identity=${3:-}
+  [[ -n "$pid" ]] || return 0
+  wh_terminate_process_group "$pid" "$pgid" 500 "$identity" >/dev/null 2>&1 || true
+}
 
 cleanup() {
   set +e
@@ -26,6 +43,10 @@ cleanup() {
     kill "$SENTINEL_PID" >/dev/null 2>&1 || true
     wait "$SENTINEL_PID" >/dev/null 2>&1 || true
   fi
+  OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >/dev/null 2>&1 || true
+  cleanup_recorded_group "$UNRELATED_PID" "$UNRELATED_PGID" "$UNRELATED_IDENTITY"
+  cleanup_recorded_group "$READINESS_HARNESS_PID" "$READINESS_HARNESS_PGID" "$READINESS_HARNESS_IDENTITY"
+  cleanup_recorded_group "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY"
   OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >/dev/null 2>&1 || true
   rm -rf "$HARNESS_ROOT" "$TMP_DIR"
 }
@@ -126,6 +147,128 @@ import sys
 print(json.loads(pathlib.Path(sys.argv[1]).read_text())["launcher_pid"])
 PY
 )"
+READY_HARNESS_PID="$(python3 - "$status_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["harness_pid"])
+PY
+)"
+READY_HARNESS_PGID="$(python3 - "$status_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["harness_pgid"])
+PY
+)"
+READY_HARNESS_IDENTITY="$(python3 - "$status_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["harness_identity"])
+PY
+)"
+ready_launcher_pgid="$(python3 - "$status_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["launcher_pgid"])
+PY
+)"
+ready_launcher_identity="$(python3 - "$status_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["launcher_identity"])
+PY
+)"
+
+# A live unrelated process with the same shape of PID/PGID record must not be
+# accepted as the running harness.  These four consumers previously trusted
+# kill -0 and therefore all accepted this stale record.
+wh_start_managed sleep 300 >"$TMP_DIR/unrelated-group.log" 2>&1
+UNRELATED_PID="$WH_MANAGED_PID"
+UNRELATED_PGID="$WH_MANAGED_PGID"
+UNRELATED_IDENTITY="$WH_MANAGED_IDENTITY"
+set_stale_live_record() {
+  wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+    "$UNRELATED_PID" "$UNRELATED_PGID" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": "stale-unrelated-harness-incarnation",
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": "stale-unrelated-launcher-incarnation",
+}))
+PY
+)"
+}
+restore_ready_record() {
+  wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+    "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY" \
+    "$ready_launcher_pid" "$ready_launcher_pgid" "$ready_launcher_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": sys.argv[3],
+    "launcher_pid": int(sys.argv[4]),
+    "launcher_pgid": int(sys.argv[5]),
+    "launcher_identity": sys.argv[6],
+}))
+PY
+)"
+}
+
+set_stale_live_record
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/stale-status.log" 2>&1
+stale_status_rc=$?
+set -e
+[[ "$stale_status_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: status accepted unrelated live PID with stale identity" >&2
+  exit 1
+}
+restore_ready_record
+
+set_stale_live_record
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh url >"$TMP_DIR/stale-url.log" 2>&1
+stale_url_rc=$?
+set -e
+[[ "$stale_url_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: url accepted unrelated live PID with stale identity" >&2
+  exit 1
+}
+restore_ready_record
+
+set_stale_live_record
+set +e
+FAKE_LAUNCHER_CHILD_PID_FILE="$READY_CHILD_PID_FILE" \
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/stale-up.log" 2>&1
+stale_up_rc=$?
+set -e
+[[ "$stale_up_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: up accepted unrelated live PID with stale identity" >&2
+  exit 1
+}
+restore_ready_record
+
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down
 python3 - "$HARNESS_ROOT/state.json" <<'PY'
 import json
@@ -167,6 +310,59 @@ for _ in range(40):
 else:
     raise SystemExit("lifecycle acceptance: viewer port was not released after down")
 PY
+
+READINESS_DELAY_FILE="$TMP_DIR/readiness-delay.marker"
+READINESS_CHILD_PID_FILE="$TMP_DIR/readiness-child.pid"
+rm -f "$READINESS_DELAY_FILE" "$READINESS_CHILD_PID_FILE"
+FAKE_LAUNCHER_CHILD_PID_FILE="$READINESS_CHILD_PID_FILE" \
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$READINESS_DELAY_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
+./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/readiness-up.log" 2>&1 &
+readiness_up_pid=$!
+for _ in $(seq 1 200); do
+  [[ -e "$READINESS_DELAY_FILE" ]] && break
+  sleep 0.05
+done
+[[ -e "$READINESS_DELAY_FILE" ]] || {
+  echo "lifecycle acceptance: readiness test did not reach synchronization point" >&2
+  cat "$TMP_DIR/readiness-up.log" >&2 || true
+  exit 1
+}
+READINESS_HARNESS_PID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pid)"
+READINESS_HARNESS_PGID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pgid)"
+READINESS_HARNESS_IDENTITY="$(wh_state_get "$HARNESS_ROOT/state.json" harness_identity)"
+wh_state_write "$HARNESS_ROOT/state.json" '{"harness_identity": "stale-readiness-incarnation"}'
+set +e
+wait "$readiness_up_pid"
+readiness_up_rc=$?
+set -e
+[[ "$readiness_up_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: launcher readiness accepted stale harness identity" >&2
+  exit 1
+}
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$READINESS_HARNESS_IDENTITY" <<'PY'
+import json
+import sys
+print(json.dumps({"harness_identity": sys.argv[1]}))
+PY
+)"
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >/dev/null 2>&1 || {
+  echo "lifecycle acceptance: readiness fixture cleanup failed" >&2
+  exit 1
+}
+if [[ -e "$READINESS_CHILD_PID_FILE" ]]; then
+  readiness_child_pid="$(cat "$READINESS_CHILD_PID_FILE")"
+  for _ in $(seq 1 40); do
+    kill -0 "$readiness_child_pid" >/dev/null 2>&1 || break
+    sleep 0.05
+  done
+  if kill -0 "$readiness_child_pid" >/dev/null 2>&1; then
+    echo "lifecycle acceptance: readiness launcher child survived cleanup" >&2
+    exit 1
+  fi
+fi
+echo "unrelated live PID identity rejection: status_rc=$stale_status_rc url_rc=$stale_url_rc up_rc=$stale_up_rc readiness_rc=$readiness_up_rc"
 
 CONCURRENT_DELAY_FILE="$TMP_DIR/concurrent-delay.marker"
 CONCURRENT_CHILD_PID_FILE="$TMP_DIR/concurrent-child.pid"
