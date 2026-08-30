@@ -6,7 +6,13 @@
 - 想快速理解核心玩法骨架：先在 `../prd.md` 确认活跃基线与路由，再读 `gameplay-top-level-design.prd.md` 的 bounded 专业合同
 - 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 由同候选 GitHub task evidence 与 `../../testing/evidence/` 确认。
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
-- 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
+- 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-mature-world-progression-contract.prd.md` 的专业合同
+- 想确认下游容量不足时如何暂停/降载上游、持有输出并恢复未决流水线：读 `gameplay-industrial-backpressure-recovery-contract.prd.md`
+- 想确认需求满足、取消、到期、未知或缩减后如何处置既有工业工作：读 `gameplay-industrial-demand-change-disposition-contract.prd.md`
+- 想确认工厂维护真值、计划停机、带风险运行与既有工作的恢复边界：读 `gameplay-industrial-maintenance-planned-downtime-contract.prd.md`
+- 想确认配方六态、准入/退役、旧工作处置和 successor 边界：读 `gameplay-industrial-recipe-lifecycle-decision-contract.prd.md`
+- 想确认原材料不适配时如何比较换源、合法替代、换配方、减量/延期与恢复：读 `gameplay-industrial-raw-material-qualification-substitution-contract.prd.md`
+- 想确认流水线服务窗口、lease 到期、hard/soft 迟到与掉电恢复：读 `gameplay-industrial-pipeline-service-window-contract.prd.md`
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `../../product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的玩法合同
 - 想确认访问模式、limited preview 或 release readiness：先读 `../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前 preview 执行状态由 GitHub task truth 确认。已关闭 Round 1 的发布、渠道 fallback、信号与关闭证据从 Git history 和 GitHub issue `eng-cc/oasis7#48` 追溯
 - 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-economy-contract.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
@@ -17,6 +23,7 @@
 - `../README.md` 是 game 模块级 landing page，负责在模块 PRD、执行台账、文件级索引和少量高频 gameplay 专题之间分流。
 - `../prd.md` 是 game 模块目标态与阶段口径真值。
 - `gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` early-retention 的详细合同；它不替代 `../prd.md` 的活跃路由/状态职责，也不覆盖其他 topic 或 `doc/product/` 的声明范围。
+- `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同；产品承诺仍由 mature-world 产品分册拥有。
 - GitHub Project task status 与 issue evidence comments 是 retention、preview、经济规则和放行门禁的执行状态入口。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
@@ -47,7 +54,7 @@
 - 首读入口:
   - `gameplay-indirect-control-agency-contract.prd.md`
   - `../../product/world-rules-core-gameplay/prd.md`（产品承诺）与 `gameplay-top-level-design.prd.md`（玩法合同）
-  - `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`
+  - `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`（产品承诺）与 `gameplay-mature-world-progression-contract.prd.md`（玩法合同）
   - `gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感
