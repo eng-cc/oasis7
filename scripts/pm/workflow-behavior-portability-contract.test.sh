@@ -44,6 +44,32 @@ with tempfile.TemporaryDirectory(prefix='oasis7-workflow-projection-') as tmp:
     ], text=True, capture_output=True, check=False)
     assert leaked.returncode != 0, leaked.stdout
     assert 'new filesystem projection path: .pm/scratch' in leaked.stderr, leaked.stderr
+    root = pathlib.Path(sys.argv[1]).parents[2]
+    pr_review = root / 'scripts' / 'pr-review-thread-closeout.test.sh'
+    detached = pathlib.Path(tmp) / 'pr-review-pristine-worktree'
+    detached_state = pathlib.Path(tmp) / 'pr-review-pristine-state'
+    subprocess.run([
+        'git', '-C', str(root), 'worktree', 'add', '--detach', str(detached), 'HEAD'
+    ], check=True, capture_output=True, text=True)
+    try:
+        subprocess.run([
+            sys.executable, str(guard), 'snapshot', '--root', str(detached),
+            '--state', str(detached_state), '--pathspec', '.pm',
+        ], check=True)
+        review = subprocess.run(
+            ['bash', str(detached / 'scripts' / 'pr-review-thread-closeout.test.sh')],
+            cwd=detached, text=True, capture_output=True, check=False,
+        )
+        assert review.returncode == 0, review.stderr
+        clean = subprocess.run([
+            sys.executable, str(guard), 'check', '--root', str(detached),
+            '--state', str(detached_state), '--pathspec', '.pm',
+        ], text=True, capture_output=True, check=False)
+        assert clean.returncode == 0, clean.stderr
+    finally:
+        subprocess.run([
+            'git', '-C', str(root), 'worktree', 'remove', '--force', str(detached)
+        ], check=True, capture_output=True, text=True)
 required_commands=(
     './scripts/pm/closeout-tmpdir-portability.test.sh',
     './scripts/pm/claim-ready-ready-pr.test.sh',
