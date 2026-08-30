@@ -1099,6 +1099,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             positive.group(0),
             r'terminal_outcome=\{schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done\}',
         )
+        self.assertIn("`verdict=pass` when all typed assertions match", positive.group(0))
         schema = re.search(
             r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
             self.supervisor_design,
@@ -1307,7 +1308,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             normalized,
         )
         for field in (
-            "id", "fault", "injection", "expected_outcome", "status", "phase",
+            "id", "fault", "injection", "expected_outcome", "observed_outcome", "verdict", "status", "phase",
             "cardinality", "recovery", "readback", "digest",
         ):
             with self.subTest(field=field):
@@ -1333,6 +1334,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
             for field in ("task_uid", "repository", "canonical_worktree", "bootstrap_epoch", "evidence_epoch"):
                 with self.subTest(schema=schema, field=field):
                     self.assertIn(f"`{field}`", row.group(0))
+            self.assertNotIn("run_id", row.group(0))
+            self.assertNotIn("case_id", row.group(0))
         self.assertRegex(
             self.supervisor_design,
             r"evidence_epoch[\s\S]*?concrete on\s+all later route/action/receipt/proof/collaboration/wake/transition envelopes",
@@ -1361,7 +1364,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         assert schema is not None
         normalized = re.sub(r"\s+", " ", schema.group(1))
         self.assertIn("B02={identity,epoch}", normalized)
-        self.assertIn('outcome={"kind":"all_subcases_pass"', normalized)
+        self.assertIn('observed_outcome={"kind":"all_subcases_pass"', normalized)
 
     def test_supervisor_wake_rows_separate_external_wait_state_from_phase(self) -> None:
         phase_matrix = re.search(
@@ -1465,11 +1468,27 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn('`recovery={"aggregate":"all_subcases"}`', schema)
         self.assertIn("never one tuple", schema)
         self.assertIn(
-            'parent uses `outcome={"kind":"all_subcases_pass","child_ids":[...],"child_outcomes":[...]}`',
+            'parent uses `expected_outcome={"kind":"subcases","child_ids":[...],"child_outcomes":[...]}`',
             schema,
         )
+        self.assertIn(
+            'observed_outcome={"kind":"all_subcases_pass","child_ids":[...],"child_outcomes":[...]}`',
+            schema,
+        )
+        self.assertIn("separate closed `verdict` (`pass|fail|blocked`)", schema)
+        self.assertIn("`verdict` is never an outcome code", schema)
+        self.assertIn("aggregate verdict is `blocked` if any case is blocked", schema)
         self.assertIn("scalar parent code is invalid when subcases exist", schema)
-        self.assertIn("composite-only `all_subcases_pass`", schema)
+        self.assertIn("a composite expected field", schema)
+        self.assertIn(
+            '"expected_outcome":{"kind":"code","code":"rejected(authority)"}',
+            schema,
+        )
+        self.assertIn(
+            '"observed_outcome":{"kind":"code","code":"rejected(authority)"}',
+            schema,
+        )
+        self.assertIn('"verdict":"pass"', schema)
         self.assertIn("same-digest W01 is accepted(existing_result), R=0, idempotent_existing", schema)
         self.assertIn("every other W01 subcase has R=1/reject_same_epoch", schema)
         for variant in (
@@ -1591,8 +1610,19 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual(1, len(transitions))
         transition = transitions[0]
         self.assertEqual("tpm-supervisor-transition/v1", transition["schema"])
-        self.assertEqual("adversarial-B01-7001", transition["case_id"])
-        for field in ("task_uid", "bootstrap_epoch", "evidence_epoch"):
+        allowed_transition_fields = {
+            "schema", "task_uid", "repository", "canonical_worktree", "bootstrap_epoch",
+            "evidence_epoch", "transition_id", "event_id", "action_id", "receipt_id",
+            "parent_event_digest", "parent_transition_digest", "parent_rejection_digest",
+            "from_state", "to_state", "from_phase", "to_phase", "expected_revision",
+            "new_revision", "lease_id", "fencing_token", "validator_proof_digest",
+            "outcome_code", "status", "result", "expected_state_digest",
+            "observed_state_digest", "state_digest", "committed_at", "transition_digest",
+        }
+        self.assertEqual(allowed_transition_fields, set(transition))
+        self.assertNotIn("run_id", transition)
+        self.assertNotIn("case_id", transition)
+        for field in ("task_uid", "repository", "canonical_worktree", "bootstrap_epoch", "evidence_epoch"):
             self.assertEqual(record[field], transition[field], field)
         self.assertEqual("running", transition["from_state"])
         self.assertEqual("capability_blocked", transition["to_state"])
@@ -1615,6 +1645,18 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual(1, final_cardinality["capability_blocks"])
         self.assertEqual([], record["observed"]["effects"])
         self.assertEqual([], record["observed"]["readbacks"])
+        self.assertEqual(
+            {"kind": "code", "code": "producer_missing"},
+            record["expected"]["expected_outcome"],
+        )
+        self.assertEqual(
+            {"kind": "code", "code": "producer_missing"},
+            record["observed_outcome"],
+        )
+        self.assertEqual("pass", record["verdict"])
+        self.assertNotIn("outcome", record)
+        self.assertIn("nested repository envelopes never carry", self.supervisor_design)
+        self.assertNotIn("staging-only `run_id`/`case_id` binding", self.supervisor_design)
 
     def test_supervisor_state_hash_has_canonical_preimage_and_ascii_lf(self) -> None:
         section = re.search(
