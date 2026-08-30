@@ -30,8 +30,8 @@ fixture 的档案必须同时读出 factory/recipe authority 与 fit、两类 in
 
 ## 4. 失败恢复与状态守恒
 
-- 两类 input 未齐套、批次不适用、物流 edge 满/失效、power 或 factory fit 漂移、mandatory output destination 失效、terminal owner/资格/容量失效时，首个不可逆 sink 前只能延期或 atomic reject；已存在的 WIP、in-transit、buffer-held 或 settled branch 只能按 profile 支持的 hold、等待、改道、返工、return、salvage 或终止各处置一次。
-- `terminal_pending` 必须保留有限、可追溯的产物与占用；不得免费销毁、无限堆积、自动转卖、静默改道、伪造交付或用 production receipt 冒充 terminal settlement。任何恢复动作都要指出 primary root、已消费/仍占用/已损失价值和 `next_recheck`。
+- 两类 input 未齐套、批次不适用、物流 edge 满/失效、power 或 factory fit 漂移、mandatory output destination 失效、terminal owner/资格/容量失效时，首个不可逆 sink 前只能延期或 atomic reject；已存在的 WIP、in-transit、buffer-held、terminal-pending 或 settled branch 只能按 profile 支持的 hold、等待、改道、返工、return、reroute/handoff/reject、salvage 或终止各处置一次。
+- `terminal_pending` 必须保留有限、可追溯的产物与占用，以及 recipient、destination、admission、capacity obligation 与 provenance，直到 matching settlement 或一次受支持处置；不得免费销毁、无限堆积、自动转卖、静默改道/改绑、提前或伪造交付，或用 production receipt 冒充 terminal settlement。任何恢复动作都要指出 primary root、已消费/仍占用/已损失价值和 `next_recheck`。
 - 因果变化（factory capability、recipe version、required edge、output branch 或 terminal purpose）建立 parent-linked 新 candidate 并从 `W=0` 开始；仅补齐同一 candidate 的缺料、容量或电力前置才可保持 root continuation。本合同不重新定义既有换线、来源、批量、需求或 terminal 处置合同。
 
 ## 5. Current/target evidence cutline
@@ -48,7 +48,7 @@ fixture 的档案必须同时读出 factory/recipe authority 与 fit、两类 in
 
 ## 7. Required / full acceptance
 
-`test_tier_required` 至少覆盖：完整两输入 fixture 启动一个合法 cycle 并产生一个 output bundle；任一 input `unknown/not_applicable` 时无 sink/WIP；物流容量释放只重评未决边；power 或 factory fit 在提交前漂移时 requote/atomic reject；mandatory byproduct destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自边界完成；`terminal_pending` 不发 delivery/terminal reward；重复 submit、reconnect、Agent retry、restore 与 replay 不复制材料、产出、settlement、progression 或 reward；Viewer/pure API/Agent 对上述结果保持 parity。
+`test_tier_required` 至少覆盖：完整两输入 fixture 启动一个合法 cycle 并产生一个 output bundle；任一 input `unknown/not_applicable` 时无 sink/WIP；物流容量释放只重评未决边；power 或 factory fit 在提交前漂移时 requote/atomic reject；mandatory byproduct destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自边界完成；`terminal_pending` 不发 delivery/terminal reward，并在 owner/资格/容量失效时保留 recipient/destination/admission/capacity obligation/provenance、仅执行一次受支持处置；重复 submit、reconnect、Agent retry、restore 与 replay 不复制材料、产出、settlement、progression 或 reward；Viewer/pure API/Agent 对上述结果保持 parity。
 
 `test_tier_full` 扩展到三阶段 `join -> stage -> transit -> buffer -> terminal`、多个 output branch、容量争用、WIP/transit/buffer 处置、因果 cutover 与持久化恢复，并证明旧 receipt、reservation、稳定窗口和奖励不会跨 candidate 迁移。
 
