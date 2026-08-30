@@ -26,7 +26,7 @@ fixture 的档案必须同时读出 factory/recipe authority 与 fit、两类 in
 | 4. `observe_settlement` | 读 `accepted/scheduled`、生产执行、`production_settled`、`terminal_pending` 与 `delivery/terminal_settled`，按 profile 选择等待、补前置、解决输出去向或延期 | `accepted/scheduled` 不推进完成；matching production receipt 只让 `production_only` 在声明边界完成首产物并标为 `produced/undelivered`，只有 canonical `W` 的稳定条件成立后才标为 `production-stable`；`terminal_pending` 不给 delivery/terminal 收益。缺输入、边容量、power、mandatory branch 或 terminal 时，保留或按 profile 单次处置 WIP/transit/buffer，并显示损失/占用与复查点 |
 | 5. `choose_next_use` | 在已声明完成边界后比较继续稳定当前能力、结算 terminal、交易/本地服务或进入下一工业目标；未完成时只能走 profile 支持的恢复动作 | 完成收益是一次可归因的 production 或 matching delivery/terminal settlement 与一个新用途/下一目标方向；非 matching receipt、preview、pending 不发奖励。下一动力必须来自新用途、交付或恢复成功，而不是重复查看/重跑同一 preview |
 
-`production-only` profile 只允许 matching production receipt 在稳定条件成立后完成生产目标，不能减少 delivery demand 或发 terminal reward；`terminal-admission` profile 必须等匹配的 delivery/terminal settlement。未声明 profile 或无法证明 boundary 时保持 blocked，不能从 bucket 名称推断完成。
+`production-only` profile 只允许 matching production receipt 完成一次首产物并标为 `produced/undelivered`，不能减少 delivery demand 或发 terminal reward；稳定条件另行决定何时标为 `production-stable`，不得反过来延迟首产物完成。`terminal-admission` profile 必须等匹配的 delivery/terminal settlement。未声明 profile 或无法证明 boundary 时保持 blocked，不能从 bucket 名称推断完成。
 
 ## 4. 失败恢复与状态守恒
 
