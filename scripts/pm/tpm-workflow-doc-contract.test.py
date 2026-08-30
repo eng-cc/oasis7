@@ -18,6 +18,10 @@ TPM_ROLE = ROOT / ".agents/roles/tpm.md"
 PM_README = ROOT / ".pm/README.md"
 VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL.md"
 SUPERVISOR_SKILL = ROOT / ".agents/skills/tpm-production-supervisor/SKILL.md"
+SUPERVISOR_DESIGN = ROOT / "doc/engineering/workflow/production-supervisor-runtime.design.md"
+ENGINEERING_README = ROOT / "doc/engineering/README.md"
+ENGINEERING_PRD_INDEX = ROOT / "doc/engineering/prd.index.md"
+SKILLS_README = ROOT / ".agents/skills/README.md"
 PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
 PROJECT_SYNC = ROOT / "scripts/pm/github-project-sync.py"
 PROJECT_WORKFLOW = ROOT / "scripts/pm/github-project-workflow.py"
@@ -39,6 +43,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.text = SOURCE.read_text(encoding="utf-8")
+        cls.supervisor_design = SUPERVISOR_DESIGN.read_text(encoding="utf-8")
 
     def section(self, heading: str) -> str:
         match = re.search(
@@ -61,6 +66,88 @@ class WorkflowDocumentationContract(unittest.TestCase):
             self.assertRegex(table, rf"(?im)^\|[^\n]*\b{state}\b[^\n]*\|$")
         self.assertIn("production supervisor", table.lower())
         self.assertRegex(table.lower(), r"production supervisor[^\n]*\bblocked\b")
+
+    def test_target_supervisor_contract_is_canonical_and_companion_is_non_normative(self) -> None:
+        capability = self.section("Capability status")
+        states = self.section("Workflow states")
+        self.assertIn("production-supervisor-runtime.design.md", capability)
+        for producer in (
+            "mechanical/bootstrap action",
+            "independent live validator",
+            "collaboration/attestation",
+            "wake/scheduler",
+        ):
+            with self.subTest(producer=producer):
+                self.assertIn(producer, capability.lower())
+        self.assertIn("all four", capability.lower())
+        self.assertIn("QA", capability)
+        self.assertIn("wait_class", states)
+        self.assertNotIn("external_wait.system", states)
+        self.assertNotIn("external_wait.policy", states)
+        self.assertRegex(self.supervisor_design, r"(?i)non-normative")
+
+    def test_supervisor_milestones_and_live_evaluation_boundary_are_explicit(self) -> None:
+        milestone_headings = (
+            "M1 — durable supervisor core",
+            "M2 — trusted mechanical path",
+            "M3 — trusted collaboration",
+            "M4 — wake/event runtime",
+        )
+        positions = [self.supervisor_design.index(heading) for heading in milestone_headings]
+        self.assertEqual(sorted(positions), positions)
+
+        canonical = re.sub(r"\s+", " ", self.text.lower())
+        self.assertRegex(
+            canonical,
+            r"no (?:single )?milestone(?: or fixture)?[^.]{0,120}"
+            r"(?:change|alter)[^.]{0,80}(?:capability|status)",
+        )
+        self.assertRegex(canonical, r"(?:live|staging) evaluation")
+        self.assertRegex(
+            canonical,
+            r"(?:target|promotion)[^.]{0,180}supervisor[^.]{0,180}"
+            r"(?:not|rather than)[^.]{0,180}(?:workflow|document)",
+        )
+
+    def test_supervisor_thin_surfaces_link_without_copying_target_matrices(self) -> None:
+        surfaces = (
+            ENGINEERING_README,
+            ENGINEERING_PRD_INDEX,
+            SKILLS_README,
+            SUPERVISOR_SKILL,
+        )
+        supervisor_links = (
+            "production-supervisor-runtime.design.md",
+            "source-of-truth.md#appendix-a-target-supervisor-contract",
+            "source-of-truth.md#capability-and-ownership",
+        )
+        producer_rows = (
+            "trusted mechanical/bootstrap action",
+            "independent live validator/readback",
+            "trusted collaboration/attestation",
+            "wake/scheduler runtime",
+        )
+        milestone_rows = (
+            "m1 — durable supervisor core",
+            "m2 — trusted mechanical path",
+            "m3 — trusted collaboration",
+            "m4 — wake/event runtime",
+        )
+        for path in surfaces:
+            normalized = path.read_text(encoding="utf-8").lower()
+            with self.subTest(path=path):
+                self.assertTrue(
+                    any(link in normalized for link in supervisor_links),
+                    f"{path} must link the canonical supervisor contract or companion",
+                )
+                self.assertFalse(
+                    all(row in normalized for row in producer_rows),
+                    f"{path} must not copy the four-row producer matrix",
+                )
+                self.assertFalse(
+                    all(row in normalized for row in milestone_rows),
+                    f"{path} must not copy the M1-M4 acceptance matrix",
+                )
 
     def test_stable_required_gate_wait_uses_bounded_codex_heartbeat(self) -> None:
         budget = self.section("GitHub query budget and terminal defaults")
