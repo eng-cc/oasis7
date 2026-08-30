@@ -139,6 +139,22 @@ if [[ "${1:-}" == "issue" && "${2:-}" == "edit" ]]; then
 fi
 
 if [[ "${1:-}" == "issue" && "${2:-}" == "comment" ]]; then
+  if [[ "${TEST_GH_PERSIST_COMMENT:-0}" == "1" ]]; then
+    body_file=""
+    for ((i=1; i<=$#; i++)); do
+      if [[ "${!i}" == "--body-file" ]]; then
+        j=$((i+1)); body_file="${!j}"; break
+      fi
+    done
+    python3 - "${TEST_GH_ISSUE_VIEW_JSON:?}" "$body_file" <<'PY'
+import json, sys
+from pathlib import Path
+state_path, body_path = map(Path, sys.argv[1:])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+state.setdefault("comments", []).append({"body": body_path.read_text(encoding="utf-8")})
+state_path.write_text(json.dumps(state), encoding="utf-8")
+PY
+  fi
   printf 'https://github.com/example/oasis7/issues/%s#issuecomment-fixture\n' "${3:-0}"
   exit 0
 fi
@@ -694,6 +710,7 @@ run_prepare_with_issue_fixture() {
   local status
   if TEST_GH_ISSUE_BODY_JSON="$issue_body" \
     TEST_GH_ISSUE_VIEW_JSON="$issue_comments" \
+    TEST_GH_PERSIST_COMMENT="${TEST_GH_PERSIST_COMMENT:-1}" \
     run_prepare "$@"; then
     status=0
   else
@@ -770,15 +787,7 @@ draft_err="$TMPDIR/draft-candidate.err"
 draft_issue_body="$TMPDIR/draft-issue-body.json"
 draft_issue_comments="$TMPDIR/draft-issue-comments.json"
 printf '{"body":"Task UID: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
-cat >"$draft_issue_comments" <<EOF
-{
-  "comments": [
-    {
-      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:04:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $SOURCE_HEAD\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
-    }
-  ]
-}
-EOF
+printf '{"comments":[]}\n' >"$draft_issue_comments"
 if ! run_prepare_with_issue_fixture "$draft_issue_body" "$draft_issue_comments" \
   "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
   cat "$draft_err" >&2
@@ -885,7 +894,7 @@ EOF
 stale_source_log="$TMPDIR/gh-stale-source-head.log"
 stale_source_git_log="$TMPDIR/git-stale-source-head.log"
 stale_source_err="$TMPDIR/stale-source-head.err"
-if run_prepare_with_issue_fixture "$draft_issue_body" "$stale_source_comments" \
+if TEST_GH_PERSIST_COMMENT=0 run_prepare_with_issue_fixture "$draft_issue_body" "$stale_source_comments" \
   "$stale_source_log" "$stale_source_git_log" --draft-candidate >/dev/null 2>"$stale_source_err"; then
   echo "expected stale issue Source Head to fail closed" >&2
   exit 1
@@ -909,7 +918,7 @@ EOF
 comparison_ref_log="$TMPDIR/gh-comparison-ref.log"
 comparison_ref_git_log="$TMPDIR/git-comparison-ref.log"
 comparison_ref_err="$TMPDIR/comparison-ref.err"
-if run_prepare_with_issue_fixture "$draft_issue_body" "$comparison_ref_comments" \
+if TEST_GH_PERSIST_COMMENT=0 run_prepare_with_issue_fixture "$draft_issue_body" "$comparison_ref_comments" \
   "$comparison_ref_log" "$comparison_ref_git_log" --draft-candidate >/dev/null 2>"$comparison_ref_err"; then
   echo "expected issue Comparison Ref mismatch to fail closed" >&2
   exit 1

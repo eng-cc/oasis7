@@ -91,7 +91,7 @@ never satisfy a live task.
 <a id="pr-creation-gate"></a>
 **Draft candidate and promotion gate.**
 
-A draft candidate opens or resumes its frozen-head draft PR before exact-head CI. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
+A draft candidate opens or resumes its frozen-head draft PR before exact-head CI. Before any push or PR write, the repo-owned helper derives the bound task identity from canonical mapping, writes a marked `<!-- oasis7-pm-evidence -->` comment binding task UID, canonical worktree/branch, source head, and comparison ref/OID, then reads that exact identity back from the task issue; write/readback failure or mismatch rejects the operation. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
 The draft candidate remains PM status `committed` while its workflow phase is
 `verification`; selected-task audit projects that explicit pair as Project
 workflow phase `verification`. Other `committed` task states project as
@@ -380,7 +380,7 @@ Deterministic script contract:
   a terminal closeout.
 
 `post-merge-finalize.py` remains the only `post_merge_done` writer; `non-merge-finalize.py` is the only `closed_without_merge` and non-merge Issue-close writer.
-- `./scripts/prepare-task-pr.sh --draft-candidate --create` creates or resumes the frozen-head draft PR and records its identity. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
+- `scripts/pm/record-draft-freeze-evidence.py` is the canonical pre-draft identity producer; `./scripts/prepare-task-pr.sh --draft-candidate --create` requires its issue readback before consumer validation or side effects, then creates or resumes the frozen-head draft PR. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
   the task to `pr_watch` when GitHub-backed mapping exists. PR creation is
   resumable: before creating, query all states using the exact head repository,
   head branch, and base branch. Reuse only an OPEN match and retry the missing
