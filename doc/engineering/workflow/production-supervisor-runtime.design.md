@@ -338,7 +338,7 @@ the CAS/lease/fencing rules above.
 | `action_required` | Authorized consumer starts the recorded action with matching action/revision/lease | `Execute(action)` or `Dispatch(slice)` | `running` in the same phase; no caller may substitute a new action |
 | `action_required` | Required producer or validator is unavailable before the recorded action is issued | `CapabilityBlocked(producer_missing)` | `capability_blocked`; no action, receipt, proof, wake, or external effect |
 | `running` | Validated action receipt and validator proof | `Execute(next)` or `Dispatch(next slice)` | Next lifecycle phase in the phase matrix below |
-| `running` | Trusted temporary external condition with a durable deadline | `Wait(condition)` | `external_wait`; wake metadata is persisted before returning |
+| `running` | Trusted temporary external condition with a durable deadline | `Wait(condition)` | `external_wait`; wake metadata is persisted before returning in the durable production-supervisor checkpoint; transient human helper status is not a transition |
 | `running` | Required producer/validator/attestation is unavailable | `CapabilityBlocked(reason)` | `capability_blocked`; no synthetic receipt or wake subtype |
 | `running` | A validated action outcome is non-retryable (not an input-envelope rejection) | `Fail(reason)` | `failed`; resume requires authorized new evidence epoch or fresh bootstrap |
 | `external_wait` | Authenticated wake/event whose delivery and checkpoint CAS match | `Execute(next)` or `Dispatch(next slice)` | `running`; stale/duplicate delivery does not mutate state |
@@ -353,13 +353,15 @@ the CAS/lease/fencing rules above.
 | `route` | Task-bound route and slice contracts | `Dispatch(slice)` for `dispatch` |
 | `dispatch` / `execute` | Runtime dispatch acknowledgement and bounded slice return/attempt state | `Wait(condition)` until returns are due; then `Dispatch` retry/replace or advance to `integrate` |
 | `integrate` | All required returns are attested, digest-valid, and scope-compatible | `Execute(freeze)`; incomplete slices wait, while exhausted/invalid slices become the classified retry or failure outcome, never a merge bypass |
-| `freeze` | Frozen implementation head and comparison/base identity | `Execute(verify)` at `draft_candidate` |
+| `freeze` | Frozen implementation head and comparison/base identity | `Execute(draft_candidate)` at `draft_candidate` |
+| `draft_candidate` | Frozen-head draft PR identity and independent create/record/comment readback | `Execute(create_pr)` / `create_pr` |
+| `create_pr` / `record_pr` / `comment` | Draft PR helper receipt plus independent task/PR and issue-comment readback | `Execute(verify)` / `verify` |
 | `verify` | Trusted exact-head CI receipt and planner authority | `Dispatch(review)` / `review` |
 | `review` | All required role returns and dispositions for the same frozen head/epoch | `Execute(closeout)` / `pre_pr_ready` |
-| `closeout` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `pre_pr_ready` |
-| `create_pr` / `record_pr` / `comment` | Repository helper receipt plus independent task/PR and issue-comment readback | `Wait` for the live PR gate / `pr_watch` |
-| `watch` | Current-head required checks, mergeability, reviews, comments, threads, and holds | `Wait` for a temporary condition, `Dispatch(fix)` for actionable findings, or `Execute(merge)` only on the live gate receipt |
-| `fix` / `reverify` / `push` | Current-head fix artifact and fresh verification/readback | Return to `review`/`watch`; any head change creates a new evidence epoch |
+| `closeout` | Repository helper receipt plus task-truth/readback of the review packet | `Execute(promote_draft)` / `promote_draft` |
+| `promote_draft` | Same-head CI/review evidence, open draft PR, and task-truth readback | `Execute(promote_draft)` / `pr_watch` |
+| `pr_watch` | Current-head required checks, mergeability, reviews, comments, threads, and holds | `Wait` for a temporary condition, `Dispatch(fix)` for actionable findings, or `Execute(merge)` only on the live gate receipt |
+| `fix` / `reverify` / `push` | Current-head fix artifact and fresh verification/readback | Return to `review`/`pr_watch`; any head change creates a new evidence epoch |
 | `merge` / `merge_receipt` | Live merged PR receipt bound to the reviewed head/epoch | `Execute(task_done)`; an intermediate merge receipt is not terminal |
 | `task_done` / `main_sync` / `safe_cleanup` | Ordered task truth, main-sync, cleanup journal, and finalizer readbacks | `Complete(post_merge_done)` only after finalization |
 | Any permitted early non-merge entry | Classified reason, bounded evidence, verified task completion, and terminal tombstone | `Complete(closed_without_merge)` through the canonical non-merge finalizer |
@@ -580,10 +582,11 @@ assertion as its own validation.
 | `route` | Trusted collaboration/attestation | Task-bound route and dispatch acknowledgement readback |
 | `dispatch`, `execute`, `integrate` | Trusted collaboration/attestation | Runtime dispatch/return attestation, artifact digest, scope and integration-barrier readback |
 | `freeze` | Trusted mechanical/bootstrap action | Git identity, frozen tree, branch and base/head readback |
+| `draft_candidate`, `create_pr`, `record_pr`, `comment` | Trusted mechanical/bootstrap action | Frozen-head draft PR identity and GitHub task/PR/issue-comment readback |
 | `verify` | Trusted mechanical/bootstrap action | Independent CI/check planner receipt bound to the frozen head |
 | `review` | Trusted collaboration/attestation | Task-issue review ledger, role/slice identity, artifact digest, and head/epoch readback |
-| `closeout`, `create_pr`, `record_pr`, `comment` | Trusted mechanical/bootstrap action | GitHub task/PR identity and issue-comment readback |
-| `watch` | Trusted mechanical/bootstrap action | Independent live PR-gate readback of checks, mergeability, reviews, threads, comments, and holds |
+| `closeout`, `promote_draft` | Trusted mechanical/bootstrap action | Same-head review/CI evidence and draft-to-ready PR transition readback |
+| `pr_watch` | Trusted mechanical/bootstrap action | Independent live PR-gate readback of checks, mergeability, reviews, threads, comments, and holds |
 | `fix` | Trusted collaboration/attestation | Runtime return attestation plus current-head artifact and scope readback |
 | `reverify`, `push` | Trusted mechanical/bootstrap action | Repository-owned verification/Git remote readback at the same head/epoch |
 | `merge`, `merge_receipt` | Trusted mechanical/bootstrap action | Live GitHub merge/readback receipt bound to PR, head, and gate epoch |
@@ -763,12 +766,12 @@ digest, and evidence epoch.
 | --- | --- |
 | Clean full production-adapter runs | Exactly 3, seeds `7001`, `7002`, `7003`; each must use the manifest-selected adapter and all four producer classes. |
 | Adversarial repetitions | Exactly 3 per matrix case, one each with seeds `7001`, `7002`, `7003`; no random or wall-clock-derived case selection. |
-| Per-case and whole-run wall clock | `120 s` per case; `1,800 s` per clean/adversarial run; a timeout is a failed or blocked case, never an implicit retry. |
+| Per-case and whole-run wall clock | `120 s` per matrix/operational/positive case; `1,800 s` per clean/adversarial run; a timeout is a failed or blocked case, never an implicit retry. |
 | Action/transport timeout and retries | `30 s` action deadline; at most `3` attempts for one logical action; retry backoff capped at `10 s`; attempts preserve the action ID and idempotency key. |
 | Wake delivery | Durable deadline `120 s`; at most `3` delivery attempts per wake identity; duplicate/stale deliveries do not consume budget as new logical work. |
 | Recovery | `60 s` from process/session restart or lease takeover to a durable readback and one accepted/rejected outcome; otherwise the case is blocked/failed with retained evidence. |
 | Cost and external effects | `0.00` charged production-side API cost, `0` production mutations, and staging-only credentials/effect targets; an unmeasured or non-zero production-side effect fails the run. |
-| Cross-process soak | Exactly 3 runs with the same seed set; each runs `900 s`, delivers `100` wake events, and performs `3` scheduled kill/restart/takeover points. |
+| Cross-process soak case timeout | At least `900 s` per soak case; exactly 3 runs with the same seed set, each delivering `100` wake events and performing `3` scheduled kill/restart/takeover points. |
 
 Budgets apply to observed runtime behavior, not just configuration. The
 report records elapsed monotonic time, attempt and delivery counts, charged
@@ -806,7 +809,7 @@ logical keys. Recovery tokens use `rule(attempts<=n,elapsed_s<=n,new_epoch=<bool
 `reject_same_epoch`/`capability_unchanged` require `new_epoch=false`, while
 only `authorized_reset` may set `new_epoch=true` and must name its authority.
 
-The following matrix is the minimum fault suite; status/phase are observed at the fault boundary, cardinality covers recovery, and each injection records its point and proves every predicate by readback.
+The following matrix is the minimum fault suite; status/phase are observed at the fault boundary, cardinality covers recovery, and each injection records its point and proves every predicate by readback. A05's typed subcases remain within one case record per seed, so they add no catalog IDs or records.
 | Case ID | Stage | Input workflow state | Input phase | Fault injection | Expected status rule | Expected phase rule | Expected outcome code | Effect cardinality | Recovery rule |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `B01` | Bootstrap | `running` | `bootstrap` | Missing/partial manifest, producer, trust root, or attestation | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
@@ -815,7 +818,7 @@ The following matrix is the minimum fault suite; status/phase are observed at th
 | `A02` | Action | `running` | `execute` | Kill after intent but before response/readback | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=1K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `A03` | Action | `running` | `execute` | Transient external failure or `Retry-After` | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=1K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=120,new_epoch=false,same_key=true)` |
 | `A04` | Action | `running` | `execute` | Unqueryable or contradictory effect after an ambiguous response | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
-| `A05` | Action/receipt | `running` | `execute` | Forged, stale, duplicate-with-different-digest, wrong task/head, or wrong lease/fencing receipt | `same_as_input` | `same_as_input` | `stale_receipt` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `A05` | Action/receipt | `running` | `execute` | Forged, malformed, stale, duplicate-with-different-digest, wrong task/head, wrong revision/lease, or fencing receipt | `same_as_input` | `same_as_input` | `typed_subcases: forged -> rejected(authority); malformed -> rejected(malformed); wrong identity -> rejected(identity); stale/revision/different digest -> stale_receipt; fencing -> stale_fencing` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `V01` | Validator | `running` | `verify` | Validator unavailable before proof can be issued | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `V02` | Validator | `running` | `verify` | Live readback disagrees with requested effect or receipt digest | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
 | `C01` | Collaboration dispatch | `running` | `dispatch` | Required producer absent before dispatch | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
@@ -825,7 +828,7 @@ The following matrix is the minimum fault suite; status/phase are observed at th
 | `W02` | Wake | `external_wait` | `external_wait` | Valid wake races process restart/takeover | `canonical:running` | `same_as_input` | `accepted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `wake_race(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `W03` | Wake | `external_wait` | `external_wait` | Logical wake deadline expires | `canonical:failed` | `same_as_input` | `wake_expired` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false,reset_authority=owner)` |
 | `R01` | Review/fix | `running` | `review` | Exact-head artifact missing or review/CI receipt is stale | `canonical:running` | `same_as_input` | `stale_receipt` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
-| `M01` | Merge receipt | `running` | `watch` | Malformed merge receipt input | `same_as_input` | `same_as_input` | `receipt_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `M01` | Merge receipt | `running` | `pr_watch` | Malformed merge receipt input | `same_as_input` | `same_as_input` | `receipt_mismatch` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `S01` | Main sync | `running` | `main_sync` | Process kill after merge effect but before sync/readback | `canonical:external_wait` | `same_as_input` | `accepted` | `A<=2K/P=0/S=1/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `K01` | Safe cleanup | `running` | `safe_cleanup` | Incomplete, contradictory, or missing cleanup evidence | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `no_delete(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 The operational catalog is also closed and not inferred from matrix prose; its
@@ -845,21 +848,18 @@ faults); no new outcome code may be invented by an adapter.
 | `O06` | migration / unsupported or partially published transform | `running` / `bootstrap` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `O07` | compaction / manifest or before-after hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `O08` | replay / attempted external effect or forbidden final-state accept | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
-The closed positive catalog is `positive-7001`, `positive-7002`, and
-`positive-7003` (one per fixed seed), each with typed assertions:
+The closed positive catalog is `positive-7001`, `positive-7002`, and `positive-7003` (one per fixed seed), each with typed assertions:
 `case_kind=positive`, input `action_required/bootstrap`,
 `final_status={kind:canonical,value:completed}`,
 `final_phase={kind:canonical,value:post_merge_done}`,
 `expected_outcome_code=accepted`, exactly four independently read-back
 producer classes, and the exact phase sequence
-`[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,verify,review,closeout,promote_draft,create_pr,record_pr,comment,watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize,post_merge_done]`,
+`[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,create_pr,record_pr,comment,verify,review,closeout,promote_draft,pr_watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize,post_merge_done]`,
 `accepted_external_effects >= 1`, `phase_advances = 21`,
 `classified_rejections = 0`, `capability_blocks = 0`,
 `cleanup_mutations = 1`, and `all_effects_independently_readback = true`.
-Fix/reverify loops are not silently inserted into this positive catalog; a
-loop requires a separate catalog version and exact sequence.
-The closed soak catalog is `soak-7001`, `soak-7002`, and `soak-7003`, each a
-900-second cross-process run with
+Fix/reverify loops are not silently inserted into this positive catalog; a loop requires a separate catalog version and exact sequence.
+The closed soak catalog is `soak-7001`, `soak-7002`, and `soak-7003`, each a cross-process run with `case_timeout_s >= 900` (ordinary case timeout remains `120 s`) and
 `input={workflow_state:external_wait,phase:external_wait}` and
 typed assertions `wake_deliveries = 100`, `wake_consumes = 100`,
 `duplicate_consumes = 0`, `stale_wake_accepts = 0`,
@@ -941,8 +941,9 @@ The target acceptance set requires all of the following:
   with no accepted effect, phase advance, accepted state change, integration,
   or cleanup on a rejected/forged/stale/partial input;
 - the catalog set equals the 19 matrix plus 8 operational IDs above and the
-  aggregate contains exactly 81 adversarial, 3 positive, 3 soak, and 87 total
-  records; each positive has the exact 21-advance phase sequence ending in
+aggregate contains exactly 81 adversarial, 3 positive, 3 soak, and 87 total
+  records; each positive has the exact 22-phase/21-advance sequence with draft
+  PR creation before CI/review and `promote_draft -> pr_watch`, ending in
   `post_merge_done`, four
   producer readbacks, and zero rejection/block records;
 - every soak repetition has exactly 100 wake deliveries/consumes and 3 kill/

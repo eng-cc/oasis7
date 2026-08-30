@@ -1007,7 +1007,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("optional", commits[0].lower())
         self.assertEqual(1, len(creates), labels)
         self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}human-operated evidence validated")
-        self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}PR creat")
+        self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}Promote draft")
 
     def test_supervisor_positive_catalog_reaches_post_merge_done(self) -> None:
         positive = re.search(
@@ -1019,6 +1019,14 @@ class WorkflowDocumentationContract(unittest.TestCase):
         sequence = re.search(r"exact phase sequence\s+`\[(.*?)\]`", catalog, re.S)
         self.assertIsNotNone(sequence, "positive catalog must publish its exact phase sequence")
         phases = [phase.strip() for phase in sequence.group(1).split(",")]
+        expected = [
+            "bootstrap", "route", "dispatch", "execute", "integrate", "freeze",
+            "draft_candidate", "create_pr", "record_pr", "comment", "verify",
+            "review", "closeout", "promote_draft", "pr_watch", "merge",
+            "merge_receipt", "task_done", "main_sync", "safe_cleanup",
+            "post_merge_finalize", "post_merge_done",
+        ]
+        self.assertEqual(expected, phases)
         self.assertEqual("post_merge_done", phases[-1])
         self.assertEqual(22, len(phases), phases)
         self.assertRegex(catalog, r"final_phase=.*post_merge_done")
@@ -1027,8 +1035,78 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertEqual("21", advances.group(1))
         self.assertRegex(
             self.supervisor_design,
-            r"exact 21-advance phase sequence ending in\s+`post_merge_done`",
+            r"exact 22-phase/21-advance sequence with draft\s+PR creation before CI/review and `promote_draft -> pr_watch`, ending in\s+`post_merge_done`",
         )
+
+    def test_supervisor_soak_timeout_is_distinct_from_ordinary_case_budget(self) -> None:
+        budgets = re.search(
+            r"(?ms)^### 10\.3 Initial staging budgets and deterministic repetitions\n(.*?)(?=^### 10\.4)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(budgets, "staging budgets are required")
+        assert budgets is not None
+        self.assertIn("`120 s` per matrix/operational/positive case", budgets.group(1))
+        self.assertIn("Cross-process soak case timeout", budgets.group(1))
+        self.assertIn("At least `900 s` per soak case", budgets.group(1))
+        soak = re.search(
+            r"(?ms)^The closed soak catalog .*?(?=^Every catalog row)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(soak, "closed soak catalog is required")
+        assert soak is not None
+        self.assertIn("case_timeout_s >= 900", soak.group(0))
+        self.assertIn("ordinary case timeout remains `120 s`", soak.group(0))
+
+    def test_supervisor_a05_typed_outcomes_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        row = re.search(r"(?m)^\| `A05` .*", matrix.group(0))
+        self.assertIsNotNone(row, "A05 typed receipt variants are required")
+        assert row is not None
+        text = row.group(0)
+        for mapping in (
+            "forged -> rejected(authority)",
+            "malformed -> rejected(malformed)",
+            "wrong identity -> rejected(identity)",
+            "stale/revision/different digest -> stale_receipt",
+            "fencing -> stale_fencing",
+        ):
+            with self.subTest(mapping=mapping):
+                self.assertIn(mapping, text)
+        self.assertIn("new_epoch=false", text)
+        self.assertIn("reject_same_epoch", text)
+        self.assertIn("one case record per seed", self.supervisor_design)
+        self.assertIn("total_case_count=87", self.supervisor_design)
+
+    def test_external_wait_metadata_is_durable_checkpoint_only(self) -> None:
+        states = self.section("Workflow states")
+        for phrase in (
+            "only a durable production-supervisor checkpoint emission",
+            "Transient human-operated helper transport/status JSON",
+            "`pr-watch-loop`",
+            "current collaboration probe",
+            "cannot be persisted or promoted as one",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, states)
+        machine = re.sub(r"\s+", " ", self.section("Canonical state machine"))
+        expected = (
+            "draft_candidate -> create/record/comment draft PR -> CI verify -> review -> "
+            "pre_pr_ready -> promote_draft -> pr_watch"
+        )
+        self.assertIn(expected, machine)
+        design_state = re.search(
+            r"(?m)^\| `running` \| Trusted temporary external condition.*$",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(design_state, "design external_wait transition is required")
+        assert design_state is not None
+        self.assertIn("durable production-supervisor checkpoint", design_state.group(0))
+        self.assertIn("transient human helper status is not a transition", design_state.group(0))
 
     def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
         catalog = re.search(

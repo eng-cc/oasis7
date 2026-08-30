@@ -52,12 +52,11 @@ The production supervisor is a target runtime executor and is currently
 blocked; the state machine below defines required order, not implemented
 automation.
 
-`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; a classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
-
+`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> create/record/comment draft PR -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; a classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
 ## Workflow states
 - `running`: the recorded action authority is executing its typed action.
 - `action_required`: a bounded action awaits an authorized consumer.
-- `external_wait`: a trusted external condition with a durable resume condition; task/epoch-bound wait_class, authority, resume condition, wake policy, retry/deadline budget, and delivery identity are required.
+- `external_wait`: only a durable production-supervisor checkpoint emission for a trusted external condition; task/epoch-bound wait_class, authority, resume condition, wake policy, retry/deadline budget, and delivery identity are required. Transient human-operated helper transport/status JSON, including `pr-watch-loop` and the current collaboration probe, is observation-only, not a workflow checkpoint transition, and cannot be persisted or promoted as one.
 - `capability_blocked`: missing machinery required by the selected execution mode, including runtime attestation for unattended automation.
 - `completed`: terminal completion has been independently proven.
 - `failed`: a non-retryable contract violation; stop and escalate. Recovery
@@ -83,7 +82,7 @@ The final implementation head freezes one immutable tree; later code
 <a id="pre-pr-ready-gate"></a>
 **Pre-PR Ready.**
 
-The draft candidate's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Ready is a pre-PR gate, not PR creation or Done. The human-operated path requires a
+The draft PR's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Draft PR creation is an identity/readback step before CI and review; Ready is a pre-PR gate, not promotion or Done. The human-operated path requires a
 GitHub task packet, all-required-role ledger, head binding, artifact digests,
 findings dispositions, and residual risk. Runtime-issued provenance applies
 only to unattended supervision, which remains `capability_blocked`. Fixtures
@@ -92,7 +91,7 @@ never satisfy a live task.
 <a id="pr-creation-gate"></a>
 **Draft candidate and promotion gate.**
 
-A draft candidate opens after freeze for exact-head CI. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
+A draft candidate opens or resumes its frozen-head draft PR before exact-head CI. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
 The draft candidate remains PM status `committed` while its workflow phase is
 `verification`; selected-task audit projects that explicit pair as Project
 workflow phase `verification`. Other `committed` task states project as
@@ -166,12 +165,13 @@ flowchart TD
   G --> H[Implementation + Slice Verification]
   H --> R[Freeze immutable implementation head]
   R --> J[Open or resume draft candidate]
-  J --> I[Trusted CI required gate\nreceipt bound to frozen head]
+  J --> PRC[Draft PR creation/record/comment]
+  PRC --> I[Trusted CI required gate\nreceipt bound to frozen head]
   I --> M[Pre-PR Local Role Review\nrole-return ledger per required role]
   M --> Q[Pre-PR Ready gate\nhuman-operated evidence validated]
   Q --> X[Optional evidence-only commit\nrestart CI and review if HEAD changes]
   X --> J
-  Q --> Y[PR creation state confirmed\npromote draft]
+  Q --> Y[Promote draft\nPR becomes ready and enters pr_watch]
   Y --> N{PR purpose / merge hold?}
   N -- normal --> O[PR Watch/Fix/Merge Gate\nchecks + mergeability + all comment surfaces]
   N -- packaging --> P[Manual CI Hold\nrecord purpose + wait for operator/user]
@@ -380,7 +380,7 @@ Deterministic script contract:
   a terminal closeout.
 
 `post-merge-finalize.py` remains the only `post_merge_done` writer; `non-merge-finalize.py` is the only `closed_without_merge` and non-merge Issue-close writer.
-- `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
+- `./scripts/prepare-task-pr.sh --create --draft` creates or resumes the frozen-head draft PR and records its identity. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
   the task to `pr_watch` when GitHub-backed mapping exists. PR creation is
   resumable: before creating, query all states using the exact head repository,
   head branch, and base branch. Reuse only an OPEN match and retry the missing
