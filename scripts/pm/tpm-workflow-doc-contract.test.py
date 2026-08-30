@@ -71,14 +71,39 @@ class WorkflowDocumentationContract(unittest.TestCase):
         capability = self.section("Capability status")
         states = self.section("Workflow states")
         self.assertIn("production-supervisor-runtime.design.md", capability)
-        for producer in (
+        declaration_match = re.search(
+            r"(?is)requires\s+four\s+independently observable producer classes:\s*"
+            r"(?P<declaration>[^.]+)\.\s*",
+            capability,
+        )
+        self.assertIsNotNone(
+            declaration_match,
+            "Capability status must publish one four-class producer declaration",
+        )
+        raw_producers = re.split(
+            r"\s*,\s*|\s+and\s+", declaration_match.group("declaration").strip()
+        )
+        producers = set()
+        for producer in raw_producers:
+            normalized_producer = producer.strip().lower()
+            normalized_producer = re.sub(r"^and\s+", "", normalized_producer)
+            normalized_producer = re.sub(
+                r"^(?:task-bound|runtime-issued|durable)\s+", "", normalized_producer
+            )
+            normalized_producer = re.sub(r"/readback$", "", normalized_producer)
+            normalized_producer = re.sub(
+                r"/return\s+attestation", "/attestation", normalized_producer
+            )
+            normalized_producer = re.sub(r"\s+delivery$", "", normalized_producer)
+            producers.add(normalized_producer)
+        expected_producers = {
             "mechanical/bootstrap action",
             "independent live validator",
             "collaboration/attestation",
             "wake/scheduler",
-        ):
-            with self.subTest(producer=producer):
-                self.assertIn(producer, capability.lower())
+        }
+        self.assertEqual(4, len(raw_producers))
+        self.assertEqual(expected_producers, producers)
         self.assertIn("all four", capability.lower())
         self.assertIn("QA", capability)
         self.assertIn("wait_class", states)
@@ -93,7 +118,11 @@ class WorkflowDocumentationContract(unittest.TestCase):
             "M3 — trusted collaboration",
             "M4 — wake/event runtime",
         )
-        positions = [self.supervisor_design.index(heading) for heading in milestone_headings]
+        positions = []
+        for heading in milestone_headings:
+            with self.subTest(heading=heading):
+                self.assertIn(heading, self.supervisor_design)
+                positions.append(self.supervisor_design.index(heading))
         self.assertEqual(sorted(positions), positions)
 
         canonical = re.sub(r"\s+", " ", self.text.lower())
@@ -102,11 +131,14 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"no (?:single )?milestone(?: or fixture)?[^.]{0,120}"
             r"(?:change|alter)[^.]{0,80}(?:capability|status)",
         )
-        self.assertRegex(canonical, r"(?:live|staging) evaluation")
         self.assertRegex(
             canonical,
-            r"(?:target|promotion)[^.]{0,180}supervisor[^.]{0,180}"
-            r"(?:not|rather than)[^.]{0,180}(?:workflow|document)",
+            r"(?is)(?=[^.!?]*(?:live|staging)[^.!?]*(?:evaluation|evidence))"
+            r"(?=[^.!?]*supervisor[- ]runtime)"
+            r"(?=[^.!?]*(?:target(?:ed)?|promotion))"
+            r"(?=[^.!?]*(?:not|rather than)[^.!?]*"
+            r"(?:universal|every|each)[^.!?]*(?:workflow|document))"
+            r"[^.!?]+",
         )
 
     def test_supervisor_thin_surfaces_link_without_copying_target_matrices(self) -> None:
@@ -134,7 +166,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
             "m4 — wake/event runtime",
         )
         for path in surfaces:
-            normalized = path.read_text(encoding="utf-8").lower()
+            normalized = re.sub(r"\s+", " ", path.read_text(encoding="utf-8").lower())
             with self.subTest(path=path):
                 self.assertTrue(
                     any(link in normalized for link in supervisor_links),
