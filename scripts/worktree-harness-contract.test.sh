@@ -88,13 +88,14 @@ if kill -0 "$process_tree_pid" >/dev/null 2>&1 || kill -0 "$process_tree_child_p
 fi
 
 PORT_ROOT="$TMP_DIR/port-reservations"
+PORT_COMMON_DIR="$TMP_DIR/port-registry"
 mkdir -p "$PORT_ROOT"
 PORT_ONE_JSON="$TMP_DIR/ports-one.json"
 PORT_TWO_JSON="$TMP_DIR/ports-two.json"
 set +e
-wh_resolve_ports_json "$PORT_ROOT" "$$" >"$PORT_ONE_JSON" 2>"$TMP_DIR/ports-one.err" &
+wh_resolve_ports_json "$PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$PORT_ONE_JSON" 2>"$TMP_DIR/ports-one.err" &
 port_one_pid=$!
-wh_resolve_ports_json "$PORT_ROOT" "$$" >"$PORT_TWO_JSON" 2>"$TMP_DIR/ports-two.err" &
+wh_resolve_ports_json "$PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$PORT_TWO_JSON" 2>"$TMP_DIR/ports-two.err" &
 port_two_pid=$!
 wait "$port_one_pid"
 port_one_status=$?
@@ -123,6 +124,19 @@ PY
     exit 1
   fi
 fi
+for ports_json in "$PORT_ONE_JSON" "$PORT_TWO_JSON"; do
+  if [[ -s "$ports_json" ]]; then
+    reservation_token="$(python3 - "$ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())['reservation_token'])
+PY
+)"
+    wh_release_ports_reservation "$PORT_ROOT" "$reservation_token" "$PORT_COMMON_DIR"
+  fi
+done
 
 STALE_PORT_ROOT="$TMP_DIR/stale-port-reservation"
 mkdir -p "$STALE_PORT_ROOT"
@@ -137,7 +151,7 @@ pathlib.Path(sys.argv[1]).write_text(
 )
 PY
 stale_ports_json="$TMP_DIR/stale-ports.json"
-wh_resolve_ports_json "$STALE_PORT_ROOT" "$$" >"$stale_ports_json"
+wh_resolve_ports_json "$STALE_PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$stale_ports_json"
 python3 - "$stale_ports_json" "$STALE_PORT_ROOT/.ports.reservation.json" <<'PY'
 import json
 import pathlib
@@ -156,11 +170,87 @@ import sys
 print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
 PY
 )"
-wh_release_ports_reservation "$STALE_PORT_ROOT" "$stale_token"
+wh_release_ports_reservation "$STALE_PORT_ROOT" "$stale_token" "$PORT_COMMON_DIR"
 [[ ! -e "$STALE_PORT_ROOT/.ports.reservation.json" ]] || {
   echo "port reservation contract: release left reservation behind" >&2
   exit 1
 }
+
+collision_paths="$(python3 - <<'PY'
+import hashlib
+import pathlib
+
+base = pathlib.Path("/tmp/oasis7-port-collision").resolve()
+seen = {}
+for index in range(500_000):
+    candidate = base / f"worktree-{index}"
+    digest = hashlib.sha256(str(candidate).encode("utf-8")).hexdigest()[:8]
+    if digest in seen:
+        print(seen[digest])
+        print(candidate)
+        break
+    seen[digest] = candidate
+else:
+    raise SystemExit("unable to find deterministic worktree hash collision")
+PY
+)"
+collision_one="$(printf '%s\n' "$collision_paths" | sed -n '1p')"
+collision_two="$(printf '%s\n' "$collision_paths" | sed -n '2p')"
+COLLISION_COMMON_DIR="$TMP_DIR/shared-common-dir"
+mkdir -p "$COLLISION_COMMON_DIR"
+collision_root_one="$TMP_DIR/collision-root-one"
+collision_root_two="$TMP_DIR/collision-root-two"
+same_root_one="$TMP_DIR/same-worktree-root-one"
+same_root_two="$TMP_DIR/same-worktree-root-two"
+collision_ports_one="$TMP_DIR/collision-ports-one.json"
+collision_ports_two="$TMP_DIR/collision-ports-two.json"
+same_ports_one="$TMP_DIR/same-ports-one.json"
+same_ports_two="$TMP_DIR/same-ports-two.json"
+wh_resolve_ports_json "$collision_root_one" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$collision_ports_one" 2>"$TMP_DIR/collision-one.err" &
+collision_pid_one=$!
+wh_resolve_ports_json "$collision_root_two" "$$" "$collision_two" "$COLLISION_COMMON_DIR" >"$collision_ports_two" 2>"$TMP_DIR/collision-two.err" &
+collision_pid_two=$!
+set +e
+wait "$collision_pid_one"
+collision_status_one=$?
+wait "$collision_pid_two"
+collision_status_two=$?
+set -e
+[[ "$collision_status_one" -eq 0 && "$collision_status_two" -eq 0 ]] || {
+  cat "$TMP_DIR/collision-one.err" "$TMP_DIR/collision-two.err" >&2
+  exit 1
+}
+wh_resolve_ports_json "$same_root_one" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$same_ports_one" 2>"$TMP_DIR/same-one.err" &
+same_pid_one=$!
+wh_resolve_ports_json "$same_root_two" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$same_ports_two" 2>"$TMP_DIR/same-two.err" &
+same_pid_two=$!
+set +e
+wait "$same_pid_one"
+same_status_one=$?
+wait "$same_pid_two"
+same_status_two=$?
+set -e
+[[ "$same_status_one" -eq 0 && "$same_status_two" -eq 0 ]] || {
+  cat "$TMP_DIR/same-one.err" "$TMP_DIR/same-two.err" >&2
+  exit 1
+}
+port_collision_failures="$(python3 - "$collision_ports_one" "$collision_ports_two" "$same_ports_one" "$same_ports_two" <<'PY'
+import json
+import pathlib
+import sys
+
+records = [json.loads(pathlib.Path(path).read_text()) for path in sys.argv[1:]]
+failures = []
+if records[0]["viewer_port"] == records[1]["viewer_port"]:
+    failures.append("distinct colliding worktree paths received the same port set")
+if records[2]["viewer_port"] == records[3]["viewer_port"]:
+    failures.append("same worktree path across distinct roots received the same port set")
+if failures:
+    print("\n".join(failures), file=sys.stderr)
+print(len(failures))
+PY
+)"
+[[ "$port_collision_failures" == "0" ]] || exit 1
 
 python3 - "$STATE_FILE" <<'PY'
 import json

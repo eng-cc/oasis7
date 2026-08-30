@@ -41,6 +41,7 @@ wh_require_git_worktree
 WORKTREE_ID="$(wh_worktree_id)"
 GIT_HEAD="$(wh_git_head)"
 HARNESS_ROOT="$(wh_harness_root "$ROOT_DIR" "$WORKTREE_ID")"
+PORT_REGISTRY_COMMON_DIR="$(wh_git_common_dir)"
 STATE_FILE="$(wh_state_file "$HARNESS_ROOT")"
 RUNTIME_DIR="$(wh_runtime_dir "$HARNESS_ROOT")"
 ARTIFACT_DIR="$(wh_artifacts_dir "$HARNESS_ROOT")"
@@ -86,7 +87,7 @@ kill_recorded_processes() {
   fi
   ab_cmd "$BROWSER_SESSION" close >/dev/null 2>&1 || true
   if [[ -n "$reservation_token" ]]; then
-    wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" || true
+    wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" "$PORT_REGISTRY_COMMON_DIR" || true
   fi
 }
 
@@ -274,7 +275,7 @@ case "$action" in
     kill_recorded_processes
     rm -f "$META_FILE" "$STARTUP_LOG"
 
-    ports_json=$(wh_resolve_ports_json "$HARNESS_ROOT" "" "$(wh_worktree_path)")
+    ports_json=$(wh_resolve_ports_json "$HARNESS_ROOT" "" "$(wh_worktree_path)" "$PORT_REGISTRY_COMMON_DIR")
     viewer_port=$(json_get "$ports_json" viewer_port)
     web_bind=$(json_get "$ports_json" web_bind)
     live_bind=$(json_get "$ports_json" live_bind)
@@ -380,7 +381,7 @@ PY
     wh_start_managed launch_stack >"$STARTUP_LOG" 2>&1
     HARNESS_PID=$WH_MANAGED_PID
     HARNESS_PGID=$WH_MANAGED_PGID
-    if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID"; then
+    if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID" "$PORT_REGISTRY_COMMON_DIR"; then
       kill_recorded_processes
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "unable to bind port reservation to managed harness process"}'
       exit 1

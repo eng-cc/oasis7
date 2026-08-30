@@ -19,6 +19,17 @@ wh_worktree_path() {
   pwd -P
 }
 
+wh_git_common_dir() {
+  local repo_root common_dir
+  repo_root=$(git rev-parse --show-toplevel) || return 1
+  common_dir=$(git rev-parse --git-common-dir) || return 1
+  if [[ "$common_dir" == /* ]]; then
+    (cd "$common_dir" && pwd -P)
+  else
+    (cd "$repo_root/$common_dir" && pwd -P)
+  fi
+}
+
 wh_worktree_id() {
   python3 - "$(wh_worktree_path)" <<'PY'
 import hashlib
@@ -146,12 +157,17 @@ wh_resolve_ports_json() {
   local harness_root=${1:-}
   local owner_pid=${2:-$$}
   local worktree_path=${3:-$(wh_worktree_path)}
+  local common_dir=${4:-$(wh_git_common_dir)}
   [[ -n "$harness_root" ]] || {
     echo "error: wh_resolve_ports_json requires a harness root" >&2
     return 2
   }
+  [[ -n "$common_dir" ]] || {
+    echo "error: wh_resolve_ports_json requires a git common directory" >&2
+    return 2
+  }
   mkdir -p "$harness_root"
-  python3 - "$harness_root" "$owner_pid" "$worktree_path" <<'PY'
+  python3 - "$harness_root" "$owner_pid" "$worktree_path" "$common_dir" <<'PY'
 from __future__ import annotations
 
 import fcntl
@@ -167,10 +183,15 @@ from pathlib import Path
 harness_root = Path(sys.argv[1]).resolve()
 owner_pid = int(sys.argv[2]) if sys.argv[2] else os.getppid()
 worktree_path = str(Path(sys.argv[3]).resolve())
+common_dir = Path(sys.argv[4]).resolve()
 seed = int(hashlib.sha256(worktree_path.encode("utf-8")).hexdigest()[:8], 16)
 start = 43000 + (seed % 1500) * 10
 reservation_path = harness_root / ".ports.reservation.json"
-lock_path = harness_root / ".ports.lock"
+local_lock_path = harness_root / ".ports.lock"
+registry_dir = common_dir / ".oasis7-harness-port-registry"
+registry_path = registry_dir / "reservations.json"
+registry_lock_path = registry_dir / "registry.lock"
+registry_dir.mkdir(parents=True, exist_ok=True)
 
 
 def pid_alive(pid: int) -> bool:
@@ -202,6 +223,36 @@ def atomic_write(path: Path, contents: str) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
+def load_registry() -> dict:
+    if not registry_path.exists():
+        return {"schema": 1, "reservations": {}}
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"error: invalid shared harness port registry: {exc}")
+    if registry.get("schema") != 1 or not isinstance(registry.get("reservations"), dict):
+        raise SystemExit("error: unsupported shared harness port registry schema")
+    return registry
+
+
+def save_registry(registry: dict) -> None:
+    atomic_write(registry_path, json.dumps(registry, sort_keys=True) + "\n")
+
+
+def reservation_ports(reservation: dict) -> set[int]:
+    ports = reservation.get("ports", {})
+
+    def port_value(value: object) -> int:
+        if isinstance(value, str):
+            return int(value.rsplit(":", 1)[-1])
+        return int(value)
+
+    return {
+        port_value(ports[key])
+        for key in ("viewer_port", "web_bind", "live_bind", "chain_status_bind")
+    }
+
+
 def free(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -212,47 +263,77 @@ def free(port: int) -> bool:
     return True
 
 
-with lock_path.open("a+", encoding="utf-8") as lock:
-    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-    if reservation_path.exists():
-        try:
-            reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise SystemExit(f"error: invalid harness port reservation: {exc}")
-        reservation_owner = int(reservation.get("owner_pid", 0))
-        if pid_alive(reservation_owner):
-            raise SystemExit(
-                f"error: harness ports are already reserved by live owner {reservation_owner}"
-            )
-        reservation_path.unlink()
+with local_lock_path.open("a+", encoding="utf-8") as local_lock:
+    fcntl.flock(local_lock.fileno(), fcntl.LOCK_EX)
+    with registry_lock_path.open("a+", encoding="utf-8") as registry_lock:
+        fcntl.flock(registry_lock.fileno(), fcntl.LOCK_EX)
+        if reservation_path.exists():
+            try:
+                local_reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise SystemExit(f"error: invalid harness port reservation: {exc}")
+            local_owner = int(local_reservation.get("owner_pid", 0))
+            if pid_alive(local_owner):
+                raise SystemExit(
+                    f"error: harness ports are already reserved by live owner {local_owner}"
+                )
+            reservation_path.unlink()
 
-    for step in range(1500):
-        base = start + step * 10
-        ports = [base, base + 1, base + 2, base + 3]
-        if ports[-1] > 65000:
-            continue
-        if all(free(port) for port in ports):
-            token = uuid.uuid4().hex
-            payload = {
-                "viewer_port": ports[0],
-                "web_bind": f"127.0.0.1:{ports[1]}",
-                "live_bind": f"127.0.0.1:{ports[2]}",
-                "chain_status_bind": f"127.0.0.1:{ports[3]}",
-            }
-            reservation = {
-                "schema": 1,
-                "reservation_token": token,
-                "owner_pid": owner_pid,
-                "worktree_path": worktree_path,
-                "ports": payload,
-            }
-            atomic_write(reservation_path, json.dumps(reservation, sort_keys=True) + "\n")
-            payload["reservation_token"] = token
-            payload["reservation_file"] = str(reservation_path)
-            print(json.dumps(payload, ensure_ascii=True))
-            break
-    else:
-        raise SystemExit("error: unable to allocate free loopback ports for worktree harness")
+        registry = load_registry()
+        reservations = registry["reservations"]
+        stale_tokens = [
+            token
+            for token, record in reservations.items()
+            if not pid_alive(int(record.get("owner_pid", 0)))
+        ]
+        for token in stale_tokens:
+            del reservations[token]
+
+        for token, record in reservations.items():
+            if record.get("harness_root") == str(harness_root) and pid_alive(int(record.get("owner_pid", 0))):
+                raise SystemExit(
+                    f"error: harness ports are already reserved by live owner {record.get('owner_pid')}"
+                )
+
+        reserved_ports = set()
+        for record in reservations.values():
+            reserved_ports.update(reservation_ports(record))
+
+        for step in range(1500):
+            base = start + step * 10
+            ports = [base, base + 1, base + 2, base + 3]
+            if ports[-1] > 65000:
+                continue
+            if set(ports) & reserved_ports:
+                continue
+            if all(free(port) for port in ports):
+                token = uuid.uuid4().hex
+                payload = {
+                    "viewer_port": ports[0],
+                    "web_bind": f"127.0.0.1:{ports[1]}",
+                    "live_bind": f"127.0.0.1:{ports[2]}",
+                    "chain_status_bind": f"127.0.0.1:{ports[3]}",
+                }
+                reservation = {
+                    "schema": 1,
+                    "reservation_token": token,
+                    "owner_pid": owner_pid,
+                    "worktree_path": worktree_path,
+                    "harness_root": str(harness_root),
+                    "common_dir": str(common_dir),
+                    "registry_path": str(registry_path),
+                    "ports": payload,
+                }
+                reservations[token] = reservation
+                save_registry(registry)
+                atomic_write(reservation_path, json.dumps(reservation, sort_keys=True) + "\n")
+                payload["reservation_token"] = token
+                payload["reservation_file"] = str(reservation_path)
+                payload["registry_file"] = str(registry_path)
+                print(json.dumps(payload, ensure_ascii=True))
+                break
+        else:
+            raise SystemExit("error: unable to allocate free loopback ports for worktree harness")
 PY
 }
 
@@ -261,7 +342,8 @@ wh_bind_ports_owner() {
   local reservation_token=$2
   local old_owner_pid=$3
   local new_owner_pid=$4
-  python3 - "$harness_root" "$reservation_token" "$old_owner_pid" "$new_owner_pid" <<'PY'
+  local common_dir=${5:-}
+  python3 - "$harness_root" "$reservation_token" "$old_owner_pid" "$new_owner_pid" "$common_dir" <<'PY'
 from __future__ import annotations
 
 import fcntl
@@ -275,10 +357,31 @@ harness_root = pathlib.Path(sys.argv[1]).resolve()
 expected_token = sys.argv[2]
 old_owner_pid = int(sys.argv[3]) if sys.argv[3] else os.getppid()
 new_owner_pid = int(sys.argv[4])
+common_dir = pathlib.Path(sys.argv[5]).resolve() if sys.argv[5] else None
 reservation_path = harness_root / ".ports.reservation.json"
-lock_path = harness_root / ".ports.lock"
-with lock_path.open("a+", encoding="utf-8") as lock:
-    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+
+
+def atomic_write(path: pathlib.Path, contents: str) -> None:
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    temporary_path = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+local_lock_path = harness_root / ".ports.lock"
+with local_lock_path.open("a+", encoding="utf-8") as local_lock:
+    fcntl.flock(local_lock.fileno(), fcntl.LOCK_EX)
     if not reservation_path.exists():
         raise SystemExit("error: harness port reservation disappeared before owner binding")
     reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
@@ -286,47 +389,94 @@ with lock_path.open("a+", encoding="utf-8") as lock:
         raise SystemExit("error: harness port reservation token changed before owner binding")
     if int(reservation.get("owner_pid", 0)) != old_owner_pid:
         raise SystemExit("error: harness port reservation owner changed before owner binding")
-    reservation["owner_pid"] = new_owner_pid
-    fd, temporary_name = tempfile.mkstemp(prefix=f".{reservation_path.name}.", dir=str(harness_root))
-    temporary_path = pathlib.Path(temporary_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
-            temporary.write(json.dumps(reservation, sort_keys=True) + "\n")
-            temporary.flush()
-            os.fsync(temporary.fileno())
-        os.replace(temporary_path, reservation_path)
-        directory_fd = os.open(harness_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+    registry_path = pathlib.Path(reservation.get("registry_path", ""))
+    if not registry_path.is_absolute():
+        if common_dir is None:
+            raise SystemExit("error: harness port reservation has no shared registry path")
+        registry_path = common_dir / ".oasis7-harness-port-registry" / "reservations.json"
+    registry_lock_path = registry_path.parent / "registry.lock"
+    with registry_lock_path.open("a+", encoding="utf-8") as registry_lock:
+        fcntl.flock(registry_lock.fileno(), fcntl.LOCK_EX)
+        if not registry_path.exists():
+            raise SystemExit("error: shared harness port registry disappeared before owner binding")
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        reservations = registry.get("reservations")
+        record = reservations.get(expected_token) if isinstance(reservations, dict) else None
+        if not isinstance(record, dict) or record.get("harness_root") != str(harness_root):
+            raise SystemExit("error: shared harness port reservation changed before owner binding")
+        if int(record.get("owner_pid", 0)) != old_owner_pid:
+            raise SystemExit("error: shared harness port owner changed before owner binding")
+        reservation["owner_pid"] = new_owner_pid
+        record["owner_pid"] = new_owner_pid
+        atomic_write(registry_path, json.dumps(registry, sort_keys=True) + "\n")
+        atomic_write(reservation_path, json.dumps(reservation, sort_keys=True) + "\n")
 PY
 }
 
 wh_release_ports_reservation() {
   local harness_root=$1
   local reservation_token=$2
-  python3 - "$harness_root" "$reservation_token" <<'PY'
+  local common_dir=${3:-}
+  python3 - "$harness_root" "$reservation_token" "$common_dir" <<'PY'
 from __future__ import annotations
 
 import fcntl
 import json
+import os
 import pathlib
+import tempfile
 import sys
 
 harness_root = pathlib.Path(sys.argv[1]).resolve()
 expected_token = sys.argv[2]
+common_dir = pathlib.Path(sys.argv[3]).resolve() if sys.argv[3] else None
 reservation_path = harness_root / ".ports.reservation.json"
-lock_path = harness_root / ".ports.lock"
-with lock_path.open("a+", encoding="utf-8") as lock:
-    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-    if not reservation_path.exists():
-        raise SystemExit(0)
-    reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
-    if reservation.get("reservation_token") == expected_token:
-        reservation_path.unlink()
+
+
+def atomic_write(path: pathlib.Path, contents: str) -> None:
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    temporary_path = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+local_lock_path = harness_root / ".ports.lock"
+with local_lock_path.open("a+", encoding="utf-8") as local_lock:
+    fcntl.flock(local_lock.fileno(), fcntl.LOCK_EX)
+    reservation = {}
+    if reservation_path.exists():
+        reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+    registry_path = pathlib.Path(reservation.get("registry_path", ""))
+    if not registry_path.is_absolute():
+        if common_dir is None:
+            if reservation_path.exists():
+                raise SystemExit("error: harness port reservation has no shared registry path")
+            raise SystemExit(0)
+        registry_path = common_dir / ".oasis7-harness-port-registry" / "reservations.json"
+    registry_lock_path = registry_path.parent / "registry.lock"
+    with registry_lock_path.open("a+", encoding="utf-8") as registry_lock:
+        fcntl.flock(registry_lock.fileno(), fcntl.LOCK_EX)
+        if registry_path.exists():
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            reservations = registry.get("reservations")
+            if isinstance(reservations, dict):
+                record = reservations.get(expected_token)
+                if isinstance(record, dict) and record.get("harness_root") == str(harness_root):
+                    del reservations[expected_token]
+                    atomic_write(registry_path, json.dumps(registry, sort_keys=True) + "\n")
+        if reservation.get("reservation_token") == expected_token and reservation_path.exists():
+            reservation_path.unlink()
 PY
 }
 

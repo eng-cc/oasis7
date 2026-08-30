@@ -61,13 +61,13 @@
 - Test: `scripts/worktree-harness-contract.test.sh`
 
 **Interfaces:**
-- Consumes: harness root, candidate base port, required port offsets.
+- Consumes: harness root, repository-family git common directory, candidate base port, and required port offsets.
 - Produces: lock-held allocation/reservation result that another concurrent `up` cannot also claim.
 
 - [x] **Step 1:** Add a failing two-process allocation fixture synchronized at the current probe/release window.
 - [x] **Step 2:** Run the fixture and observe duplicate allocation.
-- [x] **Step 3:** Add per-harness locking and persist the selected allocation before releasing coordination authority; stale reservations must be recoverable only after owner liveness checks.
-- [x] **Step 4:** Rerun concurrent and stale-owner cases and record the allocation result (commit deferred to the integration owner).
+- [x] **Step 3:** Add per-harness locking plus a repository-family registry keyed by the canonical git common directory, and persist the selected allocation before releasing coordination authority; stale reservations must be recoverable only after owner liveness checks.
+- [x] **Step 4:** Rerun concurrent, cross-worktree collision, same-worktree/different-root, and stale-owner cases and record the allocation result (commit deferred to the integration owner).
 
 ### Task 4: Public lifecycle acceptance lane
 
