@@ -1130,6 +1130,33 @@ class WorkflowDocumentationContract(unittest.TestCase):
             assert row is not None
             self.assertIn(evidence, row.group(0), phase)
             self.assertIn(f"/ `{next_phase}`", row.group(0), phase)
+        trust = re.search(
+            r"(?ms)^#### Phase-to-producer and validator trust matrix\n(.*?)(?=^The executor receipt)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(trust, "phase-to-producer trust matrix is required")
+        assert trust is not None
+        trust_rows = trust.group(1)
+        for phase, evidence in (
+            ("draft_candidate", "candidate-input readback; no PR identity yet"),
+            ("create_pr", "Draft PR create receipt and independent PR identity/readback"),
+            ("record_pr", "Recorded PR identity plus independent task/PR readback"),
+            ("comment", "Issue-comment receipt plus independent task/issue-comment readback"),
+        ):
+            row = re.search(rf"(?m)^\| `{phase}` .*", trust_rows)
+            self.assertIsNotNone(row, phase)
+            assert row is not None
+            self.assertIn(evidence, row.group(0), phase)
+
+    def test_draft_candidate_command_uses_canonical_flags(self) -> None:
+        self.assertIn(
+            "./scripts/prepare-task-pr.sh --draft-candidate --create",
+            self.text,
+        )
+        self.assertNotIn(
+            "./scripts/prepare-task-pr.sh --create --draft",
+            self.text,
+        )
 
     def test_supervisor_a05_subcases_are_explicit_nested_schema(self) -> None:
         section = re.search(
@@ -1155,6 +1182,60 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertRegex(example, r'"subcases": \[\]')
         self.assertIn("one nested object per typed variant", text)
+
+    def test_supervisor_return_and_wake_variants_follow_closed_mapping(self) -> None:
+        matrix = re.search(
+            r"(?ms)^\| Case ID \| Stage .*?(?=^The operational catalog)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(matrix, "supervisor fault matrix is required")
+        assert matrix is not None
+        for case_id, mappings in (
+            (
+                "C03",
+                (
+                    "forged -> rejected(authority)",
+                    "stale/replayed -> stale_return(category=stale_or_replay)",
+                    "out-of-order -> stale_return(category=ordering)",
+                    "partial -> rejected(malformed)",
+                    "wrong-scope -> rejected(scope)",
+                ),
+            ),
+            (
+                "W01",
+                (
+                    "same_digest_duplicate -> accepted(existing_result)",
+                    "different_digest_duplicate -> stale_receipt",
+                    "out-of-order/stale-lease -> stale_fencing",
+                ),
+            ),
+        ):
+            row = re.search(rf"(?m)^\| `{case_id}` .*", matrix.group(0))
+            self.assertIsNotNone(row, case_id)
+            assert row is not None
+            for mapping in mappings:
+                with self.subTest(case_id=case_id, mapping=mapping):
+                    self.assertIn(mapping, row.group(0))
+            self.assertIn("new_epoch=false", row.group(0), case_id)
+
+    def test_supervisor_soak_wake_evidence_is_nested_and_aggregateable(self) -> None:
+        section = re.search(
+            r"(?ms)^### 10\.5 Machine-readable case summary and human report\n(.*?)(?=^### 10\.6)",
+            self.supervisor_design,
+        )
+        self.assertIsNotNone(section, "machine-readable case schema is required")
+        assert section is not None
+        text = section.group(1)
+        normalized = re.sub(r"\s+", " ", text)
+        self.assertIn("`observed.wakes` is a typed nested array", normalized)
+        for field in (
+            "wake_id", "delivery_id", "attempt", "fencing_token",
+            "consume_result", "readback", "digest",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"`{field}`", text)
+        self.assertIn("len(wakes)=wake_deliveries=wake_consumes", normalized)
+        self.assertIn('"wakes": []', text)
 
     def test_supervisor_outcome_catalog_maps_generic_rejections(self) -> None:
         catalog = re.search(
@@ -1260,14 +1341,16 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 "schema", "task_uid", "repository", "canonical_worktree", "task_branch",
                 "bootstrap_epoch", "evidence_epoch", "workflow_state", "phase", "next_result",
                 "revision", "head_oid", "base_oid", "comparison_oid", "event_parent_digest",
-                "transition_parent_digest", "active_action", "wait", "effect_states",
+                "transition_parent_digest", "validator_proof_digest", "active_action", "wait", "effect_states",
                 "rejection_parent_digest", "terminal_outcome",
             ],
             [field.strip() for field in field_order.group(1).split(",")],
         )
         self.assertIn("non-identity local paths", text)
         self.assertIn("`canonical_worktree` is the canonical identity string", text)
-        self.assertIn("only the transition digest currently being published is", text)
+        self.assertIn("only the `transition_digest` of the transition currently being published is", text)
+        self.assertIn("referenced `validator_proof_digest`/effect/receipt digests remain", text)
+        self.assertIn("`validator_proof_digest` is included as a referenced proof input", self.supervisor_design)
         self.assertIn("`transition_parent_digest`", text)
         self.assertNotIn("Envelope digests, signatures", text)
 

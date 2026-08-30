@@ -380,7 +380,7 @@ Deterministic script contract:
   a terminal closeout.
 
 `post-merge-finalize.py` remains the only `post_merge_done` writer; `non-merge-finalize.py` is the only `closed_without_merge` and non-merge Issue-close writer.
-- `./scripts/prepare-task-pr.sh --create --draft` creates or resumes the frozen-head draft PR and records its identity. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
+- `./scripts/prepare-task-pr.sh --draft-candidate --create` creates or resumes the frozen-head draft PR and records its identity. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
   the task to `pr_watch` when GitHub-backed mapping exists. PR creation is
   resumable: before creating, query all states using the exact head repository,
   head branch, and base branch. Reuse only an OPEN match and retry the missing

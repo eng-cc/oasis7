@@ -256,8 +256,8 @@ Cross-bindings are one-way to avoid cycles: action binds effect by
 receipt references `effect_digest`; readback references action/effect and
 expected digest; proof references receipt/effect/readback digests; transition
 references receipt/proof/state digests; and case references transition/effect/
-readback digests. Effect/readback never reference downstream digests, and
-proof/transition digests never enter the state-hash preimage.
+readback digests. Effect/readback never reference downstream digests.
+`validator_proof_digest` is included as a referenced proof input; only the currently published `transition_digest` is excluded, while `transition_parent_digest` remains included in the state-hash preimage.
 
 `workflow_state` is always one of the closed states in the canonical source;
 `phase`, `event_type`, `operation`, and blocker reason are separate typed
@@ -284,7 +284,7 @@ clock is logical, the seed explicit, and runtime IDs use the recorded map.
 `SHA-256(ASCII("oasis7/tpm/tpm-supervisor-state-hash/v1") || byte[0x0A] || UTF-8(canonical_json(preimage)))`.
 The delimiter is therefore one ASCII LF byte, not a textual escape. The exact
 semantic field order of the state-hash preimage is
-`[schema, task_uid, repository, canonical_worktree, task_branch, bootstrap_epoch, evidence_epoch, workflow_state, phase, next_result, revision, head_oid, base_oid, comparison_oid, event_parent_digest, transition_parent_digest, active_action, wait, effect_states, rejection_parent_digest, terminal_outcome]`.
+`[schema, task_uid, repository, canonical_worktree, task_branch, bootstrap_epoch, evidence_epoch, workflow_state, phase, next_result, revision, head_oid, base_oid, comparison_oid, event_parent_digest, transition_parent_digest, validator_proof_digest, active_action, wait, effect_states, rejection_parent_digest, terminal_outcome]`.
 Canonical JSON sorts those object keys by Unicode code point when serializing;
 the list fixes field presence and semantic order before serialization. All keys
 are present, with `null` only where the envelope contract permits it:
@@ -296,7 +296,7 @@ are present, with `null` only where the envelope contract permits it:
   "task_branch": "...", "bootstrap_epoch": "...", "evidence_epoch": null,
   "workflow_state": "...", "phase": "...", "next_result": {},
   "revision": 0, "head_oid": null, "base_oid": null, "comparison_oid": null,
-  "event_parent_digest": "...", "transition_parent_digest": "...",
+  "event_parent_digest": "...", "transition_parent_digest": "...", "validator_proof_digest": null,
   "active_action": null, "wait": null, "effect_states": [],
   "rejection_parent_digest": "...", "terminal_outcome": null
 }
@@ -307,10 +307,7 @@ contains typed condition, logical deadline tick, and delivery state;
 `effect_states` is sorted by logical action/attempt/target; and the rejection
 parent covers rejections committed before this event. Event/transition/
 rejection fields use parent-chain, never soon-to-be-published head, digests.
-For `state_digest`, only the transition digest currently being published is excluded.
-`event_parent_digest`, `transition_parent_digest`, `rejection_parent_digest`, and referenced effect/receipt/proof digests remain in the state preimage.
-Signatures, transport metadata, leases/fencing, journal generation, non-identity local paths, wall clocks, and normalized runtime IDs remain excluded safety/audit data.
-`canonical_worktree` is the canonical identity string shown in the preimage and is included; changing it changes the bootstrap identity/epoch and state hash.
+For `state_digest`, only the `transition_digest` of the transition currently being published is excluded. `event_parent_digest`, `transition_parent_digest`, `rejection_parent_digest`, and the referenced `validator_proof_digest`/effect/receipt digests remain in the state preimage. Signatures, transport metadata, leases/fencing, journal generation, non-identity local paths, wall clocks, and normalized runtime IDs remain excluded safety/audit data; `validator_proof_digest` is null only when no proof exists. `canonical_worktree` is the canonical identity string shown in the preimage and is included; changing it changes the bootstrap identity/epoch and state hash.
 
 Replay compares state digest after every transition and at final state. The
 first unsupported schema/migration or expected-vs-actual preimage mismatch
@@ -582,7 +579,10 @@ assertion as its own validation.
 | `route` | Trusted collaboration/attestation | Task-bound route and dispatch acknowledgement readback |
 | `dispatch`, `execute`, `integrate` | Trusted collaboration/attestation | Runtime dispatch/return attestation, artifact digest, scope and integration-barrier readback |
 | `freeze` | Trusted mechanical/bootstrap action | Git identity, frozen tree, branch and base/head readback |
-| `draft_candidate`, `create_pr`, `record_pr`, `comment` | Trusted mechanical/bootstrap action | Frozen-head draft PR identity and GitHub task/PR/issue-comment readback |
+| `draft_candidate` | Trusted mechanical/bootstrap action | Frozen task/branch/base/head/epoch/manifest candidate-input readback; no PR identity yet |
+| `create_pr` | Trusted mechanical/bootstrap action | Draft PR create receipt and independent PR identity/readback |
+| `record_pr` | Trusted mechanical/bootstrap action | Recorded PR identity plus independent task/PR readback |
+| `comment` | Trusted mechanical/bootstrap action | Issue-comment receipt plus independent task/issue-comment readback |
 | `verify` | Trusted mechanical/bootstrap action | Independent CI/check planner receipt bound to the frozen head |
 | `review` | Trusted collaboration/attestation | Task-issue review ledger, role/slice identity, artifact digest, and head/epoch readback |
 | `closeout`, `promote_draft` | Trusted mechanical/bootstrap action | Same-head review/CI evidence and draft-to-ready PR transition readback |
@@ -798,7 +798,7 @@ outcome catalog is `accepted`, `producer_missing`, `retry_exhausted`,
 `stale_receipt`, `identity_mismatch`, `receipt_mismatch`, `replay_mismatch`,
 `wake_expired`, `wake_cancelled`, `unresolved_effect`, and `rejected`; adapters may not add codes. Generic `rejected` requires one category: `schema|identity|epoch|revision|lease|fencing|scope|ordering|authority|malformed`.
 Mapping is `schema|malformed -> rejected(category)`, `identity|epoch|scope|authority -> rejected(category)`,
-`revision|lease|ordering -> stale_receipt`, and `fencing -> stale_fencing`; same-digest duplicates return the existing result, while different-digest duplicates map to `stale_receipt`.
+`revision|lease|ordering -> stale_receipt` for action receipts, and `fencing -> stale_fencing`; same-digest duplicates return the existing result, while different-digest duplicates map to `stale_receipt`. Collaboration-return `stale|replay|ordering` variants use `stale_return` with a typed category; malformed/partial, wrong-scope, and forged inputs use `rejected(malformed|scope|authority)`.
 Phase-specific aliases remain closed and must carry their category in evidence.
 
 Cardinality is six integer predicates `A/P/S/R/B/C`: accepted external effects,
@@ -823,8 +823,8 @@ The following matrix is the minimum fault suite; status/phase are observed at th
 | `V02` | Validator | `running` | `verify` | Live readback disagrees with requested effect or receipt digest | `canonical:failed` | `same_as_input` | `unresolved_effect` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=60,new_epoch=true,same_key=false,reset_authority=escalation)` |
 | `C01` | Collaboration dispatch | `running` | `dispatch` | Required producer absent before dispatch | `canonical:capability_blocked` | `same_as_input` | `producer_missing` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `C02` | Collaboration return | `external_wait` | `execute` | Trusted dispatch exists but return is temporarily absent/late | `canonical:external_wait` | `same_as_input` | `accepted` | `A=0/P=0/S=0/R=0/B=0/C=0` | `same_key(attempts<=3,elapsed_s<=120,new_epoch=false,same_key=true)` |
-| `C03` | Collaboration return | `external_wait` | `execute` | Forged, stale, replayed, out-of-order, partial, or wrong-scope return | `same_as_input` | `same_as_input` | `stale_return` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
-| `W01` | Wake | `external_wait` | `external_wait` | Duplicate, out-of-order, or stale-lease wake | `same_as_input` | `same_as_input` | `stale_fencing` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_unchanged(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
+| `C03` | Collaboration return | `external_wait` | `execute` | Forged, stale, replayed, out-of-order, partial, or wrong-scope return | `same_as_input` | `same_as_input` | `typed_subcases: forged -> rejected(authority); stale/replayed -> stale_return(category=stale_or_replay); out-of-order -> stale_return(category=ordering); partial -> rejected(malformed); wrong-scope -> rejected(scope)` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
+| `W01` | Wake | `external_wait` | `external_wait` | Same-digest duplicate, different-digest duplicate, out-of-order, or stale-lease wake | `same_as_input` | `same_as_input` | `typed_subcases: same_digest_duplicate -> accepted(existing_result); different_digest_duplicate -> stale_receipt; out-of-order/stale-lease -> stale_fencing` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_unchanged(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
 | `W02` | Wake | `external_wait` | `external_wait` | Valid wake races process restart/takeover | `canonical:running` | `same_as_input` | `accepted` | `A=0/P=0/S=1/R=0/B=0/C=0` | `wake_race(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=true)` |
 | `W03` | Wake | `external_wait` | `external_wait` | Logical wake deadline expires | `canonical:failed` | `same_as_input` | `wake_expired` | `A=0/P=0/S=1/R=0/B=0/C=0` | `authorized_reset(attempts<=1,elapsed_s<=120,new_epoch=true,same_key=false,reset_authority=owner)` |
 | `R01` | Review/fix | `running` | `review` | Exact-head artifact missing or review/CI receipt is stale | `canonical:running` | `same_as_input` | `stale_receipt` | `A=0/P=0/S=0/R=1/B=0/C=0` | `reject_same_epoch(attempts<=1,elapsed_s<=120,new_epoch=false,same_key=false)` |
@@ -866,9 +866,7 @@ typed assertions `wake_deliveries = 100`, `wake_consumes = 100`,
 `kill_restart_points = 3`, `takeovers = 3`, `active_turn_poll_count = 0`,
 `max_recovery_latency_s <= 60`, `accepted_external_effects = 0`,
 `final_status={kind:same_as_input}`, `final_phase={kind:same_as_input}`, and
-an independent readback. Every wake has its own
-delivery ID, attempt, fencing proof, consume result, and readback; any
-missing nested wake record blocks the whole soak case.
+an independent readback.
 Every catalog row is repeated for all three fixed seeds. A row passes only
 when the observed canonical status/phase rule, typed outcome code, effect
 cardinality, and recovery rule match exactly; “eventually green” or a
@@ -885,6 +883,8 @@ binding. Arrays have deterministic sort keys and matching digest lists; unknown
 fields, duplicate IDs, malformed items, or case identity/digest mismatch reject
 without lifecycle progress. `record_digest` is the complete case-object
 preimage (excluding itself) under `oasis7/tpm/tpm-supervisor-staging-case/v1`.
+
+For soak cases, `observed.wakes` is a typed nested array with one record per delivery; each requires `wake_id`, `delivery_id`, `attempt`, `fencing_token`, `consume_result`, `readback`, and `digest`. Its aggregate predicate is `len(wakes)=wake_deliveries=wake_consumes`, every record independently validates, and any missing nested wake record blocks the whole soak case; non-soak records use `wakes: []`.
 
 Each case emits one immutable `tpm-supervisor-staging-case/v1` JSON record with
 catalog identity, input state/phase, typed status/phase rules, outcome enum,
@@ -906,7 +906,7 @@ The A05 shape is `{"subcases":[{"id":"forged","fault":"...","injection":"...","e
   "budgets": {"case_timeout_s": 120, "action_timeout_s": 30, "max_attempts": 3, "wake_deadline_s": 120, "recovery_deadline_s": 60},
   "observed": {"fault_boundary": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
     "final": {"workflow_state": "capability_blocked", "phase": "bootstrap", "cardinality": {"accepted_external_effects": 0, "phase_advances": 0, "state_changes": 1, "classified_rejections": 0, "capability_blocks": 1, "cleanup_mutations": 0}},
-    "transitions": [], "effects": [], "readbacks": [], "attempts": 0, "wake_deliveries": 0, "elapsed_s": 0, "charged_cost_usd": 0.0},
+    "transitions": [], "effects": [], "readbacks": [], "wakes": [], "attempts": 0, "wake_deliveries": 0, "elapsed_s": 0, "charged_cost_usd": 0.0},
   "subcases": [],
   "recovery": {"restart_count": 0, "takeover_count": 0, "readback_queries": [], "signature": "...", "rule": "capability_unchanged", "attempts": 1, "elapsed_s": 0, "new_epoch": false, "same_idempotency_key": false, "final_status": {"kind": "canonical", "value": "capability_blocked"}},
   "expected": {"status_rule": {"kind": "canonical", "value": "capability_blocked"}, "phase_rule": {"kind": "same_as_input"}, "expected_outcome_code": "producer_missing",
