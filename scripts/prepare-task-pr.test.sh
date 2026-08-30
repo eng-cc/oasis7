@@ -128,6 +128,11 @@ if [[ "${1:-}" == "issue" && "${2:-}" == "view" && "$*" == *"--json body,number,
   exit 0
 fi
 
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" && "$*" == *"--json body,number,url"* ]]; then
+  cat "${TEST_GH_ISSUE_BODY_JSON:?}"
+  exit 0
+fi
+
 if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
   cat "${TEST_GH_ISSUE_VIEW_JSON:?}"
   exit 0
@@ -754,6 +759,34 @@ EOF
   commit --no-verify -m "test: fresh draft candidate fixture" >/dev/null
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 
+# A stale mapping must not be able to select and self-authorize the wrong live
+# issue. Reject before comment, push, PR creation, or task-state mutation.
+wrong_issue_body="$TMPDIR/wrong-issue-body.json"
+wrong_issue_comments="$TMPDIR/wrong-issue-comments.json"
+printf '{"body":"Task UID: task_ffffffffffffffffffffffffffffffff\\n","number":123,"title":"wrong","url":"https://github.com/example/oasis7/issues/123"}\n' >"$wrong_issue_body"
+printf '{"comments":[]}\n' >"$wrong_issue_comments"
+wrong_issue_log="$TMPDIR/gh-wrong-issue.log"
+wrong_issue_git_log="$TMPDIR/git-wrong-issue.log"
+if TEST_GH_ISSUE_BODY_JSON="$wrong_issue_body" TEST_GH_ISSUE_VIEW_JSON="$wrong_issue_comments" \
+  run_prepare "$wrong_issue_log" "$wrong_issue_git_log" --draft-candidate \
+  >"$TMPDIR/wrong-issue.out" 2>"$TMPDIR/wrong-issue.err"; then
+  echo "expected live issue identity mismatch" >&2
+  exit 1
+fi
+python3 - "$wrong_issue_log" "$wrong_issue_git_log" "$TMPDIR/wrong-issue.err" <<'PY'
+from pathlib import Path
+import sys
+gh = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+if any(line.startswith("issue comment ") or line.startswith("pr create ") for line in gh):
+    raise SystemExit(f"wrong issue identity reached a write: {gh}")
+if any("push" in line for line in git):
+    raise SystemExit(f"wrong issue identity pushed: {git}")
+if "live issue identity does not match canonical task mapping" not in stderr:
+    raise SystemExit(f"unexpected wrong-issue failure: {stderr}")
+PY
+
 # A producer failure must stop before issue evidence, push, PR creation, or
 # task-state mutation. This proves the producer is part of the real path.
 producer_failure_log="$TMPDIR/gh-producer-failure.log"
@@ -865,9 +898,11 @@ git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 expected_error = sys.argv[4]
 issue_read = "issue view 123 -R example/oasis7 --json comments"
+identity_read = "issue view 123 -R example/oasis7 --json body,number,url"
 unexpected_gh = [
     line for line in gh_lines
-    if line != issue_read and not line.startswith("issue comment 123 -R example/oasis7 --body-file ")
+    if line not in {issue_read, identity_read}
+    and not line.startswith("issue comment 123 -R example/oasis7 --body-file ")
 ]
 if unexpected_gh:
     raise SystemExit(f"draft candidate rejection reached a PR side effect: {gh_lines}")

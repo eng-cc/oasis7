@@ -1408,6 +1408,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
         for marker in ("oasis7-pm-evidence", "Source Worktree", "Source Branch", "Source Head", "Comparison Ref", "Comparison OID"):
             self.assertIn(marker, producer)
         self.assertIn("Evidence Phase: draft_candidate_freeze", producer)
+        self.assertIn('"body,number,url"', producer)
+        self.assertIn("live issue identity does not match canonical task mapping", producer)
         self.assertIn("written frozen identity was not observed on bound issue readback", producer)
         self.assertNotIn("canonical_hits or legacy_hits", script)
         self.assertIn(

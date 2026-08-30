@@ -48,6 +48,19 @@ def main() -> int:
     issue = str(record.get("issue_number") or "")
     repo = str((mapping.get("project") or {}).get("repo") or record.get("repository") or "")
     if not issue.isdigit() or not re.fullmatch(r"[^/\s]+/[^/\s]+", repo): fail("canonical issue or repository is invalid")
+    try:
+        live_issue = json.loads(subprocess.check_output(
+            ["gh", "issue", "view", issue, "-R", repo, "--json", "body,number,url"], text=True
+        ))
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        fail(f"cannot validate bound issue identity: {exc}")
+    live_body = str(live_issue.get("body") or "") if isinstance(live_issue, dict) else ""
+    live_number = live_issue.get("number") if isinstance(live_issue, dict) else None
+    live_url = str(live_issue.get("url") or "") if isinstance(live_issue, dict) else ""
+    if live_number != int(issue) or not live_url.endswith(f"/issues/{issue}") or not re.search(
+        rf"(?m)^Task UID:\s*`?{re.escape(task_uid)}`?\s*$", live_body
+    ):
+        fail("live issue identity does not match canonical task mapping")
     if not re.fullmatch(r"[0-9a-f]{40}", args.head) or not re.fullmatch(r"[0-9a-f]{40}", args.comparison_oid): fail("head or comparison OID is invalid")
     if git(worktree, "rev-parse", "--verify", "HEAD^{commit}") != args.head: fail("worktree HEAD differs from frozen source head")
     if git(worktree, "rev-parse", "--verify", f"refs/heads/{args.branch}^{{commit}}") != args.head: fail("task branch differs from frozen source head")
@@ -60,9 +73,13 @@ def main() -> int:
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
         handle.write(body); body_path = Path(handle.name)
     try:
-        subprocess.run(["gh", "issue", "comment", issue, "-R", repo, "--body-file", str(body_path)], check=True, stdout=subprocess.DEVNULL)
+        comment_url = subprocess.check_output(
+            ["gh", "issue", "comment", issue, "-R", repo, "--body-file", str(body_path)], text=True
+        ).strip()
     except subprocess.CalledProcessError as exc: fail(f"cannot record frozen identity on bound issue: {exc}")
     finally: body_path.unlink(missing_ok=True)
+    if f"/{repo}/issues/{issue}#issuecomment-" not in comment_url:
+        fail("frozen identity writer returned an unexpected comment identity")
     try:
         payload = json.loads(subprocess.check_output(["gh", "issue", "view", issue, "-R", repo, "--json", "comments"], text=True))
     except (subprocess.CalledProcessError, json.JSONDecodeError) as exc: fail(f"cannot read back bound issue comments: {exc}")
