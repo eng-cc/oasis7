@@ -506,6 +506,10 @@ assert record["reconciled_from_project"] is True, record
 PY
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/github-project-workflow.sh" \
   --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
+# Refresh intentionally reconciles the partial remote Project state and rewrites
+# the local mapping. Bind the SIGTERM immutability check to that new baseline,
+# not to the pre-refresh cache captured for the failed closeout.
+CACHE_BEFORE_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 
 set +e
 GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
@@ -516,7 +520,10 @@ INTERRUPTED_CLOSEOUT_STATUS=$?
 set -e
 [[ "$INTERRUPTED_CLOSEOUT_STATUS" != "0" ]]
 CACHE_AFTER_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-[[ "$CACHE_BEFORE_FAILURE" == "$CACHE_AFTER_INTERRUPT" ]]
+if [[ "$CACHE_BEFORE_INTERRUPT" != "$CACHE_AFTER_INTERRUPT" ]]; then
+  echo "github-project-task.test: interrupted closeout changed mapping" >&2
+  exit 1
+fi
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm \
