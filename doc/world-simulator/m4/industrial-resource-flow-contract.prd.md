@@ -48,6 +48,18 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - `MaterialStack.kind` 是模块/domain 拥有的字符串材料标签，可以表达 `compound`、`hardware` 等工业材料；它不能扩展、伪装或自动映射为 simulator 内建 `ResourceKind`。内建资源仅有 `Electricity | Data`，模块资产的 manifest、hash、interface、capability、limits、owner 与安装/调用拒绝继续服从 WASM ABI/runtime authority。
 - `TransferMaterial` 的即时或在途结果必须保持守恒、确定性和可审计；其具体字段、事件顺序和 ABI 以 runtime/ABI 真值为准。其中空 route/path binding 且 `auto_reroute=false` 的 zero-distance 请求保留 legacy direct-transfer compatibility；同一空 binding 下 positive-distance remains existing unbound transit。显式 route/path binding 或 `auto_reroute=true` 请求 graph mode，只有 path validation/selection 成功才成为 path-bound transit（即使有效路径距离为零）；invalid explicit binding 或无可用 graph selection 必须 atomic reject；unavailable explicit binding 只有在 `auto_reroute` 选出另一条有效 graph path 时才能替换，且不得 fallback 到 direct。该 runtime compatibility lane 不替代 gameplay authority 对玩家层 co-location/eligibility target 的定义。以上当前边界以 [`world-runtime` status matrix](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 为准，不能把 `ActionId/caused_by` trace 写成已经落地的 canonical root identity。
 
+### 工业外部性与 `operational_mitigation` authority（target-only）
+
+本节只为未来可选的 profile-declared `industrial_externality` 建立 M4/domain authority 边界，不代表当前工厂或配方已有该能力。M4/domain eventual authority 负责 profile 在 factory/recipe/operation scope 的外部性事实、受影响范围、`operational_mitigation` 的可用/已占用容量，以及一次性的 externality ledger 与 impact receipt/disposition；产品层拥有玩家承诺，gameplay 拥有选择与机会成本，M4 不新增污染或治理规则。
+
+- `operational_mitigation` 仅表示局部工业运行的缓解/处置能力，不能继承 systemic crisis containment、区域治理、shared-impact right、regional credit 或其他治理语义。没有 profile 的 legacy factory/recipe 保持原路径不变，不因本 target contract 追溯加闸。
+- profile 已声明但 mandatory externality fact、scope 或 mitigation authority 缺失、过期或冲突时，结果必须是 `unknown/blocked`，在首个不可逆 sink 前禁止排程/运行；不得从材料名称、batch contamination、location radiation-source fact、客户端缓存或 Agent 建议推断“无外部性”或安全容量。
+- M4 的 externality fact、mitigation capacity 与 impact disposition 必须沿既有 root/revision/operation lineage 持久化、可审计并可回放。`production result`、externality disposition 与 delivery/terminal settlement 是互相独立的事实；production receipt 不能冒充 mitigation、cleanup、terminal 或治理结算。
+- 已有 profile 支持的运行至多产生一次 linked production result 与一次 externality/mitigation disposition；WIP、in-transit、buffer 的处置必须各至多一次。重复提交、重连、Agent retry、snapshot restore、事件乱序和 replay 只能重读既有 receipt/disposition，不得重复扣容量、产生影响或发放进度/奖励。
+- `world-runtime` 拥有未来 event/schema、apply order、状态与持久化、checkpoint/recovery、replay/idempotency 以及 current/target status；本节不定义这些字段或实现。当前 runtime 仅有 `LocationProfile.radiation_emission_per_tick` 等 location radiation-source 窄路径证据，不能据此宣称 factory/recipe industrial externality 已实现。
+
+本 target authority 的 Non-Goals 是：不规定污染/温度/环境公式、积累、衰减、扩散、半径、阈值、清理经济、税费、区域 credit、生态模拟或治理/charter/claim 权利；不修改 runtime code、event/schema、API、ABI、UI 或 Agent 行为，也不提供自动缓解、清理、降级、改道、退款或补偿。未来 M4/runtime/QA composite evidence 形成前，不得把本节写成 current implementation 或 release readiness。
+
 ### 多阶段批次、预留与背压合同（PRD-WORLD_SIMULATOR-047）
 
 - 每批中间品必须保留可回溯的来源阶段/边、父级 receipt、材料与规格/品质适用证据、数量及当前到达账本。下游只有在批次已经结算并到达、且按当前规则明确判为适用时才能消费；`待验证/证据不足` 与 `不适用` 都必须在下游 sink 或进度前 fail closed。材料名称、Agent 建议、Viewer 缓存或模块元数据不能替代适用性证据，也不能把未知批次推断、降级或混合成适用批次。
