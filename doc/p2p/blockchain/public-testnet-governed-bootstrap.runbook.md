@@ -915,11 +915,12 @@ steps first. The preflight consumes the resulting bounded projection file;
 ./scripts/p2p-public-testnet-package-rollout.py \
   --manifest .tmp/public-testnet-package-rollout/nodes.json \
   --package-dir .tmp/testnet-packages/<run-id> \
+  --known-hosts <operator-local-pinned-known-hosts> \
   --out-dir .tmp/public-testnet-package-rollout \
   --readiness-policy rpc-running
 ```
 
-默认模式只生成计划，不改节点；脚本会校验各平台 `*-BUILDINFO` 和 `*-SHA256SUMS`，并输出 Linux/Windows operator 命令和 `rollout-plan.json`。本地 Linux 节点需要显式加 `--apply-local` 才会调用 `p2p-public-testnet-package-node-upgrade.sh` 执行替换；远端 SSH、Windows PowerShell 和凭据注入仍由 operator 在脚本外执行，manifest 不写密码。
+默认模式只生成计划，不改节点；脚本会校验各平台 `*-BUILDINFO` 和 `*-SHA256SUMS`，并输出 Linux/Windows operator 命令和 `rollout-plan.json`。当 manifest 包含远端 canonical Linux provider 时，`--known-hosts` 必须指向 operator 本机的非空 pinned host-key regular file，不得填写 provider 上的 `/opt/oasis7/p2p-testnet/...` 路径；脚本会在创建输出目录、信任校验或任何 transport/probe 前 fail closed。本地 Linux 节点需要显式加 `--apply-local` 才会调用 `p2p-public-testnet-package-node-upgrade.sh` 执行替换；远端 SSH、Windows PowerShell 和凭据注入仍由 operator 在脚本外执行，manifest 不写密码。
 
 Windows 计划要求 `windows-x64-SHA256SUMS` 覆盖并传输受治理的 bundle、genesis、network manifest、bootstrap peers、`governance_bootstrap_refs` 中全部非空 evidence 源，以及 public-testnet 必需的 world snapshot、递归 generated-world sidecar 和 world-generation provenance。每个带 `host` 的远端 Windows node manifest entry 必须显式声明非空 `rollback_backup_root`，并指向该节点已验证的时间戳备份目录；计划生成不得为远端节点隐式回退到 `backups\known-good`。每个计划按 node/version/commit/run 派生唯一 attempt id，installer、完整 governed closure 和 upgrade script 只能传到 `C:\oasis7-deploy\staging\package-rollout\<attempt-id>`；pre-apply 命令不得写 `config/`、install root 或其他 active deployment 路径。每次传输前先在远端创建并确认 staging 父目录，传输后按精确预期 SHA-256 远端复核并输出 `staging_transfer_ack`；全部传输闭合后，apply 必须使用精确的 `user@host` SSH target，并通过同步的 `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <staged-script>` 子进程从该 attempt staging root 执行脚本，再把子进程 `$LASTEXITCODE` 原样返回给 SSH。远端 PowerShell 在停止 scheduled task 或执行 installer 前初始化唯一、只追加的 stdout、stderr、exit-marker 诊断，完成 staged 文件与目录树完整性、来源路径、basename 冲突及已配置 known-good rollback root 预检，并依次输出 `staged_sha_closure_complete=true`、`promotion_begin=true`；只有此后才能停止 task、安装 runtime 或把 staged config 通过临时文件提升到 active tree，全部提升完成后输出 `promotion_complete=true`。
 
