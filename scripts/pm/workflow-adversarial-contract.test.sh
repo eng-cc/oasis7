@@ -74,4 +74,27 @@ grep -Eiq 'capability[-_ ]blocked|resumable.*capability|capability.*resume' "$TM
 }
 fi
 
+# Operator-facing examples in the workflow skills must stay aligned with the
+# real parser contracts. Help checks catch stale flags without mutating task
+# truth or requiring a live GitHub connection.
+if [[ "$CASE" == all || "$CASE" == command-examples ]]; then
+  workflow_help="$TMPDIR/workflow-next-help"
+  python3 "$ROOT_DIR/scripts/pm/workflow-next.py" --help >"$workflow_help"
+  grep -Fq -- '--repo-root' "$workflow_help"
+  grep -Fq -- '--task-uid' "$workflow_help"
+  grep -Fq -- '--json' "$workflow_help"
+
+  finalizer_help="$TMPDIR/finalizer-help"
+  "$ROOT_DIR/scripts/pm/finalize-task.sh" --help >"$finalizer_help"
+  grep -Fq -- '--preflight' "$finalizer_help"
+
+  classification_help="$TMPDIR/classification-help"
+  python3 "$ROOT_DIR/scripts/pm/github-project-task.py" classify-non-pr-task --help >"$classification_help"
+  grep -Fq -- '--evidence' "$classification_help"
+
+  non_merge_help="$TMPDIR/non-merge-help"
+  python3 "$ROOT_DIR/scripts/pm/non-merge-finalize.py" --help >"$non_merge_help"
+  grep -Fq -- '--evidence-file' "$non_merge_help"
+fi
+
 echo "workflow-adversarial-contract.test: OK"

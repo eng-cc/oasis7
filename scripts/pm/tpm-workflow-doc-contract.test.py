@@ -15,6 +15,7 @@ SOURCE = ROOT / "doc/engineering/workflow/source-of-truth.md"
 AGENTS = ROOT / "AGENTS.md"
 FINISHING = ROOT / ".agents/skills/finishing-a-development-branch/SKILL.md"
 EXECUTING_PROJECT_TASKS = ROOT / ".agents/skills/executing-project-tasks/SKILL.md"
+TDD_TEST_WRITER = ROOT / ".agents/skills/tdd-test-writer/SKILL.md"
 TPM_ROLE = ROOT / ".agents/roles/tpm.md"
 PM_README = ROOT / ".pm/README.md"
 VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL.md"
@@ -41,6 +42,9 @@ RECEIVING_CODE_REVIEW_SKILL = ROOT / ".agents/skills/receiving-code-review/SKILL
 WORKFLOW_ROUTER_SKILL = ROOT / ".agents/skills/repo-owned-workflow-router/SKILL.md"
 PREPARE_TASK_PR = ROOT / "scripts/prepare-task-pr.sh"
 SCRIPTS_PRD = ROOT / "doc/scripts/prd.md"
+TERMINAL_FINALIZER = ROOT / "scripts/pm/finalize-task.sh"
+WORKFLOW_NEXT = ROOT / "scripts/pm/workflow-next.py"
+NON_MERGE_FINALIZER = ROOT / "scripts/pm/non-merge-finalize.py"
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -2106,6 +2110,38 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"bootstrap-task-snapshot\.py validate-or-create"
             r" --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm",
         )
+
+    def test_tdd_red_owner_is_reachable_with_explicit_specialist_fallback(self) -> None:
+        skill = TDD_TEST_WRITER.read_text(encoding="utf-8")
+        normalized = re.sub(r"\s+", " ", skill.lower())
+        self.assertIn("currently assigned professional implementation role", normalized)
+        self.assertRegex(normalized, r"tdd_test_writer.{0,180}(only when|when) registered")
+        self.assertRegex(normalized, r"fallback:.{0,140}tdd_test_writer unavailable")
+        self.assertNotRegex(skill, r"(?i)spawn a `?tdd_test_writer`? subagent")
+
+    def test_touched_workflow_command_examples_match_real_help_contracts(self) -> None:
+        surfaces = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (SOURCE, EXECUTING_PROJECT_TASKS, FINISHING)
+        )
+        commands = (
+            (WORKFLOW_NEXT, ["--help"], "--task-uid", "workflow-next.py"),
+            (TERMINAL_FINALIZER, ["--help"], "--preflight", "finalize-task.sh"),
+            (PREPARE_TASK_PR, ["--help"], "--json", "prepare-task-pr.sh"),
+            (NON_MERGE_FINALIZER, ["--help"], "--evidence-file", "non-merge-finalize.py"),
+            (PROJECT_TASK, ["classify-non-pr-task", "--help"], "--evidence", "classify-non-pr-task"),
+        )
+        for path, args, option, marker in commands:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, surfaces)
+                result = subprocess.run(
+                    [str(path), *args] if path.suffix == ".sh" else ["python3", str(path), *args],
+                    cwd=ROOT,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                self.assertIn(option, result.stdout)
 
 
 if __name__ == "__main__":

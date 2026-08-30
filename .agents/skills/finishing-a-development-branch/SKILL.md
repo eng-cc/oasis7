@@ -17,13 +17,10 @@ may enter from bootstrap, planning, or execution without implementation
 verification and must proceed directly to the canonical non-merge terminal
 route below.
 
-Before choosing a finishing route, query the bound task's compact resume state
-from the canonical worktree. Follow only its `next_command`; an unbound
-identity or any blocker stops the route until the task truth is repaired:
+Before choosing a finishing route, query the bound task's compact resume state from the canonical worktree. Follow only its `next_command`; an unbound identity or any blocker stops the route until task truth is repaired:
 
 ```bash
-python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
-  --task-uid <TASK-UID> --json
+python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json
 ```
 
 ## Freeze-Commit Gates
@@ -89,14 +86,10 @@ On a non-Codex surface, use the finite fallback:
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
-9. Before merge, run the mutation-free terminal readiness preflight from the
-   canonical default worktree. It must return `status: ready`, an empty
-   `blockers` array, and the exact `next_command`; any identity mismatch is an
-   actionable blocker that must be repaired and reverified before merge:
+9. Before merge, run the mutation-free terminal readiness preflight from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact `next_command`; any identity mismatch must be repaired and reverified before merge:
 
 ```bash
-./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> \
-  --task-uid <TASK-UID> --pr <PR-NUMBER> --preflight --json
+./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --preflight --json
 ```
 
 10. Merge only with trusted gate evidence and the gate-selected repository path.
@@ -108,8 +101,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 ## Post-Merge Cleanup
 
-11. From the canonical default worktree, use the terminal runbook's resumable
-operator entry:
+11. From the canonical default worktree, use the terminal runbook's resumable operator entry:
 
 ```bash
 ./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> \

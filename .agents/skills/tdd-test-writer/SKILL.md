@@ -49,7 +49,10 @@ Also use it in oasis7 when a behavior-changing implementation task already has a
 ## Required Rules
 
 1. Do not modify production code while running this skill.
-2. Use subagent role `tdd_test_writer` for RED-phase test authoring whenever available.
+2. RED-phase test authoring belongs to the currently assigned professional
+   implementation role. An optional `tdd_test_writer` specialist may be used
+   only when that role is registered in the canonical role inventory and
+   reachable on the current surface; an absent role must not be dispatched.
 3. Write behavior-focused tests, not placeholders.
 4. Every new/updated test must fail before handoff.
 5. Failures must come from missing or incorrect production behavior, not broken tests.
@@ -65,12 +68,11 @@ Also use it in oasis7 when a behavior-changing implementation task already has a
 - Identify happy path, edge cases, and negative-path expectations.
 - If requirements are ambiguous, record `ASSUMPTION:` lines in output.
 
-### 2. Delegate Test Authoring To `tdd_test_writer`
+### 2. Author RED Tests Under the Assigned Role
 
-- Spawn a `tdd_test_writer` subagent with task scope, target files, and acceptance criteria.
-- Require the subagent to write/update tests only (no production code changes).
-- Require command output proving RED-state failure for the new tests.
-- If `tdd_test_writer` is unavailable, continue directly and note `FALLBACK: tdd_test_writer unavailable`.
+- Have the currently assigned professional implementation role write/update tests only, with task scope, target files, and acceptance criteria.
+- Use an optional `tdd_test_writer` specialist only when it is registered and reachable; require tests-only changes and command output proving RED-state failure.
+- If the specialist is unavailable, continue directly and record `FALLBACK: tdd_test_writer unavailable; implementation role authored RED tests`.
 
 ### 3. Discover Existing Test Conventions
 
@@ -95,7 +97,7 @@ Also use it in oasis7 when a behavior-changing implementation task already has a
 
 Return a block that implementation agents must follow. The handoff must include:
 
-- subagent used (`tdd_test_writer`) or explicit fallback reason
+- assigned implementation role, plus optional `tdd_test_writer` only when registered/reachable, or an explicit fallback reason
 - exact test files created/updated
 - exact verification command(s)
 - short failure summary proving RED state
