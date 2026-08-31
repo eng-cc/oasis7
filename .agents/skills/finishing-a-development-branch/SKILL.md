@@ -57,7 +57,7 @@ Partial remote state recovers via refresh -> audit -> retry; do not edit cache J
 ./scripts/prepare-task-pr.sh --promote-draft <ci_ready_receipt.json>
 ```
 
-Pre-PR local role review is recorded after frozen-head draft-candidate creation and trusted exact-head CI, before draft promotion; its schema is at the canonical review-packet link.
+Pre-PR local role review packet recorded after immutable verification, after frozen-head draft-candidate creation and trusted exact-head CI, before draft promotion; its schema is at the canonical review-packet link.
 
 ## Post-PR / Pre-Merge Gates
 
@@ -78,7 +78,7 @@ On a non-Codex surface, use the finite fallback:
 ./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
-Post-PR checks, comments, mergeability, interpretations and merge authorization remain separate canonical gates; this skill adds no gate semantics.
+Post-PR checks/comments/mergeability remain separate gates; interpretations and merge authorization come from canonical gates, not this skill.
 9. Before merge, follow the canonical [terminal-readiness preflight](../../../doc/engineering/workflow/source-of-truth.md#terminal-readiness-preflight) from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact executable `next_command`; any identity mismatch must be repaired and reverified before merge:
 
 ```bash
