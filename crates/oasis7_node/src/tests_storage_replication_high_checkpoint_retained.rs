@@ -563,6 +563,173 @@ fn fetch_commit_handler_publishes_commit_payload_provider_to_dht() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn fetch_commit_handler_rejects_same_size_corrupt_checkpoint_member_before_provider_publication() {
+    let world_id = "world-fetch-commit-corrupt-checkpoint-no-publication";
+    let dir = temp_dir("fetch-commit-corrupt-checkpoint-no-publication");
+    let (_, public_key) = deterministic_keypair_hex(198);
+    let config = NodeConfig::new("node-storage", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_replication(
+            signed_replication_config(dir.clone(), 198)
+                .with_fetch_requester_allowlist(vec![public_key])
+                .expect("fetch allowlist"),
+        );
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-storage")
+            .expect("runtime");
+    let height = 64;
+    let bundle = test_execution_checkpoint_bundle(height, "exec-block-64", "exec-state-64");
+    let message = replication
+        .build_local_commit_message_with_checkpoint(
+            "node-storage",
+            world_id,
+            7_064,
+            &PosDecision {
+                height,
+                slot: height,
+                epoch: 0,
+                proposer_id: "node-storage".to_string(),
+                status: PosConsensusStatus::Committed,
+                block_hash: "block-64".to_string(),
+                action_root: empty_action_root(),
+                committed_actions: Vec::new(),
+                approved_stake: 100,
+                rejected_stake: 0,
+                required_stake: 67,
+                total_stake: 100,
+            },
+            Some("exec-block-64"),
+            Some("exec-state-64"),
+            Some(bundle.clone()),
+        )
+        .expect("build checkpoint message")
+        .expect("checkpoint message");
+    let payload = parse_replication_commit_payload(message.payload.as_slice())
+        .expect("parse checkpoint payload");
+    let descriptor = payload
+        .execution_checkpoint
+        .expect("checkpoint descriptor");
+    let corrupt_hash = descriptor
+        .blobs
+        .first()
+        .expect("checkpoint blob descriptor")
+        .content_hash
+        .clone();
+    let corrupt_bytes = vec![0_u8; bundle.blobs.first().expect("checkpoint blob").bytes.len()];
+    assert_ne!(
+        oasis7_distfs::blake3_hex(corrupt_bytes.as_slice()),
+        corrupt_hash,
+        "fixture must contain a same-size, wrong-hash checkpoint member"
+    );
+    fs::write(
+        dir.join("store")
+            .join("blobs")
+            .join(format!("{corrupt_hash}.blob")),
+        corrupt_bytes.as_slice(),
+    )
+    .expect("seed corrupt checkpoint member at its expected CAS path");
+
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "remote-provider",
+        "storage-provider",
+    ));
+    let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("storage-provider");
+    register_replication_fetch_handlers(
+        &handle,
+        config.replication.as_ref().expect("replication"),
+        world_id,
+        &config.network_policy,
+    )
+    .expect("register fetch handlers");
+
+    let request = replication
+        .build_fetch_commit_request(world_id, height)
+        .expect("fetch request");
+    let response_payload = network
+        .request(
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+            serde_json::to_vec(&request)
+                .expect("encode request")
+                .as_slice(),
+        )
+        .expect("fetch commit response");
+    let response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(&response_payload).expect("decode response");
+    assert!(response.found, "handler should still return the persisted commit");
+
+    let marker_height = height + 1;
+    let marker_message = replication
+        .build_local_commit_message(
+            "node-storage",
+            world_id,
+            7_065,
+            &PosDecision {
+                height: marker_height,
+                slot: marker_height,
+                epoch: 0,
+                proposer_id: "node-storage".to_string(),
+                status: PosConsensusStatus::Committed,
+                block_hash: "block-65".to_string(),
+                action_root: empty_action_root(),
+                committed_actions: Vec::new(),
+                approved_stake: 100,
+                rejected_stake: 0,
+                required_stake: 67,
+                total_stake: 100,
+            },
+            None,
+            None,
+        )
+        .expect("build completion marker")
+        .expect("completion marker");
+    let marker_request = replication
+        .build_fetch_commit_request(world_id, marker_height)
+        .expect("marker fetch request");
+    let marker_response_payload = network
+        .request(
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+            serde_json::to_vec(&marker_request)
+                .expect("encode marker request")
+                .as_slice(),
+        )
+        .expect("marker fetch commit response");
+    let marker_response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(&marker_response_payload).expect("decode marker response");
+    assert!(marker_response.found, "completion marker should be served");
+
+    let marker_published = wait_until(Instant::now() + Duration::from_secs(2), || {
+        dht.published_records().iter().any(
+            |(published_world, content_hash, provider_id)| published_world == world_id
+                && content_hash == &marker_message.record.content_hash
+                && provider_id == "storage-provider",
+        )
+    });
+    assert!(
+        marker_published,
+        "completion marker must publish after the corrupt job reaches terminal failure, got {:?}",
+        dht.published_records()
+    );
+    let published = dht.published_records();
+    assert!(
+        published == vec![
+            (
+                world_id.to_string(),
+                marker_message.record.content_hash.clone(),
+                "storage-provider".to_string(),
+            )
+        ],
+        "corrupt checkpoint closure must not advertise the payload or any checkpoint member: {:?}",
+        published
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[derive(Clone, Default)]
 struct BlockingCheckpointProviderDht {
     entered_publish: Arc<(Mutex<bool>, Condvar)>,

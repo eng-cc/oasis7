@@ -64,26 +64,33 @@ impl PosNodeEngine {
     ) -> Result<Option<serde_json::Value>, NodeError> {
         if let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? {
             self.checkpoint_blob_fetch_progress.remove(content_hash);
-            if bytes.len() as u64 != expected_size_bytes {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "execution checkpoint local blob size mismatch hash={} expected={} actual={}",
-                        content_hash,
-                        expected_size_bytes,
-                        bytes.len()
-                    ),
-                });
+            let actual = blake3_hex(bytes.as_slice());
+            if actual == content_hash {
+                if bytes.len() as u64 != expected_size_bytes {
+                    return Err(NodeError::Replication {
+                        reason: format!(
+                            "execution checkpoint local blob size mismatch hash={} expected={} actual={}",
+                            content_hash,
+                            expected_size_bytes,
+                            bytes.len()
+                        ),
+                    });
+                }
+                return Ok(collect_fetch_observations.then(|| {
+                    serde_json::json!({
+                        "content_hash": content_hash,
+                        "source": "local_cache",
+                        "expected_size_bytes": expected_size_bytes,
+                        "observed_size_bytes": bytes.len(),
+                        "response_found": true,
+                        "observed_content_hash": actual,
+                    })
+                }));
             }
-            return Ok(collect_fetch_observations.then(|| {
-                serde_json::json!({
-                    "content_hash": content_hash,
-                    "source": "local_cache",
-                    "expected_size_bytes": expected_size_bytes,
-                    "observed_size_bytes": bytes.len(),
-                    "response_found": true,
-                    "observed_content_hash": blake3_hex(bytes.as_slice()),
-                })
-            }));
+            // The authenticated descriptor makes this local member
+            // replaceable: discard only the exact invalid CAS path, then let
+            // the normal signed/provider-routed fetch verify and restore it.
+            replication_runtime.discard_blob_by_hash(content_hash)?;
         }
         let request = replication_runtime.build_fetch_blob_request(content_hash)?;
         let mut provider_lookup_failure = None;

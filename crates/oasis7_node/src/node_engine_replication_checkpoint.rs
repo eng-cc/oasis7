@@ -665,6 +665,15 @@ impl PosNodeEngine {
                     ),
                 });
             }
+            let actual_hash = oasis7_distfs::blake3_hex(bytes.as_slice());
+            if actual_hash != *content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "execution checkpoint provider publish local blob hash mismatch expected={} actual={}",
+                        content_hash, actual_hash
+                    ),
+                });
+            }
         }
         for (content_hash, _) in closure_refs {
             endpoint.publish_local_content_provider_best_effort(world_id, content_hash);

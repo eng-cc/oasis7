@@ -248,6 +248,7 @@ impl NodeReplicationNetworkHandle {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn publish_checkpoint_descriptor_providers_from_root(
         &self,
         network_policy: &NodeNetworkPolicy,
@@ -258,47 +259,51 @@ impl NodeReplicationNetworkHandle {
         let Some(descriptor) = descriptor else {
             return Ok(());
         };
-        self.validate_checkpoint_blob_from_root(
-            root_dir,
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            self.validate_checkpoint_blob_from_root(
-                root_dir,
-                blob_ref.content_hash.as_str(),
-                blob_ref.size_bytes,
-            )?;
-        }
-        self.publish_checkpoint_blob_provider_from_root(
+        let validated_hashes =
+            self.validate_checkpoint_descriptor_from_root(root_dir, descriptor)?;
+        self.publish_validated_checkpoint_descriptor_providers(
             network_policy,
-            root_dir,
             world_id,
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            self.publish_checkpoint_blob_provider_from_root(
+            validated_hashes.as_slice(),
+        )
+    }
+
+    pub(crate) fn publish_commit_and_checkpoint_descriptor_providers_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        commit_hash: &str,
+        descriptor: Option<&NodeExecutionCheckpointDescriptor>,
+    ) -> Result<(), NodeError> {
+        // Validate the complete checkpoint closure before publishing the
+        // commit payload. A descriptor member can be present at its expected
+        // CAS path while containing same-size corrupt bytes; publishing the
+        // commit first would advertise a partial/invalid closure.
+        let validated_hashes = descriptor
+            .map(|descriptor| self.validate_checkpoint_descriptor_from_root(root_dir, descriptor))
+            .transpose()?;
+        self.publish_local_content_provider(network_policy, world_id, commit_hash)?;
+        if let Some(validated_hashes) = validated_hashes {
+            self.publish_validated_checkpoint_descriptor_providers(
                 network_policy,
-                root_dir,
                 world_id,
-                blob_ref.content_hash.as_str(),
-                blob_ref.size_bytes,
+                validated_hashes.as_slice(),
             )?;
         }
         Ok(())
     }
 
-    fn publish_checkpoint_blob_provider_from_root(
+    fn publish_validated_checkpoint_descriptor_providers(
         &self,
         network_policy: &NodeNetworkPolicy,
-        root_dir: &Path,
         world_id: &str,
-        content_hash: &str,
-        expected_size_bytes: u64,
+        validated_hashes: &[String],
     ) -> Result<(), NodeError> {
-        self.validate_checkpoint_blob_from_root(root_dir, content_hash, expected_size_bytes)?;
-        self.publish_local_content_provider(network_policy, world_id, content_hash)
+        for content_hash in validated_hashes {
+            self.publish_local_content_provider(network_policy, world_id, content_hash)?;
+        }
+        Ok(())
     }
 
     fn validate_checkpoint_blob_from_root(
@@ -327,7 +332,39 @@ impl NodeReplicationNetworkHandle {
                 ),
             });
         }
+        let actual_hash = oasis7_distfs::blake3_hex(bytes.as_slice());
+        if actual_hash != content_hash {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "checkpoint provider publish local blob hash mismatch expected={} actual={}",
+                    content_hash, actual_hash
+                ),
+            });
+        }
         Ok(())
+    }
+
+    fn validate_checkpoint_descriptor_from_root(
+        &self,
+        root_dir: &Path,
+        descriptor: &NodeExecutionCheckpointDescriptor,
+    ) -> Result<Vec<String>, NodeError> {
+        let mut validated_hashes = Vec::with_capacity(1 + descriptor.blobs.len());
+        self.validate_checkpoint_blob_from_root(
+            root_dir,
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        validated_hashes.push(descriptor.manifest_ref.clone());
+        for blob_ref in &descriptor.blobs {
+            self.validate_checkpoint_blob_from_root(
+                root_dir,
+                blob_ref.content_hash.as_str(),
+                blob_ref.size_bytes,
+            )?;
+            validated_hashes.push(blob_ref.content_hash.clone());
+        }
+        Ok(validated_hashes)
     }
 
     #[allow(dead_code)]

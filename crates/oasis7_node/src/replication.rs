@@ -995,6 +995,28 @@ impl ReplicationRuntime {
             .map_err(distfs_error_to_node_error)
     }
 
+    pub(crate) fn discard_blob_by_hash(&self, content_hash: &str) -> Result<bool, NodeError> {
+        // A corrupt CAS member must be removed before a verified refetch: the
+        // store intentionally treats an existing path as immutable, so put()
+        // would otherwise leave the corrupt bytes in place.  Validate the
+        // hash through the store API before constructing the exact blob path.
+        if !self
+            .store
+            .has(content_hash)
+            .map_err(distfs_error_to_node_error)?
+        {
+            return Ok(false);
+        }
+        let path = self.store.blobs_dir().join(format!("{content_hash}.blob"));
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(true),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(err) => Err(NodeError::Replication {
+                reason: format!("discard corrupt blob {} failed: {}", path.display(), err),
+            }),
+        }
+    }
+
     pub(crate) fn build_fetch_commit_request(
         &self,
         world_id: &str,
