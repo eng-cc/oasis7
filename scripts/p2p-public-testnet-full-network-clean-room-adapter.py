@@ -11,6 +11,9 @@ any mutating callback is even eligible to run.
 The transport interface is intentionally tiny and data-oriented::
 
     inspect_node(node) -> read-only preflight evidence
+    preflight(operation, node-or-None) -> authenticated preflight receipt
+    verify(operation, node-or-None) -> authenticated verification receipt
+    health(operation) -> authenticated fleet-health receipt
     verify_fresh_root_probe(plan) -> authenticated probe receipt
     mutate(operation, node-or-None) -> sanitized operation receipt
     rollback_clean_redeploy(plan, started_operations) -> sanitized receipt
@@ -42,6 +45,7 @@ PLAN_SCHEMA = "oasis7.public_testnet_full_network_clean_room_plan.v1"
 ADAPTER_SCHEMA = "oasis7.clean_room_mutation_adapter.v1"
 AUTHORITY_SCHEMA = "oasis7.clean_room_mutation_authority.v1"
 CRYPTO_RECEIPT_SCHEMA = "oasis7.crypto_verifier_receipt.v1"
+PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
 NODE_RECEIPT_SCHEMA = "oasis7.clean_room_node_receipt.v1"
 NONCE_ROW_SCHEMA = "oasis7.clean_room_adapter_nonce.v1"
@@ -51,11 +55,23 @@ CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
+CANONICAL_PROBE_PEER_ID = "validator-pair"
+CANONICAL_FLEET_PEER_ID = "fleet"
+CANONICAL_PROVIDER_UID = {
+    "storage-205": 0,
+    "sequencer-204": 0,
+    "linux-lan-observer": 0,
+    "windows-observer": 0,
+    "macos-observer": 0,
+}
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
 SAFE_NONCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,255}$")
 SECRET_KEY_RE = re.compile(r"(?:password|secret|token|private[_-]?key|sshpass)", re.I)
+SECRET_FIELD_NAMES = frozenset(
+    {"nonce", "credential", "credentials", "environment_name", "argv", "command", "command_line"}
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MIN_FREE_BYTES = 64 * 1024 * 1024
 
@@ -68,6 +84,51 @@ CANONICAL_PEER_REGISTRY = {
     "windows-observer": "12D3KooWtriadtestnetwindowsobserver",
     "macos-observer": "12D3KooWtriadtestnetfourthlocal",
 }
+
+# Provider callbacks receive only these DTO fields.  Keeping the allowlist in
+# the adapter makes a future planner field opt-in rather than an accidental
+# transport disclosure.
+TRANSPORT_NODE_FIELDS = frozenset(
+    {
+        "name",
+        "node_id",
+        "role",
+        "platform",
+        "node_root",
+        "service_manager",
+        "service",
+        "host_binding",
+        "endpoints",
+        "persistent_state_paths",
+        "identity_receipt",
+        "bindings",
+    }
+)
+TRANSPORT_PLAN_FIELDS = frozenset(
+    {
+        "schema_version",
+        "task_uid",
+        "head_oid",
+        "plan_digest",
+        "transaction_id",
+        "capture_window_id",
+        "node_order",
+        "global_order",
+        "canonical_host_inventory",
+        "canonical_endpoint_inventory",
+        "nodes",
+        "surfaces",
+        "truth",
+        "execution",
+        "forensic_backup",
+        "rollback",
+        "fresh_root_probe",
+        "observer_gate",
+        "operation_journal",
+        "operation_journal_contract",
+        "adapter_verification",
+    }
+)
 
 
 class AdapterError(RuntimeError):
@@ -245,6 +306,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         identity = _object(node.get("identity_receipt"), f"{name} identity receipt")
         if identity.get("peer_id") != CANONICAL_PEER_REGISTRY[name]:
             _fail(f"{name} peer is not in the code-owned peer registry")
+        if identity.get("key_uid") != CANONICAL_PROVIDER_UID[name]:
+            _fail(f"{name} provider identity uid is not code-owned")
         if identity.get("authenticated") is not True or identity.get("verified") is not True:
             _fail(f"{name} identity receipt is not authenticated and verified")
         paths = _safe_relative_paths(
@@ -269,6 +332,44 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or rollback.get("cross_node_state_copy") is not False
     ):
         _fail("rollback is not clean-redeploy-only")
+    ledger_contract = _object(plan.get("credential_nonce_ledger"), "credential nonce ledger contract")
+    ledger_path = _string(ledger_contract.get("path"), "credential nonce ledger path")
+    if not Path(ledger_path).is_absolute():
+        _fail("credential nonce ledger path must be absolute")
+    ledger_receipt = _object(ledger_contract.get("receipt"), "credential nonce ledger receipt")
+    if _object(ledger_receipt.get("bindings"), "credential nonce ledger receipt bindings").get("path") != ledger_path:
+        _fail("credential nonce ledger receipt path binding drifted")
+    for node in nodes:
+        seam = _object(node.get("credential_seam"), f"{node['name']} credential seam")
+        if seam.get("ledger_path") != ledger_path:
+            _fail(f"{node['name']} credential ledger path is not the canonical path")
+    journal_contract = _object(
+        plan.get("operation_journal_contract"), "operation journal contract"
+    )
+    if (
+        journal_contract.get("authoritative") is not False
+        or journal_contract.get("apply_usable") is not False
+        or journal_contract.get("adapter_owned") is not True
+        or journal_contract.get("durable_receipt_required") is not True
+        or journal_contract.get("planner_output_is_not_apply_proof") is not True
+    ):
+        _fail("operation journal contract is not the adapter-owned fail-closed contract")
+    adapter_verification = _object(
+        plan.get("adapter_verification"), "planner adapter verification"
+    )
+    if (
+        adapter_verification.get("schema_version") != "oasis7.clean_room_adapter_verification.v1"
+        or adapter_verification.get("adapter_id") != CANONICAL_ADAPTER_ID
+        or adapter_verification.get("transaction_id") != plan["transaction_id"]
+        or adapter_verification.get("capture_window_id") != plan["capture_window_id"]
+        or adapter_verification.get("live_receipts_verified") is not True
+        or adapter_verification.get("credential_nonce_ledger_verified") is not True
+        or adapter_verification.get("backup_or_no_backup_authority_verified") is not True
+        or adapter_verification.get("apply_authority_granted") is not False
+        or adapter_verification.get("durable_journal_authoritative") is not False
+        or adapter_verification.get("durable_journal_receipt_required") is not True
+    ):
+        _fail("planner adapter verification does not grant safe apply prerequisites")
     global_order = plan.get("global_order")
     if not isinstance(global_order, list):
         _fail("plan global order is missing")
@@ -294,6 +395,7 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
     """Validate external authority without accepting caller-owned identities."""
     validate_plan(plan)
     authority = _object(authority, "adapter authority")
+    _reject_secret_fields(authority, "adapter authority")
     if authority.get("schema_version") != AUTHORITY_SCHEMA:
         _fail("adapter authority schema is unsupported")
     expected = {
@@ -320,27 +422,38 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
         _fail("adapter authority signer is not in the code-owned allowlist")
     if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
         _fail("adapter authority receipt verifier or trust root is not code-owned")
+    if set(receipt) - {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "verifier_id",
+        "trust_root_id",
+        "bindings",
+    }:
+        _fail("adapter authority receipt contains an unsafe field")
+    _reject_secret_fields(receipt, "adapter authority receipt")
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "adapter authority signed payload")
     _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "adapter authority signature")
     _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, "adapter authority canonical digest")
     bindings = _object(receipt.get("bindings"), "adapter authority receipt bindings")
-    if (
-        bindings.get("task_uid") != plan["task_uid"]
-        or bindings.get("frozen_head_oid") != plan["head_oid"]
-        or bindings.get("plan_digest") != plan["plan_digest"]
-    ):
-        _fail("adapter authority receipt head or plan binding drifted")
-    if bindings.get("execution") != plan["truth"]["execution"]:
-        _fail("adapter authority receipt execution provenance binding drifted")
-    if bindings.get("forensic_backup") != plan["forensic_backup"]:
-        _fail("adapter authority receipt backup authority binding drifted")
-    if (
-        bindings.get("package_commit") != plan["truth"]["package"]["commit"]
-        or bindings.get("checkpoint_id") != plan["truth"]["checkpoint"]["checkpoint_id"]
-        or bindings.get("checkpoint_manifest_hash")
-        != plan["truth"]["checkpoint"]["manifest_hash"]
-    ):
-        _fail("adapter authority receipt package or checkpoint binding drifted")
+    expected_bindings = {
+        "task_uid": plan["task_uid"],
+        "frozen_head_oid": plan["head_oid"],
+        "plan_digest": plan["plan_digest"],
+        "execution": plan["truth"]["execution"],
+        "ledger_path": plan["credential_nonce_ledger"]["path"],
+        "apply_authorized": authority["apply_authorized"],
+        "forensic_backup": plan["forensic_backup"],
+        "package_commit": plan["truth"]["package"]["commit"],
+        "checkpoint_id": plan["truth"]["checkpoint"]["checkpoint_id"],
+        "checkpoint_manifest_hash": plan["truth"]["checkpoint"]["manifest_hash"],
+    }
+    if bindings != expected_bindings:
+        _fail("adapter authority receipt binding set is not exact")
     return {"apply_authorized": authority.get("apply_authorized") is True, "receipt": receipt}
 
 
@@ -521,9 +634,33 @@ def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], eviden
     validate_plan(plan)
     node = _object(node, "remote preflight node")
     evidence = _object(evidence, "remote preflight evidence")
+    if set(evidence) - {
+        "node",
+        "node_id",
+        "provider_uid",
+        "node_root",
+        "persistent_state_paths",
+        "symlink_free",
+        "free_bytes",
+        "required_bytes",
+        "free_inodes",
+        "required_inodes",
+        "host_target",
+        "known_hosts_path",
+        "known_host_fingerprint",
+        "known_hosts_regular",
+        "known_hosts_owner_uid",
+        "known_hosts_mode",
+    }:
+        _fail("remote preflight evidence contains an unsafe field")
+    _reject_secret_fields(evidence, "remote preflight evidence")
     name = _string(node.get("name"), "remote preflight node name")
     if evidence.get("node") not in (None, name):
         _fail(f"{name} preflight evidence node binding drifted")
+    if evidence.get("node_id") != node["node_id"]:
+        _fail(f"{name} preflight identity binding drifted")
+    if evidence.get("provider_uid") != CANONICAL_PROVIDER_UID[name]:
+        _fail(f"{name} provider uid is not the governed uid")
     if evidence.get("node_root") != node["node_root"]:
         _fail(f"{name} remote root is not canonical")
     paths = _safe_relative_paths(
@@ -582,6 +719,17 @@ def _write_journal(path: Path, record: dict[str, Any]) -> None:
     path = Path(path)
     if path.is_symlink():
         _fail("transaction journal must not be a symlink")
+    if path.exists():
+        try:
+            metadata = path.stat()
+        except OSError:
+            _fail("transaction journal metadata is unavailable")
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            _fail("transaction journal owner or mode is invalid")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(record)
     payload["journal_digest"] = journal_digest(payload)
@@ -613,6 +761,13 @@ def _read_journal(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         _fail("transaction journal must be an existing regular file")
     try:
+        metadata = path.stat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            _fail("transaction journal owner or mode is invalid")
         record = _object(json.loads(path.read_text(encoding="utf-8")), "transaction journal")
     except (OSError, json.JSONDecodeError):
         _fail("transaction journal is unreadable")
@@ -628,6 +783,11 @@ def _journal_record(
     completed: list[str],
     error: str | None = None,
     node_receipts: dict[str, dict[str, Any]] | None = None,
+    provider_receipts: list[dict[str, Any]] | None = None,
+    rollback_status: str = "not-started",
+    rollback_receipt: dict[str, Any] | None = None,
+    execution_mode: str = "dry-run",
+    rollback_error: str | None = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "schema_version": JOURNAL_SCHEMA,
@@ -638,6 +798,7 @@ def _journal_record(
         "transaction_id": plan["transaction_id"],
         "capture_window_id": plan["capture_window_id"],
         "status": status,
+        "execution_mode": execution_mode,
         "next_operation_index": next_index,
         "completed_operations": list(completed),
         "operations": list(plan["global_order"]),
@@ -645,9 +806,14 @@ def _journal_record(
         "restore_old_state": False,
         "cross_node_state_copy": False,
         "node_receipts": copy.deepcopy(node_receipts or {}),
+        "provider_receipts": copy.deepcopy(provider_receipts or []),
+        "rollback_status": rollback_status,
+        "rollback_receipt": copy.deepcopy(rollback_receipt),
     }
     if error is not None:
         record["terminal_error"] = error
+    if rollback_error is not None:
+        record["rollback_error"] = rollback_error
     return record
 
 
@@ -680,7 +846,154 @@ def _validate_node_receipts(plan: dict[str, Any], raw: Any) -> dict[str, dict[st
             or receipt.get("rollback_policy") != "clean-redeploy"
         ):
             _fail(f"{name} node receipt is not bound to this transaction")
+        if receipt.get("status") not in {"planned", "completed"}:
+            _fail(f"{name} node receipt status is unsupported")
+        operation_count = receipt.get("operation_count")
+        if not isinstance(operation_count, int) or operation_count < 0:
+            _fail(f"{name} node receipt operation_count is malformed")
+        if receipt.get("status") == "completed":
+            if not isinstance(receipt.get("last_operation"), str) or not receipt["last_operation"].endswith(name):
+                _fail(f"{name} node receipt last operation is malformed")
+        elif "last_operation" in receipt:
+            _fail(f"{name} planned node receipt must not claim a last operation")
         result[name] = receipt
+    return result
+
+
+def _provider_peer(plan: dict[str, Any], node_name: str | None, operation: str) -> str:
+    if node_name is not None:
+        node = next((item for item in plan["nodes"] if item["name"] == node_name), None)
+        if node is None:
+            _fail("provider receipt names an unknown node")
+        return CANONICAL_PEER_REGISTRY[node_name]
+    if operation == "fresh-root-probe":
+        return CANONICAL_PROBE_PEER_ID
+    return CANONICAL_FLEET_PEER_ID
+
+
+def _verify_receipt_with_verifier(
+    plan: dict[str, Any],
+    receipt: dict[str, Any],
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+) -> None:
+    if verifier is None:
+        return
+    try:
+        # A provider verifier never needs nonce seams or other adapter-only
+        # authority material.  Keep that boundary identical to the transport
+        # DTO boundary.
+        result = verifier(_transport_plan(plan), receipt)
+    except Exception as error:
+        _fail(f"provider receipt verifier failed: {error.__class__.__name__}")
+    result = _object(result, "provider receipt verifier result")
+    if (
+        result.get("verified") is not True
+        or result.get("bindings") != receipt["bindings"]
+        or result.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or result.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+        or result.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+    ):
+        _fail("provider receipt verifier did not verify the exact receipt binding")
+
+
+def _validate_provider_receipt(
+    plan: dict[str, Any],
+    operation: str,
+    node_name: str | None,
+    raw: Any,
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Validate and sanitize every provider receipt before phase advance."""
+    receipt = _object(raw, f"{operation} provider receipt")
+    allowed = {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "transaction_id",
+        "capture_window_id",
+        "operation",
+        "node",
+        "peer_id",
+        "bindings",
+        "replayed",
+        "checkpoint_manifest_hash",
+        "checkpoint_id",
+        "height",
+        "package_commit",
+        "execution_block_hash",
+        "execution_state_root",
+    }
+    _reject_secret_fields(receipt, f"{operation} provider receipt")
+    if set(receipt) - allowed:
+        _fail(f"{operation} provider receipt contains an unsafe field")
+    if receipt.get("schema_version") != PROVIDER_RECEIPT_SCHEMA:
+        _fail(f"{operation} provider receipt schema is unsupported")
+    if receipt.get("authenticated") is not True or receipt.get("verified") is not True:
+        _fail(f"{operation} provider receipt is not authenticated and verified")
+    if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
+        _fail(f"{operation} provider receipt signer is not code-owned")
+    if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+        _fail(f"{operation} provider receipt verifier or trust root is not code-owned")
+    _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, f"{operation} signed payload")
+    _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, f"{operation} signature")
+    _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, f"{operation} canonical digest")
+    if (
+        receipt.get("transaction_id") != plan["transaction_id"]
+        or receipt.get("capture_window_id") != plan["capture_window_id"]
+    ):
+        _fail(f"{operation} provider receipt transaction binding drifted")
+    if receipt.get("operation") != operation or receipt.get("node") != node_name:
+        _fail(f"{operation} provider receipt operation or node binding drifted")
+    peer_id = _string(receipt.get("peer_id"), f"{operation} provider receipt peer")
+    if peer_id != _provider_peer(plan, node_name, operation):
+        _fail(f"{operation} provider receipt peer binding drifted")
+    bindings = _object(receipt.get("bindings"), f"{operation} provider receipt bindings")
+    expected_bindings = {
+        "task_uid": plan["task_uid"],
+        "frozen_head_oid": plan["head_oid"],
+        "plan_digest": plan["plan_digest"],
+        "transaction_id": plan["transaction_id"],
+        "capture_window_id": plan["capture_window_id"],
+        "operation": operation,
+        "node": node_name,
+        "peer_id": peer_id,
+        "ledger_path": plan["credential_nonce_ledger"]["path"],
+    }
+    if bindings != expected_bindings:
+        _fail(f"{operation} provider receipt binding set is not exact")
+    if operation == "fresh-root-probe":
+        checkpoint = plan["truth"]["checkpoint"]
+        if (
+            receipt.get("replayed") is not False
+            or receipt.get("checkpoint_manifest_hash") != checkpoint["manifest_hash"]
+            or receipt.get("checkpoint_id") != checkpoint["checkpoint_id"]
+            or receipt.get("height") != checkpoint["height"]
+            or receipt.get("package_commit") != plan["truth"]["package"]["commit"]
+            or receipt.get("execution_block_hash") != checkpoint["execution_block_hash"]
+            or receipt.get("execution_state_root") != checkpoint["execution_state_root"]
+        ):
+            _fail("fresh-root probe receipt is replayed or checkpoint-unbound")
+    _verify_receipt_with_verifier(plan, receipt, verifier)
+    return _sanitize_receipt(receipt, f"{operation} provider receipt")
+
+
+def _validate_journal_provider_receipts(plan: dict[str, Any], raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        _fail("transaction journal provider_receipts must be a list")
+    result: list[dict[str, Any]] = []
+    for receipt in raw:
+        receipt_object = _object(receipt, "transaction journal provider receipt")
+        operation = _string(receipt_object.get("operation"), "transaction journal receipt operation")
+        node_name = receipt_object.get("node")
+        if node_name is not None:
+            node_name = _string(node_name, "transaction journal receipt node")
+        result.append(_validate_provider_receipt(plan, operation, node_name, receipt_object, None))
     return result
 
 
@@ -697,8 +1010,16 @@ def _validate_live_probe(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
         or receipt.get("capture_window_id") != plan["capture_window_id"]
     ):
         _fail("live fresh-root probe transaction binding drifted")
+    checkpoint = plan["truth"]["checkpoint"]
     _nonzero_hex(receipt.get("checkpoint_manifest_hash"), HEX64_RE, "live probe checkpoint manifest")
-    if receipt.get("checkpoint_manifest_hash") != plan["truth"]["checkpoint"]["manifest_hash"]:
+    if (
+        receipt.get("checkpoint_manifest_hash") != checkpoint["manifest_hash"]
+        or receipt.get("checkpoint_id") != checkpoint["checkpoint_id"]
+        or receipt.get("height") != checkpoint["height"]
+        or receipt.get("package_commit") != plan["truth"]["package"]["commit"]
+        or receipt.get("execution_block_hash") != checkpoint["execution_block_hash"]
+        or receipt.get("execution_state_root") != checkpoint["execution_state_root"]
+    ):
         _fail("live fresh-root probe checkpoint binding drifted")
 
 
@@ -729,13 +1050,26 @@ def _verify_provenance(
     return True
 
 
+def _reject_secret_fields(value: Any, label: str) -> None:
+    """Reject secret-bearing fields recursively before any provider boundary."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            if SECRET_KEY_RE.search(key_text) or key_text in SECRET_FIELD_NAMES:
+                _fail(f"{label} contains a secret-bearing field")
+            _reject_secret_fields(child, label)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_secret_fields(child, label)
+
+
 def _sanitize_receipt(value: Any, label: str) -> dict[str, Any]:
     value = _object(value, label)
     cleaned: dict[str, Any] = {}
     for key, child in value.items():
         if SECRET_KEY_RE.search(str(key)):
             continue
-        if key in {"nonce", "credential", "environment_name", "argv", "command", "command_line"}:
+        if key in SECRET_FIELD_NAMES:
             continue
         if isinstance(child, dict):
             cleaned[key] = _sanitize_receipt(child, label)
@@ -748,15 +1082,25 @@ def _sanitize_receipt(value: Any, label: str) -> dict[str, Any]:
 
 def _transport_node(node: dict[str, Any]) -> dict[str, Any]:
     """Pass inventory only; credential seams never cross the adapter API."""
-    result = copy.deepcopy(node)
-    result.pop("credential_seam", None)
+    node = _object(node, "transport node")
+    if set(node) - TRANSPORT_NODE_FIELDS - {"credential_seam"}:
+        _fail("transport node contains a field outside the allowlist")
+    result = {key: copy.deepcopy(value) for key, value in node.items() if key != "credential_seam"}
+    _reject_secret_fields(result, "transport node")
     return result
 
 
 def _transport_plan(plan: dict[str, Any]) -> dict[str, Any]:
-    result = copy.deepcopy(plan)
-    result.pop("credential_nonce_ledger", None)
+    plan = _object(plan, "transport plan")
+    if set(plan) - TRANSPORT_PLAN_FIELDS - {"authority", "credential_nonce_ledger"}:
+        _fail("transport plan contains a field outside the allowlist")
+    result = {
+        key: copy.deepcopy(value)
+        for key, value in plan.items()
+        if key not in {"authority", "credential_nonce_ledger"}
+    }
     result["nodes"] = [_transport_node(node) for node in result["nodes"]]
+    _reject_secret_fields(result, "transport plan")
     return result
 
 
@@ -783,6 +1127,10 @@ def execute(
     """
     validated = validate_plan(plan)
     authority_summary = validate_authority(plan, authority)
+    declared_ledger = Path(plan["credential_nonce_ledger"]["path"]).absolute()
+    requested_ledger = Path(ledger_path).absolute()
+    if requested_ledger != declared_ledger:
+        _fail("requested credential nonce ledger is not the plan-bound canonical path")
     provenance_verified = _verify_provenance(plan, authority, provenance_verifier)
     ledger_summary = validate_credential_ledger(plan, Path(ledger_path))
     operations = list(plan["global_order"])
@@ -800,7 +1148,15 @@ def execute(
             }
             for name in plan["node_order"]
         }
-        record = _journal_record(plan, "dry-run-complete", len(operations), operations, node_receipts=receipts)
+        record = _journal_record(
+            plan,
+            "dry-run-complete",
+            len(operations),
+            operations,
+            node_receipts=receipts,
+            rollback_status="not-needed",
+            execution_mode="dry-run",
+        )
         _write_journal(Path(journal_path), record)
         return {
             "schema_version": ADAPTER_SCHEMA,
@@ -812,17 +1168,35 @@ def execute(
             "operations": operations,
             "ledger_rows": ledger_summary["rows"],
             "provider_mutation_performed": False,
+            "provider_receipts": [],
+            "rollback_status": "not-needed",
+            "rollback_receipt": None,
             "nodes": {name: {"status": "planned", "receipt": receipts[name]} for name in plan["node_order"]},
         }
-    if transport is None or not hasattr(transport, "mutate") or not hasattr(transport, "inspect_node"):
-        _fail("apply requires an explicitly governed provider transport")
+    required_callbacks = (
+        "inspect_node",
+        "preflight",
+        "verify",
+        "health",
+        "verify_fresh_root_probe",
+        "mutate",
+        "rollback_clean_redeploy",
+    )
+    if transport is None or any(not callable(getattr(transport, name, None)) for name in required_callbacks):
+        _fail("apply requires all explicitly governed provider callbacks")
     if authority_summary["apply_authorized"] is not True:
         _fail("external apply authority is absent")
     if not provenance_verified:
         _fail("apply requires an independently executed provenance verifier")
     # One-shot reservations precede every remote observation.  Values stay in
     # the external ledger and never enter a journal, receipt, or log.
-    _write_journal(Path(journal_path), _journal_record(plan, "prepared", 0, []))
+    provider_receipts: list[dict[str, Any]] = []
+    rollback_receipt: dict[str, Any] | None = None
+    rollback_status = "not-started"
+    _write_journal(
+        Path(journal_path),
+        _journal_record(plan, "prepared", 0, [], execution_mode="apply"),
+    )
     try:
         for node in (plan["nodes"] if isinstance(plan.get("nodes"), list) else []):
             reserve_nonce(Path(ledger_path), plan["transaction_id"], _node_nonce(plan, node))
@@ -832,61 +1206,126 @@ def execute(
     except Exception as error:
         _write_journal(
             Path(journal_path),
-            _journal_record(plan, "terminal-failure", 0, [], error=error.__class__.__name__),
+            _journal_record(
+                plan,
+                "terminal-failure",
+                0,
+                [],
+                error=error.__class__.__name__,
+                provider_receipts=provider_receipts,
+                rollback_status=rollback_status,
+                execution_mode="apply",
+            ),
         )
         _fail("nonce reservation or remote preflight failed; transaction is terminal")
     completed: list[str] = []
     started: list[str] = []
     node_receipts: dict[str, dict[str, Any]] = {}
     for index, operation in enumerate(operations):
-        _write_journal(
-            Path(journal_path),
-            _journal_record(plan, "in-flight", index, completed, node_receipts=node_receipts),
-        )
+        node_name: str | None = None
         try:
+            # The in-flight journal write is itself protected by the rollback
+            # handler.  A failure here must not strand an earlier successful
+            # start/rebuild outside the durable transaction boundary.
+            _write_journal(
+                Path(journal_path),
+                _journal_record(
+                    plan,
+                    "in-flight",
+                    index,
+                    completed,
+                    node_receipts=node_receipts,
+                    provider_receipts=provider_receipts,
+                    rollback_status=rollback_status,
+                    rollback_receipt=rollback_receipt,
+                    execution_mode="apply",
+                ),
+            )
             if operation == "fresh-root-probe":
-                _validate_live_probe(plan, transport.verify_fresh_root_probe(_transport_plan(plan)))
+                raw_receipt = transport.verify_fresh_root_probe(_transport_plan(plan))
+                receipt = _validate_provider_receipt(
+                    plan,
+                    operation,
+                    None,
+                    raw_receipt,
+                    provenance_verifier,
+                )
+                _validate_live_probe(plan, receipt)
             else:
                 node_name = operation.partition(":")[2] or None
                 node = next((item for item in plan["nodes"] if item["name"] == node_name), None)
-                receipt = transport.mutate(
+                phase = operation.partition(":")[0]
+                transport_node = _transport_node(node) if node is not None else None
+                if phase == "preflight":
+                    raw_receipt = transport.preflight(operation, transport_node)
+                elif phase == "verify":
+                    raw_receipt = transport.verify(operation, transport_node)
+                elif operation == "fleet-health":
+                    raw_receipt = transport.health(operation)
+                else:
+                    raw_receipt = transport.mutate(operation, transport_node)
+                # A successful start/rebuild callback may have changed the
+                # provider even if its receipt is malformed or the following
+                # durable journal write fails.  Include that operation in the
+                # clean-redeploy rollback set before any validation/write.
+                if operation.startswith(("start:", "rebuild:")):
+                    started.append(operation)
+                receipt = _validate_provider_receipt(
+                    plan,
                     operation,
-                    _transport_node(node) if node is not None else None,
+                    node_name,
+                    raw_receipt,
+                    provenance_verifier,
                 )
-                if _mutating_operation(operation):
-                    _sanitize_receipt(receipt, f"{operation} receipt")
-                if node_name is not None and operation.startswith("verify:"):
-                    _sanitize_receipt(receipt, f"{operation} receipt")
-                if node_name is not None:
-                    node_receipts[node_name] = {
-                        "schema_version": NODE_RECEIPT_SCHEMA,
-                        "node": node_name,
-                        "transaction_id": plan["transaction_id"],
-                        "capture_window_id": plan["capture_window_id"],
-                        "plan_digest": plan["plan_digest"],
-                        "status": "completed",
-                        "last_operation": operation,
-                        "operation_count": sum(
-                            1 for completed_operation in completed + [operation]
-                            if completed_operation.endswith(node_name)
-                        ),
-                        "rollback_policy": "clean-redeploy",
-                    }
+            provider_receipts.append(receipt)
+            if node_name is not None:
+                node_receipts[node_name] = {
+                    "schema_version": NODE_RECEIPT_SCHEMA,
+                    "node": node_name,
+                    "transaction_id": plan["transaction_id"],
+                    "capture_window_id": plan["capture_window_id"],
+                    "plan_digest": plan["plan_digest"],
+                    "status": "completed",
+                    "last_operation": operation,
+                    "operation_count": sum(
+                        1 for completed_operation in completed + [operation]
+                        if completed_operation.endswith(node_name)
+                    ),
+                    "rollback_policy": "clean-redeploy",
+                }
             completed.append(operation)
             _write_journal(
                 Path(journal_path),
-                _journal_record(plan, "running", index + 1, completed, node_receipts=node_receipts),
+                _journal_record(
+                    plan,
+                    "running",
+                    index + 1,
+                    completed,
+                    node_receipts=node_receipts,
+                    provider_receipts=provider_receipts,
+                    rollback_status=rollback_status,
+                    rollback_receipt=rollback_receipt,
+                    execution_mode="apply",
+                ),
             )
-            if operation.startswith(("start:", "rebuild:")):
-                started.append(operation)
         except Exception as error:
+            rollback_error: str | None = None
             try:
                 rollback_receipt = transport.rollback_clean_redeploy(
                     _transport_plan(plan), list(started)
                 )
-                _sanitize_receipt(rollback_receipt, "clean-redeploy rollback receipt")
-            except Exception:
-                pass
+                rollback_receipt = _validate_provider_receipt(
+                    plan,
+                    "rollback-clean-redeploy",
+                    None,
+                    rollback_receipt,
+                    provenance_verifier,
+                )
+                rollback_status = "completed"
+            except Exception as rollback_failure:
+                rollback_receipt = None
+                rollback_status = "reconciliation-blocked"
+                rollback_error = rollback_failure.__class__.__name__
             _write_journal(
                 Path(journal_path),
                 _journal_record(
@@ -896,10 +1335,30 @@ def execute(
                     completed,
                     error.__class__.__name__,
                     node_receipts,
+                    provider_receipts,
+                    rollback_status,
+                    rollback_receipt,
+                    "apply",
+                    rollback_error,
                 ),
             )
+            if rollback_status == "reconciliation-blocked":
+                _fail("provider operation and clean-redeploy rollback failed; reconciliation is blocked")
             _fail("provider operation failed; transaction is terminal and requires governed reconciliation")
-    _write_journal(Path(journal_path), _journal_record(plan, "complete", len(operations), completed))
+    _write_journal(
+        Path(journal_path),
+        _journal_record(
+            plan,
+            "complete",
+            len(operations),
+            completed,
+            node_receipts=node_receipts,
+            provider_receipts=provider_receipts,
+            rollback_status="not-needed",
+            rollback_receipt=None,
+            execution_mode="apply",
+        ),
+    )
     return {
         "schema_version": ADAPTER_SCHEMA,
         "status": "complete",
@@ -909,6 +1368,9 @@ def execute(
         "transaction_id": plan["transaction_id"],
         "operations": operations,
         "provider_mutation_performed": True,
+        "provider_receipts": provider_receipts,
+        "rollback_status": "not-needed",
+        "rollback_receipt": None,
         "nodes": {name: {"status": "complete", "receipt": node_receipts.get(name)} for name in plan["node_order"]},
     }
 
@@ -926,6 +1388,9 @@ def resume_transaction(
     """Resume only a complete/planned journal; ambiguous state is terminal."""
     validate_plan(plan)
     validate_authority(plan, authority)
+    declared_ledger = Path(plan["credential_nonce_ledger"]["path"]).absolute()
+    if Path(ledger_path).absolute() != declared_ledger:
+        _fail("requested credential nonce ledger is not the plan-bound canonical path")
     record = _read_journal(Path(journal_path))
     for field, expected in (
         ("task_uid", plan["task_uid"]),
@@ -936,16 +1401,56 @@ def resume_transaction(
     ):
         if record.get(field) != expected:
             _fail("transaction journal is bound to a different task, head, plan, or capture window")
+    expected_mode = "dry-run" if dry_run else "apply"
+    if record.get("execution_mode") != expected_mode:
+        _fail("transaction journal execution mode is not the requested mode")
     if record.get("operations") != plan["global_order"]:
         _fail("transaction journal operation order is not the frozen deterministic order")
     receipts = _validate_node_receipts(plan, record.get("node_receipts", {}))
+    provider_receipts = _validate_journal_provider_receipts(plan, record.get("provider_receipts", []))
+    rollback_status = record.get("rollback_status")
+    if rollback_status not in {"not-started", "not-needed", "completed", "reconciliation-blocked"}:
+        _fail("transaction journal rollback status is unsupported")
+    rollback_receipt_raw = record.get("rollback_receipt")
+    if rollback_status == "completed":
+        rollback_receipt = _validate_provider_receipt(
+            plan,
+            "rollback-clean-redeploy",
+            None,
+            rollback_receipt_raw,
+            None,
+        )
+    elif rollback_receipt_raw is not None:
+        _fail("transaction journal has a rollback receipt without a completed rollback")
+    status = record.get("status")
+    completed = record.get("completed_operations")
+    next_index = record.get("next_operation_index")
+    if (
+        not isinstance(completed, list)
+        or not isinstance(next_index, int)
+        or next_index < 0
+        or next_index > len(plan["global_order"])
+        or completed != plan["global_order"][:next_index]
+    ):
+        _fail("transaction journal progress is not a deterministic operation prefix")
+    if status in {"dry-run-complete", "complete"} and next_index != len(plan["global_order"]):
+        _fail("completed transaction journal does not cover the full operation order")
+    provider_operations = [receipt["operation"] for receipt in provider_receipts]
+    if expected_mode == "dry-run":
+        if provider_operations:
+            _fail("dry-run journal must not contain provider receipts")
+    elif provider_operations != completed:
+        _fail("apply journal provider receipts do not cover its completed prefix")
+    if rollback_status == "reconciliation-blocked" and not isinstance(record.get("rollback_error"), str):
+        _fail("reconciliation-blocked journal lacks an explicit rollback error")
+    if rollback_status != "reconciliation-blocked" and "rollback_error" in record:
+        _fail("non-terminal rollback journal contains a rollback error")
     if (
         record.get("rollback_policy") != "clean-redeploy"
         or record.get("restore_old_state") is not False
         or record.get("cross_node_state_copy") is not False
     ):
         _fail("transaction journal contains an unsafe rollback policy")
-    status = record.get("status")
     if status == "dry-run-complete" or status == "complete":
         return {
             "schema_version": ADAPTER_SCHEMA,
@@ -956,6 +1461,9 @@ def resume_transaction(
             "transaction_id": plan["transaction_id"],
             "operations": list(plan["global_order"]),
             "provider_mutation_performed": status == "complete",
+            "provider_receipts": provider_receipts,
+            "rollback_status": rollback_status,
+            "rollback_receipt": rollback_receipt_raw,
             "nodes": {
                 name: {"status": "already-complete", "receipt": receipts.get(name)}
                 for name in plan["node_order"]
@@ -970,14 +1478,6 @@ def resume_transaction(
     if status == "terminal-failure":
         _fail("transaction journal is terminal-failure; governed reconciliation is required")
     if status in {"prepared", "running"} and dry_run:
-        completed = record.get("completed_operations")
-        next_index = record.get("next_operation_index")
-        if (
-            not isinstance(completed, list)
-            or not isinstance(next_index, int)
-            or completed != plan["global_order"][:next_index]
-        ):
-            _fail("transaction journal progress is not a deterministic operation prefix")
         _write_journal(
             Path(journal_path),
             _journal_record(
@@ -986,6 +1486,10 @@ def resume_transaction(
                 len(plan["global_order"]),
                 list(plan["global_order"]),
                 node_receipts=receipts,
+                provider_receipts=provider_receipts,
+                rollback_status="not-needed",
+                rollback_receipt=None,
+                execution_mode="dry-run",
             ),
         )
         return {
@@ -997,6 +1501,9 @@ def resume_transaction(
             "transaction_id": plan["transaction_id"],
             "operations": list(plan["global_order"]),
             "provider_mutation_performed": False,
+            "provider_receipts": [],
+            "rollback_status": "not-needed",
+            "rollback_receipt": None,
             "nodes": {
                 name: {"status": "planned", "receipt": receipts.get(name)}
                 for name in plan["node_order"]
