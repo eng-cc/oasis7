@@ -1170,7 +1170,12 @@ def command_move_task(args: argparse.Namespace) -> int:
             "move-task: refusing done because GitHub Project item mapping could not be recovered; "
             f"task_uid={args.task_uid}"
         )
+    # Status and Workflow Phase are one canonical Project projection.  Derive
+    # both from the requested status before producing any Issue/Project write,
+    # so a stale cached phase cannot publish an invalid combination such as
+    # Done/deferred/execution.
     record["status"] = args.to_status
+    record["workflow_phase"] = load_sync_module().workflow_phase_for(args.to_status)
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0

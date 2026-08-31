@@ -156,8 +156,8 @@ JSON
 {"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
 {"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
-{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_VERIFICATION","name":"verification"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"},{"id":"OPT_DEFERRED_PM","name":"deferred"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_VERIFICATION","name":"verification"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_BLOCKED_PHASE","name":"blocked"},{"id":"OPT_DONE_PHASE","name":"done"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
 {"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
 {"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
@@ -205,6 +205,8 @@ JSON
         printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
       elif [[ "$*" == *"OPT_DONE"* ]]; then
         printf 'done\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_DEFERRED_PM"* ]]; then
+        printf 'deferred\n' >"$GH_PROJECT_STATE_FILE"
       fi
     elif [[ "$*" == *"--field-id FIELD_WORKFLOW_PHASE"* ]]; then
       case "$*" in
@@ -212,6 +214,7 @@ JSON
         *OPT_VERIFICATION*) printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_PRE_PR_READY*) printf 'pre_pr_ready\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_PR_WATCH_PHASE*) printf 'pr_watch\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_BLOCKED_PHASE*) printf 'blocked\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_DONE_PHASE*) printf 'done\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
       esac
     fi
@@ -266,6 +269,72 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
+
+# RED: public move-task must derive Workflow Phase from the new PM Status. A
+# stale execution phase would otherwise publish the invalid Done/deferred/
+# execution combination instead of the canonical Done/deferred/blocked pair.
+MOVE_PHASE_ROOT="$TMPDIR/move-phase"
+MOVE_PHASE_UID="task_77777777777777777777777777777777"
+mkdir -p "$MOVE_PHASE_ROOT/.pm/github-project-sync"
+python3 - "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$MOVE_PHASE_UID" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+uid = sys.argv[2]
+payload = {
+    "version": 1,
+    "tasks": {
+        uid: {
+            "task_uid": uid,
+            "title": "Move-task phase mapping",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "committed",
+            "workflow_phase": "execution",
+            "priority": "P2",
+            "worktree_hint": "/tmp/move-phase-worktree",
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/2001",
+            "issue_number": 2001,
+            "project_item_id": "ITEM_ID",
+        },
+    },
+}
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+set +e
+python3 "$TMPDIR/github-project-task.py" move-task "$MOVE_PHASE_ROOT" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$MOVE_PHASE_UID" \
+  --to-status deferred \
+  --json >"$TMPDIR/move-phase.json" 2>"$TMPDIR/move-phase.err"
+MOVE_PHASE_STATUS=$?
+set -e
+if [[ "$MOVE_PHASE_STATUS" != "0" ]]; then
+  echo "github-project-task.test: move-task phase mapping fixture unexpectedly failed" >&2
+  cat "$TMPDIR/move-phase.err" >&2
+  exit 1
+fi
+python3 - "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$MOVE_PHASE_UID" <<'PY'
+import json
+import sys
+
+record = json.load(open(sys.argv[1], encoding="utf-8"))["tasks"][sys.argv[2]]
+assert record["status"] == "deferred", record
+assert record["workflow_phase"] == "blocked", record
+PY
+[[ "$(cat "$GH_PROJECT_STATUS_STATE_FILE")" == "Done" ]]
+[[ "$(cat "$GH_PROJECT_STATE_FILE")" == "deferred" ]]
+[[ "$(cat "$GH_PROJECT_PHASE_STATE_FILE")" == "blocked" ]]
+printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 
 # RED: non-PR classification must reject a live Project lifecycle that drifts
 # from the authoritative Issue before editing the Issue or local cache.
