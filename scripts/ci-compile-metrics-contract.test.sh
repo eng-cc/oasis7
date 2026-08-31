@@ -725,6 +725,36 @@ passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
 
+duplicate_metric_rows = deepcopy(matching_comparison)
+duplicate_metric_rows["metric_rows"].append(
+    deepcopy(duplicate_metric_rows["metric_rows"][0])
+)
+duplicate = run_gate(duplicate_metric_rows)
+if (
+    duplicate.returncode == 0
+    or "comparison metric_rows contains duplicate metric row for package_count"
+    not in duplicate.stdout
+    or duplicate.stderr
+):
+    raise SystemExit(
+        "duplicate metric rows unexpectedly passed or used wrong error: "
+        f"{duplicate.stdout}{duplicate.stderr}"
+    )
+
+malformed_metric_rows = deepcopy(matching_comparison)
+malformed_metric_rows["metric_rows"] = [{}]
+malformed = run_gate(malformed_metric_rows)
+if (
+    malformed.returncode == 0
+    or "comparison metric_rows entry 0 metric must be a non-empty string"
+    not in malformed.stdout
+    or malformed.stderr
+):
+    raise SystemExit(
+        "malformed metric row unexpectedly passed or used wrong error: "
+        f"{malformed.stdout}{malformed.stderr}"
+    )
+
 stale_current = deepcopy(matching_comparison)
 stale_current["current_commit_oid"] = baseline_commit_oid
 stale_current["current"]["commit_oid"] = baseline_commit_oid

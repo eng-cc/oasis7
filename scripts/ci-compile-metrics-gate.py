@@ -357,6 +357,45 @@ def main() -> int:
     ):
         failures.append("current package closure still includes wasmtime")
 
+    thresholds = {
+        "package_count": args.max_package_count_regression_pct,
+        "cargo_check_seconds": args.max_cargo_check_regression_pct,
+        "cargo_build_release_seconds": args.max_cargo_build_release_regression_pct,
+        "release_binary_bytes": args.max_release_binary_bytes_regression_pct,
+    }
+
+    # Treat metric_rows as a schema-bearing list rather than a map projection:
+    # duplicate or malformed rows must fail closed instead of silently
+    # replacing evidence before threshold evaluation.
+    metric_rows: dict[str, dict] = {}
+    raw_metric_rows = comparison.get("metric_rows", [])
+    if not isinstance(raw_metric_rows, list):
+        failures.append("comparison metric_rows must be a JSON array")
+    else:
+        for index, row in enumerate(raw_metric_rows):
+            if not isinstance(row, dict):
+                failures.append(
+                    f"comparison metric_rows entry {index} must be a JSON object"
+                )
+                continue
+            metric = row.get("metric")
+            if type(metric) is not str or not metric:
+                failures.append(
+                    f"comparison metric_rows entry {index} metric must be a non-empty string"
+                )
+                continue
+            if metric not in thresholds:
+                failures.append(
+                    f"comparison metric_rows entry {index} metric is unsupported: {metric}"
+                )
+                continue
+            if metric in metric_rows:
+                failures.append(
+                    f"comparison metric_rows contains duplicate metric row for {metric}"
+                )
+                continue
+            metric_rows[metric] = row
+
     if baseline is None:
         if failures:
             for failure in failures:
@@ -365,14 +404,6 @@ def main() -> int:
         print("gate: SKIP: no baseline metrics available for regression thresholds")
         return 0
 
-    thresholds = {
-        "package_count": args.max_package_count_regression_pct,
-        "cargo_check_seconds": args.max_cargo_check_regression_pct,
-        "cargo_build_release_seconds": args.max_cargo_build_release_regression_pct,
-        "release_binary_bytes": args.max_release_binary_bytes_regression_pct,
-    }
-
-    metric_rows = {row["metric"]: row for row in comparison.get("metric_rows", [])}
     metric_labels = {
         "package_count": "package closure count",
         "cargo_check_seconds": "cold cargo check time",
