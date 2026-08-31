@@ -19,6 +19,8 @@ from typing import Any
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
+GATE_OWNED_STATUSES = {"ready", "pr_watch"}
+TERMINAL_WORKFLOW_PHASES = {"task_done", "main_sync", "post_merge_done", "closed_without_merge"}
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
@@ -1157,6 +1159,37 @@ def command_workflow_report(args: argparse.Namespace) -> int:
 def command_move_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
+    previous_phase = str(record.get("workflow_phase") or "")
+    if args.to_status in GATE_OWNED_STATUSES:
+        canonical_writer = (
+            "task-closeout.sh with canonical review/CI evidence"
+            if args.to_status == "ready"
+            else "prepare-task-pr.sh --promote-draft with canonical CI/promotion evidence"
+        )
+        die(
+            f"move-task: {args.to_status} is owned by the canonical {canonical_writer}; "
+            "generic move-task cannot publish a readiness-gated status"
+        )
+    if previous == "done":
+        if args.to_status == "done":
+            # Terminal finalizers own the fine-grained phase.  A repeated
+            # generic move is a read-only idempotent acknowledgment, never a
+            # projection back to the intermediate task_done phase.
+            payload = {
+                "task_uid": args.task_uid,
+                "previous_status": previous,
+                "status": "done",
+                "workflow_phase": previous_phase,
+                "issue_url": record.get("issue_url"),
+                "project_item_id": record.get("project_item_id"),
+                "updated_field_values": 0,
+                "idempotent": True,
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"move-task: {args.task_uid} already done")
+            return 0
+        die("move-task: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook")
+    if previous_phase in TERMINAL_WORKFLOW_PHASES:
+        die("move-task: terminal workflow phase cannot be reclassified by generic move-task")
     if args.to_status == "done" and not (record.get("last_closed_at") and has_verified_task_complete(record)):
         die(
             "move-task: refusing done without closeout and verified task_complete evidence; "

@@ -667,13 +667,18 @@ PY
 NO_CACHE_ROOT="$TMPDIR/no-cache"
 mkdir -p "$NO_CACHE_ROOT"
 NO_CACHE_UID="task_99999999999999999999999999999999"
+set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
   --project-number 1 \
   --task-uid "$NO_CACHE_UID" \
   --to-status ready \
-  --json > "$TMPDIR/no-cache-move.json"
+  --json > "$TMPDIR/no-cache-move.json" 2> "$TMPDIR/no-cache-move.err"
+NO_CACHE_MOVE_STATUS=$?
+set -e
+[[ "$NO_CACHE_MOVE_STATUS" != "0" ]]
+grep -Fq "canonical task-closeout.sh" "$TMPDIR/no-cache-move.err"
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \
