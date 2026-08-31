@@ -697,6 +697,31 @@ def run_gate(payload):
     )
 
 
+def run_gate_without_thresholds(payload):
+    comparison_path.write_text(json.dumps(payload), encoding="utf-8")
+    return subprocess.run(
+        [
+            "python3",
+            "scripts/ci-compile-metrics-gate.py",
+            "--comparison",
+            str(comparison_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def assert_exact_gate_failure(payload, expected_failure, label):
+    result = run_gate_without_thresholds(payload)
+    expected_output = f"gate: FAIL: {expected_failure}\n"
+    if result.returncode != 1 or result.stdout != expected_output or result.stderr:
+        raise SystemExit(
+            f"{label} did not fail closed with exact output: "
+            f"{result.stdout}{result.stderr}"
+        )
+
+
 comparison_path.write_text(json.dumps(matching_comparison), encoding="utf-8")
 
 for invalid in ("NaN", "inf", "-1"):
@@ -724,6 +749,134 @@ for invalid in ("NaN", "inf", "-1"):
 passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
+
+missing_metric_rows = deepcopy(matching_comparison)
+missing_metric_rows.pop("metric_rows")
+assert_exact_gate_failure(
+    missing_metric_rows,
+    "comparison is missing metric_rows",
+    "omitted metric_rows",
+)
+
+explicit_empty_metric_rows = deepcopy(matching_comparison)
+explicit_empty_metric_rows["metric_rows"] = []
+explicit_empty = run_gate_without_thresholds(explicit_empty_metric_rows)
+expected_empty_output = "gate: PASS: compile metrics are within configured thresholds\n"
+if (
+    explicit_empty.returncode != 0
+    or explicit_empty.stdout != expected_empty_output
+    or explicit_empty.stderr
+):
+    raise SystemExit(
+        "explicit empty metric_rows did not remain distinguishable from omission: "
+        f"{explicit_empty.stdout}{explicit_empty.stderr}"
+    )
+
+non_array_metric_rows = deepcopy(matching_comparison)
+non_array_metric_rows["metric_rows"] = None
+assert_exact_gate_failure(
+    non_array_metric_rows,
+    "comparison metric_rows must be a JSON array",
+    "non-array metric_rows",
+)
+
+non_object_metric_row = deepcopy(matching_comparison)
+non_object_metric_row["metric_rows"] = [[]]
+assert_exact_gate_failure(
+    non_object_metric_row,
+    "comparison metric_rows entry 0 must be a JSON object",
+    "non-object metric row",
+)
+
+unsupported_metric_row = deepcopy(matching_comparison)
+unsupported_metric_row["metric_rows"] = [{"metric": "unsupported"}]
+assert_exact_gate_failure(
+    unsupported_metric_row,
+    "comparison metric_rows entry 0 metric is unsupported: unsupported",
+    "unsupported metric row",
+)
+
+empty_metric_name = deepcopy(matching_comparison)
+empty_metric_name["metric_rows"] = [{"metric": ""}]
+assert_exact_gate_failure(
+    empty_metric_name,
+    "comparison metric_rows entry 0 metric must be a non-empty string",
+    "empty metric name",
+)
+
+invalid_numeric_fields = (
+    ("baseline", "finite non-negative number"),
+    ("current", "finite non-negative number"),
+    ("delta", "finite number"),
+    ("percent", "finite number"),
+)
+for field, numeric_contract in invalid_numeric_fields:
+    invalid_numeric = deepcopy(matching_comparison)
+    invalid_numeric["metric_rows"][0][field] = "not-a-number"
+    assert_exact_gate_failure(
+        invalid_numeric,
+        f"comparison row package_count {field} must be a {numeric_contract}",
+        f"invalid unthresholded {field}",
+    )
+
+current_only_invalid_numeric = deepcopy(matching_comparison)
+current_only_invalid_numeric["baseline"] = None
+current_only_invalid_numeric["baseline_ref"] = None
+current_only_invalid_numeric["baseline_commit_oid"] = None
+current_only_invalid_numeric["metric_rows"][0]["current"] = "not-a-number"
+assert_exact_gate_failure(
+    current_only_invalid_numeric,
+    "comparison row package_count current must be a finite non-negative number",
+    "invalid current-only numeric field",
+)
+
+missing_metric_name = deepcopy(matching_comparison)
+missing_metric_name["metric_rows"] = [{}]
+assert_exact_gate_failure(
+    missing_metric_name,
+    "comparison metric_rows entry 0 metric must be a non-empty string",
+    "missing metric name",
+)
+
+duplicate_metric_rows_exact = deepcopy(matching_comparison)
+duplicate_metric_rows_exact["metric_rows"].append(
+    deepcopy(duplicate_metric_rows_exact["metric_rows"][0])
+)
+assert_exact_gate_failure(
+    duplicate_metric_rows_exact,
+    "comparison metric_rows contains duplicate metric row for package_count",
+    "duplicate metric rows",
+)
+
+duplicate_metric_rows = deepcopy(matching_comparison)
+duplicate_metric_rows["metric_rows"].append(
+    deepcopy(duplicate_metric_rows["metric_rows"][0])
+)
+duplicate = run_gate(duplicate_metric_rows)
+if (
+    duplicate.returncode == 0
+    or "comparison metric_rows contains duplicate metric row for package_count"
+    not in duplicate.stdout
+    or duplicate.stderr
+):
+    raise SystemExit(
+        "duplicate metric rows unexpectedly passed or used wrong error: "
+        f"{duplicate.stdout}{duplicate.stderr}"
+    )
+
+malformed_metric_rows = deepcopy(matching_comparison)
+malformed_metric_rows["metric_rows"] = [{}]
+malformed = run_gate(malformed_metric_rows)
+if (
+    malformed.returncode == 0
+    or "comparison metric_rows entry 0 metric must be a non-empty string"
+    not in malformed.stdout
+    or malformed.stderr
+):
+    raise SystemExit(
+        "malformed metric row unexpectedly passed or used wrong error: "
+        f"{malformed.stdout}{malformed.stderr}"
+    )
 
 stale_current = deepcopy(matching_comparison)
 stale_current["current_commit_oid"] = baseline_commit_oid
