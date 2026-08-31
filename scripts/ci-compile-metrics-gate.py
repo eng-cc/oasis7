@@ -369,8 +369,11 @@ def main() -> int:
     # replacing evidence before threshold evaluation.
     metric_rows: dict[str, dict] = {}
     metric_values: dict[str, dict[str, object]] = {}
-    raw_metric_rows = comparison.get("metric_rows", [])
-    if not isinstance(raw_metric_rows, list):
+    missing_metric_rows = object()
+    raw_metric_rows = comparison.get("metric_rows", missing_metric_rows)
+    if raw_metric_rows is missing_metric_rows:
+        failures.append("comparison is missing metric_rows")
+    elif not isinstance(raw_metric_rows, list):
         failures.append("comparison metric_rows must be a JSON array")
     else:
         for index, row in enumerate(raw_metric_rows):

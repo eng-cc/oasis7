@@ -750,6 +750,28 @@ passing = run_gate(matching_comparison)
 if passing.returncode != 0:
     raise SystemExit(f"valid threshold unexpectedly failed: {passing.stdout}{passing.stderr}")
 
+missing_metric_rows = deepcopy(matching_comparison)
+missing_metric_rows.pop("metric_rows")
+assert_exact_gate_failure(
+    missing_metric_rows,
+    "comparison is missing metric_rows",
+    "omitted metric_rows",
+)
+
+explicit_empty_metric_rows = deepcopy(matching_comparison)
+explicit_empty_metric_rows["metric_rows"] = []
+explicit_empty = run_gate_without_thresholds(explicit_empty_metric_rows)
+expected_empty_output = "gate: PASS: compile metrics are within configured thresholds\n"
+if (
+    explicit_empty.returncode != 0
+    or explicit_empty.stdout != expected_empty_output
+    or explicit_empty.stderr
+):
+    raise SystemExit(
+        "explicit empty metric_rows did not remain distinguishable from omission: "
+        f"{explicit_empty.stdout}{explicit_empty.stderr}"
+    )
+
 non_array_metric_rows = deepcopy(matching_comparison)
 non_array_metric_rows["metric_rows"] = None
 assert_exact_gate_failure(
