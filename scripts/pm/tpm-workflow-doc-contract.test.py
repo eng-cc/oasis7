@@ -873,7 +873,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         task_text = PROJECT_TASK.read_text(encoding="utf-8")
         self.assertRegex(
             task_text,
-            r"[\"']Workflow Phase[\"']\s*:\s*[\"']task_done[\"']\s+if\s+[^\n]+\s+else\s+[\"']pre_pr_ready[\"']",
+            r"[\"']Workflow Phase[\"']\s*:\s*terminal_phase",
         )
         self.assertNotIn("post_merge_done", function_source := re.search(
             r"(?ms)^def command_closeout_task\b.*?(?=^def |\Z)", task_text

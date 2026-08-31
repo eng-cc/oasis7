@@ -126,9 +126,12 @@ elif args[:2] == ["project", "view"]:
     print(json.dumps({"id": "P1", "number": 1, "title": "fixture"}))
 elif args[:2] == ["project", "field-list"]:
     options = {
-        "Status": [("Done", "STATUS_DONE"), ("In Progress", "STATUS_PROGRESS")],
-        "PM Status": [("done", "PM_DONE"), ("committed", "PM_COMMITTED")],
-        "Workflow Phase": [("done", "PHASE_DONE"), ("execution", "PHASE_EXECUTION")],
+        "Status": [("Done", "STATUS_DONE"), ("Blocked", "STATUS_BLOCKED"),
+                   ("In Progress", "STATUS_PROGRESS")],
+        "PM Status": [("done", "PM_DONE"), ("deferred", "PM_DEFERRED"),
+                      ("committed", "PM_COMMITTED")],
+        "Workflow Phase": [("done", "PHASE_DONE"), ("blocked", "PHASE_BLOCKED"),
+                            ("execution", "PHASE_EXECUTION")],
     }
     fields = []
     for name, values in options.items():
@@ -143,7 +146,10 @@ elif args[:2] == ["project", "item-edit"]:
                                          "PM Status": "committed",
                                          "Workflow Phase": "execution"})
     values.update({"STATUS_DONE": {"Status": "Done"},
+                   "STATUS_BLOCKED": {"Status": "Blocked"},
                    "PM_DONE": {"PM Status": "done"},
+                   "PM_DEFERRED": {"PM Status": "deferred"},
+                   "PHASE_BLOCKED": {"Workflow Phase": "blocked"},
                    "PHASE_DONE": {"Workflow Phase": "done"}}.get(option_id, {}))
     write("GH_PROJECT_FIELDS", values)
     if (os.environ.get("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT") == "1"
@@ -473,6 +479,73 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(mapping_path.read_bytes(), before)
         self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
         self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_rejects_closed_issue_before_any_remote_mutation(self) -> None:
+        mapping_path = self.mapping()
+        before = mapping_path.read_bytes()
+        self.write_state(self.issue_state, {"state": "CLOSED", "stateReason": "NOT_PLANNED"})
+
+        result = self.classify_non_pr("closed issue must remain immutable")
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"closed|statereason")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_requires_complete_issue_identity_before_remote_mutation(self) -> None:
+        for missing in ("issue_number", "issue_url"):
+            with self.subTest(missing=missing):
+                self.reset_runtime()
+                mapping_path = self.mapping(extra={missing: ""})
+                before = mapping_path.read_bytes()
+
+                result = self.classify_non_pr(f"missing {missing}")
+
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertRegex(result.stderr.lower(), r"issue|identity|incomplete")
+                self.assertEqual(mapping_path.read_bytes(), before)
+                self.assertEqual(self.read_json(self.comments), [])
+                self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+                self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_rejects_repository_binding_drift_before_remote_mutation(self) -> None:
+        mapping_path = self.mapping(extra={"repository": "foreign/repo"})
+        before = mapping_path.read_bytes()
+
+        result = self.classify_non_pr("foreign repository binding")
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"repository|identity|bound")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_deferred_closeout_publishes_blocked_phase_to_issue_project_and_cache(self) -> None:
+        mapping_path = self.mapping()
+        result = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "deferred", "--claim-json", "{}", "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        comments = self.read_json(self.comments)
+        self.assertEqual(len(comments), 1)
+        self.assertIn("Evidence Phase: blocked", comments[0]["body"])
+        self.assertIn("Workflow Phase: blocked", comments[0]["body"])
+        self.assertIn("Task Status: deferred", comments[0]["body"])
+        self.assertIn("- status: `deferred`", self.issue_body.read_text())
+        self.assertIn("- workflow_phase: `blocked`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "Done", "PM Status": "deferred", "Workflow Phase": "blocked"
+        })
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["status"], "deferred")
+        self.assertEqual(record["workflow_phase"], "blocked")
 
     def test_superseded_without_bound_pr_fails(self) -> None:
         self.mapping()

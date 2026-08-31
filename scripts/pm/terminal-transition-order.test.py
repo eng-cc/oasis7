@@ -34,7 +34,7 @@ def function(text: str, name: str) -> str:
 class TerminalTransitionOrder(unittest.TestCase):
     def test_done_closeout_is_intermediate_and_does_not_close_issue(self) -> None:
         closeout = function(TASK.read_text(encoding="utf-8"), "command_closeout_task")
-        self.assertIn('"Workflow Phase": "task_done"', closeout)
+        self.assertIn('"Workflow Phase": terminal_phase', closeout)
         self.assertNotIn('"Workflow Phase": "post_merge_done"', closeout)
         self.assertNotRegex(closeout, r"gh[\"'],\s*[\"']issue[\"'],\s*[\"']close")
         self.assertNotIn('run_text(["gh", "issue", "close"', closeout)

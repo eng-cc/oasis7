@@ -339,6 +339,21 @@ def issue_number_from_url(issue_url: str) -> int:
         raise RuntimeError(f"cannot parse issue number from {issue_url}") from exc
 
 
+def validate_issue_identity(repo: str, issue_number: Any, issue_url: Any, *, source: str) -> tuple[int, str]:
+    """Require a complete Issue handle bound to the requested repository."""
+    number_text = str(issue_number or "").strip()
+    url_text = str(issue_url or "").strip()
+    if not re.fullmatch(r"[1-9]\d*", number_text) or not url_text:
+        die(f"classify-non-pr-task: {source} Issue identity is incomplete")
+    match = re.fullmatch(
+        r"https://github\.com/([^/\s]+/[^/\s]+)/issues/(\d+)/?",
+        url_text,
+    )
+    if not match or match.group(1) != repo or int(match.group(2)) != int(number_text):
+        die(f"classify-non-pr-task: {source} Issue identity is invalid or repository-bound incorrectly")
+    return int(number_text), url_text
+
+
 def pr_number_from_url(pr_url: str) -> int | None:
     match = re.search(r"/pull/(\d+)(?:$|[?#])", pr_url)
     return int(match.group(1)) if match else None
@@ -413,7 +428,18 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     issue_number = int(hits[0].get("number") or 0)
     if not issue_number:
         return None
-    issue_payload = run_text(["gh", "issue", "view", str(issue_number), "-R", repo, "--json", "body,number,title,url"])
+    issue_payload = run_text(
+        [
+            "gh",
+            "issue",
+            "view",
+            str(issue_number),
+            "-R",
+            repo,
+            "--json",
+            "body,number,title,url,state,stateReason",
+        ]
+    )
     issue = json.loads(issue_payload)
     body = str(issue.get("body") or "").replace("\r\n", "\n")
     if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
@@ -428,6 +454,8 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "title": title,
             "issue_number": int(issue.get("number") or issue_number),
             "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
+            "issue_state": str(issue.get("state") or hits[0].get("state") or ""),
+            "issue_state_reason": str(issue.get("stateReason") or ""),
             "_github_source": "issue_search",
         }
     )
@@ -968,9 +996,21 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     if str(record.get("task_uid") or "") != args.task_uid:
         die("classify-non-pr-task: canonical mapping embedded Task UID does not match its key")
-    required_identity = ("repository", "canonical_worktree", "task_branch", "default_branch")
+    required_identity = (
+        "repository",
+        "canonical_worktree",
+        "task_branch",
+        "default_branch",
+        "issue_number",
+        "issue_url",
+    )
     if any(record.get(key) in (None, "") for key in required_identity):
-        die("classify-non-pr-task: canonical repository/worktree identity is incomplete")
+        die("classify-non-pr-task: canonical repository/worktree/Issue identity is incomplete")
+    if str(record["repository"]) != args.repo:
+        die("classify-non-pr-task: canonical repository is not bound to --repo")
+    cached_issue_number, cached_issue_url = validate_issue_identity(
+        args.repo, record["issue_number"], record["issue_url"], source="cached"
+    )
     repository_identity = authoritative_repository_identity(
         args.root.resolve(), str(record["repository"]), str(record["canonical_worktree"]),
     )
@@ -989,12 +1029,23 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         die(f"classify-non-pr-task: live GitHub issue not found for {args.task_uid}")
     if str(live.get("task_uid") or "") != args.task_uid:
         die("classify-non-pr-task: live Issue Task UID mismatch")
+    live_issue_number, live_issue_url = validate_issue_identity(
+        args.repo, live.get("issue_number"), live.get("issue_url"), source="live"
+    )
+    if cached_issue_number != live_issue_number:
+        die("classify-non-pr-task: cached/live Issue identity drift (issue_number)")
+    if cached_issue_url != live_issue_url:
+        die("classify-non-pr-task: cached/live Issue identity drift (issue_url)")
+    live_state = str(live.get("issue_state") or "").upper()
+    live_state_reason = str(live.get("issue_state_reason") or "")
+    if live_state == "CLOSED":
+        die(
+            "classify-non-pr-task: CLOSED Issue is immutable; "
+            f"stateReason={live_state_reason or 'missing'}"
+        )
+    if live_state != "OPEN":
+        die("classify-non-pr-task: authoritative live Issue state is missing or unsupported")
     validate_authoritative_project_fields(args, mapping, record, live)
-    for key in ("issue_number", "issue_url"):
-        cached = str(record.get(key) or "")
-        current = str(live.get(key) or "")
-        if cached and current and cached != current:
-            die(f"classify-non-pr-task: cached/live Issue identity drift ({key})")
     status = str(live.get("status") or "")
     phase = str(live.get("workflow_phase") or "")
     if not status or not phase:
@@ -1170,7 +1221,7 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     record["workflow_phase"] = terminal_phase
     task = task_from_record(args.task_uid, record)
     evidence_fields = {
-        "Workflow Phase": "task_done" if args.to_status == "done" else "pre_pr_ready",
+        "Workflow Phase": terminal_phase,
         "Task Status": args.to_status,
         "Immutable Verification Head": claim.get("frozen_source_head") or "n/a",
         "Immutable Verification Tree": claim.get("frozen_source_tree") or "n/a",
