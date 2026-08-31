@@ -10,12 +10,14 @@ supplied.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,7 +74,7 @@ class ApplyTransport:
         original = next(item for item in self.plan["nodes"] if item["name"] == name)
         required_bytes, required_inodes = self.adapter.capacity_requirement(self.plan, original)
         binding = original["host_binding"]
-        return {
+        evidence = {
             "node": name,
             "node_id": original["node_id"],
             "provider_uid": self.adapter.CANONICAL_PROVIDER_UID[name],
@@ -90,8 +92,16 @@ class ApplyTransport:
             "known_hosts_owner_uid": os.getuid(),
             "known_hosts_mode": "0600",
         }
+        evidence["receipt"] = self._receipt(f"preflight:{name}", original, evidence=evidence)
+        return evidence
 
-    def _receipt(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
+    def _receipt(
+        self,
+        operation: str,
+        node: dict[str, object] | None,
+        *,
+        evidence: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         node_name = node["name"] if node is not None else None
         peer_id = (
             self.adapter.CANONICAL_PEER_REGISTRY[node_name]
@@ -111,6 +121,8 @@ class ApplyTransport:
             "peer_id": peer_id,
             "ledger_path": self.plan["credential_nonce_ledger"]["path"],
         }
+        if evidence is not None:
+            bindings["evidence_sha256"] = self.adapter._remote_evidence_digest(evidence)
         receipt: dict[str, object] = {
             "schema_version": self.adapter.PHASE_RECEIPT_SCHEMAS[
                 self.adapter._receipt_phase(operation)
@@ -131,6 +143,7 @@ class ApplyTransport:
             "bindings": bindings,
             "phase": self.adapter._receipt_phase(operation),
             "captured_at": "2026-09-01T00:00:00Z",
+            "replayed": False,
             "observer_mutation": False,
             "status": (
                 "completed"
@@ -273,6 +286,22 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.ledger_path = Path(self._test_directory.name) / "nonce.jsonl"
         self._write_ledger(self.ledger_path)
         self.plan = self._bind_test_ledger(self.planner.build_plan(self.fixture._input()))
+        self.live_trust_root_patcher = mock.patch.object(
+            self.adapter,
+            "validate_live_trust_root_file",
+            return_value={
+                "path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
+                "sha256": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                "owner_uid": os.getuid(),
+                "mode": "0600",
+                "regular_file": True,
+            },
+        )
+        self.live_trust_root_patcher.start()
+
+    def tearDown(self) -> None:
+        self.live_trust_root_patcher.stop()
+        self._test_directory.cleanup()
 
     def _bind_test_ledger(self, plan: dict[str, object]) -> dict[str, object]:
         plan["credential_nonce_ledger"]["path"] = str(self.ledger_path)
@@ -472,8 +501,121 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertEqual(len(record["provider_receipts"]), len(self.plan["global_order"]))
         self.assertIsNone(record["rollback_receipt"])
         self.assertEqual(record["execution_mode"], "apply")
+        self.assertEqual(record["rollback_status"], "not-needed")
         self.assertIn("authority", verifier_calls)
         self.assertIn("fresh-root-probe", verifier_calls)
+
+    def test_apply_executes_code_owned_live_trust_root_check_before_remote_observation(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(self.adapter, self.plan, invalid_operation="preflight:storage-205")
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(
+                self.adapter,
+                "validate_live_trust_root_file",
+                create=True,
+                return_value={"path": self.adapter.CANONICAL_TRUST_ROOT_PATH},
+            ) as live_check:
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=Path(directory) / "journal.json",
+                        ledger_path=self.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+                live_check.assert_called_once_with()
+
+    def test_read_only_failure_with_no_rollback_candidates_never_calls_rollback(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(self.adapter, self.plan, invalid_operation="preflight:storage-205")
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with mock.patch.object(
+                self.adapter,
+                "validate_live_trust_root_file",
+                create=True,
+                return_value={"path": self.adapter.CANONICAL_TRUST_ROOT_PATH},
+            ):
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertEqual(transport.rollback_operations, [])
+        self.assertEqual(transport.rollback_reobservations, [])
+        self.assertEqual(record["rollback_status"], "not-needed")
+
+    def test_journal_rejects_symlink_in_any_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            symlink_parent = root / "symlink-parent"
+            symlink_parent.symlink_to(real_parent, target_is_directory=True)
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter._write_journal(
+                    symlink_parent / "nested" / "journal.json",
+                    {"schema_version": self.adapter.JOURNAL_SCHEMA},
+                )
+
+    def test_live_trust_root_file_checks_content_owner_mode_and_symlink(self) -> None:
+        self.live_trust_root_patcher.stop()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "trust-root.json"
+                content = b"canonical trust root"
+                root.write_bytes(content)
+                root.chmod(0o600)
+                with mock.patch.object(self.adapter, "CANONICAL_TRUST_ROOT_PATH", str(root)), mock.patch.object(
+                    self.adapter,
+                    "CANONICAL_TRUST_ROOT_DIGEST",
+                    hashlib.sha256(content).hexdigest(),
+                ):
+                    result = self.adapter.validate_live_trust_root_file()
+                    self.assertEqual(result["sha256"], hashlib.sha256(content).hexdigest())
+                    root.chmod(0o644)
+                    with self.assertRaises(self.adapter.AdapterError):
+                        self.adapter.validate_live_trust_root_file()
+                    root.chmod(0o600)
+                    with mock.patch.object(
+                        self.adapter, "CANONICAL_TRUST_ROOT_OWNER_UID", os.getuid() + 1
+                    ):
+                        with self.assertRaises(self.adapter.AdapterError):
+                            self.adapter.validate_live_trust_root_file()
+                    root.unlink()
+                    root.symlink_to(Path(directory) / "missing-root.json")
+                    with self.assertRaises(self.adapter.AdapterError):
+                        self.adapter.validate_live_trust_root_file()
+        finally:
+            self.live_trust_root_patcher.start()
 
     def test_completed_apply_resume_revalidates_authority_verifier_and_receipt_signatures(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -559,6 +701,46 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 receipt,
                 None,
             )
+
+    def test_every_provider_receipt_is_fresh_and_inside_transaction_capture_window(self) -> None:
+        transport = ApplyTransport(self.adapter, self.plan)
+        receipt = transport._receipt("stop:storage-205", self.plan["nodes"][0])
+        receipt["replayed"] = True
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan, "stop:storage-205", "storage-205", receipt, None
+            )
+
+        receipt = transport._receipt("stop:storage-205", self.plan["nodes"][0])
+        receipt["captured_at"] = "2020-01-01T00:00:00Z"
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan, "stop:storage-205", "storage-205", receipt, None
+            )
+
+    def test_remote_preflight_requires_signed_verifier_checked_evidence_receipt(self) -> None:
+        node = self.plan["nodes"][0]
+        required_bytes, required_inodes = self.adapter.capacity_requirement(self.plan, node)
+        evidence = {
+            "node": node["name"],
+            "node_id": node["node_id"],
+            "provider_uid": self.adapter.CANONICAL_PROVIDER_UID[node["name"]],
+            "node_root": node["node_root"],
+            "persistent_state_paths": list(node["persistent_state_paths"]),
+            "symlink_free": True,
+            "free_bytes": required_bytes,
+            "required_bytes": required_bytes,
+            "free_inodes": required_inodes,
+            "required_inodes": required_inodes,
+            "host_target": node["host_binding"]["target"],
+            "known_hosts_path": node["host_binding"]["known_hosts_path"],
+            "known_host_fingerprint": node["host_binding"]["known_host_fingerprint"],
+            "known_hosts_regular": True,
+            "known_hosts_owner_uid": os.getuid(),
+            "known_hosts_mode": "0600",
+        }
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_remote_preflight(self.plan, node, evidence)
 
     def test_no_backup_authority_rejects_future_issue_and_requires_independent_verifier(self) -> None:
         plan = self._no_backup_plan()
@@ -930,12 +1112,29 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             "known_hosts_owner_uid": os.getuid(),
             "known_hosts_mode": "0600",
         }
-        result = self.adapter.validate_remote_preflight(self.plan, node, evidence)
+        evidence["receipt"] = ApplyTransport(self.adapter, self.plan)._receipt(
+            f"preflight:{node['name']}", node, evidence=evidence
+        )
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        result = self.adapter.validate_remote_preflight(self.plan, node, evidence, verifier)
         self.assertTrue(result["known_hosts_pinned"])
+        tampered = copy.deepcopy(evidence)
+        tampered["free_bytes"] += 1
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_remote_preflight(self.plan, node, tampered, verifier)
         for field, bad_value in (("symlink_free", False), ("free_bytes", required_bytes - 1)):
             invalid = dict(evidence, **{field: bad_value})
             with self.assertRaises(self.adapter.AdapterError):
-                self.adapter.validate_remote_preflight(self.plan, node, invalid)
+                self.adapter.validate_remote_preflight(self.plan, node, invalid, verifier)
 
     def test_credential_ledger_is_regular_0600_and_rejects_nonce_replay(self) -> None:
         nonce = self.plan["credential_nonce_ledger"]["reserved_nonces"][0]

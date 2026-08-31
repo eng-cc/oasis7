@@ -1161,6 +1161,13 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         "head_oid": authority["head_oid"],
         "transaction_id": context["transaction_id"],
         "capture_window_id": context["capture_window_id"],
+        # The one-shot credential lease is the externally captured transaction
+        # window; every provider receipt must land inside these exact bounds.
+        "capture_window": {
+            "id": context["capture_window_id"],
+            "starts_at": credential_nonce_ledger["issued_at"],
+            "ends_at": credential_nonce_ledger["expires_at"],
+        },
         "authority": authority,
         "execution": {
             "mode": "plan-only",

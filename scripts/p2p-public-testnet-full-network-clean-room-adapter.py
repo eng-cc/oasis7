@@ -10,7 +10,8 @@ any mutating callback is even eligible to run.
 
 The transport interface is intentionally tiny and data-oriented::
 
-    inspect_node(node) -> read-only preflight evidence
+    inspect_node(node) -> read-only preflight evidence plus a signed,
+        independently verifier-bound receipt
     preflight(operation, node-or-None) -> authenticated preflight receipt
     verify(operation, node-or-None) -> authenticated verification receipt
     health(operation) -> authenticated fleet-health receipt
@@ -136,6 +137,7 @@ TRANSPORT_PLAN_FIELDS = frozenset(
         "plan_digest",
         "transaction_id",
         "capture_window_id",
+        "capture_window",
         "node_order",
         "global_order",
         "canonical_host_inventory",
@@ -418,6 +420,20 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     ledger_receipt = _object(ledger_contract.get("receipt"), "credential nonce ledger receipt")
     if _object(ledger_receipt.get("bindings"), "credential nonce ledger receipt bindings").get("path") != ledger_path:
         _fail("credential nonce ledger receipt path binding drifted")
+    capture_window = _object(plan.get("capture_window"), "transaction capture window")
+    if set(capture_window) != {"id", "starts_at", "ends_at"}:
+        _fail("transaction capture window contains an unsafe field")
+    if capture_window.get("id") != plan["capture_window_id"]:
+        _fail("transaction capture window id binding drifted")
+    window_start = _parse_utc(capture_window.get("starts_at"), "transaction capture window starts_at")
+    window_end = _parse_utc(capture_window.get("ends_at"), "transaction capture window ends_at")
+    if window_end <= window_start:
+        _fail("transaction capture window is inverted")
+    if (
+        capture_window.get("starts_at") != ledger_contract.get("issued_at")
+        or capture_window.get("ends_at") != ledger_contract.get("expires_at")
+    ):
+        _fail("transaction capture window is not bound to the nonce ledger lease")
     for node in nodes:
         seam = _object(node.get("credential_seam"), f"{node['name']} credential seam")
         if seam.get("ledger_path") != ledger_path:
@@ -480,6 +496,17 @@ def _parse_utc(value: Any, label: str) -> dt.datetime:
     if parsed.tzinfo is None:
         _fail(f"{label} must include a timezone")
     return parsed.astimezone(dt.timezone.utc)
+
+
+def _capture_window_bounds(plan: dict[str, Any]) -> tuple[dt.datetime, dt.datetime]:
+    window = _object(plan.get("capture_window"), "transaction capture window")
+    if window.get("id") != plan["capture_window_id"]:
+        _fail("transaction capture window id binding drifted")
+    start = _parse_utc(window.get("starts_at"), "transaction capture window starts_at")
+    end = _parse_utc(window.get("ends_at"), "transaction capture window ends_at")
+    if end <= start:
+        _fail("transaction capture window is inverted")
+    return start, end
 
 
 def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
@@ -635,6 +662,55 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
     if bindings != expected_bindings:
         _fail("adapter authority receipt binding set is not exact")
     return {"apply_authorized": authority.get("apply_authorized") is True, "receipt": receipt}
+
+
+def validate_live_trust_root_file() -> dict[str, Any]:
+    """Check the code-owned trust-root file at the apply boundary.
+
+    The authority envelope is not sufficient: an apply must observe the live
+    regular file immediately before any provider operation.  Path, content,
+    owner, and mode are deployment-pinned constants, never caller inputs.
+    """
+    path = Path(CANONICAL_TRUST_ROOT_PATH)
+    try:
+        link_metadata = path.lstat()
+    except OSError:
+        _fail("code-owned trust-root file is unavailable")
+    if not stat.S_ISREG(link_metadata.st_mode):
+        _fail("code-owned trust-root file is not a regular file")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            _fail("code-owned trust-root file is not a regular file")
+        if metadata.st_uid != CANONICAL_TRUST_ROOT_OWNER_UID:
+            _fail("code-owned trust-root file owner drifted")
+        if stat.S_IMODE(metadata.st_mode) != int(CANONICAL_TRUST_ROOT_MODE, 8):
+            _fail("code-owned trust-root file mode drifted")
+        digest_builder = hashlib.sha256()
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest_builder.update(chunk)
+        digest = digest_builder.hexdigest()
+    except OSError:
+        _fail("code-owned trust-root file content is unreadable")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if digest != CANONICAL_TRUST_ROOT_DIGEST:
+        _fail("code-owned trust-root file content digest drifted")
+    return {
+        "path": CANONICAL_TRUST_ROOT_PATH,
+        "sha256": digest,
+        "owner_uid": metadata.st_uid,
+        "mode": CANONICAL_TRUST_ROOT_MODE,
+        "regular_file": True,
+    }
 
 
 def verify_repository_provenance_helper(
@@ -813,8 +889,18 @@ def capacity_requirement(plan: dict[str, Any], node: dict[str, Any]) -> tuple[in
     return required_bytes, len(node["persistent_state_paths"]) + 16
 
 
-def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
-    """Validate read-only remote path, host pin, symlink, and capacity evidence."""
+def _remote_evidence_digest(evidence: dict[str, Any]) -> str:
+    """Digest only the read-only evidence, excluding its signed receipt."""
+    return hashlib.sha256(_canonical_bytes(evidence, omit="receipt")).hexdigest()
+
+
+def validate_remote_preflight(
+    plan: dict[str, Any],
+    node: dict[str, Any],
+    evidence: dict[str, Any],
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Validate pinned remote evidence and its signed verifier-bound receipt."""
     validate_plan(plan)
     node = _object(node, "remote preflight node")
     evidence = _object(evidence, "remote preflight evidence")
@@ -835,6 +921,7 @@ def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], eviden
         "known_hosts_regular",
         "known_hosts_owner_uid",
         "known_hosts_mode",
+        "receipt",
     }:
         _fail("remote preflight evidence contains an unsafe field")
     _reject_secret_fields(evidence, "remote preflight evidence")
@@ -877,6 +964,16 @@ def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], eviden
         _fail(f"{name} remote byte capacity is insufficient")
     if not isinstance(evidence.get("free_inodes"), int) or evidence["free_inodes"] < required_inodes:
         _fail(f"{name} remote inode capacity is insufficient")
+    if verifier is None:
+        _fail(f"{name} remote preflight requires an independent receipt verifier")
+    receipt = _validate_provider_receipt(
+        plan,
+        f"preflight:{name}",
+        name,
+        evidence.get("receipt"),
+        verifier,
+        evidence=evidence,
+    )
     return {
         "node": name,
         "node_root": node["node_root"],
@@ -884,6 +981,7 @@ def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], eviden
         "symlink_free": True,
         "known_hosts_pinned": True,
         "capacity_verified": True,
+        "receipt": receipt,
     }
 
 
@@ -899,8 +997,39 @@ def _fsync_parent(path: Path) -> None:
         _fail("durable fsync failed")
 
 
+def _reject_symlink_ancestors(path: Path) -> None:
+    """Reject symlinked path components before creating or opening a journal."""
+    raw_parts = Path(os.fspath(path)).parts
+    if ".." in raw_parts:
+        _fail("transaction journal path must not contain parent traversal")
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    # macOS exposes /var as a system alias for /private/var.  Normalize that
+    # host-owned alias without resolving any caller-controlled descendant.
+    if (
+        len(absolute.parts) > 1
+        and absolute.parts[1] == "var"
+        and os.path.realpath("/var") == "/private/var"
+    ):
+        absolute = Path(os.path.realpath("/var")).joinpath(*absolute.parts[2:])
+    current = Path(absolute.anchor or os.curdir)
+    for component in absolute.parts[1:]:
+        current /= component
+        try:
+            metadata = os.lstat(current)
+        except FileNotFoundError:
+            # No later component can exist below a missing ancestor.
+            break
+        except OSError:
+            _fail("transaction journal path metadata is unavailable")
+        if stat.S_ISLNK(metadata.st_mode):
+            _fail("transaction journal path must not contain a symlink ancestor")
+        if current != absolute and not stat.S_ISDIR(metadata.st_mode):
+            _fail("transaction journal path ancestor is not a directory")
+
+
 def _write_journal(path: Path, record: dict[str, Any]) -> None:
     path = Path(path)
+    _reject_symlink_ancestors(path)
     if path.is_symlink():
         _fail("transaction journal must not be a symlink")
     if path.exists():
@@ -942,6 +1071,7 @@ def _write_journal(path: Path, record: dict[str, Any]) -> None:
 
 def _read_journal(path: Path) -> dict[str, Any]:
     path = Path(path)
+    _reject_symlink_ancestors(path)
     if path.is_symlink() or not path.is_file():
         _fail("transaction journal must be an existing regular file")
     try:
@@ -963,6 +1093,7 @@ def _read_journal(path: Path) -> dict[str, Any]:
 def _acquire_transaction_lock(journal_path: Path) -> Any:
     """Serialize a transaction and leave the lock durable for inspection."""
     lock_path = Path(f"{journal_path}.lock")
+    _reject_symlink_ancestors(lock_path)
     if lock_path.is_symlink():
         _fail("transaction lock must not be a symlink")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1152,6 +1283,8 @@ def _validate_provider_receipt(
     node_name: str | None,
     raw: Any,
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+    *,
+    evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate and sanitize every provider receipt before phase advance."""
     receipt = _object(raw, f"{operation} provider receipt")
@@ -1210,10 +1343,14 @@ def _validate_provider_receipt(
         receipt.get("phase") != phase
         or receipt.get("captured_at") is None
         or receipt.get("observer_mutation") is not False
+        or receipt.get("replayed") is not False
         or receipt.get("status") != ("completed" if phase in {"backup", "apply", "reobserve", "rollback"} else "verified")
     ):
         _fail(f"{operation} provider receipt phase, capture, observer, or status binding drifted")
-    _parse_utc(receipt.get("captured_at"), f"{operation} captured_at")
+    captured_at = _parse_utc(receipt.get("captured_at"), f"{operation} captured_at")
+    capture_start, capture_end = _capture_window_bounds(plan)
+    if not capture_start <= captured_at <= capture_end:
+        _fail(f"{operation} captured_at is outside the transaction capture window")
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, f"{operation} signed payload")
     _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, f"{operation} signature")
     _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, f"{operation} canonical digest")
@@ -1239,6 +1376,14 @@ def _validate_provider_receipt(
         "peer_id": peer_id,
         "ledger_path": plan["credential_nonce_ledger"]["path"],
     }
+    if evidence is not None:
+        expected_bindings["evidence_sha256"] = _remote_evidence_digest(evidence)
+    elif phase == "preflight" and "evidence_sha256" in bindings:
+        # The journal retains the evidence digest inside the signed receipt;
+        # the original evidence object is intentionally not replayed here.
+        expected_bindings["evidence_sha256"] = _digest(
+            bindings.get("evidence_sha256"), f"{operation} evidence digest"
+        )
     if bindings != expected_bindings:
         _fail(f"{operation} provider receipt binding set is not exact")
     if operation == "fresh-root-probe":
@@ -1514,6 +1659,14 @@ def _rollback_candidate(operation: str) -> bool:
     return operation.startswith(("stop:", "delete:", "rebuild:", "start:"))
 
 
+def _read_only_operation(operation: str) -> bool:
+    """Classify phases that cannot have changed provider state."""
+    return operation.startswith(("preflight:", "verify:")) or operation in {
+        "fresh-root-probe",
+        "fleet-health",
+    }
+
+
 def _execute_unlocked(
     plan: dict[str, Any],
     authority: dict[str, Any],
@@ -1613,6 +1766,9 @@ def _execute_unlocked(
         _fail("apply requires the independent provider receipt verifier callback")
     if not provenance_verified:
         _fail("apply requires an independently executed provenance verifier")
+    # Re-check the code-owned trust root against the live filesystem after
+    # authority/provenance validation and before journal/nonce/provider work.
+    validate_live_trust_root_file()
     # One-shot reservations precede every remote observation.  Values stay in
     # the external ledger and never enter a journal, receipt, or log.
     provider_receipts: list[dict[str, Any]] = []
@@ -1644,7 +1800,7 @@ def _execute_unlocked(
             reserve_nonce(Path(ledger_path), plan["transaction_id"], _node_nonce(plan, node))
         for node in plan["nodes"]:
             evidence = transport.inspect_node(_transport_node(node))
-            validate_remote_preflight(plan, node, evidence)
+            validate_remote_preflight(plan, node, evidence, provenance_verifier)
     except Exception as error:
         _persist_terminal(
             Path(journal_path),
@@ -1655,7 +1811,7 @@ def _execute_unlocked(
                 [],
                 error=error.__class__.__name__,
                 provider_receipts=provider_receipts,
-                rollback_status=rollback_status,
+                rollback_status="not-needed",
                 execution_mode="apply",
             ),
         )
@@ -1742,6 +1898,7 @@ def _execute_unlocked(
                     "rollback_policy": "clean-redeploy",
                 }
             completed.append(operation)
+            journal_rollback_status = "not-needed" if index + 1 == len(operations) else rollback_status
             _write_journal(
                 Path(journal_path),
                 _journal_record(
@@ -1751,7 +1908,7 @@ def _execute_unlocked(
                     completed,
                     node_receipts=node_receipts,
                     provider_receipts=provider_receipts,
-                    rollback_status=rollback_status,
+                    rollback_status=journal_rollback_status,
                     rollback_receipt=rollback_receipt,
                     execution_mode="apply",
                 ),
@@ -1760,6 +1917,28 @@ def _execute_unlocked(
             rollback_error: str | None = None
             failed_operation = operation
             failed_state_digest: str | None = None
+            if not rollback_candidates and _read_only_operation(operation):
+                # A failed preflight/verify/probe/health has no provider
+                # mutation to reconcile.  Never call re-observe or rollback
+                # transports for a read-only failure with an empty set.
+                rollback_status = "not-needed"
+                _persist_terminal(
+                    Path(journal_path),
+                    _journal_record(
+                        plan,
+                        "terminal-failure",
+                        index,
+                        completed,
+                        error.__class__.__name__,
+                        node_receipts,
+                        provider_receipts,
+                        rollback_status,
+                        rollback_receipt,
+                        execution_mode="apply",
+                        failed_operation=failed_operation,
+                    ),
+                )
+                _fail("read-only provider operation failed; no rollback is required")
             try:
                 if _rollback_candidate(operation) and operation not in rollback_candidates:
                     rollback_candidates.append(operation)

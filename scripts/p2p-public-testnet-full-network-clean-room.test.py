@@ -529,6 +529,14 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             set(plan["truth"]["package"]["platforms"]),
             {"linux-x64", "windows-x64", "macos-arm64"},
         )
+        self.assertEqual(
+            plan["capture_window"],
+            {
+                "id": plan["capture_window_id"],
+                "starts_at": plan["credential_nonce_ledger"]["issued_at"],
+                "ends_at": plan["credential_nonce_ledger"]["expires_at"],
+            },
+        )
 
     def test_observer_destructive_phases_follow_fresh_root_probe(self) -> None:
         plan = self.module.build_plan(self._input())
