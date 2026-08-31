@@ -418,11 +418,7 @@ def main() -> int:
         if percent is None:
             failures.append(f"cannot evaluate {metric} regression percentage")
             continue
-        if (
-            not isinstance(percent, (int, float))
-            or isinstance(percent, bool)
-            or not math.isfinite(percent)
-        ):
+        if not is_finite_number(percent):
             failures.append(
                 f"comparison row {metric} percent must be a finite number"
             )

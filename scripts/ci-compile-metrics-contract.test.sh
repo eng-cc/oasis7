@@ -1035,6 +1035,32 @@ if (
     )
 
 print("oversized metric payload contract: OK")
+
+oversized_percent = deepcopy(matching_comparison)
+oversized_percent["metric_rows"][0].update(
+    {
+        "baseline": 10,
+        "current": 20,
+        "delta": 10,
+        "percent": 10**1000,
+    }
+)
+invalid = run_gate(oversized_percent)
+expected_oversized_percent_output = (
+    "gate: FAIL: comparison row package_count percent must be a finite number\n"
+)
+if (
+    invalid.returncode == 0
+    or invalid.stdout != expected_oversized_percent_output
+    or invalid.stderr
+):
+    raise SystemExit(
+        "oversized comparison percent did not fail closed with a deterministic "
+        "diagnostic: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+print("oversized percent payload contract: OK")
 PY
 
 echo "ci-compile-metrics-contract.test: OK"
