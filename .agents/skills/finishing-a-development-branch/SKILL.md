@@ -35,7 +35,7 @@ python3 ./scripts/pm/ci-ready-receipt.py \
 ```
 
 Resolve `<required-check-app-id>` from the active repository rules returned by `pr-lifecycle-gate.py`; do not infer it from whichever same-name check finished most recently. The producer validates the live PR, exact HEAD, ruleset-bound required check, base, and planner artifact before emitting the receipt. `prepare-task-pr.sh --draft-candidate --create` does not create this artifact.
-4. Use `requesting-repo-owned-review` with `<ci_ready_receipt.json>`; resolve findings against that same head.
+4. Use `requesting-repo-owned-review`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
 
@@ -57,7 +57,7 @@ Partial remote state recovers via refresh -> audit -> retry; do not edit cache J
 ./scripts/prepare-task-pr.sh --promote-draft <ci_ready_receipt.json>
 ```
 
-Pre-PR local role review packet recorded after immutable verification, after frozen-head draft-candidate creation and trusted exact-head CI, before draft promotion; its schema is at the canonical review-packet link.
+Pre-PR local role review packet recorded after immutable verification, after frozen-head draft-candidate creation and trusted exact-head CI, before draft promotion; its schema is only at the canonical review-packet link.
 
 ## Post-PR / Pre-Merge Gates
 
@@ -78,7 +78,7 @@ On a non-Codex surface, use the finite fallback:
 ./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
-Post-PR checks/comments/mergeability remain separate gates; interpretations and merge authorization come from canonical gates, not this skill.
+Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from canonical gate definitions, not this skill.
 9. Before merge, follow the canonical [terminal-readiness preflight](../../../doc/engineering/workflow/source-of-truth.md#terminal-readiness-preflight) from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact executable `next_command`; any identity mismatch must be repaired and reverified before merge:
 
 ```bash
