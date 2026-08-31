@@ -1009,6 +1009,32 @@ if (
     )
 
 print("percent arithmetic consistency contract: OK")
+
+oversized_baseline = deepcopy(matching_comparison)
+oversized_baseline["metric_rows"][0].update(
+    {
+        "baseline": 10**1000,
+        "current": 20,
+        "delta": 0,
+        "percent": 0.0,
+    }
+)
+invalid = run_gate(oversized_baseline)
+expected_oversized_output = (
+    "gate: FAIL: comparison row package_count baseline must be a finite non-negative number\n"
+)
+if (
+    invalid.returncode == 0
+    or invalid.stdout != expected_oversized_output
+    or invalid.stderr
+):
+    raise SystemExit(
+        "oversized comparison baseline did not fail closed with a deterministic "
+        "diagnostic: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+print("oversized metric payload contract: OK")
 PY
 
 echo "ci-compile-metrics-contract.test: OK"
