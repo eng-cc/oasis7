@@ -52,6 +52,7 @@ class ApplyTransport:
         invalid_signature: bool = False,
         peer_mismatch: bool = False,
         rollback_failure: bool = False,
+        side_effect_operation: str | None = None,
     ) -> None:
         self.adapter = adapter
         self.plan = plan
@@ -59,9 +60,12 @@ class ApplyTransport:
         self.invalid_signature = invalid_signature
         self.peer_mismatch = peer_mismatch
         self.rollback_failure = rollback_failure
+        self.side_effect_operation = side_effect_operation
         self.operations: list[str] = []
         self.rollback_operations: list[str] = []
+        self.rollback_reobservations: list[str] = []
         self.rollback_started: list[str] = []
+        self.failed_operation: str | None = None
 
     def inspect_node(self, node: dict[str, object]) -> dict[str, object]:
         name = node["name"]
@@ -135,6 +139,46 @@ class ApplyTransport:
             receipt["package_commit"] = self.plan["truth"]["package"]["commit"]
             receipt["execution_block_hash"] = checkpoint["execution_block_hash"]
             receipt["execution_state_root"] = checkpoint["execution_state_root"]
+            receipt["blob_closure"] = copy.deepcopy(self.plan["truth"]["execution"])
+            receipt["runtime"] = {
+                "sha256": self.plan["truth"]["package"]["runtime_sha256"],
+                "size_bytes": self.plan["truth"]["package"]["runtime_size_bytes"],
+            }
+            receipt["connected_provider"] = {
+                "verified": True,
+                "providers": [
+                    {
+                        "node": name,
+                        "node_id": next(item for item in self.plan["nodes"] if item["name"] == name)["node_id"],
+                        "peer_id": self.adapter.CANONICAL_PEER_REGISTRY[name],
+                        "provider_uid": self.adapter.CANONICAL_PROVIDER_UID[name],
+                    }
+                    for name in ("storage-205", "sequencer-204")
+                ],
+            }
+            receipt["recovery_receipt"] = {
+                "schema_version": "oasis7.recovery_receipt.v1",
+                "authenticated": True,
+                "verified": True,
+                "signer_id": "governance-signer",
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "b" * 128,
+                "canonical_digest": "c" * 64,
+                "bindings": {
+                    "task_uid": self.plan["task_uid"],
+                    "transaction_id": self.plan["transaction_id"],
+                    "capture_window_id": self.plan["capture_window_id"],
+                    "checkpoint_id": checkpoint["checkpoint_id"],
+                    "checkpoint_manifest_hash": checkpoint["manifest_hash"],
+                },
+            }
+        if operation in {"reobserve-failed-state", "rollback-clean-redeploy"}:
+            receipt["failed_operation"] = self.failed_operation or "stop:storage-205"
+            receipt["failed_state_digest"] = "d" * 64
+            receipt["rollback_steps"] = list(self.plan["rollback"]["steps"])
+            receipt["reobserved"] = True
         return receipt
 
     def verify_fresh_root_probe(self, plan: dict[str, object]) -> dict[str, object]:
@@ -144,28 +188,47 @@ class ApplyTransport:
     def preflight(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
         self.operations.append(operation)
         if operation == self.invalid_operation:
+            self.failed_operation = operation
             return {"schema_version": "caller-owned.invalid"}
         return self._receipt(operation, node)
 
     def verify(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
         self.operations.append(operation)
         if operation == self.invalid_operation:
+            self.failed_operation = operation
             return {"schema_version": "caller-owned.invalid"}
         return self._receipt(operation, node)
 
     def health(self, operation: str) -> dict[str, object]:
         self.operations.append(operation)
         if operation == self.invalid_operation:
+            self.failed_operation = operation
             return {"schema_version": "caller-owned.invalid"}
         return self._receipt(operation, None)
 
     def mutate(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
         self.operations.append(operation)
+        if operation == self.side_effect_operation:
+            self.failed_operation = operation
+            raise RuntimeError("provider side effect then throw")
         if operation == self.invalid_operation:
+            self.failed_operation = operation
             return {"schema_version": "caller-owned.invalid"}
         return self._receipt(operation, node)
 
-    def rollback_clean_redeploy(self, plan: dict[str, object], started: list[str]) -> dict[str, object]:
+    def reobserve_failed_state(
+        self, plan: dict[str, object], started: list[str], failed_operation: str
+    ) -> dict[str, object]:
+        self.rollback_reobservations.append(failed_operation)
+        self.failed_operation = failed_operation
+        return self._receipt("reobserve-failed-state", None)
+
+    def rollback_clean_redeploy(
+        self,
+        plan: dict[str, object],
+        started: list[str],
+        failed_state: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         self.rollback_operations.append("rollback")
         self.rollback_started = list(started)
         if self.rollback_failure:
@@ -177,32 +240,39 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.planner = load_module("full_network_clean_room", PLANNER_PATH)
         self.adapter = load_module("full_network_clean_room_adapter", ADAPTER_PATH)
-        fixture_module = load_module("full_network_clean_room_fixture", PLANNER_TEST_PATH)
-        fixture = fixture_module.FullNetworkCleanRoomPlanTests()
-        fixture.setUp()
-        request = fixture._input()
-        self.plan = self.planner.build_plan(request)
+        self.fixture_module = load_module("full_network_clean_room_fixture", PLANNER_TEST_PATH)
+        self.fixture = self.fixture_module.FullNetworkCleanRoomPlanTests()
+        self.fixture.setUp()
         self._test_directory = tempfile.TemporaryDirectory()
         self.ledger_path = Path(self._test_directory.name) / "nonce.jsonl"
         self._write_ledger(self.ledger_path)
-        self.plan["credential_nonce_ledger"]["path"] = str(self.ledger_path)
-        self.plan["credential_nonce_ledger"]["receipt"]["bindings"]["path"] = str(self.ledger_path)
-        for node in self.plan["nodes"]:
-            node["credential_seam"]["ledger_path"] = str(self.ledger_path)
-        self.plan["plan_digest"] = self.adapter.canonical_plan_digest(self.plan)
+        self.plan = self._bind_test_ledger(self.planner.build_plan(self.fixture._input()))
 
-    def _authority(self, apply_authorized: bool = False) -> dict[str, object]:
-        execution = copy.deepcopy(self.plan["truth"]["execution"])
+    def _bind_test_ledger(self, plan: dict[str, object]) -> dict[str, object]:
+        plan["credential_nonce_ledger"]["path"] = str(self.ledger_path)
+        plan["credential_nonce_ledger"]["receipt"]["bindings"]["path"] = str(self.ledger_path)
+        for node in plan["nodes"]:
+            node["credential_seam"]["ledger_path"] = str(self.ledger_path)
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        return plan
+
+    def _authority(
+        self, apply_authorized: bool = False, plan: dict[str, object] | None = None
+    ) -> dict[str, object]:
+        plan = plan or self.plan
+        execution = copy.deepcopy(plan["truth"]["execution"])
         return {
             "schema_version": self.adapter.AUTHORITY_SCHEMA,
             "repository": "eng-cc/oasis7",
-            "task_uid": self.plan["task_uid"],
-            "frozen_head_oid": self.plan["head_oid"],
-            "plan_digest": self.plan["plan_digest"],
+            "task_uid": plan["task_uid"],
+            "frozen_head_oid": plan["head_oid"],
+            "plan_digest": plan["plan_digest"],
             "adapter_id": self.adapter.CANONICAL_ADAPTER_ID,
             "network_id": self.adapter.CANONICAL_NETWORK_ID,
             "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
             "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+            "trust_root_path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
+            "trust_root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
             "apply_authorized": apply_authorized,
             "receipt": {
                 "schema_version": self.adapter.CRYPTO_RECEIPT_SCHEMA,
@@ -215,19 +285,44 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
                 "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
                 "bindings": {
-                    "task_uid": self.plan["task_uid"],
-                    "frozen_head_oid": self.plan["head_oid"],
-                    "plan_digest": self.plan["plan_digest"],
+                    "task_uid": plan["task_uid"],
+                    "frozen_head_oid": plan["head_oid"],
+                    "plan_digest": plan["plan_digest"],
                     "execution": execution,
-                    "ledger_path": self.plan["credential_nonce_ledger"]["path"],
+                    "ledger_path": plan["credential_nonce_ledger"]["path"],
                     "apply_authorized": apply_authorized,
-                    "forensic_backup": copy.deepcopy(self.plan["forensic_backup"]),
-                    "package_commit": self.plan["truth"]["package"]["commit"],
-                    "checkpoint_id": self.plan["truth"]["checkpoint"]["checkpoint_id"],
-                    "checkpoint_manifest_hash": self.plan["truth"]["checkpoint"]["manifest_hash"],
+                    "forensic_backup": copy.deepcopy(plan["forensic_backup"]),
+                    "package_commit": plan["truth"]["package"]["commit"],
+                    "checkpoint_id": plan["truth"]["checkpoint"]["checkpoint_id"],
+                    "checkpoint_manifest_hash": plan["truth"]["checkpoint"]["manifest_hash"],
+                    "trust_root_path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
+                    "trust_root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
                 },
             },
         }
+
+    def _no_backup_plan(self) -> dict[str, object]:
+        request = self.fixture._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.planner.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self.fixture._no_backup_receipt(
+                request, "2099-01-01T00:00:00Z"
+            ),
+        }
+        return self._bind_test_ledger(self.planner.build_plan(request))
 
     @staticmethod
     def _write_ledger(path: Path, rows: list[dict[str, object]] | None = None) -> None:
@@ -325,6 +420,91 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertIn("authority", verifier_calls)
         self.assertIn("fresh-root-probe", verifier_calls)
 
+    def test_completed_apply_resume_revalidates_authority_verifier_and_receipt_signatures(self) -> None:
+        authority = self._authority(apply_authorized=True)
+        verifier_calls: list[str] = []
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            verifier_calls.append(
+                receipt["bindings"].get("operation", "authority")
+            )
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(self.adapter, self.plan)
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            self.adapter.execute(
+                self.plan,
+                authority,
+                journal_path=journal,
+                ledger_path=self.ledger_path,
+                transport=transport,
+                dry_run=False,
+                provenance_verifier=verifier,
+            )
+
+            verifier_calls.clear()
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.resume_transaction(
+                    self.plan,
+                    self._authority(apply_authorized=False),
+                    journal,
+                    ledger_path=self.ledger_path,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+            self.assertEqual(verifier_calls, [])
+
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            record["provider_receipts"][0]["signature_hex"] = "0" * 128
+            record["journal_digest"] = self.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            verifier_calls.clear()
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.resume_transaction(
+                    self.plan,
+                    authority,
+                    journal,
+                    ledger_path=self.ledger_path,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+            self.assertIn("authority", verifier_calls)
+
+    def test_operator_no_backup_apply_requires_signed_current_authority(self) -> None:
+        plan = self._no_backup_plan()
+        authority = self._authority(apply_authorized=True, plan=plan)
+        plan["forensic_backup"]["authority"] = None
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        authority = self._authority(apply_authorized=True, plan=plan)
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.execute(
+                plan,
+                authority,
+                journal_path=Path(tempfile.mkdtemp()) / "journal.json",
+                ledger_path=self.ledger_path,
+                dry_run=True,
+            )
+
+    def test_fresh_root_probe_requires_signed_full_closure(self) -> None:
+        transport = ApplyTransport(self.adapter, self.plan)
+        receipt = transport._receipt("fresh-root-probe", None)
+        receipt["blob_closure"]["json_index_consistency"]["verified"] = False
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan,
+                "fresh-root-probe",
+                None,
+                receipt,
+                None,
+            )
+
     def test_rejects_invalid_provider_signature_or_peer_before_advancing(self) -> None:
         authority = self._authority(apply_authorized=True)
 
@@ -390,6 +570,11 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertTrue(record["provider_receipts"])
         self.assertEqual(record["rollback_status"], "completed")
         self.assertEqual(record["rollback_receipt"]["operation"], "rollback-clean-redeploy")
+        self.assertEqual(transport.rollback_reobservations, ["stop:storage-205"])
+        self.assertEqual(record["rollback_receipt"]["failed_operation"], "stop:storage-205")
+        self.assertEqual(
+            record["rollback_receipt"]["rollback_steps"], self.plan["rollback"]["steps"]
+        )
 
     def test_rollback_failure_is_reconciliation_blocked_and_durable(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -425,6 +610,37 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertEqual(record["rollback_status"], "reconciliation-blocked")
         self.assertIsNone(record["rollback_receipt"])
         self.assertEqual(record["rollback_error"], "RuntimeError")
+
+    def test_side_effect_then_throw_includes_current_operation_in_rollback(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(
+            self.adapter,
+            self.plan,
+            side_effect_operation="rebuild:storage-205",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.execute(
+                    self.plan,
+                    authority,
+                    journal_path=journal,
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+        self.assertIn("rebuild:storage-205", transport.rollback_started)
 
     def test_journal_write_failure_rolls_back_current_started_operation(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -477,6 +693,10 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
     def test_transport_and_receipt_boundaries_reject_secret_fields(self) -> None:
         node = copy.deepcopy(self.plan["nodes"][0])
         node["identity_receipt"]["nested"] = {"password": "must-not-cross"}
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._transport_node(node)
+        node = copy.deepcopy(self.plan["nodes"][0])
+        node["identity_receipt"]["nested"] = {"safe_label": "PRIVATE KEY material"}
         with self.assertRaises(self.adapter.AdapterError):
             self.adapter._transport_node(node)
 
@@ -571,6 +791,14 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             with self.assertRaises(self.adapter.AdapterError):
                 self.adapter.validate_credential_ledger(self.plan, ledger)
 
+            cross_transaction = Path(directory) / "cross-transaction.jsonl"
+            self._write_ledger(
+                cross_transaction,
+                [dict(row, transaction_id="different-transaction")],
+            )
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.validate_credential_ledger(self.plan, cross_transaction)
+
             ledger = Path(directory) / "duplicate.jsonl"
             self._write_ledger(ledger, [dict(row, nonce="fresh-nonce"), dict(row, nonce="fresh-nonce")])
             with self.assertRaises(self.adapter.AdapterError):
@@ -654,6 +882,40 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertNotIn("credential_seam", transport_node)
         self.assertNotIn("credential_nonce_ledger", transport_plan)
         self.assertTrue(all("credential_seam" not in item for item in transport_plan["nodes"]))
+
+        captured: dict[str, object] = {}
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            captured.update(plan)
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.adapter.execute(
+                self.plan,
+                self._authority(),
+                journal_path=Path(directory) / "journal.json",
+                ledger_path=self.ledger_path,
+                dry_run=True,
+                provenance_verifier=verifier,
+            )
+        self.assertNotIn("credential_nonce_ledger", captured)
+        self.assertNotIn("authority", captured)
+        captured_text = json.dumps(captured, sort_keys=True)
+        self.assertNotIn("storage-nonce-", captured_text)
+        self.assertNotIn("PUBLIC_TESTNET_", captured_text)
+
+    def test_trust_root_path_and_digest_are_code_owned(self) -> None:
+        authority = self._authority()
+        authority["trust_root_path"] = "/caller/selected/trust-root.json"
+        authority["trust_root_digest"] = "a" * 64
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_authority(self.plan, authority)
 
     def test_journal_execution_mode_and_ledger_path_are_exact_bindings(self) -> None:
         authority = self._authority()
