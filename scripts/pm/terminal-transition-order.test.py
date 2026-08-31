@@ -77,6 +77,23 @@ def has_effectful_terminal_writer(path: Path, text: str) -> bool:
             if key is not None
         )
 
+    def call_name(node: ast.Call) -> str:
+        function = node.func
+        if isinstance(function, ast.Name):
+            return function.id
+        if isinstance(function, ast.Attribute):
+            return function.attr
+        return ""
+
+    writer_arg_names = {
+        argument.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and re.search(r"(?i)(?:write|update|replace|persist|commit|transact|save|close)", call_name(node))
+        for argument in node.args
+        if isinstance(argument, ast.Name)
+    }
+
     def literal_command(node: ast.AST) -> tuple[str, ...] | None:
         if not isinstance(node, (ast.List, ast.Tuple)):
             return None
@@ -92,7 +109,10 @@ def has_effectful_terminal_writer(path: Path, text: str) -> bool:
             if any(is_workflow_phase_target(target) for target in node.targets):
                 if is_terminal_value(node.value):
                     return True
-            if terminal_dict(node.value):
+            if terminal_dict(node.value) and any(
+                isinstance(target, ast.Name) and target.id in writer_arg_names
+                for target in node.targets
+            ):
                 return True
         if isinstance(node, ast.Call):
             if any(literal_command(argument)[:3] == ("gh", "issue", "close")
@@ -122,6 +142,23 @@ class TerminalTransitionOrder(unittest.TestCase):
         self.assertIn("oasis7_terminal_cleanup", cleanup)
         self.assertIn("post-merge-finalize.py", cleanup)
         self.assertLess(cleanup.index("oasis7_terminal_cleanup"), cleanup.index("post-merge-finalize.py"))
+        self.assertFalse(
+            has_effectful_terminal_writer(
+                Path("validation.py"),
+                'expected = {"workflow_phase": "post_merge_done"}\n',
+            ),
+            "validation-only expected values are not terminal writes",
+        )
+        for field_write in (
+            'state["workflow_phase"] = "post_merge_done"\n',
+            'result["workflow_phase"] = "post_merge_done"\n',
+            'task["workflow_phase"] = "post_merge_done"\n',
+        ):
+            with self.subTest(field_write=field_write):
+                self.assertTrue(
+                    has_effectful_terminal_writer(Path("writer.py"), field_write),
+                    "state/result/task terminal field writes must remain detectable",
+                )
         all_writers = []
         for path in (TASK, MAIN_SYNC, CLEANUP, PR_WATCH_AUDIT, FINALIZE):
             if path.exists():
