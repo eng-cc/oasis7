@@ -11,6 +11,7 @@ never restores old chain state.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import re
@@ -102,6 +103,37 @@ EXPECTED_NODES: dict[str, dict[str, str]] = {
     },
 }
 
+# Connection inventory is code-owned.  Callers may provide evidence for these
+# exact bindings, but cannot select a different host, known_hosts file, or pin.
+# Observer targets are operator aliases; no credential material is represented.
+CANONICAL_HOST_INVENTORY: dict[str, dict[str, str]] = {
+    "sequencer-204": {
+        "target": "root@39.104.204.172",
+        "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
+        "known_host_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+    },
+    "storage-205": {
+        "target": "root@39.104.205.67",
+        "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
+        "known_host_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
+    },
+    "linux-lan-observer": {
+        "target": "observer@linux-lan",
+        "known_hosts_path": "/operator/known-hosts",
+        "known_host_fingerprint": "SHA256:2NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+    },
+    "windows-observer": {
+        "target": "observer@windows-lan",
+        "known_hosts_path": "/operator/known-hosts",
+        "known_host_fingerprint": "SHA256:3NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+    },
+    "macos-observer": {
+        "target": "observer@macos-lan",
+        "known_hosts_path": "/operator/known-hosts",
+        "known_host_fingerprint": "SHA256:4NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+    },
+}
+
 
 def die(message: str) -> NoReturn:
     raise SystemExit(f"error: full-network clean-room: {message}")
@@ -129,6 +161,29 @@ def require_oid(value: Any, label: str) -> str:
     if not isinstance(value, str) or OID_RE.fullmatch(value) is None:
         die(f"{label} must be a hexadecimal commit oid")
     return value.lower()
+
+
+def _parse_utc(value: Any, label: str) -> datetime:
+    raw = require_string(value, label)
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        die(f"{label} must be an RFC3339 timestamp")
+    if parsed.tzinfo is None:
+        die(f"{label} must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_transaction_context(request: dict[str, Any]) -> dict[str, str]:
+    transaction_id = require_string(request.get("transaction_id"), "transaction_id")
+    capture_window_id = require_string(request.get("capture_window_id"), "capture_window_id")
+    for value, label in (
+        (transaction_id, "transaction_id"),
+        (capture_window_id, "capture_window_id"),
+    ):
+        if SAFE_NAME_RE.fullmatch(value) is None:
+            die(f"{label} is not a safe transaction identifier")
+    return {"transaction_id": transaction_id, "capture_window_id": capture_window_id}
 
 
 def reject_secret_fields(value: Any, label: str = "input") -> None:
@@ -273,6 +328,100 @@ def _positive_size(value: Any, label: str) -> int:
     return value
 
 
+def _validate_execution_bindings(value: Any, label: str) -> dict[str, Any]:
+    execution = require_object(value, label)
+    records = require_object(execution.get("execution_records_root"), f"{label}.execution_records_root")
+    require_string(records.get("path"), f"{label}.execution_records_root.path")
+    require_hex(records.get("sha256"), f"{label}.execution_records_root.sha256")
+    _positive_size(records.get("size_bytes"), f"{label}.execution_records_root.size_bytes")
+
+    cas = require_object(execution.get("cas"), f"{label}.cas")
+    require_string(cas.get("root"), f"{label}.cas.root")
+    require_hex(cas.get("blake3"), f"{label}.cas.blake3")
+    _positive_size(cas.get("size_bytes"), f"{label}.cas.size_bytes")
+
+    world_head = require_object(execution.get("world_head"), f"{label}.world_head")
+    require_string(world_head.get("path"), f"{label}.world_head.path")
+    require_hex(world_head.get("sha256"), f"{label}.world_head.sha256")
+    _positive_size(world_head.get("size_bytes"), f"{label}.world_head.size_bytes")
+    world_head_height = world_head.get("height")
+    if isinstance(world_head_height, bool) or not isinstance(world_head_height, int) or world_head_height <= 0:
+        die(f"{label}.world_head.height must be a positive integer")
+    require_hex(world_head.get("block_hash"), f"{label}.world_head.block_hash")
+    require_hex(world_head.get("state_root"), f"{label}.world_head.state_root")
+
+    sidecar = require_object(
+        execution.get("generated_world_sidecar"), f"{label}.generated_world_sidecar"
+    )
+    require_string(sidecar.get("path"), f"{label}.generated_world_sidecar.path")
+    require_hex(sidecar.get("sha256"), f"{label}.generated_world_sidecar.sha256")
+    _positive_size(sidecar.get("size_bytes"), f"{label}.generated_world_sidecar.size_bytes")
+    require_string(sidecar.get("provenance_path"), f"{label}.generated_world_sidecar.provenance_path")
+    require_hex(
+        sidecar.get("provenance_sha256"),
+        f"{label}.generated_world_sidecar.provenance_sha256",
+    )
+    _positive_size(
+        sidecar.get("provenance_size_bytes"),
+        f"{label}.generated_world_sidecar.provenance_size_bytes",
+    )
+
+    consistency = require_object(
+        execution.get("json_index_consistency"), f"{label}.json_index_consistency"
+    )
+    if consistency.get("verified") is not True:
+        die(f"{label}.json_index_consistency must be independently verified")
+    for field in ("snapshot_sha256", "journal_sha256", "index_sha256"):
+        require_hex(consistency.get(field), f"{label}.json_index_consistency.{field}")
+    for field in ("snapshot_size_bytes", "journal_size_bytes", "index_size_bytes"):
+        _positive_size(consistency.get(field), f"{label}.json_index_consistency.{field}")
+    return {
+        "execution_records_root": {
+            "path": records["path"],
+            "sha256": records["sha256"].lower(),
+            "size_bytes": records["size_bytes"],
+        },
+        "cas": {
+            "root": cas["root"],
+            "blake3": cas["blake3"].lower(),
+            "size_bytes": cas["size_bytes"],
+        },
+        "world_head": {
+            "path": world_head["path"],
+            "sha256": world_head["sha256"].lower(),
+            "size_bytes": world_head["size_bytes"],
+            "height": world_head_height,
+            "block_hash": world_head["block_hash"].lower(),
+            "state_root": world_head["state_root"].lower(),
+        },
+        "generated_world_sidecar": {
+            "path": sidecar["path"],
+            "sha256": sidecar["sha256"].lower(),
+            "size_bytes": sidecar["size_bytes"],
+            "provenance_path": sidecar["provenance_path"],
+            "provenance_sha256": sidecar["provenance_sha256"].lower(),
+            "provenance_size_bytes": sidecar["provenance_size_bytes"],
+        },
+        "json_index_consistency": {
+            "verified": True,
+            "snapshot_sha256": consistency["snapshot_sha256"].lower(),
+            "snapshot_size_bytes": consistency["snapshot_size_bytes"],
+            "journal_sha256": consistency["journal_sha256"].lower(),
+            "journal_size_bytes": consistency["journal_size_bytes"],
+            "index_sha256": consistency["index_sha256"].lower(),
+            "index_size_bytes": consistency["index_size_bytes"],
+        },
+    }
+
+
+def _validate_verifier_bindings(
+    verifier: dict[str, Any], execution: dict[str, Any]
+) -> None:
+    bindings = require_object(verifier.get("bindings"), "crypto_verifier_receipt.bindings")
+    if bindings != execution:
+        die("crypto verifier receipt execution/world/CAS/index binding mismatch")
+
+
 def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
     value = require_object(truth, "truth")
     package = require_object(value.get("package"), "truth.package")
@@ -335,6 +484,7 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
         ):
             die(f"truth.package.platforms.{platform} world provenance binding mismatch")
 
+    execution = _validate_execution_bindings(value.get("execution"), "truth.execution")
     checkpoint = require_object(value.get("checkpoint"), "truth.checkpoint")
     checkpoint_id = require_string(checkpoint.get("checkpoint_id"), "truth.checkpoint.checkpoint_id")
     manifest_hash = require_hex(checkpoint.get("manifest_hash"), "truth.checkpoint.manifest_hash")
@@ -347,6 +497,13 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
     require_hex(checkpoint.get("execution_state_root"), "truth.checkpoint.execution_state_root")
     require_hex(checkpoint.get("sha256"), "truth.checkpoint.sha256")
     validate_authenticated_receipt(checkpoint.get("receipt"), "truth.checkpoint.receipt", allowed_signers)
+    world_head = execution["world_head"]
+    if (
+        world_head["height"] != height
+        or world_head["block_hash"] != checkpoint["execution_block_hash"].lower()
+        or world_head["state_root"] != checkpoint["execution_state_root"].lower()
+    ):
+        die("truth world-head/checkpoint execution binding mismatch")
     return {
         "package": {
             **package,
@@ -356,12 +513,16 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
         },
         "genesis": {**genesis, "sha256": genesis_sha},
         "world": {**world, "sha256": world_sha},
+        "execution": execution,
         "checkpoint": {**checkpoint, "manifest_hash": manifest_hash, "height": height},
     }
 
 
 def _validate_probe(
-    probe: Any, truth: dict[str, Any], allowed_signers: set[str]
+    probe: Any,
+    truth: dict[str, Any],
+    allowed_signers: set[str],
+    context: dict[str, str],
 ) -> dict[str, Any]:
     value = require_object(probe, "fresh_root_probe")
     schema = require_string(value.get("schema_version"), "fresh_root_probe.schema_version")
@@ -369,6 +530,12 @@ def _validate_probe(
         die("fresh_root_probe schema is unsupported")
     if value.get("authenticated") is not True or value.get("verified") is not True:
         die("fresh_root_probe must be authenticated and verified")
+    if value.get("transaction_id") != context["transaction_id"]:
+        die("fresh_root_probe transaction binding mismatch")
+    if value.get("capture_window_id") != context["capture_window_id"]:
+        die("fresh_root_probe capture-window binding mismatch")
+    if value.get("replayed") is not False or value.get("post_validator_verify") is not True:
+        die("fresh_root_probe must be a post-validator, non-replayed capture")
     if value.get("package_commit", "").lower() != truth["package"]["commit"]:
         die("fresh_root_probe package binding mismatch")
     checkpoint = truth["checkpoint"]
@@ -378,6 +545,35 @@ def _validate_probe(
         or value.get("height") != checkpoint["height"]
     ):
         die("fresh_root_probe checkpoint binding mismatch")
+    outputs = require_object(
+        value.get("validator_verify_outputs"), "fresh_root_probe.validator_verify_outputs"
+    )
+    if set(outputs) != set(VALIDATOR_NAMES):
+        die("fresh_root_probe validator verify outputs must cover both validators")
+    for name in sorted(VALIDATOR_NAMES):
+        output = require_object(outputs.get(name), f"fresh_root_probe.validator_verify_outputs.{name}")
+        validate_authenticated_receipt(
+            output,
+            f"fresh_root_probe.validator_verify_outputs.{name}",
+            allowed_signers,
+        )
+        if output.get("schema_version") != "oasis7.validator_verify_output.v1":
+            die(f"{name} validator verify output schema is unsupported")
+        if output.get("node") != name:
+            die(f"{name} validator verify output node binding mismatch")
+        if output.get("transaction_id") != context["transaction_id"]:
+            die(f"{name} validator verify output transaction binding mismatch")
+        if output.get("capture_window_id") != context["capture_window_id"]:
+            die(f"{name} validator verify output capture-window binding mismatch")
+        if output.get("package_commit", "").lower() != truth["package"]["commit"]:
+            die(f"{name} validator verify output package binding mismatch")
+        if (
+            output.get("checkpoint_id") != checkpoint["checkpoint_id"]
+            or str(output.get("manifest_hash", "")).lower() != checkpoint["manifest_hash"]
+            or output.get("height") != checkpoint["height"]
+        ):
+            die(f"{name} validator verify output checkpoint binding mismatch")
+        require_hex(output.get("output_sha256"), f"{name}.validator_verify_output.output_sha256")
     validate_authenticated_receipt(value.get("receipt"), "fresh_root_probe.receipt", allowed_signers)
     return value
 
@@ -387,13 +583,20 @@ def _validate_host_and_endpoints(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     name = str(node.get("name"))
     host = require_object(node.get("host_binding"), f"{name}.host_binding")
+    canonical_host = CANONICAL_HOST_INVENTORY[name]
     target = require_string(host.get("target"), f"{name}.host_binding.target")
+    if target != canonical_host["target"]:
+        die(f"{name}.host_binding.target does not match the code-owned canonical inventory")
     if "/v1/chain/status" in target:
         die(f"{name}.host_binding.target must not contain a status endpoint")
     known_hosts_path = require_string(host.get("known_hosts_path"), f"{name}.host_binding.known_hosts_path")
+    if known_hosts_path != canonical_host["known_hosts_path"]:
+        die(f"{name}.host_binding.known_hosts_path does not match the code-owned canonical inventory")
     if not known_hosts_path.startswith("/") or ".." in PurePosixPath(known_hosts_path).parts:
         die(f"{name}.host_binding.known_hosts_path must be an absolute operator path")
     fingerprint = require_string(host.get("known_host_fingerprint"), f"{name}.host_binding.known_host_fingerprint")
+    if fingerprint != canonical_host["known_host_fingerprint"]:
+        die(f"{name}.host_binding.known_host_fingerprint does not match the code-owned canonical inventory")
     if re.fullmatch(r"SHA256:[A-Za-z0-9+/]{20,}", fingerprint) is None:
         die(f"{name}.host_binding.known_host_fingerprint is malformed")
 
@@ -419,10 +622,27 @@ def _validate_host_and_endpoints(
     nonce = require_string(seam.get("nonce"), f"{name}.credential_seam.nonce")
     if re.fullmatch(r"[A-Za-z0-9._-]{32,}", nonce) is None:
         die(f"{name}.credential_seam.nonce must be an unpredictable bound nonce")
+    issued_at = _parse_utc(seam.get("issued_at"), f"{name}.credential_seam.issued_at")
+    expires_at = _parse_utc(seam.get("expires_at"), f"{name}.credential_seam.expires_at")
+    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+        die(f"{name}.credential_seam nonce lease is expired or inverted")
+    ledger_path = require_string(seam.get("ledger_path"), f"{name}.credential_seam.ledger_path")
+    if not ledger_path.startswith("/") or ".." in PurePosixPath(ledger_path).parts:
+        die(f"{name}.credential_seam.ledger_path must be an absolute operator path")
+    if seam.get("one_shot") is not True:
+        die(f"{name}.credential_seam must be one-shot")
     return (
         {"target": target, "known_hosts_path": known_hosts_path, "known_host_fingerprint": fingerprint},
         {"healthz": healthz, "evidence": evidence},
-        {"kind": seam["kind"], "environment_name": environment_name, "nonce": nonce},
+        {
+            "kind": seam["kind"],
+            "environment_name": environment_name,
+            "nonce": nonce,
+            "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+            "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+            "ledger_path": ledger_path,
+            "one_shot": True,
+        },
     )
 
 
@@ -455,14 +675,15 @@ def _validate_nodes(nodes: Any, truth: dict[str, Any], allowed_signers: set[str]
             if isinstance(owner_value, bool) or not isinstance(owner_value, int) or owner_value < 0:
                 die(f"{name}.identity_receipt.{owner} must be a non-negative integer")
         if "node_root" in expected:
+            path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
             expected_root = _normalized_path(
                 expected["node_root"],
-                "windows" if expected["platform"] == "windows-x64" else "posix",
+                path_style,
                 f"{name}.expected_node_root",
             )
             actual_root = _normalized_path(
                 node.get("node_root"),
-                "windows" if expected["platform"] == "windows-x64" else "posix",
+                path_style,
                 f"{name}.node_root",
             )
             root_mismatch = (
@@ -473,16 +694,16 @@ def _validate_nodes(nodes: Any, truth: dict[str, Any], allowed_signers: set[str]
             if root_mismatch:
                 die(f"{name}.node_root does not match the governed path inventory")
         host_binding, endpoints, credential_seam = _validate_host_and_endpoints(node, expected)
-        _validate_state_paths(node, expected)
+        normalized_paths = _validate_state_paths(node, expected)
         by_name[name] = {
             "name": name,
             "node_id": expected["node_id"],
             "role": expected["role"],
             "platform": expected["platform"],
-            "node_root": node["node_root"],
+            "node_root": expected_root,
             "service_manager": expected["service_manager"],
             "service": expected["service"],
-            "persistent_state_paths": list(node["persistent_state_paths"]),
+            "persistent_state_paths": normalized_paths,
             "identity_receipt": identity_receipt,
             "host_binding": host_binding,
             "endpoints": endpoints,
@@ -500,6 +721,79 @@ def _validate_nodes(nodes: Any, truth: dict[str, Any], allowed_signers: set[str]
     if set(by_name) != set(NODE_ORDER):
         die("managed node set is incomplete")
     return by_name
+
+
+def _validate_credential_nonce_ledger(
+    raw_ledger: Any,
+    nodes: dict[str, dict[str, Any]],
+    context: dict[str, str],
+    allowed_signers: set[str],
+) -> dict[str, Any]:
+    ledger = require_object(raw_ledger, "credential_nonce_ledger")
+    if ledger.get("schema_version") != "oasis7.credential_nonce_ledger.v1":
+        die("credential_nonce_ledger schema is unsupported")
+    path = require_string(ledger.get("path"), "credential_nonce_ledger.path")
+    if not path.startswith("/") or ".." in PurePosixPath(path).parts:
+        die("credential_nonce_ledger.path must be an absolute operator path")
+    if ledger.get("transaction_id") != context["transaction_id"]:
+        die("credential_nonce_ledger transaction binding mismatch")
+    if ledger.get("capture_window_id") != context["capture_window_id"]:
+        die("credential_nonce_ledger capture-window binding mismatch")
+    if ledger.get("one_shot") is not True or ledger.get("replay") is not False:
+        die("credential_nonce_ledger must be a non-replayed one-shot ledger")
+    issued_at = _parse_utc(ledger.get("issued_at"), "credential_nonce_ledger.issued_at")
+    expires_at = _parse_utc(ledger.get("expires_at"), "credential_nonce_ledger.expires_at")
+    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+        die("credential_nonce_ledger is expired or inverted")
+    raw_reserved = ledger.get("reserved_nonces")
+    if not isinstance(raw_reserved, list) or len(raw_reserved) != len(NODE_ORDER):
+        die("credential_nonce_ledger must reserve one nonce per managed node")
+    reserved = [require_string(item, "credential_nonce_ledger.reserved_nonces[]") for item in raw_reserved]
+    if any(re.fullmatch(r"[A-Za-z0-9._-]{32,}", item) is None for item in reserved):
+        die("credential_nonce_ledger contains a malformed nonce")
+    if len(set(reserved)) != len(reserved):
+        die("credential_nonce_ledger contains duplicate nonces")
+    expected = [nodes[name]["credential_seam"]["nonce"] for name in NODE_ORDER]
+    if reserved != expected:
+        die("credential_nonce_ledger reservations do not match node nonce seams in order")
+    for name in NODE_ORDER:
+        seam = nodes[name]["credential_seam"]
+        if seam["ledger_path"] != path or seam["one_shot"] is not True:
+            die(f"{name}.credential_seam ledger binding mismatch")
+        if seam["issued_at"] != issued_at.isoformat().replace("+00:00", "Z"):
+            die(f"{name}.credential_seam issued-at binding mismatch")
+        if seam["expires_at"] != expires_at.isoformat().replace("+00:00", "Z"):
+            die(f"{name}.credential_seam expiry binding mismatch")
+    validate_authenticated_receipt(
+        ledger.get("receipt"), "credential_nonce_ledger.receipt", allowed_signers
+    )
+    receipt_bindings = require_object(
+        ledger["receipt"].get("bindings"), "credential_nonce_ledger.receipt.bindings"
+    )
+    expected_receipt_bindings = {
+        "path": path,
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
+        "one_shot": True,
+        "replay": False,
+        "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        "reserved_nonces": reserved,
+    }
+    if receipt_bindings != expected_receipt_bindings:
+        die("credential_nonce_ledger receipt binding mismatch")
+    return {
+        "schema_version": ledger["schema_version"],
+        "path": path,
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
+        "one_shot": True,
+        "replay": False,
+        "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        "reserved_nonces": reserved,
+        "receipt": ledger["receipt"],
+    }
 
 
 def _validate_no_old_state_copy(request: dict[str, Any]) -> None:
@@ -521,7 +815,10 @@ def _validate_no_old_state_copy(request: dict[str, Any]) -> None:
 
 
 def _validate_backup_policy(
-    request: dict[str, Any], authority: dict[str, Any], allowed_signers: set[str]
+    request: dict[str, Any],
+    authority: dict[str, Any],
+    allowed_signers: set[str],
+    context: dict[str, str],
 ) -> dict[str, Any]:
     raw_policy = request.get("backup_policy")
     if raw_policy is None:
@@ -544,20 +841,64 @@ def _validate_backup_policy(
         die("backup_policy.mode is unsupported")
     if policy.get("operator_authorized") is not True:
         die("operator-authorized-no-backup requires explicit operator_authorized=true")
+    if policy.get("current_authorization") is not True:
+        die("operator-authorized-no-backup requires current_authorization=true")
+    if policy.get("repository") != "eng-cc/oasis7":
+        die("backup_policy.repository is not the governed repository")
+    if policy.get("action") != "full-network-clean-room":
+        die("backup_policy.action is not the governed clean-room action")
+    targets = policy.get("targets")
+    if targets != list(NODE_ORDER):
+        die("backup_policy.targets must cover every managed node in deterministic order")
+    if policy.get("transaction_id") != context["transaction_id"]:
+        die("backup_policy transaction binding mismatch")
+    if policy.get("capture_window_id") != context["capture_window_id"]:
+        die("backup_policy capture-window binding mismatch")
+    actor = require_string(policy.get("actor"), "backup_policy.actor")
+    if SAFE_NAME_RE.fullmatch(actor) is None:
+        die("backup_policy.actor is not a safe operator identifier")
+    issued_at = _parse_utc(policy.get("issued_at"), "backup_policy.issued_at")
+    expires_at = _parse_utc(policy.get("expires_at"), "backup_policy.expires_at")
+    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+        die("backup_policy authorization is expired or inverted")
     if (
         policy.get("task_uid") != authority["task_uid"]
         or str(policy.get("frozen_head_oid", "")).lower() != authority["head_oid"]
     ):
         die("backup_policy authority task/frozen-head binding mismatch")
     require_string(policy.get("reason"), "backup_policy.reason")
-    authority = validate_authenticated_receipt(
+    no_backup_receipt = validate_authenticated_receipt(
         policy.get("authority"), "backup_policy.authority", allowed_signers
     )
+    receipt_bindings = require_object(
+        no_backup_receipt.get("bindings"), "backup_policy.authority.bindings"
+    )
+    expected_bindings = {
+        "repository": "eng-cc/oasis7",
+        "action": "full-network-clean-room",
+        "targets": list(NODE_ORDER),
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
+        "actor": actor,
+        "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        "current_authorization": True,
+    }
+    if receipt_bindings != expected_bindings:
+        die("backup_policy authority receipt binding mismatch")
     return {
         "mode": mode,
         "required_before_reset": False,
         "operator_authorized": True,
-        "authority": authority,
+        "authority": no_backup_receipt,
+        "repository": "eng-cc/oasis7",
+        "action": "full-network-clean-room",
+        "targets": list(NODE_ORDER),
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
+        "actor": actor,
+        "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -577,18 +918,45 @@ def _global_order(backup_required: bool) -> list[str]:
     return order
 
 
-def _operation_journal(global_order: list[str]) -> list[dict[str, Any]]:
+def _operation_journal(
+    global_order: list[str],
+    nodes: dict[str, dict[str, Any]],
+    truth: dict[str, Any],
+    context: dict[str, str],
+) -> list[dict[str, Any]]:
     journal: list[dict[str, Any]] = []
     for sequence, entry in enumerate(global_order, 1):
         phase, _, node = entry.partition(":")
-        journal.append(
-            {
-                "sequence": sequence,
-                "phase": phase,
-                "node": node or None,
-                "operation": entry,
-            }
-        )
+        record: dict[str, Any] = {
+            "sequence": sequence,
+            "phase": phase,
+            "node": node or None,
+            "operation": entry,
+            "transaction_id": context["transaction_id"],
+            "capture_window_id": context["capture_window_id"],
+            "package_commit": truth["package"]["commit"],
+            "checkpoint_id": truth["checkpoint"]["checkpoint_id"],
+            "checkpoint_manifest_hash": truth["checkpoint"]["manifest_hash"],
+            "checkpoint_height": truth["checkpoint"]["height"],
+        }
+        if node:
+            node_value = nodes[node]
+            record.update(
+                {
+                    "target_root": node_value["node_root"],
+                    "host_target": node_value["host_binding"]["target"],
+                    "known_hosts_path": node_value["host_binding"]["known_hosts_path"],
+                    "known_host_fingerprint": node_value["host_binding"]["known_host_fingerprint"],
+                    "surface_set_sha256": hashlib.sha256(
+                        json.dumps(
+                            node_value["persistent_state_paths"],
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                        ).encode()
+                    ).hexdigest(),
+                }
+            )
+        journal.append(record)
     return journal
 
 
@@ -597,18 +965,25 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     reject_secret_fields(request)
     if request.get("schema_version") != INPUT_SCHEMA:
         die("input schema is unsupported")
+    context = _validate_transaction_context(request)
     authority = _validate_authority(request)
     _validate_no_old_state_copy(request)
     allowed_signers = set(authority["signer_allowlist"])
     truth = _validate_truth(request.get("truth"), allowed_signers)
-    probe = _validate_probe(request.get("fresh_root_probe"), truth, allowed_signers)
+    _validate_verifier_bindings(authority["crypto_verifier_receipt"], truth["execution"])
+    probe = _validate_probe(request.get("fresh_root_probe"), truth, allowed_signers, context)
     nodes = _validate_nodes(request.get("nodes"), truth, allowed_signers)
-    backup_policy = _validate_backup_policy(request, authority, allowed_signers)
+    credential_nonce_ledger = _validate_credential_nonce_ledger(
+        request.get("credential_nonce_ledger"), nodes, context, allowed_signers
+    )
+    backup_policy = _validate_backup_policy(request, authority, allowed_signers, context)
     global_order = _global_order(backup_policy["required_before_reset"])
     plan: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
         "task_uid": authority["task_uid"],
         "head_oid": authority["head_oid"],
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
         "authority": authority,
         "execution": {
             "mode": "plan-only",
@@ -617,7 +992,8 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         },
         "node_order": list(NODE_ORDER),
         "global_order": global_order,
-        "operation_journal": _operation_journal(global_order),
+        "operation_journal": _operation_journal(global_order, nodes, truth, context),
+        "canonical_host_inventory": CANONICAL_HOST_INVENTORY,
         "surfaces": {
             "validators": list(VALIDATOR_RESET_SURFACES),
             "observers": list(OBSERVER_RESET_SURFACES),
@@ -628,9 +1004,11 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
             "package": truth["package"],
             "genesis": truth["genesis"],
             "world": truth["world"],
+            "execution": truth["execution"],
             "checkpoint": truth["checkpoint"],
         },
         "fresh_root_probe": probe,
+        "credential_nonce_ledger": credential_nonce_ledger,
         "nodes": [nodes[name] for name in NODE_ORDER],
         "forensic_backup": {
             "mode": backup_policy["mode"],
@@ -642,6 +1020,14 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
             "restore_old_state": False,
             "receipt_required_per_node": backup_policy["required_before_reset"],
             "authority": backup_policy["authority"],
+            "repository": backup_policy.get("repository"),
+            "action": backup_policy.get("action"),
+            "targets": backup_policy.get("targets"),
+            "transaction_id": backup_policy.get("transaction_id", context["transaction_id"]),
+            "capture_window_id": backup_policy.get("capture_window_id", context["capture_window_id"]),
+            "actor": backup_policy.get("actor"),
+            "issued_at": backup_policy.get("issued_at"),
+            "expires_at": backup_policy.get("expires_at"),
         },
         "observer_gate": {
             "required_before": ["windows-observer", "macos-observer"],

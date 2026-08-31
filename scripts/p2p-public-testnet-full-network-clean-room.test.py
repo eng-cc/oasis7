@@ -55,12 +55,66 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         )
         return receipt
 
+    def _no_backup_receipt(self, request: dict[str, object], expires_at: str) -> dict[str, object]:
+        receipt = self._receipt("oasis7.no_backup_authority.v1")
+        receipt["bindings"] = {
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": expires_at,
+            "current_authorization": True,
+        }
+        return receipt
+
     @staticmethod
     def _windows_state_path(surface: str) -> str:
         surface = surface.replace("{node_id}", "triad-testnet-windows-observer")
         return rf"C:\\oasis7-deploy\\{surface.replace('/', chr(92))}"
 
     def _input(self) -> dict[str, object]:
+        transaction_id = "txn-clean-room-001"
+        capture_window_id = "capture-window-20260901-001"
+        execution_bindings = {
+            "execution_records_root": {
+                "path": "/operator/truth/execution-records/root",
+                "sha256": "a" * 64,
+                "size_bytes": 16384,
+            },
+            "cas": {
+                "root": "/operator/truth/execution-cas",
+                "blake3": "b" * 64,
+                "size_bytes": 32768,
+            },
+            "world_head": {
+                "path": "/operator/truth/world-head.json",
+                "sha256": "c" * 64,
+                "size_bytes": 1024,
+                "height": 100,
+                "block_hash": "8" * 64,
+                "state_root": "9" * 64,
+            },
+            "generated_world_sidecar": {
+                "path": "/operator/truth/world/.distfs-state/sidecar-generations/index.json",
+                "sha256": "d" * 64,
+                "size_bytes": 4096,
+                "provenance_path": "/operator/truth/world/generated-world.provenance.json",
+                "provenance_sha256": "4" * 64,
+                "provenance_size_bytes": 256,
+            },
+            "json_index_consistency": {
+                "verified": True,
+                "snapshot_sha256": "e" * 64,
+                "snapshot_size_bytes": 8192,
+                "journal_sha256": "f" * 64,
+                "journal_size_bytes": 16384,
+                "index_sha256": "0" * 64,
+                "index_size_bytes": 4096,
+            },
+        }
         truth = {
             "package": {
                 "package_id": "testnet-package-linux-windows-macos-001",
@@ -108,6 +162,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "provenance_size_bytes": 256,
                 "receipt": self._receipt("oasis7.world_binding.v1"),
             },
+            "execution": execution_bindings,
             "checkpoint": {
                 "checkpoint_id": "checkpoint-001",
                 "manifest_hash": "5" * 64,
@@ -132,7 +187,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "host_binding": {
                     "target": "root@39.104.204.172",
                     "known_host_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
-                    "known_hosts_path": "/operator/known-hosts",
+                    "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
                 },
                 "endpoints": {
                     "healthz": "http://127.0.0.1:6631/healthz",
@@ -142,6 +197,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_SEQUENCER_SSHPASS",
                     "nonce": "sequencer-nonce-" + "x" * 32,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
                 },
                 "persistent_state_paths": [
                     f"/opt/oasis7/p2p-testnet/{surface}"
@@ -160,7 +219,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "host_binding": {
                     "target": "root@39.104.205.67",
                     "known_host_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
-                    "known_hosts_path": "/operator/known-hosts",
+                    "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
                 },
                 "endpoints": {
                     "healthz": "http://127.0.0.1:6632/healthz",
@@ -170,6 +229,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_STORAGE_SSHPASS",
                     "nonce": "storage-nonce-" + "x" * 32,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
                 },
                 "persistent_state_paths": [
                     f"/opt/oasis7/p2p-testnet/{surface}"
@@ -198,6 +261,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_LINUX_OBSERVER_SSHPASS",
                     "nonce": "linux-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
                 },
                 "persistent_state_paths": [
                     f"/opt/oasis7/p2p-testnet-local/{surface.replace('{node_id}', 'triad-testnet-local')}"
@@ -226,6 +293,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_WINDOWS_OBSERVER_SSHPASS",
                     "nonce": "windows-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
                 },
                 "persistent_state_paths": [
                     self._windows_state_path(surface)
@@ -254,6 +325,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_MACOS_OBSERVER_SSHPASS",
                     "nonce": "macos-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
                 },
                 "persistent_state_paths": [
                     f"/Applications/oasis7/{surface.replace('{node_id}', 'triad-testnet-fourth-local')}"
@@ -264,6 +339,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         ]
         return {
             "schema_version": "oasis7.public_testnet_full_network_clean_room_input.v1",
+            "transaction_id": transaction_id,
+            "capture_window_id": capture_window_id,
             "task_uid": "task_174f0a5a87394012b071171cc4a52372",
             "head_oid": "e" * 40,
             "authority": {
@@ -285,6 +362,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "verifier_id": "governed-receipt-verifier",
                     "executable_path": "/operator/bin/verify-receipt",
                     "executable_sha256": "f" * 64,
+                    "bindings": json.loads(json.dumps(execution_bindings)),
                 },
                 "receipt": self._receipt("oasis7.clean_room_authority.v1"),
             },
@@ -297,7 +375,67 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "checkpoint_id": "checkpoint-001",
                 "manifest_hash": "5" * 64,
                 "height": 100,
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "replayed": False,
+                "post_validator_verify": True,
+                "validator_verify_outputs": {
+                    name: {
+                        "schema_version": "oasis7.validator_verify_output.v1",
+                        "authenticated": True,
+                        "verified": True,
+                        "signer_id": "governance-signer",
+                        "signed_payload_sha256": "a" * 64,
+                        "signature_hex": "b" * 128,
+                        "canonical_digest": "c" * 64,
+                        "node": name,
+                        "transaction_id": transaction_id,
+                        "capture_window_id": capture_window_id,
+                        "package_commit": "d" * 40,
+                        "checkpoint_id": "checkpoint-001",
+                        "manifest_hash": "5" * 64,
+                        "height": 100,
+                        "output_sha256": "6" * 64,
+                    }
+                    for name in ("sequencer-204", "storage-205")
+                },
                 "receipt": self._receipt("oasis7.fresh_root_probe_receipt.v1"),
+            },
+            "credential_nonce_ledger": {
+                "schema_version": "oasis7.credential_nonce_ledger.v1",
+                "path": "/operator/credential-nonce-ledger.jsonl",
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "one_shot": True,
+                "replay": False,
+                "issued_at": "2026-09-01T00:00:00Z",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "reserved_nonces": [
+                    "storage-nonce-" + "x" * 32,
+                    "sequencer-nonce-" + "x" * 32,
+                    "linux-observer-nonce-" + "x" * 32,
+                    "windows-observer-nonce-" + "x" * 32,
+                    "macos-observer-nonce-" + "x" * 32,
+                ],
+                "receipt": {
+                    **self._receipt("oasis7.credential_nonce_ledger_receipt.v1"),
+                    "bindings": {
+                        "path": "/operator/credential-nonce-ledger.jsonl",
+                        "transaction_id": transaction_id,
+                        "capture_window_id": capture_window_id,
+                        "one_shot": True,
+                        "replay": False,
+                        "issued_at": "2026-09-01T00:00:00Z",
+                        "expires_at": "2099-01-01T00:00:00Z",
+                        "reserved_nonces": [
+                            "storage-nonce-" + "x" * 32,
+                            "sequencer-nonce-" + "x" * 32,
+                            "linux-observer-nonce-" + "x" * 32,
+                            "windows-observer-nonce-" + "x" * 32,
+                            "macos-observer-nonce-" + "x" * 32,
+                        ],
+                    },
+                },
             },
             "nodes": nodes,
         }
@@ -442,16 +580,170 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         request["backup_policy"] = {
             "mode": "operator-authorized-no-backup",
             "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
             "task_uid": request["task_uid"],
             "frozen_head_oid": request["head_oid"],
             "reason": "immutable provider backup unavailable",
-            "authority": self._receipt("oasis7.no_backup_authority.v1"),
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
         }
         plan = self.module.build_plan(request)
         self.assertFalse(plan["forensic_backup"]["required_before_reset"])
         self.assertEqual(plan["forensic_backup"]["mode"], "operator-authorized-no-backup")
         self.assertFalse(plan["forensic_backup"]["immutable"])
         self.assertFalse(plan["forensic_backup"]["receipt_required_per_node"])
+
+    def test_plan_rejects_caller_inventory_override(self) -> None:
+        request = self._input()
+        request["nodes"][0]["host_binding"]["known_hosts_path"] = "/operator/other-known-hosts"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)canonical|inventory|known.?hosts|host")
+
+    def test_verifier_receipt_binds_execution_world_and_json_index_evidence(self) -> None:
+        request = self._input()
+        request["authority"]["crypto_verifier_receipt"]["bindings"]["cas"]["blake3"] = "0" * 64
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)verifier|execution|cas|binding")
+
+        request = self._input()
+        request["truth"]["execution"]["json_index_consistency"]["verified"] = False
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)json|index|consistency|execution")
+
+    def test_probe_binds_transaction_capture_and_post_validator_outputs(self) -> None:
+        request = self._input()
+        request["fresh_root_probe"]["transaction_id"] = "different-transaction"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)transaction|capture|probe")
+
+        request = self._input()
+        request["fresh_root_probe"]["replayed"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)replay|probe")
+
+        request = self._input()
+        request["fresh_root_probe"]["validator_verify_outputs"].pop("storage-205")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)validator|verify|output|probe")
+
+    def test_no_backup_authority_binds_full_context_and_expiry(self) -> None:
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
+        }
+        request["backup_policy"]["action"] = "other-action"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)backup|authority|action|binding")
+
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2020-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2020-01-01T00:00:00Z"),
+        }
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)expir|backup|authority")
+
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
+        }
+        request["backup_policy"]["authority"]["bindings"]["actor"] = "different-actor"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)authority|receipt|binding")
+
+    def test_credential_nonce_ledger_is_unique_live_and_one_shot(self) -> None:
+        request = self._input()
+        request["credential_nonce_ledger"]["reserved_nonces"][1] = request[
+            "credential_nonce_ledger"
+        ]["reserved_nonces"][0]
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|unique|duplicate")
+
+        request = self._input()
+        request["nodes"][0]["credential_seam"]["expires_at"] = "2020-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|credential|expir")
+
+        request = self._input()
+        request["credential_nonce_ledger"]["replay"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)one.?shot|replay|ledger|nonce")
+
+        request = self._input()
+        request["credential_nonce_ledger"]["receipt"]["bindings"]["capture_window_id"] = "other-window"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)receipt|ledger|binding")
+
+    def test_operation_journal_binds_transaction_capture_targets_and_truth(self) -> None:
+        plan = self.module.build_plan(self._input())
+        self.assertTrue(plan["operation_journal"])
+        for entry in plan["operation_journal"]:
+            self.assertEqual(entry["transaction_id"], "txn-clean-room-001")
+            self.assertEqual(entry["capture_window_id"], "capture-window-20260901-001")
+            if entry["node"] is not None:
+                self.assertIn("target_root", entry)
+                self.assertEqual(entry["package_commit"], "d" * 40)
 
     def test_plan_is_deterministic_and_contains_no_secret_or_mutation_command(self) -> None:
         request = self._input()
