@@ -277,6 +277,8 @@ run_standalone_tool_lockfiles_checks() {
 run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
   run python3 ./scripts/product-doc-governance-check.test.py
+  run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
+  run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh

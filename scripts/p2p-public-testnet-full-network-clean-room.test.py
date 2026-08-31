@@ -36,6 +36,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "verified": True,
             "authenticated": True,
             "signer_id": "governance-signer",
+            "verifier_id": "governed-receipt-verifier",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
             "signed_payload_sha256": "a" * 64,
             "signature_hex": "b" * 128,
             "canonical_digest": "c" * 64,
@@ -62,10 +64,12 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "repository": "eng-cc/oasis7",
             "action": "full-network-clean-room",
             "targets": list(self.module.NODE_ORDER),
+            "task_uid": request["task_uid"],
             "transaction_id": request["transaction_id"],
             "capture_window_id": request["capture_window_id"],
+            "frozen_head_oid": request["head_oid"],
             "actor": "ops-actor",
-            "issued_at": "2026-09-01T00:00:00Z",
+            "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": expires_at,
             "current_authorization": True,
         }
@@ -209,7 +213,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_SEQUENCER_SSHPASS",
                     "nonce": "sequencer-nonce-" + "x" * 32,
-                    "issued_at": "2026-09-01T00:00:00Z",
+                    "issued_at": "2026-08-30T00:00:00Z",
                     "expires_at": "2099-01-01T00:00:00Z",
                     "ledger_path": "/operator/credential-nonce-ledger.jsonl",
                     "one_shot": True,
@@ -241,7 +245,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_STORAGE_SSHPASS",
                     "nonce": "storage-nonce-" + "x" * 32,
-                    "issued_at": "2026-09-01T00:00:00Z",
+                    "issued_at": "2026-08-30T00:00:00Z",
                     "expires_at": "2099-01-01T00:00:00Z",
                     "ledger_path": "/operator/credential-nonce-ledger.jsonl",
                     "one_shot": True,
@@ -273,7 +277,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_LINUX_OBSERVER_SSHPASS",
                     "nonce": "linux-observer-nonce-" + "x" * 32,
-                    "issued_at": "2026-09-01T00:00:00Z",
+                    "issued_at": "2026-08-30T00:00:00Z",
                     "expires_at": "2099-01-01T00:00:00Z",
                     "ledger_path": "/operator/credential-nonce-ledger.jsonl",
                     "one_shot": True,
@@ -305,7 +309,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_WINDOWS_OBSERVER_SSHPASS",
                     "nonce": "windows-observer-nonce-" + "x" * 32,
-                    "issued_at": "2026-09-01T00:00:00Z",
+                    "issued_at": "2026-08-30T00:00:00Z",
                     "expires_at": "2099-01-01T00:00:00Z",
                     "ledger_path": "/operator/credential-nonce-ledger.jsonl",
                     "one_shot": True,
@@ -337,7 +341,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "kind": "temporary-fd-or-environment",
                     "environment_name": "PUBLIC_TESTNET_MACOS_OBSERVER_SSHPASS",
                     "nonce": "macos-observer-nonce-" + "x" * 32,
-                    "issued_at": "2026-09-01T00:00:00Z",
+                    "issued_at": "2026-08-30T00:00:00Z",
                     "expires_at": "2099-01-01T00:00:00Z",
                     "ledger_path": "/operator/credential-nonce-ledger.jsonl",
                     "one_shot": True,
@@ -430,7 +434,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "capture_window_id": capture_window_id,
                 "one_shot": True,
                 "replay": False,
-                "issued_at": "2026-09-01T00:00:00Z",
+                "issued_at": "2026-08-30T00:00:00Z",
                 "expires_at": "2099-01-01T00:00:00Z",
                 "reserved_nonces": [
                     "storage-nonce-" + "x" * 32,
@@ -447,7 +451,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         "capture_window_id": capture_window_id,
                         "one_shot": True,
                         "replay": False,
-                        "issued_at": "2026-09-01T00:00:00Z",
+                        "issued_at": "2026-08-30T00:00:00Z",
                         "expires_at": "2099-01-01T00:00:00Z",
                         "reserved_nonces": [
                             "storage-nonce-" + "x" * 32,
@@ -691,7 +695,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "transaction_id": request["transaction_id"],
             "capture_window_id": request["capture_window_id"],
             "actor": "ops-actor",
-            "issued_at": "2026-09-01T00:00:00Z",
+            "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": "2099-01-01T00:00:00Z",
             "task_uid": request["task_uid"],
             "frozen_head_oid": request["head_oid"],
@@ -755,7 +759,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "transaction_id": request["transaction_id"],
             "capture_window_id": request["capture_window_id"],
             "actor": "ops-actor",
-            "issued_at": "2026-09-01T00:00:00Z",
+            "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": "2099-01-01T00:00:00Z",
             "task_uid": request["task_uid"],
             "frozen_head_oid": request["head_oid"],
@@ -766,6 +770,12 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)backup|authority|action|binding")
+
+        request["backup_policy"]["action"] = "full-network-clean-room"
+        request["backup_policy"]["issued_at"] = "2099-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)expir|future|backup|authority")
 
         request = self._input()
         request["backup_policy"] = {
@@ -778,7 +788,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "transaction_id": request["transaction_id"],
             "capture_window_id": request["capture_window_id"],
             "actor": "ops-actor",
-            "issued_at": "2026-09-01T00:00:00Z",
+            "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": "2020-01-01T00:00:00Z",
             "task_uid": request["task_uid"],
             "frozen_head_oid": request["head_oid"],
@@ -800,7 +810,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "transaction_id": request["transaction_id"],
             "capture_window_id": request["capture_window_id"],
             "actor": "ops-actor",
-            "issued_at": "2026-09-01T00:00:00Z",
+            "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": "2099-01-01T00:00:00Z",
             "task_uid": request["task_uid"],
             "frozen_head_oid": request["head_oid"],

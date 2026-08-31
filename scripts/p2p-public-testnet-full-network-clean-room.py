@@ -982,7 +982,7 @@ def _validate_backup_policy(
         die("backup_policy.actor is not a safe operator identifier")
     issued_at = _parse_utc(policy.get("issued_at"), "backup_policy.issued_at")
     expires_at = _parse_utc(policy.get("expires_at"), "backup_policy.expires_at")
-    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+    if issued_at > datetime.now(timezone.utc) or expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
         die("backup_policy authorization is expired or inverted")
     if (
         policy.get("task_uid") != authority["task_uid"]
@@ -993,6 +993,11 @@ def _validate_backup_policy(
     no_backup_receipt = validate_authenticated_receipt(
         policy.get("authority"), "backup_policy.authority", allowed_signers
     )
+    if (
+        no_backup_receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or no_backup_receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+    ):
+        die("backup_policy authority verifier or trust-root identity mismatch")
     receipt_bindings = require_object(
         no_backup_receipt.get("bindings"), "backup_policy.authority.bindings"
     )
@@ -1000,8 +1005,10 @@ def _validate_backup_policy(
         "repository": "eng-cc/oasis7",
         "action": "full-network-clean-room",
         "targets": list(NODE_ORDER),
+        "task_uid": authority["task_uid"],
         "transaction_id": context["transaction_id"],
         "capture_window_id": context["capture_window_id"],
+        "frozen_head_oid": authority["head_oid"],
         "actor": actor,
         "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
@@ -1013,6 +1020,7 @@ def _validate_backup_policy(
         "mode": mode,
         "required_before_reset": False,
         "operator_authorized": True,
+        "current_authorization": True,
         "authority": no_backup_receipt,
         "repository": "eng-cc/oasis7",
         "action": "full-network-clean-room",
@@ -1192,8 +1200,11 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         "nodes": [nodes[name] for name in NODE_ORDER],
         "forensic_backup": {
             "mode": backup_policy["mode"],
+            "task_uid": authority["task_uid"],
+            "frozen_head_oid": authority["head_oid"],
             "required_before_reset": backup_policy["required_before_reset"],
             "operator_authorized": backup_policy["operator_authorized"],
+            "current_authorization": backup_policy.get("current_authorization", False),
             "immutable": backup_policy["required_before_reset"],
             "seed_eligible": False,
             "cross_node_state_copy": False,

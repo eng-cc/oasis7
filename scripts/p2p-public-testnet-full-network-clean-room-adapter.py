@@ -16,7 +16,8 @@ The transport interface is intentionally tiny and data-oriented::
     health(operation) -> authenticated fleet-health receipt
     verify_fresh_root_probe(plan) -> authenticated probe receipt
     mutate(operation, node-or-None) -> sanitized operation receipt
-    rollback_clean_redeploy(plan, started_operations) -> sanitized receipt
+    reobserve_failed_state(plan, attempted_mutating_operations, failed_operation) -> signed receipt
+    rollback_clean_redeploy(plan, attempted_mutating_operations, failed_state_receipt) -> sanitized receipt
 
 No shell command, credential, or provider-specific implementation belongs in
 this file.  In particular, old-state restore and cross-node copy are not
@@ -48,6 +49,7 @@ CRYPTO_RECEIPT_SCHEMA = "oasis7.crypto_verifier_receipt.v1"
 PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
+IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v1"
 JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
 NODE_RECEIPT_SCHEMA = "oasis7.clean_room_node_receipt.v1"
 NONCE_ROW_SCHEMA = "oasis7.clean_room_adapter_nonce.v1"
@@ -60,9 +62,24 @@ CANONICAL_TRUST_ROOT_PATH = "/operator/truth/governance-root.json"
 CANONICAL_TRUST_ROOT_DIGEST = hashlib.sha256(
     f"{CANONICAL_TRUST_ROOT_ID}:{CANONICAL_TRUST_ROOT_PATH}".encode()
 ).hexdigest()
+# Deployment supplies this code-owned digest for the pinned regular file;
+# tests validate the path/content/owner/mode contract without reading a live
+# operator filesystem.
+CANONICAL_TRUST_ROOT_OWNER_UID = os.getuid()
+CANONICAL_TRUST_ROOT_MODE = "0600"
 CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
 CANONICAL_PROBE_PEER_ID = "validator-pair"
 CANONICAL_FLEET_PEER_ID = "fleet"
+PHASE_RECEIPT_SCHEMAS = {
+    "preflight": "oasis7.clean_room_preflight_receipt.v1",
+    "backup": "oasis7.clean_room_backup_receipt.v1",
+    "apply": "oasis7.clean_room_apply_receipt.v1",
+    "verify": "oasis7.clean_room_verify_receipt.v1",
+    "fresh-root-probe": "oasis7.clean_room_fresh_root_probe_receipt.v1",
+    "fleet-health": "oasis7.clean_room_fleet_health_receipt.v1",
+    "reobserve": "oasis7.clean_room_reobserve_receipt.v1",
+    "rollback": "oasis7.clean_room_rollback_receipt.v1",
+}
 CANONICAL_PROVIDER_UID = {
     "storage-205": 0,
     "sequencer-204": 0,
@@ -311,12 +328,40 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if _object(node.get("endpoints"), f"{name} endpoints") != planner.CANONICAL_ENDPOINT_INVENTORY[name]:
             _fail(f"{name} endpoint binding is not code-owned")
         identity = _object(node.get("identity_receipt"), f"{name} identity receipt")
+        if set(identity) - {
+            "schema_version", "authenticated", "verified", "signer_id", "verifier_id",
+            "trust_root_id", "signed_payload_sha256", "signature_hex", "canonical_digest",
+            "node_id", "peer_id", "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid",
+        }:
+            _fail(f"{name} identity receipt contains an unsafe field")
+        if (
+            identity.get("schema_version") != IDENTITY_RECEIPT_SCHEMA
+            or identity.get("authenticated") is not True
+            or identity.get("verified") is not True
+            or identity.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+            or identity.get("verifier_id") != CANONICAL_VERIFIER_ID
+            or identity.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+            or identity.get("node_id") != node["node_id"]
+        ):
+            _fail(f"{name} identity receipt is not independently authenticated")
+        _reject_secret_fields(identity, f"{name} identity receipt")
+        _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
+        _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
+        _nonzero_hex(identity.get("canonical_digest"), HEX64_RE, f"{name} identity digest")
         if identity.get("peer_id") != CANONICAL_PEER_REGISTRY[name]:
             _fail(f"{name} peer is not in the code-owned peer registry")
         if identity.get("key_uid") != CANONICAL_PROVIDER_UID[name]:
             _fail(f"{name} provider identity uid is not code-owned")
-        if identity.get("authenticated") is not True or identity.get("verified") is not True:
-            _fail(f"{name} identity receipt is not authenticated and verified")
+        key_size = identity.get("key_size_bytes")
+        if not isinstance(key_size, int) or isinstance(key_size, bool) or key_size <= 0:
+            _fail(f"{name} identity key size is malformed")
+        _nonzero_hex(identity.get("key_sha256"), HEX64_RE, f"{name} identity key digest")
+        if identity.get("key_mode") != "0600":
+            _fail(f"{name} identity key mode is not 0600")
+        for owner in ("key_uid", "key_gid"):
+            value = identity.get(owner)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                _fail(f"{name} identity {owner} is malformed")
         paths = _safe_relative_paths(
             node["node_root"],
             node.get("persistent_state_paths"),
@@ -332,6 +377,33 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or forensic.get("seed_eligible") is not False
     ):
         _fail("old-state restore or cross-node copy is not an adapter operation")
+    mode = forensic.get("mode")
+    if (
+        forensic.get("task_uid") != plan["task_uid"]
+        or forensic.get("frozen_head_oid") != plan["head_oid"]
+    ):
+        _fail("forensic backup task or frozen-head binding drifted")
+    if mode not in {"forensic-backup", "operator-authorized-no-backup"}:
+        _fail("forensic backup mode is unsupported")
+    if mode == "forensic-backup":
+        if (
+            forensic.get("required_before_reset") is not True
+            or forensic.get("immutable") is not True
+            or forensic.get("receipt_required_per_node") is not True
+            or forensic.get("operator_authorized") is not False
+            or forensic.get("current_authorization") is not False
+            or forensic.get("authority") is not None
+        ):
+            _fail("forensic-backup mode has an unsafe authority or reset combination")
+    else:
+        if (
+            forensic.get("required_before_reset") is not False
+            or forensic.get("immutable") is not False
+            or forensic.get("receipt_required_per_node") is not False
+            or forensic.get("operator_authorized") is not True
+            or forensic.get("current_authorization") is not True
+        ):
+            _fail("operator-authorized-no-backup mode has an unsafe reset combination")
     rollback = _object(plan.get("rollback"), "rollback")
     if (
         rollback.get("policy") != "clean-redeploy"
@@ -423,6 +495,8 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         _fail("operator-authorized-no-backup requires a signed current authority")
     if forensic.get("operator_authorized") is not True:
         _fail("no-backup mode is not operator-authorized")
+    if forensic.get("current_authorization") is not True:
+        _fail("no-backup mode lacks current authorization")
     if forensic.get("repository") != REPOSITORY or forensic.get("action") != "full-network-clean-room":
         _fail("no-backup authority repository or action is not governed")
     if forensic.get("targets") != list(plan["node_order"]):
@@ -437,7 +511,7 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         _fail("no-backup authority actor is malformed")
     issued_at = _parse_utc(forensic["issued_at"], "no-backup authority issued_at")
     expires_at = _parse_utc(forensic["expires_at"], "no-backup authority expires_at")
-    if expires_at <= issued_at or expires_at <= dt.datetime.now(dt.timezone.utc):
+    if issued_at > dt.datetime.now(dt.timezone.utc) or expires_at <= issued_at or expires_at <= dt.datetime.now(dt.timezone.utc):
         _fail("no-backup authority is expired or inverted")
     receipt = _object(authority, "no-backup authority receipt")
     if receipt.get("schema_version") != NO_BACKUP_AUTHORITY_SCHEMA:
@@ -446,8 +520,10 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         _fail("no-backup authority receipt is not authenticated and verified")
     if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
         _fail("no-backup authority signer is not code-owned")
+    if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+        _fail("no-backup authority verifier or trust root is not code-owned")
     allowed = {
-        "schema_version", "authenticated", "verified", "signer_id",
+        "schema_version", "authenticated", "verified", "signer_id", "verifier_id", "trust_root_id",
         "signed_payload_sha256", "signature_hex", "canonical_digest", "bindings",
     }
     if set(receipt) - allowed:
@@ -460,8 +536,10 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         "repository": REPOSITORY,
         "action": "full-network-clean-room",
         "targets": list(plan["node_order"]),
+        "task_uid": plan["task_uid"],
         "transaction_id": plan["transaction_id"],
         "capture_window_id": plan["capture_window_id"],
+        "frozen_head_oid": plan["head_oid"],
         "actor": actor,
         "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
@@ -479,7 +557,7 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
     if set(authority) - {
         "schema_version", "repository", "task_uid", "frozen_head_oid", "plan_digest",
         "adapter_id", "network_id", "verifier_id", "trust_root_id", "trust_root_path",
-        "trust_root_digest", "apply_authorized", "receipt", "provenance_helper",
+        "trust_root_digest", "trust_root_file", "apply_authorized", "receipt", "provenance_helper",
     }:
         _fail("adapter authority contains an unsafe field")
     if authority.get("schema_version") != AUTHORITY_SCHEMA:
@@ -499,6 +577,17 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
     for field, expected_value in expected.items():
         if authority.get(field) != expected_value:
             _fail(f"adapter authority {field} is not bound to the frozen plan")
+    trust_root_file = _object(authority.get("trust_root_file"), "pinned trust-root file contract")
+    if set(trust_root_file) != {"path", "sha256", "owner_uid", "mode", "regular_file"}:
+        _fail("pinned trust-root file contract contains an unsafe field")
+    if (
+        trust_root_file.get("path") != CANONICAL_TRUST_ROOT_PATH
+        or trust_root_file.get("sha256") != CANONICAL_TRUST_ROOT_DIGEST
+        or trust_root_file.get("owner_uid") != CANONICAL_TRUST_ROOT_OWNER_UID
+        or trust_root_file.get("mode") != CANONICAL_TRUST_ROOT_MODE
+        or trust_root_file.get("regular_file") is not True
+    ):
+        _fail("pinned trust-root file path, content digest, owner, or mode drifted")
     if not isinstance(authority.get("apply_authorized"), bool):
         _fail("adapter authority apply_authorized must be an explicit boolean")
     receipt = _object(authority.get("receipt"), "adapter authority receipt")
@@ -541,6 +630,7 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
         "checkpoint_manifest_hash": plan["truth"]["checkpoint"]["manifest_hash"],
         "trust_root_path": CANONICAL_TRUST_ROOT_PATH,
         "trust_root_digest": CANONICAL_TRUST_ROOT_DIGEST,
+        "trust_root_file": copy.deepcopy(trust_root_file),
     }
     if bindings != expected_bindings:
         _fail("adapter authority receipt binding set is not exact")
@@ -749,7 +839,7 @@ def validate_remote_preflight(plan: dict[str, Any], node: dict[str, Any], eviden
         _fail("remote preflight evidence contains an unsafe field")
     _reject_secret_fields(evidence, "remote preflight evidence")
     name = _string(node.get("name"), "remote preflight node name")
-    if evidence.get("node") not in (None, name):
+    if evidence.get("node") != name:
         _fail(f"{name} preflight evidence node binding drifted")
     if evidence.get("node_id") != node["node_id"]:
         _fail(f"{name} preflight identity binding drifted")
@@ -1096,18 +1186,34 @@ def _validate_provider_receipt(
         "failed_state_digest",
         "rollback_steps",
         "reobserved",
+        "phase",
+        "captured_at",
+        "observer_mutation",
+        "status",
+        "backup_manifest",
+        "seed_eligible",
+        "fleet_health_closure",
     }
     _reject_secret_fields(receipt, f"{operation} provider receipt")
     if set(receipt) - allowed:
         _fail(f"{operation} provider receipt contains an unsafe field")
-    if receipt.get("schema_version") != PROVIDER_RECEIPT_SCHEMA:
-        _fail(f"{operation} provider receipt schema is unsupported")
+    phase = _receipt_phase(operation)
+    if receipt.get("schema_version") != PHASE_RECEIPT_SCHEMAS[phase]:
+        _fail(f"{operation} provider receipt schema is unsupported for phase {phase}")
     if receipt.get("authenticated") is not True or receipt.get("verified") is not True:
         _fail(f"{operation} provider receipt is not authenticated and verified")
     if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
         _fail(f"{operation} provider receipt signer is not code-owned")
     if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
         _fail(f"{operation} provider receipt verifier or trust root is not code-owned")
+    if (
+        receipt.get("phase") != phase
+        or receipt.get("captured_at") is None
+        or receipt.get("observer_mutation") is not False
+        or receipt.get("status") != ("completed" if phase in {"backup", "apply", "reobserve", "rollback"} else "verified")
+    ):
+        _fail(f"{operation} provider receipt phase, capture, observer, or status binding drifted")
+    _parse_utc(receipt.get("captured_at"), f"{operation} captured_at")
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, f"{operation} signed payload")
     _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, f"{operation} signature")
     _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, f"{operation} canonical digest")
@@ -1155,6 +1261,31 @@ def _validate_provider_receipt(
         _nonzero_hex(receipt.get("failed_state_digest"), HEX64_RE, f"{operation} failed state digest")
         if receipt.get("rollback_steps") != plan["rollback"]["steps"]:
             _fail(f"{operation} receipt clean-redeploy steps are not exact")
+    if phase in {"backup", "apply"}:
+        if plan["forensic_backup"]["required_before_reset"] is True:
+            manifest = _object(receipt.get("backup_manifest"), f"{operation} backup manifest")
+            if set(manifest) != {"node", "sha256", "size_bytes", "verified", "seed_eligible"}:
+                _fail(f"{operation} backup manifest is incomplete")
+            if manifest.get("node") != node_name or manifest.get("verified") is not True:
+                _fail(f"{operation} backup manifest node or verification drifted")
+            _nonzero_hex(manifest.get("sha256"), HEX64_RE, f"{operation} backup manifest digest")
+            if not isinstance(manifest.get("size_bytes"), int) or manifest["size_bytes"] <= 0:
+                _fail(f"{operation} backup manifest size is malformed")
+            if manifest.get("seed_eligible") is not False or receipt.get("seed_eligible") is not False:
+                _fail(f"{operation} backup is incorrectly seed eligible")
+        elif receipt.get("backup_manifest") is not None:
+            manifest = _object(receipt["backup_manifest"], f"{operation} backup manifest")
+            if manifest.get("seed_eligible") is not False or receipt.get("seed_eligible") is not False:
+                _fail(f"{operation} no-backup receipt contains a seed-eligible manifest")
+    if operation == "fleet-health":
+        closure = _object(receipt.get("fleet_health_closure"), "fleet-health closure")
+        if (
+            set(closure) != {"verified", "nodes", "healthy"}
+            or closure.get("verified") is not True
+            or closure.get("healthy") is not True
+            or closure.get("nodes") != list(plan["node_order"])
+        ):
+            _fail("fleet-health receipt does not close the governed fleet")
     _verify_receipt_with_verifier(plan, receipt, verifier)
     return _sanitize_receipt(receipt, f"{operation} provider receipt")
 
@@ -1266,25 +1397,35 @@ def _verify_provenance(
     authority: dict[str, Any],
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
 ) -> bool:
-    receipt = authority["receipt"]
+    def validate_result(receipt: dict[str, Any], result: Any) -> None:
+        result = _object(result, "external provenance verifier result")
+        if (
+            result.get("verified") is not True
+            or result.get("bindings") != receipt["bindings"]
+            or result.get("verifier_id") != CANONICAL_VERIFIER_ID
+            or result.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+            or result.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+        ):
+            _fail("external provenance verifier did not verify exact execution bindings")
+
+    receipts = [authority["receipt"]]
+    forensic = _object(plan.get("forensic_backup"), "forensic backup")
+    if forensic.get("mode") == "operator-authorized-no-backup":
+        receipts.append(_object(forensic.get("authority"), "no-backup authority receipt"))
     if verifier is None:
         if "provenance_helper" not in authority:
             return False
         result = verify_repository_provenance_helper(plan, authority)
+        if len(receipts) != 1:
+            _fail("no-backup authority requires the independent receipt verifier callback")
+        validate_result(receipts[0], result)
     else:
-        try:
-            result = verifier(_transport_plan(plan), receipt)
-        except Exception as error:
-            _fail(f"external provenance verifier failed: {error.__class__.__name__}")
-    result = _object(result, "external provenance verifier result")
-    if (
-        result.get("verified") is not True
-        or result.get("bindings") != receipt["bindings"]
-        or result.get("verifier_id") != CANONICAL_VERIFIER_ID
-        or result.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
-        or result.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
-    ):
-        _fail("external provenance verifier did not verify exact execution bindings")
+        for receipt in receipts:
+            try:
+                result = verifier(_transport_plan(plan), receipt)
+            except Exception as error:
+                _fail(f"external provenance verifier failed: {error.__class__.__name__}")
+            validate_result(receipt, result)
     return True
 
 
@@ -1346,6 +1487,31 @@ def _transport_plan(plan: dict[str, Any]) -> dict[str, Any]:
 
 def _mutating_operation(operation: str) -> bool:
     return operation.startswith(("forensic-backup:", "stop:", "delete:", "rebuild:", "start:"))
+
+
+def _receipt_phase(operation: str) -> str:
+    if operation.startswith("preflight:"):
+        return "preflight"
+    if operation.startswith("forensic-backup:"):
+        return "backup"
+    if operation.startswith(("stop:", "delete:", "rebuild:", "start:")):
+        return "apply"
+    if operation.startswith("verify:"):
+        return "verify"
+    if operation == "fresh-root-probe":
+        return "fresh-root-probe"
+    if operation == "fleet-health":
+        return "fleet-health"
+    if operation == "reobserve-failed-state":
+        return "reobserve"
+    if operation == "rollback-clean-redeploy":
+        return "rollback"
+    _fail(f"{operation} has no governed receipt phase")
+
+
+def _rollback_candidate(operation: str) -> bool:
+    """Only attempted stop/delete/rebuild/start operations can need rollback."""
+    return operation.startswith(("stop:", "delete:", "rebuild:", "start:"))
 
 
 def _execute_unlocked(
@@ -1521,7 +1687,7 @@ def _execute_unlocked(
             # Every provider callback is an attempted operation boundary. If
             # it performs a side effect and then throws, clean-redeploy must
             # still receive the current operation in its rollback set.
-            if operation not in rollback_candidates:
+            if _rollback_candidate(operation) and operation not in rollback_candidates:
                 rollback_candidates.append(operation)
             if operation == "fresh-root-probe":
                 raw_receipt = transport.verify_fresh_root_probe(_transport_plan(plan))
@@ -1545,9 +1711,6 @@ def _execute_unlocked(
                 elif operation == "fleet-health":
                     raw_receipt = transport.health(operation)
                 else:
-                    # Record the attempted operation before entering the
-                    # provider. A side-effect-then-throw must be covered by
-                    # clean-redeploy even when no receipt is returned.
                     raw_receipt = transport.mutate(operation, transport_node)
                 # A successful start/rebuild callback may have changed the
                 # provider even if its receipt is malformed or the following
@@ -1598,7 +1761,7 @@ def _execute_unlocked(
             failed_operation = operation
             failed_state_digest: str | None = None
             try:
-                if operation not in rollback_candidates and operation not in {"fresh-root-probe", "fleet-health"}:
+                if _rollback_candidate(operation) and operation not in rollback_candidates:
                     rollback_candidates.append(operation)
                 validate_authority(plan, authority)
                 if provenance_verifier is None:
@@ -1844,7 +2007,7 @@ def _resume_transaction_unlocked(
         terminal = dict(record)
         terminal["status"] = "terminal-failure"
         terminal["terminal_error"] = "ambiguous in-flight journal requires governed reconciliation"
-        _write_journal(Path(journal_path), terminal)
+        _persist_terminal(Path(journal_path), terminal)
         _fail("transaction journal is ambiguous in-flight; governed reconciliation is required")
     if status == "terminal-failure":
         _fail("transaction journal is terminal-failure; governed reconciliation is required")
